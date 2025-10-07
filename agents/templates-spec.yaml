@@ -1,0 +1,314 @@
+# Templates Specification - ONEX Agent Framework
+# Complete template specifications for agent initialization, intelligence gathering, and lifecycle management
+# Target: <100ms template instantiation per agent
+
+schema_version: "1.0.0"
+total_templates: 5
+categories: 3
+instantiation_overhead_ms: 100
+
+# Template Categories
+categories:
+  initialization:
+    description: "Repository-aware initialization and Archon project association"
+    templates: 1
+    performance_target_ms: 100
+    integration: "Phase 1 agent lifecycle"
+
+  intelligence:
+    description: "Multi-service intelligence orchestration and pattern queries"
+    templates: 2
+    performance_target_ms: 150
+    integration: "Phase 2 agent lifecycle"
+
+  lifecycle:
+    description: "Knowledge capture, coordination, and completion management"
+    templates: 2
+    performance_target_ms: 75
+    integration: "Phase 3-4 agent lifecycle"
+
+# Template Parameter Schema
+parameter_schema:
+  core_identity:
+    AGENT_DOMAIN:
+      type: "string"
+      description: "Short identifier (e.g., 'debug', 'api_design')"
+      required: true
+
+    AGENT_PURPOSE:
+      type: "string"
+      description: "Brief purpose description"
+      required: true
+
+    AGENT_TITLE:
+      type: "string"
+      description: "Human-readable title"
+      required: true
+
+    AGENT_DESCRIPTION:
+      type: "string"
+      description: "Detailed description"
+      required: true
+
+  context_configuration:
+    AGENT_CONTEXT:
+      type: "string"
+      description: "Orchestrated search context"
+      values: ["api_development", "debugging", "architecture", "general"]
+      default: "general"
+
+    DOMAIN_QUERY:
+      type: "string"
+      description: "Primary domain-specific query pattern"
+      required: true
+
+    IMPLEMENTATION_QUERY:
+      type: "string"
+      description: "Implementation-focused query pattern"
+      required: true
+
+  behavioral_configuration:
+    MATCH_COUNT:
+      type: "integer"
+      description: "Results per service"
+      default: 5
+      range: [1, 20]
+
+    CONFIDENCE_THRESHOLD:
+      type: "float"
+      description: "Minimum confidence score"
+      default: 0.6
+      range: [0.0, 1.0]
+
+    KNOWLEDGE_CAPTURE_LEVEL:
+      type: "string"
+      description: "Knowledge capture depth"
+      values: ["basic", "standard", "comprehensive"]
+      default: "standard"
+
+  integration_configuration:
+    MCP_ENABLED:
+      type: "boolean"
+      description: "Archon MCP integration"
+      default: true
+
+    CORRELATION_TRACKING:
+      type: "boolean"
+      description: "Full correlation tracking"
+      default: true
+
+    PARALLEL_CAPABLE:
+      type: "boolean"
+      description: "Can spawn parallel agents"
+      default: false
+
+# Template Specifications
+templates:
+  # Initialization Templates
+  archon_context_establishment:
+    name: "Archon Context Establishment"
+    category: "initialization"
+    description: "Repository-aware initialization and Archon project association"
+    integration: "Phase 1 of agent lifecycle, correlations with COMMON_WORKFLOW.md"
+    performance_target_ms: 100
+    parameters_used: ["AGENT_DOMAIN", "AGENT_PURPOSE", "AGENT_TITLE", "MCP_ENABLED"]
+
+    template_structure:
+      function_name: "establish_archon_{AGENT_DOMAIN}_context"
+      return_type: "Optional[str]"
+      phases:
+        - "Initialize correlation context from COMMON_WORKFLOW.md"
+        - "Repository context detection (URL, name, branch, commit)"
+        - "Archon MCP connectivity verification"
+        - "Project discovery and association with human-in-loop protection"
+        - "Project accessibility validation"
+
+    integration_points:
+      - "COMMON_WORKFLOW.md correlation tracking"
+      - "Archon MCP project discovery"
+      - "Human-in-loop protection"
+      - "Repository context detection"
+
+    error_handling:
+      - "MCP unavailable → local-only mode"
+      - "No matching project → human intervention required"
+      - "Project inaccessible → graceful failure"
+
+    outputs:
+      success: "Project ID string"
+      failure: "None with descriptive logging"
+
+  # Intelligence Gathering Templates
+  orchestrated_intelligence_research:
+    name: "Orchestrated Intelligence Research"
+    category: "intelligence"
+    description: "Multi-service intelligence orchestration with synthesis"
+    integration: "Phase 2 of agent lifecycle, domain-specific pattern queries"
+    performance_target_ms: 150
+    parameters_used: ["AGENT_DOMAIN", "AGENT_CONTEXT", "DOMAIN_QUERY", "IMPLEMENTATION_QUERY", "MATCH_COUNT"]
+
+    template_structure:
+      function_name: "gather_{AGENT_DOMAIN}_intelligence"
+      return_type: "Dict[str, Any]"
+      phases:
+        - "Execute orchestrated RAG query with domain patterns"
+        - "Search code examples with implementation focus"
+        - "Extract and synthesize intelligence results"
+        - "Apply confidence scoring and validation"
+
+    orchestration_pattern:
+      primary_research: "mcp__archon__perform_rag_query"
+      code_examples: "mcp__archon__search_code_examples"
+      synthesis: "Intelligent result merging with confidence assessment"
+
+    intelligence_extraction:
+      - "rag_patterns: Successfully applied patterns from RAG results"
+      - "code_examples: Implementation examples and best practices"
+      - "synthesis_insights: Cross-source intelligence correlation"
+      - "confidence_metrics: Quality and relevance assessment"
+
+    integration_points:
+      - "Multi-service orchestration (RAG, Vector, Knowledge Graph)"
+      - "Context-aware query generation"
+      - "Intelligence synthesis and validation"
+
+  domain_specific_intelligence:
+    name: "Domain-Specific Intelligence Enhancement"
+    category: "intelligence"
+    description: "Enhanced intelligence gathering with domain specialization"
+    integration: "Supplementary Phase 2 intelligence for complex domains"
+    performance_target_ms: 125
+    parameters_used: ["AGENT_DOMAIN", "AGENT_CONTEXT", "DOMAIN_QUERY", "CONFIDENCE_THRESHOLD"]
+
+    template_structure:
+      function_name: "gather_enhanced_{AGENT_DOMAIN}_intelligence"
+      return_type: "Dict[str, Any]"
+      phases:
+        - "Enhanced search with hybrid mode"
+        - "Similar entity discovery"
+        - "Relationship traversal for context"
+        - "Domain-specific pattern validation"
+
+    enhanced_capabilities:
+      - "mcp__archon__enhanced_search with hybrid mode"
+      - "mcp__archon__search_similar_entities for pattern discovery"
+      - "mcp__archon__search_entity_relationships for context"
+      - "Domain-specific confidence scoring"
+
+  # Lifecycle Management Templates
+  unified_knowledge_capture:
+    name: "Unified Knowledge Capture"
+    category: "lifecycle"
+    description: "Comprehensive knowledge capture and UAKS integration"
+    integration: "Phase 4 of agent lifecycle, knowledge synthesis"
+    performance_target_ms: 75
+    parameters_used: ["AGENT_DOMAIN", "AGENT_TITLE", "KNOWLEDGE_CAPTURE_LEVEL"]
+
+    template_structure:
+      function_name: "capture_{AGENT_DOMAIN}_knowledge"
+      return_type: "Dict[str, Any]"
+      phases:
+        - "Extract execution results and intelligence applied"
+        - "Create comprehensive documentation with correlation metadata"
+        - "Update task status to completion"
+        - "Integrate with UAKS for collective intelligence"
+
+    knowledge_structure:
+      - "correlation_metadata: Session and execution tracking"
+      - "spawn_relationships: Multi-agent coordination data"
+      - "execution_summary: Results and performance metrics"
+      - "intelligence_applied: RAG patterns and code examples used"
+      - "outcomes_achieved: Objectives met and quality metrics"
+      - "lessons_learned: Successful strategies and challenges"
+      - "knowledge_contributions: New patterns and reusable solutions"
+
+    integration_points:
+      - "Archon MCP document creation"
+      - "Task status management"
+      - "UAKS knowledge synthesis"
+      - "Cross-domain pattern capture"
+
+  parallel_coordination_management:
+    name: "Parallel Coordination Management"
+    category: "lifecycle"
+    description: "Multi-agent coordination and synchronization"
+    integration: "Phase 2.5 parallel coordination"
+    performance_target_ms: 200
+    parameters_used: ["AGENT_DOMAIN", "PARALLEL_CAPABLE", "CORRELATION_TRACKING"]
+
+    template_structure:
+      function_name: "manage_{AGENT_DOMAIN}_coordination"
+      return_type: "Dict[str, Any]"
+      phases:
+        - "Create shared coordination state"
+        - "Distribute context to parallel agents"
+        - "Monitor coordination signals and progress"
+        - "Aggregate results and handle synchronization"
+
+    coordination_capabilities:
+      - "Shared state creation and management"
+      - "Context distribution for parallel execution"
+      - "Real-time coordination signal handling"
+      - "Result aggregation and consistency validation"
+
+    performance_characteristics:
+      - "Coordination overhead: ~200-500ms setup"
+      - "Signal overhead: ~50-100ms per coordination event"
+      - "Optimal agent count: 2-6 agents"
+      - "Time reduction: 60-80% for 3+ agents vs sequential"
+
+# Template Dependencies
+dependencies:
+  archon_context_establishment:
+    framework_files: ["@COMMON_WORKFLOW.md"]
+    mcp_functions: ["mcp__archon__health_check", "mcp__archon__list_projects", "mcp__archon__get_project"]
+    external_tools: ["git commands for repository context"]
+
+  orchestrated_intelligence_research:
+    framework_files: []
+    mcp_functions: ["mcp__archon__perform_rag_query", "mcp__archon__search_code_examples"]
+    external_tools: []
+
+  domain_specific_intelligence:
+    framework_files: []
+    mcp_functions: ["mcp__archon__enhanced_search", "mcp__archon__search_similar_entities", "mcp__archon__search_entity_relationships"]
+    external_tools: []
+
+  unified_knowledge_capture:
+    framework_files: ["@UNIFIED_KNOWLEDGE_CAPTURE.md"]
+    mcp_functions: ["mcp__archon__create_document", "mcp__archon__update_task"]
+    external_tools: []
+
+  parallel_coordination_management:
+    framework_files: []
+    mcp_functions: ["mcp__archon__create_document", "mcp__archon__update_document"]
+    external_tools: ["asyncio for parallel coordination"]
+
+# Template Performance Targets
+performance_targets:
+  instantiation_time_ms: 100     # Template instantiation
+  parameter_resolution_ms: 50    # Parameter processing
+  cache_hit_ratio: 0.85         # Template caching effectiveness
+  memory_footprint_kb: 512      # Memory usage per template
+
+# Template Caching Configuration
+caching:
+  enabled: true
+  max_cache_size: 1000
+  cache_ttl_seconds: 3600
+  cache_key_format: "{template_name}:{parameters_hash}"
+
+# Integration Points
+integration:
+  mandatory_functions: "@core-requirements.yaml"
+  quality_gates: "@quality-gates-spec.yaml"
+  performance_thresholds: "@performance-thresholds.yaml"
+  workflow_patterns: "@COMMON_WORKFLOW.md"
+  context_lifecycle: "@COMMON_CONTEXT_LIFECYCLE.md"
+
+# Compliance Requirements
+compliance:
+  template_coverage: 100.0        # All agent types must have templates
+  instantiation_success_rate: 95.0  # Template instantiation success
+  performance_compliance: 90.0    # Meet performance targets
+  integration_compliance: 100.0   # Full framework integration
