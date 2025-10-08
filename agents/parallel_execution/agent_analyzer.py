@@ -158,9 +158,16 @@ Perform comprehensive architectural and code analysis to:
 
 Analyze thoroughly using available tools and generate comprehensive analysis report."""
 
+# Model fallback configuration
+FALLBACK_MODELS = [
+    'google-gla:gemini-2.5-flash',  # Primary model
+    'google-gla:gemini-1.5-flash',  # Fallback 1
+    'openai:gpt-4o-mini'            # Fallback 2
+]
+
 # Create the Pydantic AI agent
 architectural_analyzer_agent = Agent[AgentDeps, AnalysisReport](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    FALLBACK_MODELS[0],  # Start with primary model
     deps_type=AgentDeps,
     output_type=AnalysisReport,
     system_prompt=ANALYZER_SYSTEM_PROMPT
@@ -470,7 +477,7 @@ class ArchitecturalAnalyzerAgent:
             # Build analysis prompt
             prompt = self._build_analysis_prompt(task, code_to_analyze, file_path, language, analysis_focus)
 
-            # Run Pydantic AI agent
+            # Run Pydantic AI agent with model fallback
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_START,
                 message="Invoking Pydantic AI architectural analyzer",
@@ -479,7 +486,40 @@ class ArchitecturalAnalyzerAgent:
                 task_id=task.task_id
             )
 
-            result = await architectural_analyzer_agent.run(prompt, deps=deps)
+            # Try each model in fallback chain on 503 errors
+            last_error = None
+            result = None
+            for model_idx, model_name in enumerate(FALLBACK_MODELS):
+                try:
+                    if model_idx > 0:
+                        await self.trace_logger.log_event(
+                            event_type=TraceEventType.AGENT_INFO,
+                            message=f"Retrying with fallback model: {model_name}",
+                            level=TraceLevel.INFO,
+                            agent_name=self.config.agent_name,
+                            task_id=task.task_id
+                        )
+                    architectural_analyzer_agent.model = model_name
+                    result = await architectural_analyzer_agent.run(prompt, deps=deps)
+                    break  # Success - exit fallback loop
+                except Exception as e:
+                    error_str = str(e)
+                    last_error = e
+                    # Check if it's a 503 error
+                    if "503" in error_str and model_idx < len(FALLBACK_MODELS) - 1:
+                        await self.trace_logger.log_event(
+                            event_type=TraceEventType.AGENT_ERROR,
+                            message=f"Model {model_name} unavailable (503), trying fallback",
+                            level=TraceLevel.WARNING,
+                            agent_name=self.config.agent_name,
+                            task_id=task.task_id
+                        )
+                        continue  # Try next fallback
+                    else:
+                        raise  # Non-503 error or last model failed
+
+            if result is None:
+                raise last_error or Exception("All fallback models failed")
             analysis_report: AnalysisReport = result.output
 
             # Calculate execution time
