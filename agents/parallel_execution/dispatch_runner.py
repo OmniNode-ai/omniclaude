@@ -54,6 +54,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Pydantic imports for handling typed agent outputs
+try:
+    from pydantic import BaseModel
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    BaseModel = None
+    PYDANTIC_AVAILABLE = False
+
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -746,18 +754,59 @@ async def execute_phase_4_parallel_execution(
         results = await coordinator.execute_parallel(tasks)
 
         # Automatic code extraction from debug agent outputs
+        # Supports both Pydantic AI typed outputs (BaseModel) and legacy JSON (dict)
         for task_id, result in results.items():
             if result.success and result.agent_name == "agent-debug-intelligence":
                 try:
-                    # Check if debug agent provided fixed code in solution
-                    output_data = result.output_data or {}
-                    solution = output_data.get("solution", {})
-                    fixed_code = solution.get("fixed_code")
+                    # Extract fixed code - support both Pydantic BaseModel and JSON dict
+                    output_data = result.output_data
+                    fixed_code = None
+                    extraction_method = None
+
+                    # Method 1: Pydantic BaseModel with typed attributes
+                    if PYDANTIC_AVAILABLE and isinstance(output_data, BaseModel):
+                        # Check for solution.fixed_code using attribute access
+                        if hasattr(output_data, "solution"):
+                            solution = output_data.solution
+                            if hasattr(solution, "fixed_code"):
+                                fixed_code = solution.fixed_code
+                                extraction_method = "Pydantic BaseModel (solution.fixed_code)"
+
+                        print(
+                            f"[DispatchRunner] Pydantic extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code attribute'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 2: Legacy JSON dict with nested keys
+                    elif isinstance(output_data, dict):
+                        solution = output_data.get("solution", {})
+                        fixed_code = solution.get("fixed_code") if isinstance(solution, dict) else None
+                        extraction_method = "JSON dict (solution.fixed_code)" if fixed_code else None
+
+                        print(
+                            f"[DispatchRunner] JSON extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code key'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 3: Handle None or unexpected types gracefully
+                    else:
+                        output_type = type(output_data).__name__ if output_data is not None else "None"
+                        print(
+                            f"[DispatchRunner] Skipping {task_id}: "
+                            f"output_data is {output_type}, expected BaseModel or dict",
+                            file=sys.stderr
+                        )
 
                     if fixed_code:
                         # Find the corresponding task to get output file info
                         task = next((t for t in tasks if t.task_id == task_id), None)
                         if not task:
+                            print(
+                                f"[DispatchRunner] Warning: Task {task_id} not found for code extraction",
+                                file=sys.stderr
+                            )
                             continue
 
                         # Determine output file path
@@ -778,15 +827,22 @@ async def execute_phase_4_parallel_execution(
                         output_file.write_text(fixed_code, encoding="utf-8")
 
                         print(
-                            f"[DispatchRunner] Code extracted from {task_id}: {output_file}",
+                            f"[DispatchRunner] ✓ Code extracted from {task_id} using {extraction_method}: {output_file}",
                             file=sys.stderr
                         )
 
-                        # Update result metadata
-                        if result.output_data is None:
-                            result.output_data = {}
-                        result.output_data["_code_extracted"] = True
-                        result.output_data["_extracted_file"] = str(output_file)
+                        # Update result metadata - preserve BaseModel or create dict
+                        if isinstance(output_data, dict):
+                            result.output_data["_code_extracted"] = True
+                            result.output_data["_extracted_file"] = str(output_file)
+                            result.output_data["_extraction_method"] = extraction_method
+                        else:
+                            # For BaseModel, store metadata separately to avoid mutating the model
+                            if not hasattr(result, "_extraction_metadata"):
+                                result._extraction_metadata = {}
+                            result._extraction_metadata["code_extracted"] = True
+                            result._extraction_metadata["extracted_file"] = str(output_file)
+                            result._extraction_metadata["extraction_method"] = extraction_method
 
                 except Exception as e:
                     print(
