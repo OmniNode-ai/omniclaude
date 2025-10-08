@@ -321,7 +321,8 @@ class ResearchIntelligenceAgent:
         try:
             # Extract research query from task
             query_data = task.input_data.get("query", {})
-            research_query = ResearchQuery(**query_data) if isinstance(query_data, dict) else ResearchQuery(
+            # Use query_data only if it has actual content (not empty dict)
+            research_query = ResearchQuery(**query_data) if (isinstance(query_data, dict) and query_data) else ResearchQuery(
                 topic=task.description,
                 keywords=task.input_data.get("keywords", []),
                 depth=task.input_data.get("depth", "medium"),
