@@ -1,16 +1,159 @@
 """
 Agent Registry - Dynamic agent discovery and validation system.
 
-Scans the agents/parallel_execution directory for available agent modules
-and provides an API for checking agent existence and getting agent modules.
+Provides a decorator-based self-registration system for agents. Agents use the
+@register_agent decorator to register themselves with metadata. This eliminates
+the need for directory scanning and import validation.
+
+Legacy scanning functionality is still available but deprecated.
 """
 
+import logging
 import os
 import importlib.util
 import inspect
 from pathlib import Path
-from typing import Dict, List, Optional, Set
-from functools import lru_cache
+from typing import Dict, List, Optional, Set, Callable, Any, TypeVar
+from functools import lru_cache, wraps
+
+# Configure logging for agent registry
+logger = logging.getLogger(__name__)
+
+# Global registry for decorator-based agent registration
+_AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {}
+
+# Type variable for decorator
+T = TypeVar('T')
+
+
+def register_agent(
+    agent_name: str,
+    agent_type: str,
+    capabilities: List[str],
+    description: str = ""
+) -> Callable[[T], T]:
+    """
+    Decorator for agent self-registration.
+
+    This decorator allows agents to register themselves with the registry by
+    adding metadata at module load time. This eliminates the need for directory
+    scanning and import validation.
+
+    Args:
+        agent_name: Unique identifier for the agent (e.g., "analyzer", "researcher")
+        agent_type: Type category of the agent (e.g., "analyzer", "researcher",
+                    "validator", "debug", "coder")
+        capabilities: List of capabilities the agent provides
+        description: Human-readable description of the agent's purpose
+
+    Returns:
+        Decorator function that registers the agent and returns the original class/function
+
+    Example:
+        >>> @register_agent(
+        ...     agent_name="analyzer",
+        ...     agent_type="analyzer",
+        ...     capabilities=["architecture_analysis", "design_patterns"],
+        ...     description="Architectural and code quality analysis agent"
+        ... )
+        ... class ArchitecturalAnalyzer:
+        ...     def execute(self, task):
+        ...         pass
+
+        >>> # Or with a function
+        >>> @register_agent(
+        ...     agent_name="simple_agent",
+        ...     agent_type="coder",
+        ...     capabilities=["code_generation"],
+        ...     description="Simple code generation agent"
+        ... )
+        ... def execute(task):
+        ...     pass
+    """
+    def decorator(cls_or_func: T) -> T:
+        """Inner decorator that performs the registration."""
+        # Log registration start
+        logger.info("[AgentRegistry] Registering agent: '%s'", agent_name)
+        logger.info("[AgentRegistry]   Type: %s", agent_type)
+        logger.info("[AgentRegistry]   Capabilities: %s", capabilities)
+
+        # Store agent metadata in global registry
+        _AGENT_REGISTRY[agent_name] = {
+            "agent_name": agent_name,
+            "agent_type": agent_type,
+            "capabilities": capabilities,
+            "description": description,
+            "class_or_function": cls_or_func,
+            "is_class": inspect.isclass(cls_or_func),
+            "module_name": f"agent_{agent_name}",  # Standard naming convention
+        }
+
+        # Log registration completion with total count
+        total_registered = len(_AGENT_REGISTRY)
+        logger.info("[AgentRegistry] Total registered agents: %d", total_registered)
+
+        # Return the original class/function unchanged
+        return cls_or_func
+
+    return decorator
+
+
+def get_registered_agents() -> Dict[str, Dict[str, Any]]:
+    """
+    Get all registered agents and their metadata.
+
+    Returns:
+        Dictionary mapping agent names to their metadata dictionaries.
+        Each metadata dict contains:
+        - agent_name: str
+        - agent_type: str
+        - capabilities: List[str]
+        - description: str
+        - class_or_function: The registered class or function
+        - is_class: bool (True if registered item is a class)
+        - module_name: str (module name for importing)
+
+    Example:
+        >>> agents = get_registered_agents()
+        >>> for name, metadata in agents.items():
+        ...     print(f"{name}: {metadata['description']}")
+    """
+    return _AGENT_REGISTRY.copy()
+
+
+def agent_is_registered(name: str) -> bool:
+    """
+    Check if an agent is registered via the decorator.
+
+    Args:
+        name: Agent name to check
+
+    Returns:
+        True if the agent is registered, False otherwise
+
+    Example:
+        >>> if agent_is_registered("analyzer"):
+        ...     print("Analyzer agent is available")
+    """
+    return name in _AGENT_REGISTRY
+
+
+def get_agent_metadata(name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get metadata for a registered agent.
+
+    Args:
+        name: Agent name
+
+    Returns:
+        Metadata dictionary if agent is registered, None otherwise
+
+    Example:
+        >>> metadata = get_agent_metadata("analyzer")
+        >>> if metadata:
+        ...     print(f"Capabilities: {metadata['capabilities']}")
+    """
+    return _AGENT_REGISTRY.get(name)
 
 
 class AgentRegistry:
@@ -157,12 +300,20 @@ def agent_exists(name: str) -> bool:
     """
     Convenience function to check if an agent exists.
 
+    First checks the decorator registry (preferred), then falls back to
+    directory scanning (deprecated).
+
     Args:
         name: Agent name to check.
 
     Returns:
         True if agent exists, False otherwise.
     """
+    # Check decorator registry first (preferred method)
+    if agent_is_registered(name):
+        return True
+
+    # Fall back to legacy scanning (deprecated)
     return get_registry().agent_exists(name)
 
 
@@ -170,15 +321,28 @@ def get_available_agents() -> Dict[str, str]:
     """
     Convenience function to get all available agents.
 
+    Combines decorator-registered agents (preferred) with scanned agents (deprecated).
+
     Returns:
         Dictionary mapping agent names to module paths.
     """
-    return get_registry().get_available_agents()
+    # Start with decorator-registered agents
+    registered = get_registered_agents()
+    agents = {name: metadata["module_name"] for name, metadata in registered.items()}
+
+    # Merge with legacy scanned agents (for backward compatibility)
+    scanned = get_registry().get_available_agents()
+    agents.update(scanned)
+
+    return agents
 
 
 def get_agent_module_name(name: str) -> Optional[str]:
     """
     Convenience function to get agent module name.
+
+    Checks decorator registry first (preferred), then falls back to
+    directory scanning (deprecated).
 
     Args:
         name: Agent name.
@@ -186,4 +350,10 @@ def get_agent_module_name(name: str) -> Optional[str]:
     Returns:
         Full module name if exists, None otherwise.
     """
+    # Check decorator registry first
+    metadata = get_agent_metadata(name)
+    if metadata:
+        return metadata["module_name"]
+
+    # Fall back to legacy scanning
     return get_registry().get_agent_module_name(name)

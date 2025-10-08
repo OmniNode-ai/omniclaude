@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
 from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
@@ -270,6 +271,12 @@ async def analyze_research_quality(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+@register_agent(
+    agent_name="researcher",
+    agent_type="researcher",
+    capabilities=["rag_intelligence", "documentation_search", "code_examples", "multi_source_synthesis"],
+    description="Multi-source research intelligence agent"
+)
 class ResearchIntelligenceAgent:
     """
     Pydantic AI-based research intelligence agent.

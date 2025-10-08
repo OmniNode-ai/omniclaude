@@ -46,6 +46,7 @@ Usage:
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from dataclasses import dataclass, asdict, field
@@ -65,11 +66,57 @@ except ImportError:
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Configure logging to write to both stderr and file
+log_file = Path("/tmp/logging_implementation_coord.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='a'),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+logger = logging.getLogger(__name__)
+logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_file)
+
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask, AgentConfig
 from context_manager import ContextManager
 from agent_architect import ArchitectAgent
 from agent_registry import agent_exists, get_agent_module_name
+
+# Import all agents to trigger self-registration via decorators
+# This ensures agents register themselves when dispatch_runner loads
+logger.info("[AgentImport] Starting agent module imports...")
+try:
+    logger.info("[AgentImport] Importing agent_analyzer...")
+    import agent_analyzer
+    logger.info("[AgentImport] Successfully imported agent_analyzer")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_analyzer: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_researcher...")
+    import agent_researcher
+    logger.info("[AgentImport] Successfully imported agent_researcher")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_researcher: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_validator...")
+    import agent_validator
+    logger.info("[AgentImport] Successfully imported agent_validator")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_validator: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_debug_intelligence...")
+    import agent_debug_intelligence
+    logger.info("[AgentImport] Successfully imported agent_debug_intelligence")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_debug_intelligence: %s", e)
+
+logger.info("[AgentImport] Agent module imports completed")
 
 # Import quorum validation (optional dependency)
 try:
@@ -751,7 +798,24 @@ async def execute_phase_4_parallel_execution(
 
     try:
         print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
+
+        # Log execution start for each task
+        for task in tasks:
+            logger.info("[AgentExecution] Starting: %s for task '%s'", task.agent_name, task.task_id)
+            logger.info("[AgentExecution] Task: '%s'", task.description)
+
+        execution_start = time.time()
         results = await coordinator.execute_parallel(tasks)
+        execution_duration = (time.time() - execution_start) * 1000
+
+        # Log execution completion for each task
+        for task_id, result in results.items():
+            logger.info(
+                "[AgentExecution] Completed: %s (success=%s, time=%.1fms)",
+                result.agent_name, result.success, result.execution_time_ms
+            )
+            if not result.success and result.error:
+                logger.error("[AgentExecution] Error for task '%s': %s", task_id, result.error)
 
         # Automatic code extraction from debug agent outputs
         # Supports both Pydantic AI typed outputs (BaseModel) and legacy JSON (dict)
@@ -1213,6 +1277,9 @@ Phase Control Examples:
                 # Map agent name from architect's generic names to actual agent implementations
                 # Use dynamic agent registry to check if agent exists, with intelligent fallbacks
                 requested_agent = task_data.get("agent", "")
+                task_id = task_data.get("task_id", "unknown")
+
+                logger.info("[AgentSelection] Requested agent: '%s' for task '%s'", requested_agent, task_id)
 
                 # Static mappings for known aliases
                 agent_alias_mapping = {
@@ -1223,17 +1290,29 @@ Phase Control Examples:
 
                 # Resolve alias first
                 agent_base_name = agent_alias_mapping.get(requested_agent, requested_agent)
+                if requested_agent in agent_alias_mapping:
+                    logger.info("[AgentSelection] Agent alias resolved: '%s' -> '%s'", requested_agent, agent_base_name)
 
                 # Check if the agent exists in the registry
-                if agent_exists(agent_base_name):
+                logger.info("[AgentSelection] Checking if agent exists: %s", agent_base_name)
+                agent_exists_result = agent_exists(agent_base_name)
+                logger.info("[AgentSelection] agent_exists('%s') = %s", agent_base_name, agent_exists_result)
+
+                if agent_exists_result:
                     # Agent exists, use it
                     agent_name = f"agent-{agent_base_name}"
+                    logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
+                    logger.info("[AgentSelection] Fallback: False")
                     agent_metadata = {"agent_source": "registry", "fallback_used": False}
                 else:
                     # Agent doesn't exist, use intelligent fallback
+                    logger.warning(
+                        "[AgentSelection] Agent '%s' not found in registry. Using fallback for task '%s'",
+                        agent_base_name, task_id
+                    )
                     print(
                         f"[DispatchRunner] Warning: Agent '{agent_base_name}' not found in registry. "
-                        f"Using fallback for task {task_data.get('task_id')}",
+                        f"Using fallback for task {task_id}",
                         file=sys.stderr
                     )
 
@@ -1250,6 +1329,9 @@ Phase Control Examples:
                         # Default fallback to coder
                         agent_name = "agent-contract-driven-generator"
                         fallback_reason = "unknown agent type defaulted to coder"
+
+                    logger.info("[AgentSelection] Selected agent: '%s' (fallback)", agent_name)
+                    logger.info("[AgentSelection] Fallback: True - Reason: %s", fallback_reason)
 
                     agent_metadata = {
                         "agent_source": "fallback",
