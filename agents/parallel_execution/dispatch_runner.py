@@ -1269,10 +1269,11 @@ Phase Control Examples:
             sys.exit(0)
 
     # Phase 3: Context Filtering
+    # Initialize tasks list before Phase 3 (needed when skipping to Phase 4)
+    tasks = []
+
     if phase_config.should_execute_phase(ExecutionPhase.CONTEXT_FILTERING):
         # Convert tasks and apply context filtering
-        tasks = []
-
         for task_data in tasks_data:
             try:
                 # Map agent name from architect's generic names to actual agent implementations
@@ -1386,6 +1387,25 @@ Phase Control Examples:
                 "tasks_prepared": len(tasks)
             }, indent=2))
             sys.exit(0)
+    else:
+        # Phase 3 was skipped - build tasks directly from tasks_data
+        for task_data in tasks_data:
+            try:
+                agent_name = f"agent-{task_data.get('agent', '')}"
+                task = AgentTask(
+                    task_id=task_data["task_id"],
+                    description=task_data["description"],
+                    agent_name=agent_name,
+                    input_data=task_data.get("input_data", {}),
+                    dependencies=task_data.get("dependencies", [])
+                )
+                tasks.append(task)
+            except Exception as e:
+                print(json.dumps({
+                    "success": False,
+                    "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}"
+                }), file=sys.stderr)
+                sys.exit(1)
 
     # Phase 4: Parallel Execution
     if phase_config.should_execute_phase(ExecutionPhase.PARALLEL_EXECUTION):

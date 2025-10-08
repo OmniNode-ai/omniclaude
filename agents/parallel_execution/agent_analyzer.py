@@ -216,7 +216,7 @@ async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
         return "Design pattern intelligence available from knowledge base"
 
     except Exception as e:
-        deps.trace_logger.log_event(
+        await deps.trace_logger.log_event(
             event_type=TraceEventType.AGENT_ERROR,
             message=f"Pattern intelligence gathering failed: {str(e)}",
             level=TraceLevel.WARNING,
@@ -480,7 +480,7 @@ class ArchitecturalAnalyzerAgent:
             )
 
             result = await architectural_analyzer_agent.run(prompt, deps=deps)
-            analysis_report: AnalysisReport = result.data
+            analysis_report: AnalysisReport = result.output
 
             # Calculate execution time
             execution_time_ms = (time.time() - start_time) * 1000
