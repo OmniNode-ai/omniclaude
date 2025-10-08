@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
 from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
@@ -161,7 +162,7 @@ Analyze thoroughly using available tools and generate comprehensive analysis rep
 architectural_analyzer_agent = Agent[AgentDeps, AnalysisReport](
     'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
     deps_type=AgentDeps,
-    result_type=AnalysisReport,
+    output_type=AnalysisReport,
     system_prompt=ANALYZER_SYSTEM_PROMPT
 )
 
@@ -384,6 +385,12 @@ async def get_anti_pattern_detection(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+@register_agent(
+    agent_name="analyzer",
+    agent_type="analyzer",
+    capabilities=["architecture_analysis", "design_patterns", "quality_metrics", "anti_patterns"],
+    description="Architectural and code quality analysis agent"
+)
 class ArchitecturalAnalyzerAgent:
     """
     Pydantic AI-based architectural analysis agent.
