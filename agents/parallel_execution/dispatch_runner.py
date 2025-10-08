@@ -61,6 +61,7 @@ from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask, AgentConfig
 from context_manager import ContextManager
 from agent_architect import ArchitectAgent
+from agent_registry import agent_exists, get_agent_module_name
 
 # Import quorum validation (optional dependency)
 try:
@@ -744,6 +745,55 @@ async def execute_phase_4_parallel_execution(
         print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
         results = await coordinator.execute_parallel(tasks)
 
+        # Automatic code extraction from debug agent outputs
+        for task_id, result in results.items():
+            if result.success and result.agent_name == "agent-debug-intelligence":
+                try:
+                    # Check if debug agent provided fixed code in solution
+                    output_data = result.output_data or {}
+                    solution = output_data.get("solution", {})
+                    fixed_code = solution.get("fixed_code")
+
+                    if fixed_code:
+                        # Find the corresponding task to get output file info
+                        task = next((t for t in tasks if t.task_id == task_id), None)
+                        if not task:
+                            continue
+
+                        # Determine output file path
+                        input_data = task.input_data or {}
+                        output_files = input_data.get("output_files", [])
+                        target_directory = input_data.get("target_directory", ".")
+
+                        if output_files and len(output_files) > 0:
+                            output_file = Path(target_directory) / output_files[0]
+                        else:
+                            # Fallback: use task_id as filename
+                            output_file = Path(target_directory) / f"agent_{task_id}.py"
+
+                        # Ensure directory exists
+                        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                        # Write the extracted code
+                        output_file.write_text(fixed_code, encoding="utf-8")
+
+                        print(
+                            f"[DispatchRunner] Code extracted from {task_id}: {output_file}",
+                            file=sys.stderr
+                        )
+
+                        # Update result metadata
+                        if result.output_data is None:
+                            result.output_data = {}
+                        result.output_data["_code_extracted"] = True
+                        result.output_data["_extracted_file"] = str(output_file)
+
+                except Exception as e:
+                    print(
+                        f"[DispatchRunner] Warning: Failed to extract code from {task_id}: {e}",
+                        file=sys.stderr
+                    )
+
         # Interactive checkpoint: Review execution results
         if validator and INTERACTIVE_AVAILABLE:
             successful = sum(1 for r in results.values() if r.success)
@@ -1105,17 +1155,52 @@ Phase Control Examples:
         for task_data in tasks_data:
             try:
                 # Map agent name from architect's generic names to actual agent implementations
-                agent_name_mapping = {
-                    "coder": "agent-contract-driven-generator",
-                    "debug": "agent-debug-intelligence",
-                    "debugger": "agent-debug-intelligence",
-                    # Map research/analysis tasks to coder for now (they can generate code/docs)
-                    "researcher": "agent-contract-driven-generator",
-                    "analyzer": "agent-contract-driven-generator",
-                    # Map validation to debug intelligence (can analyze and validate)
-                    "validator": "agent-debug-intelligence"
+                # Use dynamic agent registry to check if agent exists, with intelligent fallbacks
+                requested_agent = task_data.get("agent", "")
+
+                # Static mappings for known aliases
+                agent_alias_mapping = {
+                    "coder": "contract-driven-generator",
+                    "debug": "debug-intelligence",
+                    "debugger": "debug-intelligence",
                 }
-                agent_name = agent_name_mapping.get(task_data.get("agent"), task_data.get("agent"))
+
+                # Resolve alias first
+                agent_base_name = agent_alias_mapping.get(requested_agent, requested_agent)
+
+                # Check if the agent exists in the registry
+                if agent_exists(agent_base_name):
+                    # Agent exists, use it
+                    agent_name = f"agent-{agent_base_name}"
+                    agent_metadata = {"agent_source": "registry", "fallback_used": False}
+                else:
+                    # Agent doesn't exist, use intelligent fallback
+                    print(
+                        f"[DispatchRunner] Warning: Agent '{agent_base_name}' not found in registry. "
+                        f"Using fallback for task {task_data.get('task_id')}",
+                        file=sys.stderr
+                    )
+
+                    # Fallback logic based on task type
+                    if agent_base_name in ["researcher", "analyzer"]:
+                        # Research/analysis tasks - use coder for now (can generate docs)
+                        agent_name = "agent-contract-driven-generator"
+                        fallback_reason = "research/analysis tasks mapped to coder temporarily"
+                    elif agent_base_name in ["validator"]:
+                        # Validation tasks - use debug intelligence (can analyze)
+                        agent_name = "agent-debug-intelligence"
+                        fallback_reason = "validation tasks mapped to debug temporarily"
+                    else:
+                        # Default fallback to coder
+                        agent_name = "agent-contract-driven-generator"
+                        fallback_reason = "unknown agent type defaulted to coder"
+
+                    agent_metadata = {
+                        "agent_source": "fallback",
+                        "fallback_used": True,
+                        "requested_agent": requested_agent,
+                        "fallback_reason": fallback_reason
+                    }
 
                 # Filter context for this task (if enabled)
                 input_data_with_context = task_data.get("input_data", {}).copy()
@@ -1146,6 +1231,9 @@ Phase Control Examples:
                             f"{len(filtered_context)} context items attached",
                             file=sys.stderr
                         )
+
+                # Add agent metadata to input_data for tracking
+                input_data_with_context["_agent_metadata"] = agent_metadata
 
                 task = AgentTask(
                     task_id=task_data["task_id"],
