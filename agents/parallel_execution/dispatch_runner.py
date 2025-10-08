@@ -801,7 +801,8 @@ async def execute_phase_4_parallel_execution(
 
         # Log execution start for each task
         for task in tasks:
-            logger.info("[AgentExecution] Starting: %s for task '%s'", task.agent_name, task.task_id)
+            agent_name = getattr(task, 'agent_name', 'unknown-agent')
+            logger.info("[AgentExecution] Starting: %s for task '%s'", agent_name, task.task_id)
             logger.info("[AgentExecution] Task: '%s'", task.description)
 
         execution_start = time.time()
