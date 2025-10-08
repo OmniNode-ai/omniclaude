@@ -1045,6 +1045,7 @@ Phase Control Examples:
     # Input/session management
     parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
     parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
+    parser.add_argument("--output-file", "-o", type=str, help="Write JSON output to file instead of stdout")
 
     args = parser.parse_args()
 
@@ -1498,8 +1499,14 @@ Phase Control Examples:
     if phase_config.save_state_file:
         phase_state.save(phase_config.save_state_file)
 
-    # Print results to stdout
-    print(json.dumps(output, indent=2))
+    # Write results to output file or stdout
+    output_json = json.dumps(output, indent=2)
+    if args.output_file:
+        with open(args.output_file, 'w') as f:
+            f.write(output_json)
+        print(f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr)
+    else:
+        print(output_json)
 
     # Cleanup
     if context_manager:
