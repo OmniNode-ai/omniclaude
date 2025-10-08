@@ -285,7 +285,16 @@ class ResearchIntelligenceAgent:
     """
 
     def __init__(self):
-        self.config = AgentConfig.load("agent-researcher")
+        # Config is optional - create default if not found
+        try:
+            self.config = AgentConfig.load("agent-researcher")
+        except (FileNotFoundError, Exception):
+            # Create minimal default config
+            self.config = AgentConfig(
+                agent_name="agent-researcher",
+                agent_domain="research_intelligence",
+                agent_purpose="Research validation patterns and gather intelligence"
+            )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
         self._current_trace_id: Optional[str] = None

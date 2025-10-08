@@ -59,6 +59,7 @@ class AgentTask(BaseModel):
 
     task_id: str
     description: str
+    agent_name: str
     input_data: Dict[str, Any] = Field(default_factory=dict)
     dependencies: list[str] = Field(default_factory=list)
 

@@ -1299,47 +1299,28 @@ Phase Control Examples:
                 agent_exists_result = agent_exists(agent_base_name)
                 logger.info("[AgentSelection] agent_exists('%s') = %s", agent_base_name, agent_exists_result)
 
-                if agent_exists_result:
-                    # Agent exists, use it
-                    agent_name = f"agent-{agent_base_name}"
-                    logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
-                    logger.info("[AgentSelection] Fallback: False")
-                    agent_metadata = {"agent_source": "registry", "fallback_used": False}
-                else:
-                    # Agent doesn't exist, use intelligent fallback
-                    logger.warning(
-                        "[AgentSelection] Agent '%s' not found in registry. Using fallback for task '%s'",
-                        agent_base_name, task_id
+                if not agent_exists_result:
+                    # Agent doesn't exist - fail immediately with clear error
+                    error_msg = (
+                        f"Agent '{agent_base_name}' not found in registry for task '{task_id}'. "
+                        f"Available agents: {', '.join(sorted(list_registered_agents()))}"
                     )
-                    print(
-                        f"[DispatchRunner] Warning: Agent '{agent_base_name}' not found in registry. "
-                        f"Using fallback for task {task_id}",
-                        file=sys.stderr
-                    )
+                    logger.error("[AgentSelection] %s", error_msg)
+                    print(f"[DispatchRunner] ERROR: {error_msg}", file=sys.stderr)
 
-                    # Fallback logic based on task type
-                    if agent_base_name in ["researcher", "analyzer"]:
-                        # Research/analysis tasks - use coder for now (can generate docs)
-                        agent_name = "agent-contract-driven-generator"
-                        fallback_reason = "research/analysis tasks mapped to coder temporarily"
-                    elif agent_base_name in ["validator"]:
-                        # Validation tasks - use debug intelligence (can analyze)
-                        agent_name = "agent-debug-intelligence"
-                        fallback_reason = "validation tasks mapped to debug temporarily"
-                    else:
-                        # Default fallback to coder
-                        agent_name = "agent-contract-driven-generator"
-                        fallback_reason = "unknown agent type defaulted to coder"
-
-                    logger.info("[AgentSelection] Selected agent: '%s' (fallback)", agent_name)
-                    logger.info("[AgentSelection] Fallback: True - Reason: %s", fallback_reason)
-
-                    agent_metadata = {
-                        "agent_source": "fallback",
-                        "fallback_used": True,
+                    print(json.dumps({
+                        "success": False,
+                        "error": error_msg,
+                        "task_id": task_id,
                         "requested_agent": requested_agent,
-                        "fallback_reason": fallback_reason
-                    }
+                        "available_agents": list_registered_agents()
+                    }), file=sys.stderr)
+                    sys.exit(1)
+
+                # Agent exists, use it
+                agent_name = f"agent-{agent_base_name}"
+                logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
+                agent_metadata = {"agent_source": "registry"}
 
                 # Filter context for this task (if enabled)
                 input_data_with_context = task_data.get("input_data", {}).copy()
