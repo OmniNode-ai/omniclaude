@@ -161,8 +161,8 @@ Analyze thoroughly using available tools and generate comprehensive analysis rep
 # Model fallback configuration
 FALLBACK_MODELS = [
     'google-gla:gemini-2.5-flash',  # Primary model
-    'google-gla:gemini-1.5-flash',  # Fallback 1
-    'openai:gpt-4o-mini'            # Fallback 2
+    'glm-4.6',                      # Fallback 1: Zai GLM-4.6
+    'google-gla:gemini-1.5-flash'   # Fallback 2
 ]
 
 # Create the Pydantic AI agent
