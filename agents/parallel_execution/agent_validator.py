@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic_ai import Agent, RunContext
 
 from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
@@ -137,7 +138,7 @@ Validate thoroughly and generate complete compliance report."""
 validation_agent = Agent[AgentDeps, ComplianceReport](
     'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
     deps_type=AgentDeps,
-    result_type=ComplianceReport,
+    output_type=ComplianceReport,
     system_prompt=VALIDATION_SYSTEM_PROMPT
 )
 
@@ -285,6 +286,12 @@ async def get_validation_standards(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+@register_agent(
+    agent_name="validator",
+    agent_type="validator",
+    capabilities=["code_validation", "config_validation", "output_validation", "compliance_reporting"],
+    description="Compliance and validation agent"
+)
 class AgentValidator:
     """
     Pydantic AI-based validation agent.
