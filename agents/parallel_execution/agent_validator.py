@@ -300,7 +300,16 @@ class AgentValidator:
     """
 
     def __init__(self):
-        self.config = AgentConfig.load("agent-validator")
+        # Config is optional - create default if not found
+        try:
+            self.config = AgentConfig.load("agent-validator")
+        except (FileNotFoundError, Exception):
+            # Create minimal default config
+            self.config = AgentConfig(
+                agent_name="agent-validator",
+                agent_domain="validation_compliance",
+                agent_purpose="Validate code, configuration, and output compliance"
+            )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
         self._current_trace_id: Optional[str] = None

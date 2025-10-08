@@ -400,7 +400,16 @@ class ArchitecturalAnalyzerAgent:
     """
 
     def __init__(self):
-        self.config = AgentConfig.load("agent-analyzer")
+        # Config is optional - create default if not found
+        try:
+            self.config = AgentConfig.load("agent-analyzer")
+        except (FileNotFoundError, Exception):
+            # Create minimal default config
+            self.config = AgentConfig(
+                agent_name="agent-analyzer",
+                agent_domain="architectural_analysis",
+                agent_purpose="Analyze architecture, design patterns, and quality metrics"
+            )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
         self._current_trace_id: Optional[str] = None
