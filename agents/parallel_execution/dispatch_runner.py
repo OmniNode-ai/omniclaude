@@ -46,6 +46,7 @@ Usage:
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from dataclasses import dataclass, asdict, field
@@ -54,13 +55,68 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Pydantic imports for handling typed agent outputs
+try:
+    from pydantic import BaseModel
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    BaseModel = None
+    PYDANTIC_AVAILABLE = False
+
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Configure logging to write to both stderr and file
+log_file = Path("/tmp/logging_implementation_coord.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='a'),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+logger = logging.getLogger(__name__)
+logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_file)
 
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask, AgentConfig
 from context_manager import ContextManager
 from agent_architect import ArchitectAgent
+from agent_registry import agent_exists, get_agent_module_name
+
+# Import all agents to trigger self-registration via decorators
+# This ensures agents register themselves when dispatch_runner loads
+logger.info("[AgentImport] Starting agent module imports...")
+try:
+    logger.info("[AgentImport] Importing agent_analyzer...")
+    import agent_analyzer
+    logger.info("[AgentImport] Successfully imported agent_analyzer")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_analyzer: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_researcher...")
+    import agent_researcher
+    logger.info("[AgentImport] Successfully imported agent_researcher")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_researcher: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_validator...")
+    import agent_validator
+    logger.info("[AgentImport] Successfully imported agent_validator")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_validator: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_debug_intelligence...")
+    import agent_debug_intelligence
+    logger.info("[AgentImport] Successfully imported agent_debug_intelligence")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_debug_intelligence: %s", e)
+
+logger.info("[AgentImport] Agent module imports completed")
 
 # Import quorum validation (optional dependency)
 try:
@@ -742,7 +798,122 @@ async def execute_phase_4_parallel_execution(
 
     try:
         print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
+
+        # Log execution start for each task
+        for task in tasks:
+            agent_name = getattr(task, 'agent_name', 'unknown-agent')
+            logger.info("[AgentExecution] Starting: %s for task '%s'", agent_name, task.task_id)
+            logger.info("[AgentExecution] Task: '%s'", task.description)
+
+        execution_start = time.time()
         results = await coordinator.execute_parallel(tasks)
+        execution_duration = (time.time() - execution_start) * 1000
+
+        # Log execution completion for each task
+        for task_id, result in results.items():
+            logger.info(
+                "[AgentExecution] Completed: %s (success=%s, time=%.1fms)",
+                result.agent_name, result.success, result.execution_time_ms
+            )
+            if not result.success and result.error:
+                logger.error("[AgentExecution] Error for task '%s': %s", task_id, result.error)
+
+        # Automatic code extraction from debug agent outputs
+        # Supports both Pydantic AI typed outputs (BaseModel) and legacy JSON (dict)
+        for task_id, result in results.items():
+            if result.success and result.agent_name == "agent-debug-intelligence":
+                try:
+                    # Extract fixed code - support both Pydantic BaseModel and JSON dict
+                    output_data = result.output_data
+                    fixed_code = None
+                    extraction_method = None
+
+                    # Method 1: Pydantic BaseModel with typed attributes
+                    if PYDANTIC_AVAILABLE and isinstance(output_data, BaseModel):
+                        # Check for solution.fixed_code using attribute access
+                        if hasattr(output_data, "solution"):
+                            solution = output_data.solution
+                            if hasattr(solution, "fixed_code"):
+                                fixed_code = solution.fixed_code
+                                extraction_method = "Pydantic BaseModel (solution.fixed_code)"
+
+                        print(
+                            f"[DispatchRunner] Pydantic extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code attribute'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 2: Legacy JSON dict with nested keys
+                    elif isinstance(output_data, dict):
+                        solution = output_data.get("solution", {})
+                        fixed_code = solution.get("fixed_code") if isinstance(solution, dict) else None
+                        extraction_method = "JSON dict (solution.fixed_code)" if fixed_code else None
+
+                        print(
+                            f"[DispatchRunner] JSON extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code key'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 3: Handle None or unexpected types gracefully
+                    else:
+                        output_type = type(output_data).__name__ if output_data is not None else "None"
+                        print(
+                            f"[DispatchRunner] Skipping {task_id}: "
+                            f"output_data is {output_type}, expected BaseModel or dict",
+                            file=sys.stderr
+                        )
+
+                    if fixed_code:
+                        # Find the corresponding task to get output file info
+                        task = next((t for t in tasks if t.task_id == task_id), None)
+                        if not task:
+                            print(
+                                f"[DispatchRunner] Warning: Task {task_id} not found for code extraction",
+                                file=sys.stderr
+                            )
+                            continue
+
+                        # Determine output file path
+                        input_data = task.input_data or {}
+                        output_files = input_data.get("output_files", [])
+                        target_directory = input_data.get("target_directory", ".")
+
+                        if output_files and len(output_files) > 0:
+                            output_file = Path(target_directory) / output_files[0]
+                        else:
+                            # Fallback: use task_id as filename
+                            output_file = Path(target_directory) / f"agent_{task_id}.py"
+
+                        # Ensure directory exists
+                        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                        # Write the extracted code
+                        output_file.write_text(fixed_code, encoding="utf-8")
+
+                        print(
+                            f"[DispatchRunner] ✓ Code extracted from {task_id} using {extraction_method}: {output_file}",
+                            file=sys.stderr
+                        )
+
+                        # Update result metadata - preserve BaseModel or create dict
+                        if isinstance(output_data, dict):
+                            result.output_data["_code_extracted"] = True
+                            result.output_data["_extracted_file"] = str(output_file)
+                            result.output_data["_extraction_method"] = extraction_method
+                        else:
+                            # For BaseModel, store metadata separately to avoid mutating the model
+                            if not hasattr(result, "_extraction_metadata"):
+                                result._extraction_metadata = {}
+                            result._extraction_metadata["code_extracted"] = True
+                            result._extraction_metadata["extracted_file"] = str(output_file)
+                            result._extraction_metadata["extraction_method"] = extraction_method
+
+                except Exception as e:
+                    print(
+                        f"[DispatchRunner] Warning: Failed to extract code from {task_id}: {e}",
+                        file=sys.stderr
+                    )
 
         # Interactive checkpoint: Review execution results
         if validator and INTERACTIVE_AVAILABLE:
@@ -830,6 +1001,54 @@ async def execute_phase_4_parallel_execution(
         await coordinator.cleanup()
 
 
+async def extract_code_from_results(output: dict, output_dir: str):
+    """Extract Python code files from agent results using the new architecture."""
+    print("[DispatchRunner] Extracting Python code files...", file=sys.stderr)
+
+    try:
+        # Import the new code extractor
+        from code_extractor import ExtractCode
+
+        # Create extractor and extract code
+        extractor = ExtractCode(output_dir)
+        code_files = extractor.extract_from_results(output)
+
+        # Write code files
+        extractor.write_code_files(code_files)
+
+        # Write manifest
+        extractor.write_manifest(code_files)
+
+        print(f"[DispatchRunner] ✓ Extracted {len(code_files)} code files to {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import code extractor: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Code extraction failed: {e}", file=sys.stderr)
+
+
+async def generate_markdown_docs(output: dict, output_dir: str):
+    """Generate human-readable Markdown documentation using the new architecture."""
+    print("[DispatchRunner] Generating Markdown documentation...", file=sys.stderr)
+
+    try:
+        # Import the new doc generator
+        from doc_generator import MarkdownDocGenerator
+
+        # Create generator and generate docs
+        doc_generator = MarkdownDocGenerator(output_dir)
+        doc_generator.generate_from_results(output)
+
+        print(f"[DispatchRunner] ✓ Generated documentation in {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import doc generator: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Documentation generation failed: {e}", file=sys.stderr)
+
+
+
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -874,6 +1093,10 @@ Phase Control Examples:
     # Input/session management
     parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
     parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
+    parser.add_argument("--output-file", "-o", type=str, help="Write JSON output to file instead of stdout")
+    parser.add_argument("--extract-code", "-c", action="store_true", help="Extract Python code files from agent results")
+    parser.add_argument("--generate-md", "-m", action="store_true", help="Generate human-readable Markdown documentation")
+    parser.add_argument("--output-dir", type=str, default="generated_code", help="Directory for extracted code and docs")
 
     args = parser.parse_args()
 
@@ -1098,24 +1321,59 @@ Phase Control Examples:
             sys.exit(0)
 
     # Phase 3: Context Filtering
+    # Initialize tasks list before Phase 3 (needed when skipping to Phase 4)
+    tasks = []
+
     if phase_config.should_execute_phase(ExecutionPhase.CONTEXT_FILTERING):
         # Convert tasks and apply context filtering
-        tasks = []
-
         for task_data in tasks_data:
             try:
                 # Map agent name from architect's generic names to actual agent implementations
-                agent_name_mapping = {
-                    "coder": "agent-contract-driven-generator",
-                    "debug": "agent-debug-intelligence",
-                    "debugger": "agent-debug-intelligence",
-                    # Map research/analysis tasks to coder for now (they can generate code/docs)
-                    "researcher": "agent-contract-driven-generator",
-                    "analyzer": "agent-contract-driven-generator",
-                    # Map validation to debug intelligence (can analyze and validate)
-                    "validator": "agent-debug-intelligence"
+                # Use dynamic agent registry to check if agent exists, with intelligent fallbacks
+                requested_agent = task_data.get("agent", "")
+                task_id = task_data.get("task_id", "unknown")
+
+                logger.info("[AgentSelection] Requested agent: '%s' for task '%s'", requested_agent, task_id)
+
+                # Static mappings for known aliases
+                agent_alias_mapping = {
+                    "coder": "contract-driven-generator",
+                    "debug": "debug-intelligence",
+                    "debugger": "debug-intelligence",
                 }
-                agent_name = agent_name_mapping.get(task_data.get("agent"), task_data.get("agent"))
+
+                # Resolve alias first
+                agent_base_name = agent_alias_mapping.get(requested_agent, requested_agent)
+                if requested_agent in agent_alias_mapping:
+                    logger.info("[AgentSelection] Agent alias resolved: '%s' -> '%s'", requested_agent, agent_base_name)
+
+                # Check if the agent exists in the registry
+                logger.info("[AgentSelection] Checking if agent exists: %s", agent_base_name)
+                agent_exists_result = agent_exists(agent_base_name)
+                logger.info("[AgentSelection] agent_exists('%s') = %s", agent_base_name, agent_exists_result)
+
+                if not agent_exists_result:
+                    # Agent doesn't exist - fail immediately with clear error
+                    error_msg = (
+                        f"Agent '{agent_base_name}' not found in registry for task '{task_id}'. "
+                        f"Available agents: {', '.join(sorted(list_registered_agents()))}"
+                    )
+                    logger.error("[AgentSelection] %s", error_msg)
+                    print(f"[DispatchRunner] ERROR: {error_msg}", file=sys.stderr)
+
+                    print(json.dumps({
+                        "success": False,
+                        "error": error_msg,
+                        "task_id": task_id,
+                        "requested_agent": requested_agent,
+                        "available_agents": list_registered_agents()
+                    }), file=sys.stderr)
+                    sys.exit(1)
+
+                # Agent exists, use it
+                agent_name = f"agent-{agent_base_name}"
+                logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
+                agent_metadata = {"agent_source": "registry"}
 
                 # Filter context for this task (if enabled)
                 input_data_with_context = task_data.get("input_data", {}).copy()
@@ -1146,6 +1404,9 @@ Phase Control Examples:
                             f"{len(filtered_context)} context items attached",
                             file=sys.stderr
                         )
+
+                # Add agent metadata to input_data for tracking
+                input_data_with_context["_agent_metadata"] = agent_metadata
 
                 task = AgentTask(
                     task_id=task_data["task_id"],
@@ -1178,6 +1439,25 @@ Phase Control Examples:
                 "tasks_prepared": len(tasks)
             }, indent=2))
             sys.exit(0)
+    else:
+        # Phase 3 was skipped - build tasks directly from tasks_data
+        for task_data in tasks_data:
+            try:
+                agent_name = f"agent-{task_data.get('agent', '')}"
+                task = AgentTask(
+                    task_id=task_data["task_id"],
+                    description=task_data["description"],
+                    agent_name=agent_name,
+                    input_data=task_data.get("input_data", {}),
+                    dependencies=task_data.get("dependencies", [])
+                )
+                tasks.append(task)
+            except Exception as e:
+                print(json.dumps({
+                    "success": False,
+                    "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}"
+                }), file=sys.stderr)
+                sys.exit(1)
 
     # Phase 4: Parallel Execution
     if phase_config.should_execute_phase(ExecutionPhase.PARALLEL_EXECUTION):
@@ -1270,8 +1550,25 @@ Phase Control Examples:
     if phase_config.save_state_file:
         phase_state.save(phase_config.save_state_file)
 
-    # Print results to stdout
-    print(json.dumps(output, indent=2))
+    # Write results to output file or stdout
+    output_json = json.dumps(output, indent=2)
+    if args.output_file:
+        with open(args.output_file, 'w') as f:
+            f.write(output_json)
+        print(f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr)
+    else:
+        print(output_json)
+
+    # Extract code and generate docs if requested
+    if args.extract_code or args.generate_md:
+        import os
+        os.makedirs(args.output_dir, exist_ok=True)
+        print(f"[DispatchRunner] Output directory: {args.output_dir}", file=sys.stderr)
+
+        if args.extract_code:
+            await extract_code_from_results(output, args.output_dir)
+        if args.generate_md:
+            await generate_markdown_docs(output, args.output_dir)
 
     # Cleanup
     if context_manager:

@@ -13,6 +13,9 @@ from agent_model import AgentTask, AgentResult
 from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 from agent_coder import CoderAgent
 from agent_debug_intelligence import DebugIntelligenceAgent
+from agent_analyzer import ArchitecturalAnalyzerAgent
+from agent_researcher import ResearchIntelligenceAgent
+from agent_validator import AgentValidator
 
 
 class ParallelCoordinator:
@@ -33,7 +36,10 @@ class ParallelCoordinator:
         # Agent registry
         self.agents = {
             "agent-contract-driven-generator": CoderAgent(),
-            "agent-debug-intelligence": DebugIntelligenceAgent()
+            "agent-debug-intelligence": DebugIntelligenceAgent(),
+            "agent-analyzer": ArchitecturalAnalyzerAgent(),
+            "agent-researcher": ResearchIntelligenceAgent(),
+            "agent-validator": AgentValidator()
         }
 
     async def execute_parallel(
@@ -253,7 +259,7 @@ class ParallelCoordinator:
 
             return AgentResult(
                 task_id=task.task_id,
-                agent_name=getattr(agent, "config", type(agent)).agent_name if hasattr(agent, "config") else "unknown",
+                agent_name=task.agent_name if hasattr(task, 'agent_name') else "unknown",
                 success=False,
                 error=error_msg,
                 execution_time_ms=0.0
