@@ -368,7 +368,7 @@ class AgentValidator:
             )
 
             result = await validation_agent.run(prompt, deps=deps)
-            compliance_report: ComplianceReport = result.data
+            compliance_report: ComplianceReport = result.output
 
             # Calculate execution time
             execution_time_ms = (time.time() - start_time) * 1000
