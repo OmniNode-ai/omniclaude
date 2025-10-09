@@ -1001,6 +1001,54 @@ async def execute_phase_4_parallel_execution(
         await coordinator.cleanup()
 
 
+async def extract_code_from_results(output: dict, output_dir: str):
+    """Extract Python code files from agent results using the new architecture."""
+    print("[DispatchRunner] Extracting Python code files...", file=sys.stderr)
+
+    try:
+        # Import the new code extractor
+        from code_extractor import ExtractCode
+
+        # Create extractor and extract code
+        extractor = ExtractCode(output_dir)
+        code_files = extractor.extract_from_results(output)
+
+        # Write code files
+        extractor.write_code_files(code_files)
+
+        # Write manifest
+        extractor.write_manifest(code_files)
+
+        print(f"[DispatchRunner] ✓ Extracted {len(code_files)} code files to {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import code extractor: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Code extraction failed: {e}", file=sys.stderr)
+
+
+async def generate_markdown_docs(output: dict, output_dir: str):
+    """Generate human-readable Markdown documentation using the new architecture."""
+    print("[DispatchRunner] Generating Markdown documentation...", file=sys.stderr)
+
+    try:
+        # Import the new doc generator
+        from doc_generator import MarkdownDocGenerator
+
+        # Create generator and generate docs
+        doc_generator = MarkdownDocGenerator(output_dir)
+        doc_generator.generate_from_results(output)
+
+        print(f"[DispatchRunner] ✓ Generated documentation in {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import doc generator: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Documentation generation failed: {e}", file=sys.stderr)
+
+
+
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -1046,6 +1094,9 @@ Phase Control Examples:
     parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
     parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
     parser.add_argument("--output-file", "-o", type=str, help="Write JSON output to file instead of stdout")
+    parser.add_argument("--extract-code", "-c", action="store_true", help="Extract Python code files from agent results")
+    parser.add_argument("--generate-md", "-m", action="store_true", help="Generate human-readable Markdown documentation")
+    parser.add_argument("--output-dir", type=str, default="generated_code", help="Directory for extracted code and docs")
 
     args = parser.parse_args()
 
@@ -1507,6 +1558,17 @@ Phase Control Examples:
         print(f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr)
     else:
         print(output_json)
+
+    # Extract code and generate docs if requested
+    if args.extract_code or args.generate_md:
+        import os
+        os.makedirs(args.output_dir, exist_ok=True)
+        print(f"[DispatchRunner] Output directory: {args.output_dir}", file=sys.stderr)
+
+        if args.extract_code:
+            await extract_code_from_results(output, args.output_dir)
+        if args.generate_md:
+            await generate_markdown_docs(output, args.output_dir)
 
     # Cleanup
     if context_manager:
