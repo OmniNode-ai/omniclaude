@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
 from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
@@ -274,6 +275,12 @@ async def get_debug_patterns(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+@register_agent(
+    agent_name="debug",
+    agent_type="debug",
+    capabilities=["debug_analysis", "root_cause_analysis", "bfros_analysis", "solution_generation"],
+    description="Multi-dimensional debug intelligence agent"
+)
 class DebugIntelligenceAgent:
     """
     Pydantic AI-based debug intelligence agent.
