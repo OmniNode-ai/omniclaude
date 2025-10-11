@@ -1,0 +1,9 @@
+# Pattern Tracking Dependencies
+# Install with: pip install -r requirements-pattern-tracking.txt
+
+# HTTP client for async API calls to Phase 4 Pattern Traceability
+aiohttp>=3.9.0
+
+# Required for existing PostToolUse hook (already installed)
+# pyyaml
+# libcst

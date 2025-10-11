@@ -38,6 +38,8 @@ class TraceEventType(str, Enum):
     PARALLEL_BATCH_END = "PARALLEL_BATCH_END"
     DEPENDENCY_WAIT = "DEPENDENCY_WAIT"
     DEPENDENCY_MET = "DEPENDENCY_MET"
+    ROUTING_DECISION = "ROUTING_DECISION"
+    AGENT_TRANSFORM = "AGENT_TRANSFORM"
 
 
 class TraceEvent(BaseModel):
@@ -285,6 +287,103 @@ class TraceLogger:
                 self._current_coordinator_trace.events.append(event)
                 await self._write_coordinator_trace()
 
+    async def log_routing_decision(
+        self,
+        user_request: str,
+        selected_agent: str,
+        confidence_score: float,
+        alternatives: List[Dict[str, Any]],
+        reasoning: str,
+        task_id: Optional[str] = None,
+        routing_strategy: str = "enhanced",
+        context: Optional[Dict[str, Any]] = None,
+        routing_time_ms: Optional[float] = None
+    ):
+        """
+        Log a routing decision with full context.
+
+        Args:
+            user_request: Original user request that triggered routing
+            selected_agent: Name of the selected agent
+            confidence_score: Confidence score for the selection (0.0-1.0)
+            alternatives: List of alternative agents considered with their scores
+            reasoning: Explanation for why this agent was selected
+            task_id: Associated task ID if available
+            routing_strategy: Strategy used for routing (enhanced, fuzzy, exact, etc.)
+            context: Additional context used in routing decision
+            routing_time_ms: Time taken to make routing decision
+        """
+        async with self._lock:
+            # Build routing metadata
+            routing_metadata = {
+                "user_request": user_request,
+                "selected_agent": selected_agent,
+                "confidence_score": confidence_score,
+                "reasoning": reasoning,
+                "routing_strategy": routing_strategy,
+                "alternatives": alternatives,  # List of {agent_name, confidence, match_type, ...}
+                "context": context or {},
+                "routing_time_ms": routing_time_ms,
+                "alternatives_count": len(alternatives),
+                "top_3_alternatives": alternatives[:3] if len(alternatives) > 3 else alternatives
+            }
+
+            # Determine log level based on confidence
+            level = TraceLevel.INFO
+            if confidence_score < 0.5:
+                level = TraceLevel.WARNING
+            elif confidence_score < 0.3:
+                level = TraceLevel.ERROR
+
+            # Create message
+            message = (
+                f"Routing decision: selected '{selected_agent}' "
+                f"(confidence: {confidence_score:.2%}, "
+                f"alternatives: {len(alternatives)}, "
+                f"strategy: {routing_strategy})"
+            )
+
+            # Create trace event
+            event = TraceEvent(
+                event_type=TraceEventType.ROUTING_DECISION,
+                level=level,
+                agent_name=selected_agent,
+                task_id=task_id,
+                coordinator_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                message=message,
+                metadata=routing_metadata,
+                duration_ms=routing_time_ms,
+                parent_trace_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None
+            )
+
+            # Add to coordinator trace if active
+            if self._current_coordinator_trace:
+                self._current_coordinator_trace.events.append(event)
+                await self._write_coordinator_trace()
+
+            # Also write a standalone routing decision file for easy querying
+            await self._write_routing_decision_file(event)
+
+    async def _write_routing_decision_file(self, event: TraceEvent):
+        """Write standalone routing decision file for easy querying."""
+        # Create routing decisions subdirectory
+        routing_dir = self.trace_dir / "routing_decisions"
+        routing_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create filename with timestamp
+        timestamp_str = datetime.fromtimestamp(event.timestamp).strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"routing_{timestamp_str}.json"
+        routing_file = routing_dir / filename
+
+        # Convert to JSON
+        routing_data = event.model_dump()
+
+        # Write atomically
+        temp_file = routing_file.with_suffix('.tmp')
+        with open(temp_file, 'w') as f:
+            json.dump(routing_data, f, indent=2)
+        temp_file.replace(routing_file)
+
     async def _write_coordinator_trace(self):
         """Write coordinator trace to file."""
         if not self._current_coordinator_trace:
@@ -363,6 +462,190 @@ class TraceLogger:
 
         if len(trace.events) > 20:
             print(f"... and {len(trace.events) - 20} more events")
+
+        print(f"{'='*80}\n")
+
+    async def query_routing_decisions(
+        self,
+        agent_name: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+        max_confidence: Optional[float] = None,
+        routing_strategy: Optional[str] = None,
+        limit: int = 50
+    ) -> List[TraceEvent]:
+        """
+        Query routing decisions with filters.
+
+        Args:
+            agent_name: Filter by selected agent name
+            min_confidence: Minimum confidence score
+            max_confidence: Maximum confidence score
+            routing_strategy: Filter by routing strategy
+            limit: Maximum number of results
+
+        Returns:
+            List of matching routing decision events
+        """
+        routing_dir = self.trace_dir / "routing_decisions"
+        if not routing_dir.exists():
+            return []
+
+        # Get all routing decision files
+        routing_files = sorted(
+            routing_dir.glob("routing_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+
+        results = []
+        for routing_file in routing_files:
+            if len(results) >= limit:
+                break
+
+            try:
+                with open(routing_file) as f:
+                    event_data = json.load(f)
+                    event = TraceEvent(**event_data)
+
+                # Apply filters
+                metadata = event.metadata
+                if agent_name and metadata.get("selected_agent") != agent_name:
+                    continue
+                if min_confidence is not None and metadata.get("confidence_score", 0) < min_confidence:
+                    continue
+                if max_confidence is not None and metadata.get("confidence_score", 1) > max_confidence:
+                    continue
+                if routing_strategy and metadata.get("routing_strategy") != routing_strategy:
+                    continue
+
+                results.append(event)
+            except Exception:
+                # Skip corrupted files
+                continue
+
+        return results
+
+    async def get_recent_routing_decisions(self, limit: int = 10) -> List[TraceEvent]:
+        """Get N most recent routing decisions."""
+        return await self.query_routing_decisions(limit=limit)
+
+    async def get_routing_decisions_for_agent(self, agent_name: str, limit: int = 20) -> List[TraceEvent]:
+        """Get routing decisions for a specific agent."""
+        return await self.query_routing_decisions(agent_name=agent_name, limit=limit)
+
+    async def get_low_confidence_routing_decisions(
+        self,
+        confidence_threshold: float = 0.7,
+        limit: int = 20
+    ) -> List[TraceEvent]:
+        """Get routing decisions with low confidence scores."""
+        return await self.query_routing_decisions(max_confidence=confidence_threshold, limit=limit)
+
+    async def get_routing_statistics(self) -> Dict[str, Any]:
+        """
+        Get aggregate statistics about routing decisions.
+
+        Returns:
+            Dictionary with routing statistics:
+            - total_decisions: Total number of routing decisions
+            - agents_selected: Count by agent name
+            - avg_confidence: Average confidence score
+            - confidence_distribution: Distribution by confidence ranges
+            - routing_strategies: Count by strategy
+            - low_confidence_count: Number of decisions below 0.7 confidence
+        """
+        all_decisions = await self.query_routing_decisions(limit=10000)
+
+        if not all_decisions:
+            return {
+                "total_decisions": 0,
+                "agents_selected": {},
+                "avg_confidence": 0.0,
+                "confidence_distribution": {},
+                "routing_strategies": {},
+                "low_confidence_count": 0
+            }
+
+        # Collect statistics
+        agents_selected = {}
+        confidence_scores = []
+        confidence_distribution = {"0.0-0.3": 0, "0.3-0.5": 0, "0.5-0.7": 0, "0.7-0.9": 0, "0.9-1.0": 0}
+        routing_strategies = {}
+        low_confidence_count = 0
+
+        for event in all_decisions:
+            metadata = event.metadata
+
+            # Agent selection counts
+            agent = metadata.get("selected_agent", "unknown")
+            agents_selected[agent] = agents_selected.get(agent, 0) + 1
+
+            # Confidence scores
+            confidence = metadata.get("confidence_score", 0.0)
+            confidence_scores.append(confidence)
+
+            # Confidence distribution
+            if confidence < 0.3:
+                confidence_distribution["0.0-0.3"] += 1
+                low_confidence_count += 1
+            elif confidence < 0.5:
+                confidence_distribution["0.3-0.5"] += 1
+                low_confidence_count += 1
+            elif confidence < 0.7:
+                confidence_distribution["0.5-0.7"] += 1
+                low_confidence_count += 1
+            elif confidence < 0.9:
+                confidence_distribution["0.7-0.9"] += 1
+            else:
+                confidence_distribution["0.9-1.0"] += 1
+
+            # Routing strategies
+            strategy = metadata.get("routing_strategy", "unknown")
+            routing_strategies[strategy] = routing_strategies.get(strategy, 0) + 1
+
+        return {
+            "total_decisions": len(all_decisions),
+            "agents_selected": agents_selected,
+            "avg_confidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0,
+            "confidence_distribution": confidence_distribution,
+            "routing_strategies": routing_strategies,
+            "low_confidence_count": low_confidence_count,
+            "low_confidence_rate": low_confidence_count / len(all_decisions) if all_decisions else 0.0
+        }
+
+    async def print_routing_statistics(self):
+        """Print human-readable routing statistics."""
+        stats = await self.get_routing_statistics()
+
+        print(f"\n{'='*80}")
+        print(f"🎯 Routing Decision Statistics")
+        print(f"{'='*80}")
+        print(f"Total Decisions: {stats['total_decisions']}")
+        print(f"Average Confidence: {stats['avg_confidence']:.2%}")
+        print(f"Low Confidence Rate: {stats['low_confidence_rate']:.2%} ({stats['low_confidence_count']} decisions)")
+
+        print(f"\n{'='*80}")
+        print(f"Agents Selected:")
+        print(f"{'='*80}")
+        for agent, count in sorted(stats['agents_selected'].items(), key=lambda x: x[1], reverse=True):
+            percentage = (count / stats['total_decisions']) * 100 if stats['total_decisions'] > 0 else 0
+            print(f"  {agent:40s} {count:5d} ({percentage:5.1f}%)")
+
+        print(f"\n{'='*80}")
+        print(f"Confidence Distribution:")
+        print(f"{'='*80}")
+        for range_label, count in stats['confidence_distribution'].items():
+            percentage = (count / stats['total_decisions']) * 100 if stats['total_decisions'] > 0 else 0
+            bar_length = int(percentage / 2)
+            bar = "█" * bar_length
+            print(f"  {range_label:10s} {count:5d} ({percentage:5.1f}%) {bar}")
+
+        print(f"\n{'='*80}")
+        print(f"Routing Strategies:")
+        print(f"{'='*80}")
+        for strategy, count in sorted(stats['routing_strategies'].items(), key=lambda x: x[1], reverse=True):
+            percentage = (count / stats['total_decisions']) * 100 if stats['total_decisions'] > 0 else 0
+            print(f"  {strategy:20s} {count:5d} ({percentage:5.1f}%)")
 
         print(f"{'='*80}\n")
 

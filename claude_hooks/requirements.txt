@@ -1,0 +1,22 @@
+# AI-Enhanced Quality Enforcement System Dependencies
+# For Claude Code Hooks
+
+# Core AST manipulation (for surgical code corrections)
+libcst>=1.1.0
+
+# YAML configuration
+pyyaml>=6.0
+
+# HTTP client (for RAG and AI quorum)
+httpx>=0.25.0
+
+# Logging and monitoring
+loguru>=0.7.0
+
+# Optional: Type checking support
+typing-extensions>=4.8.0
+
+# Testing dependencies (dev)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-benchmark>=4.0.0
