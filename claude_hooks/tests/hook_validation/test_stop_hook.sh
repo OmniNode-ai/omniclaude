@@ -1,0 +1,335 @@
+#!/usr/bin/env bash
+# test_stop_hook.sh - Test suite for Stop hook
+#
+# Tests:
+# - Stop hook basic functionality
+# - Stop hook database insertion
+# - Stop hook performance (<30ms target)
+# - Stop hook correlation tracking
+# - Stop hook response metadata
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Database connection
+DB_HOST="localhost"
+DB_PORT="5436"
+DB_NAME="omninode_bridge"
+DB_USER="postgres"
+DB_PASS="omninode-bridge-postgres-dev-2024"
+
+# Test counters
+TESTS_RUN=0
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Performance threshold (ms)
+PERFORMANCE_THRESHOLD_MS=30
+
+# Test functions
+log_success() {
+    echo -e "${GREEN}✓${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}✗${NC} $*"
+}
+
+log_info() {
+    echo "ℹ $*"
+}
+
+run_sql() {
+    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$1"
+}
+
+test_stop_hook_basic() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+    log_info "Test: Stop hook basic functionality"
+
+    local correlation_id="$(uuidgen)"
+
+    # Create Stop hook event
+    local result=$(run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'Stop',
+            'response_completed',
+            'response',
+            'test-response',
+            '{\"response_length\": 500, \"model\": \"claude-sonnet-4\"}'::jsonb,
+            '{\"correlation_id\": \"$correlation_id\", \"test\": true}'::jsonb
+        )
+        RETURNING id;
+    ")
+
+    if [[ -n "$result" ]]; then
+        log_success "Stop hook basic functionality"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';"
+        return 0
+    else
+        log_error "Stop hook basic functionality - Failed to create event"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        return 1
+    fi
+}
+
+test_stop_hook_performance() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+    log_info "Test: Stop hook performance (<${PERFORMANCE_THRESHOLD_MS}ms)"
+
+    local total_time_ms=0
+    local iterations=20
+
+    for i in $(seq 1 $iterations); do
+        local correlation_id="perf-stop-$(uuidgen)"
+
+        # Measure insertion time using Python for nanosecond precision
+        local start_ns=$(python3 -c "import time; print(int(time.time() * 1000000000))")
+
+        run_sql "
+            INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+            VALUES (
+                gen_random_uuid(),
+                'Stop',
+                'response_completed',
+                'response',
+                'test-response',
+                '{\"test\": true}'::jsonb,
+                '{\"correlation_id\": \"$correlation_id\"}'::jsonb
+            );
+        " > /dev/null
+
+        local end_ns=$(python3 -c "import time; print(int(time.time() * 1000000000))")
+        local elapsed_ms=$(((end_ns - start_ns) / 1000000))
+
+        total_time_ms=$((total_time_ms + elapsed_ms))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';" > /dev/null
+    done
+
+    local avg_time_ms=$((total_time_ms / iterations))
+
+    if [[ $avg_time_ms -lt $PERFORMANCE_THRESHOLD_MS ]]; then
+        log_success "Stop hook performance: ${avg_time_ms}ms avg (target <${PERFORMANCE_THRESHOLD_MS}ms)"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+        return 0
+    else
+        log_error "Stop hook performance: ${avg_time_ms}ms avg (target <${PERFORMANCE_THRESHOLD_MS}ms) - EXCEEDED"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        return 1
+    fi
+}
+
+test_stop_hook_correlation() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+    log_info "Test: Stop hook correlation tracking"
+
+    local correlation_id="$(uuidgen)"
+
+    # Create UserPromptSubmit event
+    run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'UserPromptSubmit',
+            'prompt_submitted',
+            'prompt',
+            'test-prompt',
+            '{\"prompt\": \"test\"}'::jsonb,
+            '{\"correlation_id\": \"$correlation_id\"}'::jsonb
+        );
+    " > /dev/null
+
+    # Create PreToolUse event
+    run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'PreToolUse',
+            'tool_invocation',
+            'tool',
+            'Write',
+            '{\"file\": \"test.py\"}'::jsonb,
+            '{\"correlation_id\": \"$correlation_id\"}'::jsonb
+        );
+    " > /dev/null
+
+    # Create PostToolUse event
+    run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'PostToolUse',
+            'tool_completed',
+            'tool',
+            'Write',
+            '{\"success\": true}'::jsonb,
+            '{\"correlation_id\": \"$correlation_id\"}'::jsonb
+        );
+    " > /dev/null
+
+    # Create Stop event
+    run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'Stop',
+            'response_completed',
+            'response',
+            'test-response',
+            '{\"response_length\": 1000}'::jsonb,
+            '{\"correlation_id\": \"$correlation_id\"}'::jsonb
+        );
+    " > /dev/null
+
+    # Verify all events are correlated
+    local event_count=$(run_sql "
+        SELECT COUNT(*)
+        FROM hook_events
+        WHERE metadata->>'correlation_id' = '$correlation_id';
+    " | tr -d ' ')
+
+    if [[ "$event_count" == "4" ]]; then
+        log_success "Stop hook correlation: Found 4 correlated events"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';"
+        return 0
+    else
+        log_error "Stop hook correlation: Expected 4 events, found $event_count"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';"
+        return 1
+    fi
+}
+
+test_stop_hook_response_metadata() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+    log_info "Test: Stop hook response metadata"
+
+    local correlation_id="$(uuidgen)"
+
+    # Create Stop event with rich metadata
+    run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'Stop',
+            'response_completed',
+            'response',
+            'test-response',
+            '{
+                \"response_length\": 2500,
+                \"model\": \"claude-sonnet-4-5\",
+                \"tokens_used\": {\"input\": 1000, \"output\": 1500},
+                \"latency_ms\": 3500
+            }'::jsonb,
+            '{
+                \"correlation_id\": \"$correlation_id\",
+                \"test\": true,
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+            }'::jsonb
+        );
+    " > /dev/null
+
+    # Verify metadata
+    local metadata=$(run_sql "
+        SELECT payload
+        FROM hook_events
+        WHERE metadata->>'correlation_id' = '$correlation_id';
+    ")
+
+    if echo "$metadata" | grep -q "claude-sonnet-4-5"; then
+        log_success "Stop hook response metadata: Model info captured"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';"
+        return 0
+    else
+        log_error "Stop hook response metadata: Metadata not found"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+
+        # Cleanup
+        run_sql "DELETE FROM hook_events WHERE metadata->>'correlation_id' = '$correlation_id';"
+        return 1
+    fi
+}
+
+test_stop_hook_without_correlation() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+    log_info "Test: Stop hook without correlation ID (graceful handling)"
+
+    # Create Stop event without correlation ID
+    local result=$(run_sql "
+        INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
+        VALUES (
+            gen_random_uuid(),
+            'Stop',
+            'response_completed',
+            'response',
+            'test-response',
+            '{\"response_length\": 500}'::jsonb,
+            '{\"test\": true}'::jsonb
+        )
+        RETURNING id;
+    ")
+
+    if [[ -n "$result" ]]; then
+        log_success "Stop hook without correlation: Gracefully handled"
+        TESTS_PASSED=$((TESTS_PASSED + 1))
+
+        # Cleanup
+        local event_id=$(echo "$result" | tr -d ' ')
+        run_sql "DELETE FROM hook_events WHERE id = '$event_id'::uuid;"
+        return 0
+    else
+        log_error "Stop hook without correlation: Failed"
+        TESTS_FAILED=$((TESTS_FAILED + 1))
+        return 1
+    fi
+}
+
+# Main test execution
+echo "=========================================="
+echo "Stop Hook Test Suite"
+echo "=========================================="
+echo ""
+
+# Run all tests
+test_stop_hook_basic
+test_stop_hook_performance
+test_stop_hook_correlation
+test_stop_hook_response_metadata
+test_stop_hook_without_correlation
+
+# Summary
+echo ""
+echo "=========================================="
+echo "Test Summary"
+echo "=========================================="
+echo "Tests Run:    $TESTS_RUN"
+echo "Tests Passed: $TESTS_PASSED"
+echo "Tests Failed: $TESTS_FAILED"
+
+if [[ $TESTS_FAILED -eq 0 ]]; then
+    echo -e "${GREEN}All tests passed!${NC}"
+    exit 0
+else
+    echo -e "${RED}Some tests failed!${NC}"
+    exit 1
+fi

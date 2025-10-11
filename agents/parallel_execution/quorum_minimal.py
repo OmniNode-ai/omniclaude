@@ -93,27 +93,52 @@ class MinimalQuorum:
     ) -> QuorumResult:
         """Validate task breakdown against user intent"""
 
-        # Build validation prompt
-        prompt = f"""Given user request: "{user_prompt}"
+        # Check if task breakdown includes node_type (ONEX architecture)
+        has_node_type = False
+        if "tasks" in task_breakdown:
+            for task in task_breakdown["tasks"]:
+                if "input_data" in task and "node_type" in task["input_data"]:
+                    has_node_type = True
+                    break
 
-Task breakdown generated:
-{json.dumps(task_breakdown, indent=2)}
-
-Answer these questions with JSON:
+        # Build validation prompt (conditional based on whether ONEX is used)
+        if has_node_type:
+            validation_questions = """Answer these questions with JSON:
 1. Does the task breakdown correctly understand the user's intent? (score 0-100)
 2. Is the correct node type selected? (Effect/Compute/Reducer/Orchestrator)
 3. Are all requirements captured? (list any missing)
 
-CRITICAL: Do NOT repeat the task breakdown or user request in your response. Only return the validation JSON.
-
 Respond with JSON only:
-{{
+{
   "alignment_score": <0-100>,
   "correct_node_type": <true/false>,
   "expected_node_type": "<Effect|Compute|Reducer|Orchestrator>",
   "missing_requirements": [<list of strings>],
   "recommendation": "<PASS|RETRY|FAIL>"
-}}"""
+}"""
+        else:
+            validation_questions = """Answer these questions with JSON:
+1. Does the task breakdown correctly understand the user's intent? (score 0-100)
+2. Are all requirements captured? (list any missing)
+3. Is the implementation approach appropriate? (true/false)
+
+Respond with JSON only:
+{
+  "alignment_score": <0-100>,
+  "correct_node_type": true,
+  "expected_node_type": "N/A",
+  "missing_requirements": [<list of strings>],
+  "recommendation": "<PASS|RETRY|FAIL>"
+}"""
+
+        prompt = f"""Given user request: "{user_prompt}"
+
+Task breakdown generated:
+{json.dumps(task_breakdown, indent=2)}
+
+{validation_questions}
+
+CRITICAL: Do NOT repeat the task breakdown or user request in your response. Only return the validation JSON."""
 
         # Query models in parallel
         tasks = [

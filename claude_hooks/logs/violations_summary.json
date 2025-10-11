@@ -1,0 +1,238 @@
+{
+  "last_updated": "2025-10-11T12:41:14Z",
+  "total_violations_today": 129,
+  "files_with_violations": [
+    {
+      "path": "agents/parallel_execution/state_manager.py",
+      "violations": 5,
+      "timestamp": "2025-10-11T11:45:12Z",
+      "suggestions": [
+        "model_*.py or model_*_subcontract.py",
+        "EnumVerboseMode",
+        "EnumSnapshotType",
+        "EnumErrorCategory",
+        "EnumErrorSeverity"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_fail_fast.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T11:47:05Z",
+      "suggestions": [
+        "MixinTestFailFastBasicBehavior",
+        "MixinTestFailFastIntegration"
+      ]
+    },
+    {
+      "path": "tests/unit/models/core/test_model_result_factory.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T11:47:26Z",
+      "suggestions": [
+        "ModelTestResultModel",
+        "ModelMinimalResultModel"
+      ]
+    },
+    {
+      "path": "tests/unit/logging/test_pydantic_json_encoder.py",
+      "violations": 3,
+      "timestamp": "2025-10-11T11:47:41Z",
+      "suggestions": [
+        "ModelSampleModel",
+        "ModelNestedModel",
+        "ModelEmptyModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_hash_computation.py",
+      "violations": 20,
+      "timestamp": "2025-10-11T11:47:49Z",
+      "suggestions": [
+        "MixinTestHashComputationBasicBehavior",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel"
+      ]
+    },
+    {
+      "path": "tests/unit/models/events/test_model_event_envelope.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T11:47:54Z",
+      "suggestions": [
+        "ModelSimplePayload",
+        "ModelComplexPayload"
+      ]
+    },
+    {
+      "path": "tests/unit/models/nodes/test_model_node_type.py",
+      "violations": 30,
+      "timestamp": "2025-10-11T11:48:14Z",
+      "suggestions": [
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case",
+        "snake_case"
+      ]
+    },
+    {
+      "path": "tests/unit/logging/test_structured.py",
+      "violations": 1,
+      "timestamp": "2025-10-11T11:48:42Z",
+      "suggestions": [
+        "ModelSampleContext"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_lazy_evaluation.py",
+      "violations": 8,
+      "timestamp": "2025-10-11T11:48:48Z",
+      "suggestions": [
+        "MixinTestLazyEvaluationBasicBehavior",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelNestedModel",
+        "ModelTestModel",
+        "ModelComplexModel",
+        "ModelDataProcessor"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_redaction.py",
+      "violations": 31,
+      "timestamp": "2025-10-11T11:49:46Z",
+      "suggestions": [
+        "MixinTestSensitiveFieldRedactionBasicBehavior",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelTestModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_hash_computation.py",
+      "violations": 4,
+      "timestamp": "2025-10-11T11:51:00Z",
+      "suggestions": [
+        "MixinTestHashComputationBasicBehavior",
+        "ModelTestModel",
+        "ModelTestModel",
+        "ModelDerivedModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_hash_computation.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T11:51:41Z",
+      "suggestions": [
+        "ModelTestModel",
+        "ModelTestModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_redaction.py",
+      "violations": 1,
+      "timestamp": "2025-10-11T11:52:30Z",
+      "suggestions": [
+        "ModelCustomModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_redaction.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T11:52:47Z",
+      "suggestions": [
+        "ModelUserModel",
+        "ModelConfigModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_workflow_support.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T12:18:36Z",
+      "suggestions": [
+        "MixinTestInitialization",
+        "ModelTestResult"
+      ]
+    },
+    {
+      "path": "agent_testing.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T12:36:32Z",
+      "suggestions": [
+        "ModelTestCase",
+        "ModelTestSuite"
+      ]
+    },
+    {
+      "path": "agent_refactoring.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T12:37:38Z",
+      "suggestions": [
+        "ModelRefactoringChange",
+        "ModelRefactoringPlan"
+      ]
+    },
+    {
+      "path": "agent_researcher.py",
+      "violations": 3,
+      "timestamp": "2025-10-11T12:38:43Z",
+      "suggestions": [
+        "ModelCodeExample",
+        "ModelDocumentationLink",
+        "ModelResearchFindings"
+      ]
+    },
+    {
+      "path": "tests/unit/utils/test_service_logging.py",
+      "violations": 1,
+      "timestamp": "2025-10-11T12:39:19Z",
+      "suggestions": [
+        "snake_case"
+      ]
+    },
+    {
+      "path": "tests/unit/utils/test_safe_yaml_loader_branches.py",
+      "violations": 2,
+      "timestamp": "2025-10-11T12:40:06Z",
+      "suggestions": [
+        "ModelSimpleModel",
+        "ModelBrokenModel"
+      ]
+    },
+    {
+      "path": "tests/unit/mixins/test_mixin_hybrid_execution.py",
+      "violations": 3,
+      "timestamp": "2025-10-11T12:40:37Z",
+      "suggestions": [
+        "ModelSimpleInputState",
+        "ModelComplexInputState",
+        "MixinTestInitialization"
+      ]
+    },
+    {
+      "path": "tests/unit/infrastructure/test_node_effect_error_branches.py",
+      "violations": 1,
+      "timestamp": "2025-10-11T12:41:14Z",
+      "suggestions": [
+        "snake_case"
+      ]
+    }
+  ]
+}

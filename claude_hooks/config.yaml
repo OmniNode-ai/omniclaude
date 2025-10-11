@@ -1,0 +1,203 @@
+# AI-Enhanced Quality Enforcement Configuration
+# Phase 1: Conservative defaults with RAG and Quorum disabled for initial rollout
+
+enforcement:
+  # Master switch for quality enforcement
+  enabled: true
+
+  # Enforcement mode: "warn" or "block"
+  # - "warn": Show warnings but allow write to continue (PostToolUse will auto-fix)
+  # - "block": Block writes with violations (prevents bad code upfront)
+  mode: "warn"  # Permissive mode - allow writes, auto-fix violations after
+
+  # Maximum time budget for enforcement checks (seconds)
+  # Conservative default: 2s ensures minimal impact on workflow
+  performance_budget_seconds: 2.0
+
+  # Which Claude Code tools to intercept for quality checks
+  intercept_tools:
+    - Write
+    - Edit
+    - MultiEdit
+
+  # Programming languages to validate
+  # Start with most common languages in your codebase
+  supported_languages:
+    - python
+    - typescript
+    - javascript
+
+  # Validation behavior
+  validation:
+    # Minimum severity level to enforce: "error" or "warning"
+    # Phase 1 conservative: only enforce errors
+    severity_threshold: "error"
+
+    # Maximum violations to report per file (prevents overwhelming output)
+    max_violations_per_file: 50
+
+  # PostToolUse auto-fix settings
+  # When enabled, violations are automatically fixed after file is written
+  # DISABLED: Regex-based corrections cause false positives
+  # TODO: Replace with AST-based corrections (Phase 6 Reflex Arc)
+  post_tool_use_enabled: false
+
+  # Dual enforcement strategy:
+  # - PreToolUse (mode="block"): Prevents writes with violations upfront
+  # - PostToolUse (post_tool_use_enabled=true): Auto-fixes violations after write
+  #
+  # Recommended configurations:
+  # 1. Strict (mode="block", post_tool_use=false): Block bad code, force correct code
+  # 2. Permissive (mode="warn", post_tool_use=true): Allow writes, auto-fix immediately
+  # 3. Hybrid (mode="block", post_tool_use=true): Block + auto-fix for edge cases
+  #
+  # Current: Strict blocking mode (prevents violations from being written)
+
+# Pattern Tracking Configuration
+# Track patterns independently from auto-fix enforcement
+pattern_tracking:
+  # Enable pattern tracking (runs independently of post_tool_use_enabled)
+  enabled: true
+
+  # Intelligence service URL for pattern analysis
+  intelligence_service_url: "http://localhost:8053"
+
+  # Timeout for pattern tracking operations (seconds)
+  timeout_seconds: 5.0
+
+  # Fail gracefully if pattern tracking fails
+  fail_gracefully: true
+
+# RAG Intelligence Settings
+# Phase 2: ENABLED - RAG-based intelligence for context-aware corrections
+rag:
+  enabled: true  # Phase 2: RAG intelligence active
+  base_url: "http://localhost:8181"  # Main Archon server RAG API
+  timeout_seconds: 0.5
+  cache_ttl_seconds: 3600  # 1 hour cache for RAG results
+
+  # Use fallback rules when RAG unavailable (graceful degradation)
+  use_fallback_rules: true
+
+# AI Quorum Settings
+# Phase 4: ENABLED - Multi-model validation for high-confidence auto-apply
+quorum:
+  enabled: true  # AI quorum active for consensus-based corrections
+
+  # Model configuration for quorum voting
+  # Each model contributes to consensus score with assigned weight
+  models:
+    flash:
+      enabled: true
+      type: "gemini"
+      name: "gemini-2.0-flash"
+      weight: 1.0  # Base weight
+      timeout: 3.0
+
+    codestral:
+      enabled: true
+      type: "ollama"
+      name: "codestral:22b-v0.1-q4_K_M"
+      weight: 1.5  # Higher weight for specialized code model
+      timeout: 5.0
+
+    deepseek:
+      enabled: true
+      type: "openai"  # OpenAI-compatible API via vLLM
+      base_url: "http://192.168.86.201:8000/v1"
+      name: "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
+      weight: 2.0  # High weight for specialized code model on RTX 5090
+      timeout: 5.0
+
+    llama:
+      enabled: true
+      type: "openai"  # OpenAI-compatible API via vLLM
+      base_url: "http://192.168.86.201:8001/v1"
+      name: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+      weight: 1.2  # Good general reasoning on RTX 4090
+      timeout: 5.0
+
+    deepseek_full:
+      enabled: true
+      type: "ollama"
+      base_url: "http://192.168.86.101:11434"  # Mac Mini
+      name: "deepseek-coder-v2:latest"
+      weight: 1.8  # Full DeepSeek Coder v2 model (15.7B) on Mac Mini
+      timeout: 5.0
+
+    pro:
+      enabled: false  # Disabled by default due to higher latency
+      type: "gemini"
+      name: "gemini-2.5-pro"
+      weight: 2.5  # Highest weight for most capable model
+      timeout: 5.0
+
+  # Decision thresholds for automated actions
+  thresholds:
+    # Auto-apply correction if consensus score >= 0.80 (high confidence)
+    auto_apply: 0.80
+
+    # Suggest correction if consensus score >= 0.60 (medium confidence)
+    suggest: 0.60
+
+    # Minimum confidence level required for auto-apply
+    min_confidence: 0.70
+
+  # Ollama service configuration (for local models)
+  ollama:
+    base_url: "http://192.168.86.200:11434"
+    mac_mini_url: "http://192.168.86.101:11434"
+
+# Logging Configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  # DEBUG: Verbose logging for troubleshooting
+  # INFO: Standard operational logging (default)
+  # WARNING: Only warnings and errors
+  # ERROR: Only errors
+  level: "INFO"
+
+  # Main log file (quality enforcement details)
+  file: "~/.claude/hooks/logs/quality_enforcer.log"
+
+  # Hook execution log (every hook trigger, lightweight)
+  # Use: tail -f ~/.claude/hooks/logs/hook_executions.log
+  # Shows: timestamp, tool name, file path for every hook call
+  hook_executions_log: "~/.claude/hooks/logs/hook_executions.log"
+
+  # Violations tracking
+  violations_log: "~/.claude/hooks/logs/violations.log"
+  violations_summary: "~/.claude/hooks/logs/violations_summary.json"
+  max_violations_history: 100  # Keep last 100 violations in summary
+
+  # Log rotation settings
+  max_size_mb: 10
+  backup_count: 5
+
+# Caching System
+cache:
+  # Enable caching for performance
+  enabled: true
+
+  # Cache directory location
+  directory: "~/.claude/hooks/.cache"
+
+  # Maximum age for cached entries (seconds)
+  # 1 hour default - adjust based on your development cycle
+  max_age_seconds: 3600
+
+  # Maximum cache size (MB)
+  max_size_mb: 100
+
+# Phase 1 Notes:
+# --------------
+# This configuration uses conservative defaults to ensure stable initial rollout:
+# - RAG disabled: Reduces external dependencies
+# - Quorum disabled: Avoids multi-model coordination complexity
+# - Error-only enforcement: Minimizes false positives
+# - Short performance budget: Ensures minimal workflow impact
+#
+# Future phases will progressively enable:
+# - Phase 2: RAG intelligence for context-aware suggestions
+# - Phase 3: AI quorum for multi-model consensus
+# - Phase 4: Warning-level enforcement with learned patterns
