@@ -74,6 +74,47 @@ from agents.lib.debug_loop import record_workflow_step
 from agents.lib.state_snapshots import capture_workflow_state
 from agents.lib.error_logging import log_execution_error
 from agents.lib.success_logging import log_phase_success
+from agents.lib.logging_config import debug_logger, LogLevel
+
+# Import retry manager for robust error handling
+try:
+    from agents.lib.retry_manager import (
+        execute_with_retry,
+        execute_with_circuit_breaker,
+        STANDARD_RETRY_CONFIG,
+        API_RETRY_CONFIG,
+        DATABASE_RETRY_CONFIG
+    )
+    RETRY_MANAGER_AVAILABLE = True
+except ImportError:
+    RETRY_MANAGER_AVAILABLE = False
+    print("[DispatchRunner] Warning: Retry manager unavailable (retry_manager.py not found)", file=sys.stderr)
+
+# Import performance monitor for real-time tracking
+try:
+    from agents.lib.performance_monitor import (
+        track_phase_performance,
+        check_performance_threshold,
+        get_performance_level,
+        get_performance_summary
+    )
+    PERFORMANCE_MONITOR_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_MONITOR_AVAILABLE = False
+    print("[DispatchRunner] Warning: Performance monitor unavailable (performance_monitor.py not found)", file=sys.stderr)
+
+# Import input validator for security and quality checks
+try:
+    from agents.lib.input_validator import (
+        validate_and_sanitize,
+        sanitize_prompt,
+        validate_json_input,
+        InputType
+    )
+    INPUT_VALIDATOR_AVAILABLE = True
+except ImportError:
+    INPUT_VALIDATOR_AVAILABLE = False
+    print("[DispatchRunner] Warning: Input validator unavailable (input_validator.py not found)", file=sys.stderr)
 
 # Import quorum validation (optional dependency)
 try:
@@ -125,21 +166,34 @@ async def execute_phase_0_context_gathering(
     start_time = time.time()
     started_at = datetime.now().isoformat()
 
-    print(f"\n{'='*80}", file=sys.stderr)
-    print(f"[DispatchRunner] Phase 0: Context Gathering", file=sys.stderr)
-    print(f"[DispatchRunner] Queries: {len(rag_queries)}", file=sys.stderr)
-    print(f"{'='*80}\n", file=sys.stderr)
+    debug_logger.log_phase_start("Phase 0: Context Gathering", f"Queries: {len(rag_queries)}")
 
     try:
         context_manager = ContextManager()
 
-        print("[DispatchRunner] Gathering global context...", file=sys.stderr)
-        global_context = await context_manager.gather_global_context(
-            user_prompt=user_prompt,
-            workspace_path=workspace_path,
-            rag_queries=rag_queries,
-            max_rag_results=5
-        )
+        debug_logger.log_progress("Gathering global context...")
+        
+        # Use retry logic for context gathering if available
+        if RETRY_MANAGER_AVAILABLE:
+            success, result = await execute_with_retry(
+                context_manager.gather_global_context,
+                user_prompt=user_prompt,
+                workspace_path=workspace_path,
+                rag_queries=rag_queries,
+                max_rag_results=5,
+                manager_name="context_gathering",
+                config=API_RETRY_CONFIG
+            )
+            if not success:
+                raise result
+            global_context = result
+        else:
+            global_context = await context_manager.gather_global_context(
+                user_prompt=user_prompt,
+                workspace_path=workspace_path,
+                rag_queries=rag_queries,
+                max_rag_results=5
+            )
 
         # Print context summary
         summary = context_manager.get_context_summary()
@@ -233,7 +287,7 @@ async def execute_phase_0_context_gathering(
         phase_state.global_context = global_context
 
         duration_ms = (time.time() - start_time) * 1000
-        print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        debug_logger.log_phase_complete("Phase 0: Context Gathering", duration_ms, success=True)
 
         result_obj = PhaseResult(
             phase=phase,
@@ -274,6 +328,21 @@ async def execute_phase_0_context_gathering(
             )
         except Exception:
             pass
+        
+        # Track performance metrics
+        if PERFORMANCE_MONITOR_AVAILABLE:
+            try:
+                await track_phase_performance(
+                    phase=phase.name,
+                    duration_ms=duration_ms,
+                    success=True,
+                    metadata={
+                        "context_summary": summary,
+                        "total_items": summary.get('total_items', 0)
+                    }
+                )
+            except Exception:
+                pass
 
         # Capture state snapshot for Phase 0
         try:
@@ -310,6 +379,22 @@ async def execute_phase_0_context_gathering(
             )
         except Exception:
             pass
+        
+        # Track performance metrics for failure
+        if PERFORMANCE_MONITOR_AVAILABLE:
+            try:
+                await track_phase_performance(
+                    phase=phase.name,
+                    duration_ms=duration_ms,
+                    success=False,
+                    error_type=type(e).__name__,
+                    metadata={
+                        "duration_ms": duration_ms,
+                        "started_at": started_at
+                    }
+                )
+            except Exception:
+                pass
 
         # Capture error state snapshot
         try:
@@ -396,7 +481,21 @@ async def execute_phase_1_quorum_validation(
                 print(f"\n[DispatchRunner] Retry attempt {retry_count}/{max_retries}", file=sys.stderr)
 
             print("[DispatchRunner] Validating task breakdown with AI quorum...", file=sys.stderr)
-            result = await quorum.validate_intent(user_prompt, task_breakdown)
+            
+            # Use retry manager for quorum validation if available
+            if RETRY_MANAGER_AVAILABLE:
+                success, result = await execute_with_circuit_breaker(
+                    quorum.validate_intent,
+                    "quorum_validation",
+                    user_prompt,
+                    task_breakdown,
+                    manager_name="quorum_validation",
+                    config=API_RETRY_CONFIG
+                )
+                if not success:
+                    raise result
+            else:
+                result = await quorum.validate_intent(user_prompt, task_breakdown)
 
             print(f"[DispatchRunner] Quorum decision: {result.decision.value} (confidence: {result.confidence:.1%})", file=sys.stderr)
 
@@ -885,8 +984,16 @@ Phase Control Examples:
     # Input/session management
     parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
     parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
+    
+    # Logging control
+    parser.add_argument("--log-level", choices=["silent", "quiet", "normal", "verbose"], 
+                       default="normal", help="Set logging verbosity level")
 
     args = parser.parse_args()
+
+    # Initialize logging level
+    log_level = LogLevel(args.log_level)
+    debug_logger.set_level(log_level)
 
     # Build phase configuration
     skip_phases = []
@@ -909,22 +1016,22 @@ Phase Control Examples:
 
     # Print phase configuration
     if phase_config.only_phase is not None:
-        print(f"[DispatchRunner] Executing only Phase {phase_config.only_phase}", file=sys.stderr)
+        debug_logger.log_info(f"Executing only Phase {phase_config.only_phase}")
     elif phase_config.stop_after_phase is not None:
-        print(f"[DispatchRunner] Stopping after Phase {phase_config.stop_after_phase}", file=sys.stderr)
+        debug_logger.log_info(f"Stopping after Phase {phase_config.stop_after_phase}")
     if skip_phases:
-        print(f"[DispatchRunner] Skipping phases: {skip_phases}", file=sys.stderr)
+        debug_logger.log_info(f"Skipping phases: {skip_phases}")
 
     # Create validator
     validator = None
     if enable_interactive and INTERACTIVE_AVAILABLE:
-        print("[DispatchRunner] Interactive mode enabled", file=sys.stderr)
+        debug_logger.log_info("Interactive mode enabled")
         validator = create_validator(
             interactive=True,
             session_file=resume_session_file
         )
     elif enable_interactive and not INTERACTIVE_AVAILABLE:
-        print("[DispatchRunner] Warning: Interactive mode requested but unavailable", file=sys.stderr)
+        debug_logger.log_warning("Interactive mode requested but unavailable")
 
     # Initialize phase state
     phase_state = PhaseState()
@@ -966,6 +1073,43 @@ Phase Control Examples:
     # Parse user prompt and tasks
     user_prompt = input_data.get("user_prompt", "")
     tasks_data = input_data.get("tasks", [])
+    
+    # Validate and sanitize user input
+    if INPUT_VALIDATOR_AVAILABLE:
+        try:
+            # Validate user prompt
+            prompt_result = await validate_and_sanitize(user_prompt, InputType.USER_PROMPT)
+            if not prompt_result.is_valid:
+                print(f"[DispatchRunner] Input validation failed: {prompt_result.errors}", file=sys.stderr)
+                if prompt_result.errors:
+                    print(json.dumps({
+                        "success": False,
+                        "error": "Input validation failed",
+                        "validation_errors": prompt_result.errors
+                    }))
+                    sys.exit(1)
+            user_prompt = prompt_result.sanitized_input
+            
+            # Validate tasks data
+            if tasks_data:
+                tasks_result = await validate_and_sanitize(tasks_data, InputType.TASK_DATA)
+                if not tasks_result.is_valid:
+                    print(f"[DispatchRunner] Tasks validation failed: {tasks_result.errors}", file=sys.stderr)
+                    if tasks_result.errors:
+                        print(json.dumps({
+                            "success": False,
+                            "error": "Tasks validation failed",
+                            "validation_errors": tasks_result.errors
+                        }))
+                        sys.exit(1)
+                tasks_data = tasks_result.sanitized_input
+                
+        except Exception as e:
+            print(f"[DispatchRunner] Input validation error: {e}", file=sys.stderr)
+            # Continue without validation if validator fails
+    else:
+        # Basic sanitization without full validation
+        user_prompt = sanitize_prompt(user_prompt) if user_prompt else ""
 
     # If no tasks provided, Phase 2 (architect) will generate them
     if not tasks_data and not user_prompt:
@@ -985,7 +1129,7 @@ Phase Control Examples:
     # Enable architect if no tasks provided
     enable_architect = not tasks_data
     if enable_architect:
-        print("[DispatchRunner] No tasks provided - architect agent will generate breakdown", file=sys.stderr)
+        debug_logger.log_info("No tasks provided - architect agent will generate breakdown")
 
     # ========================================================================
     # STARTUP BANNER
@@ -994,29 +1138,19 @@ Phase Control Examples:
     correlation_id = input_data.get("correlation_id", "N/A")
     workspace_path = input_data.get("workspace_path", "N/A")
 
-    print("\n" + "="*80)
-    print("AUTOMATED WORKFLOW INITIATED")
-    print("="*80)
-    print(f"\nUser Request: {user_prompt[:120]}{'...' if len(user_prompt) > 120 else ''}")
-    print(f"Correlation ID: {correlation_id}")
-    print(f"Workspace: {workspace_path}")
-    print(f"\nWorkflow Configuration:")
-    print(f"  - Context Gathering: {'ENABLED' if enable_context else 'DISABLED'}")
-    print(f"  - Quorum Validation: {'ENABLED' if enable_quorum else 'DISABLED'}")
-    print(f"  - Interactive Mode: {'ENABLED' if enable_interactive else 'DISABLED'}")
-    print(f"  - Task Architect: {'ENABLED' if enable_architect else 'DISABLED'}")
-
-    if phase_config.only_phase is not None:
-        print(f"  - Execution Mode: SINGLE PHASE ({phase_config.only_phase})")
-    elif phase_config.stop_after_phase is not None:
-        print(f"  - Execution Mode: STOP AFTER PHASE {phase_config.stop_after_phase}")
-    else:
-        print(f"  - Execution Mode: FULL PIPELINE")
-
-    print("\n" + "="*80)
-    print("BEGINNING EXECUTION")
-    print("="*80 + "\n")
-    sys.stdout.flush()
+    debug_logger.log_startup_banner(
+        user_prompt=user_prompt,
+        correlation_id=correlation_id,
+        workspace_path=workspace_path,
+        enable_context=enable_context,
+        enable_quorum=enable_quorum,
+        enable_interactive=enable_interactive,
+        enable_architect=enable_architect,
+        phase_config={
+            'only_phase': phase_config.only_phase,
+            'stop_after_phase': phase_config.stop_after_phase
+        }
+    )
 
     # ========================================================================
     # Phase Execution
