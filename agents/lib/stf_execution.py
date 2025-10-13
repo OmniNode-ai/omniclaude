@@ -195,7 +195,7 @@ class STFRegistry:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT name, version, code_repo, file_path, symbol, lang
+                SELECT name, version, code_repo, file_path, symbol, lang, line_start, line_end
                 FROM debug_transform_functions
                 WHERE id = $1
                 """,
@@ -205,8 +205,24 @@ class STFRegistry:
             if not row:
                 return None
             
-            # For now, return a mock function
-            # In a real implementation, this would load the actual function
+            # Try to load the actual function
+            try:
+                stf_func = await self._load_function_from_source(
+                    code_repo=row['code_repo'],
+                    file_path=row['file_path'],
+                    symbol=row['symbol'],
+                    line_start=row['line_start'],
+                    line_end=row['line_end'],
+                    lang=row['lang']
+                )
+                
+                if stf_func:
+                    self._loaded_functions[stf_id] = stf_func
+                    return stf_func
+            except Exception as e:
+                print(f"Warning: Failed to load STF {stf_id}: {e}")
+            
+            # Fallback to mock function if real loading fails
             def mock_stf(*args, **kwargs):
                 return {
                     "transformed": True,
@@ -214,11 +230,106 @@ class STFRegistry:
                     "stf_name": row['name'],
                     "timestamp": datetime.now().isoformat(),
                     "inputs": args,
-                    "kwargs": kwargs
+                    "kwargs": kwargs,
+                    "note": "Mock function - real loading failed"
                 }
             
             self._loaded_functions[stf_id] = mock_stf
             return mock_stf
+    
+    async def _load_function_from_source(
+        self,
+        code_repo: str,
+        file_path: str,
+        symbol: str,
+        line_start: int,
+        line_end: int,
+        lang: str
+    ) -> Optional[Callable]:
+        """
+        Load a function from source code.
+        
+        Args:
+            code_repo: Repository URL
+            file_path: Path to the function file
+            symbol: Function symbol name
+            line_start: Start line number
+            line_end: End line number
+            lang: Programming language
+            
+        Returns:
+            The loaded function or None if loading fails
+        """
+        if lang != "python":
+            # Only support Python for now
+            return None
+        
+        try:
+            # For MVP, we'll implement a simple local file loading
+            # In production, this would fetch from the repository
+            
+            # Check if it's a local file path
+            if file_path.startswith('/') or file_path.startswith('./'):
+                import os
+                if os.path.exists(file_path):
+                    return await self._load_from_local_file(
+                        file_path, symbol, line_start, line_end
+                    )
+            
+            # For remote repositories, we would:
+            # 1. Clone/fetch the repository
+            # 2. Load the specific file
+            # 3. Extract the function
+            # This is complex and would require git integration
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error loading function from source: {e}")
+            return None
+    
+    async def _load_from_local_file(
+        self,
+        file_path: str,
+        symbol: str,
+        line_start: int,
+        line_end: int
+    ) -> Optional[Callable]:
+        """
+        Load a function from a local file.
+        
+        Args:
+            file_path: Path to the Python file
+            symbol: Function symbol name
+            line_start: Start line number
+            line_end: End line number
+            
+        Returns:
+            The loaded function or None if loading fails
+        """
+        try:
+            import importlib.util
+            import sys
+            
+            # Load the module
+            spec = importlib.util.spec_from_file_location("stf_module", file_path)
+            if spec is None or spec.loader is None:
+                return None
+            
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Get the function
+            if hasattr(module, symbol):
+                func = getattr(module, symbol)
+                if callable(func):
+                    return func
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error loading from local file {file_path}: {e}")
+            return None
     
     async def execute_stf(
         self,
