@@ -19,7 +19,7 @@ async def _get_active_price_row(model: str, provider: str) -> Optional[Dict[str,
             WHERE model=$1 AND provider=$2
               AND effective_from <= CURRENT_DATE
               AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
-            ORDER BY effective_from DESC
+            ORDER BY effective_from DESC, input_per_1k ASC, output_per_1k ASC
             LIMIT 1
             """,
             model,
@@ -53,8 +53,9 @@ async def log_llm_call(
 
     # Fetch active price
     price_row = await _get_active_price_row(model, provider)
-    eff_in = price_row.get("input_per_1k") if price_row else None
-    eff_out = price_row.get("output_per_1k") if price_row else None
+    # Values may come back as Decimal; convert to float for computation
+    eff_in = float(price_row.get("input_per_1k")) if price_row and price_row.get("input_per_1k") is not None else None
+    eff_out = float(price_row.get("output_per_1k")) if price_row and price_row.get("output_per_1k") is not None else None
     price_id = price_row.get("id") if price_row else None
 
     # Compute cost
