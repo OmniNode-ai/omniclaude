@@ -71,6 +71,9 @@ from workflow.phase_models import (
 )
 from agents.lib.lineage import LineageWriter, LineageEdge
 from agents.lib.debug_loop import record_workflow_step
+from agents.lib.state_snapshots import capture_workflow_state
+from agents.lib.error_logging import log_execution_error
+from agents.lib.success_logging import log_phase_success
 
 # Import quorum validation (optional dependency)
 try:
@@ -257,12 +260,72 @@ async def execute_phase_0_context_gathering(
             )
         except Exception:
             pass
+        
+        # Log success event for Phase 0
+        try:
+            await log_phase_success(
+                run_id=phase_state.user_prompt[:16] or "run",
+                phase=phase.name,
+                duration_ms=duration_ms,
+                metadata={
+                    "context_summary": summary,
+                    "total_items": summary.get('total_items', 0)
+                }
+            )
+        except Exception:
+            pass
+
+        # Capture state snapshot for Phase 0
+        try:
+            await capture_workflow_state(
+                run_id=phase_state.user_prompt[:16] or "run",
+                phase=phase.name,
+                state_data={
+                    "global_context": global_context,
+                    "context_summary": summary,
+                    "phase_result": result_obj.to_dict()
+                },
+                is_success=True
+            )
+        except Exception:
+            pass
         return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 0 failed: {e}", file=sys.stderr)
         print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+
+        # Log error event
+        try:
+            await log_execution_error(
+                run_id=phase_state.user_prompt[:16] or "run",
+                phase=phase.name,
+                task_id=None,
+                error=e,
+                details={
+                    "duration_ms": duration_ms,
+                    "started_at": started_at
+                }
+            )
+        except Exception:
+            pass
+
+        # Capture error state snapshot
+        try:
+            await capture_workflow_state(
+                run_id=phase_state.user_prompt[:16] or "run",
+                phase=phase.name,
+                state_data={
+                    "error": str(e),
+                    "duration_ms": duration_ms,
+                    "started_at": started_at,
+                    "phase_state": phase_state.to_dict() if hasattr(phase_state, 'to_dict') else {}
+                },
+                is_success=False
+            )
+        except Exception:
+            pass
 
         return PhaseResult(
             phase=phase,
