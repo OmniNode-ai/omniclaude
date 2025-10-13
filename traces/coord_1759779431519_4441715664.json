@@ -1,0 +1,338 @@
+{
+  "trace_id": "coord_1759779431519_4441715664",
+  "coordinator_type": "parallel",
+  "start_time": 1759779431.5194728,
+  "end_time": 1759779431.548359,
+  "duration_ms": 28.886079788208008,
+  "total_agents": 1,
+  "completed_agents": 1,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759779431520_4441715664",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "start_time": 1759779431.520959,
+      "end_time": 1759779431.545813,
+      "duration_ms": 24.854183197021484,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759779431.520968,
+          "datetime_str": "2025-10-06T15:37:11.520968",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "test-1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task test-1",
+          "metadata": {
+            "domain": "contract_driven_generator",
+            "input_data": {
+              "contract": {
+                "name": "HelloWorld",
+                "description": "Simple test"
+              },
+              "node_type": "Compute",
+              "language": "python"
+            }
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759779431519_4441715664"
+        },
+        {
+          "timestamp": 1759779431.5458481,
+          "datetime_str": "2025-10-06T15:37:11.545849",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "test-1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (24.85ms)",
+          "metadata": {
+            "result": {
+              "task_id": "test-1",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nHelloWorld - ONEX Compute Node\n\nSimple test\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass HelloWorldInput(BaseModel):\n    \"\"\"Input model for HelloWorld.\"\"\"\n    pass\n\n\nclass HelloWorldOutput(BaseModel):\n    \"\"\"Output model for HelloWorld.\"\"\"\n    pass\n\n\nclass NodeHelloWorldCompute:\n    \"\"\"\n    ONEX Compute node for HelloWorld.\n    \n    Simple test\n    \"\"\"\n\n    async def execute(self, input_data: HelloWorldInput) -> HelloWorldOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 0 sources\n        \n        # Placeholder implementation\n        return HelloWorldOutput()",
+                "node_type": "Compute",
+                "contract": {
+                  "name": "HelloWorld",
+                  "description": "Simple test"
+                },
+                "intelligence_gathered": {},
+                "quality_metrics": {},
+                "quality_score": 0.0,
+                "lines_generated": 42,
+                "validation_passed": false
+              },
+              "error": null,
+              "execution_time_ms": 24.83987808227539,
+              "trace_id": "agent_agent-contract-driven-generator_1759779431520_4441715664"
+            },
+            "error": null
+          },
+          "duration_ms": 24.854183197021484,
+          "parent_trace_id": "coord_1759779431519_4441715664"
+        }
+      ],
+      "result": {
+        "task_id": "test-1",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nHelloWorld - ONEX Compute Node\n\nSimple test\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass HelloWorldInput(BaseModel):\n    \"\"\"Input model for HelloWorld.\"\"\"\n    pass\n\n\nclass HelloWorldOutput(BaseModel):\n    \"\"\"Output model for HelloWorld.\"\"\"\n    pass\n\n\nclass NodeHelloWorldCompute:\n    \"\"\"\n    ONEX Compute node for HelloWorld.\n    \n    Simple test\n    \"\"\"\n\n    async def execute(self, input_data: HelloWorldInput) -> HelloWorldOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 0 sources\n        \n        # Placeholder implementation\n        return HelloWorldOutput()",
+          "node_type": "Compute",
+          "contract": {
+            "name": "HelloWorld",
+            "description": "Simple test"
+          },
+          "intelligence_gathered": {},
+          "quality_metrics": {},
+          "quality_score": 0.0,
+          "lines_generated": 42,
+          "validation_passed": false
+        },
+        "error": null,
+        "execution_time_ms": 24.83987808227539,
+        "trace_id": "agent_agent-contract-driven-generator_1759779431520_4441715664"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759779431.519487,
+      "datetime_str": "2025-10-06T15:37:11.519489",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "test-1",
+            "description": "Generate hello world"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759779431.520131,
+      "datetime_str": "2025-10-06T15:37:11.520132",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.520422,
+      "datetime_str": "2025-10-06T15:37:11.520422",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "test-1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.5206661,
+      "datetime_str": "2025-10-06T15:37:11.520666",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Task test-1 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.5209758,
+      "datetime_str": "2025-10-06T15:37:11.520977",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Starting contract-driven code generation: Generate hello world",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.521333,
+      "datetime_str": "2025-10-06T15:37:11.521334",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Phase 1: Gathering intelligence (no pre-gathered context available)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.5418172,
+      "datetime_str": "2025-10-06T15:37:11.541820",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Intelligence gathering failed (continuing): Tool call failed: All connection attempts failed",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.5425541,
+      "datetime_str": "2025-10-06T15:37:11.542555",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Phase 2: Generating ONEX-compliant code",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.543205,
+      "datetime_str": "2025-10-06T15:37:11.543206",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Phase 3: Validating generated code quality",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.545301,
+      "datetime_str": "2025-10-06T15:37:11.545302",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Quality validation failed (continuing): Tool call failed: All connection attempts failed",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.546508,
+      "datetime_str": "2025-10-06T15:37:11.546509",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Code generation complete: 824 chars, quality=0.00",
+      "metadata": {
+        "execution_time_ms": 24.83987808227539
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.547047,
+      "datetime_str": "2025-10-06T15:37:11.547048",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "test-1",
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Task test-1 succeeded in 24.84ms",
+      "metadata": {
+        "execution_time_ms": 24.83987808227539
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.547724,
+      "datetime_str": "2025-10-06T15:37:11.547725",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "test-1"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    },
+    {
+      "timestamp": 1759779431.548377,
+      "datetime_str": "2025-10-06T15:37:11.548377",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Coordinator completed: 1/1 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 28.890132904052734,
+        "tasks_completed": 1,
+        "success_count": 1
+      },
+      "duration_ms": 28.886079788208008,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759779431.5489652,
+      "datetime_str": "2025-10-06T15:37:11.548965",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759779431519_4441715664",
+      "message": "Parallel execution complete: 1 tasks in 28.89ms",
+      "metadata": {
+        "total_time_ms": 28.890132904052734,
+        "results": {
+          "test-1": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759779431519_4441715664"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "test-1",
+        "description": "Generate hello world"
+      }
+    ]
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "trace_id": "coord_1759862712995_4462778320",
+  "coordinator_type": "parallel",
+  "start_time": 1759862712.995871,
+  "end_time": null,
+  "duration_ms": null,
+  "total_agents": 1,
+  "completed_agents": 0,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759862712997_4462778320",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "start_time": 1759862712.997888,
+      "end_time": null,
+      "duration_ms": null,
+      "status": "running",
+      "events": [
+        {
+          "timestamp": 1759862712.997896,
+          "datetime_str": "2025-10-07T14:45:12.997897",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task task1",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759862712995_4462778320"
+        }
+      ],
+      "result": null,
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759862712.995883,
+      "datetime_str": "2025-10-07T14:45:12.995884",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task1",
+            "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759862712.996636,
+      "datetime_str": "2025-10-07T14:45:12.996637",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759862712995_4462778320"
+    },
+    {
+      "timestamp": 1759862712.996926,
+      "datetime_str": "2025-10-07T14:45:12.996927",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759862712995_4462778320"
+    },
+    {
+      "timestamp": 1759862712.997458,
+      "datetime_str": "2025-10-07T14:45:12.997458",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Task task1 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759862712995_4462778320"
+    },
+    {
+      "timestamp": 1759862712.9979048,
+      "datetime_str": "2025-10-07T14:45:12.997905",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Generating Effect node: NodePostgreSQLAdapterEffect",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759862712995_4462778320"
+    },
+    {
+      "timestamp": 1759862713.064765,
+      "datetime_str": "2025-10-07T14:45:13.064767",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759862712995_4462778320",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759862712995_4462778320"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task1",
+        "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+      }
+    ]
+  }
+}

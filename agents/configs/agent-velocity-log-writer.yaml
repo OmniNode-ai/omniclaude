@@ -1,0 +1,266 @@
+agent_domain: velocity_log_writer
+agent_purpose: Direct-to-database velocity tracking writer that bypasses repository
+  for instant productivity metrics with intelligence-driven quality validation
+agent_title: ONEX Anti-YOLO Method + BFROS Framework + Intelligence-Enhanced Velocity Analytics
+agent_description: Direct-to-database velocity tracking writer that bypasses repository
+  for instant productivity metrics with automated quality assessment, data completeness
+  validation, prediction accuracy tracking, and trend analysis
+agent_context: general
+domain_query: velocity_log_writer patterns best practices intelligence quality metrics
+implementation_query: velocity_log_writer implementation strategies quality validation trend analysis
+match_count: 8
+confidence_threshold: 0.7
+knowledge_capture_level: comprehensive
+
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  intelligence_capabilities:
+    - velocity_metrics_quality_assessment
+    - data_completeness_validation
+    - prediction_accuracy_tracking
+    - trend_analysis_and_forecasting
+    - productivity_pattern_detection
+    - velocity_anomaly_detection
+    - metrics_consistency_validation
+    - historical_correlation_analysis
+
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+triggers:
+  - log velocity
+  - track productivity
+  - write velocity metrics
+  - record development speed
+  - measure team velocity
+  - track sprint progress
+  - velocity analytics
+  - productivity tracking
+  - validate velocity data quality
+  - analyze velocity trends
+  - assess tracking accuracy
+  - identify velocity patterns
+  - detect velocity anomalies
+  - forecast velocity trends
+  - check metrics completeness
+  - validate productivity data
+
+intelligence_integration:
+  pre_execution:
+    - action: research_velocity_patterns
+      tool: mcp__archon__perform_rag_query
+      params:
+        query: "velocity tracking patterns data quality metrics completeness validation"
+        context: "velocity_tracking"
+        match_count: 8
+      purpose: Research proven velocity tracking patterns and quality metrics
+
+    - action: analyze_historical_velocity
+      tool: mcp__archon__semantic_search_with_context
+      params:
+        query: "historical velocity data patterns trend analysis prediction accuracy"
+        limit: 6
+      purpose: Analyze historical velocity patterns for baseline establishment
+
+    - action: assess_current_metrics_quality
+      tool: mcp__archon__assess_code_quality
+      params:
+        content: "velocity_tracking_system"
+        source_path: "velocity_metrics_analysis"
+        language: "structured_data"
+      purpose: Assess current velocity metrics quality and identify gaps
+
+    - action: establish_velocity_baseline
+      tool: mcp__archon__establish_performance_baseline
+      params:
+        operation_name: "velocity_tracking_accuracy"
+        metrics:
+          completeness_rate: 0.0
+          prediction_accuracy: 0.0
+          data_consistency: 0.0
+          trend_reliability: 0.0
+      purpose: Establish baseline for velocity tracking quality metrics
+
+    - action: validate_data_requirements
+      tool: mcp__archon__analyze_document_quality
+      params:
+        content: "velocity_data_schema_and_requirements"
+        document_type: "data_specification"
+        check_completeness: true
+      purpose: Validate velocity data requirements and schema completeness
+
+  during_execution:
+    - action: monitor_data_quality
+      tool: mcp__archon__assess_code_quality
+      params:
+        content: "velocity_entry_data"
+        language: "structured_data"
+      purpose: Continuously monitor velocity data quality during tracking
+      trigger: "on_each_velocity_entry"
+
+    - action: validate_metrics_completeness
+      tool: mcp__archon__analyze_document_quality
+      params:
+        content: "velocity_metrics_snapshot"
+        check_completeness: true
+      purpose: Validate completeness of velocity metrics being tracked
+      trigger: "on_metrics_collection"
+
+    - action: detect_velocity_anomalies
+      tool: mcp__archon__get_quality_patterns
+      params:
+        content: "velocity_data_stream"
+        pattern_type: "anomaly_detection"
+      purpose: Detect anomalies and outliers in velocity data
+      trigger: "continuous_monitoring"
+
+    - action: check_prediction_accuracy
+      tool: mcp__archon__monitor_performance_trends
+      params:
+        time_window_hours: 24
+        include_predictions: true
+      purpose: Monitor accuracy of velocity predictions and forecasts
+      trigger: "hourly_validation"
+
+    - action: validate_trend_consistency
+      tool: mcp__archon__check_architectural_compliance
+      params:
+        content: "velocity_trend_data"
+        architecture_type: "data_consistency"
+      purpose: Ensure velocity trends maintain consistency with historical patterns
+      trigger: "on_trend_analysis"
+
+  post_execution:
+    - action: validate_velocity_log_quality
+      tool: mcp__archon__assess_code_quality
+      params:
+        content: "completed_velocity_log"
+        language: "structured_data"
+      purpose: Validate overall quality of velocity log entry
+
+    - action: analyze_tracking_accuracy
+      tool: mcp__archon__get_optimization_report
+      params:
+        time_window_hours: 168
+      purpose: Analyze velocity tracking accuracy over past week
+
+    - action: identify_improvement_patterns
+      tool: mcp__archon__identify_optimization_opportunities
+      params:
+        operation_name: "velocity_tracking_accuracy"
+      purpose: Identify opportunities to improve velocity tracking accuracy
+
+    - action: validate_prediction_results
+      tool: mcp__archon__analyze_document_quality
+      params:
+        content: "velocity_predictions_vs_actuals"
+        document_type: "analysis_report"
+      purpose: Validate accuracy of velocity predictions against actuals
+
+    - action: capture_velocity_patterns
+      tool: mcp__archon__get_quality_patterns
+      params:
+        content: "velocity_tracking_session"
+        pattern_type: "best_practices"
+      purpose: Capture effective velocity tracking patterns for learning
+
+    - action: update_velocity_baseline
+      tool: mcp__archon__establish_performance_baseline
+      params:
+        operation_name: "velocity_tracking_accuracy"
+      purpose: Update velocity tracking baseline with new performance data
+
+quality_gates:
+  data_completeness:
+    threshold: 0.95
+    description: "Velocity data must be 95% complete with all required fields"
+    validation_tool: "analyze_document_quality"
+    failure_action: "flag_incomplete_data"
+
+  metrics_consistency:
+    threshold: 0.90
+    description: "Velocity metrics must maintain 90% consistency with historical patterns"
+    validation_tool: "check_architectural_compliance"
+    failure_action: "investigate_inconsistency"
+
+  prediction_accuracy:
+    threshold: 0.80
+    description: "Velocity predictions must achieve 80% accuracy against actuals"
+    validation_tool: "monitor_performance_trends"
+    failure_action: "recalibrate_predictions"
+
+  trend_reliability:
+    threshold: 0.85
+    description: "Velocity trends must demonstrate 85% reliability in forecasting"
+    validation_tool: "get_optimization_report"
+    failure_action: "adjust_trend_analysis"
+
+  anomaly_detection:
+    threshold: 0.95
+    description: "System must detect 95% of velocity anomalies and outliers"
+    validation_tool: "get_quality_patterns"
+    failure_action: "enhance_detection_sensitivity"
+
+pattern_learning:
+  enabled: true
+  learning_areas:
+    - velocity_tracking_strategies
+    - data_quality_patterns
+    - prediction_accuracy_improvement
+    - trend_analysis_techniques
+    - anomaly_detection_methods
+    - completeness_validation_approaches
+    - consistency_check_patterns
+    - productivity_correlation_insights
+
+  feedback_collection:
+    - metric: velocity_data_quality_score
+      source: assess_code_quality
+      frequency: per_entry
+
+    - metric: completeness_percentage
+      source: analyze_document_quality
+      frequency: per_session
+
+    - metric: prediction_accuracy_rate
+      source: monitor_performance_trends
+      frequency: daily
+
+    - metric: trend_reliability_score
+      source: get_optimization_report
+      frequency: weekly
+
+    - metric: anomaly_detection_rate
+      source: get_quality_patterns
+      frequency: continuous
+
+  improvement_tracking:
+    baseline_metrics:
+      - data_completeness_rate
+      - metrics_consistency_score
+      - prediction_accuracy
+      - trend_forecast_reliability
+      - anomaly_detection_accuracy
+
+    optimization_goals:
+      - improve_data_completeness: target 0.98
+      - enhance_prediction_accuracy: target 0.85
+      - increase_trend_reliability: target 0.90
+      - boost_anomaly_detection: target 0.97
+
+    learning_integration:
+      - pattern: successful_velocity_tracking_strategies
+        application: apply_to_future_tracking_sessions
+
+      - pattern: high_accuracy_prediction_methods
+        application: enhance_forecasting_models
+
+      - pattern: effective_anomaly_detection_rules
+        application: refine_detection_algorithms
+
+      - pattern: data_quality_improvement_techniques
+        application: strengthen_validation_processes

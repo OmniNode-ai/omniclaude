@@ -1,6 +1,6 @@
 {
-  "last_updated": "2025-10-11T12:41:14Z",
-  "total_violations_today": 129,
+  "last_updated": "2025-10-11T18:11:55Z",
+  "total_violations_today": 134,
   "files_with_violations": [
     {
       "path": "agents/parallel_execution/state_manager.py",
@@ -231,6 +231,25 @@
       "violations": 1,
       "timestamp": "2025-10-11T12:41:14Z",
       "suggestions": [
+        "snake_case"
+      ]
+    },
+    {
+      "path": "agents/parallel_execution/workflow/phase_models.py",
+      "violations": 1,
+      "timestamp": "2025-10-11T18:10:38Z",
+      "suggestions": [
+        "EnumExecutionPhase"
+      ]
+    },
+    {
+      "path": "agents/parallel_execution/dispatch_runner.py",
+      "violations": 4,
+      "timestamp": "2025-10-11T18:11:55Z",
+      "suggestions": [
+        "snake_case",
+        "snake_case",
+        "snake_case",
         "snake_case"
       ]
     }

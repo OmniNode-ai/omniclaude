@@ -1,0 +1,754 @@
+{
+  "trace_id": "coord_1759861800594_4654741520",
+  "coordinator_type": "parallel",
+  "start_time": 1759861800.594636,
+  "end_time": 1759861830.2793431,
+  "duration_ms": 29684.707164764404,
+  "total_agents": 1,
+  "completed_agents": 1,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759861800600_4654741520",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "start_time": 1759861800.6007628,
+      "end_time": 1759861830.273996,
+      "duration_ms": 29673.23327064514,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759861800.600776,
+          "datetime_str": "2025-10-07T14:30:00.600777",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task task1",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759861800594_4654741520"
+        },
+        {
+          "timestamp": 1759861830.274131,
+          "datetime_str": "2025-10-07T14:30:30.274134",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (29673.23ms)",
+          "metadata": {
+            "result": {
+              "task_id": "task1",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nNodePostgreSQLAdapterEffect - ONEX Effect Node\n\nThe NodePostgreSQLAdapterEffect adheres to ONEX architecture principles:\n- **Node Type**: Explicitly an 'Effect' node, handling external I/O with a PostgreSQL database.\n- **Naming Convention**: Uses the exact ONEX standard name 'NodePostgreSQLAdapterEffect'.\n- **Pydantic Models**: Employs Pydantic models (NodePostgreSQLAdapterEffectInput, NodePostgreSQLAdapterEffectOutput) for robust type safety and data validation for all inputs and outputs.\n- **Async/Await**: All I/O operations (database connection and query execution) are implemented using `async`/`await` with `asyncpg` to ensure non-blocking execution.\n- **Separation of Concerns**: The node's sole responsibility is database interaction, maintaining a clear separation of concerns as an Effect node.\n- **Error Handling**: Includes `try...except` blocks to gracefully handle `asyncpg.exceptions.PostgresError` and other general exceptions, returning a structured error message in the output model.\n- **Documentation**: Comprehensive docstrings are provided for the class, methods, and Pydantic models, enhancing readability and maintainability.\n\"\"\"\n\nfrom pydantic import BaseModel, Field\nfrom typing import List, Dict, Any, Optional\nimport asyncpg\n\nclass NodePostgreSQLAdapterEffectInput(BaseModel):\n    \"\"\"\n    Input model for the NodePostgreSQLAdapterEffect.\n\n    Attributes:\n        connection_string (str): The PostgreSQL connection string.\n                                 Example: \"postgresql://user:password@host:port/database\"\n        query (str): The SQL query string to execute.\n                     Use placeholders like $1, $2 for parameterized queries.\n        parameters (Optional[List[Any]]): A list of parameters to be passed to the query.\n                                          These will replace placeholders in the query in order.\n                                          Defaults to None for queries without parameters.\n    \"\"\"\n    connection_string: str = Field(..., description=\"PostgreSQL connection string.\")\n    query: str = Field(..., description=\"SQL query to execute. Use $1, $2 for parameters.\")\n    parameters: Optional[List[Any]] = Field(None, description=\"List of parameters for the query.\")\n\nclass NodePostgreSQLAdapterEffectOutput(BaseModel):\n    \"\"\"\n    Output model for the NodePostgreSQLAdapterEffect.\n\n    Attributes:\n        success (bool): True if the query execution was successful, False otherwise.\n        records (List[Dict[str, Any]]): A list of dictionaries, where each dictionary\n                                        represents a row returned by the query.\n                                        Empty if no rows are returned or on error.\n        row_count (int): The number of rows affected by a DML query (INSERT, UPDATE, DELETE)\n                         or the number of rows returned by a SELECT query.\n        error_message (Optional[str]): A descriptive error message if the operation failed.\n                                       None if successful.\n    \"\"\"\n    success: bool = Field(..., description=\"Indicates if the query executed successfully.\")\n    records: List[Dict[str, Any]] = Field(..., description=\"List of records returned by the query.\")\n    row_count: int = Field(..., description=\"Number of rows affected or returned.\")\n    error_message: Optional[str] = Field(None, description=\"Error message if an exception occurred.\")\n\nclass NodePostgreSQLAdapterEffect:\n    \"\"\"\n    NodePostgreSQLAdapterEffect is an ONEX Effect node responsible for interacting\n    with a PostgreSQL database. It handles establishing a connection, executing\n    SQL queries (including parameterized queries), and returning results.\n\n    This node adheres to ONEX principles by isolating external I/O operations\n    and using Pydantic models for strict input/output contracts.\n    \"\"\"\n\n    async def execute(self, input_data: NodePostgreSQLAdapterEffectInput) -> NodePostgreSQLAdapterEffectOutput:\n        \"\"\"\n        Executes a given SQL query against a PostgreSQL database.\n\n        Connects to the database using the provided connection string, executes\n        the query with optional parameters, and returns the results.\n        Gracefully handles database connection and query execution errors.\n\n        Args:\n            input_data (NodePostgreSQLAdapterEffectInput):\n                An instance of NodePostgreSQLAdapterEffectInput containing\n                the connection string, query, and optional parameters.\n\n        Returns:\n            NodePostgreSQLAdapterEffectOutput:\n                An instance of NodePostgreSQLAdapterEffectOutput containing\n                the success status, returned records, row count, and any\n                error messages.\n\n        Raises:\n            Exception: Propagates unexpected exceptions if internal error handling fails,\n                       though efforts are made to capture common database errors.\n        \"\"\"\n        connection = None\n        try:\n            # Establish an asynchronous connection to the PostgreSQL database\n            connection = await asyncpg.connect(input_data.connection_string)\n\n            # Determine if the query is a SELECT statement or DML\n            is_select_query = input_data.query.strip().upper().startswith(\"SELECT\")\n\n            if is_select_query:\n                # Execute SELECT query and fetch all records\n                if input_data.parameters:\n                    records = await connection.fetch(input_data.query, *input_data.parameters)\n                else:\n                    records = await connection.fetch(input_data.query)\n                \n                # Convert records to list of dictionaries for Pydantic model\n                result_records = [dict(r) for r in records]\n                row_count = len(result_records)\n            else:\n                # Execute DML (INSERT, UPDATE, DELETE) or other non-SELECT query\n                if input_data.parameters:\n                    status, row_count = await connection.execute(input_data.query, *input_data.parameters)\n                else:\n                    status, row_count = await connection.execute(input_data.query)\n                result_records = [] # No records returned for DML\n                # row_count is already from execute result\n\n            return NodePostgreSQLAdapterEffectOutput(\n                success=True,\n                records=result_records,\n                row_count=row_count,\n                error_message=None\n            )\n\n        except asyncpg.exceptions.PostgresError as e:\n            # Catch specific PostgreSQL errors\n            return NodePostgreSQLAdapterEffectOutput(\n                success=False,\n                records=[],\n                row_count=0,\n                error_message=f\"PostgreSQL Error: {e}\"\n            )\n        except Exception as e:\n            # Catch any other unexpected errors\n            return NodePostgreSQLAdapterEffectOutput(\n                success=False,\n                records=[],\n                row_count=0,\n                error_message=f\"An unexpected error occurred: {e}\"\n            )\n        finally:\n            # Ensure the connection is closed\n            if connection:\n                await connection.close()",
+                "node_type": "Effect",
+                "node_name": "NodePostgreSQLAdapterEffect",
+                "dependencies": [
+                  "pydantic",
+                  "asyncpg"
+                ],
+                "intelligence_gathered": {
+                  "domain_patterns": {
+                    "success": true,
+                    "query": "contract-driven development patterns",
+                    "context": "architecture",
+                    "timestamp": "2025-10-07T18:30:00.583526",
+                    "duration_ms": 7,
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG",
+                      "Vector Search",
+                      "Knowledge Graph"
+                    ],
+                    "total_results": 5,
+                    "results": {
+                      "rag_search": {
+                        "success": true,
+                        "source": "rag_search",
+                        "results": [],
+                        "query": "contract-driven development patterns",
+                        "reranked": false
+                      },
+                      "vector_search": {
+                        "success": true,
+                        "source": "qdrant_vector_search",
+                        "results": [
+                          {
+                            "entity_id": "doc_0_0",
+                            "entity_type": "page",
+                            "title": "SHARED_RESOURCE_VERSIONING.md",
+                            "content": "# Shared Resource Versioning Strategy\n\n**Version**: 1.0.0\n**Date**: 2025-10-01\n**Status**: \u2705 Final Design\n\n---\n\n## Problem Statement\n\nWhen models or protocols are shared between multiple nodes in a group:\n- How do we version them independently from nodes?\n- How do we handle breaking changes?\n- How do we deprecate old versions?\n- How do we allow gradual migration?\n\n---\n\n## Solution: Independent Versioning with `shared/` Directory\n\nShared resources version INDEPENDENTLY from nodes. Use major versions only (v1, v2, v3), not semantic versioning. Follow lazy promotion to shared/ directory.",
+                            "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/SHARED_RESOURCE_VERSIONING.md",
+                            "relevance_score": 0.42193946,
+                            "semantic_score": 0.42193946,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_0_2",
+                            "entity_type": "page",
+                            "title": "ONEX Canonical Examples",
+                            "content": "# ONEX Canonical Examples - Quick Start\n\n## 15 Canonical Patterns\n\n1. Container Injection - ONEXContainer for dependency injection\n2. Transaction Management - Rollback support with LIFO order  \n3. Circuit Breaker - Prevent cascading failures (CLOSED/OPEN/HALF_OPEN)\n4. Retry Logic - Exponential backoff with jitter\n5. Security Assessment - Path traversal detection, sandbox compliance\n6. Multiple Operations - File, HTTP, database, email, audit handlers\n7. Input Validation - Comprehensive with errors AND warnings\n8. Performance Metrics - Per-operation timing and success rates\n9. Strong Typing - Pydantic BaseModel + Python Enum  \n10. Rollback Instructions - Human-readable recovery steps\n11. Contract Loading - YAML contracts with Pydantic validation\n12. Error Handling - OnexError with structured details\n13. Structured Logging - emit_log_event with correlation IDs\n14. Async Context Managers - Resource cleanup with RAII\n15. Semaphore Concurrency - Prevent resource exhaustion\n\n## Canonical Effect Node Structure\n\n```python\nclass NodeDatabaseWriterEffect(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Initialize transaction manager\n        # Initialize circuit breaker\n        # Initialize retry logic\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # 1. Validate input\n        # 2. Assess security risk\n        # 3. Execute with transaction\n        # 4. Track performance metrics\n        # 5. Handle rollback if needed\n```\n\n## Key Patterns to Keep\n\nInfrastructure (ALWAYS keep):\n- Container injection\n- Transaction management with rollback\n- Circuit breaker for external services  \n- Retry logic with exponential backoff\n- Input validation with errors/warnings\n- Security risk assessment\n- Performance metrics tracking\n- Structured logging with correlation IDs\n- OnexError for exceptions\n- Pydantic models for all data\n\nBusiness Logic (Customize):\n- Operation handlers\n- Validation rules\n- Security checks\n- Rollback instructions",
+                            "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/examples/QUICKSTART.md",
+                            "relevance_score": 0.42189717,
+                            "semantic_score": 0.42189717,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_0_0",
+                            "entity_type": "page",
+                            "title": "ONEX Implementation Guide",
+                            "content": "# ONEX Implementation Guide\n\n**Version**: 2.0.0\n**Status**: \u2705 Canonical Reference\n\nONEX provides **three levels** of base contracts:\n\n1. MINIMAL (advanced use cases)\n2. STANDARD (recommended for 90% of nodes) \u2b50  \n3. FULL (complex infrastructure nodes)\n\n## 4-Node Architecture\n\nEffect \u2192 Compute \u2192 Reducer \u2192 Orchestrator (unidirectional flow)\n\n### NodeEffect\n**Purpose**: Side effects (I/O, database, API calls)\n**Method**: async def execute_effect(self, contract: ModelContractEffect)\n**Use for**: Database writes, file operations, API calls, event publishing\n\n### NodeCompute  \n**Purpose**: Pure computations (no side effects)\n**Method**: async def execute_compute(self, contract: ModelContractCompute)\n**Use for**: Data transformations, calculations, filtering, validation\n\n### NodeReducer\n**Purpose**: Data aggregation and state reduction  \n**Method**: async def execute_reduction(self, contract: ModelContractReducer)\n**Use for**: Aggregation, statistics, state merging, report generation\n\n### NodeOrchestrator\n**Purpose**: Workflow coordination\n**Method**: async def execute_orchestration(self, contract: ModelContractOrchestrator)  \n**Use for**: Multi-step workflows, pipeline coordination, dependency resolution\n\n## Naming Conventions (SUFFIX-based)\n\n- Files: node_<name>_<type>.py \u2192 node_database_writer_effect.py\n- Classes: Node<Name><Type> \u2192 NodeDatabaseWriterEffect  \n- Models: model_<name>.py \u2192 model_task_data.py\n\n**Key**: Type comes LAST (suffix-based), not first!\n\n## Creating Your First Node\n\n```python\nfrom omnibase.core.node_effect import NodeEffect\nfrom omnibase_core.models.core import ModelOnexContainer\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolMyNodeProcessor(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # Your business logic here\n        pass\n```\n\n## Base Class Compositions\n\n### ModelContractEffectStandard \u2b50 (90% of nodes)\nIncludes:\n- Service resolution\n- Health monitoring  \n- Performance tracking\n- Configuration management\n- Request/response patterns\n\n### ModelContractEffectFull (complex infrastructure)\nAdds to Standard:\n- External dependencies tracking\n- Runtime introspection\n- State management\n- FSM patterns",
+                            "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/ONEX_GUIDE.md",
+                            "relevance_score": 0.40644374,
+                            "semantic_score": 0.40644374,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_86",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.40567595,
+                            "semantic_score": 0.40567595,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:12.963261+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_86",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.40567595,
+                            "semantic_score": 0.40567595,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:12.963261+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          }
+                        ],
+                        "query": "contract-driven development patterns"
+                      },
+                      "knowledge_graph": {
+                        "success": true,
+                        "source": "memgraph_knowledge_graph",
+                        "results": [],
+                        "query": "contract-driven development patterns",
+                        "search_terms": [
+                          "contract-driven",
+                          "development",
+                          "patterns"
+                        ]
+                      }
+                    },
+                    "synthesis": {
+                      "key_findings": [
+                        "Identified 5 semantically similar items"
+                      ],
+                      "patterns_identified": [
+                        "Vector search found 5 semantically related items"
+                      ],
+                      "recommended_actions": [
+                        "Review architectural patterns and best practices from RAG search",
+                        "Analyze knowledge graph for architectural relationships and dependencies"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.5,
+                      "ecosystem_insights": [
+                        "Cross-referenced patterns across omninode ecosystem projects",
+                        "4-node architecture compliance and implementation patterns",
+                        "Integration opportunities between omniagent/omnimcp components",
+                        "Architectural consistency analysis across ecosystem"
+                      ],
+                      "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                      "ecosystem_integration_opportunities": [
+                        "Identify shared patterns between omnibase components",
+                        "Leverage 4-node architecture across ecosystem projects",
+                        "Optimize cross-component communication patterns"
+                      ]
+                    },
+                    "cache": {
+                      "hits": 3,
+                      "misses": 0,
+                      "hit_rate": 100.0,
+                      "stats": {
+                        "enabled": true,
+                        "total_keys": 24,
+                        "hits": 166,
+                        "misses": 246,
+                        "hit_rate": 40.29126213592233,
+                        "connected_clients": 0
+                      }
+                    }
+                  }
+                },
+                "quality_metrics": {
+                  "success": true,
+                  "analysis": {
+                    "source_path": "NodePostgreSQLAdapterEffect.py",
+                    "language": "python",
+                    "content_length": 7234,
+                    "quality_score": 0.745,
+                    "quality_metrics": {
+                      "complexity": 0.3000000000000001,
+                      "maintainability": 1.0,
+                      "documentation": 0.8,
+                      "structure": 0.8
+                    },
+                    "architectural_compliance": {
+                      "onex_compliance": 0.745,
+                      "pattern_compliance": 0,
+                      "compliance_insights": []
+                    },
+                    "code_patterns": {
+                      "identified_patterns": [],
+                      "anti_patterns": [],
+                      "improvement_opportunities": [
+                        "Consider breaking down complex functions into smaller, more focused methods"
+                      ]
+                    },
+                    "maintainability": {
+                      "score": 1.0,
+                      "factors": {
+                        "line_count": 140,
+                        "avg_line_length": 50.67857142857143,
+                        "max_line_length": 196,
+                        "empty_lines": 18
+                      }
+                    },
+                    "architectural_era": "modern",
+                    "temporal_relevance": 0.745
+                  },
+                  "orchestration_summary": {
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG",
+                      "Vector Search",
+                      "Knowledge Graph"
+                    ],
+                    "synthesis": {
+                      "key_findings": [
+                        "Identified 3 semantically similar items"
+                      ],
+                      "patterns_identified": [
+                        "Vector search found 3 semantically related items"
+                      ],
+                      "recommended_actions": [
+                        "Review RAG search results for documentation patterns",
+                        "Analyze vector search results for code similarities",
+                        "Explore knowledge graph connections for related concepts"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.5
+                    },
+                    "duration_ms": 4
+                  },
+                  "intelligence_service_url": "orchestrated_backend_services",
+                  "timestamp": "2025-10-07T18:30:30.256537"
+                },
+                "quality_score": 0.0,
+                "lines_generated": 140,
+                "validation_passed": false,
+                "onex_compliance_notes": "The NodePostgreSQLAdapterEffect adheres to ONEX architecture principles:\n- **Node Type**: Explicitly an 'Effect' node, handling external I/O with a PostgreSQL database.\n- **Naming Convention**: Uses the exact ONEX standard name 'NodePostgreSQLAdapterEffect'.\n- **Pydantic Models**: Employs Pydantic models (NodePostgreSQLAdapterEffectInput, NodePostgreSQLAdapterEffectOutput) for robust type safety and data validation for all inputs and outputs.\n- **Async/Await**: All I/O operations (database connection and query execution) are implemented using `async`/`await` with `asyncpg` to ensure non-blocking execution.\n- **Separation of Concerns**: The node's sole responsibility is database interaction, maintaining a clear separation of concerns as an Effect node.\n- **Error Handling**: Includes `try...except` blocks to gracefully handle `asyncpg.exceptions.PostgresError` and other general exceptions, returning a structured error message in the output model.\n- **Documentation**: Comprehensive docstrings are provided for the class, methods, and Pydantic models, enhancing readability and maintainability.",
+                "pydantic_ai_metadata": {
+                  "model_used": "gemini-1.5-flash",
+                  "structured_output": true,
+                  "tools_available": 3
+                }
+              },
+              "error": null,
+              "execution_time_ms": 29673.028230667114,
+              "trace_id": "agent_agent-contract-driven-generator_1759861800600_4654741520"
+            },
+            "error": null
+          },
+          "duration_ms": 29673.23327064514,
+          "parent_trace_id": "coord_1759861800594_4654741520"
+        }
+      ],
+      "result": {
+        "task_id": "task1",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nNodePostgreSQLAdapterEffect - ONEX Effect Node\n\nThe NodePostgreSQLAdapterEffect adheres to ONEX architecture principles:\n- **Node Type**: Explicitly an 'Effect' node, handling external I/O with a PostgreSQL database.\n- **Naming Convention**: Uses the exact ONEX standard name 'NodePostgreSQLAdapterEffect'.\n- **Pydantic Models**: Employs Pydantic models (NodePostgreSQLAdapterEffectInput, NodePostgreSQLAdapterEffectOutput) for robust type safety and data validation for all inputs and outputs.\n- **Async/Await**: All I/O operations (database connection and query execution) are implemented using `async`/`await` with `asyncpg` to ensure non-blocking execution.\n- **Separation of Concerns**: The node's sole responsibility is database interaction, maintaining a clear separation of concerns as an Effect node.\n- **Error Handling**: Includes `try...except` blocks to gracefully handle `asyncpg.exceptions.PostgresError` and other general exceptions, returning a structured error message in the output model.\n- **Documentation**: Comprehensive docstrings are provided for the class, methods, and Pydantic models, enhancing readability and maintainability.\n\"\"\"\n\nfrom pydantic import BaseModel, Field\nfrom typing import List, Dict, Any, Optional\nimport asyncpg\n\nclass NodePostgreSQLAdapterEffectInput(BaseModel):\n    \"\"\"\n    Input model for the NodePostgreSQLAdapterEffect.\n\n    Attributes:\n        connection_string (str): The PostgreSQL connection string.\n                                 Example: \"postgresql://user:password@host:port/database\"\n        query (str): The SQL query string to execute.\n                     Use placeholders like $1, $2 for parameterized queries.\n        parameters (Optional[List[Any]]): A list of parameters to be passed to the query.\n                                          These will replace placeholders in the query in order.\n                                          Defaults to None for queries without parameters.\n    \"\"\"\n    connection_string: str = Field(..., description=\"PostgreSQL connection string.\")\n    query: str = Field(..., description=\"SQL query to execute. Use $1, $2 for parameters.\")\n    parameters: Optional[List[Any]] = Field(None, description=\"List of parameters for the query.\")\n\nclass NodePostgreSQLAdapterEffectOutput(BaseModel):\n    \"\"\"\n    Output model for the NodePostgreSQLAdapterEffect.\n\n    Attributes:\n        success (bool): True if the query execution was successful, False otherwise.\n        records (List[Dict[str, Any]]): A list of dictionaries, where each dictionary\n                                        represents a row returned by the query.\n                                        Empty if no rows are returned or on error.\n        row_count (int): The number of rows affected by a DML query (INSERT, UPDATE, DELETE)\n                         or the number of rows returned by a SELECT query.\n        error_message (Optional[str]): A descriptive error message if the operation failed.\n                                       None if successful.\n    \"\"\"\n    success: bool = Field(..., description=\"Indicates if the query executed successfully.\")\n    records: List[Dict[str, Any]] = Field(..., description=\"List of records returned by the query.\")\n    row_count: int = Field(..., description=\"Number of rows affected or returned.\")\n    error_message: Optional[str] = Field(None, description=\"Error message if an exception occurred.\")\n\nclass NodePostgreSQLAdapterEffect:\n    \"\"\"\n    NodePostgreSQLAdapterEffect is an ONEX Effect node responsible for interacting\n    with a PostgreSQL database. It handles establishing a connection, executing\n    SQL queries (including parameterized queries), and returning results.\n\n    This node adheres to ONEX principles by isolating external I/O operations\n    and using Pydantic models for strict input/output contracts.\n    \"\"\"\n\n    async def execute(self, input_data: NodePostgreSQLAdapterEffectInput) -> NodePostgreSQLAdapterEffectOutput:\n        \"\"\"\n        Executes a given SQL query against a PostgreSQL database.\n\n        Connects to the database using the provided connection string, executes\n        the query with optional parameters, and returns the results.\n        Gracefully handles database connection and query execution errors.\n\n        Args:\n            input_data (NodePostgreSQLAdapterEffectInput):\n                An instance of NodePostgreSQLAdapterEffectInput containing\n                the connection string, query, and optional parameters.\n\n        Returns:\n            NodePostgreSQLAdapterEffectOutput:\n                An instance of NodePostgreSQLAdapterEffectOutput containing\n                the success status, returned records, row count, and any\n                error messages.\n\n        Raises:\n            Exception: Propagates unexpected exceptions if internal error handling fails,\n                       though efforts are made to capture common database errors.\n        \"\"\"\n        connection = None\n        try:\n            # Establish an asynchronous connection to the PostgreSQL database\n            connection = await asyncpg.connect(input_data.connection_string)\n\n            # Determine if the query is a SELECT statement or DML\n            is_select_query = input_data.query.strip().upper().startswith(\"SELECT\")\n\n            if is_select_query:\n                # Execute SELECT query and fetch all records\n                if input_data.parameters:\n                    records = await connection.fetch(input_data.query, *input_data.parameters)\n                else:\n                    records = await connection.fetch(input_data.query)\n                \n                # Convert records to list of dictionaries for Pydantic model\n                result_records = [dict(r) for r in records]\n                row_count = len(result_records)\n            else:\n                # Execute DML (INSERT, UPDATE, DELETE) or other non-SELECT query\n                if input_data.parameters:\n                    status, row_count = await connection.execute(input_data.query, *input_data.parameters)\n                else:\n                    status, row_count = await connection.execute(input_data.query)\n                result_records = [] # No records returned for DML\n                # row_count is already from execute result\n\n            return NodePostgreSQLAdapterEffectOutput(\n                success=True,\n                records=result_records,\n                row_count=row_count,\n                error_message=None\n            )\n\n        except asyncpg.exceptions.PostgresError as e:\n            # Catch specific PostgreSQL errors\n            return NodePostgreSQLAdapterEffectOutput(\n                success=False,\n                records=[],\n                row_count=0,\n                error_message=f\"PostgreSQL Error: {e}\"\n            )\n        except Exception as e:\n            # Catch any other unexpected errors\n            return NodePostgreSQLAdapterEffectOutput(\n                success=False,\n                records=[],\n                row_count=0,\n                error_message=f\"An unexpected error occurred: {e}\"\n            )\n        finally:\n            # Ensure the connection is closed\n            if connection:\n                await connection.close()",
+          "node_type": "Effect",
+          "node_name": "NodePostgreSQLAdapterEffect",
+          "dependencies": [
+            "pydantic",
+            "asyncpg"
+          ],
+          "intelligence_gathered": {
+            "domain_patterns": {
+              "success": true,
+              "query": "contract-driven development patterns",
+              "context": "architecture",
+              "timestamp": "2025-10-07T18:30:00.583526",
+              "duration_ms": 7,
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG",
+                "Vector Search",
+                "Knowledge Graph"
+              ],
+              "total_results": 5,
+              "results": {
+                "rag_search": {
+                  "success": true,
+                  "source": "rag_search",
+                  "results": [],
+                  "query": "contract-driven development patterns",
+                  "reranked": false
+                },
+                "vector_search": {
+                  "success": true,
+                  "source": "qdrant_vector_search",
+                  "results": [
+                    {
+                      "entity_id": "doc_0_0",
+                      "entity_type": "page",
+                      "title": "SHARED_RESOURCE_VERSIONING.md",
+                      "content": "# Shared Resource Versioning Strategy\n\n**Version**: 1.0.0\n**Date**: 2025-10-01\n**Status**: \u2705 Final Design\n\n---\n\n## Problem Statement\n\nWhen models or protocols are shared between multiple nodes in a group:\n- How do we version them independently from nodes?\n- How do we handle breaking changes?\n- How do we deprecate old versions?\n- How do we allow gradual migration?\n\n---\n\n## Solution: Independent Versioning with `shared/` Directory\n\nShared resources version INDEPENDENTLY from nodes. Use major versions only (v1, v2, v3), not semantic versioning. Follow lazy promotion to shared/ directory.",
+                      "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/SHARED_RESOURCE_VERSIONING.md",
+                      "relevance_score": 0.42193946,
+                      "semantic_score": 0.42193946,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_0_2",
+                      "entity_type": "page",
+                      "title": "ONEX Canonical Examples",
+                      "content": "# ONEX Canonical Examples - Quick Start\n\n## 15 Canonical Patterns\n\n1. Container Injection - ONEXContainer for dependency injection\n2. Transaction Management - Rollback support with LIFO order  \n3. Circuit Breaker - Prevent cascading failures (CLOSED/OPEN/HALF_OPEN)\n4. Retry Logic - Exponential backoff with jitter\n5. Security Assessment - Path traversal detection, sandbox compliance\n6. Multiple Operations - File, HTTP, database, email, audit handlers\n7. Input Validation - Comprehensive with errors AND warnings\n8. Performance Metrics - Per-operation timing and success rates\n9. Strong Typing - Pydantic BaseModel + Python Enum  \n10. Rollback Instructions - Human-readable recovery steps\n11. Contract Loading - YAML contracts with Pydantic validation\n12. Error Handling - OnexError with structured details\n13. Structured Logging - emit_log_event with correlation IDs\n14. Async Context Managers - Resource cleanup with RAII\n15. Semaphore Concurrency - Prevent resource exhaustion\n\n## Canonical Effect Node Structure\n\n```python\nclass NodeDatabaseWriterEffect(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Initialize transaction manager\n        # Initialize circuit breaker\n        # Initialize retry logic\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # 1. Validate input\n        # 2. Assess security risk\n        # 3. Execute with transaction\n        # 4. Track performance metrics\n        # 5. Handle rollback if needed\n```\n\n## Key Patterns to Keep\n\nInfrastructure (ALWAYS keep):\n- Container injection\n- Transaction management with rollback\n- Circuit breaker for external services  \n- Retry logic with exponential backoff\n- Input validation with errors/warnings\n- Security risk assessment\n- Performance metrics tracking\n- Structured logging with correlation IDs\n- OnexError for exceptions\n- Pydantic models for all data\n\nBusiness Logic (Customize):\n- Operation handlers\n- Validation rules\n- Security checks\n- Rollback instructions",
+                      "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/examples/QUICKSTART.md",
+                      "relevance_score": 0.42189717,
+                      "semantic_score": 0.42189717,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_0_0",
+                      "entity_type": "page",
+                      "title": "ONEX Implementation Guide",
+                      "content": "# ONEX Implementation Guide\n\n**Version**: 2.0.0\n**Status**: \u2705 Canonical Reference\n\nONEX provides **three levels** of base contracts:\n\n1. MINIMAL (advanced use cases)\n2. STANDARD (recommended for 90% of nodes) \u2b50  \n3. FULL (complex infrastructure nodes)\n\n## 4-Node Architecture\n\nEffect \u2192 Compute \u2192 Reducer \u2192 Orchestrator (unidirectional flow)\n\n### NodeEffect\n**Purpose**: Side effects (I/O, database, API calls)\n**Method**: async def execute_effect(self, contract: ModelContractEffect)\n**Use for**: Database writes, file operations, API calls, event publishing\n\n### NodeCompute  \n**Purpose**: Pure computations (no side effects)\n**Method**: async def execute_compute(self, contract: ModelContractCompute)\n**Use for**: Data transformations, calculations, filtering, validation\n\n### NodeReducer\n**Purpose**: Data aggregation and state reduction  \n**Method**: async def execute_reduction(self, contract: ModelContractReducer)\n**Use for**: Aggregation, statistics, state merging, report generation\n\n### NodeOrchestrator\n**Purpose**: Workflow coordination\n**Method**: async def execute_orchestration(self, contract: ModelContractOrchestrator)  \n**Use for**: Multi-step workflows, pipeline coordination, dependency resolution\n\n## Naming Conventions (SUFFIX-based)\n\n- Files: node_<name>_<type>.py \u2192 node_database_writer_effect.py\n- Classes: Node<Name><Type> \u2192 NodeDatabaseWriterEffect  \n- Models: model_<name>.py \u2192 model_task_data.py\n\n**Key**: Type comes LAST (suffix-based), not first!\n\n## Creating Your First Node\n\n```python\nfrom omnibase.core.node_effect import NodeEffect\nfrom omnibase_core.models.core import ModelOnexContainer\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolMyNodeProcessor(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # Your business logic here\n        pass\n```\n\n## Base Class Compositions\n\n### ModelContractEffectStandard \u2b50 (90% of nodes)\nIncludes:\n- Service resolution\n- Health monitoring  \n- Performance tracking\n- Configuration management\n- Request/response patterns\n\n### ModelContractEffectFull (complex infrastructure)\nAdds to Standard:\n- External dependencies tracking\n- Runtime introspection\n- State management\n- FSM patterns",
+                      "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/ONEX_GUIDE.md",
+                      "relevance_score": 0.40644374,
+                      "semantic_score": 0.40644374,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "code_86",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.40567595,
+                      "semantic_score": 0.40567595,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:12.963261+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "code_86",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.40567595,
+                      "semantic_score": 0.40567595,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:12.963261+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    }
+                  ],
+                  "query": "contract-driven development patterns"
+                },
+                "knowledge_graph": {
+                  "success": true,
+                  "source": "memgraph_knowledge_graph",
+                  "results": [],
+                  "query": "contract-driven development patterns",
+                  "search_terms": [
+                    "contract-driven",
+                    "development",
+                    "patterns"
+                  ]
+                }
+              },
+              "synthesis": {
+                "key_findings": [
+                  "Identified 5 semantically similar items"
+                ],
+                "patterns_identified": [
+                  "Vector search found 5 semantically related items"
+                ],
+                "recommended_actions": [
+                  "Review architectural patterns and best practices from RAG search",
+                  "Analyze knowledge graph for architectural relationships and dependencies"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.5,
+                "ecosystem_insights": [
+                  "Cross-referenced patterns across omninode ecosystem projects",
+                  "4-node architecture compliance and implementation patterns",
+                  "Integration opportunities between omniagent/omnimcp components",
+                  "Architectural consistency analysis across ecosystem"
+                ],
+                "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                "ecosystem_integration_opportunities": [
+                  "Identify shared patterns between omnibase components",
+                  "Leverage 4-node architecture across ecosystem projects",
+                  "Optimize cross-component communication patterns"
+                ]
+              },
+              "cache": {
+                "hits": 3,
+                "misses": 0,
+                "hit_rate": 100.0,
+                "stats": {
+                  "enabled": true,
+                  "total_keys": 24,
+                  "hits": 166,
+                  "misses": 246,
+                  "hit_rate": 40.29126213592233,
+                  "connected_clients": 0
+                }
+              }
+            }
+          },
+          "quality_metrics": {
+            "success": true,
+            "analysis": {
+              "source_path": "NodePostgreSQLAdapterEffect.py",
+              "language": "python",
+              "content_length": 7234,
+              "quality_score": 0.745,
+              "quality_metrics": {
+                "complexity": 0.3000000000000001,
+                "maintainability": 1.0,
+                "documentation": 0.8,
+                "structure": 0.8
+              },
+              "architectural_compliance": {
+                "onex_compliance": 0.745,
+                "pattern_compliance": 0,
+                "compliance_insights": []
+              },
+              "code_patterns": {
+                "identified_patterns": [],
+                "anti_patterns": [],
+                "improvement_opportunities": [
+                  "Consider breaking down complex functions into smaller, more focused methods"
+                ]
+              },
+              "maintainability": {
+                "score": 1.0,
+                "factors": {
+                  "line_count": 140,
+                  "avg_line_length": 50.67857142857143,
+                  "max_line_length": 196,
+                  "empty_lines": 18
+                }
+              },
+              "architectural_era": "modern",
+              "temporal_relevance": 0.745
+            },
+            "orchestration_summary": {
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG",
+                "Vector Search",
+                "Knowledge Graph"
+              ],
+              "synthesis": {
+                "key_findings": [
+                  "Identified 3 semantically similar items"
+                ],
+                "patterns_identified": [
+                  "Vector search found 3 semantically related items"
+                ],
+                "recommended_actions": [
+                  "Review RAG search results for documentation patterns",
+                  "Analyze vector search results for code similarities",
+                  "Explore knowledge graph connections for related concepts"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.5
+              },
+              "duration_ms": 4
+            },
+            "intelligence_service_url": "orchestrated_backend_services",
+            "timestamp": "2025-10-07T18:30:30.256537"
+          },
+          "quality_score": 0.0,
+          "lines_generated": 140,
+          "validation_passed": false,
+          "onex_compliance_notes": "The NodePostgreSQLAdapterEffect adheres to ONEX architecture principles:\n- **Node Type**: Explicitly an 'Effect' node, handling external I/O with a PostgreSQL database.\n- **Naming Convention**: Uses the exact ONEX standard name 'NodePostgreSQLAdapterEffect'.\n- **Pydantic Models**: Employs Pydantic models (NodePostgreSQLAdapterEffectInput, NodePostgreSQLAdapterEffectOutput) for robust type safety and data validation for all inputs and outputs.\n- **Async/Await**: All I/O operations (database connection and query execution) are implemented using `async`/`await` with `asyncpg` to ensure non-blocking execution.\n- **Separation of Concerns**: The node's sole responsibility is database interaction, maintaining a clear separation of concerns as an Effect node.\n- **Error Handling**: Includes `try...except` blocks to gracefully handle `asyncpg.exceptions.PostgresError` and other general exceptions, returning a structured error message in the output model.\n- **Documentation**: Comprehensive docstrings are provided for the class, methods, and Pydantic models, enhancing readability and maintainability.",
+          "pydantic_ai_metadata": {
+            "model_used": "gemini-1.5-flash",
+            "structured_output": true,
+            "tools_available": 3
+          }
+        },
+        "error": null,
+        "execution_time_ms": 29673.028230667114,
+        "trace_id": "agent_agent-contract-driven-generator_1759861800600_4654741520"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759861800.594651,
+      "datetime_str": "2025-10-07T14:30:00.594653",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task1",
+            "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759861800.597263,
+      "datetime_str": "2025-10-07T14:30:00.597266",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861800.597814,
+      "datetime_str": "2025-10-07T14:30:00.597815",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861800.5983171,
+      "datetime_str": "2025-10-07T14:30:00.598317",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Task task1 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861800.600791,
+      "datetime_str": "2025-10-07T14:30:00.600792",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Generating Effect node: NodePostgreSQLAdapterEffect",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861800.734108,
+      "datetime_str": "2025-10-07T14:30:00.734110",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861830.2757308,
+      "datetime_str": "2025-10-07T14:30:30.275732",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Code generation complete: 7234 chars, quality=0.00",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861830.277233,
+      "datetime_str": "2025-10-07T14:30:30.277234",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Task task1 succeeded in 29673.03ms",
+      "metadata": {
+        "execution_time_ms": 29673.028230667114
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861830.2783391,
+      "datetime_str": "2025-10-07T14:30:30.278339",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "task1"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    },
+    {
+      "timestamp": 1759861830.2793548,
+      "datetime_str": "2025-10-07T14:30:30.279355",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Coordinator completed: 1/1 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 29684.703826904297,
+        "tasks_completed": 1,
+        "success_count": 1
+      },
+      "duration_ms": 29684.707164764404,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759861830.280373,
+      "datetime_str": "2025-10-07T14:30:30.280374",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759861800594_4654741520",
+      "message": "Parallel execution complete: 1 tasks in 29684.70ms",
+      "metadata": {
+        "total_time_ms": 29684.703826904297,
+        "results": {
+          "task1": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759861800594_4654741520"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task1",
+        "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+      }
+    ]
+  }
+}

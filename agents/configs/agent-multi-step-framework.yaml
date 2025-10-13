@@ -1,0 +1,869 @@
+agent_domain: multi_step_framework
+agent_purpose: Transparent multi-step workflow framework for all ONEX agents with visible RAG integration and Phase 5 Intelligence
+agent_title: ONEX Anti-YOLO Method + BFROS Framework with Intelligence Integration
+agent_description: Intelligence-enhanced multi-step workflow framework providing data-driven step optimization, quality gates, pattern learning, and ROI-focused workflow design for transparent ONEX agent orchestration
+agent_context: general
+domain_query: multi_step_framework patterns best practices intelligence
+implementation_query: multi_step_framework implementation strategies quality optimization
+match_count: 8
+confidence_threshold: 0.7
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  # Intelligence-Enhanced Multi-Step Capabilities
+  multi_step_intelligence_analysis: true
+  step_dependency_optimization: true
+  workflow_pattern_learning: true
+  quality_gate_enforcement: true
+  step_performance_tracking: true
+  roi_driven_workflow_design: true
+  parallel_step_coordination: true
+  adaptive_workflow_adjustment: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+# Intelligence Integration Configuration
+intelligence_integration:
+  enabled: true
+  pre_workflow_analysis: true
+  step_quality_validation: true
+  post_workflow_validation: true
+  continuous_learning: true
+  roi_calculation: true
+  quality_gates:
+    minimum_quality_score: 0.7
+    minimum_compliance: 70
+    enforce_at_each_step: true
+  confidence_thresholds:
+    high: 0.8
+    medium: 0.6
+    low: 0.4
+
+# Enhanced Triggers
+triggers:
+  - "multi-step workflow with intelligence"
+  - "optimize workflow steps"
+  - "intelligent step sequencing"
+  - "workflow quality validation"
+  - "track workflow patterns"
+  - "measure workflow efficiency"
+  - "ROI-driven workflow design"
+  - "adaptive multi-step execution"
+  - "parallel workflow coordination"
+  - "workflow pattern learning"
+  - "quality-gated workflow"
+  - "measure step performance"
+
+# Multi-Step Framework Intelligence Integration (Phase 5)
+multi_step_intelligence_integration: |
+  ## Multi-Step Framework Intelligence Integration (Phase 5)
+
+  ### Overview
+
+  The agent-multi-step-framework integrates comprehensive Intelligence capabilities
+  to provide data-driven workflow optimization, quality-gated execution, pattern
+  learning, and ROI-focused workflow design. This transforms traditional sequential
+  workflows into adaptive, intelligent execution paths with measurable outcomes.
+
+  ### Phase 1: Pre-Workflow Intelligence Analysis
+
+  **Purpose**: Analyze workflow requirements and establish optimal execution strategy
+
+  #### 1.1 Workflow Complexity Assessment
+
+  ```typescript
+  // Assess overall workflow complexity
+  workflow_assessment = assess_code_quality(workflow_definition, "workflow.yaml", "yaml")
+  ```
+
+  **Captures**:
+  - Workflow complexity score (0.0-1.0)
+  - Step dependency analysis
+  - Parallelization opportunities
+  - Potential bottlenecks
+  - Risk factors
+
+  **Example**:
+  ```typescript
+  assess_code_quality(`
+    workflow:
+      steps:
+        - name: gather_requirements
+          dependencies: []
+        - name: analyze_codebase
+          dependencies: [gather_requirements]
+        - name: design_solution
+          dependencies: [analyze_codebase]
+        - name: implement_changes
+          dependencies: [design_solution]
+        - name: validate_quality
+          dependencies: [implement_changes]
+  `, "workflow_definition.yaml", "yaml")
+
+  // Returns:
+  // {
+  //   complexity_score: 0.65,
+  //   total_steps: 5,
+  //   parallel_opportunities: 2,
+  //   estimated_duration: "45-60 minutes",
+  //   risk_level: "medium",
+  //   recommendations: [
+  //     "Steps 'gather_requirements' and 'setup_environment' can run in parallel",
+  //     "Add quality gates after 'implement_changes'",
+  //     "Consider breaking 'analyze_codebase' into smaller steps"
+  //   ]
+  // }
+  ```
+
+  #### 1.2 Query Historical Workflow Patterns
+
+  ```typescript
+  // Learn from successful similar workflows
+  POST /api/pattern-traceability/lineage/query
+  {
+    "metadata_filter": {
+      "event_type": "workflow_executed",
+      "workflow_type": workflow_type,
+      "success": true,
+      "quality_score": {"$gte": 0.8}
+    },
+    "limit": 10
+  }
+  ```
+
+  **Learn From Patterns**:
+  - Which step sequences work best
+  - Average time per step type
+  - Common failure patterns to avoid
+  - Effective parallelization strategies
+  - Quality gate effectiveness
+
+  **Example Response**:
+  ```json
+  {
+    "patterns": [
+      {
+        "workflow_type": "code_refactoring",
+        "total_steps": 6,
+        "success_rate": 0.92,
+        "avg_duration_minutes": 52,
+        "parallelization_used": true,
+        "parallel_step_count": 3,
+        "quality_gates_passed": 5,
+        "lessons_learned": [
+          "Running analysis steps in parallel saved 15 minutes",
+          "Quality gate after implementation caught 3 issues early",
+          "Breaking large steps into smaller ones improved monitoring"
+        ]
+      }
+    ]
+  }
+  ```
+
+  #### 1.3 Step Performance Baseline Establishment
+
+  ```typescript
+  // Establish baseline for each step type
+  for (const step of workflow_steps) {
+    establish_performance_baseline(step.name, {
+      duration_minutes: 2,
+      metrics: ["execution_time", "resource_usage", "success_rate"]
+    })
+  }
+  ```
+
+  **Returns**:
+  - Historical performance for each step type
+  - Expected duration ranges
+  - Resource requirements
+  - Success rate baselines
+
+  #### 1.4 Workflow Optimization Strategy
+
+  ```typescript
+  // Identify optimization opportunities
+  optimization_plan = identify_optimization_opportunities("workflow_execution")
+  ```
+
+  **Returns**:
+  - Parallelization opportunities with impact
+  - Step consolidation recommendations
+  - Resource optimization suggestions
+  - ROI-ranked improvements
+
+  **Example**:
+  ```typescript
+  identify_optimization_opportunities("refactoring_workflow")
+
+  // Returns:
+  // {
+  //   opportunities: [
+  //     {
+  //       optimization: "Parallelize analysis and documentation steps",
+  //       expected_time_savings: "25%",
+  //       complexity: "low",
+  //       roi_score: 9.5,
+  //       priority: 1
+  //     },
+  //     {
+  //       optimization: "Add quality gate after implementation",
+  //       expected_defect_reduction: "40%",
+  //       complexity: "low",
+  //       roi_score: 8.8,
+  //       priority: 2
+  //     },
+  //     {
+  //       optimization: "Break large analysis step into 3 smaller steps",
+  //       expected_visibility_improvement: "high",
+  //       complexity: "medium",
+  //       roi_score: 7.2,
+  //       priority: 3
+  //     }
+  //   ]
+  // }
+  ```
+
+  ### Phase 2: Intelligent Step Execution
+
+  #### 2.1 Quality-Gated Step Execution
+
+  **For Each Step**:
+
+  ```typescript
+  async function executeStepWithIntelligence(step, context) {
+    // 1. Pre-step quality check
+    const pre_check = await assess_code_quality(
+      context.current_state,
+      context.file_path,
+      context.language
+    );
+
+    if (pre_check.quality_score < 0.7) {
+      return {
+        status: "BLOCKED",
+        reason: "Pre-step quality gate failed",
+        quality_score: pre_check.quality_score,
+        action: "Fix quality issues before proceeding"
+      };
+    }
+
+    // 2. Execute step with performance tracking
+    const start_time = Date.now();
+    const result = await executeStep(step, context);
+    const duration = Date.now() - start_time;
+
+    // 3. Post-step quality validation
+    const post_check = await assess_code_quality(
+      result.output,
+      context.file_path,
+      context.language
+    );
+
+    // 4. Quality gate enforcement
+    if (post_check.quality_score < pre_check.quality_score) {
+      return {
+        status: "DEGRADED",
+        reason: "Step caused quality degradation",
+        quality_before: pre_check.quality_score,
+        quality_after: post_check.quality_score,
+        action: "Review and fix step implementation"
+      };
+    }
+
+    // 5. Track step performance
+    await track_pattern_creation(result.changes, {
+      "event_type": "workflow_step_completed",
+      "step_name": step.name,
+      "duration_ms": duration,
+      "quality_before": pre_check.quality_score,
+      "quality_after": post_check.quality_score,
+      "quality_improvement": post_check.quality_score - pre_check.quality_score,
+      "success": true
+    });
+
+    return {
+      status: "SUCCESS",
+      result,
+      quality_improvement: post_check.quality_score - pre_check.quality_score,
+      duration_ms: duration
+    };
+  }
+  ```
+
+  #### 2.2 Parallel Step Coordination
+
+  ```typescript
+  async function executeParallelSteps(parallel_steps, context) {
+    // 1. Validate all steps can run in parallel
+    const dependency_check = validateNoDependencies(parallel_steps);
+    if (!dependency_check.valid) {
+      return {
+        status: "ERROR",
+        reason: "Dependency conflict detected",
+        conflicts: dependency_check.conflicts
+      };
+    }
+
+    // 2. Execute steps in parallel with quality monitoring
+    const results = await Promise.all(
+      parallel_steps.map(step => executeStepWithIntelligence(step, context))
+    );
+
+    // 3. Validate no conflicts in outputs
+    const conflict_check = await validateNoConflicts(results);
+    if (!conflict_check.valid) {
+      return {
+        status: "CONFLICT",
+        reason: "Parallel steps produced conflicting changes",
+        conflicts: conflict_check.conflicts,
+        action: "Resolve conflicts before proceeding"
+      };
+    }
+
+    // 4. Measure parallel execution efficiency
+    const total_duration = Math.max(...results.map(r => r.duration_ms));
+    const sequential_duration = results.reduce((sum, r) => sum + r.duration_ms, 0);
+    const efficiency_gain = ((sequential_duration - total_duration) / sequential_duration) * 100;
+
+    return {
+      status: "SUCCESS",
+      results,
+      efficiency_gain_percent: efficiency_gain,
+      time_saved_ms: sequential_duration - total_duration
+    };
+  }
+  ```
+
+  #### 2.3 Adaptive Workflow Adjustment
+
+  ```typescript
+  async function adaptWorkflowBasedOnResults(workflow, completed_steps, context) {
+    // 1. Analyze completed steps for patterns
+    const step_analysis = await analyzeStepOutcomes(completed_steps);
+
+    // 2. Check if workflow adjustments needed
+    if (step_analysis.quality_trend === "degrading") {
+      // Add additional quality validation step
+      workflow.steps.splice(
+        completed_steps.length,
+        0,
+        {
+          name: "emergency_quality_validation",
+          type: "quality_check",
+          required: true
+        }
+      );
+      return { adjusted: true, reason: "Quality degradation detected" };
+    }
+
+    if (step_analysis.performance_trend === "slower_than_baseline") {
+      // Optimize remaining steps
+      const optimization = await identify_optimization_opportunities(
+        "remaining_workflow_steps"
+      );
+      if (optimization.opportunities.length > 0) {
+        applyOptimizations(workflow, optimization.opportunities);
+        return { adjusted: true, reason: "Performance optimization applied" };
+      }
+    }
+
+    return { adjusted: false };
+  }
+  ```
+
+  ### Phase 3: Post-Workflow Validation & Analysis
+
+  #### 3.1 Comprehensive Quality Validation
+
+  ```typescript
+  async function postWorkflowValidation(workflow_result) {
+    // 1. Overall quality assessment
+    const final_quality = await assess_code_quality(
+      workflow_result.final_output,
+      workflow_result.file_path,
+      workflow_result.language
+    );
+
+    // 2. Architectural compliance check
+    const compliance = await check_architectural_compliance(
+      workflow_result.final_output,
+      "onex"
+    );
+
+    // 3. Performance validation
+    const performance = await identify_optimization_opportunities(
+      workflow_result.component_name
+    );
+
+    // 4. Quality gate validation
+    const gates_passed = {
+      minimum_quality: final_quality.quality_score >= 0.7,
+      minimum_compliance: compliance.compliance_percentage >= 70,
+      no_critical_issues: final_quality.critical_issues === 0,
+      performance_acceptable: performance.critical_opportunities === 0
+    };
+
+    const all_gates_passed = Object.values(gates_passed).every(v => v === true);
+
+    return {
+      quality_score: final_quality.quality_score,
+      compliance_percentage: compliance.compliance_percentage,
+      gates_passed,
+      all_gates_passed,
+      recommendation: all_gates_passed ? "APPROVE" : "REVIEW_REQUIRED"
+    };
+  }
+  ```
+
+  #### 3.2 Workflow Performance Analysis
+
+  ```typescript
+  // Generate comprehensive performance report
+  const workflow_metrics = {
+    total_steps: workflow.steps.length,
+    steps_completed: completed_steps.length,
+    steps_failed: failed_steps.length,
+    parallel_steps_executed: parallel_step_count,
+    total_duration_minutes: total_duration / 60000,
+    average_step_duration: avg_step_duration,
+    quality_improvement: final_quality - initial_quality,
+    efficiency_gain: parallel_efficiency_gain,
+    roi_score: calculateWorkflowROI(effort, outcomes)
+  };
+  ```
+
+  #### 3.3 ROI Analysis
+
+  ```typescript
+  function calculateWorkflowROI(workflow_execution) {
+    const roi = {
+      // Effort invested
+      effort_hours: workflow_execution.total_duration_minutes / 60,
+      effort_cost: (workflow_execution.total_duration_minutes / 60) * hourly_rate,
+
+      // Value delivered
+      quality_improvement_value: estimateQualityValue(
+        workflow_execution.quality_improvement
+      ),
+      time_savings_value: estimateTimeSavingsValue(
+        workflow_execution.efficiency_gain
+      ),
+      defect_prevention_value: estimateDefectPreventionValue(
+        workflow_execution.quality_gates_passed
+      ),
+
+      // Total ROI
+      total_value: quality_value + time_value + defect_value,
+      net_value: total_value - effort_cost,
+      roi_ratio: total_value / effort_cost,
+      payback_period_days: effort_cost / (total_value / 365)
+    };
+
+    return roi;
+  }
+  ```
+
+  **Example ROI Output**:
+  ```typescript
+  {
+    effort_hours: 2.5,
+    effort_cost: 250,  // @ $100/hour
+    quality_improvement_value: 800,  // Estimated maintenance savings
+    time_savings_value: 300,  // Efficiency gains
+    defect_prevention_value: 500,  // Prevented bugs
+    total_value: 1600,
+    net_value: 1350,
+    roi_ratio: 6.4,  // $6.40 return per $1 invested
+    payback_period_days: 57
+  }
+  ```
+
+  ### Phase 4: Continuous Workflow Intelligence
+
+  #### 4.1 Track Workflow Pattern
+
+  ```typescript
+  // Track complete workflow for learning
+  track_pattern_creation(workflow_summary, {
+    "event_type": "workflow_completed",
+    "workflow_type": workflow.type,
+    "total_steps": workflow.steps.length,
+    "steps_completed": completed_steps.length,
+    "parallel_steps_used": parallel_step_count,
+    "duration_minutes": total_duration_minutes,
+    "quality_before": initial_quality_score,
+    "quality_after": final_quality_score,
+    "quality_improvement": quality_improvement_percent,
+    "compliance_score": compliance_percentage,
+    "gates_passed": all_gates_passed,
+    "efficiency_gain": efficiency_gain_percent,
+    "roi_ratio": roi_analysis.roi_ratio,
+    "success": workflow_succeeded,
+    "optimizations_applied": optimization_count,
+    "lessons_learned": extracted_lessons
+  })
+  ```
+
+  #### 4.2 Learn From Workflow Outcomes
+
+  **Success Pattern Analysis**:
+  - Which step sequences yield best results
+  - Optimal parallelization strategies
+  - Effective quality gate placements
+  - Time estimation accuracy
+  - ROI prediction accuracy
+
+  **Continuous Improvement**:
+  - Update step duration estimates
+  - Refine parallelization algorithms
+  - Improve quality gate thresholds
+  - Enhance ROI calculation models
+  - Optimize workflow templates
+
+  #### 4.3 Predictive Workflow Optimization
+
+  ```typescript
+  // Monitor workflow trends
+  const trends = await monitor_performance_trends(
+    "workflow_execution",
+    time_window_hours: 168  // 1 week
+  );
+
+  // Predict future workflow performance
+  if (trends.predictions.next_7d.includes_alert) {
+    await send_alert({
+      workflow_type: workflow.type,
+      alert: trends.predictions.next_7d.alert,
+      predicted_issue: trends.predictions.issue,
+      recommended_actions: trends.recommended_actions
+    });
+  }
+  ```
+
+  ## Enhanced Workflow Patterns
+
+  ### Pattern 1: Quality-Gated Workflow
+
+  ```
+  1. PRE-EXECUTION ANALYSIS
+     └─> assess_code_quality(initial_state)
+         └─> Establish quality baseline
+         └─> Set quality targets for completion
+
+  2. STEP-BY-STEP EXECUTION
+     └─> For each step:
+         └─> Pre-step quality check (gate)
+         └─> Execute step with tracking
+         └─> Post-step quality validation (gate)
+         └─> Block if quality degrades
+
+  3. POST-EXECUTION VALIDATION
+     └─> assess_code_quality(final_state)
+         └─> Validate minimum quality score (0.7)
+         └─> check_architectural_compliance()
+         └─> Validate minimum compliance (70%)
+
+  4. APPROVAL DECISION
+     └─> All gates passed: APPROVE
+     └─> Any gate failed: REVIEW_REQUIRED
+  ```
+
+  ### Pattern 2: Parallel-Optimized Workflow
+
+  ```
+  1. DEPENDENCY ANALYSIS
+     └─> Identify independent steps
+         └─> Group by dependency levels
+         └─> Calculate parallel opportunities
+
+  2. PARALLEL EXECUTION
+     └─> Execute independent steps in parallel
+         └─> Track each step independently
+         └─> Measure efficiency gains
+
+  3. CONFLICT RESOLUTION
+     └─> Validate no output conflicts
+         └─> Merge results intelligently
+         └─> Resolve any conflicts detected
+
+  4. EFFICIENCY REPORTING
+     └─> Calculate time savings
+         └─> Report ROI from parallelization
+         └─> Track for future optimization
+  ```
+
+  ### Pattern 3: Adaptive Workflow
+
+  ```
+  1. INITIAL WORKFLOW PLAN
+     └─> Define standard step sequence
+         └─> Set quality gates
+         └─> Establish baselines
+
+  2. REAL-TIME MONITORING
+     └─> Track step outcomes
+         └─> Detect quality trends
+         └─> Identify performance issues
+
+  3. ADAPTIVE ADJUSTMENTS
+     └─> Quality degrading: Add validation steps
+     └─> Performance slow: Apply optimizations
+     └─> Errors detected: Add debugging steps
+     └─> Success exceeding: Simplify remaining steps
+
+  4. DYNAMIC RE-OPTIMIZATION
+     └─> Adjust workflow in real-time
+         └─> Track adjustment effectiveness
+         └─> Learn for future workflows
+  ```
+
+  ### Pattern 4: ROI-Driven Workflow
+
+  ```
+  1. COST-BENEFIT ANALYSIS
+     └─> Estimate effort for each step
+         └─> Predict value from each step
+         └─> Calculate ROI for workflow
+
+  2. PRIORITIZED EXECUTION
+     └─> Execute high-ROI steps first
+         └─> Skip low-ROI steps if constrained
+         └─> Optimize based on ROI data
+
+  3. VALUE MEASUREMENT
+     └─> Track actual value delivered
+         └─> Compare to predictions
+         └─> Adjust ROI models
+
+  4. ROI OPTIMIZATION
+     └─> Refine ROI predictions
+         └─> Improve step value estimation
+         └─> Optimize workflow ROI over time
+  ```
+
+  ## Integration with Agent Workflow
+
+  ### Pre-Execution Phase
+
+  ```typescript
+  async function preExecution(workflow_definition) {
+    // 1. Assess workflow complexity
+    const complexity = await assess_code_quality(
+      workflow_definition,
+      "workflow.yaml",
+      "yaml"
+    );
+
+    // 2. Query historical patterns
+    const patterns = await queryHistoricalPatterns({
+      workflow_type: workflow_definition.type,
+      success: true,
+      quality_score: {"$gte": 0.8}
+    });
+
+    // 3. Establish performance baselines
+    const baselines = await Promise.all(
+      workflow_definition.steps.map(step =>
+        establish_performance_baseline(step.name, {duration_minutes: 2})
+      )
+    );
+
+    // 4. Identify optimization opportunities
+    const optimizations = await identify_optimization_opportunities(
+      "workflow_execution"
+    );
+
+    // 5. Generate optimized execution plan
+    const execution_plan = generateOptimizedPlan(
+      workflow_definition,
+      patterns,
+      baselines,
+      optimizations
+    );
+
+    return {
+      complexity,
+      patterns,
+      baselines,
+      optimizations,
+      execution_plan,
+      estimated_duration: execution_plan.estimated_duration_minutes,
+      estimated_roi: execution_plan.estimated_roi
+    };
+  }
+  ```
+
+  ### During-Execution Phase
+
+  ```typescript
+  async function duringExecution(workflow, execution_plan) {
+    const results = [];
+    let context = initializeContext(workflow);
+
+    for (const step_group of execution_plan.step_groups) {
+      if (step_group.parallel) {
+        // Execute parallel steps
+        const parallel_result = await executeParallelSteps(
+          step_group.steps,
+          context
+        );
+        results.push(parallel_result);
+        context = updateContext(context, parallel_result);
+      } else {
+        // Execute sequential steps with quality gates
+        for (const step of step_group.steps) {
+          const step_result = await executeStepWithIntelligence(step, context);
+
+          if (step_result.status !== "SUCCESS") {
+            // Handle step failure
+            return {
+              status: "FAILED",
+              failed_at_step: step.name,
+              reason: step_result.reason,
+              completed_steps: results,
+              action: step_result.action
+            };
+          }
+
+          results.push(step_result);
+          context = updateContext(context, step_result);
+
+          // Check if workflow adaptation needed
+          const adaptation = await adaptWorkflowBasedOnResults(
+            workflow,
+            results,
+            context
+          );
+
+          if (adaptation.adjusted) {
+            // Workflow has been adjusted, continue with new plan
+            console.log(`Workflow adapted: ${adaptation.reason}`);
+          }
+        }
+      }
+    }
+
+    return {
+      status: "SUCCESS",
+      results,
+      context
+    };
+  }
+  ```
+
+  ### Post-Execution Phase
+
+  ```typescript
+  async function postExecution(workflow_result) {
+    // 1. Comprehensive quality validation
+    const validation = await postWorkflowValidation(workflow_result);
+
+    // 2. Performance analysis
+    const performance = await analyzeWorkflowPerformance(workflow_result);
+
+    // 3. ROI calculation
+    const roi = await calculateWorkflowROI(workflow_result);
+
+    // 4. Pattern tracking
+    await track_pattern_creation(workflow_result.summary, {
+      event_type: "workflow_completed",
+      ...workflow_result.metrics,
+      quality_score: validation.quality_score,
+      compliance_percentage: validation.compliance_percentage,
+      roi_ratio: roi.roi_ratio
+    });
+
+    // 5. Generate comprehensive report
+    const report = generateWorkflowReport({
+      validation,
+      performance,
+      roi,
+      workflow_result
+    });
+
+    return {
+      validation,
+      performance,
+      roi,
+      report,
+      recommendation: validation.recommendation
+    };
+  }
+  ```
+
+  ## Best Practices
+
+  ### 1. Always Establish Baselines First
+  - Query historical patterns before execution
+  - Establish performance baselines for each step type
+  - Set quality targets based on historical data
+  - Use baselines to detect anomalies during execution
+
+  ### 2. Enforce Quality Gates Rigorously
+  - Pre-step quality check (minimum 0.7)
+  - Post-step quality validation (no degradation)
+  - Final workflow quality gate (minimum 0.7)
+  - Architectural compliance check (minimum 70%)
+
+  ### 3. Maximize Parallelization
+  - Identify all independent steps
+  - Execute parallel steps where possible
+  - Track efficiency gains from parallelization
+  - Learn optimal parallelization strategies
+
+  ### 4. Adapt Workflows Dynamically
+  - Monitor step outcomes in real-time
+  - Detect quality or performance issues early
+  - Adjust workflow plan based on results
+  - Add validation steps when needed
+
+  ### 5. Track Everything for Learning
+  - Track every workflow execution
+  - Capture quality, performance, and ROI metrics
+  - Learn from both successes and failures
+  - Continuously improve workflow templates
+
+  ### 6. Optimize for ROI
+  - Calculate ROI for each workflow
+  - Prioritize high-ROI workflows
+  - Skip low-ROI steps when constrained
+  - Refine ROI models based on outcomes
+
+  ## Success Metrics
+
+  Track these metrics to measure Multi-Step Framework effectiveness:
+
+  1. **Workflow Success Rate**: >90% of workflows complete successfully
+  2. **Quality Gate Pass Rate**: >85% of steps pass quality gates on first try
+  3. **Parallelization Efficiency**: 40-60% time savings from parallel execution
+  4. **Adaptation Effectiveness**: >75% of adaptive adjustments improve outcomes
+  5. **ROI Accuracy**: Actual ROI within ±25% of predicted ROI
+  6. **Pattern Learning Accuracy**: >80% accuracy in predicting workflow outcomes
+  7. **Quality Improvement**: Average +15% quality improvement per workflow
+  8. **Time Estimation Accuracy**: Actual duration within ±20% of estimate
+
+  ## Troubleshooting
+
+  ### Issue: Step fails quality gate
+  **Cause**: Code quality below threshold (0.7)
+  **Solution**: Review and improve code quality before step execution
+
+  ### Issue: Parallel steps produce conflicts
+  **Cause**: Steps modified overlapping code regions
+  **Solution**: Review step dependencies, may need to execute sequentially
+
+  ### Issue: Workflow duration exceeds estimate
+  **Cause**: Inaccurate baseline or unexpected complexity
+  **Solution**: Update baselines, add performance optimization steps
+
+  ### Issue: ROI lower than predicted
+  **Cause**: Value estimation was too optimistic or effort was underestimated
+  **Solution**: Calibrate ROI model based on actual results
+
+  ### Issue: Adaptive adjustments ineffective
+  **Cause**: Adjustment logic needs refinement
+  **Solution**: Review adjustment patterns, update algorithms based on outcomes

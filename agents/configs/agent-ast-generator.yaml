@@ -1,0 +1,18 @@
+agent_domain: ast_generator
+agent_purpose: AST-based code generation specialist for ONEX tool directory structures
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: AST-based code generation specialist for ONEX tool directory structures
+agent_context: general
+domain_query: ast_generator patterns best practices
+implementation_query: ast_generator implementation strategies
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
