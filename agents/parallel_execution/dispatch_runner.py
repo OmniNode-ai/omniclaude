@@ -70,6 +70,7 @@ from workflow.phase_models import (
     PhaseState
 )
 from agents.lib.lineage import LineageWriter, LineageEdge
+from agents.lib.debug_loop import record_workflow_step
 
 # Import quorum validation (optional dependency)
 try:
@@ -231,7 +232,7 @@ async def execute_phase_0_context_gathering(
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
 
-        return PhaseResult(
+        result_obj = PhaseResult(
             phase=phase,
             phase_name="Context Gathering",
             success=True,
@@ -243,6 +244,20 @@ async def execute_phase_0_context_gathering(
                 'total_items': summary['total_items']
             }
         )
+
+        try:
+            await record_workflow_step(
+                run_id=phase_state.user_prompt[:16] or "run",
+                step_index=0,
+                phase=phase.name,
+                started_at=started_at,
+                completed_at=result_obj.completed_at,
+                duration_ms=duration_ms,
+                success=True,
+            )
+        except Exception:
+            pass
+        return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
@@ -414,7 +429,7 @@ async def execute_phase_1_quorum_validation(
             else:
                 print(f"[DispatchRunner] ⚠ Phase 1 completed with warnings in {duration_ms:.0f}ms\n", file=sys.stderr)
 
-            return PhaseResult(
+            result_obj = PhaseResult(
                 phase=phase,
                 phase_name="Quorum Validation",
                 success=quorum_result_dict.get("validated", False),
@@ -424,6 +439,20 @@ async def execute_phase_1_quorum_validation(
                 output_data=quorum_result_dict,
                 retry_count=retry_count
             )
+            try:
+                await record_workflow_step(
+                    run_id=phase_state.user_prompt[:16] or "run",
+                    step_index=1,
+                    phase=phase.name,
+                    started_at=started_at,
+                    completed_at=result_obj.completed_at,
+                    duration_ms=duration_ms,
+                    success=result_obj.success,
+                    error=result_obj.error,
+                )
+            except Exception:
+                pass
+            return result_obj
 
         except Exception as e:
             retry_count += 1
@@ -553,7 +582,7 @@ async def execute_phase_2_task_architecture(
 
         await architect.cleanup()
 
-        return PhaseResult(
+        result_obj = PhaseResult(
             phase=phase,
             phase_name="Task Architecture",
             success=True,
@@ -568,6 +597,19 @@ async def execute_phase_2_task_architecture(
                 'parallel_capable': breakdown.get('parallel_capable', False)
             }
         )
+        try:
+            await record_workflow_step(
+                run_id=phase_state.user_prompt[:16] or "run",
+                step_index=2,
+                phase=phase.name,
+                started_at=started_at,
+                completed_at=result_obj.completed_at,
+                duration_ms=duration_ms,
+                success=True,
+            )
+        except Exception:
+            pass
+        return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
@@ -677,7 +719,7 @@ async def execute_phase_4_parallel_execution(
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✓ Phase 4 completed in {duration_ms:.0f}ms ({successful} succeeded, {failed} failed)\n", file=sys.stderr)
 
-        return PhaseResult(
+        result_obj = PhaseResult(
             phase=phase,
             phase_name="Parallel Execution",
             success=True,
@@ -703,6 +745,19 @@ async def execute_phase_4_parallel_execution(
                 }
             }
         )
+        try:
+            await record_workflow_step(
+                run_id=phase_state.user_prompt[:16] or "run",
+                step_index=4,
+                phase=phase.name,
+                started_at=started_at,
+                completed_at=result_obj.completed_at,
+                duration_ms=duration_ms,
+                success=True,
+            )
+        except Exception:
+            pass
+        return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
