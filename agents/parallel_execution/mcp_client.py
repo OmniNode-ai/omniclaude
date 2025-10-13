@@ -8,6 +8,10 @@ import asyncio
 import json
 from typing import Any, Dict, Optional
 import httpx
+try:
+    from agents.lib.llm_logging import log_llm_call  # type: ignore
+except Exception:
+    log_llm_call = None  # type: ignore
 
 
 class ArchonMCPClient:
@@ -125,6 +129,19 @@ class ArchonMCPClient:
                         except json.JSONDecodeError:
                             # Return as plain text
                             return {"result": first_item["text"]}
+
+            # Best-effort logging to llm_calls as an external tool call
+            try:
+                if log_llm_call is not None:
+                    await log_llm_call(
+                        run_id=None,
+                        model=f"mcp:{tool_name}",
+                        provider="archon-mcp",
+                        request={"args": kwargs},
+                        response={"result": mcp_result} if isinstance(mcp_result, (dict, list, str)) else {"result": str(mcp_result)},
+                    )
+            except Exception:
+                pass
 
             return mcp_result
 
