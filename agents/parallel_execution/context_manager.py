@@ -20,6 +20,17 @@ from dataclasses import dataclass
 
 from mcp_client import ArchonMCPClient
 
+# Import context optimizer for intelligent context selection
+try:
+    from agents.lib.context_optimizer import (
+        learn_from_execution,
+        optimize_context_for_task,
+        predict_context_needs
+    )
+    CONTEXT_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    CONTEXT_OPTIMIZER_AVAILABLE = False
+
 
 @dataclass
 class ContextItem:
@@ -61,7 +72,8 @@ class ContextManager:
         user_prompt: str,
         workspace_path: Optional[str] = None,
         rag_queries: Optional[List[str]] = None,
-        max_rag_results: int = 5
+        max_rag_results: int = 5,
+        enable_optimization: bool = True
     ) -> Dict[str, ContextItem]:
         """
         Gather comprehensive global context once per dispatch.
@@ -79,6 +91,22 @@ class ContextManager:
         """
         start_time = time.time()
         context_items: Dict[str, ContextItem] = {}
+
+        # 0. Predictive context gathering (if optimization enabled)
+        predicted_queries = []
+        if enable_optimization and CONTEXT_OPTIMIZER_AVAILABLE:
+            try:
+                predicted_queries = await predict_context_needs(user_prompt)
+                print(f"[ContextManager] Predicted context needs: {predicted_queries}", file=sys.stderr)
+            except Exception as e:
+                print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
+        
+        # Merge predicted queries with provided queries
+        if predicted_queries:
+            if rag_queries:
+                rag_queries = list(set(rag_queries + predicted_queries))
+            else:
+                rag_queries = predicted_queries
 
         # 1. RAG Queries for domain patterns and code examples (PARALLEL)
         if rag_queries:
@@ -180,6 +208,21 @@ class ContextManager:
         print(f"[ContextManager] Gathered {len(context_items)} context items in {elapsed_ms:.0f}ms")
 
         return context_items
+
+    async def _predict_context_needs(self, user_prompt: str) -> List[str]:
+        """
+        Predicts what context types might be needed based on the user prompt.
+        """
+        if not CONTEXT_OPTIMIZER_AVAILABLE:
+            return []
+        
+        try:
+            # Use the context optimizer to predict needs
+            predicted_needs = await predict_context_needs(user_prompt)
+            return predicted_needs
+        except Exception as e:
+            print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
+            return []
 
     def filter_context(
         self,

@@ -118,11 +118,11 @@ except ImportError:
 
 # Import quorum validation (optional dependency)
 try:
-    from quorum_minimal import MinimalQuorum, ValidationDecision
+    from quorum_validator import QuorumValidator, ValidationDecision
     QUORUM_AVAILABLE = True
 except ImportError:
     QUORUM_AVAILABLE = False
-    print("[DispatchRunner] Warning: Quorum validation unavailable (quorum_minimal.py not found)", file=sys.stderr)
+    print("[DispatchRunner] Warning: Quorum validation unavailable (quorum_validator.py not found)", file=sys.stderr)
 
 # Import interactive validator (optional dependency)
 try:
@@ -475,7 +475,7 @@ async def execute_phase_1_quorum_validation(
     # Retry loop for quorum validation
     while retry_count <= max_retries:
         try:
-            quorum = MinimalQuorum()
+            quorum = QuorumValidator()
 
             if retry_count > 0:
                 print(f"\n[DispatchRunner] Retry attempt {retry_count}/{max_retries}", file=sys.stderr)

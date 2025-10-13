@@ -39,8 +39,8 @@ class QuorumResult:
     model_responses: List[Dict[str, Any]]
 
 
-class MinimalQuorum:
-    """Minimal quorum validation for testing"""
+class QuorumValidator:
+    """Quorum validation for AI model consensus"""
 
     def __init__(self):
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
