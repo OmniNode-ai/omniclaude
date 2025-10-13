@@ -2,7 +2,11 @@ import asyncio
 from pathlib import Path
 from typing import List
 
-from .db import get_pg_pool
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from agents.lib.db import get_pg_pool
 
 
 async def _ensure_migrations_table(conn) -> str:

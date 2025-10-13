@@ -1,5 +1,13 @@
 -- Core tables for MVP Debug Loop and Lineage
 
+-- Migration tracking table
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    filename VARCHAR(255) NOT NULL,
+    applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS debug_transform_functions (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
@@ -178,4 +186,11 @@ CREATE TABLE IF NOT EXISTS lineage_edges (
 CREATE INDEX IF NOT EXISTS idx_lineage_src ON lineage_edges(src_type, src_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_lineage_dst ON lineage_edges(dst_type, dst_id, created_at DESC);
 
-
+-- Insert migration record
+INSERT INTO schema_migrations (id, name, filename, applied_at) 
+VALUES (
+    gen_random_uuid(),
+    '001_core',
+    '001_core.sql',
+    NOW()
+) ON CONFLICT (name) DO NOTHING;
