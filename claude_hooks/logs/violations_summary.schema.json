@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omniclaude.dev/schemas/violations_summary.schema.json",
+  "title": "Violations Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "commit_sha",
+    "branch",
+    "env",
+    "last_updated",
+    "window_start",
+    "window_end",
+    "total_violations_today",
+    "files_with_violations"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "run_id": { "type": "string", "minLength": 1 },
+    "commit_sha": { "type": "string", "minLength": 7 },
+    "branch": { "type": "string", "minLength": 1 },
+    "env": { "type": "string", "enum": ["local", "ci", "staging", "prod"] },
+    "last_updated": { "type": "string", "format": "date-time" },
+    "window_start": { "type": "string", "format": "date-time" },
+    "window_end": { "type": "string", "format": "date-time" },
+    "total_violations_today": { "type": "integer", "minimum": 0 },
+    "files_with_violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "violations", "timestamp"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "violations": { "type": "integer", "minimum": 0 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "suggestions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "violation_codes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "severity_breakdown": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
+
+

@@ -69,6 +69,7 @@ from workflow.phase_models import (
     PhaseResult,
     PhaseState
 )
+from agents.lib.lineage import LineageWriter, LineageEdge
 
 # Import quorum validation (optional dependency)
 try:
@@ -609,6 +610,7 @@ async def execute_phase_4_parallel_execution(
     print(f"{'='*80}\n", file=sys.stderr)
 
     coordinator = ParallelCoordinator()
+    lineage = LineageWriter()
 
     try:
         print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
@@ -647,9 +649,30 @@ async def execute_phase_4_parallel_execution(
                 print("[DispatchRunner] User requested retry of agent execution", file=sys.stderr)
                 print("[DispatchRunner] Note: Retry of agent execution not yet implemented", file=sys.stderr)
 
-        # Count successes
+        # Count successes and emit lineage edges per task result (best-effort)
         successful = sum(1 for r in results.values() if r.success)
         failed = len(results) - successful
+
+        try:
+            run_id = phase_state.user_prompt[:16] or "run"
+            for task_id, result in results.items():
+                attrs = {
+                    "agent": result.agent_name,
+                    "success": result.success,
+                    "execution_time_ms": result.execution_time_ms,
+                }
+                if result.trace_id:
+                    attrs["trace_id"] = result.trace_id
+                await lineage.emit(LineageEdge(
+                    edge_type="EXECUTED",
+                    src_type="run",
+                    src_id=run_id,
+                    dst_type="task",
+                    dst_id=task_id,
+                    attributes=attrs,
+                ))
+        except Exception:
+            pass
 
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✓ Phase 4 completed in {duration_ms:.0f}ms ({successful} succeeded, {failed} failed)\n", file=sys.stderr)

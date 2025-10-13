@@ -1,0 +1,12 @@
+# Logs and run artifacts
+claude_hooks/logs/*.json
+!claude_hooks/logs/*.schema.json
+!claude_hooks/logs/README.md
+
+# macOS
+.DS_Store
+
+# Environments
+.env
+
+
