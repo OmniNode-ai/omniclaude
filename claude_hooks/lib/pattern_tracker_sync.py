@@ -52,13 +52,20 @@ class PatternTrackerSync:
             response = requests.get(f"{self.base_url}/health", timeout=2)
             if response.status_code == 200:
                 print(f"✅ [PatternTrackerSync] Phase 4 API reachable", file=sys.stderr)
+                self._api_healthy = True
                 return True
             else:
                 print(f"⚠️ [PatternTrackerSync] Phase 4 API unhealthy: {response.status_code}", file=sys.stderr)
+                self._api_healthy = False
                 return False
         except Exception as e:
             print(f"❌ [PatternTrackerSync] API unreachable: {e}", file=sys.stderr)
+            self._api_healthy = False
             return False
+
+    def is_api_available(self) -> bool:
+        """Check if API is available for tracking."""
+        return hasattr(self, '_api_healthy') and self._api_healthy
 
     def track_pattern_creation_sync(
         self,
@@ -102,6 +109,11 @@ class PatternTrackerSync:
         Returns:
             Pattern ID if successful, None otherwise
         """
+        # Check if API is available before attempting to track
+        if not self.is_api_available():
+            print(f"⚠️ [PatternTrackerSync] Skipping pattern tracking - API not available", file=sys.stderr)
+            return None
+
         try:
             # Generate pattern ID
             pattern_id = self._generate_pattern_id(code, context)
