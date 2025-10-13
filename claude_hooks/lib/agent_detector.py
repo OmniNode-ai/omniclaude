@@ -17,9 +17,13 @@ class AgentDetector:
     AGENT_PATTERNS = [
         r"@(agent-[a-z0-9-]+)",  # @agent-name pattern (lowercase only, no underscores)
         r'Task\([^)]*agent["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # Task(agent="agent-name")
-        r"use\s+(agent-[a-z0-9-]+)",  # use agent-name (lowercase only)
-        r"invoke\s+(agent-[a-z0-9-]+)",  # invoke agent-name (lowercase only)
+        r"use\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # use agent-name, use the agent-name
+        r"invoke\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # invoke agent-name, invoke the agent-name
         r'subagent_type["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # subagent_type="agent-name"
+        # Add flexible workflow coordinator patterns
+        r"(?:use|invoke)\s+(?:the\s+)?agent\s+workflow\s+coordinator",  # "use agent workflow coordinator"
+        r"(?:use|invoke)\s+(?:the\s+)?workflow\s+coordinator",  # "use workflow coordinator"
+        r"(?:use|invoke)\s+(?:the\s+)?agent\s+workflow\s+coordination",  # "use agent workflow coordination"
     ]
 
     # Automated workflow trigger patterns - launch dispatch_runner.py
@@ -71,13 +75,13 @@ class AgentDetector:
             if not triggers:
                 continue
 
-            # Count how many triggers match with word boundaries
+            # Count how many triggers match with flexible matching
             matches = 0
             for trigger in triggers:
                 trigger_lower = trigger.lower()
-                # Use word boundary regex for whole-word matching
-                # This prevents "test" from matching "tests" or "latest"
-                pattern = r'\b' + re.escape(trigger_lower) + r'\b'
+                # Use flexible matching that handles plurals and variations
+                # Match "test" in "tests", "testing", etc.
+                pattern = r'\b' + re.escape(trigger_lower) + r'(?:s|ing|ed)?\b'
                 if re.search(pattern, prompt_lower):
                     matches += 1
 
@@ -117,15 +121,21 @@ class AgentDetector:
         Returns:
             Agent name if detected, None otherwise
         """
-        # Try explicit pattern matching (case-sensitive)
-        for pattern in self.AGENT_PATTERNS:
-            match = re.search(pattern, prompt)  # No re.IGNORECASE - patterns must be lowercase
+        # Try explicit pattern matching (case-insensitive)
+        for i, pattern in enumerate(self.AGENT_PATTERNS):
+            match = re.search(pattern, prompt, re.IGNORECASE)  # Case-insensitive matching
             if match:
-                agent_name = match.group(1)
-                # Ensure it starts with 'agent-'
-                if not agent_name.startswith("agent-"):
-                    agent_name = f"agent-{agent_name}"
-                return agent_name
+                # Handle patterns that capture groups vs those that don't
+                if match.groups():
+                    agent_name = match.group(1)
+                    # Ensure it starts with 'agent-'
+                    if not agent_name.startswith("agent-"):
+                        agent_name = f"agent-{agent_name}"
+                    return agent_name
+                else:
+                    # Handle workflow coordinator patterns that don't capture groups
+                    if "workflow" in pattern and "coordinator" in pattern:
+                        return "agent-workflow-coordinator"
 
         # No pattern matched - return None
         # Note: Trigger-based detection is available via _detect_by_triggers()

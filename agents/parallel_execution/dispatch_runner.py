@@ -69,6 +69,11 @@ from workflow.phase_models import (
     PhaseResult,
     PhaseState
 )
+# Add parent directory to path for imports
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from agents.lib.lineage import LineageWriter, LineageEdge
 from agents.lib.debug_loop import record_workflow_step
 from agents.lib.state_snapshots import capture_workflow_state
@@ -494,6 +499,7 @@ async def execute_phase_1_quorum_validation(
                 )
                 if not success:
                     raise result
+                # result is now the actual QuorumResult, not a tuple
             else:
                 result = await quorum.validate_intent(user_prompt, task_breakdown)
 

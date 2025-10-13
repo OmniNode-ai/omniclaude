@@ -1,0 +1,97 @@
+{
+  "trace_id": "coord_1760384661920_5357826576",
+  "coordinator_type": "parallel",
+  "start_time": 1760384661.920335,
+  "end_time": 1760384661.921806,
+  "duration_ms": 1.4710426330566406,
+  "total_agents": 0,
+  "completed_agents": 0,
+  "failed_agents": 0,
+  "agent_traces": [],
+  "events": [
+    {
+      "timestamp": 1760384661.9203598,
+      "datetime_str": "2025-10-13T15:44:21.920362",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760384661920_5357826576",
+      "message": "Coordinator started: parallel with 0 agents",
+      "metadata": {
+        "tasks": []
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760384661.9212852,
+      "datetime_str": "2025-10-13T15:44:21.921288",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760384661920_5357826576",
+      "message": "Starting parallel execution of 0 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760384661920_5357826576"
+    },
+    {
+      "timestamp": 1760384661.921841,
+      "datetime_str": "2025-10-13T15:44:21.921842",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760384661920_5357826576",
+      "message": "Coordinator completed: 0/0 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 1.4710426330566406,
+        "tasks_completed": 0,
+        "success_count": 0
+      },
+      "duration_ms": 1.4710426330566406,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760384661.922347,
+      "datetime_str": "2025-10-13T15:44:21.922348",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760384661920_5357826576",
+      "message": "Parallel execution complete: 0 tasks in 1.47ms",
+      "metadata": {
+        "total_time_ms": 1.4710426330566406,
+        "results": {}
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760384661920_5357826576"
+    },
+    {
+      "timestamp": 1760384661.9267771,
+      "datetime_str": "2025-10-13T15:44:21.926778",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760384661920_5357826576",
+      "message": "Agent loader cleanup complete",
+      "metadata": {
+        "total_agents": 0,
+        "loaded_agents": 0,
+        "failed_agents": 0,
+        "capabilities_indexed": 0,
+        "hot_reload_enabled": true,
+        "is_initialized": false
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760384661920_5357826576"
+    }
+  ],
+  "metadata": {
+    "tasks": []
+  }
+}

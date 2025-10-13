@@ -214,26 +214,32 @@ class RetryManager:
             from .circuit_breaker import call_with_breaker, CircuitBreakerConfig
             
             # Create circuit breaker config for retry operations
+            # Use retry config values to create circuit breaker config
             cb_config = CircuitBreakerConfig(
-                failure_threshold=3,
+                failure_threshold=config.max_retries if config else 3,
                 timeout_seconds=30.0,
                 success_threshold=2,
                 max_retries=0,  # Let retry manager handle retries
-                base_delay=1.0,
-                max_delay=10.0
+                base_delay=config.base_delay if config else 1.0,
+                max_delay=config.max_delay if config else 10.0
             )
             
             # Use circuit breaker with retry logic
-            success, result = await call_with_breaker(
+            cb_success, cb_result = await call_with_breaker(
                 circuit_breaker_name,
                 self.execute_with_retry,
                 func,
                 *args,
-                config=config,
+                config=cb_config,
                 **kwargs
             )
             
-            return success, result
+            # cb_result is a tuple (retry_success, retry_result) from execute_with_retry
+            if cb_success and isinstance(cb_result, tuple) and len(cb_result) == 2:
+                retry_success, retry_result = cb_result
+                return retry_success, retry_result
+            else:
+                return cb_success, cb_result
             
         except ImportError:
             # Fallback to retry only if circuit breaker not available
