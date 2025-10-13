@@ -1,0 +1,910 @@
+{
+  "trace_id": "coord_1759777990179_4394531088",
+  "coordinator_type": "parallel",
+  "start_time": 1759777990.179175,
+  "end_time": 1759777994.816965,
+  "duration_ms": 4637.790203094482,
+  "total_agents": 2,
+  "completed_agents": 2,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759777990180_4394531088",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "start_time": 1759777990.180594,
+      "end_time": 1759777994.742143,
+      "duration_ms": 4561.548948287964,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759777990.180612,
+          "datetime_str": "2025-10-06T15:13:10.180613",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "gen-registration",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task gen-registration",
+          "metadata": {
+            "domain": "contract_driven_generator",
+            "input_data": {
+              "contract": {
+                "name": "UserRegistration",
+                "description": "User registration function with secure password hashing using bcrypt or argon2",
+                "type": "application",
+                "operations": [
+                  "register_user",
+                  "hash_password",
+                  "validate_email"
+                ]
+              },
+              "node_type": "Compute",
+              "language": "python",
+              "context": "Security-focused user registration with password hashing best practices"
+            }
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759777990179_4394531088"
+        },
+        {
+          "timestamp": 1759777994.742614,
+          "datetime_str": "2025-10-06T15:13:14.742615",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "gen-registration",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (4561.55ms)",
+          "metadata": {
+            "result": {
+              "task_id": "gen-registration",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nUserRegistration - ONEX Compute Node\n\nUser registration function with secure password hashing using bcrypt or argon2\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass UserRegistrationInput(BaseModel):\n    \"\"\"Input model for UserRegistration.\"\"\"\n    pass\n\n\nclass UserRegistrationOutput(BaseModel):\n    \"\"\"Output model for UserRegistration.\"\"\"\n    pass\n\n\nclass NodeUserRegistrationCompute:\n    \"\"\"\n    ONEX Compute node for UserRegistration.\n    \n    User registration function with secure password hashing using bcrypt or argon2\n    \"\"\"\n\n    async def execute(self, input_data: UserRegistrationInput) -> UserRegistrationOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 1 sources\n        \n        # Placeholder implementation\n        return UserRegistrationOutput()",
+                "node_type": "Compute",
+                "contract": {
+                  "name": "UserRegistration",
+                  "description": "User registration function with secure password hashing using bcrypt or argon2",
+                  "type": "application",
+                  "operations": [
+                    "register_user",
+                    "hash_password",
+                    "validate_email"
+                  ]
+                },
+                "intelligence_gathered": {
+                  "domain_patterns": {
+                    "success": true,
+                    "query": "contract-driven development patterns",
+                    "context": "api_development",
+                    "timestamp": "2025-10-06T19:13:10.230090",
+                    "duration_ms": 2267,
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG",
+                      "Vector Search",
+                      "Knowledge Graph"
+                    ],
+                    "total_results": 5,
+                    "results": {
+                      "rag_search": {
+                        "success": true,
+                        "source": "rag_search",
+                        "results": [],
+                        "query": "contract-driven development patterns",
+                        "reranked": false
+                      },
+                      "vector_search": {
+                        "success": true,
+                        "source": "qdrant_vector_search",
+                        "results": [
+                          {
+                            "entity_id": "b8b1a5f4-c6bf-49e0-9a51-3b5c107ca917",
+                            "entity_type": "page",
+                            "title": "Two-Way Registration Pattern - Event-Driven Service Discovery",
+                            "content": "Two-Way Registration Pattern - Event-Driven Service Discovery\n\nThe Two-Way Registration Pattern is an event-driven service discovery architecture that enables dynamic node registration and resilient service coordination across the ONEX ecosystem",
+                            "url": null,
+                            "relevance_score": 0.4368675,
+                            "semantic_score": 0.4368675,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": "2025-10-03T12:34:16.872145",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "b8b1a5f4-c6bf-49e0-9a51-3b5c107ca917",
+                            "entity_type": "page",
+                            "title": "Two-Way Registration Pattern - Event-Driven Service Discovery",
+                            "content": "Two-Way Registration Pattern - Event-Driven Service Discovery\n\nThe Two-Way Registration Pattern is an event-driven service discovery architecture that enables dynamic node registration and resilient service coordination across the ONEX ecosystem",
+                            "url": null,
+                            "relevance_score": 0.4368675,
+                            "semantic_score": 0.4368675,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": "2025-10-03T12:34:17.898506",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_457990293851",
+                            "entity_type": "page",
+                            "title": "Composed Node Base Classes",
+                            "content": "Composed Node Base Classes\n\n# ONEX Composed Node Base Classes - Design Specification\n\n**Version**: 1.0.0\n**Status**: \ud83d\udea7 Proposed Design\n**Last Updated**: 2025-10-01\n**Related**: NODE_GROUP_STRUCTURE.md, SHARED_RESOURCE_VERSIONING.md\n\n---\n\n## Problem Statement\n\nCurrently, **each node manually composes the subcontracts it needs**, leading to:\n- \u274c Boilerplate repetition across similar nodes\n- \u274c Inconsistent subcontract usage patterns\n- \u274c Difficult to enforce best practices\n- \u274c No clear templates for new nodes\n\n**Current State** (ModelContractEffect):\n```python\nclass ModelContractEffect(ModelContractBase):\n    # Only 3 subcontracts out of 14 available!\n    event_type: ModelEventTypeSubcontract | None = None\n    caching: ModelCachingSubcontract | None = None\n    routing: ModelRoutingSubcontract | None = None\n```\n\n**Missing Subcontracts** not in base contracts:\n1. ModelConfigurationSubcontract\n2. ModelWorkflowCoordinationSubcontract\n3. ModelServiceResolutionSubcontract \u2b50\n4. ModelExternalDependenciesSubcontract\n5. ModelHealthCheckSubcontract\n6. ModelIntrospectionSubcontract\n7. ModelPerformanceMonitoringSubcontract\n8. ModelRequestResponseSubcontract\n9. ModelAggregationSubcontract (Reducer only?)\n10. ModelFSMSubcontract (in base, but not mentioned)\n11. ModelStateManagementSubcontract (in base, but not mentioned)\n\n---\n\n## Solution: Composed Base Classes\n\nCreate **pre-composed base contract classes** that aggregate common subcontract patterns for typical use cases.\n\n### Design Principles\n\n1. **Layered Composition**: Multiple levels of composition for flexibility\n2. **Progressive Enhancement**: Start minimal, add features as needed\n3. **Clear Naming**: Names indicate included subcontracts\n4. **Backward Compatible**: Existing contracts still work\n5. **Zero Duplication**: DRY principle for subcontract aggregation\n\n---\n\n## Proposed Hierarchy\n\n```\nModelContractBase (foundation)\n    \u2193\nModelContract{Type} (current: minimal)\n    \u2193\nModelContract{Type}Standard (common patterns)\n    \u2193\nModelContract{Type}Full (all applicable subcontracts)\n```\n\n---\n\n## Composed Base Classes Design\n\n### 1. Effect Node Compositions\n\n#### ModelContractEffectStandard\n**Common patterns for typical Effect nodes**\n\n```python\nclass ModelContractEffectStandard(ModelContractEffect):\n    \"\"\"\n    Standard Effect node with common operational patterns.\n\n    Includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n\n    Use for: Most production Effect nodes\n    \"\"\"\n\n    # === OPERATIONAL SUBCONTRACTS ===\n    service_resolution: ModelServiceResolutionSubcontract = Field(\n        default_factory=ModelServiceResolutionSubcontract,\n        description=\"Service discovery and dependency injection\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Health monitoring and readiness checks\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Performance metrics and monitoring\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Configuration management\",\n    )\n\n    request_response: ModelRequestResponseSubcontract = Field(\n        default_factory=ModelRequestResponseSubcontract,\n        description=\"Request/response pattern support\",\n    )\n\n    # Inherit from parent: event_type, caching, routing\n```\n\n#### ModelContractEffectFull\n**All applicable Effect subcontracts**\n\n```python\nclass ModelContractEffectFull(ModelContractEffectStandard):\n    \"\"\"\n    Full-featured Effect node with all operational capabilities.\n\n    Adds to Standard:\n    - External dependencies tracking\n    - Runtime introspection\n    - Advanced state management\n    - FSM patterns\n\n    Use for: Complex infrastructure nodes, critical services\n    \"\"\"\n\n    # === ADVANCED SUBCONTRACTS ===\n    external_dependencies: ModelExternalDependenciesSubcontract = Field(\n        default_factory=ModelExternalDependenciesSubcontract,\n        description=\"External dependency management\",\n    )\n\n    introspection: ModelIntrospectionSubcontract = Field(\n        default_factory=ModelIntrospectionSubcontract,\n        description=\"Runtime introspection capabilities\",\n    )\n\n    state_management: ModelStateManagementSubcontract | None = Field(\n        default=None,\n        description=\"Advanced state management (optional)\",\n    )\n\n    fsm: ModelFSMSubcontract | None = Field(\n        default=None,\n        description=\"Finite state machine patterns (optional)\",\n    )\n```\n\n---\n\n### 2. Compute Node Compositions\n\n#### ModelContractComputeStandard\n**Common patterns for typical Compute nodes**\n\n```python\nclass ModelContractComputeStandard(ModelContractCompute):\n    \"\"\"\n    Standard Compute node with performance optimization patterns.\n\n    Includes:\n    - Caching (critical for pure functions)\n    - Performance monitoring\n    - Configuration management\n    - Health checks\n\n    Use for: Most Compute nodes with caching needs\n    \"\"\"\n\n    # === PERFORMANCE SUBCONTRACTS ===\n    caching: ModelCachingSubcontract = Field(\n        default_factory=ModelCachingSubcontract,\n        description=\"Result caching for pure computations\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Computation performance tracking\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Algorithm configuration\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Computation health monitoring\",\n    )\n```\n\n#### ModelContractComputeFull\n**All applicable Compute subcontracts**\n\n```python\nclass ModelContractComputeFull(ModelContractComputeStandard):\n    \"\"\"\n    Full-featured Compute node for complex computations.\n\n    Adds to Standard:\n    - Service resolution (for external data sources)\n    - Request/response patterns\n    - Introspection capabilities\n\n    Use for: Complex algorithmic nodes, ML inference nodes\n    \"\"\"\n\n    service_resolution: ModelServiceResolutionSubcontract | None = Field(\n        default=None,\n        description=\"External data source resolution (optional)\",\n    )\n\n    request_response: ModelRequestResponseSubcontractt | None = Field(\n        default=None,\n        description=\"Request/response patterns (optional)\",\n    )\n\n    introspection: ModelIntrospectionSubcontract | None = Field(\n        default=None,\n        description=\"Runtime introspection (optional)\",\n    )\n```\n\n---\n\n### 3. Reducer Node Compositions\n\n#### ModelContractReducerStandard\n**Common patterns for typical Reducer nodes**\n\n```python\nclass ModelContractReducerStandard(ModelContractReducer):\n    \"\"\"\n    Standard Reducer node with aggregation patterns.\n\n    Includes:\n    - Aggregation (core reducer functionality)\n    - State management\n    - Caching\n    - Performance monitoring\n\n    Use for: Most Reducer nodes\n    \"\"\"\n\n    # === AGGREGATION SUBCONTRACTS ===\n    aggregation: ModelAggregationSubcontract = Field(\n        default_factory=ModelAggregationSubcontract,\n        description=\"Data aggregation strategies\",\n    )\n\n    state_management: ModelStateManagementSubcontract = Field(\n        default_factory=ModelStateManagementSubcontract,\n        description=\"Aggregation state management\",\n    )\n\n    caching: ModelCachingSubcontract = Field(\n        default_factory=ModelCachingSubcontract,\n        description=\"Aggregation result caching\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Aggregation performance tracking\",\n    )\n```\n\n---\n\n### 4. Orchestrator Node Compositions\n\n#### ModelContractOrchestratorStandard\n**Common patterns for typical Orchestrator nodes**\n\n```python\nclass ModelContractOrchestratorStandard(ModelContractOrchestrator):\n    \"\"\"\n    Standard Orchestrator node with workflow coordination.\n\n    Includes:\n    - Workflow coordination (core orchestrator functionality)\n    - Routing\n    - Service resolution\n    - Health monitoring\n    - Event coordination\n\n    Use for: Most Orchestrator nodes\n    \"\"\"\n\n    # === ORCHESTRATION SUBCONTRACTS ===\n    workflow_coordination: ModelWorkflowCoordinationSubcontract = Field(\n        default_factory=ModelWorkflowCoordinationSubcontract,\n        description=\"Multi-node workflow coordination\",\n    )\n\n    routing: ModelRoutingSubcontract = Field(\n        default_factory=ModelRoutingSubcontract,\n        description=\"Node routing and load balancing\",\n    )\n\n    service_resolution: ModelServiceResolutionSubcontract = Field(\n        default_factory=ModelServiceResolutionSubcontract,\n        description=\"Node and service discovery\",\n    )\n\n    event_type: ModelEventTypeSubcontract = Field(\n        default_factory=ModelEventTypeSubcontract,\n        description=\"Event-driven orchestration\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Orchestration health monitoring\",\n    )\n```\n\n#### ModelContractOrchestratorFull\n**All applicable Orchestrator subcontracts**\n\n```python\nclass ModelContractOrchestratorFull(ModelContractOrchestratorStandard):\n    \"\"\"\n    Full-featured Orchestrator with advanced capabilities.\n\n    Adds to Standard:\n    - FSM patterns for complex workflows\n    - State management\n    - Performance monitoring\n    - Configuration management\n\n    Use for: Complex multi-stage workflows, critical orchestration\n    \"\"\"\n\n    fsm: ModelFSMSubcontract = Field(\n        default_factory=ModelFSMSubcontract,\n        description=\"State machine-based workflow control\",\n    )\n\n    state_management: ModelStateManagementSubcontract = Field(\n        default_factory=ModelStateManagementSubcontract,\n        description=\"Workflow state management\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Orchestration performance tracking\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Workflow configuration management\",\n    )\n```\n\n---\n\n## Subcontract-to-Node Type Matrix\n\n| Subcontract | Effect | Compute | Reducer | Orchestrator | Notes |\n|------------|--------|---------|---------|--------------|-------|\n| **ServiceResolution** | \u2705 Standard | Optional | Optional | \u2705 Standard | DI pattern |\n| **HealthCheck** | \u2705 Standard | \u2705 Standard | \u2705 Standard | \u2705 Standard | Universal |\n| **PerformanceMonitoring** | \u2705 Standard | \u2705 Standard | \u2705 Standard | Optional | Universal |\n| **Configuration** | \u2705 Standard | \u2705 Standard | Optional | Optional | Common |\n| **RequestResponse** | \u2705 Standard | Optional | \u274c | \u274c | Effect/Compute only |\n| **Caching** | Optional | \u2705 Standard | \u2705 Standard | \u274c | Performance |\n| **EventType** | Optional | \u274c | \u274c | \u2705 Standard | Event-driven |\n| **Routing** | Optional | \u274c | \u274c | \u2705 Standard | Orchestration |\n| **WorkflowCoordination** | \u274c | \u274c | \u274c | \u2705 Standard | Orchestrator only |\n| **Aggregation** | \u274c | \u274c | \u2705 Standard | \u274c | Reducer only |\n| **StateManagement** | Optional | \u274c | \u2705 Standard | Optional | Stateful nodes |\n| **FSM** | Optional | \u274c | \u274c | Optional | Complex workflows |\n| **ExternalDependencies** | Optional | Optional | \u274c | \u274c | Integration nodes |\n| **Introspection** | Optional | Optional | \u274c | \u274c | Debugging/monitoring |\n\n**Legend**:\n- \u2705 Standard: Included in `{Type}Standard` composition\n- Optional: Available in `{Type}Full` or can be added manually\n- \u274c: Not applicable to this node type\n\n---\n\n## Usage Examples\n\n### Example 1: Simple Effect Node (Minimal)\n\n```python\n# Use base contract - minimal subcontracts\nfrom omnibase_core.models.contracts import ModelContractEffect\n\nclass ToolSimpleFileWriter(NodeEffect):\n    \"\"\"Minimal Effect node - just the essentials.\"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffect with basic I/O only\n```\n\n### Example 2: Production Effect Node (Standard)\n\n```python\n# Use Standard composition - common operational patterns\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolProductionAPIClient(NodeEffect):\n    \"\"\"\n    Production Effect node with standard operational patterns.\n\n    Automatically includes:\n    - Service resolution\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffectStandard\n        # All standard subcontracts available automatically\n```\n\n### Example 3: Complex Infrastructure Node (Full)\n\n```python\n# Use Full composition - all capabilities\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n\nclass ToolDatabaseConnector(NodeEffect):\n    \"\"\"\n    Complex infrastructure node with all operational capabilities.\n\n    Includes all Standard features PLUS:\n    - External dependencies tracking\n    - Runtime introspection\n    - State management\n    - FSM patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffectFull\n        # Maximum operational capabilities\n```\n\n### Example 4: Custom Composition\n\n```python\n# Start with Standard, customize as needed\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\nfrom omnibase_core.models.contracts.subcontracts import ModelFSMSubcontract\n\nclass ToolCustomProcessor(NodeEffect):\n    \"\"\"Custom composition: Standard + FSM, no caching.\"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract in YAML can specify custom subcontracts\n        # Inherits Standard patterns, adds FSM, removes caching\n```\n\n---\n\n## Contract YAML Examples\n\n### Minimal Effect (base)\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"effect\"\n# Uses: ModelContractEffect\n# Subcontracts: event_type, caching, routing (all optional)\n\nio_operations:\n  - operation_type: \"file_write\"\n    path: \"/data/output.json\"\n```\n\n### Standard Effect\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"effect\"\ncomposed_type: \"standard\"  # \ud83c\udd95 Triggers ModelContractEffectStandard\n# Automatically includes: service_resolution, health_check,\n# performance_monitoring, configuration, request_response\n\nio_operations:\n  - operation_type: \"api_call\"\n    endpoint: \"${SERVICE_URL}/api/data\"\n\nservice_resolution:\n  service_name: \"data_api\"\n  discovery_method: \"dns\"\n\nhealth_check:\n  endpoint: \"/health\"\n  interval_seconds: 30\n\nperformance_monitoring:\n  enable_metrics: true\n  sample_rate: 1.0\n```\n\n### Full Orchestrator\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"orchestrator\"\ncomposed_type: \"full\"  # \ud83c\udd95 Triggers ModelContractOrchestratorFull\n# All orchestration capabilities enabled\n\nworkflow_coordination:\n  max_concurrent_workflows: 100\n  execution_timeout_seconds: 300\n\nrouting:\n  strategy: \"round_robin\"\n  load_balancing: true\n\nfsm:\n  initial_state: \"pending\"\n  states:\n    - name: \"pending\"\n      transitions: [\"processing\"]\n    - name: \"processing\"\n      transitions: [\"completed\", \"failed\"]\n```\n\n---\n\n## Migration Strategy\n\n### Phase 1: Create Composed Base Classes (omnibase_core)\n1. \u2705 Audit all 14 subcontracts\n2. \ud83c\udd95 Create `model_contract_{type}_standard.py` for each node type\n3. \ud83c\udd95 Create `model_contract_{type}_full.py` for each node type\n4. \u2705 Update `__init__.py` exports\n\n### Phase 2: Update Documentation\n1. \ud83c\udd95 Update NODE_GROUP_STRUCTURE.md with composed classes\n2. \ud83c\udd95 Create this document (COMPOSED_NODE_BASE_CLASSES.md)\n3. \ud83c\udd95 Update ONEX examples to show all three levels\n4. \ud83c\udd95 Create migration guide for existing nodes\n\n### Phase 3: Gradual Adoption\n1. \u2705 Keep existing base contracts (backward compatible)\n2. \ud83c\udd95 New nodes use `Standard` by default\n3. \ud83c\udd95 Complex nodes use `Full` when needed\n4. \u23f8\ufe0f Migrate existing nodes gradually (optional)\n\n### Phase 4: Tooling Support\n1. \ud83c\udd95 CLI: `onex create node --template standard|full|minimal`\n2. \ud83c\udd95 Validator: Check subcontract usage against patterns\n3. \ud83c\udd95 Generator: Auto-generate composed contracts from specs\n\n---\n\n## Benefits\n\n### \u2705 Developer Experience\n- **Faster Development**: Pre-composed patterns reduce boilerplate\n- **Best Practices**: Standard patterns enforce good architecture\n- **Clear Templates**: Three levels (minimal/standard/full) guide choices\n- **Gradual Complexity**: Start minimal, add features as needed\n\n### \u2705 Consistency\n- **Uniform Patterns**: Same operational patterns across similar nodes\n- **Predictable Behavior**: Standard nodes behave consistently\n- **Easier Onboarding**: Clear examples of typical compositions\n\n### \u2705 Maintainability\n- **DRY Principle**: Subcontract aggregation in one place\n- **Centralized Updates**: Update composed class, all nodes benefit\n- **Clear Dependencies**: Explicit subcontract requirements\n\n### \u2705 Flexibility\n- **Progressive Enhancement**: Start small, grow as needed\n- **Custom Compositions**: Can still compose manually\n- **Backward Compatible**: Existing nodes unchanged\n\n---\n\n## Implementation Checklist\n\n### omnibase_core Updates\n- [ ] Create `model_contract_effect_standard.py`\n- [ ] Create `model_contract_effect_full.py`\n- [ ] Create `model_contract_compute_standard.py`\n- [ ] Create `model_contract_compute_full.py`\n- [ ] Create `model_contract_reducer_standard.py`\n- [ ] Create `model_contract_orchestrator_standard.py`\n- [ ] Create `model_contract_orchestrator_full.py`\n- [ ] Update `__init__.py` exports\n- [ ] Add validation for `composed_type` field\n- [ ] Unit tests for all composed classes\n\n### Documentation Updates\n- [ ] Update NODE_GROUP_STRUCTURE.md\n- [ ] Create examples for all 14 subcontracts\n- [ ] Update ONEX examples (docs/onex/examples/)\n- [ ] Create migration guide\n- [ ] Update CLAUDE.md\n\n### Tooling\n- [ ] CLI: Node creation with templates\n- [ ] Validator: Pattern compliance checking\n- [ ] Generator: Auto-generate from specs\n\n---\n\n## References\n\n- **Node Structure**: NODE_GROUP_STRUCTURE.md\n- **Subcontracts**: omnibase_core/models/contracts/subcontracts/\n- **Base Contracts**: omnibase_core/models/contracts/model_contract_*.py\n- **Versioning**: SHARED_RESOURCE_VERSIONING.md\n\n---\n\n**Status**: \ud83d\udea7 Proposed Design - Ready for Review\n**Version**: 1.0.0\n**Last Updated**: 2025-10-01\n**Next Steps**: Review \u2192 Implement in omnibase_core \u2192 Update documentation",
+                            "url": null,
+                            "relevance_score": 0.41716355,
+                            "semantic_score": 0.41716355,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_111439200485",
+                            "entity_type": "page",
+                            "title": "Onex Architecture Patterns Complete",
+                            "content": "Onex Architecture Patterns Complete\n\n# ONEX Architecture Patterns - Complete Reference\n\n**Version**: 1.0.0\n**Generated**: 2025-10-01\n**Purpose**: Comprehensive ONEX patterns for AI-assisted development with hooks integration\n\n---\n\n## Core Architecture\n\n### 4-Node Architecture Pattern\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502   EFFECT    \u2502\u2500\u2500\u2500\u25b6\u2502   COMPUTE   \u2502\u2500\u2500\u2500\u25b6\u2502   REDUCER   \u2502\u2500\u2500\u2500\u25b6\u2502ORCHESTRATOR \u2502\n\u2502   (Input)   \u2502    \u2502 (Process)   \u2502    \u2502(Aggregate)  \u2502    \u2502(Coordinate) \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n**Unidirectional Data Flow**: EFFECT \u2192 COMPUTE \u2192 REDUCER \u2192 ORCHESTRATOR\n\n---\n\n## 1. Node Types\n\n### NodeEffect\n**Purpose**: Side effect management and external interactions\n**File Pattern**: `node_*_effect.py`\n**Contract**: `ModelContractEffect`\n\n**Responsibilities**:\n- I/O operations (file, database, API)\n- Transaction management with rollback\n- Retry policies and circuit breakers\n- Event emission\n- Metrics collection\n\n**Method Signature**:\n```python\nasync def execute_effect(self, contract: ModelContractEffect) -> Any:\n    \"\"\"Execute side effect with transaction support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Database writes\n- File operations\n- API calls\n- Event publishing\n\n---\n\n### NodeCompute\n**Purpose**: Pure computational operations\n**File Pattern**: `node_*_compute.py`\n**Contract**: `ModelContractCompute`\n\n**Responsibilities**:\n- Data transformations\n- Calculations and computations\n- Caching and memoization\n- Parallel processing\n- Pure functions (no side effects)\n\n**Method Signature**:\n```python\nasync def execute_compute(self, contract: ModelContractCompute) -> Any:\n    \"\"\"Execute computation with caching support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Data transformations\n- Calculations\n- Filtering/mapping\n- Validation logic\n\n---\n\n### NodeReducer\n**Purpose**: Data aggregation and state reduction\n**File Pattern**: `node_*_reducer.py`\n**Contract**: `ModelContractReducer`\n\n**Responsibilities**:\n- Data aggregation\n- State reduction\n- Conflict resolution\n- Streaming support\n- Statistical operations\n\n**Method Signature**:\n```python\nasync def execute_reduction(self, contract: ModelContractReducer) -> Any:\n    \"\"\"Execute reduction with streaming support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Data aggregation\n- Statistics calculation\n- State merging\n- Report generation\n\n---\n\n### NodeOrchestrator\n**Purpose**: Workflow coordination\n**File Pattern**: `node_*_orchestrator.py`\n**Contract**: `ModelContractOrchestrator`\n\n**Responsibilities**:\n- Workflow coordination\n- Thunk emission\n- Dependency management\n- Pipeline orchestration\n- Error recovery\n\n**Method Signature**:\n```python\nasync def execute_orchestration(self, contract: ModelContractOrchestrator) -> Any:\n    \"\"\"Execute orchestration with dependency management.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Multi-step workflows\n- Pipeline coordination\n- Dependency resolution\n- Error recovery flows\n\n---\n\n## 2. Contract System\n\n### Base Contract\n**Class**: `ModelContractBase`\n**File Pattern**: `model_contract_base.py`\n\n**Core Fields**:\n- `name: str` - Contract identifier\n- `version: str` - Semantic version\n- `description: str` - Human-readable description\n- `node_type: EnumNodeType` - Node type (EFFECT/COMPUTE/REDUCER/ORCHESTRATOR)\n\n### Specialized Contracts\n\n1. **ModelContractEffect** - For EFFECT nodes\n2. **ModelContractCompute** - For COMPUTE nodes\n3. **ModelContractReducer** - For REDUCER nodes\n4. **ModelContractOrchestrator** - For ORCHESTRATOR nodes\n\n---\n\n## 3. Subcontract System\n\n**Pattern**: `Model<Type>Subcontract`\n**File Pattern**: `model_*_subcontract.py`\n\n### 6 Core Subcontract Types\n\n1. **ModelFSMSubcontract** - Finite State Machine functionality\n   - State transitions\n   - Event-driven state changes\n   - Guards and actions\n\n2. **ModelEventTypeSubcontract** - Event-driven architecture\n   - Event definitions\n   - Event handlers\n   - Pub/sub patterns\n\n3. **ModelAggregationSubcontract** - Data aggregation\n   - Aggregation strategies\n   - Statistical operations\n   - Group by operations\n\n4. **ModelStateManagementSubcontract** - State persistence\n   - State storage\n   - State synchronization\n   - State recovery\n\n5. **ModelRoutingSubcontract** - Request routing\n   - Load balancing\n   - Request routing\n   - Endpoint selection\n\n6. **ModelCachingSubcontract** - Performance optimization\n   - Cache strategies\n   - TTL management\n   - Cache invalidation\n\n---\n\n## 4. Naming Conventions\n\n### File Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Models | `model_<name>.py` | `model_task_data.py` |\n| Enums | `enum_<name>.py` | `enum_task_status.py` |\n| TypedDicts | `typed_dict_<name>.py` | `typed_dict_result_kwargs.py` |\n| Nodes | `node_<type>_<name>.py` | `node_effect_database.py` |\n| Contracts | `model_contract_<type>.py` | `model_contract_effect.py` |\n| Subcontracts | `model_<type>_subcontract.py` | `model_fsm_subcontract.py` |\n| Protocols | `protocol_<name>.py` | `protocol_event_bus.py` |\n\n### Class Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Pydantic Models | `Model<Name>` | `ModelTaskData` |\n| Enums | `Enum<Name>` | `EnumTaskStatus` |\n| TypedDicts | `TypedDict<Name>` | `TypedDictResultKwargs` |\n| Protocols | `Protocol<Name>` | `ProtocolEventBus` |\n| Nodes | `Node<Name><Type>` | `NodeDatabaseWriterEffect` |\n\n---\n\n## 5. Architecture Principles\n\n### Zero Tolerance for Any Types\n```python\n# \u2705 Correct - Strongly typed\ndef process_data(data: ModelTaskData) -> ModelResult:\n    pass\n\n# \u274c Incorrect - Using Any\ndef process_data(data: Any) -> Any:\n    pass\n```\n\n### Contract-Driven Development\n```python\n# \u2705 Correct - Contract defines behavior\nclass NodeDatabaseWriterEffect:\n    async def execute_effect(self, contract: ModelContractEffect) -> ModelResult:\n        # Implementation follows contract spec\n        pass\n```\n\n### Composition Over Inheritance\n```python\n# \u2705 Correct - Subcontract composition\ncontract = ModelContractEffect(\n    name=\"database_write\",\n    state_transitions=ModelFSMSubcontract(...),  # Compose FSM\n    caching=ModelCachingSubcontract(...)  # Compose caching\n)\n```\n\n### Unidirectional Data Flow\n```python\n# \u2705 Correct - Left to right flow\neffect_result = await effect_node.execute_effect(effect_contract)\ncompute_result = await compute_node.execute_compute(compute_contract)\nreducer_result = await reducer_node.execute_reduction(reducer_contract)\nfinal_result = await orchestrator.execute_orchestration(orch_contract)\n```\n\n---\n\n## 6. Quick Reference Templates\n\n### Creating an Effect Node\n```python\nfrom omnibase.core.models.contracts import ModelContractEffect\nfrom omnibase.core.nodes import NodeEffect\n\nclass NodeMyOperationEffect(NodeEffect):\n    \"\"\"My custom effect node.\"\"\"\n\n    async def execute_effect(self, contract: ModelContractEffect) -> ModelResult:\n        # Transaction management\n        async with self.transaction_manager.begin():\n            # Your side effect logic here\n            result = await self._perform_operation(contract)\n            return ModelResult(success=True, data=result)\n```\n\n### Creating a Compute Node\n```python\nfrom omnibase.core.models.contracts import ModelContractCompute\nfrom omnibase.core.nodes import NodeCompute\n\nclass NodeMyTransformCompute(NodeCompute):\n    \"\"\"My custom compute node.\"\"\"\n\n    async def execute_compute(self, contract: ModelContractCompute) -> ModelResult:\n        # Pure computation with caching\n        cached = self.cache.get(contract.cache_key)\n        if cached:\n            return cached\n\n        result = self._transform_data(contract.input_data)\n        self.cache.set(contract.cache_key, result)\n        return ModelResult(success=True, data=result)\n```\n\n### Contract YAML Template\n```yaml\nname: my_operation\nversion: 1.0.0\ndescription: \"My operation description\"\nnode_type: EFFECT  # or COMPUTE, REDUCER, ORCHESTRATOR\n\n# Optional subcontracts\nstate_transitions:\n  initial_state: PENDING\n  transitions:\n    - from: PENDING\n      to: PROCESSING\n      event: START\n    - from: PROCESSING\n      to: COMPLETED\n      event: FINISH\n\ncaching:\n  strategy: LRU\n  ttl_seconds: 3600\n  max_entries: 1000\n```\n\n---\n\n## 7. Best Practices\n\n### DO \u2705\n- Use unidirectional data flow (EFFECT \u2192 COMPUTE \u2192 REDUCER \u2192 ORCHESTRATOR)\n- Apply contract-driven development\n- Compose subcontracts for reusable functionality\n- Use strong typing (zero `Any` types)\n- Follow naming conventions consistently\n- Implement proper error handling and logging\n- Use UUID correlation IDs for tracing\n\n### DON'T \u274c\n- Skip contract validation\n- Use `Any` types in models\n- Create side effects in compute nodes\n- Break unidirectional flow\n- Mix responsibilities across node types\n- Hardcode configuration (use contracts)\n- Ignore transaction management in effects\n\n---\n\n## 8. Integration Checklist\n\nWhen creating new nodes:\n\n- [ ] Choose correct node type (Effect/Compute/Reducer/Orchestrator)\n- [ ] Follow file naming convention (`node_<type>_<name>.py`)\n- [ ] Follow class naming convention (`Node<Type><Name>`)\n- [ ] Create contract YAML with all required fields\n- [ ] Implement correct method signature (`execute_effect/compute/reduction/orchestration`)\n- [ ] Use appropriate subcontracts (FSM, caching, etc.)\n- [ ] Add proper error handling and logging\n- [ ] Include UUID correlation tracking\n- [ ] Write comprehensive tests\n- [ ] Document in contract YAML\n\n---\n\n**References**:\n- omnibase_core: Node implementations\n- omnibase_3: Contract and subcontract models\n- omnibase_infra: Production examples (PostgreSQL, Kafka adapters)",
+                            "url": null,
+                            "relevance_score": 0.4168243,
+                            "semantic_score": 0.4168243,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_718927590691",
+                            "entity_type": "page",
+                            "title": "ONEX Implementation Guide",
+                            "content": "ONEX Implementation Guide\n\n# ONEX Implementation Guide\n\n**Version**: 2.0.0\n**Status**: \u2705 Canonical Reference\n**Last Updated**: 2025-10-01\n**Purpose**: Comprehensive guide for implementing ONEX nodes and node groups\n\n---\n\n## \ud83d\udcd6 What to Read First\n\n**New to ONEX?** Start here:\n1. Read this guide's [Quick Start](#quick-start) section\n2. Review [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md) for patterns and examples\n3. Explore [examples/](examples/) directory for real implementations\n\n**Looking for specific info?**\n- **Directory structure** \u2192 [Structure Guide](#directory-structure)\n- **Base classes** \u2192 [Composed Base Classes](#composed-base-classes)\n- **Naming patterns** \u2192 [Naming Conventions](#naming-conventions)\n- **Shared resources** \u2192 [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md)\n- **Quick patterns** \u2192 [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md)\n\n---\n\n## \ud83d\ude80 Quick Start\n\n### 3-Tier Base Class System\n\nONEX provides **three levels** of base contracts for progressive enhancement:\n\n```python\n# Level 1: MINIMAL (advanced use cases)\nfrom omnibase_core.models.contracts import ModelContractEffect\n\n# Level 2: STANDARD (recommended for most nodes) \u2b50\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\n# Level 3: FULL (complex infrastructure nodes)\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n```\n\n**Use Standard for 90% of nodes** - includes common operational patterns like service resolution, health monitoring, performance tracking, and configuration management.\n\n### Creating Your First Node\n\n```python\n#!/usr/bin/env python3\n\"\"\"My Effect Node - Production-ready with standard patterns.\"\"\"\n\nfrom pathlib import Path\nfrom omnibase.constants.contract_constants import CONTRACT_FILENAME\nfrom omnibase.core.node_base import NodeBase\nfrom omnibase.core.node_effect import NodeEffect\nfrom omnibase_core.models.core import ModelOnexContainer\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nfrom .models.model_input_state import ModelMyNodeInputState\nfrom .models.model_output_state import ModelMyNodeOutputState\n\n\nclass ToolMyNodeProcessor(NodeEffect):\n    \"\"\"\n    My production Effect node using Standard composition.\n\n    Automatically includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Your initialization here\n\n    async def execute_effect(\n        self, contract: ModelContractEffectStandard\n    ) -> ModelMyNodeOutputState:\n        \"\"\"Main processing method.\"\"\"\n        # Your business logic here\n        pass\n\n\ndef main():\n    \"\"\"One-line main function.\"\"\"\n    return NodeBase(Path(__file__).parent / CONTRACT_FILENAME)\n\n\nif __name__ == \"__main__\":\n    main()\n```\n\n---\n\n## \ud83d\udcc1 Directory Structure\n\n### Minimum Viable Structure\n\n**Use this** for new nodes (production-ready):\n\n```\n<node_group>/                           # e.g., \"canary\"\n\u251c\u2500\u2500 __init__.py                         # Group package\n\u251c\u2500\u2500 README.md                           # Main documentation\n\u2502\n\u251c\u2500\u2500 deployment/                         # Deployment configs\n\u2502   \u251c\u2500\u2500 docker-compose.<group>.yml\n\u2502   \u2514\u2500\u2500 *.env files\n\u2502\n\u2514\u2500\u2500 <node_name>/                        # e.g., \"my_tool\"\n    \u251c\u2500\u2500 __init__.py\n    \u2514\u2500\u2500 v1_0_0/\n        \u251c\u2500\u2500 __init__.py\n        \u251c\u2500\u2500 node.py                     # ONLY node class + main()\n        \u2502\n        \u251c\u2500\u2500 contract.yaml               # Main interface\n        \u251c\u2500\u2500 node_config.yaml            # Runtime config\n        \u251c\u2500\u2500 deployment_config.yaml      # Deployment config\n        \u2502\n        \u251c\u2500\u2500 contracts/                  # YAML subcontracts\n        \u2502   \u251c\u2500\u2500 contract_actions.yaml\n        \u2502   \u251c\u2500\u2500 contract_cli.yaml\n        \u2502   \u251c\u2500\u2500 contract_examples.yaml\n        \u2502   \u2514\u2500\u2500 contract_models.yaml\n        \u2502\n        \u2514\u2500\u2500 models/                     # Node-specific models\n            \u251c\u2500\u2500 __init__.py\n            \u251c\u2500\u2500 model_input_state.py\n            \u2514\u2500\u2500 model_output_state.py\n```\n\n### Maximum Recommended Structure\n\n**Evolve to this** as needs arise (best practices):\n\n```\n<node_group>/                           # e.g., \"canary\"\n\u2502\n\u251c\u2500\u2500 __init__.py\n\u251c\u2500\u2500 README.md\n\u251c\u2500\u2500 API_REFERENCE.md\n\u251c\u2500\u2500 compatibility.yaml                  # Version compatibility matrix\n\u2502\n\u251c\u2500\u2500 shared/                             # LAZY: Only when 2+ nodes share\n\u2502   \u251c\u2500\u2500 models/                         # Independent versioning\n\u2502   \u2502   \u251c\u2500\u2500 v1/                         # Major version 1 (stable)\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 __init__.py\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 model_*.py\n\u2502   \u2502   \u2514\u2500\u2500 v2/                         # Major version 2 (breaking changes)\n\u2502   \u2502       \u251c\u2500\u2500 __init__.py\n\u2502   \u2502       \u2514\u2500\u2500 model_*.py\n\u2502   \u2514\u2500\u2500 protocols/                      # Shared protocols (if needed)\n\u2502       \u251c\u2500\u2500 v1/\n\u2502       \u2514\u2500\u2500 v2/\n\u2502\n\u251c\u2500\u2500 tests/                              # Group-level integration tests\n\u2502   \u251c\u2500\u2500 integration/\n\u2502   \u2502   \u2514\u2500\u2500 test_node_interactions.py\n\u2502   \u2514\u2500\u2500 fixtures/\n\u2502\n\u251c\u2500\u2500 deployment/\n\u2502   \u251c\u2500\u2500 docker-compose.<group>.yml\n\u2502   \u2514\u2500\u2500 *.env files\n\u2502\n\u2514\u2500\u2500 <node_name>/                        # e.g., \"my_tool\"\n    \u251c\u2500\u2500 __init__.py\n    \u2514\u2500\u2500 v1_0_0/\n        \u251c\u2500\u2500 README.md                   # Node documentation\n        \u251c\u2500\u2500 CHANGELOG.md                # Version history\n        \u251c\u2500\u2500 node.py                     # ONLY node class + main()\n        \u2502\n        \u251c\u2500\u2500 contract.yaml               # Main interface\n        \u251c\u2500\u2500 node_config.yaml\n        \u251c\u2500\u2500 deployment_config.yaml\n        \u251c\u2500\u2500 state_transitions.yaml      # State machine (if needed)\n        \u251c\u2500\u2500 workflow_testing.yaml       # Testing workflows (if needed)\n        \u251c\u2500\u2500 security_config.yaml        # Security (Effect nodes)\n        \u2502\n        \u251c\u2500\u2500 contracts/                  # YAML subcontracts\n        \u2502   \u251c\u2500\u2500 contract_actions.yaml\n        \u2502   \u251c\u2500\u2500 contract_cli.yaml\n        \u2502   \u251c\u2500\u2500 contract_examples.yaml\n        \u2502   \u251c\u2500\u2500 contract_models.yaml\n        \u2502   \u2514\u2500\u2500 contract_validation.yaml\n        \u2502\n        \u251c\u2500\u2500 models/                     # Node-specific models\n        \u2502   \u251c\u2500\u2500 __init__.py\n        \u2502   \u251c\u2500\u2500 model_input_state.py\n        \u2502   \u251c\u2500\u2500 model_output_state.py\n        \u2502   \u2514\u2500\u2500 enum_*.py\n        \u2502\n        \u251c\u2500\u2500 protocols/                  # Node-specific protocols\n        \u2502   \u251c\u2500\u2500 __init__.py\n        \u2502   \u2514\u2500\u2500 protocol_<node>.py\n        \u2502\n        \u251c\u2500\u2500 tests/                      # Node unit tests\n        \u2502   \u251c\u2500\u2500 unit/\n        \u2502   \u2502   \u2514\u2500\u2500 test_node.py\n        \u2502   \u2514\u2500\u2500 fixtures/\n        \u2502\n        \u2514\u2500\u2500 mock_configurations/        # Testing mocks (optional)\n            \u251c\u2500\u2500 event_bus_mock_behaviors.yaml\n            \u251c\u2500\u2500 llm_mock_responses.yaml\n            \u2514\u2500\u2500 uuid_mock_behaviors.yaml\n```\n\n---\n\n## \ud83c\udfaf Core Principles\n\n### 1. Composed Base Classes (Recommended Approach) \u2b50\n\n**Use pre-composed base classes** that aggregate common subcontract patterns:\n\n#### Three Levels of Composition\n\n```\nModelContract{Type} (minimal)           \u2190 Advanced use cases\n    \u2193\nModelContract{Type}Standard (common)    \u2190 90% of nodes \u2b50\n    \u2193\nModelContract{Type}Full (complete)      \u2190 Complex infrastructure\n```\n\n#### When to Use Each Level\n\n| Level | Use When | Example |\n|-------|----------|---------|\n| **Minimal** | Custom subcontract composition needed | Specialized nodes |\n| **Standard** \u2b50 | Most production nodes | API clients, file processors |\n| **Full** | Complex infrastructure nodes | Database connectors, message brokers |\n\n**Recommendation**: Start with **Standard**, downgrade to Minimal only if you need custom composition.\n\n### 2. Lazy Promotion for Shared Resources\n\n**Don't create `shared/` upfront**. Follow this progression:\n\n```\nPhase 1: Model in node\nnode_1/v1_0_0/models/model_data.py\n\nPhase 2: Second node needs it \u2192 Promote to shared/v1/\nshared/models/v1/model_data.py\nnode_1/v1_0_0/  # updates imports\nnode_2/v1_0_0/  # uses shared version\n\nPhase 3: Breaking change needed \u2192 Create v2\nshared/models/v1/model_data.py  # Old version (frozen)\nshared/models/v2/model_data.py  # New version (breaking changes)\n```\n\n**Promotion Criteria** (ALL must be true):\n1. \u2705 Actually used by 2+ consumers (not \"might be\")\n2. \u2705 Same semantic meaning across consumers\n3. \u2705 Same version lifecycle requirements\n4. \u2705 Detected by duplication analysis (not speculative)\n\nSee [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md) for complete details.\n\n### 3. Protocols: Hybrid Approach\n\n**Both locations are valid** based on scope:\n\n| Protocol Scope | Location | Example |\n|----------------|----------|---------|\n| Node-specific | `node/v1_0_0/protocols/` | `protocol_my_node.py` |\n| Shared (2+ nodes) | `shared/protocols/v1/` | `protocol_common.py` |\n| Framework-wide | `omnibase_spi/protocols/` | `ProtocolOnexNode` |\n\n**Start node-local**, promote when actually shared.\n\n### 4. Container Type: ModelOnexContainer Only\n\n**Always use ModelOnexContainer** (proper Pydantic container):\n\n```python\n# \u2705 CORRECT\nfrom omnibase_core.models.core import ModelOnexContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n```\n\n```python\n# \u274c WRONG - Legacy technical debt\nfrom omnibase.core.onex_container import ONEXContainer\n```\n\n### 5. Node.py Purity\n\n**node.py contains ONLY**:\n- \u2705 One node class (Effect/Compute/Reducer/Orchestrator)\n- \u2705 main() function (one-liner)\n- \u2705 Class-level constants (if needed)\n- \u274c NO other classes\n- \u274c NO enums (use `models/enum_*.py`)\n- \u274c NO helper functions (use separate modules)\n\n### 6. Independent Node Versioning\n\n\u2705 Each node has `v1_0_0/`, `v2_0_0/`, etc.\n\u2705 Nodes evolve independently\n\u2705 Use `compatibility.yaml` to track which versions work together\n\u274c NO group-level versioning (breaks independence)\n\n---\n\n## \ud83c\udfa8 Composed Base Classes\n\n### Overview\n\nPre-composed base classes provide **zero-boilerplate** operational patterns:\n\n```python\n# Instead of manually composing subcontracts...\nclass ModelContractEffect(ModelContractBase):\n    service_resolution: ModelServiceResolutionSubcontract | None = None\n    health_check: ModelHealthCheckSubcontract | None = None\n    performance_monitoring: ModelPerformanceMonitoringSubcontract | None = None\n    configuration: ModelConfigurationSubcontract | None = None\n    # ... etc (boilerplate!)\n\n# Use pre-composed Standard for common patterns:\nclass ModelContractEffectStandard(ModelContractEffect):\n    # All common subcontracts included with sensible defaults!\n```\n\n### Effect Node Compositions\n\n#### ModelContractEffectStandard \u2b50\n**Common patterns for typical Effect nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolProductionAPIClient(NodeEffect):\n    \"\"\"\n    Production Effect node with standard operational patterns.\n\n    Automatically includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `service_resolution` - Service discovery and DI\n- \u2705 `health_check` - Health monitoring\n- \u2705 `performance_monitoring` - Performance metrics\n- \u2705 `configuration` - Configuration management\n- \u2705 `request_response` - Request/response patterns\n- Plus inherited: `event_type`, `caching`, `routing`\n\n#### ModelContractEffectFull\n**All applicable Effect subcontracts**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n\nclass ToolDatabaseConnector(NodeEffect):\n    \"\"\"\n    Complex infrastructure node with all operational capabilities.\n\n    Includes Standard features PLUS:\n    - External dependencies tracking\n    - Runtime introspection\n    - State management\n    - FSM patterns\n    \"\"\"\n```\n\n**Adds to Standard**:\n- \u2705 `external_dependencies` - External dependency management\n- \u2705 `introspection` - Runtime introspection\n- \u2705 `state_management` - Advanced state management (optional)\n- \u2705 `fsm` - Finite state machine patterns (optional)\n\n### Compute Node Compositions\n\n#### ModelContractComputeStandard \u2b50\n**Common patterns for typical Compute nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractComputeStandard\n\nclass ToolDataTransformer(NodeCompute):\n    \"\"\"\n    Standard Compute node with performance optimization patterns.\n\n    Includes:\n    - Caching (critical for pure functions)\n    - Performance monitoring\n    - Configuration management\n    - Health checks\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `caching` - Result caching for pure computations\n- \u2705 `performance_monitoring` - Computation performance tracking\n- \u2705 `configuration` - Algorithm configuration\n- \u2705 `health_check` - Computation health monitoring\n\n#### ModelContractComputeFull\n**All applicable Compute subcontracts**\n\n**Adds to Standard**:\n- \u2705 `service_resolution` - External data source resolution (optional)\n- \u2705 `request_response` - Request/response patterns (optional)\n- \u2705 `introspection` - Runtime introspection (optional)\n\n### Reducer Node Compositions\n\n#### ModelContractReducerStandard \u2b50\n**Common patterns for typical Reducer nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractReducerStandard\n\nclass ToolDataAggregator(NodeReducer):\n    \"\"\"\n    Standard Reducer node with aggregation patterns.\n\n    Includes:\n    - Aggregation (core reducer functionality)\n    - State management\n    - Caching\n    - Performance monitoring\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `aggregation` - Data aggregation strategies\n- \u2705 `state_management` - Aggregation state management\n- \u2705 `caching` - Aggregation result caching\n- \u2705 `performance_monitoring` - Aggregation performance tracking\n\n### Orchestrator Node Compositions\n\n#### ModelContractOrchestratorStandard \u2b50\n**Common patterns for typical Orchestrator nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractOrchestratorStandard\n\nclass ToolWorkflowCoordinator(NodeOrchestrator):\n    \"\"\"\n    Standard Orchestrator node with workflow coordination.\n\n    Includes:\n    - Workflow coordination (core orchestrator functionality)\n    - Routing\n    - Service resolution\n    - Health monitoring\n    - Event coordination\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `workflow_coordination` - Multi-node workflow coordination\n- \u2705 `routing` - Node routing and load balancing\n- \u2705 `service_resolution` - Node and service discovery\n- \u2705 `event_type` - Event-driven orchestration\n- \u2705 `health_check` - Orchestration health monitoring\n\n#### ModelContractOrchestratorFull\n**All applicable Orchestrator subcontracts**\n\n**Adds to Standard**:\n- \u2705 `fsm` - State machine-based workflow control\n- \u2705 `state_management` - Workflow state management\n- \u2705 `performance_monitoring` - Orchestration performance tracking\n- \u2705 `configuration` - Workflow configuration management\n\n### Subcontract-to-Node Type Matrix\n\n| Subcontract | Effect | Compute | Reducer | Orchestrator |\n|------------|--------|---------|---------|--------------|\n| **ServiceResolution** | \u2705 Standard | Optional | Optional | \u2705 Standard |\n| **HealthCheck** | \u2705 Standard | \u2705 Standard | \u2705 Standard | \u2705 Standard |\n| **PerformanceMonitoring** | \u2705 Standard | \u2705 Standard | \u2705 Standard | Optional |\n| **Configuration** | \u2705 Standard | \u2705 Standard | Optional | Optional |\n| **RequestResponse** | \u2705 Standard | Optional | \u274c | \u274c |\n| **Caching** | Optional | \u2705 Standard | \u2705 Standard | \u274c |\n| **EventType** | Optional | \u274c | \u274c | \u2705 Standard |\n| **Routing** | Optional | \u274c | \u274c | \u2705 Standard |\n| **WorkflowCoordination** | \u274c | \u274c | \u274c | \u2705 Standard |\n| **Aggregation** | \u274c | \u274c | \u2705 Standard | \u274c |\n| **StateManagement** | Optional | \u274c | \u2705 Standard | Optional |\n| **FSM** | Optional | \u274c | \u274c | Optional |\n| **ExternalDependencies** | Optional | Optional | \u274c | \u274c |\n| **Introspection** | Optional | Optional | \u274c | \u274c |\n\n**Legend**:\n- \u2705 Standard: Included in `{Type}Standard` composition\n- Optional: Available in `{Type}Full` or can be added manually\n- \u274c: Not applicable to this node type\n\n---\n\n## \ud83d\udcdd Naming Conventions\n\n### File Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Nodes | `node_<name>_<type>.py` | `node_database_writer_effect.py` |\n| Models | `model_<name>.py` | `model_task_data.py` |\n| Enums | `enum_<name>.py` | `enum_task_status.py` |\n| Contracts | `model_contract_<type>.py` | `model_contract_effect.py` |\n| Subcontracts | `model_<type>_subcontract.py` | `model_fsm_subcontract.py` |\n| Protocols | `protocol_<name>.py` | `protocol_event_bus.py` |\n\n### Class Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Nodes | `Node<Name><Type>` | `NodeDatabaseWriterEffect` |\n| Models | `Model<Name>` | `ModelTaskData` |\n| Enums | `Enum<Name>` | `EnumTaskStatus` |\n| Contracts | `ModelContract<Type>` | `ModelContractEffect` |\n| Subcontracts | `Model<Type>Subcontract` | `ModelFSMSubcontract` |\n| Protocols | `Protocol<Name>` | `ProtocolEventBus` |\n\n**Key Point**: Naming is **SUFFIX-based** - the type comes LAST:\n- `NodeDatabaseWriter**Effect**` (not `NodeEffectDatabaseWriter`)\n- `node_database_writer_**effect**.py` (not `node_effect_database_writer.py`)\n\n---\n\n## \ud83d\udd27 Framework Components\n\n### DO NOT DUPLICATE\n\nThese are imported from `omnibase_core`:\n\n#### Base Contracts\n```python\nfrom omnibase_core.models.contracts import (\n    ModelContractBase,\n    ModelContractEffect,\n    ModelContractCompute,\n    ModelContractReducer,\n    ModelContractOrchestrator,\n)\n```\n\n#### Composed Base Contracts \u2b50\n```python\nfrom omnibase_core.models.contracts import (\n    ModelContractEffectStandard,\n    ModelContractEffectFull,\n    ModelContractComputeStandard,\n    ModelContractComputeFull,\n    ModelContractReducerStandard,\n    ModelContractOrchestratorStandard,\n    ModelContractOrchestratorFull,\n)\n```\n\n#### Subcontracts\n```python\nfrom omnibase_core.models.contracts.subcontracts import (\n    ModelFSMSubcontract,\n    ModelEventTypeSubcontract,\n    ModelAggregationSubcontract,\n    ModelStateManagementSubcontract,\n    ModelRoutingSubcontract,\n    ModelCachingSubcontract,\n    ModelServiceResolutionSubcontract,\n    ModelHealthCheckSubcontract,\n    ModelPerformanceMonitoringSubcontract,\n    ModelConfigurationSubcontract,\n    ModelRequestResponseSubcontract,\n    ModelExternalDependenciesSubcontract,\n    ModelIntrospectionSubcontract,\n    ModelWorkflowCoordinationSubcontract,\n)\n```\n\n#### Container\n```python\nfrom omnibase_core.models.core import ModelOnexContainer\n```\n\n---\n\n## \u274c Anti-Patterns\n\n### 1. Premature Shared Resources\n\n```\n# \u274c WRONG - Creating shared/ upfront\nnode_group/\n\u251c\u2500\u2500 shared/\n\u2502   \u2514\u2500\u2500 models/v1/      # Created \"just in case\"\n\u2502       \u2514\u2500\u2500 model_*.py  # No nodes use it yet\n\n# \u2705 CORRECT - Start with node-level models\nnode_group/\n\u2514\u2500\u2500 node_1/\n    \u2514\u2500\u2500 v1_0_0/\n        \u2514\u2500\u2500 models/\n            \u2514\u2500\u2500 model_*.py  # Only promote when 2+ nodes need it\n```\n\n### 2. Using Minimal When Standard Would Work\n\n```python\n# \u274c WRONG - Manual composition when Standard exists\nfrom omnibase_core.models.contracts import ModelContractEffect\n\nclass MyNode(NodeEffect):\n    # Manually adding all standard subcontracts...\n    # (boilerplate repetition!)\n\n# \u2705 CORRECT - Use Standard composition\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass MyNode(NodeEffect):\n    # All standard subcontracts included automatically!\n```\n\n### 3. Multiple Classes in node.py\n\n```python\n# \u274c WRONG - Multiple classes in node.py\nclass MyDataModel(BaseModel):      # Should be in models/\n    pass\n\nclass MyEnum(Enum):                 # Should be in models/\n    pass\n\nclass MyNode(NodeEffect):           # Only this should be in node.py\n    pass\n\n# \u2705 CORRECT - One class in node.py\n# node.py\nfrom .models.model_data import MyDataModel\nfrom .models.enum_status import MyEnum\n\nclass MyNode(NodeEffect):\n    pass\n```\n\n### 4. Using Legacy Container\n\n```python\n# \u274c WRONG - Legacy container (technical debt)\nfrom omnibase.core.onex_container import ONEXContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ONEXContainer) -> None:\n        pass\n\n# \u2705 CORRECT - Proper Pydantic container\nfrom omnibase_core.models.core import ModelOnexContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        pass\n```\n\n### 5. Group-Level Versioning\n\n```\n# \u274c WRONG - Version at group level\nnode_group/\n\u2514\u2500\u2500 v1_0_0/         # Breaks independent node evolution\n    \u251c\u2500\u2500 node_1/\n    \u2514\u2500\u2500 node_2/\n\n# \u2705 CORRECT - Version per node\nnode_group/\n\u251c\u2500\u2500 node_1/\n\u2502   \u2514\u2500\u2500 v1_0_0/    # Independent versioning\n\u2514\u2500\u2500 node_2/\n    \u2514\u2500\u2500 v2_0_0/    # Can be different version\n```\n\n### 6. Premature Protocol Promotion\n\n```\n# \u274c WRONG - Moving protocol to omnibase_spi prematurely\nomnibase_spi/protocols/\n\u2514\u2500\u2500 protocol_experimental.py  # Only one node uses it!\n\n# \u2705 CORRECT - Keep in node until actually shared\nnode/v1_0_0/protocols/\n\u2514\u2500\u2500 protocol_experimental.py  # Promote when 2+ nodes need it\n```\n\n---\n\n## \ud83d\udd04 Migration Strategy\n\n### From Current to Best Practices\n\n**Phase 1: Adopt Composed Base Classes**\n1. \u2705 Update imports to use `ModelContract{Type}Standard`\n2. \u2705 Remove manual subcontract composition\n3. \u2705 Update contract YAML with `composed_type: \"standard\"`\n4. \u2705 Test that all subcontracts work as expected\n\n**Phase 2: Add Structure**\n1. \ud83c\udd95 Add `compatibility.yaml` at group level\n2. \ud83c\udd95 Add `README.md` + `CHANGELOG.md` per node\n3. \ud83c\udd95 Add `tests/` directories (explicit structure)\n4. \ud83c\udd95 Add node-level documentation\n\n**Phase 3: Lazy Promotion (when needed)**\n1. \u23f8\ufe0f Monitor for duplicate models/protocols\n2. \u23f8\ufe0f Create `shared/models/v1/` when 2nd node needs it\n3. \u23f8\ufe0f Create `shared/models/v2/` when breaking changes needed\n4. \u23f8\ufe0f Promote protocols to `omnibase_spi` when truly framework-wide\n\n### Migration Scripts\n\n**Required tooling**:\n1. `scripts/detect_duplicate_models.py` - Find models to promote\n2. `scripts/validate_compatibility.py` - Check version matrix\n3. `scripts/generate_docs.py` - Auto-gen from contracts\n4. `scripts/migrate_to_standard.py` - Convert to Standard base classes\n\n---\n\n## \ud83d\udee0\ufe0f Tooling Support\n\n### Duplication Detection\n```bash\n# Find models/protocols that should be promoted\npython scripts/detect_duplicate_models.py --group canary\n```\n\n### Compatibility Validation\n```bash\n# Validate version compatibility matrix\npython scripts/validate_compatibility.py --all\n```\n\n### Documentation Generation\n```bash\n# Auto-generate API_REFERENCE.md from contracts\npython scripts/generate_docs.py --group canary --format markdown\n```\n\n### CLI Tools\n```bash\n# Create new node with Standard template\nonex create node --type effect --template standard --name my_tool\n\n# Validate node structure\nonex validate node --path ./my_tool/v1_0_0/\n\n# Promote model to shared\nonex promote model --model model_data --to shared/v1/\n```\n\n---\n\n## \ud83d\udcda References\n\n**Related Documentation**:\n- [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md) - Patterns and examples\n- [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md) - Versioning strategy\n- [examples/](examples/) - Real implementation examples\n\n**Framework Code**:\n- `omnibase_core/models/contracts/` - Base and composed contracts\n- `omnibase_core/models/contracts/subcontracts/` - All subcontracts\n- `omnibase_core/models/core/` - ModelOnexContainer\n- `omnibase_spi/protocols/` - Framework-wide protocols\n\n**Reference Implementations**:\n- `omnibase_3/src/omnibase/tools/canary/` - Production node group\n\n---\n\n## \ud83d\udccb Quick Checklist\n\n### Creating a New Node\n\n- [ ] Choose correct node type (Effect/Compute/Reducer/Orchestrator)\n- [ ] Use **Standard** composed base class (not minimal)\n- [ ] Follow file naming: `node_<name>_<type>.py`\n- [ ] Follow class naming: `Node<Name><Type>`\n- [ ] Use ModelOnexContainer (not ONEXContainer)\n- [ ] One class per node.py (no enums, no helpers)\n- [ ] Create contract.yaml with all required fields\n- [ ] Keep models node-local (promote when 2+ nodes need)\n- [ ] Keep protocols node-local (promote when actually shared)\n- [ ] Add comprehensive tests\n- [ ] Document in README.md and CHANGELOG.md\n\n### Before Promoting to Shared\n\n- [ ] Actually used by 2+ nodes (not \"might be\")\n- [ ] Same semantic meaning across consumers\n- [ ] Same version lifecycle requirements\n- [ ] Detected by duplication analysis\n- [ ] Use `shared/models/v1/` (major version only)\n- [ ] Update imports in all consuming nodes\n- [ ] Add tests for shared resource\n\n---\n\n**Status**: \u2705 Canonical Reference\n**Version**: 2.0.0\n**Last Updated**: 2025-10-01\n**Key Feature**: Composed base classes (Standard/Full) as recommended approach",
+                            "url": null,
+                            "relevance_score": 0.40979397,
+                            "semantic_score": 0.40979397,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          }
+                        ],
+                        "query": "contract-driven development patterns"
+                      },
+                      "knowledge_graph": {
+                        "success": true,
+                        "source": "memgraph_knowledge_graph",
+                        "results": [],
+                        "query": "contract-driven development patterns",
+                        "search_terms": [
+                          "contract-driven",
+                          "development",
+                          "patterns"
+                        ]
+                      }
+                    },
+                    "synthesis": {
+                      "key_findings": [
+                        "Identified 5 semantically similar items"
+                      ],
+                      "patterns_identified": [
+                        "Vector search found 5 semantically related items"
+                      ],
+                      "recommended_actions": [
+                        "Check RAG results for API documentation and best practices",
+                        "Review similar API implementations from vector search"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.5,
+                      "ecosystem_insights": [
+                        "Cross-referenced patterns across omninode ecosystem projects",
+                        "4-node architecture compliance and implementation patterns",
+                        "Integration opportunities between omniagent/omnimcp components",
+                        "Architectural consistency analysis across ecosystem"
+                      ],
+                      "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                      "ecosystem_integration_opportunities": [
+                        "Identify shared patterns between omnibase components",
+                        "Leverage 4-node architecture across ecosystem projects",
+                        "Optimize cross-component communication patterns"
+                      ]
+                    }
+                  }
+                },
+                "quality_metrics": {},
+                "quality_score": 0.0,
+                "lines_generated": 42,
+                "validation_passed": false
+              },
+              "error": null,
+              "execution_time_ms": 4561.353921890259,
+              "trace_id": "agent_agent-contract-driven-generator_1759777990180_4394531088"
+            },
+            "error": null
+          },
+          "duration_ms": 4561.548948287964,
+          "parent_trace_id": "coord_1759777990179_4394531088"
+        }
+      ],
+      "result": {
+        "task_id": "gen-registration",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nUserRegistration - ONEX Compute Node\n\nUser registration function with secure password hashing using bcrypt or argon2\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass UserRegistrationInput(BaseModel):\n    \"\"\"Input model for UserRegistration.\"\"\"\n    pass\n\n\nclass UserRegistrationOutput(BaseModel):\n    \"\"\"Output model for UserRegistration.\"\"\"\n    pass\n\n\nclass NodeUserRegistrationCompute:\n    \"\"\"\n    ONEX Compute node for UserRegistration.\n    \n    User registration function with secure password hashing using bcrypt or argon2\n    \"\"\"\n\n    async def execute(self, input_data: UserRegistrationInput) -> UserRegistrationOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 1 sources\n        \n        # Placeholder implementation\n        return UserRegistrationOutput()",
+          "node_type": "Compute",
+          "contract": {
+            "name": "UserRegistration",
+            "description": "User registration function with secure password hashing using bcrypt or argon2",
+            "type": "application",
+            "operations": [
+              "register_user",
+              "hash_password",
+              "validate_email"
+            ]
+          },
+          "intelligence_gathered": {
+            "domain_patterns": {
+              "success": true,
+              "query": "contract-driven development patterns",
+              "context": "api_development",
+              "timestamp": "2025-10-06T19:13:10.230090",
+              "duration_ms": 2267,
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG",
+                "Vector Search",
+                "Knowledge Graph"
+              ],
+              "total_results": 5,
+              "results": {
+                "rag_search": {
+                  "success": true,
+                  "source": "rag_search",
+                  "results": [],
+                  "query": "contract-driven development patterns",
+                  "reranked": false
+                },
+                "vector_search": {
+                  "success": true,
+                  "source": "qdrant_vector_search",
+                  "results": [
+                    {
+                      "entity_id": "b8b1a5f4-c6bf-49e0-9a51-3b5c107ca917",
+                      "entity_type": "page",
+                      "title": "Two-Way Registration Pattern - Event-Driven Service Discovery",
+                      "content": "Two-Way Registration Pattern - Event-Driven Service Discovery\n\nThe Two-Way Registration Pattern is an event-driven service discovery architecture that enables dynamic node registration and resilient service coordination across the ONEX ecosystem",
+                      "url": null,
+                      "relevance_score": 0.4368675,
+                      "semantic_score": 0.4368675,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": "2025-10-03T12:34:16.872145",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "b8b1a5f4-c6bf-49e0-9a51-3b5c107ca917",
+                      "entity_type": "page",
+                      "title": "Two-Way Registration Pattern - Event-Driven Service Discovery",
+                      "content": "Two-Way Registration Pattern - Event-Driven Service Discovery\n\nThe Two-Way Registration Pattern is an event-driven service discovery architecture that enables dynamic node registration and resilient service coordination across the ONEX ecosystem",
+                      "url": null,
+                      "relevance_score": 0.4368675,
+                      "semantic_score": 0.4368675,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": "2025-10-03T12:34:17.898506",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_457990293851",
+                      "entity_type": "page",
+                      "title": "Composed Node Base Classes",
+                      "content": "Composed Node Base Classes\n\n# ONEX Composed Node Base Classes - Design Specification\n\n**Version**: 1.0.0\n**Status**: \ud83d\udea7 Proposed Design\n**Last Updated**: 2025-10-01\n**Related**: NODE_GROUP_STRUCTURE.md, SHARED_RESOURCE_VERSIONING.md\n\n---\n\n## Problem Statement\n\nCurrently, **each node manually composes the subcontracts it needs**, leading to:\n- \u274c Boilerplate repetition across similar nodes\n- \u274c Inconsistent subcontract usage patterns\n- \u274c Difficult to enforce best practices\n- \u274c No clear templates for new nodes\n\n**Current State** (ModelContractEffect):\n```python\nclass ModelContractEffect(ModelContractBase):\n    # Only 3 subcontracts out of 14 available!\n    event_type: ModelEventTypeSubcontract | None = None\n    caching: ModelCachingSubcontract | None = None\n    routing: ModelRoutingSubcontract | None = None\n```\n\n**Missing Subcontracts** not in base contracts:\n1. ModelConfigurationSubcontract\n2. ModelWorkflowCoordinationSubcontract\n3. ModelServiceResolutionSubcontract \u2b50\n4. ModelExternalDependenciesSubcontract\n5. ModelHealthCheckSubcontract\n6. ModelIntrospectionSubcontract\n7. ModelPerformanceMonitoringSubcontract\n8. ModelRequestResponseSubcontract\n9. ModelAggregationSubcontract (Reducer only?)\n10. ModelFSMSubcontract (in base, but not mentioned)\n11. ModelStateManagementSubcontract (in base, but not mentioned)\n\n---\n\n## Solution: Composed Base Classes\n\nCreate **pre-composed base contract classes** that aggregate common subcontract patterns for typical use cases.\n\n### Design Principles\n\n1. **Layered Composition**: Multiple levels of composition for flexibility\n2. **Progressive Enhancement**: Start minimal, add features as needed\n3. **Clear Naming**: Names indicate included subcontracts\n4. **Backward Compatible**: Existing contracts still work\n5. **Zero Duplication**: DRY principle for subcontract aggregation\n\n---\n\n## Proposed Hierarchy\n\n```\nModelContractBase (foundation)\n    \u2193\nModelContract{Type} (current: minimal)\n    \u2193\nModelContract{Type}Standard (common patterns)\n    \u2193\nModelContract{Type}Full (all applicable subcontracts)\n```\n\n---\n\n## Composed Base Classes Design\n\n### 1. Effect Node Compositions\n\n#### ModelContractEffectStandard\n**Common patterns for typical Effect nodes**\n\n```python\nclass ModelContractEffectStandard(ModelContractEffect):\n    \"\"\"\n    Standard Effect node with common operational patterns.\n\n    Includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n\n    Use for: Most production Effect nodes\n    \"\"\"\n\n    # === OPERATIONAL SUBCONTRACTS ===\n    service_resolution: ModelServiceResolutionSubcontract = Field(\n        default_factory=ModelServiceResolutionSubcontract,\n        description=\"Service discovery and dependency injection\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Health monitoring and readiness checks\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Performance metrics and monitoring\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Configuration management\",\n    )\n\n    request_response: ModelRequestResponseSubcontract = Field(\n        default_factory=ModelRequestResponseSubcontract,\n        description=\"Request/response pattern support\",\n    )\n\n    # Inherit from parent: event_type, caching, routing\n```\n\n#### ModelContractEffectFull\n**All applicable Effect subcontracts**\n\n```python\nclass ModelContractEffectFull(ModelContractEffectStandard):\n    \"\"\"\n    Full-featured Effect node with all operational capabilities.\n\n    Adds to Standard:\n    - External dependencies tracking\n    - Runtime introspection\n    - Advanced state management\n    - FSM patterns\n\n    Use for: Complex infrastructure nodes, critical services\n    \"\"\"\n\n    # === ADVANCED SUBCONTRACTS ===\n    external_dependencies: ModelExternalDependenciesSubcontract = Field(\n        default_factory=ModelExternalDependenciesSubcontract,\n        description=\"External dependency management\",\n    )\n\n    introspection: ModelIntrospectionSubcontract = Field(\n        default_factory=ModelIntrospectionSubcontract,\n        description=\"Runtime introspection capabilities\",\n    )\n\n    state_management: ModelStateManagementSubcontract | None = Field(\n        default=None,\n        description=\"Advanced state management (optional)\",\n    )\n\n    fsm: ModelFSMSubcontract | None = Field(\n        default=None,\n        description=\"Finite state machine patterns (optional)\",\n    )\n```\n\n---\n\n### 2. Compute Node Compositions\n\n#### ModelContractComputeStandard\n**Common patterns for typical Compute nodes**\n\n```python\nclass ModelContractComputeStandard(ModelContractCompute):\n    \"\"\"\n    Standard Compute node with performance optimization patterns.\n\n    Includes:\n    - Caching (critical for pure functions)\n    - Performance monitoring\n    - Configuration management\n    - Health checks\n\n    Use for: Most Compute nodes with caching needs\n    \"\"\"\n\n    # === PERFORMANCE SUBCONTRACTS ===\n    caching: ModelCachingSubcontract = Field(\n        default_factory=ModelCachingSubcontract,\n        description=\"Result caching for pure computations\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Computation performance tracking\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Algorithm configuration\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Computation health monitoring\",\n    )\n```\n\n#### ModelContractComputeFull\n**All applicable Compute subcontracts**\n\n```python\nclass ModelContractComputeFull(ModelContractComputeStandard):\n    \"\"\"\n    Full-featured Compute node for complex computations.\n\n    Adds to Standard:\n    - Service resolution (for external data sources)\n    - Request/response patterns\n    - Introspection capabilities\n\n    Use for: Complex algorithmic nodes, ML inference nodes\n    \"\"\"\n\n    service_resolution: ModelServiceResolutionSubcontract | None = Field(\n        default=None,\n        description=\"External data source resolution (optional)\",\n    )\n\n    request_response: ModelRequestResponseSubcontractt | None = Field(\n        default=None,\n        description=\"Request/response patterns (optional)\",\n    )\n\n    introspection: ModelIntrospectionSubcontract | None = Field(\n        default=None,\n        description=\"Runtime introspection (optional)\",\n    )\n```\n\n---\n\n### 3. Reducer Node Compositions\n\n#### ModelContractReducerStandard\n**Common patterns for typical Reducer nodes**\n\n```python\nclass ModelContractReducerStandard(ModelContractReducer):\n    \"\"\"\n    Standard Reducer node with aggregation patterns.\n\n    Includes:\n    - Aggregation (core reducer functionality)\n    - State management\n    - Caching\n    - Performance monitoring\n\n    Use for: Most Reducer nodes\n    \"\"\"\n\n    # === AGGREGATION SUBCONTRACTS ===\n    aggregation: ModelAggregationSubcontract = Field(\n        default_factory=ModelAggregationSubcontract,\n        description=\"Data aggregation strategies\",\n    )\n\n    state_management: ModelStateManagementSubcontract = Field(\n        default_factory=ModelStateManagementSubcontract,\n        description=\"Aggregation state management\",\n    )\n\n    caching: ModelCachingSubcontract = Field(\n        default_factory=ModelCachingSubcontract,\n        description=\"Aggregation result caching\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Aggregation performance tracking\",\n    )\n```\n\n---\n\n### 4. Orchestrator Node Compositions\n\n#### ModelContractOrchestratorStandard\n**Common patterns for typical Orchestrator nodes**\n\n```python\nclass ModelContractOrchestratorStandard(ModelContractOrchestrator):\n    \"\"\"\n    Standard Orchestrator node with workflow coordination.\n\n    Includes:\n    - Workflow coordination (core orchestrator functionality)\n    - Routing\n    - Service resolution\n    - Health monitoring\n    - Event coordination\n\n    Use for: Most Orchestrator nodes\n    \"\"\"\n\n    # === ORCHESTRATION SUBCONTRACTS ===\n    workflow_coordination: ModelWorkflowCoordinationSubcontract = Field(\n        default_factory=ModelWorkflowCoordinationSubcontract,\n        description=\"Multi-node workflow coordination\",\n    )\n\n    routing: ModelRoutingSubcontract = Field(\n        default_factory=ModelRoutingSubcontract,\n        description=\"Node routing and load balancing\",\n    )\n\n    service_resolution: ModelServiceResolutionSubcontract = Field(\n        default_factory=ModelServiceResolutionSubcontract,\n        description=\"Node and service discovery\",\n    )\n\n    event_type: ModelEventTypeSubcontract = Field(\n        default_factory=ModelEventTypeSubcontract,\n        description=\"Event-driven orchestration\",\n    )\n\n    health_check: ModelHealthCheckSubcontract = Field(\n        default_factory=ModelHealthCheckSubcontract,\n        description=\"Orchestration health monitoring\",\n    )\n```\n\n#### ModelContractOrchestratorFull\n**All applicable Orchestrator subcontracts**\n\n```python\nclass ModelContractOrchestratorFull(ModelContractOrchestratorStandard):\n    \"\"\"\n    Full-featured Orchestrator with advanced capabilities.\n\n    Adds to Standard:\n    - FSM patterns for complex workflows\n    - State management\n    - Performance monitoring\n    - Configuration management\n\n    Use for: Complex multi-stage workflows, critical orchestration\n    \"\"\"\n\n    fsm: ModelFSMSubcontract = Field(\n        default_factory=ModelFSMSubcontract,\n        description=\"State machine-based workflow control\",\n    )\n\n    state_management: ModelStateManagementSubcontract = Field(\n        default_factory=ModelStateManagementSubcontract,\n        description=\"Workflow state management\",\n    )\n\n    performance_monitoring: ModelPerformanceMonitoringSubcontract = Field(\n        default_factory=ModelPerformanceMonitoringSubcontract,\n        description=\"Orchestration performance tracking\",\n    )\n\n    configuration: ModelConfigurationSubcontract = Field(\n        default_factory=ModelConfigurationSubcontract,\n        description=\"Workflow configuration management\",\n    )\n```\n\n---\n\n## Subcontract-to-Node Type Matrix\n\n| Subcontract | Effect | Compute | Reducer | Orchestrator | Notes |\n|------------|--------|---------|---------|--------------|-------|\n| **ServiceResolution** | \u2705 Standard | Optional | Optional | \u2705 Standard | DI pattern |\n| **HealthCheck** | \u2705 Standard | \u2705 Standard | \u2705 Standard | \u2705 Standard | Universal |\n| **PerformanceMonitoring** | \u2705 Standard | \u2705 Standard | \u2705 Standard | Optional | Universal |\n| **Configuration** | \u2705 Standard | \u2705 Standard | Optional | Optional | Common |\n| **RequestResponse** | \u2705 Standard | Optional | \u274c | \u274c | Effect/Compute only |\n| **Caching** | Optional | \u2705 Standard | \u2705 Standard | \u274c | Performance |\n| **EventType** | Optional | \u274c | \u274c | \u2705 Standard | Event-driven |\n| **Routing** | Optional | \u274c | \u274c | \u2705 Standard | Orchestration |\n| **WorkflowCoordination** | \u274c | \u274c | \u274c | \u2705 Standard | Orchestrator only |\n| **Aggregation** | \u274c | \u274c | \u2705 Standard | \u274c | Reducer only |\n| **StateManagement** | Optional | \u274c | \u2705 Standard | Optional | Stateful nodes |\n| **FSM** | Optional | \u274c | \u274c | Optional | Complex workflows |\n| **ExternalDependencies** | Optional | Optional | \u274c | \u274c | Integration nodes |\n| **Introspection** | Optional | Optional | \u274c | \u274c | Debugging/monitoring |\n\n**Legend**:\n- \u2705 Standard: Included in `{Type}Standard` composition\n- Optional: Available in `{Type}Full` or can be added manually\n- \u274c: Not applicable to this node type\n\n---\n\n## Usage Examples\n\n### Example 1: Simple Effect Node (Minimal)\n\n```python\n# Use base contract - minimal subcontracts\nfrom omnibase_core.models.contracts import ModelContractEffect\n\nclass ToolSimpleFileWriter(NodeEffect):\n    \"\"\"Minimal Effect node - just the essentials.\"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffect with basic I/O only\n```\n\n### Example 2: Production Effect Node (Standard)\n\n```python\n# Use Standard composition - common operational patterns\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolProductionAPIClient(NodeEffect):\n    \"\"\"\n    Production Effect node with standard operational patterns.\n\n    Automatically includes:\n    - Service resolution\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffectStandard\n        # All standard subcontracts available automatically\n```\n\n### Example 3: Complex Infrastructure Node (Full)\n\n```python\n# Use Full composition - all capabilities\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n\nclass ToolDatabaseConnector(NodeEffect):\n    \"\"\"\n    Complex infrastructure node with all operational capabilities.\n\n    Includes all Standard features PLUS:\n    - External dependencies tracking\n    - Runtime introspection\n    - State management\n    - FSM patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract: ModelContractEffectFull\n        # Maximum operational capabilities\n```\n\n### Example 4: Custom Composition\n\n```python\n# Start with Standard, customize as needed\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\nfrom omnibase_core.models.contracts.subcontracts import ModelFSMSubcontract\n\nclass ToolCustomProcessor(NodeEffect):\n    \"\"\"Custom composition: Standard + FSM, no caching.\"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Contract in YAML can specify custom subcontracts\n        # Inherits Standard patterns, adds FSM, removes caching\n```\n\n---\n\n## Contract YAML Examples\n\n### Minimal Effect (base)\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"effect\"\n# Uses: ModelContractEffect\n# Subcontracts: event_type, caching, routing (all optional)\n\nio_operations:\n  - operation_type: \"file_write\"\n    path: \"/data/output.json\"\n```\n\n### Standard Effect\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"effect\"\ncomposed_type: \"standard\"  # \ud83c\udd95 Triggers ModelContractEffectStandard\n# Automatically includes: service_resolution, health_check,\n# performance_monitoring, configuration, request_response\n\nio_operations:\n  - operation_type: \"api_call\"\n    endpoint: \"${SERVICE_URL}/api/data\"\n\nservice_resolution:\n  service_name: \"data_api\"\n  discovery_method: \"dns\"\n\nhealth_check:\n  endpoint: \"/health\"\n  interval_seconds: 30\n\nperformance_monitoring:\n  enable_metrics: true\n  sample_rate: 1.0\n```\n\n### Full Orchestrator\n```yaml\ncontract_version: \"2.0.0\"\nnode_type: \"orchestrator\"\ncomposed_type: \"full\"  # \ud83c\udd95 Triggers ModelContractOrchestratorFull\n# All orchestration capabilities enabled\n\nworkflow_coordination:\n  max_concurrent_workflows: 100\n  execution_timeout_seconds: 300\n\nrouting:\n  strategy: \"round_robin\"\n  load_balancing: true\n\nfsm:\n  initial_state: \"pending\"\n  states:\n    - name: \"pending\"\n      transitions: [\"processing\"]\n    - name: \"processing\"\n      transitions: [\"completed\", \"failed\"]\n```\n\n---\n\n## Migration Strategy\n\n### Phase 1: Create Composed Base Classes (omnibase_core)\n1. \u2705 Audit all 14 subcontracts\n2. \ud83c\udd95 Create `model_contract_{type}_standard.py` for each node type\n3. \ud83c\udd95 Create `model_contract_{type}_full.py` for each node type\n4. \u2705 Update `__init__.py` exports\n\n### Phase 2: Update Documentation\n1. \ud83c\udd95 Update NODE_GROUP_STRUCTURE.md with composed classes\n2. \ud83c\udd95 Create this document (COMPOSED_NODE_BASE_CLASSES.md)\n3. \ud83c\udd95 Update ONEX examples to show all three levels\n4. \ud83c\udd95 Create migration guide for existing nodes\n\n### Phase 3: Gradual Adoption\n1. \u2705 Keep existing base contracts (backward compatible)\n2. \ud83c\udd95 New nodes use `Standard` by default\n3. \ud83c\udd95 Complex nodes use `Full` when needed\n4. \u23f8\ufe0f Migrate existing nodes gradually (optional)\n\n### Phase 4: Tooling Support\n1. \ud83c\udd95 CLI: `onex create node --template standard|full|minimal`\n2. \ud83c\udd95 Validator: Check subcontract usage against patterns\n3. \ud83c\udd95 Generator: Auto-generate composed contracts from specs\n\n---\n\n## Benefits\n\n### \u2705 Developer Experience\n- **Faster Development**: Pre-composed patterns reduce boilerplate\n- **Best Practices**: Standard patterns enforce good architecture\n- **Clear Templates**: Three levels (minimal/standard/full) guide choices\n- **Gradual Complexity**: Start minimal, add features as needed\n\n### \u2705 Consistency\n- **Uniform Patterns**: Same operational patterns across similar nodes\n- **Predictable Behavior**: Standard nodes behave consistently\n- **Easier Onboarding**: Clear examples of typical compositions\n\n### \u2705 Maintainability\n- **DRY Principle**: Subcontract aggregation in one place\n- **Centralized Updates**: Update composed class, all nodes benefit\n- **Clear Dependencies**: Explicit subcontract requirements\n\n### \u2705 Flexibility\n- **Progressive Enhancement**: Start small, grow as needed\n- **Custom Compositions**: Can still compose manually\n- **Backward Compatible**: Existing nodes unchanged\n\n---\n\n## Implementation Checklist\n\n### omnibase_core Updates\n- [ ] Create `model_contract_effect_standard.py`\n- [ ] Create `model_contract_effect_full.py`\n- [ ] Create `model_contract_compute_standard.py`\n- [ ] Create `model_contract_compute_full.py`\n- [ ] Create `model_contract_reducer_standard.py`\n- [ ] Create `model_contract_orchestrator_standard.py`\n- [ ] Create `model_contract_orchestrator_full.py`\n- [ ] Update `__init__.py` exports\n- [ ] Add validation for `composed_type` field\n- [ ] Unit tests for all composed classes\n\n### Documentation Updates\n- [ ] Update NODE_GROUP_STRUCTURE.md\n- [ ] Create examples for all 14 subcontracts\n- [ ] Update ONEX examples (docs/onex/examples/)\n- [ ] Create migration guide\n- [ ] Update CLAUDE.md\n\n### Tooling\n- [ ] CLI: Node creation with templates\n- [ ] Validator: Pattern compliance checking\n- [ ] Generator: Auto-generate from specs\n\n---\n\n## References\n\n- **Node Structure**: NODE_GROUP_STRUCTURE.md\n- **Subcontracts**: omnibase_core/models/contracts/subcontracts/\n- **Base Contracts**: omnibase_core/models/contracts/model_contract_*.py\n- **Versioning**: SHARED_RESOURCE_VERSIONING.md\n\n---\n\n**Status**: \ud83d\udea7 Proposed Design - Ready for Review\n**Version**: 1.0.0\n**Last Updated**: 2025-10-01\n**Next Steps**: Review \u2192 Implement in omnibase_core \u2192 Update documentation",
+                      "url": null,
+                      "relevance_score": 0.41716355,
+                      "semantic_score": 0.41716355,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_111439200485",
+                      "entity_type": "page",
+                      "title": "Onex Architecture Patterns Complete",
+                      "content": "Onex Architecture Patterns Complete\n\n# ONEX Architecture Patterns - Complete Reference\n\n**Version**: 1.0.0\n**Generated**: 2025-10-01\n**Purpose**: Comprehensive ONEX patterns for AI-assisted development with hooks integration\n\n---\n\n## Core Architecture\n\n### 4-Node Architecture Pattern\n\n```\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510    \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502   EFFECT    \u2502\u2500\u2500\u2500\u25b6\u2502   COMPUTE   \u2502\u2500\u2500\u2500\u25b6\u2502   REDUCER   \u2502\u2500\u2500\u2500\u25b6\u2502ORCHESTRATOR \u2502\n\u2502   (Input)   \u2502    \u2502 (Process)   \u2502    \u2502(Aggregate)  \u2502    \u2502(Coordinate) \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518    \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n**Unidirectional Data Flow**: EFFECT \u2192 COMPUTE \u2192 REDUCER \u2192 ORCHESTRATOR\n\n---\n\n## 1. Node Types\n\n### NodeEffect\n**Purpose**: Side effect management and external interactions\n**File Pattern**: `node_*_effect.py`\n**Contract**: `ModelContractEffect`\n\n**Responsibilities**:\n- I/O operations (file, database, API)\n- Transaction management with rollback\n- Retry policies and circuit breakers\n- Event emission\n- Metrics collection\n\n**Method Signature**:\n```python\nasync def execute_effect(self, contract: ModelContractEffect) -> Any:\n    \"\"\"Execute side effect with transaction support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Database writes\n- File operations\n- API calls\n- Event publishing\n\n---\n\n### NodeCompute\n**Purpose**: Pure computational operations\n**File Pattern**: `node_*_compute.py`\n**Contract**: `ModelContractCompute`\n\n**Responsibilities**:\n- Data transformations\n- Calculations and computations\n- Caching and memoization\n- Parallel processing\n- Pure functions (no side effects)\n\n**Method Signature**:\n```python\nasync def execute_compute(self, contract: ModelContractCompute) -> Any:\n    \"\"\"Execute computation with caching support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Data transformations\n- Calculations\n- Filtering/mapping\n- Validation logic\n\n---\n\n### NodeReducer\n**Purpose**: Data aggregation and state reduction\n**File Pattern**: `node_*_reducer.py`\n**Contract**: `ModelContractReducer`\n\n**Responsibilities**:\n- Data aggregation\n- State reduction\n- Conflict resolution\n- Streaming support\n- Statistical operations\n\n**Method Signature**:\n```python\nasync def execute_reduction(self, contract: ModelContractReducer) -> Any:\n    \"\"\"Execute reduction with streaming support.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Data aggregation\n- Statistics calculation\n- State merging\n- Report generation\n\n---\n\n### NodeOrchestrator\n**Purpose**: Workflow coordination\n**File Pattern**: `node_*_orchestrator.py`\n**Contract**: `ModelContractOrchestrator`\n\n**Responsibilities**:\n- Workflow coordination\n- Thunk emission\n- Dependency management\n- Pipeline orchestration\n- Error recovery\n\n**Method Signature**:\n```python\nasync def execute_orchestration(self, contract: ModelContractOrchestrator) -> Any:\n    \"\"\"Execute orchestration with dependency management.\"\"\"\n    pass\n```\n\n**Example Use Cases**:\n- Multi-step workflows\n- Pipeline coordination\n- Dependency resolution\n- Error recovery flows\n\n---\n\n## 2. Contract System\n\n### Base Contract\n**Class**: `ModelContractBase`\n**File Pattern**: `model_contract_base.py`\n\n**Core Fields**:\n- `name: str` - Contract identifier\n- `version: str` - Semantic version\n- `description: str` - Human-readable description\n- `node_type: EnumNodeType` - Node type (EFFECT/COMPUTE/REDUCER/ORCHESTRATOR)\n\n### Specialized Contracts\n\n1. **ModelContractEffect** - For EFFECT nodes\n2. **ModelContractCompute** - For COMPUTE nodes\n3. **ModelContractReducer** - For REDUCER nodes\n4. **ModelContractOrchestrator** - For ORCHESTRATOR nodes\n\n---\n\n## 3. Subcontract System\n\n**Pattern**: `Model<Type>Subcontract`\n**File Pattern**: `model_*_subcontract.py`\n\n### 6 Core Subcontract Types\n\n1. **ModelFSMSubcontract** - Finite State Machine functionality\n   - State transitions\n   - Event-driven state changes\n   - Guards and actions\n\n2. **ModelEventTypeSubcontract** - Event-driven architecture\n   - Event definitions\n   - Event handlers\n   - Pub/sub patterns\n\n3. **ModelAggregationSubcontract** - Data aggregation\n   - Aggregation strategies\n   - Statistical operations\n   - Group by operations\n\n4. **ModelStateManagementSubcontract** - State persistence\n   - State storage\n   - State synchronization\n   - State recovery\n\n5. **ModelRoutingSubcontract** - Request routing\n   - Load balancing\n   - Request routing\n   - Endpoint selection\n\n6. **ModelCachingSubcontract** - Performance optimization\n   - Cache strategies\n   - TTL management\n   - Cache invalidation\n\n---\n\n## 4. Naming Conventions\n\n### File Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Models | `model_<name>.py` | `model_task_data.py` |\n| Enums | `enum_<name>.py` | `enum_task_status.py` |\n| TypedDicts | `typed_dict_<name>.py` | `typed_dict_result_kwargs.py` |\n| Nodes | `node_<type>_<name>.py` | `node_effect_database.py` |\n| Contracts | `model_contract_<type>.py` | `model_contract_effect.py` |\n| Subcontracts | `model_<type>_subcontract.py` | `model_fsm_subcontract.py` |\n| Protocols | `protocol_<name>.py` | `protocol_event_bus.py` |\n\n### Class Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Pydantic Models | `Model<Name>` | `ModelTaskData` |\n| Enums | `Enum<Name>` | `EnumTaskStatus` |\n| TypedDicts | `TypedDict<Name>` | `TypedDictResultKwargs` |\n| Protocols | `Protocol<Name>` | `ProtocolEventBus` |\n| Nodes | `Node<Name><Type>` | `NodeDatabaseWriterEffect` |\n\n---\n\n## 5. Architecture Principles\n\n### Zero Tolerance for Any Types\n```python\n# \u2705 Correct - Strongly typed\ndef process_data(data: ModelTaskData) -> ModelResult:\n    pass\n\n# \u274c Incorrect - Using Any\ndef process_data(data: Any) -> Any:\n    pass\n```\n\n### Contract-Driven Development\n```python\n# \u2705 Correct - Contract defines behavior\nclass NodeDatabaseWriterEffect:\n    async def execute_effect(self, contract: ModelContractEffect) -> ModelResult:\n        # Implementation follows contract spec\n        pass\n```\n\n### Composition Over Inheritance\n```python\n# \u2705 Correct - Subcontract composition\ncontract = ModelContractEffect(\n    name=\"database_write\",\n    state_transitions=ModelFSMSubcontract(...),  # Compose FSM\n    caching=ModelCachingSubcontract(...)  # Compose caching\n)\n```\n\n### Unidirectional Data Flow\n```python\n# \u2705 Correct - Left to right flow\neffect_result = await effect_node.execute_effect(effect_contract)\ncompute_result = await compute_node.execute_compute(compute_contract)\nreducer_result = await reducer_node.execute_reduction(reducer_contract)\nfinal_result = await orchestrator.execute_orchestration(orch_contract)\n```\n\n---\n\n## 6. Quick Reference Templates\n\n### Creating an Effect Node\n```python\nfrom omnibase.core.models.contracts import ModelContractEffect\nfrom omnibase.core.nodes import NodeEffect\n\nclass NodeMyOperationEffect(NodeEffect):\n    \"\"\"My custom effect node.\"\"\"\n\n    async def execute_effect(self, contract: ModelContractEffect) -> ModelResult:\n        # Transaction management\n        async with self.transaction_manager.begin():\n            # Your side effect logic here\n            result = await self._perform_operation(contract)\n            return ModelResult(success=True, data=result)\n```\n\n### Creating a Compute Node\n```python\nfrom omnibase.core.models.contracts import ModelContractCompute\nfrom omnibase.core.nodes import NodeCompute\n\nclass NodeMyTransformCompute(NodeCompute):\n    \"\"\"My custom compute node.\"\"\"\n\n    async def execute_compute(self, contract: ModelContractCompute) -> ModelResult:\n        # Pure computation with caching\n        cached = self.cache.get(contract.cache_key)\n        if cached:\n            return cached\n\n        result = self._transform_data(contract.input_data)\n        self.cache.set(contract.cache_key, result)\n        return ModelResult(success=True, data=result)\n```\n\n### Contract YAML Template\n```yaml\nname: my_operation\nversion: 1.0.0\ndescription: \"My operation description\"\nnode_type: EFFECT  # or COMPUTE, REDUCER, ORCHESTRATOR\n\n# Optional subcontracts\nstate_transitions:\n  initial_state: PENDING\n  transitions:\n    - from: PENDING\n      to: PROCESSING\n      event: START\n    - from: PROCESSING\n      to: COMPLETED\n      event: FINISH\n\ncaching:\n  strategy: LRU\n  ttl_seconds: 3600\n  max_entries: 1000\n```\n\n---\n\n## 7. Best Practices\n\n### DO \u2705\n- Use unidirectional data flow (EFFECT \u2192 COMPUTE \u2192 REDUCER \u2192 ORCHESTRATOR)\n- Apply contract-driven development\n- Compose subcontracts for reusable functionality\n- Use strong typing (zero `Any` types)\n- Follow naming conventions consistently\n- Implement proper error handling and logging\n- Use UUID correlation IDs for tracing\n\n### DON'T \u274c\n- Skip contract validation\n- Use `Any` types in models\n- Create side effects in compute nodes\n- Break unidirectional flow\n- Mix responsibilities across node types\n- Hardcode configuration (use contracts)\n- Ignore transaction management in effects\n\n---\n\n## 8. Integration Checklist\n\nWhen creating new nodes:\n\n- [ ] Choose correct node type (Effect/Compute/Reducer/Orchestrator)\n- [ ] Follow file naming convention (`node_<type>_<name>.py`)\n- [ ] Follow class naming convention (`Node<Type><Name>`)\n- [ ] Create contract YAML with all required fields\n- [ ] Implement correct method signature (`execute_effect/compute/reduction/orchestration`)\n- [ ] Use appropriate subcontracts (FSM, caching, etc.)\n- [ ] Add proper error handling and logging\n- [ ] Include UUID correlation tracking\n- [ ] Write comprehensive tests\n- [ ] Document in contract YAML\n\n---\n\n**References**:\n- omnibase_core: Node implementations\n- omnibase_3: Contract and subcontract models\n- omnibase_infra: Production examples (PostgreSQL, Kafka adapters)",
+                      "url": null,
+                      "relevance_score": 0.4168243,
+                      "semantic_score": 0.4168243,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_718927590691",
+                      "entity_type": "page",
+                      "title": "ONEX Implementation Guide",
+                      "content": "ONEX Implementation Guide\n\n# ONEX Implementation Guide\n\n**Version**: 2.0.0\n**Status**: \u2705 Canonical Reference\n**Last Updated**: 2025-10-01\n**Purpose**: Comprehensive guide for implementing ONEX nodes and node groups\n\n---\n\n## \ud83d\udcd6 What to Read First\n\n**New to ONEX?** Start here:\n1. Read this guide's [Quick Start](#quick-start) section\n2. Review [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md) for patterns and examples\n3. Explore [examples/](examples/) directory for real implementations\n\n**Looking for specific info?**\n- **Directory structure** \u2192 [Structure Guide](#directory-structure)\n- **Base classes** \u2192 [Composed Base Classes](#composed-base-classes)\n- **Naming patterns** \u2192 [Naming Conventions](#naming-conventions)\n- **Shared resources** \u2192 [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md)\n- **Quick patterns** \u2192 [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md)\n\n---\n\n## \ud83d\ude80 Quick Start\n\n### 3-Tier Base Class System\n\nONEX provides **three levels** of base contracts for progressive enhancement:\n\n```python\n# Level 1: MINIMAL (advanced use cases)\nfrom omnibase_core.models.contracts import ModelContractEffect\n\n# Level 2: STANDARD (recommended for most nodes) \u2b50\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\n# Level 3: FULL (complex infrastructure nodes)\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n```\n\n**Use Standard for 90% of nodes** - includes common operational patterns like service resolution, health monitoring, performance tracking, and configuration management.\n\n### Creating Your First Node\n\n```python\n#!/usr/bin/env python3\n\"\"\"My Effect Node - Production-ready with standard patterns.\"\"\"\n\nfrom pathlib import Path\nfrom omnibase.constants.contract_constants import CONTRACT_FILENAME\nfrom omnibase.core.node_base import NodeBase\nfrom omnibase.core.node_effect import NodeEffect\nfrom omnibase_core.models.core import ModelOnexContainer\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nfrom .models.model_input_state import ModelMyNodeInputState\nfrom .models.model_output_state import ModelMyNodeOutputState\n\n\nclass ToolMyNodeProcessor(NodeEffect):\n    \"\"\"\n    My production Effect node using Standard composition.\n\n    Automatically includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Your initialization here\n\n    async def execute_effect(\n        self, contract: ModelContractEffectStandard\n    ) -> ModelMyNodeOutputState:\n        \"\"\"Main processing method.\"\"\"\n        # Your business logic here\n        pass\n\n\ndef main():\n    \"\"\"One-line main function.\"\"\"\n    return NodeBase(Path(__file__).parent / CONTRACT_FILENAME)\n\n\nif __name__ == \"__main__\":\n    main()\n```\n\n---\n\n## \ud83d\udcc1 Directory Structure\n\n### Minimum Viable Structure\n\n**Use this** for new nodes (production-ready):\n\n```\n<node_group>/                           # e.g., \"canary\"\n\u251c\u2500\u2500 __init__.py                         # Group package\n\u251c\u2500\u2500 README.md                           # Main documentation\n\u2502\n\u251c\u2500\u2500 deployment/                         # Deployment configs\n\u2502   \u251c\u2500\u2500 docker-compose.<group>.yml\n\u2502   \u2514\u2500\u2500 *.env files\n\u2502\n\u2514\u2500\u2500 <node_name>/                        # e.g., \"my_tool\"\n    \u251c\u2500\u2500 __init__.py\n    \u2514\u2500\u2500 v1_0_0/\n        \u251c\u2500\u2500 __init__.py\n        \u251c\u2500\u2500 node.py                     # ONLY node class + main()\n        \u2502\n        \u251c\u2500\u2500 contract.yaml               # Main interface\n        \u251c\u2500\u2500 node_config.yaml            # Runtime config\n        \u251c\u2500\u2500 deployment_config.yaml      # Deployment config\n        \u2502\n        \u251c\u2500\u2500 contracts/                  # YAML subcontracts\n        \u2502   \u251c\u2500\u2500 contract_actions.yaml\n        \u2502   \u251c\u2500\u2500 contract_cli.yaml\n        \u2502   \u251c\u2500\u2500 contract_examples.yaml\n        \u2502   \u2514\u2500\u2500 contract_models.yaml\n        \u2502\n        \u2514\u2500\u2500 models/                     # Node-specific models\n            \u251c\u2500\u2500 __init__.py\n            \u251c\u2500\u2500 model_input_state.py\n            \u2514\u2500\u2500 model_output_state.py\n```\n\n### Maximum Recommended Structure\n\n**Evolve to this** as needs arise (best practices):\n\n```\n<node_group>/                           # e.g., \"canary\"\n\u2502\n\u251c\u2500\u2500 __init__.py\n\u251c\u2500\u2500 README.md\n\u251c\u2500\u2500 API_REFERENCE.md\n\u251c\u2500\u2500 compatibility.yaml                  # Version compatibility matrix\n\u2502\n\u251c\u2500\u2500 shared/                             # LAZY: Only when 2+ nodes share\n\u2502   \u251c\u2500\u2500 models/                         # Independent versioning\n\u2502   \u2502   \u251c\u2500\u2500 v1/                         # Major version 1 (stable)\n\u2502   \u2502   \u2502   \u251c\u2500\u2500 __init__.py\n\u2502   \u2502   \u2502   \u2514\u2500\u2500 model_*.py\n\u2502   \u2502   \u2514\u2500\u2500 v2/                         # Major version 2 (breaking changes)\n\u2502   \u2502       \u251c\u2500\u2500 __init__.py\n\u2502   \u2502       \u2514\u2500\u2500 model_*.py\n\u2502   \u2514\u2500\u2500 protocols/                      # Shared protocols (if needed)\n\u2502       \u251c\u2500\u2500 v1/\n\u2502       \u2514\u2500\u2500 v2/\n\u2502\n\u251c\u2500\u2500 tests/                              # Group-level integration tests\n\u2502   \u251c\u2500\u2500 integration/\n\u2502   \u2502   \u2514\u2500\u2500 test_node_interactions.py\n\u2502   \u2514\u2500\u2500 fixtures/\n\u2502\n\u251c\u2500\u2500 deployment/\n\u2502   \u251c\u2500\u2500 docker-compose.<group>.yml\n\u2502   \u2514\u2500\u2500 *.env files\n\u2502\n\u2514\u2500\u2500 <node_name>/                        # e.g., \"my_tool\"\n    \u251c\u2500\u2500 __init__.py\n    \u2514\u2500\u2500 v1_0_0/\n        \u251c\u2500\u2500 README.md                   # Node documentation\n        \u251c\u2500\u2500 CHANGELOG.md                # Version history\n        \u251c\u2500\u2500 node.py                     # ONLY node class + main()\n        \u2502\n        \u251c\u2500\u2500 contract.yaml               # Main interface\n        \u251c\u2500\u2500 node_config.yaml\n        \u251c\u2500\u2500 deployment_config.yaml\n        \u251c\u2500\u2500 state_transitions.yaml      # State machine (if needed)\n        \u251c\u2500\u2500 workflow_testing.yaml       # Testing workflows (if needed)\n        \u251c\u2500\u2500 security_config.yaml        # Security (Effect nodes)\n        \u2502\n        \u251c\u2500\u2500 contracts/                  # YAML subcontracts\n        \u2502   \u251c\u2500\u2500 contract_actions.yaml\n        \u2502   \u251c\u2500\u2500 contract_cli.yaml\n        \u2502   \u251c\u2500\u2500 contract_examples.yaml\n        \u2502   \u251c\u2500\u2500 contract_models.yaml\n        \u2502   \u2514\u2500\u2500 contract_validation.yaml\n        \u2502\n        \u251c\u2500\u2500 models/                     # Node-specific models\n        \u2502   \u251c\u2500\u2500 __init__.py\n        \u2502   \u251c\u2500\u2500 model_input_state.py\n        \u2502   \u251c\u2500\u2500 model_output_state.py\n        \u2502   \u2514\u2500\u2500 enum_*.py\n        \u2502\n        \u251c\u2500\u2500 protocols/                  # Node-specific protocols\n        \u2502   \u251c\u2500\u2500 __init__.py\n        \u2502   \u2514\u2500\u2500 protocol_<node>.py\n        \u2502\n        \u251c\u2500\u2500 tests/                      # Node unit tests\n        \u2502   \u251c\u2500\u2500 unit/\n        \u2502   \u2502   \u2514\u2500\u2500 test_node.py\n        \u2502   \u2514\u2500\u2500 fixtures/\n        \u2502\n        \u2514\u2500\u2500 mock_configurations/        # Testing mocks (optional)\n            \u251c\u2500\u2500 event_bus_mock_behaviors.yaml\n            \u251c\u2500\u2500 llm_mock_responses.yaml\n            \u2514\u2500\u2500 uuid_mock_behaviors.yaml\n```\n\n---\n\n## \ud83c\udfaf Core Principles\n\n### 1. Composed Base Classes (Recommended Approach) \u2b50\n\n**Use pre-composed base classes** that aggregate common subcontract patterns:\n\n#### Three Levels of Composition\n\n```\nModelContract{Type} (minimal)           \u2190 Advanced use cases\n    \u2193\nModelContract{Type}Standard (common)    \u2190 90% of nodes \u2b50\n    \u2193\nModelContract{Type}Full (complete)      \u2190 Complex infrastructure\n```\n\n#### When to Use Each Level\n\n| Level | Use When | Example |\n|-------|----------|---------|\n| **Minimal** | Custom subcontract composition needed | Specialized nodes |\n| **Standard** \u2b50 | Most production nodes | API clients, file processors |\n| **Full** | Complex infrastructure nodes | Database connectors, message brokers |\n\n**Recommendation**: Start with **Standard**, downgrade to Minimal only if you need custom composition.\n\n### 2. Lazy Promotion for Shared Resources\n\n**Don't create `shared/` upfront**. Follow this progression:\n\n```\nPhase 1: Model in node\nnode_1/v1_0_0/models/model_data.py\n\nPhase 2: Second node needs it \u2192 Promote to shared/v1/\nshared/models/v1/model_data.py\nnode_1/v1_0_0/  # updates imports\nnode_2/v1_0_0/  # uses shared version\n\nPhase 3: Breaking change needed \u2192 Create v2\nshared/models/v1/model_data.py  # Old version (frozen)\nshared/models/v2/model_data.py  # New version (breaking changes)\n```\n\n**Promotion Criteria** (ALL must be true):\n1. \u2705 Actually used by 2+ consumers (not \"might be\")\n2. \u2705 Same semantic meaning across consumers\n3. \u2705 Same version lifecycle requirements\n4. \u2705 Detected by duplication analysis (not speculative)\n\nSee [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md) for complete details.\n\n### 3. Protocols: Hybrid Approach\n\n**Both locations are valid** based on scope:\n\n| Protocol Scope | Location | Example |\n|----------------|----------|---------|\n| Node-specific | `node/v1_0_0/protocols/` | `protocol_my_node.py` |\n| Shared (2+ nodes) | `shared/protocols/v1/` | `protocol_common.py` |\n| Framework-wide | `omnibase_spi/protocols/` | `ProtocolOnexNode` |\n\n**Start node-local**, promote when actually shared.\n\n### 4. Container Type: ModelOnexContainer Only\n\n**Always use ModelOnexContainer** (proper Pydantic container):\n\n```python\n# \u2705 CORRECT\nfrom omnibase_core.models.core import ModelOnexContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n```\n\n```python\n# \u274c WRONG - Legacy technical debt\nfrom omnibase.core.onex_container import ONEXContainer\n```\n\n### 5. Node.py Purity\n\n**node.py contains ONLY**:\n- \u2705 One node class (Effect/Compute/Reducer/Orchestrator)\n- \u2705 main() function (one-liner)\n- \u2705 Class-level constants (if needed)\n- \u274c NO other classes\n- \u274c NO enums (use `models/enum_*.py`)\n- \u274c NO helper functions (use separate modules)\n\n### 6. Independent Node Versioning\n\n\u2705 Each node has `v1_0_0/`, `v2_0_0/`, etc.\n\u2705 Nodes evolve independently\n\u2705 Use `compatibility.yaml` to track which versions work together\n\u274c NO group-level versioning (breaks independence)\n\n---\n\n## \ud83c\udfa8 Composed Base Classes\n\n### Overview\n\nPre-composed base classes provide **zero-boilerplate** operational patterns:\n\n```python\n# Instead of manually composing subcontracts...\nclass ModelContractEffect(ModelContractBase):\n    service_resolution: ModelServiceResolutionSubcontract | None = None\n    health_check: ModelHealthCheckSubcontract | None = None\n    performance_monitoring: ModelPerformanceMonitoringSubcontract | None = None\n    configuration: ModelConfigurationSubcontract | None = None\n    # ... etc (boilerplate!)\n\n# Use pre-composed Standard for common patterns:\nclass ModelContractEffectStandard(ModelContractEffect):\n    # All common subcontracts included with sensible defaults!\n```\n\n### Effect Node Compositions\n\n#### ModelContractEffectStandard \u2b50\n**Common patterns for typical Effect nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass ToolProductionAPIClient(NodeEffect):\n    \"\"\"\n    Production Effect node with standard operational patterns.\n\n    Automatically includes:\n    - Service resolution (dependency injection)\n    - Health monitoring\n    - Performance tracking\n    - Configuration management\n    - Request/response patterns\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `service_resolution` - Service discovery and DI\n- \u2705 `health_check` - Health monitoring\n- \u2705 `performance_monitoring` - Performance metrics\n- \u2705 `configuration` - Configuration management\n- \u2705 `request_response` - Request/response patterns\n- Plus inherited: `event_type`, `caching`, `routing`\n\n#### ModelContractEffectFull\n**All applicable Effect subcontracts**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractEffectFull\n\nclass ToolDatabaseConnector(NodeEffect):\n    \"\"\"\n    Complex infrastructure node with all operational capabilities.\n\n    Includes Standard features PLUS:\n    - External dependencies tracking\n    - Runtime introspection\n    - State management\n    - FSM patterns\n    \"\"\"\n```\n\n**Adds to Standard**:\n- \u2705 `external_dependencies` - External dependency management\n- \u2705 `introspection` - Runtime introspection\n- \u2705 `state_management` - Advanced state management (optional)\n- \u2705 `fsm` - Finite state machine patterns (optional)\n\n### Compute Node Compositions\n\n#### ModelContractComputeStandard \u2b50\n**Common patterns for typical Compute nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractComputeStandard\n\nclass ToolDataTransformer(NodeCompute):\n    \"\"\"\n    Standard Compute node with performance optimization patterns.\n\n    Includes:\n    - Caching (critical for pure functions)\n    - Performance monitoring\n    - Configuration management\n    - Health checks\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `caching` - Result caching for pure computations\n- \u2705 `performance_monitoring` - Computation performance tracking\n- \u2705 `configuration` - Algorithm configuration\n- \u2705 `health_check` - Computation health monitoring\n\n#### ModelContractComputeFull\n**All applicable Compute subcontracts**\n\n**Adds to Standard**:\n- \u2705 `service_resolution` - External data source resolution (optional)\n- \u2705 `request_response` - Request/response patterns (optional)\n- \u2705 `introspection` - Runtime introspection (optional)\n\n### Reducer Node Compositions\n\n#### ModelContractReducerStandard \u2b50\n**Common patterns for typical Reducer nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractReducerStandard\n\nclass ToolDataAggregator(NodeReducer):\n    \"\"\"\n    Standard Reducer node with aggregation patterns.\n\n    Includes:\n    - Aggregation (core reducer functionality)\n    - State management\n    - Caching\n    - Performance monitoring\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `aggregation` - Data aggregation strategies\n- \u2705 `state_management` - Aggregation state management\n- \u2705 `caching` - Aggregation result caching\n- \u2705 `performance_monitoring` - Aggregation performance tracking\n\n### Orchestrator Node Compositions\n\n#### ModelContractOrchestratorStandard \u2b50\n**Common patterns for typical Orchestrator nodes**\n\n```python\nfrom omnibase_core.models.contracts import ModelContractOrchestratorStandard\n\nclass ToolWorkflowCoordinator(NodeOrchestrator):\n    \"\"\"\n    Standard Orchestrator node with workflow coordination.\n\n    Includes:\n    - Workflow coordination (core orchestrator functionality)\n    - Routing\n    - Service resolution\n    - Health monitoring\n    - Event coordination\n    \"\"\"\n```\n\n**Included Subcontracts**:\n- \u2705 `workflow_coordination` - Multi-node workflow coordination\n- \u2705 `routing` - Node routing and load balancing\n- \u2705 `service_resolution` - Node and service discovery\n- \u2705 `event_type` - Event-driven orchestration\n- \u2705 `health_check` - Orchestration health monitoring\n\n#### ModelContractOrchestratorFull\n**All applicable Orchestrator subcontracts**\n\n**Adds to Standard**:\n- \u2705 `fsm` - State machine-based workflow control\n- \u2705 `state_management` - Workflow state management\n- \u2705 `performance_monitoring` - Orchestration performance tracking\n- \u2705 `configuration` - Workflow configuration management\n\n### Subcontract-to-Node Type Matrix\n\n| Subcontract | Effect | Compute | Reducer | Orchestrator |\n|------------|--------|---------|---------|--------------|\n| **ServiceResolution** | \u2705 Standard | Optional | Optional | \u2705 Standard |\n| **HealthCheck** | \u2705 Standard | \u2705 Standard | \u2705 Standard | \u2705 Standard |\n| **PerformanceMonitoring** | \u2705 Standard | \u2705 Standard | \u2705 Standard | Optional |\n| **Configuration** | \u2705 Standard | \u2705 Standard | Optional | Optional |\n| **RequestResponse** | \u2705 Standard | Optional | \u274c | \u274c |\n| **Caching** | Optional | \u2705 Standard | \u2705 Standard | \u274c |\n| **EventType** | Optional | \u274c | \u274c | \u2705 Standard |\n| **Routing** | Optional | \u274c | \u274c | \u2705 Standard |\n| **WorkflowCoordination** | \u274c | \u274c | \u274c | \u2705 Standard |\n| **Aggregation** | \u274c | \u274c | \u2705 Standard | \u274c |\n| **StateManagement** | Optional | \u274c | \u2705 Standard | Optional |\n| **FSM** | Optional | \u274c | \u274c | Optional |\n| **ExternalDependencies** | Optional | Optional | \u274c | \u274c |\n| **Introspection** | Optional | Optional | \u274c | \u274c |\n\n**Legend**:\n- \u2705 Standard: Included in `{Type}Standard` composition\n- Optional: Available in `{Type}Full` or can be added manually\n- \u274c: Not applicable to this node type\n\n---\n\n## \ud83d\udcdd Naming Conventions\n\n### File Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Nodes | `node_<name>_<type>.py` | `node_database_writer_effect.py` |\n| Models | `model_<name>.py` | `model_task_data.py` |\n| Enums | `enum_<name>.py` | `enum_task_status.py` |\n| Contracts | `model_contract_<type>.py` | `model_contract_effect.py` |\n| Subcontracts | `model_<type>_subcontract.py` | `model_fsm_subcontract.py` |\n| Protocols | `protocol_<name>.py` | `protocol_event_bus.py` |\n\n### Class Naming\n\n| Type | Pattern | Example |\n|------|---------|---------|\n| Nodes | `Node<Name><Type>` | `NodeDatabaseWriterEffect` |\n| Models | `Model<Name>` | `ModelTaskData` |\n| Enums | `Enum<Name>` | `EnumTaskStatus` |\n| Contracts | `ModelContract<Type>` | `ModelContractEffect` |\n| Subcontracts | `Model<Type>Subcontract` | `ModelFSMSubcontract` |\n| Protocols | `Protocol<Name>` | `ProtocolEventBus` |\n\n**Key Point**: Naming is **SUFFIX-based** - the type comes LAST:\n- `NodeDatabaseWriter**Effect**` (not `NodeEffectDatabaseWriter`)\n- `node_database_writer_**effect**.py` (not `node_effect_database_writer.py`)\n\n---\n\n## \ud83d\udd27 Framework Components\n\n### DO NOT DUPLICATE\n\nThese are imported from `omnibase_core`:\n\n#### Base Contracts\n```python\nfrom omnibase_core.models.contracts import (\n    ModelContractBase,\n    ModelContractEffect,\n    ModelContractCompute,\n    ModelContractReducer,\n    ModelContractOrchestrator,\n)\n```\n\n#### Composed Base Contracts \u2b50\n```python\nfrom omnibase_core.models.contracts import (\n    ModelContractEffectStandard,\n    ModelContractEffectFull,\n    ModelContractComputeStandard,\n    ModelContractComputeFull,\n    ModelContractReducerStandard,\n    ModelContractOrchestratorStandard,\n    ModelContractOrchestratorFull,\n)\n```\n\n#### Subcontracts\n```python\nfrom omnibase_core.models.contracts.subcontracts import (\n    ModelFSMSubcontract,\n    ModelEventTypeSubcontract,\n    ModelAggregationSubcontract,\n    ModelStateManagementSubcontract,\n    ModelRoutingSubcontract,\n    ModelCachingSubcontract,\n    ModelServiceResolutionSubcontract,\n    ModelHealthCheckSubcontract,\n    ModelPerformanceMonitoringSubcontract,\n    ModelConfigurationSubcontract,\n    ModelRequestResponseSubcontract,\n    ModelExternalDependenciesSubcontract,\n    ModelIntrospectionSubcontract,\n    ModelWorkflowCoordinationSubcontract,\n)\n```\n\n#### Container\n```python\nfrom omnibase_core.models.core import ModelOnexContainer\n```\n\n---\n\n## \u274c Anti-Patterns\n\n### 1. Premature Shared Resources\n\n```\n# \u274c WRONG - Creating shared/ upfront\nnode_group/\n\u251c\u2500\u2500 shared/\n\u2502   \u2514\u2500\u2500 models/v1/      # Created \"just in case\"\n\u2502       \u2514\u2500\u2500 model_*.py  # No nodes use it yet\n\n# \u2705 CORRECT - Start with node-level models\nnode_group/\n\u2514\u2500\u2500 node_1/\n    \u2514\u2500\u2500 v1_0_0/\n        \u2514\u2500\u2500 models/\n            \u2514\u2500\u2500 model_*.py  # Only promote when 2+ nodes need it\n```\n\n### 2. Using Minimal When Standard Would Work\n\n```python\n# \u274c WRONG - Manual composition when Standard exists\nfrom omnibase_core.models.contracts import ModelContractEffect\n\nclass MyNode(NodeEffect):\n    # Manually adding all standard subcontracts...\n    # (boilerplate repetition!)\n\n# \u2705 CORRECT - Use Standard composition\nfrom omnibase_core.models.contracts import ModelContractEffectStandard\n\nclass MyNode(NodeEffect):\n    # All standard subcontracts included automatically!\n```\n\n### 3. Multiple Classes in node.py\n\n```python\n# \u274c WRONG - Multiple classes in node.py\nclass MyDataModel(BaseModel):      # Should be in models/\n    pass\n\nclass MyEnum(Enum):                 # Should be in models/\n    pass\n\nclass MyNode(NodeEffect):           # Only this should be in node.py\n    pass\n\n# \u2705 CORRECT - One class in node.py\n# node.py\nfrom .models.model_data import MyDataModel\nfrom .models.enum_status import MyEnum\n\nclass MyNode(NodeEffect):\n    pass\n```\n\n### 4. Using Legacy Container\n\n```python\n# \u274c WRONG - Legacy container (technical debt)\nfrom omnibase.core.onex_container import ONEXContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ONEXContainer) -> None:\n        pass\n\n# \u2705 CORRECT - Proper Pydantic container\nfrom omnibase_core.models.core import ModelOnexContainer\n\nclass MyNode(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        pass\n```\n\n### 5. Group-Level Versioning\n\n```\n# \u274c WRONG - Version at group level\nnode_group/\n\u2514\u2500\u2500 v1_0_0/         # Breaks independent node evolution\n    \u251c\u2500\u2500 node_1/\n    \u2514\u2500\u2500 node_2/\n\n# \u2705 CORRECT - Version per node\nnode_group/\n\u251c\u2500\u2500 node_1/\n\u2502   \u2514\u2500\u2500 v1_0_0/    # Independent versioning\n\u2514\u2500\u2500 node_2/\n    \u2514\u2500\u2500 v2_0_0/    # Can be different version\n```\n\n### 6. Premature Protocol Promotion\n\n```\n# \u274c WRONG - Moving protocol to omnibase_spi prematurely\nomnibase_spi/protocols/\n\u2514\u2500\u2500 protocol_experimental.py  # Only one node uses it!\n\n# \u2705 CORRECT - Keep in node until actually shared\nnode/v1_0_0/protocols/\n\u2514\u2500\u2500 protocol_experimental.py  # Promote when 2+ nodes need it\n```\n\n---\n\n## \ud83d\udd04 Migration Strategy\n\n### From Current to Best Practices\n\n**Phase 1: Adopt Composed Base Classes**\n1. \u2705 Update imports to use `ModelContract{Type}Standard`\n2. \u2705 Remove manual subcontract composition\n3. \u2705 Update contract YAML with `composed_type: \"standard\"`\n4. \u2705 Test that all subcontracts work as expected\n\n**Phase 2: Add Structure**\n1. \ud83c\udd95 Add `compatibility.yaml` at group level\n2. \ud83c\udd95 Add `README.md` + `CHANGELOG.md` per node\n3. \ud83c\udd95 Add `tests/` directories (explicit structure)\n4. \ud83c\udd95 Add node-level documentation\n\n**Phase 3: Lazy Promotion (when needed)**\n1. \u23f8\ufe0f Monitor for duplicate models/protocols\n2. \u23f8\ufe0f Create `shared/models/v1/` when 2nd node needs it\n3. \u23f8\ufe0f Create `shared/models/v2/` when breaking changes needed\n4. \u23f8\ufe0f Promote protocols to `omnibase_spi` when truly framework-wide\n\n### Migration Scripts\n\n**Required tooling**:\n1. `scripts/detect_duplicate_models.py` - Find models to promote\n2. `scripts/validate_compatibility.py` - Check version matrix\n3. `scripts/generate_docs.py` - Auto-gen from contracts\n4. `scripts/migrate_to_standard.py` - Convert to Standard base classes\n\n---\n\n## \ud83d\udee0\ufe0f Tooling Support\n\n### Duplication Detection\n```bash\n# Find models/protocols that should be promoted\npython scripts/detect_duplicate_models.py --group canary\n```\n\n### Compatibility Validation\n```bash\n# Validate version compatibility matrix\npython scripts/validate_compatibility.py --all\n```\n\n### Documentation Generation\n```bash\n# Auto-generate API_REFERENCE.md from contracts\npython scripts/generate_docs.py --group canary --format markdown\n```\n\n### CLI Tools\n```bash\n# Create new node with Standard template\nonex create node --type effect --template standard --name my_tool\n\n# Validate node structure\nonex validate node --path ./my_tool/v1_0_0/\n\n# Promote model to shared\nonex promote model --model model_data --to shared/v1/\n```\n\n---\n\n## \ud83d\udcda References\n\n**Related Documentation**:\n- [ONEX_QUICK_REFERENCE.md](ONEX_QUICK_REFERENCE.md) - Patterns and examples\n- [SHARED_RESOURCE_VERSIONING.md](SHARED_RESOURCE_VERSIONING.md) - Versioning strategy\n- [examples/](examples/) - Real implementation examples\n\n**Framework Code**:\n- `omnibase_core/models/contracts/` - Base and composed contracts\n- `omnibase_core/models/contracts/subcontracts/` - All subcontracts\n- `omnibase_core/models/core/` - ModelOnexContainer\n- `omnibase_spi/protocols/` - Framework-wide protocols\n\n**Reference Implementations**:\n- `omnibase_3/src/omnibase/tools/canary/` - Production node group\n\n---\n\n## \ud83d\udccb Quick Checklist\n\n### Creating a New Node\n\n- [ ] Choose correct node type (Effect/Compute/Reducer/Orchestrator)\n- [ ] Use **Standard** composed base class (not minimal)\n- [ ] Follow file naming: `node_<name>_<type>.py`\n- [ ] Follow class naming: `Node<Name><Type>`\n- [ ] Use ModelOnexContainer (not ONEXContainer)\n- [ ] One class per node.py (no enums, no helpers)\n- [ ] Create contract.yaml with all required fields\n- [ ] Keep models node-local (promote when 2+ nodes need)\n- [ ] Keep protocols node-local (promote when actually shared)\n- [ ] Add comprehensive tests\n- [ ] Document in README.md and CHANGELOG.md\n\n### Before Promoting to Shared\n\n- [ ] Actually used by 2+ nodes (not \"might be\")\n- [ ] Same semantic meaning across consumers\n- [ ] Same version lifecycle requirements\n- [ ] Detected by duplication analysis\n- [ ] Use `shared/models/v1/` (major version only)\n- [ ] Update imports in all consuming nodes\n- [ ] Add tests for shared resource\n\n---\n\n**Status**: \u2705 Canonical Reference\n**Version**: 2.0.0\n**Last Updated**: 2025-10-01\n**Key Feature**: Composed base classes (Standard/Full) as recommended approach",
+                      "url": null,
+                      "relevance_score": 0.40979397,
+                      "semantic_score": 0.40979397,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    }
+                  ],
+                  "query": "contract-driven development patterns"
+                },
+                "knowledge_graph": {
+                  "success": true,
+                  "source": "memgraph_knowledge_graph",
+                  "results": [],
+                  "query": "contract-driven development patterns",
+                  "search_terms": [
+                    "contract-driven",
+                    "development",
+                    "patterns"
+                  ]
+                }
+              },
+              "synthesis": {
+                "key_findings": [
+                  "Identified 5 semantically similar items"
+                ],
+                "patterns_identified": [
+                  "Vector search found 5 semantically related items"
+                ],
+                "recommended_actions": [
+                  "Check RAG results for API documentation and best practices",
+                  "Review similar API implementations from vector search"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.5,
+                "ecosystem_insights": [
+                  "Cross-referenced patterns across omninode ecosystem projects",
+                  "4-node architecture compliance and implementation patterns",
+                  "Integration opportunities between omniagent/omnimcp components",
+                  "Architectural consistency analysis across ecosystem"
+                ],
+                "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                "ecosystem_integration_opportunities": [
+                  "Identify shared patterns between omnibase components",
+                  "Leverage 4-node architecture across ecosystem projects",
+                  "Optimize cross-component communication patterns"
+                ]
+              }
+            }
+          },
+          "quality_metrics": {},
+          "quality_score": 0.0,
+          "lines_generated": 42,
+          "validation_passed": false
+        },
+        "error": null,
+        "execution_time_ms": 4561.353921890259,
+        "trace_id": "agent_agent-contract-driven-generator_1759777990180_4394531088"
+      },
+      "error": null
+    },
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759777994763_4394531088",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "start_time": 1759777994.7637591,
+      "end_time": 1759777994.803879,
+      "duration_ms": 40.11988639831543,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759777994.7638679,
+          "datetime_str": "2025-10-06T15:13:14.763870",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "analyze-security",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task analyze-security",
+          "metadata": {
+            "domain": "contract_driven_generator",
+            "input_data": {
+              "code": "{{gen-registration.output_data.generated_code}}",
+              "issue_description": "Analyze for security issues: password hashing strength, SQL injection, XSS, input validation, timing attacks, error handling",
+              "file_path": "user_registration.py",
+              "language": "python"
+            }
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759777990179_4394531088"
+        },
+        {
+          "timestamp": 1759777994.8038971,
+          "datetime_str": "2025-10-06T15:13:14.803898",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "analyze-security",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (40.12ms)",
+          "metadata": {
+            "result": {
+              "task_id": "analyze-security",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nUnknownContract - ONEX Compute Node\n\n\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass UnknownContractInput(BaseModel):\n    \"\"\"Input model for UnknownContract.\"\"\"\n    pass\n\n\nclass UnknownContractOutput(BaseModel):\n    \"\"\"Output model for UnknownContract.\"\"\"\n    pass\n\n\nclass NodeUnknownContractCompute:\n    \"\"\"\n    ONEX Compute node for UnknownContract.\n    \n    \n    \"\"\"\n\n    async def execute(self, input_data: UnknownContractInput) -> UnknownContractOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 0 sources\n        \n        # Placeholder implementation\n        return UnknownContractOutput()",
+                "node_type": "Compute",
+                "contract": {},
+                "intelligence_gathered": {},
+                "quality_metrics": {},
+                "quality_score": 0.0,
+                "lines_generated": 42,
+                "validation_passed": false
+              },
+              "error": null,
+              "execution_time_ms": 39.97993469238281,
+              "trace_id": "agent_agent-contract-driven-generator_1759777994763_4394531088"
+            },
+            "error": null
+          },
+          "duration_ms": 40.11988639831543,
+          "parent_trace_id": "coord_1759777990179_4394531088"
+        }
+      ],
+      "result": {
+        "task_id": "analyze-security",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nUnknownContract - ONEX Compute Node\n\n\n\"\"\"\n\nfrom typing import Any, Dict\nfrom pydantic import BaseModel, Field\n\n\nclass UnknownContractInput(BaseModel):\n    \"\"\"Input model for UnknownContract.\"\"\"\n    pass\n\n\nclass UnknownContractOutput(BaseModel):\n    \"\"\"Output model for UnknownContract.\"\"\"\n    pass\n\n\nclass NodeUnknownContractCompute:\n    \"\"\"\n    ONEX Compute node for UnknownContract.\n    \n    \n    \"\"\"\n\n    async def execute(self, input_data: UnknownContractInput) -> UnknownContractOutput:\n        \"\"\"\n        Execute compute operation.\n        \n        Args:\n            input_data: Validated input model\n        \n        Returns:\n            Validated output model\n        \"\"\"\n        # TODO: Implement compute logic\n        # Intelligence gathered: 0 sources\n        \n        # Placeholder implementation\n        return UnknownContractOutput()",
+          "node_type": "Compute",
+          "contract": {},
+          "intelligence_gathered": {},
+          "quality_metrics": {},
+          "quality_score": 0.0,
+          "lines_generated": 42,
+          "validation_passed": false
+        },
+        "error": null,
+        "execution_time_ms": 39.97993469238281,
+        "trace_id": "agent_agent-contract-driven-generator_1759777994763_4394531088"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759777990.17919,
+      "datetime_str": "2025-10-06T15:13:10.179191",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Coordinator started: parallel with 2 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "gen-registration",
+            "description": "Generate user registration function with password hashing"
+          },
+          {
+            "task_id": "analyze-security",
+            "description": "Analyze generated registration function for security vulnerabilities"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759777990.17966,
+      "datetime_str": "2025-10-06T15:13:10.179661",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Starting parallel execution of 2 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777990.1799731,
+      "datetime_str": "2025-10-06T15:13:10.179974",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "gen-registration"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777990.180255,
+      "datetime_str": "2025-10-06T15:13:10.180255",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Task gen-registration assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777990.1806269,
+      "datetime_str": "2025-10-06T15:13:10.180627",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Starting contract-driven code generation: Generate user registration function with password hashing",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777990.181103,
+      "datetime_str": "2025-10-06T15:13:10.181104",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 1: Gathering intelligence (no pre-gathered context available)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.7163892,
+      "datetime_str": "2025-10-06T15:13:14.716409",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Intelligence gathering failed (continuing): Tool call failed: peer closed connection without sending complete message body (incomplete chunked read)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.71784,
+      "datetime_str": "2025-10-06T15:13:14.717842",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 2: Generating ONEX-compliant code",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.7193239,
+      "datetime_str": "2025-10-06T15:13:14.719325",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 3: Validating generated code quality",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.740014,
+      "datetime_str": "2025-10-06T15:13:14.740016",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Quality validation failed (continuing): Tool call failed: Server disconnected without sending a response.",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.747102,
+      "datetime_str": "2025-10-06T15:13:14.747104",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Code generation complete: 1018 chars, quality=0.00",
+      "metadata": {
+        "execution_time_ms": 4561.353921890259
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.748768,
+      "datetime_str": "2025-10-06T15:13:14.748769",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "gen-registration",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Task gen-registration succeeded in 4561.35ms",
+      "metadata": {
+        "execution_time_ms": 4561.353921890259
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.753921,
+      "datetime_str": "2025-10-06T15:13:14.753921",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "gen-registration"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.7565281,
+      "datetime_str": "2025-10-06T15:13:14.756529",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "analyze-security"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.759018,
+      "datetime_str": "2025-10-06T15:13:14.759018",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Task analyze-security assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.763902,
+      "datetime_str": "2025-10-06T15:13:14.763902",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Starting contract-driven code generation: Analyze generated registration function for security vulnerabilities",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.770896,
+      "datetime_str": "2025-10-06T15:13:14.770899",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 1: Gathering intelligence (no pre-gathered context available)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.784365,
+      "datetime_str": "2025-10-06T15:13:14.784368",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Intelligence gathering failed (continuing): Tool call failed: Server disconnected without sending a response.",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.787782,
+      "datetime_str": "2025-10-06T15:13:14.787783",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 2: Generating ONEX-compliant code",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.7893372,
+      "datetime_str": "2025-10-06T15:13:14.789340",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Phase 3: Validating generated code quality",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.800043,
+      "datetime_str": "2025-10-06T15:13:14.800047",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Quality validation failed (continuing): Tool call failed: Server disconnected without sending a response.",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.805454,
+      "datetime_str": "2025-10-06T15:13:14.805454",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Code generation complete: 852 chars, quality=0.00",
+      "metadata": {
+        "execution_time_ms": 39.97993469238281
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.806823,
+      "datetime_str": "2025-10-06T15:13:14.806823",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "analyze-security",
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Task analyze-security succeeded in 39.98ms",
+      "metadata": {
+        "execution_time_ms": 39.97993469238281
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.808905,
+      "datetime_str": "2025-10-06T15:13:14.808908",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "analyze-security"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    },
+    {
+      "timestamp": 1759777994.8170319,
+      "datetime_str": "2025-10-06T15:13:14.817036",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Coordinator completed: 2/2 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 4637.766122817993,
+        "tasks_completed": 2,
+        "success_count": 2
+      },
+      "duration_ms": 4637.790203094482,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759777994.8227031,
+      "datetime_str": "2025-10-06T15:13:14.822706",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759777990179_4394531088",
+      "message": "Parallel execution complete: 2 tasks in 4637.77ms",
+      "metadata": {
+        "total_time_ms": 4637.766122817993,
+        "results": {
+          "gen-registration": true,
+          "analyze-security": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759777990179_4394531088"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "gen-registration",
+        "description": "Generate user registration function with password hashing"
+      },
+      {
+        "task_id": "analyze-security",
+        "description": "Analyze generated registration function for security vulnerabilities"
+      }
+    ]
+  }
+}

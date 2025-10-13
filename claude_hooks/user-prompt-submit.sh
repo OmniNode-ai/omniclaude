@@ -201,7 +201,7 @@ EOF
 
 WORKFLOW_CONTEXT=""
 if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
-  log "Launching automated workflow in background"
+  log "Launching automated workflow with output capture"
 
   # Create workflow input JSON
   WORKFLOW_JSON="$(jq -n \
@@ -210,12 +210,12 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
     --arg corr_id "$CORRELATION_ID" \
     '{user_prompt: $prompt, workspace_path: $workspace, correlation_id: $corr_id}')"
 
-  # Launch dispatch_runner.py in background and capture output
+  # Launch dispatch_runner.py and capture output to log only
   OUTPUT_FILE="/tmp/workflow_${CORRELATION_ID}.log"
+
   (
     cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
-    echo "$WORKFLOW_JSON" | python3 dispatch_runner.py --enable-context --enable-quorum \
-      > "$OUTPUT_FILE" 2>&1
+    echo "$WORKFLOW_JSON" | python3 dispatch_runner.py --enable-context --enable-quorum > "$OUTPUT_FILE" 2>&1
   ) &
   WORKFLOW_PID=$!
 
@@ -227,16 +227,21 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
 AUTOMATED WORKFLOW LAUNCHED
 ========================================================================
 
-The workflow system has been launched in the background.
+The Python-based workflow system is executing your request:
+  "${PROMPT:0:120}..."
+
+Configuration:
+  - Multi-agent orchestration (Gemini/ZAI models)
+  - Task breakdown with Architect agent
+  - Parallel execution with coordination
 
 Process ID: $WORKFLOW_PID
-Output Log: $OUTPUT_FILE
+Log File: $OUTPUT_FILE
 Correlation ID: $CORRELATION_ID
-
-The workflow is executing with Gemini/ZAI models. Results will be available in the log file.
 
 Monitor progress: tail -f $OUTPUT_FILE
 
+The workflow runs independently. Results will be available in the log.
 ========================================================================
 EOF
 )"

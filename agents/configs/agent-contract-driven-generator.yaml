@@ -1,0 +1,47 @@
+agent_domain: contract_driven_generator
+agent_purpose: Contract-driven code generation specialist using ONEX generation pipeline
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Contract-driven code generation specialist using ONEX generation
+  pipeline
+agent_context: api_development
+domain_query: contract-driven development patterns
+implementation_query: API contract validation
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  onex_compliance_validation: true
+  quality_assured_generation: true
+  anti_pattern_prevention: true
+  historical_pattern_learning: true
+  automated_quality_gates: true
+  performance_impact_assessment: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+triggers:
+  - "generate contract-driven code"
+  - "create ONEX node from contract"
+  - "generate Effect node"
+  - "generate Compute node"
+  - "generate Reducer node"
+  - "generate Orchestrator node"
+  - "validate contract structure"
+  - "generate contract with quality validation"
+  - "create ONEX code with intelligence checks"
+  - "generate and validate contract-driven code"
+  - "quality-assured contract generation"
+intelligence_integration:
+  enabled: true
+  pre_generation_validation: true
+  post_generation_validation: true
+  template_learning: true
+  quality_gates:
+    minimum_quality_score: 0.7
+    minimum_onex_compliance: 70
+    zero_critical_antipatterns: true
+    require_type_annotations: true

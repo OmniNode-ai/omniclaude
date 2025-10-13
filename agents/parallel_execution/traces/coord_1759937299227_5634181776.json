@@ -1,0 +1,237 @@
+{
+  "trace_id": "coord_1759937299227_5634181776",
+  "coordinator_type": "parallel",
+  "start_time": 1759937299.227644,
+  "end_time": 1759937306.6602619,
+  "duration_ms": 7432.617902755737,
+  "total_agents": 1,
+  "completed_agents": 0,
+  "failed_agents": 1,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-analyzer_1759937299230_5634181776",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "start_time": 1759937299.230495,
+      "end_time": 1759937306.6485171,
+      "duration_ms": 7418.022155761719,
+      "status": "failed",
+      "events": [
+        {
+          "timestamp": 1759937299.230509,
+          "datetime_str": "2025-10-08T11:28:19.230509",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-analyzer",
+          "task_id": "test-analyzer-simple",
+          "coordinator_id": null,
+          "message": "Agent started: agent-analyzer for task test-analyzer-simple",
+          "metadata": {
+            "using_pydantic_ai": true,
+            "analysis_type": "architectural"
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759937299227_5634181776"
+        },
+        {
+          "timestamp": 1759937306.648834,
+          "datetime_str": "2025-10-08T11:28:26.648854",
+          "event_type": "AGENT_ERROR",
+          "level": "ERROR",
+          "agent_name": "agent-analyzer",
+          "task_id": "test-analyzer-simple",
+          "coordinator_id": null,
+          "message": "Agent failed: agent-analyzer (7418.02ms)",
+          "metadata": {
+            "result": null,
+            "error": "Architectural analysis failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}"
+          },
+          "duration_ms": 7418.022155761719,
+          "parent_trace_id": "coord_1759937299227_5634181776"
+        }
+      ],
+      "result": null,
+      "error": "Architectural analysis failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759937299.2276568,
+      "datetime_str": "2025-10-08T11:28:19.227659",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "test-analyzer-simple",
+            "description": "Analyze the architecture patterns in agent_model.py"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759937299.2288132,
+      "datetime_str": "2025-10-08T11:28:19.228815",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937299.229196,
+      "datetime_str": "2025-10-08T11:28:19.229197",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "test-analyzer-simple"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937299.2295601,
+      "datetime_str": "2025-10-08T11:28:19.229561",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Task test-analyzer-simple assigned to agent-analyzer",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937299.2305229,
+      "datetime_str": "2025-10-08T11:28:19.230523",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Analyzing: /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/agent_model.py (comprehensive analysis)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937299.231307,
+      "datetime_str": "2025-10-08T11:28:19.231308",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Invoking Pydantic AI architectural analyzer",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937306.651932,
+      "datetime_str": "2025-10-08T11:28:26.651934",
+      "event_type": "AGENT_ERROR",
+      "level": "ERROR",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Architectural analysis failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937306.65394,
+      "datetime_str": "2025-10-08T11:28:26.653941",
+      "event_type": "TASK_FAILED",
+      "level": "ERROR",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Task test-analyzer-simple failed in 7417.98ms",
+      "metadata": {
+        "execution_time_ms": 7417.976856231689
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937306.657252,
+      "datetime_str": "2025-10-08T11:28:26.657253",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "test-analyzer-simple"
+        ],
+        "success_count": 0
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    },
+    {
+      "timestamp": 1759937306.660287,
+      "datetime_str": "2025-10-08T11:28:26.660288",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Coordinator completed: 0/1 succeeded, 1 failed",
+      "metadata": {
+        "total_time_ms": 7432.612180709839,
+        "tasks_completed": 1,
+        "success_count": 0
+      },
+      "duration_ms": 7432.617902755737,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759937306.664636,
+      "datetime_str": "2025-10-08T11:28:26.664638",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759937299227_5634181776",
+      "message": "Parallel execution complete: 1 tasks in 7432.61ms",
+      "metadata": {
+        "total_time_ms": 7432.612180709839,
+        "results": {
+          "test-analyzer-simple": false
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759937299227_5634181776"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "test-analyzer-simple",
+        "description": "Analyze the architecture patterns in agent_model.py"
+      }
+    ]
+  }
+}

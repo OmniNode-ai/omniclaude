@@ -1,0 +1,35 @@
+agent_domain: workflow_coordinator
+agent_purpose: Unified workflow execution coordinator with multi-domain orchestration,
+  RAG intelligence, and comprehensive progress management
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Unified workflow execution coordinator with multi-domain orchestration,
+  RAG intelligence, and comprehensive progress management
+agent_context: architecture
+domain_query: workflow orchestration coordination patterns
+implementation_query: multi-agent workflows delegation strategies
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  intelligence_driven_agent_selection: true
+  quality_based_routing_decisions: true
+  performance_aware_task_distribution: true
+  historical_workflow_pattern_learning: true
+  automated_workflow_optimization: true
+  multi_agent_quality_orchestration: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+triggers:
+  - coordinate workflows
+  - multi-agent orchestration
+  - parallel execution
+  - workflow optimization
+  - coordinate with intelligence
+  - optimize workflow with quality data
+  - intelligent agent selection
+  - quality-driven multi-agent coordination

@@ -1,0 +1,66 @@
+{
+  "timestamp": 1760018612.899585,
+  "datetime_str": "2025-10-09T10:03:32.899586",
+  "event_type": "ROUTING_DECISION",
+  "level": "INFO",
+  "agent_name": "agent-performance-optimizer",
+  "task_id": null,
+  "coordinator_id": "coord_1760018612898_4431964560",
+  "message": "Routing decision: selected 'agent-performance-optimizer' (confidence: 92.00%, alternatives: 3, strategy: enhanced_fuzzy_matching)",
+  "metadata": {
+    "user_request": "Help me optimize my database queries for better performance",
+    "selected_agent": "agent-performance-optimizer",
+    "confidence_score": 0.92,
+    "reasoning": "Selected agent-performance-optimizer due to: 1) Explicit 'optimize' and 'performance' keywords in request, 2) High confidence score from enhanced trigger matching (0.92), 3) Strong capability alignment with performance optimization domain",
+    "routing_strategy": "enhanced_fuzzy_matching",
+    "alternatives": [
+      {
+        "agent_name": "agent-database-specialist",
+        "confidence": 0.85,
+        "match_type": "fuzzy",
+        "reason": "Database keyword match"
+      },
+      {
+        "agent_name": "agent-debug-intelligence",
+        "confidence": 0.68,
+        "match_type": "capability",
+        "reason": "Performance analysis capability"
+      },
+      {
+        "agent_name": "agent-code-quality",
+        "confidence": 0.42,
+        "match_type": "context",
+        "reason": "Code improvement context"
+      }
+    ],
+    "context": {
+      "domain": "performance_optimization",
+      "project_type": "database_heavy",
+      "previous_agent": null
+    },
+    "routing_time_ms": 45.3,
+    "alternatives_count": 3,
+    "top_3_alternatives": [
+      {
+        "agent_name": "agent-database-specialist",
+        "confidence": 0.85,
+        "match_type": "fuzzy",
+        "reason": "Database keyword match"
+      },
+      {
+        "agent_name": "agent-debug-intelligence",
+        "confidence": 0.68,
+        "match_type": "capability",
+        "reason": "Performance analysis capability"
+      },
+      {
+        "agent_name": "agent-code-quality",
+        "confidence": 0.42,
+        "match_type": "context",
+        "reason": "Code improvement context"
+      }
+    ]
+  },
+  "duration_ms": 45.3,
+  "parent_trace_id": "coord_1760018612898_4431964560"
+}

@@ -1,0 +1,77 @@
+================================================================================
+AGENT OBSERVABILITY FRAMEWORK REPORT
+Generated: 2025-10-10T15:09:53.452703+00:00
+================================================================================
+
+📊 DATABASE TABLES & ROW COUNTS
+--------------------------------------------------------------------------------
+  ✓ agent_routing_decisions: 1 rows
+  ✓ agent_transformation_events: 1 rows
+  ✓ alembic_version: 1 rows
+  ○ connection_metrics: 0 rows
+  ○ event_metrics: 0 rows
+  ○ hash_metrics: 0 rows
+  ○ hash_metrics_y2025m09: 0 rows
+  ○ hash_metrics_y2025m10: 0 rows
+  ✓ hook_events: 17 rows
+  ○ metadata_stamps: 0 rows
+  ○ node_registrations: 0 rows
+  ○ protocol_handlers: 0 rows
+  ✓ router_performance_metrics: 1 rows
+  ○ security_audit_log: 0 rows
+  ○ service_sessions: 0 rows
+  ○ workflow_tasks: 0 rows
+  ○ workflows: 0 rows
+
+🎯 ROUTING DECISIONS STATISTICS
+--------------------------------------------------------------------------------
+  Total Decisions: 1
+  Avg Confidence: 0.8950
+  Confidence Range: 0.8950 - 0.8950
+  Avg Routing Time: 47.00ms
+  Max Routing Time: 47.00ms
+  Time Range: 2025-10-10 13:39:15.645533+00:00 to 2025-10-10 13:39:15.645533+00:00
+
+🤖 AGENT USAGE STATISTICS
+--------------------------------------------------------------------------------
+  agent-performance-optimizer
+    Usage Count: 1
+    Avg Confidence: 0.8950
+    Avg Routing Time: 47.00ms
+
+
+📋 RECENT ROUTING DECISIONS (Last 5)
+--------------------------------------------------------------------------------
+  Decision #1
+    Request: Optimize my database query performance
+    Selected Agent: agent-performance-optimizer
+    Confidence: 0.8950
+    Routing Time: 47ms
+    Strategy: enhanced_fuzzy_matching_with_capability_alignment
+    Created: 2025-10-10 13:39:15.645533+00:00
+    Alternatives:
+      - agent-database-specialist: 0.8800
+      - agent-debug-intelligence: 0.7200
+
+
+🔄 TRANSFORMATION EVENTS
+--------------------------------------------------------------------------------
+  Total Events: 1
+  Event #1: {'id': 'bc89e88e-3f73-4d51-923b-c630d2825cfe', 'source_agent': 'agent-workflow-coordinator', 'target_agent': 'agent-performance-optimizer', 'transformation_reason': 'Database query performance optimization requires specialized performance analysis capabilities. Routing from workflow coordinator to performance optimizer based on request analysis.', 'confidence_score': Decimal('0.8950'), 'transformation_duration_ms': 47, 'success': True, 'created_at': datetime.datetime(2025, 10, 10, 13, 39, 15, 651919, tzinfo=datetime.timezone.utc)}
+
+🎣 HOOK EVENTS
+--------------------------------------------------------------------------------
+  Total Events: 5
+  Event #1: {'id': 'dfe67816-43bb-4fcd-bb4d-54869600d1ff', 'source': 'PostToolUse', 'action': 'tool_completion', 'resource': 'tool', 'resource_id': 'TodoWrite', 'payload': {'file_path': None, 'tool_name': 'TodoWrite', 'tool_output': {'newTodos': [{'status': 'completed', 'content': 'Implement correlation ID propagation across hooks', 'activeForm': 'Implementing correlation ID propagation across hooks'}, {'status': 'completed', 'content': 'Enhance PreToolUse data capture', 'activeForm': 'Enhancing PreToolUse data capture'}, {'status': 'completed', 'content': 'Research available Claude Code hooks', 'activeForm': 'Researching available Claude Code hooks'}, {'status': 'in_progress', 'content': 'Test end-to-end request tracing', 'activeForm': 'Testing end-to-end request tracing'}], 'oldTodos': [{'status': 'in_progress', 'content': 'Implement correlation ID propagation across hooks', 'activeForm': 'Implementing correlation ID propagation across hooks'}, {'status': 'pending', 'content': 'Enhance PreToolUse data capture', 'activeForm': 'Enhancing PreToolUse data capture'}, {'status': 'pending', 'content': 'Research available Claude Code hooks', 'activeForm': 'Researching available Claude Code hooks'}, {'status': 'pending', 'content': 'Test end-to-end request tracing', 'activeForm': 'Testing end-to-end request tracing'}]}, 'auto_fix_details': None}, 'metadata': {'hook_type': 'PostToolUse', 'logged_at': '2025-10-10T15:07:52.098786+00:00', 'auto_fix_applied': False}, 'processed': False, 'processing_errors': None, 'retry_count': 0, 'created_at': datetime.datetime(2025, 10, 10, 15, 7, 52, 98975, tzinfo=datetime.timezone.utc), 'processed_at': None}
+  Event #2: {'id': 'a6132adc-25ef-4ac5-ab23-df4a1a9f59ee', 'source': 'PostToolUse', 'action': 'tool_completion', 'resource': 'tool', 'resource_id': 'Bash', 'payload': {'file_path': None, 'tool_name': 'Bash', 'tool_output': {'stderr': '', 'stdout': '', 'isImage': False, 'interrupted': False}, 'auto_fix_details': None}, 'metadata': {'hook_type': 'PostToolUse', 'logged_at': '2025-10-10T15:06:58.226085+00:00', 'auto_fix_applied': False}, 'processed': False, 'processing_errors': None, 'retry_count': 0, 'created_at': datetime.datetime(2025, 10, 10, 15, 6, 58, 226224, tzinfo=datetime.timezone.utc), 'processed_at': None}
+  Event #3: {'id': 'e5fd9456-c00c-42f8-84db-d1b658eb60ad', 'source': 'PostToolUse', 'action': 'tool_completion', 'resource': 'tool', 'resource_id': 'TodoWrite', 'payload': {'file_path': None, 'tool_name': 'TodoWrite', 'tool_output': None, 'auto_fix_details': None}, 'metadata': {'hook_type': 'PostToolUse', 'logged_at': '2025-10-10T15:05:51.648941+00:00', 'auto_fix_applied': False}, 'processed': False, 'processing_errors': None, 'retry_count': 0, 'created_at': datetime.datetime(2025, 10, 10, 15, 5, 51, 649438, tzinfo=datetime.timezone.utc), 'processed_at': None}
+
+⚙️  WORKFLOWS
+--------------------------------------------------------------------------------
+  Total Workflows: 0
+  Total Tasks: 0
+  ℹ️  No workflows found
+
+================================================================================
+END OF REPORT
+================================================================================
