@@ -109,7 +109,8 @@ class CodegenWorkflow:
                         prd_analysis = local
                     else:
                         prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
-                except Exception:
+                except Exception as e:
+                    self.logger.warning(f"Event-driven analysis failed, falling back to local: {e}")
                     prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
             else:
                 prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
@@ -158,9 +159,9 @@ class CodegenWorkflow:
                                 validation_status=None,
                                 template_version=None,
                             )
-                except Exception:
+                except Exception as e:
                     # Non-fatal for MVP
-                    pass
+                    self.logger.debug(f"Non-fatal artifact persistence failure: {e}")
             
             # Step 4: Validate generated code
             self.logger.info("Step 4: Validating generated code")
@@ -187,8 +188,8 @@ class CodegenWorkflow:
         except Exception as e:
             self.logger.error(f"Code generation workflow failed: {str(e)}")
             return CodegenWorkflowResult(
-                session_id=session_id if 'session_id' in locals() else uuid4(),
-                correlation_id=correlation_id if 'correlation_id' in locals() else uuid4(),
+                session_id=session_id,
+                correlation_id=correlation_id,
                 prd_analysis=None,
                 generated_nodes=[],
                 total_files=0,
