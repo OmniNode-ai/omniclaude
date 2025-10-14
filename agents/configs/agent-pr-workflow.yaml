@@ -1,0 +1,35 @@
+agent_domain: pr_workflow
+agent_purpose: Multi-step PR workflow orchestration with commit prerequisites and
+  quality gates
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Multi-step PR workflow orchestration with commit prerequisites
+  and quality gates
+agent_context: architecture
+domain_query: workflow orchestration coordination patterns
+implementation_query: multi-agent workflows delegation strategies
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  pr_quality_scoring: true
+  change_impact_assessment: true
+  historical_pr_pattern_analysis: true
+  automated_quality_gates: true
+  review_priority_intelligence: true
+  merge_safety_prediction: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+triggers:
+  - "create PR with quality validation"
+  - "assess PR quality"
+  - "prioritize PR reviews"
+  - "analyze PR impact"
+  - "validate PR changes"
+  - "PR quality gates"
+  - "merge safety check"
+  - "review priority"

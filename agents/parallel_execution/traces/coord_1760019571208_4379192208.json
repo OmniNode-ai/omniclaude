@@ -1,0 +1,699 @@
+{
+  "trace_id": "coord_1760019571208_4379192208",
+  "coordinator_type": "parallel",
+  "start_time": 1760019571.2088058,
+  "end_time": 1760019621.062905,
+  "duration_ms": 49854.09927368164,
+  "total_agents": 3,
+  "completed_agents": 1,
+  "failed_agents": 1,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1760019571213_4379192208",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "start_time": 1760019571.2136168,
+      "end_time": null,
+      "duration_ms": null,
+      "status": "running",
+      "events": [
+        {
+          "timestamp": 1760019571.21368,
+          "datetime_str": "2025-10-09T10:19:31.213681",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-2",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task parallel-2",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1760019571208_4379192208"
+        }
+      ],
+      "result": null,
+      "error": null
+    },
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1760019571218_4379192208",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "start_time": 1760019571.218218,
+      "end_time": 1760019621.0573921,
+      "duration_ms": 49839.174032211304,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1760019571.218233,
+          "datetime_str": "2025-10-09T10:19:31.218235",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-3",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task parallel-3",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1760019571208_4379192208"
+        },
+        {
+          "timestamp": 1760019592.194943,
+          "datetime_str": "2025-10-09T10:19:52.194952",
+          "event_type": "AGENT_ERROR",
+          "level": "ERROR",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-3",
+          "coordinator_id": null,
+          "message": "Agent failed: agent-contract-driven-generator (20976.47ms)",
+          "metadata": {
+            "result": null,
+            "error": "Code generation failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}"
+          },
+          "duration_ms": 20976.470947265625,
+          "parent_trace_id": "coord_1760019571208_4379192208"
+        },
+        {
+          "timestamp": 1760019621.05744,
+          "datetime_str": "2025-10-09T10:20:21.057446",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-3",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (49839.17ms)",
+          "metadata": {
+            "result": {
+              "task_id": "parallel-2",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nUnknownNode - ONEX Compute Node\n\nThe node name 'UnknownNode' does not strictly follow the 'Node<Name><Type>' convention as per ONEX standards, but was explicitly requested. All other aspects of the node (contract model, inheritance from NodeCompute, container injection, error handling, Pydantic models, etc.) adhere to the canonical ONEX patterns.\n\"\"\"\n\nfrom omnibase_core.core.contracts.model_contract_effect import ModelContractEffect\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\nfrom omnibase_core.core.common_types import ModelScalarValue\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\n\n# ============================================================================\n# Contract Model\n# ============================================================================\n\n\"\"\"ModelContractUnknownNodeCompute defines the contract for generating user profile API endpoints.\"\"\"\n\nfrom pydantic import Field\nfrom typing import Dict, Any, List, Optional\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\n\nclass ModelIOOperationConfig(ModelContractBase):\n    \"\"\"Defines configuration for I/O operations.\"\"\"\n    operation_type: str = Field(..., description=\"Type of I/O operation (e.g., 'read', 'write', 'generate')\")\n    resource_identifier: str = Field(..., description=\"Identifier for the resource being acted upon\")\n    # Add more specific I/O config fields as needed\n\nclass ModelTransactionConfig(ModelContractBase):\n    \"\"\"Defines transaction management settings.\"\"\"\n    enabled: bool = Field(False, description=\"Whether transaction management is enabled\")\n    isolation_level: Optional[str] = Field(None, description=\"Transaction isolation level (e.g., 'READ_COMMITTED')\")\n    timeout_seconds: int = Field(60, description=\"Timeout for transaction in seconds\")\n\nclass ModelRetryPolicy(ModelContractBase):\n    \"\"\"Defines retry policies for transient failures.\"\"\"\n    max_attempts: int = Field(3, description=\"Maximum number of retry attempts\")\n    delay_seconds: int = Field(2, description=\"Initial delay between retries in seconds\")\n    backoff_factor: float = Field(2.0, description=\"Factor by which the delay increases with each retry\")\n\nclass ModelCircuitBreakerConfig(ModelContractBase):\n    \"\"\"Defines circuit breaker settings to prevent cascading failures.\"\"\"\n    enabled: bool = Field(True, description=\"Whether circuit breaker is enabled\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open the circuit\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds to wait before attempting to close the circuit\")\n    # Add other circuit breaker parameters as needed\n\n\nclass ModelContractUnknownNodeCompute(ModelContractBase):\n    \"\"\"Contract model for UnknownNode, a Compute node responsible for generating user profile API endpoints.\n\n    This contract defines the configuration required for the node to generate a structured\n    API specification based on a given profile definition, including templating,\n    field validation rules, and security configurations.\n    \"\"\"\n    api_spec_template_name: str = Field(\n        \"default_user_profile_template\",\n        description=\"Name of the template to use for generating the API specification.\"\n    )\n    profile_fields_schema: Dict[str, Any] = Field(\n        {\n            \"id\": {\"type\": \"string\", \"format\": \"uuid\"},\n            \"username\": {\"type\": \"string\", \"minLength\": 3},\n            \"email\": {\"type\": \"string\", \"format\": \"email\"}\n        },\n        description=\"Schema defining expected fields and their types for user profiles.\"\n    )\n    security_config: Dict[str, Any] = Field(\n        {\n            \"authentication\": {\"type\": \"BearerAuth\"},\n            \"authorization\": {\"scopes\": [\"read:profile\", \"write:profile\"]}\n        },\n        description=\"Security configuration details for the generated API endpoints.\"\n    )\n\n    # Canonical ONEX contract fields\n    io_operations: List[ModelIOOperationConfig] = Field(\n        [\n            ModelIOOperationConfig(\n                operation_type=\"generate\",\n                resource_identifier=\"user_profile_api_spec\"\n            )\n        ],\n        description=\"Configuration for any external I/O operations (e.g., template fetching).\"\n    )\n    transaction_management: ModelTransactionConfig = Field(\n        ModelTransactionConfig(enabled=False),\n        description=\"Transaction management settings for the node.\"\n    )\n    retry_policies: ModelRetryPolicy = Field(\n        ModelRetryPolicy(max_attempts=1, delay_seconds=0),\n        description=\"Retry policies for transient failures, if any external calls are made.\"\n    )\n    circuit_breaker_config: ModelCircuitBreakerConfig = Field(\n        ModelCircuitBreakerConfig(enabled=False),\n        description=\"Circuit breaker settings for external service calls.\"\n    )\n    external_services: Dict[str, Any] = Field(\n        {},\n        description=\"Configuration for any external services this node might interact with (e.g., template engine service).\"\n    )\n\n\n# ============================================================================\n# Subcontract Models\n# ============================================================================\n\nclass ModelIOOperationConfig(ModelContractBase):\n    \"\"\"Defines configuration for I/O operations.\"\"\"\n    operation_type: str = Field(..., description=\"Type of I/O operation (e.g., 'read', 'write', 'generate')\")\n    resource_identifier: str = Field(..., description=\"Identifier for the resource being acted upon\")\n\nclass ModelTransactionConfig(ModelContractBase):\n    \"\"\"Defines transaction management settings.\"\"\"\n    enabled: bool = Field(False, description=\"Whether transaction management is enabled\")\n    isolation_level: Optional[str] = Field(None, description=\"Transaction isolation level (e.g., 'READ_COMMITTED')\")\n    timeout_seconds: int = Field(60, description=\"Timeout for transaction in seconds\")\n\nclass ModelRetryPolicy(ModelContractBase):\n    \"\"\"Defines retry policies for transient failures.\"\"\"\n    max_attempts: int = Field(3, description=\"Maximum number of retry attempts\")\n    delay_seconds: int = Field(2, description=\"Initial delay between retries in seconds\")\n    backoff_factor: float = Field(2.0, description=\"Factor by which the delay increases with each retry\")\n\nclass ModelCircuitBreakerConfig(ModelContractBase):\n    \"\"\"Defines circuit breaker settings to prevent cascading failures.\"\"\"\n    enabled: bool = Field(True, description=\"Whether circuit breaker is enabled\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open the circuit\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds to wait before attempting to close the circuit\")\n\n\n# ============================================================================\n# Node Implementation\n# ============================================================================\n\n\"\"\"UnknownNode: A Compute node for generating user profile API endpoints.\"\"\"\n\nfrom pydantic import BaseModel, Field\nfrom typing import Dict, List, Any\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\n\n# --- Input and Output Models ---\nclass ModelComputeInput(BaseModel):\n    \"\"\"Input model for UnknownNode.\n\n    Contains the core definition of the user profile, base path for API, and version information.\n    \"\"\"\n    profile_definition: Dict[str, Any] = Field(\n        ..., description=\"A dictionary defining the structure and properties of the user profile.\"\n    )\n    base_api_path: str = Field(\n        \"/api/v1/profiles\", description=\"The base URL path for the generated API endpoints.\"\n    )\n    api_version: str = Field(\n        \"1.0.0\", description=\"The version of the API to be generated.\"\n    )\n\nclass ModelComputeOutput(BaseModel):\n    \"\"\"Output model for UnknownNode.\n\n    Contains the generated OpenAPI specification and a summary of the created endpoints.\n    \"\"\"\n    generated_api_spec: Dict[str, Any] = Field(\n        ..., description=\"The generated OpenAPI specification for the user profile API.\"\n    )\n    endpoints_summary: List[str] = Field(\n        ..., description=\"A list summarizing the generated API endpoints.\"\n    )\n\n\n# --- Node Class ---\nclass UnknownNode(NodeCompute):\n    \"\"\"UnknownNode is a Compute ONEX node responsible for generating user profile API endpoints.\n\n    This node takes a profile definition and configuration to produce a structured API\n    specification (e.g., OpenAPI) for user profile management. It adheres to the\n    ONEX canonical patterns, leveraging container injection for dependencies and\n    implementing robust error handling.\n\n    Args:\n        container: The ONEXContainer providing access to shared services and configurations.\n    \"\"\"\n    def __init__(self, container: ONEXContainer):\n        super().__init__(container)\n        self.logger = self.container.get_service(\"logger\")\n        self.contract: ModelContractUnknownNodeCompute = self.get_contract()\n        self.logger.info(f\"{self.__class__.__name__} initialized with contract: {self.contract.api_spec_template_name}\")\n\n    async def process(self, input_data: ModelComputeInput) -> ModelComputeOutput:\n        \"\"\"Processes the input to generate user profile API endpoints.\n\n        This method orchestrates the generation of API endpoints based on the provided\n        profile definition and node contract. It simulates a compute-intensive task\n        that transforms input schema into API endpoint definitions.\n\n        Args:\n            input_data: An instance of ModelComputeInput containing the profile definition\n                        and API path/version details.\n\n        Returns:\n            An instance of ModelComputeOutput containing the generated OpenAPI spec\n            and a summary of endpoints.\n\n        Raises:\n            OnexError: If the input data is invalid, or if API specification generation fails.\n        \"\"\"\n        self.logger.info(f\"Processing started for profile: {input_data.profile_definition.get('name', 'unnamed')}\")\n\n        # --- Pre-processing & Validation ---\n        if not input_data.profile_definition:\n            raise OnexError(\n                code=CoreErrorCode.INVALID_INPUT,\n                message=\"Profile definition cannot be empty.\",\n                details={\"input_data\": input_data.dict()}\n            )\n\n        # Simulate transaction management (conceptual for a Compute node)\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Simulating transaction start for compute operation...\")\n            # In a real scenario, this might involve coordinating with a stateful service\n            # or a distributed transaction manager if the compute had side effects.\n\n        # --- Core Logic: API Endpoint Generation ---\n        try:\n            generated_spec = self._generate_openapi_spec(\n                profile_def=input_data.profile_definition,\n                base_path=input_data.base_api_path,\n                api_version=input_data.api_version,\n                contract_fields_schema=self.contract.profile_fields_schema,\n                security_config=self.contract.security_config\n            )\n            endpoints_summary = self._extract_endpoints_summary(generated_spec)\n\n        except Exception as e:\n            # Simulate transaction rollback/compensation\n            if self.contract.transaction_management.enabled:\n                self.logger.error(\"Simulating transaction rollback due to error.\")\n\n            raise OnexError(\n                code=CoreErrorCode.PROCESSING_FAILED,\n                message=f\"Failed to generate API endpoints: {e}\",\n                details={\"error\": str(e), \"input_data\": input_data.dict()}\n            ) from e\n\n        # Simulate transaction commit\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Simulating transaction commit for compute operation.\")\n\n        self.logger.info(\"API endpoints generated successfully.\")\n        return ModelComputeOutput(\n            generated_api_spec=generated_spec,\n            endpoints_summary=endpoints_summary\n        )\n\n    def _generate_openapi_spec(\n        self, \n        profile_def: Dict[str, Any],\n        base_path: str,\n        api_version: str,\n        contract_fields_schema: Dict[str, Any],\n        security_config: Dict[str, Any]\n    ) -> Dict[str, Any]:\n        \"\"\"Helper to simulate OpenAPI spec generation based on profile definition.\"\"\"\n        # This is a simplified, illustrative implementation.\n        # A real implementation would involve a more sophisticated templating engine.\n        self.logger.debug(f\"Generating OpenAPI spec using template: {self.contract.api_spec_template_name}\")\n\n        # Basic validation against contract's profile fields schema\n        for field, schema_props in contract_fields_schema.items():\n            if field not in profile_def:\n                self.logger.warning(f\"Profile definition missing expected field: {field}\")\n\n        # Construct a basic OpenAPI structure\n        openapi_spec = {\n            \"openapi\": \"3.0.0\",\n            \"info\": {\n                \"title\": f\"User Profile API - {profile_def.get('name', 'Generic')}\",\n                \"version\": api_version,\n                \"description\": \"API for managing user profiles.\"\n            },\n            \"servers\": [\n                {\"url\": \"https://api.example.com\"}\n            ],\n            \"paths\": {},\n            \"components\": {\n                \"schemas\": {\n                    \"UserProfile\": {\n                        \"type\": \"object\",\n                        \"properties\": {field: {\"type\": props.get(\"type\", \"string\")} for field, props in profile_def.items()},\n                        \"required\": list(profile_def.keys()) # All provided fields are required for simplicity\n                    }\n                }\n            },\n            \"security\": [\n                {\"BearerAuth\": []} # Use security config from contract\n            ]\n        }\n\n        # Define CRUD endpoints for user profiles\n        profile_id_path = f\"{base_path}/{{id}}\"\n        openapi_spec[\"paths\"][base_path] = {\n            \"get\": {\n                \"summary\": \"List all user profiles\",\n                \"responses\": {\"200\": {\"description\": \"A list of user profiles\", \"content\": {\"application/json\": {\"schema\": {\"type\": \"array\", \"items\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"post\": {\n                \"summary\": \"Create a new user profile\",\n                \"requestBody\": {\"required\": True, \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}},\n                \"responses\": {\"201\": {\"description\": \"Profile created\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            }\n        }\n        openapi_spec[\"paths\"][profile_id_path] = {\n            \"get\": {\n                \"summary\": \"Get a user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"responses\": {\"200\": {\"description\": \"User profile details\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"put\": {\n                \"summary\": \"Update an existing user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"requestBody\": {\"required\": True, \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}},\n                \"responses\": {\"200\": {\"description\": \"Profile updated\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"delete\": {\n                \"summary\": \"Delete a user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"responses\": {\"204\": {\"description\": \"Profile deleted\"}} }\n            }\n        }\n\n        return openapi_spec\n\n    def _extract_endpoints_summary(self, openapi_spec: Dict[str, Any]) -> List[str]:\n        \"\"\"Helper to extract a summary of generated endpoints.\"\"\"\n        summary = []\n        for path, methods in openapi_spec.get(\"paths\", {}).items():\n            for method, details in methods.items():\n                summary.append(f\"{method.upper()} {path} - {details.get('summary', 'No summary')}\")\n        return summary\n",
+                "node_type": "Compute",
+                "node_name": "UnknownNode",
+                "dependencies": [],
+                "intelligence_gathered": {
+                  "domain_patterns": {
+                    "success": true,
+                    "query": "contract-driven development patterns",
+                    "context": "architecture",
+                    "timestamp": "2025-10-09T14:19:31.252373",
+                    "duration_ms": 3083,
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG"
+                    ],
+                    "total_results": 0,
+                    "results": {
+                      "rag_search": {
+                        "success": true,
+                        "source": "rag_search",
+                        "results": [],
+                        "query": "contract-driven development patterns",
+                        "reranked": false
+                      },
+                      "vector_search": {
+                        "success": false,
+                        "source": "qdrant_vector_search",
+                        "error": "All connection attempts failed",
+                        "query": "contract-driven development patterns"
+                      },
+                      "knowledge_graph": {
+                        "success": false,
+                        "source": "memgraph_knowledge_graph",
+                        "error": "All connection attempts failed",
+                        "query": "contract-driven development patterns"
+                      }
+                    },
+                    "synthesis": {
+                      "key_findings": [],
+                      "patterns_identified": [],
+                      "recommended_actions": [
+                        "Review architectural patterns and best practices from RAG search"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.0,
+                      "ecosystem_insights": [
+                        "Cross-referenced patterns across omninode ecosystem projects",
+                        "4-node architecture compliance and implementation patterns",
+                        "Integration opportunities between omniagent/omnimcp components",
+                        "Architectural consistency analysis across ecosystem"
+                      ],
+                      "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                      "ecosystem_integration_opportunities": [
+                        "Identify shared patterns between omnibase components",
+                        "Leverage 4-node architecture across ecosystem projects",
+                        "Optimize cross-component communication patterns"
+                      ]
+                    },
+                    "cache": {
+                      "hits": 0,
+                      "misses": 3,
+                      "hit_rate": 0.0,
+                      "stats": {
+                        "enabled": true,
+                        "total_keys": 9,
+                        "hits": 12,
+                        "misses": 66,
+                        "hit_rate": 15.384615384615385,
+                        "connected_clients": 0
+                      }
+                    }
+                  }
+                },
+                "quality_metrics": {
+                  "success": true,
+                  "analysis": {
+                    "source_path": "UnknownNode.py",
+                    "language": "python",
+                    "content_length": 16804,
+                    "quality_score": 0.745,
+                    "quality_metrics": {
+                      "complexity": 0.3,
+                      "maintainability": 1.0,
+                      "documentation": 0.8,
+                      "structure": 0.8
+                    },
+                    "architectural_compliance": {
+                      "onex_compliance": 0.745,
+                      "pattern_compliance": 0,
+                      "compliance_insights": []
+                    },
+                    "code_patterns": {
+                      "identified_patterns": [],
+                      "anti_patterns": [],
+                      "improvement_opportunities": [
+                        "Consider breaking down complex functions into smaller, more focused methods"
+                      ]
+                    },
+                    "maintainability": {
+                      "score": 1.0,
+                      "factors": {
+                        "line_count": 343,
+                        "avg_line_length": 47.994169096209916,
+                        "max_line_length": 315,
+                        "empty_lines": 50
+                      }
+                    },
+                    "architectural_era": "modern",
+                    "temporal_relevance": 0.745
+                  },
+                  "orchestration_summary": {
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG"
+                    ],
+                    "synthesis": {
+                      "key_findings": [],
+                      "patterns_identified": [],
+                      "recommended_actions": [
+                        "Review RAG search results for documentation patterns"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.0
+                    },
+                    "duration_ms": 1
+                  },
+                  "intelligence_service_url": "orchestrated_backend_services",
+                  "timestamp": "2025-10-09T14:20:21.049089"
+                },
+                "quality_score": 0.0,
+                "lines_generated": 343,
+                "validation_passed": false,
+                "onex_compliance_notes": "The node name 'UnknownNode' does not strictly follow the 'Node<Name><Type>' convention as per ONEX standards, but was explicitly requested. All other aspects of the node (contract model, inheritance from NodeCompute, container injection, error handling, Pydantic models, etc.) adhere to the canonical ONEX patterns.",
+                "pydantic_ai_metadata": {
+                  "model_used": "gemini-1.5-flash",
+                  "structured_output": true,
+                  "tools_available": 3
+                }
+              },
+              "error": null,
+              "execution_time_ms": 49843.61505508423,
+              "trace_id": "agent_agent-contract-driven-generator_1760019571218_4379192208"
+            },
+            "error": null
+          },
+          "duration_ms": 49839.174032211304,
+          "parent_trace_id": "coord_1760019571208_4379192208"
+        }
+      ],
+      "result": {
+        "task_id": "parallel-2",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nUnknownNode - ONEX Compute Node\n\nThe node name 'UnknownNode' does not strictly follow the 'Node<Name><Type>' convention as per ONEX standards, but was explicitly requested. All other aspects of the node (contract model, inheritance from NodeCompute, container injection, error handling, Pydantic models, etc.) adhere to the canonical ONEX patterns.\n\"\"\"\n\nfrom omnibase_core.core.contracts.model_contract_effect import ModelContractEffect\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\nfrom omnibase_core.core.common_types import ModelScalarValue\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\n\n# ============================================================================\n# Contract Model\n# ============================================================================\n\n\"\"\"ModelContractUnknownNodeCompute defines the contract for generating user profile API endpoints.\"\"\"\n\nfrom pydantic import Field\nfrom typing import Dict, Any, List, Optional\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\n\nclass ModelIOOperationConfig(ModelContractBase):\n    \"\"\"Defines configuration for I/O operations.\"\"\"\n    operation_type: str = Field(..., description=\"Type of I/O operation (e.g., 'read', 'write', 'generate')\")\n    resource_identifier: str = Field(..., description=\"Identifier for the resource being acted upon\")\n    # Add more specific I/O config fields as needed\n\nclass ModelTransactionConfig(ModelContractBase):\n    \"\"\"Defines transaction management settings.\"\"\"\n    enabled: bool = Field(False, description=\"Whether transaction management is enabled\")\n    isolation_level: Optional[str] = Field(None, description=\"Transaction isolation level (e.g., 'READ_COMMITTED')\")\n    timeout_seconds: int = Field(60, description=\"Timeout for transaction in seconds\")\n\nclass ModelRetryPolicy(ModelContractBase):\n    \"\"\"Defines retry policies for transient failures.\"\"\"\n    max_attempts: int = Field(3, description=\"Maximum number of retry attempts\")\n    delay_seconds: int = Field(2, description=\"Initial delay between retries in seconds\")\n    backoff_factor: float = Field(2.0, description=\"Factor by which the delay increases with each retry\")\n\nclass ModelCircuitBreakerConfig(ModelContractBase):\n    \"\"\"Defines circuit breaker settings to prevent cascading failures.\"\"\"\n    enabled: bool = Field(True, description=\"Whether circuit breaker is enabled\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open the circuit\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds to wait before attempting to close the circuit\")\n    # Add other circuit breaker parameters as needed\n\n\nclass ModelContractUnknownNodeCompute(ModelContractBase):\n    \"\"\"Contract model for UnknownNode, a Compute node responsible for generating user profile API endpoints.\n\n    This contract defines the configuration required for the node to generate a structured\n    API specification based on a given profile definition, including templating,\n    field validation rules, and security configurations.\n    \"\"\"\n    api_spec_template_name: str = Field(\n        \"default_user_profile_template\",\n        description=\"Name of the template to use for generating the API specification.\"\n    )\n    profile_fields_schema: Dict[str, Any] = Field(\n        {\n            \"id\": {\"type\": \"string\", \"format\": \"uuid\"},\n            \"username\": {\"type\": \"string\", \"minLength\": 3},\n            \"email\": {\"type\": \"string\", \"format\": \"email\"}\n        },\n        description=\"Schema defining expected fields and their types for user profiles.\"\n    )\n    security_config: Dict[str, Any] = Field(\n        {\n            \"authentication\": {\"type\": \"BearerAuth\"},\n            \"authorization\": {\"scopes\": [\"read:profile\", \"write:profile\"]}\n        },\n        description=\"Security configuration details for the generated API endpoints.\"\n    )\n\n    # Canonical ONEX contract fields\n    io_operations: List[ModelIOOperationConfig] = Field(\n        [\n            ModelIOOperationConfig(\n                operation_type=\"generate\",\n                resource_identifier=\"user_profile_api_spec\"\n            )\n        ],\n        description=\"Configuration for any external I/O operations (e.g., template fetching).\"\n    )\n    transaction_management: ModelTransactionConfig = Field(\n        ModelTransactionConfig(enabled=False),\n        description=\"Transaction management settings for the node.\"\n    )\n    retry_policies: ModelRetryPolicy = Field(\n        ModelRetryPolicy(max_attempts=1, delay_seconds=0),\n        description=\"Retry policies for transient failures, if any external calls are made.\"\n    )\n    circuit_breaker_config: ModelCircuitBreakerConfig = Field(\n        ModelCircuitBreakerConfig(enabled=False),\n        description=\"Circuit breaker settings for external service calls.\"\n    )\n    external_services: Dict[str, Any] = Field(\n        {},\n        description=\"Configuration for any external services this node might interact with (e.g., template engine service).\"\n    )\n\n\n# ============================================================================\n# Subcontract Models\n# ============================================================================\n\nclass ModelIOOperationConfig(ModelContractBase):\n    \"\"\"Defines configuration for I/O operations.\"\"\"\n    operation_type: str = Field(..., description=\"Type of I/O operation (e.g., 'read', 'write', 'generate')\")\n    resource_identifier: str = Field(..., description=\"Identifier for the resource being acted upon\")\n\nclass ModelTransactionConfig(ModelContractBase):\n    \"\"\"Defines transaction management settings.\"\"\"\n    enabled: bool = Field(False, description=\"Whether transaction management is enabled\")\n    isolation_level: Optional[str] = Field(None, description=\"Transaction isolation level (e.g., 'READ_COMMITTED')\")\n    timeout_seconds: int = Field(60, description=\"Timeout for transaction in seconds\")\n\nclass ModelRetryPolicy(ModelContractBase):\n    \"\"\"Defines retry policies for transient failures.\"\"\"\n    max_attempts: int = Field(3, description=\"Maximum number of retry attempts\")\n    delay_seconds: int = Field(2, description=\"Initial delay between retries in seconds\")\n    backoff_factor: float = Field(2.0, description=\"Factor by which the delay increases with each retry\")\n\nclass ModelCircuitBreakerConfig(ModelContractBase):\n    \"\"\"Defines circuit breaker settings to prevent cascading failures.\"\"\"\n    enabled: bool = Field(True, description=\"Whether circuit breaker is enabled\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open the circuit\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds to wait before attempting to close the circuit\")\n\n\n# ============================================================================\n# Node Implementation\n# ============================================================================\n\n\"\"\"UnknownNode: A Compute node for generating user profile API endpoints.\"\"\"\n\nfrom pydantic import BaseModel, Field\nfrom typing import Dict, List, Any\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\n\n# --- Input and Output Models ---\nclass ModelComputeInput(BaseModel):\n    \"\"\"Input model for UnknownNode.\n\n    Contains the core definition of the user profile, base path for API, and version information.\n    \"\"\"\n    profile_definition: Dict[str, Any] = Field(\n        ..., description=\"A dictionary defining the structure and properties of the user profile.\"\n    )\n    base_api_path: str = Field(\n        \"/api/v1/profiles\", description=\"The base URL path for the generated API endpoints.\"\n    )\n    api_version: str = Field(\n        \"1.0.0\", description=\"The version of the API to be generated.\"\n    )\n\nclass ModelComputeOutput(BaseModel):\n    \"\"\"Output model for UnknownNode.\n\n    Contains the generated OpenAPI specification and a summary of the created endpoints.\n    \"\"\"\n    generated_api_spec: Dict[str, Any] = Field(\n        ..., description=\"The generated OpenAPI specification for the user profile API.\"\n    )\n    endpoints_summary: List[str] = Field(\n        ..., description=\"A list summarizing the generated API endpoints.\"\n    )\n\n\n# --- Node Class ---\nclass UnknownNode(NodeCompute):\n    \"\"\"UnknownNode is a Compute ONEX node responsible for generating user profile API endpoints.\n\n    This node takes a profile definition and configuration to produce a structured API\n    specification (e.g., OpenAPI) for user profile management. It adheres to the\n    ONEX canonical patterns, leveraging container injection for dependencies and\n    implementing robust error handling.\n\n    Args:\n        container: The ONEXContainer providing access to shared services and configurations.\n    \"\"\"\n    def __init__(self, container: ONEXContainer):\n        super().__init__(container)\n        self.logger = self.container.get_service(\"logger\")\n        self.contract: ModelContractUnknownNodeCompute = self.get_contract()\n        self.logger.info(f\"{self.__class__.__name__} initialized with contract: {self.contract.api_spec_template_name}\")\n\n    async def process(self, input_data: ModelComputeInput) -> ModelComputeOutput:\n        \"\"\"Processes the input to generate user profile API endpoints.\n\n        This method orchestrates the generation of API endpoints based on the provided\n        profile definition and node contract. It simulates a compute-intensive task\n        that transforms input schema into API endpoint definitions.\n\n        Args:\n            input_data: An instance of ModelComputeInput containing the profile definition\n                        and API path/version details.\n\n        Returns:\n            An instance of ModelComputeOutput containing the generated OpenAPI spec\n            and a summary of endpoints.\n\n        Raises:\n            OnexError: If the input data is invalid, or if API specification generation fails.\n        \"\"\"\n        self.logger.info(f\"Processing started for profile: {input_data.profile_definition.get('name', 'unnamed')}\")\n\n        # --- Pre-processing & Validation ---\n        if not input_data.profile_definition:\n            raise OnexError(\n                code=CoreErrorCode.INVALID_INPUT,\n                message=\"Profile definition cannot be empty.\",\n                details={\"input_data\": input_data.dict()}\n            )\n\n        # Simulate transaction management (conceptual for a Compute node)\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Simulating transaction start for compute operation...\")\n            # In a real scenario, this might involve coordinating with a stateful service\n            # or a distributed transaction manager if the compute had side effects.\n\n        # --- Core Logic: API Endpoint Generation ---\n        try:\n            generated_spec = self._generate_openapi_spec(\n                profile_def=input_data.profile_definition,\n                base_path=input_data.base_api_path,\n                api_version=input_data.api_version,\n                contract_fields_schema=self.contract.profile_fields_schema,\n                security_config=self.contract.security_config\n            )\n            endpoints_summary = self._extract_endpoints_summary(generated_spec)\n\n        except Exception as e:\n            # Simulate transaction rollback/compensation\n            if self.contract.transaction_management.enabled:\n                self.logger.error(\"Simulating transaction rollback due to error.\")\n\n            raise OnexError(\n                code=CoreErrorCode.PROCESSING_FAILED,\n                message=f\"Failed to generate API endpoints: {e}\",\n                details={\"error\": str(e), \"input_data\": input_data.dict()}\n            ) from e\n\n        # Simulate transaction commit\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Simulating transaction commit for compute operation.\")\n\n        self.logger.info(\"API endpoints generated successfully.\")\n        return ModelComputeOutput(\n            generated_api_spec=generated_spec,\n            endpoints_summary=endpoints_summary\n        )\n\n    def _generate_openapi_spec(\n        self, \n        profile_def: Dict[str, Any],\n        base_path: str,\n        api_version: str,\n        contract_fields_schema: Dict[str, Any],\n        security_config: Dict[str, Any]\n    ) -> Dict[str, Any]:\n        \"\"\"Helper to simulate OpenAPI spec generation based on profile definition.\"\"\"\n        # This is a simplified, illustrative implementation.\n        # A real implementation would involve a more sophisticated templating engine.\n        self.logger.debug(f\"Generating OpenAPI spec using template: {self.contract.api_spec_template_name}\")\n\n        # Basic validation against contract's profile fields schema\n        for field, schema_props in contract_fields_schema.items():\n            if field not in profile_def:\n                self.logger.warning(f\"Profile definition missing expected field: {field}\")\n\n        # Construct a basic OpenAPI structure\n        openapi_spec = {\n            \"openapi\": \"3.0.0\",\n            \"info\": {\n                \"title\": f\"User Profile API - {profile_def.get('name', 'Generic')}\",\n                \"version\": api_version,\n                \"description\": \"API for managing user profiles.\"\n            },\n            \"servers\": [\n                {\"url\": \"https://api.example.com\"}\n            ],\n            \"paths\": {},\n            \"components\": {\n                \"schemas\": {\n                    \"UserProfile\": {\n                        \"type\": \"object\",\n                        \"properties\": {field: {\"type\": props.get(\"type\", \"string\")} for field, props in profile_def.items()},\n                        \"required\": list(profile_def.keys()) # All provided fields are required for simplicity\n                    }\n                }\n            },\n            \"security\": [\n                {\"BearerAuth\": []} # Use security config from contract\n            ]\n        }\n\n        # Define CRUD endpoints for user profiles\n        profile_id_path = f\"{base_path}/{{id}}\"\n        openapi_spec[\"paths\"][base_path] = {\n            \"get\": {\n                \"summary\": \"List all user profiles\",\n                \"responses\": {\"200\": {\"description\": \"A list of user profiles\", \"content\": {\"application/json\": {\"schema\": {\"type\": \"array\", \"items\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"post\": {\n                \"summary\": \"Create a new user profile\",\n                \"requestBody\": {\"required\": True, \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}},\n                \"responses\": {\"201\": {\"description\": \"Profile created\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            }\n        }\n        openapi_spec[\"paths\"][profile_id_path] = {\n            \"get\": {\n                \"summary\": \"Get a user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"responses\": {\"200\": {\"description\": \"User profile details\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"put\": {\n                \"summary\": \"Update an existing user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"requestBody\": {\"required\": True, \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}},\n                \"responses\": {\"200\": {\"description\": \"Profile updated\", \"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/UserProfile\"}}}}} }\n            },\n            \"delete\": {\n                \"summary\": \"Delete a user profile by ID\",\n                \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": True, \"schema\": {\"type\": \"string\", \"format\": \"uuid\"}}],\n                \"responses\": {\"204\": {\"description\": \"Profile deleted\"}} }\n            }\n        }\n\n        return openapi_spec\n\n    def _extract_endpoints_summary(self, openapi_spec: Dict[str, Any]) -> List[str]:\n        \"\"\"Helper to extract a summary of generated endpoints.\"\"\"\n        summary = []\n        for path, methods in openapi_spec.get(\"paths\", {}).items():\n            for method, details in methods.items():\n                summary.append(f\"{method.upper()} {path} - {details.get('summary', 'No summary')}\")\n        return summary\n",
+          "node_type": "Compute",
+          "node_name": "UnknownNode",
+          "dependencies": [],
+          "intelligence_gathered": {
+            "domain_patterns": {
+              "success": true,
+              "query": "contract-driven development patterns",
+              "context": "architecture",
+              "timestamp": "2025-10-09T14:19:31.252373",
+              "duration_ms": 3083,
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG"
+              ],
+              "total_results": 0,
+              "results": {
+                "rag_search": {
+                  "success": true,
+                  "source": "rag_search",
+                  "results": [],
+                  "query": "contract-driven development patterns",
+                  "reranked": false
+                },
+                "vector_search": {
+                  "success": false,
+                  "source": "qdrant_vector_search",
+                  "error": "All connection attempts failed",
+                  "query": "contract-driven development patterns"
+                },
+                "knowledge_graph": {
+                  "success": false,
+                  "source": "memgraph_knowledge_graph",
+                  "error": "All connection attempts failed",
+                  "query": "contract-driven development patterns"
+                }
+              },
+              "synthesis": {
+                "key_findings": [],
+                "patterns_identified": [],
+                "recommended_actions": [
+                  "Review architectural patterns and best practices from RAG search"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.0,
+                "ecosystem_insights": [
+                  "Cross-referenced patterns across omninode ecosystem projects",
+                  "4-node architecture compliance and implementation patterns",
+                  "Integration opportunities between omniagent/omnimcp components",
+                  "Architectural consistency analysis across ecosystem"
+                ],
+                "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                "ecosystem_integration_opportunities": [
+                  "Identify shared patterns between omnibase components",
+                  "Leverage 4-node architecture across ecosystem projects",
+                  "Optimize cross-component communication patterns"
+                ]
+              },
+              "cache": {
+                "hits": 0,
+                "misses": 3,
+                "hit_rate": 0.0,
+                "stats": {
+                  "enabled": true,
+                  "total_keys": 9,
+                  "hits": 12,
+                  "misses": 66,
+                  "hit_rate": 15.384615384615385,
+                  "connected_clients": 0
+                }
+              }
+            }
+          },
+          "quality_metrics": {
+            "success": true,
+            "analysis": {
+              "source_path": "UnknownNode.py",
+              "language": "python",
+              "content_length": 16804,
+              "quality_score": 0.745,
+              "quality_metrics": {
+                "complexity": 0.3,
+                "maintainability": 1.0,
+                "documentation": 0.8,
+                "structure": 0.8
+              },
+              "architectural_compliance": {
+                "onex_compliance": 0.745,
+                "pattern_compliance": 0,
+                "compliance_insights": []
+              },
+              "code_patterns": {
+                "identified_patterns": [],
+                "anti_patterns": [],
+                "improvement_opportunities": [
+                  "Consider breaking down complex functions into smaller, more focused methods"
+                ]
+              },
+              "maintainability": {
+                "score": 1.0,
+                "factors": {
+                  "line_count": 343,
+                  "avg_line_length": 47.994169096209916,
+                  "max_line_length": 315,
+                  "empty_lines": 50
+                }
+              },
+              "architectural_era": "modern",
+              "temporal_relevance": 0.745
+            },
+            "orchestration_summary": {
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG"
+              ],
+              "synthesis": {
+                "key_findings": [],
+                "patterns_identified": [],
+                "recommended_actions": [
+                  "Review RAG search results for documentation patterns"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.0
+              },
+              "duration_ms": 1
+            },
+            "intelligence_service_url": "orchestrated_backend_services",
+            "timestamp": "2025-10-09T14:20:21.049089"
+          },
+          "quality_score": 0.0,
+          "lines_generated": 343,
+          "validation_passed": false,
+          "onex_compliance_notes": "The node name 'UnknownNode' does not strictly follow the 'Node<Name><Type>' convention as per ONEX standards, but was explicitly requested. All other aspects of the node (contract model, inheritance from NodeCompute, container injection, error handling, Pydantic models, etc.) adhere to the canonical ONEX patterns.",
+          "pydantic_ai_metadata": {
+            "model_used": "gemini-1.5-flash",
+            "structured_output": true,
+            "tools_available": 3
+          }
+        },
+        "error": null,
+        "execution_time_ms": 49843.61505508423,
+        "trace_id": "agent_agent-contract-driven-generator_1760019571218_4379192208"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1760019571.208815,
+      "datetime_str": "2025-10-09T10:19:31.208816",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Coordinator started: parallel with 3 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "parallel-1",
+            "description": "Debug authentication error in login flow"
+          },
+          {
+            "task_id": "parallel-2",
+            "description": "Generate user profile API endpoints"
+          },
+          {
+            "task_id": "parallel-3",
+            "description": "Analyze database performance bottleneck"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760019571.2094321,
+      "datetime_str": "2025-10-09T10:19:31.209433",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Starting parallel execution of 3 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019571.209764,
+      "datetime_str": "2025-10-09T10:19:31.209764",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Executing batch of 3 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "parallel-1",
+          "parallel-2",
+          "parallel-3"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019571.212696,
+      "datetime_str": "2025-10-09T10:19:31.212697",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Task parallel-2 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019571.2131789,
+      "datetime_str": "2025-10-09T10:19:31.213179",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Task parallel-3 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019571.213703,
+      "datetime_str": "2025-10-09T10:19:31.213703",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Generating Compute node: UnknownNode",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019571.21825,
+      "datetime_str": "2025-10-09T10:19:31.218250",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Generating Compute node: UnknownNode",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019574.3028538,
+      "datetime_str": "2025-10-09T10:19:34.302855",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019574.339251,
+      "datetime_str": "2025-10-09T10:19:34.339253",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019592.195998,
+      "datetime_str": "2025-10-09T10:19:52.195999",
+      "event_type": "AGENT_ERROR",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Code generation failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019592.196565,
+      "datetime_str": "2025-10-09T10:19:52.196566",
+      "event_type": "TASK_FAILED",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Task parallel-3 failed in 20976.44ms",
+      "metadata": {
+        "execution_time_ms": 20976.43804550171
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019621.059507,
+      "datetime_str": "2025-10-09T10:20:21.059508",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Code generation complete: 16804 chars, quality=0.00",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019621.0607412,
+      "datetime_str": "2025-10-09T10:20:21.060742",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-2",
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Task parallel-2 succeeded in 49843.62ms",
+      "metadata": {
+        "execution_time_ms": 49843.61505508423
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019621.061806,
+      "datetime_str": "2025-10-09T10:20:21.061807",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Batch complete: 3 tasks finished",
+      "metadata": {
+        "completed": [
+          "parallel-1",
+          "parallel-2",
+          "parallel-3"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019621.0629382,
+      "datetime_str": "2025-10-09T10:20:21.062939",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Coordinator completed: 1/3 succeeded, 1 failed",
+      "metadata": {
+        "total_time_ms": 49854.098081588745,
+        "tasks_completed": 3,
+        "success_count": 1
+      },
+      "duration_ms": 49854.09927368164,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760019621.063937,
+      "datetime_str": "2025-10-09T10:20:21.063938",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Parallel execution complete: 3 tasks in 49854.10ms",
+      "metadata": {
+        "total_time_ms": 49854.098081588745,
+        "results": {
+          "parallel-1": false,
+          "parallel-2": true,
+          "parallel-3": false
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    },
+    {
+      "timestamp": 1760019621.065772,
+      "datetime_str": "2025-10-09T10:20:21.065773",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019571208_4379192208",
+      "message": "Agent loader cleanup complete",
+      "metadata": {
+        "total_agents": 50,
+        "loaded_agents": 39,
+        "failed_agents": 11,
+        "capabilities_indexed": 623,
+        "hot_reload_enabled": true,
+        "is_initialized": true
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019571208_4379192208"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "parallel-1",
+        "description": "Debug authentication error in login flow"
+      },
+      {
+        "task_id": "parallel-2",
+        "description": "Generate user profile API endpoints"
+      },
+      {
+        "task_id": "parallel-3",
+        "description": "Analyze database performance bottleneck"
+      }
+    ]
+  }
+}

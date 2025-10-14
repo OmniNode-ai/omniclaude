@@ -1,0 +1,499 @@
+{
+  "trace_id": "coord_1760019652385_4334431184",
+  "coordinator_type": "parallel",
+  "start_time": 1760019652.3851159,
+  "end_time": 1760019662.293781,
+  "duration_ms": 9908.665180206299,
+  "total_agents": 3,
+  "completed_agents": 1,
+  "failed_agents": 1,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-debug-intelligence_1760019652400_4334431184",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "start_time": 1760019652.400414,
+      "end_time": 1760019662.286339,
+      "duration_ms": 9885.92505455017,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1760019652.4004219,
+          "datetime_str": "2025-10-09T10:20:52.400422",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "parallel-1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-debug-intelligence for task parallel-1",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1760019652385_4334431184"
+        },
+        {
+          "timestamp": 1760019662.286556,
+          "datetime_str": "2025-10-09T10:21:02.286562",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "parallel-1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-debug-intelligence (9885.93ms)",
+          "metadata": {
+            "result": {
+              "task_id": "parallel-1",
+              "agent_name": "agent-debug-intelligence",
+              "success": true,
+              "output_data": {
+                "error_message": "",
+                "error_summary": "Authentication error in login flow",
+                "bfros_analysis": {
+                  "behavior_expected": "User should be successfully authenticated and logged in upon providing correct credentials.",
+                  "behavior_actual": "An authentication error occurs during the login flow.",
+                  "behavior_deviation": "The system fails to authenticate the user, preventing successful login.",
+                  "fault_location": "Unknown (Problematic code and error details are missing)",
+                  "fault_components": [
+                    "Authentication module",
+                    "Login service"
+                  ],
+                  "root_cause_description": "Cannot determine without error details and problematic code.",
+                  "contributing_factors": []
+                },
+                "root_cause": {
+                  "primary_cause": "Cannot determine without error details and problematic code.",
+                  "contributing_factors": [],
+                  "confidence_score": 0.0,
+                  "confidence_level": "Low",
+                  "validation_method": "Insufficient information to validate.",
+                  "quality_correlation": false,
+                  "pattern_matches": []
+                },
+                "solution": {
+                  "fix_description": "Cannot generate a fix without error details and problematic code.",
+                  "implementation_steps": [],
+                  "fixed_code": "Cannot generate a fix without error details and problematic code.",
+                  "quality_improvements": [],
+                  "tests_required": [],
+                  "prevention_measures": [],
+                  "estimated_quality_improvement": 0.0
+                },
+                "intelligence_analysis": {},
+                "quality_improvement": {
+                  "before": 0.0,
+                  "after": 0.0,
+                  "delta": 0.0
+                },
+                "root_cause_confidence": 0.0,
+                "intelligence_sources": 3,
+                "analysis_completeness": 0.0,
+                "pydantic_ai_metadata": {
+                  "model_used": "gemini-2.5-flash",
+                  "structured_output": true,
+                  "tools_available": 3
+                }
+              },
+              "error": null,
+              "execution_time_ms": 9885.494709014893,
+              "trace_id": "agent_agent-debug-intelligence_1760019652400_4334431184"
+            },
+            "error": null
+          },
+          "duration_ms": 9885.92505455017,
+          "parent_trace_id": "coord_1760019652385_4334431184"
+        }
+      ],
+      "result": {
+        "task_id": "parallel-1",
+        "agent_name": "agent-debug-intelligence",
+        "success": true,
+        "output_data": {
+          "error_message": "",
+          "error_summary": "Authentication error in login flow",
+          "bfros_analysis": {
+            "behavior_expected": "User should be successfully authenticated and logged in upon providing correct credentials.",
+            "behavior_actual": "An authentication error occurs during the login flow.",
+            "behavior_deviation": "The system fails to authenticate the user, preventing successful login.",
+            "fault_location": "Unknown (Problematic code and error details are missing)",
+            "fault_components": [
+              "Authentication module",
+              "Login service"
+            ],
+            "root_cause_description": "Cannot determine without error details and problematic code.",
+            "contributing_factors": []
+          },
+          "root_cause": {
+            "primary_cause": "Cannot determine without error details and problematic code.",
+            "contributing_factors": [],
+            "confidence_score": 0.0,
+            "confidence_level": "Low",
+            "validation_method": "Insufficient information to validate.",
+            "quality_correlation": false,
+            "pattern_matches": []
+          },
+          "solution": {
+            "fix_description": "Cannot generate a fix without error details and problematic code.",
+            "implementation_steps": [],
+            "fixed_code": "Cannot generate a fix without error details and problematic code.",
+            "quality_improvements": [],
+            "tests_required": [],
+            "prevention_measures": [],
+            "estimated_quality_improvement": 0.0
+          },
+          "intelligence_analysis": {},
+          "quality_improvement": {
+            "before": 0.0,
+            "after": 0.0,
+            "delta": 0.0
+          },
+          "root_cause_confidence": 0.0,
+          "intelligence_sources": 3,
+          "analysis_completeness": 0.0,
+          "pydantic_ai_metadata": {
+            "model_used": "gemini-2.5-flash",
+            "structured_output": true,
+            "tools_available": 3
+          }
+        },
+        "error": null,
+        "execution_time_ms": 9885.494709014893,
+        "trace_id": "agent_agent-debug-intelligence_1760019652400_4334431184"
+      },
+      "error": null
+    },
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1760019652401_4334431184",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "start_time": 1760019652.401738,
+      "end_time": 1760019657.050223,
+      "duration_ms": 4648.48518371582,
+      "status": "failed",
+      "events": [
+        {
+          "timestamp": 1760019652.4017448,
+          "datetime_str": "2025-10-09T10:20:52.401746",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-3",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task parallel-3",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1760019652385_4334431184"
+        },
+        {
+          "timestamp": 1760019657.050282,
+          "datetime_str": "2025-10-09T10:20:57.050284",
+          "event_type": "AGENT_ERROR",
+          "level": "ERROR",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "parallel-3",
+          "coordinator_id": null,
+          "message": "Agent failed: agent-contract-driven-generator (4648.49ms)",
+          "metadata": {
+            "result": null,
+            "error": "Code generation failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}"
+          },
+          "duration_ms": 4648.48518371582,
+          "parent_trace_id": "coord_1760019652385_4334431184"
+        }
+      ],
+      "result": null,
+      "error": "Code generation failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}"
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1760019652.385123,
+      "datetime_str": "2025-10-09T10:20:52.385124",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Coordinator started: parallel with 3 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "parallel-1",
+            "description": "Debug authentication error in login flow"
+          },
+          {
+            "task_id": "parallel-2",
+            "description": "Generate user profile API endpoints"
+          },
+          {
+            "task_id": "parallel-3",
+            "description": "Analyze database performance bottleneck"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760019652.386621,
+      "datetime_str": "2025-10-09T10:20:52.386622",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Starting parallel execution of 3 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.386936,
+      "datetime_str": "2025-10-09T10:20:52.386937",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Executing batch of 3 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "parallel-1",
+          "parallel-2",
+          "parallel-3"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.393709,
+      "datetime_str": "2025-10-09T10:20:52.393710",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Task parallel-1 assigned to agent-debug-intelligence",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.399979,
+      "datetime_str": "2025-10-09T10:20:52.399979",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Task parallel-3 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.400429,
+      "datetime_str": "2025-10-09T10:20:52.400430",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Debugging: ",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.400783,
+      "datetime_str": "2025-10-09T10:20:52.400783",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Invoking Pydantic AI debug analyzer",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.4017558,
+      "datetime_str": "2025-10-09T10:20:52.401756",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Generating Compute node: UnknownNode",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019652.446553,
+      "datetime_str": "2025-10-09T10:20:52.446554",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019657.051039,
+      "datetime_str": "2025-10-09T10:20:57.051040",
+      "event_type": "AGENT_ERROR",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Code generation failed: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The model is overloaded. Please try again later.', 'status': 'UNAVAILABLE'}}",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019657.051511,
+      "datetime_str": "2025-10-09T10:20:57.051511",
+      "event_type": "TASK_FAILED",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "parallel-3",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Task parallel-3 failed in 4648.48ms",
+      "metadata": {
+        "execution_time_ms": 4648.47731590271
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019662.289255,
+      "datetime_str": "2025-10-09T10:21:02.289257",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Debug analysis complete: confidence=0.00",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019662.290123,
+      "datetime_str": "2025-10-09T10:21:02.290124",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "parallel-1",
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Task parallel-1 succeeded in 9885.49ms",
+      "metadata": {
+        "execution_time_ms": 9885.494709014893
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019662.291595,
+      "datetime_str": "2025-10-09T10:21:02.291596",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Batch complete: 3 tasks finished",
+      "metadata": {
+        "completed": [
+          "parallel-2",
+          "parallel-1",
+          "parallel-3"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019662.293807,
+      "datetime_str": "2025-10-09T10:21:02.293807",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Coordinator completed: 1/3 succeeded, 1 failed",
+      "metadata": {
+        "total_time_ms": 9908.661842346191,
+        "tasks_completed": 3,
+        "success_count": 1
+      },
+      "duration_ms": 9908.665180206299,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1760019662.295516,
+      "datetime_str": "2025-10-09T10:21:02.295517",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Parallel execution complete: 3 tasks in 9908.66ms",
+      "metadata": {
+        "total_time_ms": 9908.661842346191,
+        "results": {
+          "parallel-2": false,
+          "parallel-1": true,
+          "parallel-3": false
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    },
+    {
+      "timestamp": 1760019662.326582,
+      "datetime_str": "2025-10-09T10:21:02.326617",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1760019652385_4334431184",
+      "message": "Agent loader cleanup complete",
+      "metadata": {
+        "total_agents": 50,
+        "loaded_agents": 39,
+        "failed_agents": 11,
+        "capabilities_indexed": 623,
+        "hot_reload_enabled": true,
+        "is_initialized": true
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1760019652385_4334431184"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "parallel-1",
+        "description": "Debug authentication error in login flow"
+      },
+      {
+        "task_id": "parallel-2",
+        "description": "Generate user profile API endpoints"
+      },
+      {
+        "task_id": "parallel-3",
+        "description": "Analyze database performance bottleneck"
+      }
+    ]
+  }
+}

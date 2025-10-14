@@ -1,0 +1,88 @@
+{
+  "user_prompt": "Generate two ONEX nodes: database writer (Effect) and data processor (Compute), then validate both",
+  "workspace_path": "/Volumes/PRO-G40/Code/omniclaude",
+  "rag_queries": [
+    "ONEX architecture patterns",
+    "database connection best practices",
+    "data processing patterns"
+  ],
+  "tasks": [
+    {
+      "task_id": "gen-database-writer",
+      "agent": "coder",
+      "description": "Generate database writer Effect node",
+      "input_data": {
+        "contract": {
+          "name": "DatabaseWriter",
+          "description": "Effect node that writes data to PostgreSQL database",
+          "type": "Effect"
+        },
+        "node_type": "Effect",
+        "language": "python"
+      },
+      "context_requirements": [
+        "pattern:onex-architecture",
+        "rag:ONEX architecture patterns",
+        "rag:database connection best practices"
+      ],
+      "dependencies": []
+    },
+    {
+      "task_id": "gen-data-processor",
+      "agent": "coder",
+      "description": "Generate data processor Compute node",
+      "input_data": {
+        "contract": {
+          "name": "DataProcessor",
+          "description": "Compute node that transforms and validates data",
+          "type": "Compute"
+        },
+        "node_type": "Compute",
+        "language": "python"
+      },
+      "context_requirements": [
+        "pattern:onex-architecture",
+        "rag:ONEX architecture patterns",
+        "rag:data processing patterns"
+      ],
+      "dependencies": []
+    },
+    {
+      "task_id": "validate-database-writer",
+      "agent": "debug",
+      "description": "Validate database writer implementation",
+      "input_data": {
+        "code": "# Generated code will be provided",
+        "issue_description": "Validate ONEX compliance and code quality",
+        "file_path": "node_database_writer_effect.py",
+        "language": "python"
+      },
+      "context_requirements": [
+        "pattern:onex-architecture",
+        "rag:ONEX architecture patterns"
+      ],
+      "dependencies": ["gen-database-writer"]
+    },
+    {
+      "task_id": "validate-data-processor",
+      "agent": "debug",
+      "description": "Validate data processor implementation",
+      "input_data": {
+        "code": "# Generated code will be provided",
+        "issue_description": "Validate ONEX compliance and code quality",
+        "file_path": "node_data_processor_compute.py",
+        "language": "python"
+      },
+      "context_requirements": [
+        "pattern:onex-architecture",
+        "rag:ONEX architecture patterns"
+      ],
+      "dependencies": ["gen-data-processor"]
+    }
+  ],
+  "config": {
+    "max_workers": 5,
+    "timeout_seconds": 300,
+    "trace_dir": "./traces"
+  }
+}

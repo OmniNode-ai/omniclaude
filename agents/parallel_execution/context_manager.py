@@ -20,6 +20,17 @@ from dataclasses import dataclass
 
 from mcp_client import ArchonMCPClient
 
+# Import context optimizer for intelligent context selection
+try:
+    from agents.lib.context_optimizer import (
+        learn_from_execution,
+        optimize_context_for_task,
+        predict_context_needs
+    )
+    CONTEXT_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    CONTEXT_OPTIMIZER_AVAILABLE = False
+
 
 @dataclass
 class ContextItem:
@@ -61,7 +72,8 @@ class ContextManager:
         user_prompt: str,
         workspace_path: Optional[str] = None,
         rag_queries: Optional[List[str]] = None,
-        max_rag_results: int = 5
+        max_rag_results: int = 5,
+        enable_optimization: bool = True
     ) -> Dict[str, ContextItem]:
         """
         Gather comprehensive global context once per dispatch.
@@ -80,126 +92,114 @@ class ContextManager:
         start_time = time.time()
         context_items: Dict[str, ContextItem] = {}
 
-        # 1. RAG Queries for domain patterns and code examples
-        if rag_queries:
-            for query in rag_queries:
-                try:
-                    rag_result = await self.mcp_client.perform_rag_query(
-                        query=query,
-                        match_count=max_rag_results,
-                        context="general"
-                    )
+        # 0. Predictive context gathering (if optimization enabled)
+        predicted_queries = []
+        if enable_optimization and CONTEXT_OPTIMIZER_AVAILABLE:
+            try:
+                predicted_queries = await predict_context_needs(user_prompt)
+                print(f"[ContextManager] Predicted context needs: {predicted_queries}", file=sys.stderr)
+            except Exception as e:
+                print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
+        
+        # Merge predicted queries with provided queries
+        if predicted_queries:
+            if rag_queries:
+                rag_queries = list(set(rag_queries + predicted_queries))
+            else:
+                rag_queries = predicted_queries
 
+        # 1. RAG Queries for domain patterns and code examples (PARALLEL)
+        if rag_queries:
+            # Create parallel tasks for RAG queries
+            rag_tasks = [
+                self._execute_rag_query(query, max_rag_results, "general")
+                for query in rag_queries
+            ]
+            
+            # Execute all RAG queries in parallel
+            rag_results = await asyncio.gather(*rag_tasks, return_exceptions=True)
+            
+            # Process results
+            for i, result in enumerate(rag_results):
+                query = rag_queries[i]
+                if isinstance(result, Exception):
+                    print(f"Warning: RAG query failed for '{query}': {result}")
+                else:
                     # Store RAG result as context item
                     key = f"rag:{query[:50]}"  # Truncate for key
                     context_items[key] = ContextItem(
                         context_type="rag",
                         key=key,
-                        content=rag_result,
-                        tokens_estimate=self._estimate_tokens(rag_result),
+                        content=result,
+                        tokens_estimate=self._estimate_tokens(result),
                         metadata={
                             "query": query,
-                            "result_count": len(rag_result.get("results", [])),
+                            "result_count": len(result.get("results", [])),
                             "timestamp": time.time()
                         }
                     )
-                except Exception as e:
-                    print(f"Warning: RAG query failed for '{query}': {e}")
 
-        # 2. Default domain pattern query based on user prompt (smart construction)
-        try:
-            # Detect query type for intelligent query construction
-            query_lower = user_prompt.lower()
-            architecture_terms = [
-                'onex', 'architecture', 'pattern', 'node', 'effect', 'compute',
-                'reducer', 'validator', 'orchestrator', 'protocol', 'spi',
-                'omninode', 'omnibase', 'omniagent', 'omnimcp'
-            ]
-
-            is_architecture = any(term in query_lower for term in architecture_terms)
-
-            # Construct optimized query
-            if is_architecture:
-                # Preserve user's query terms (highest signal) and add ONEX context
-                query = f"{user_prompt} ONEX architecture patterns best practices"
-                context = "architecture"
-            else:
-                # For non-architecture queries, preserve original terms with minimal additions
-                query = f"{user_prompt} patterns and best practices"
-                context = "api_development"
-
-            default_rag = await self.mcp_client.perform_rag_query(
-                query=query,
-                match_count=max_rag_results,
-                context=context
-            )
-
+        # 2-4. Parallel execution of default RAG, file scanning, and pattern recognition
+        parallel_tasks = []
+        
+        # Default domain pattern query
+        parallel_tasks.append(self._execute_default_rag_query(user_prompt, max_rag_results))
+        
+        # File system scanning (if workspace provided)
+        if workspace_path:
+            parallel_tasks.append(self._scan_workspace(workspace_path))
+        else:
+            parallel_tasks.append(asyncio.create_task(asyncio.sleep(0)))  # Dummy task
+            
+        # Pattern recognition
+        parallel_tasks.append(self._execute_pattern_recognition())
+        
+        # Execute all tasks in parallel
+        parallel_results = await asyncio.gather(*parallel_tasks, return_exceptions=True)
+        
+        # Process results
+        default_rag_result = parallel_results[0]
+        file_scan_result = parallel_results[1] if workspace_path else None
+        pattern_result = parallel_results[2] if workspace_path else parallel_results[1]
+        
+        # Handle default RAG result
+        if not isinstance(default_rag_result, Exception):
             key = "rag:domain-patterns"
             context_items[key] = ContextItem(
                 context_type="rag",
                 key=key,
-                content=default_rag,
-                tokens_estimate=self._estimate_tokens(default_rag),
-                metadata={
-                    "original_prompt": user_prompt,
-                    "optimized_query": query,
-                    "context_type": context,
-                    "is_architecture_query": is_architecture,
-                    "result_count": len(default_rag.get("results", [])),
-                    "timestamp": time.time()
-                }
+                content=default_rag_result["content"],
+                tokens_estimate=self._estimate_tokens(default_rag_result["content"]),
+                metadata=default_rag_result["metadata"]
             )
-        except Exception as e:
-            print(f"Warning: Default RAG query failed: {e}")
-
-        # 3. File system scanning (if workspace provided)
-        if workspace_path:
-            workspace = Path(workspace_path)
-            if workspace.exists() and workspace.is_dir():
-                try:
-                    # Scan for relevant Python files
-                    python_files = list(workspace.rglob("*.py"))
-
-                    # Store structure context
-                    structure_key = f"structure:{workspace_path}"
-                    context_items[structure_key] = ContextItem(
-                        context_type="structure",
-                        key=structure_key,
-                        content={
-                            "workspace": str(workspace),
-                            "python_files": [str(f.relative_to(workspace)) for f in python_files[:50]],
-                            "total_files": len(python_files)
-                        },
-                        tokens_estimate=len(python_files) * 10,  # Rough estimate
-                        metadata={
-                            "workspace_path": str(workspace),
-                            "file_count": len(python_files)
-                        }
-                    )
-                except Exception as e:
-                    print(f"Warning: File system scan failed: {e}")
-
-        # 4. Pattern recognition (search for ONEX patterns, common code patterns)
-        try:
-            pattern_result = await self.mcp_client.search_code_examples(
-                query="ONEX architecture patterns and best practices",
-                match_count=3
+        else:
+            print(f"Warning: Default RAG query failed: {default_rag_result}")
+            
+        # Handle file scan result
+        if file_scan_result and not isinstance(file_scan_result, Exception):
+            key = f"structure:{workspace_path}"
+            context_items[key] = ContextItem(
+                context_type="structure",
+                key=key,
+                content=file_scan_result["content"],
+                tokens_estimate=file_scan_result["tokens_estimate"],
+                metadata=file_scan_result["metadata"]
             )
-
+        elif isinstance(file_scan_result, Exception):
+            print(f"Warning: File system scan failed: {file_scan_result}")
+            
+        # Handle pattern result
+        if not isinstance(pattern_result, Exception):
             key = "pattern:onex-architecture"
             context_items[key] = ContextItem(
                 context_type="pattern",
                 key=key,
-                content=pattern_result,
-                tokens_estimate=self._estimate_tokens(pattern_result),
-                metadata={
-                    "pattern_type": "onex",
-                    "result_count": len(pattern_result.get("results", [])),
-                    "timestamp": time.time()
-                }
+                content=pattern_result["content"],
+                tokens_estimate=self._estimate_tokens(pattern_result["content"]),
+                metadata=pattern_result["metadata"]
             )
-        except Exception as e:
-            print(f"Warning: Pattern recognition failed: {e}")
+        else:
+            print(f"Warning: Pattern recognition failed: {pattern_result}")
 
         # Store in global context
         self.global_context = context_items
@@ -208,6 +208,21 @@ class ContextManager:
         print(f"[ContextManager] Gathered {len(context_items)} context items in {elapsed_ms:.0f}ms")
 
         return context_items
+
+    async def _predict_context_needs(self, user_prompt: str) -> List[str]:
+        """
+        Predicts what context types might be needed based on the user prompt.
+        """
+        if not CONTEXT_OPTIMIZER_AVAILABLE:
+            return []
+        
+        try:
+            # Use the context optimizer to predict needs
+            predicted_needs = await predict_context_needs(user_prompt)
+            return predicted_needs
+        except Exception as e:
+            print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
+            return []
 
     def filter_context(
         self,
@@ -399,6 +414,137 @@ class ContextManager:
             "items_by_type": by_type,
             "keys": list(self.global_context.keys())
         }
+
+    async def _execute_rag_query(self, query: str, match_count: int, context: str) -> Dict[str, Any]:
+        """
+        Execute a single RAG query with error handling.
+        
+        Args:
+            query: The RAG query string
+            match_count: Maximum number of results
+            context: Context type for the query
+            
+        Returns:
+            RAG result dictionary
+        """
+        try:
+            return await self.mcp_client.perform_rag_query(
+                query=query,
+                match_count=match_count,
+                context=context
+            )
+        except Exception as e:
+            # Re-raise the exception to be handled by the caller
+            raise e
+
+    async def _execute_default_rag_query(self, user_prompt: str, max_rag_results: int) -> Dict[str, Any]:
+        """
+        Execute the default domain pattern query based on user prompt.
+        
+        Args:
+            user_prompt: The user's original request
+            max_rag_results: Maximum number of results
+            
+        Returns:
+            Dictionary with content and metadata
+        """
+        try:
+            # Detect query type for intelligent query construction
+            query_lower = user_prompt.lower()
+            architecture_terms = [
+                'onex', 'architecture', 'pattern', 'node', 'effect', 'compute',
+                'reducer', 'validator', 'orchestrator', 'protocol', 'spi',
+                'omninode', 'omnibase', 'omniagent', 'omnimcp'
+            ]
+
+            is_architecture = any(term in query_lower for term in architecture_terms)
+
+            # Construct optimized query
+            if is_architecture:
+                # Preserve user's query terms (highest signal) and add ONEX context
+                query = f"{user_prompt} ONEX architecture patterns best practices"
+                context = "architecture"
+            else:
+                # For non-architecture queries, preserve original terms with minimal additions
+                query = f"{user_prompt} patterns and best practices"
+                context = "api_development"
+
+            default_rag = await self.mcp_client.perform_rag_query(
+                query=query,
+                match_count=max_rag_results,
+                context=context
+            )
+
+            return {
+                "content": default_rag,
+                "metadata": {
+                    "original_prompt": user_prompt,
+                    "optimized_query": query,
+                    "context_type": context,
+                    "is_architecture_query": is_architecture,
+                    "result_count": len(default_rag.get("results", [])),
+                    "timestamp": time.time()
+                }
+            }
+        except Exception as e:
+            raise e
+
+    async def _scan_workspace(self, workspace_path: str) -> Dict[str, Any]:
+        """
+        Scan workspace for Python files and structure.
+        
+        Args:
+            workspace_path: Path to the workspace directory
+            
+        Returns:
+            Dictionary with content and metadata
+        """
+        try:
+            workspace = Path(workspace_path)
+            if not workspace.exists() or not workspace.is_dir():
+                raise ValueError(f"Workspace path does not exist or is not a directory: {workspace_path}")
+
+            # Scan for relevant Python files
+            python_files = list(workspace.rglob("*.py"))
+
+            return {
+                "content": {
+                    "workspace": str(workspace),
+                    "python_files": [str(f.relative_to(workspace)) for f in python_files[:50]],
+                    "total_files": len(python_files)
+                },
+                "tokens_estimate": len(python_files) * 10,  # Rough estimate
+                "metadata": {
+                    "workspace_path": str(workspace),
+                    "file_count": len(python_files)
+                }
+            }
+        except Exception as e:
+            raise e
+
+    async def _execute_pattern_recognition(self) -> Dict[str, Any]:
+        """
+        Execute pattern recognition for ONEX patterns.
+        
+        Returns:
+            Dictionary with content and metadata
+        """
+        try:
+            pattern_result = await self.mcp_client.search_code_examples(
+                query="ONEX architecture patterns and best practices",
+                match_count=3
+            )
+
+            return {
+                "content": pattern_result,
+                "metadata": {
+                    "pattern_type": "onex",
+                    "result_count": len(pattern_result.get("results", [])),
+                    "timestamp": time.time()
+                }
+            }
+        except Exception as e:
+            raise e
 
     async def cleanup(self):
         """Cleanup resources."""

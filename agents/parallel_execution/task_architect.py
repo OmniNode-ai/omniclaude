@@ -61,8 +61,9 @@ Examples: ["file:auth.py", "pattern:onex-compute-node", "rag:jwt-refresh-tokens"
         analysis_prompt = f"""Analyze this user request and break it down into tasks for parallel agent execution.
 
 Available Agents:
-1. agent_coder - Code generation, ONEX nodes, API implementations
-   - Input: contract (specification), node_type (Effect|Compute|Reducer|Orchestrator), language, context
+1. agent_coder - Code generation for any Python code (functions, classes, APIs, scripts)
+   - Input: description (what to build), language, context
+   - Optional: contract, node_type (only for ONEX architecture requests)
 
 2. agent_debug_intelligence - Debugging, quality analysis, root cause analysis
    - Input: code, issue_description, file_path, language
@@ -77,6 +78,7 @@ Task Planning Rules:
 - Each task needs unique task_id
 - Task descriptions should clearly indicate which agent to use (keywords matter)
 - IMPORTANT: Each task must declare context_requirements array with specific context items needed
+- ONEX architecture (node_type, contracts) should ONLY be used if explicitly requested
 {context_summary}
 
 CRITICAL: Do NOT repeat or echo the context in your response. Only return the JSON task breakdown.
@@ -188,32 +190,52 @@ Return ONLY valid JSON in this exact format:
             for kw in ["debug", "fix", "analyze", "investigate", "error", "bug"]
         )
 
+        # Detect if ONEX architecture is explicitly requested
+        is_onex = any(
+            kw in prompt_lower
+            for kw in ["onex", "node", "effect", "compute", "reducer", "orchestrator"]
+        )
+
         tasks = []
 
         if is_generation:
+            # Build input_data dynamically based on whether ONEX is needed
+            input_data = {
+                "description": user_prompt,
+                "language": "python",
+                "context": user_prompt
+            }
+
+            # Only add ONEX-specific fields if explicitly requested
+            if is_onex:
+                input_data["contract"] = {
+                    "name": "UserRequest",
+                    "description": user_prompt,
+                    "type": "application"
+                }
+                input_data["node_type"] = "Compute"
+
+            # Build context requirements dynamically
+            context_reqs = ["rag:domain-patterns"]
+            if is_onex:
+                context_reqs.append("pattern:onex-architecture")
+
             # Code generation task
             tasks.append({
                 "task_id": "gen-1",
                 "description": f"Generate code for: {user_prompt}",
                 "agent": "coder",
-                "input_data": {
-                    "contract": {
-                        "name": "UserRequest",
-                        "description": user_prompt,
-                        "type": "application"
-                    },
-                    "node_type": "Compute",
-                    "language": "python",
-                    "context": user_prompt
-                },
-                "context_requirements": [
-                    "rag:domain-patterns",
-                    "pattern:onex-architecture"
-                ],
+                "input_data": input_data,
+                "context_requirements": context_reqs,
                 "dependencies": []
             })
 
         if is_debug:
+            # Build context requirements for debug
+            debug_context_reqs = ["rag:domain-patterns"]
+            if is_onex:
+                debug_context_reqs.append("pattern:onex-architecture")
+
             # Debug task
             tasks.append({
                 "task_id": "debug-1",
@@ -225,24 +247,27 @@ Return ONLY valid JSON in this exact format:
                     "file_path": "unknown.py",
                     "language": "python"
                 },
-                "context_requirements": [
-                    "rag:domain-patterns",
-                    "pattern:onex-architecture"
-                ],
+                "context_requirements": debug_context_reqs,
                 "dependencies": []
             })
 
         if not tasks:
             # Default to generation
+            input_data = {
+                "description": user_prompt,
+                "language": "python"
+            }
+
+            # Only add ONEX fields if detected
+            if is_onex:
+                input_data["contract"] = user_prompt
+                input_data["node_type"] = "Compute"
+
             tasks.append({
                 "task_id": "gen-1",
                 "description": f"Generate: {user_prompt}",
                 "agent": "coder",
-                "input_data": {
-                    "contract": user_prompt,
-                    "node_type": "Compute",
-                    "language": "python"
-                },
+                "input_data": input_data,
                 "context_requirements": [
                     "rag:domain-patterns"
                 ],

@@ -1,0 +1,40 @@
+{
+  "test_timestamp": "2025-10-04T10:12:07.407577",
+  "sync_tracker": {
+    "available": true,
+    "single_operation_ms": 8.581876754760742,
+    "single_operation_success": true,
+    "multi_operations_time": 0.018809080123901367,
+    "successful_operations": 4,
+    "attempted_operations": 5,
+    "operations_per_second": 212.66324422304191,
+    "cache_test_time": 0.006793022155761719,
+    "cache_hits": 0,
+    "cache_operations_per_second": 0.0,
+    "success_rate": 80.0,
+    "metrics": {
+      "total_requests": 5,
+      "cache_hits": 4,
+      "cache_misses": 5,
+      "cache_hit_rate": 44.44444444444444,
+      "average_response_time_ms": 3.9674758911132812,
+      "total_time_ms": 19.837379455566406,
+      "session_id": "a344a48c-7aef-4598-8f4a-470305bf92c8",
+      "base_url": "http://localhost:8053"
+    }
+  },
+  "comparison": {},
+  "components": {
+    "pattern_id_generation": {
+      "uncached_time_ms": 0.4239082336425781,
+      "cached_time_ms": 0.10895729064941406,
+      "improvement_percent": 74.29696287964005,
+      "cache_hit_rate": 0.1
+    },
+    "connection_pooling": {
+      "setup_time_ms": 0.05888938903808594,
+      "pool_connections": 10,
+      "pool_maxsize": 20
+    }
+  }
+}

@@ -1,0 +1,237 @@
+{
+  "trace_id": "coord_1759936654575_5090500048",
+  "coordinator_type": "parallel",
+  "start_time": 1759936654.575584,
+  "end_time": 1759936712.272737,
+  "duration_ms": 57697.153091430664,
+  "total_agents": 1,
+  "completed_agents": 0,
+  "failed_agents": 1,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-analyzer_1759936654583_5090500048",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "start_time": 1759936654.5832052,
+      "end_time": 1759936712.264213,
+      "duration_ms": 57681.007862091064,
+      "status": "failed",
+      "events": [
+        {
+          "timestamp": 1759936654.5832179,
+          "datetime_str": "2025-10-08T11:17:34.583219",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-analyzer",
+          "task_id": "test-analyzer-simple",
+          "coordinator_id": null,
+          "message": "Agent started: agent-analyzer for task test-analyzer-simple",
+          "metadata": {
+            "using_pydantic_ai": true,
+            "analysis_type": "architectural"
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759936654575_5090500048"
+        },
+        {
+          "timestamp": 1759936712.264349,
+          "datetime_str": "2025-10-08T11:18:32.264352",
+          "event_type": "AGENT_ERROR",
+          "level": "ERROR",
+          "agent_name": "agent-analyzer",
+          "task_id": "test-analyzer-simple",
+          "coordinator_id": null,
+          "message": "Agent failed: agent-analyzer (57681.01ms)",
+          "metadata": {
+            "result": null,
+            "error": "Architectural analysis failed: 'AgentRunResult' object has no attribute 'data'"
+          },
+          "duration_ms": 57681.007862091064,
+          "parent_trace_id": "coord_1759936654575_5090500048"
+        }
+      ],
+      "result": null,
+      "error": "Architectural analysis failed: 'AgentRunResult' object has no attribute 'data'"
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759936654.575596,
+      "datetime_str": "2025-10-08T11:17:34.575598",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "test-analyzer-simple",
+            "description": "Analyze the architecture patterns in agent_model.py"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759936654.57999,
+      "datetime_str": "2025-10-08T11:17:34.579991",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936654.580338,
+      "datetime_str": "2025-10-08T11:17:34.580339",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "test-analyzer-simple"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936654.580597,
+      "datetime_str": "2025-10-08T11:17:34.580597",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Task test-analyzer-simple assigned to agent-analyzer",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936654.583232,
+      "datetime_str": "2025-10-08T11:17:34.583233",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Analyzing: /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/agent_model.py (comprehensive analysis)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936654.5836768,
+      "datetime_str": "2025-10-08T11:17:34.583678",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Invoking Pydantic AI architectural analyzer",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936712.26559,
+      "datetime_str": "2025-10-08T11:18:32.265591",
+      "event_type": "AGENT_ERROR",
+      "level": "ERROR",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Architectural analysis failed: 'AgentRunResult' object has no attribute 'data'",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936712.266409,
+      "datetime_str": "2025-10-08T11:18:32.266410",
+      "event_type": "TASK_FAILED",
+      "level": "ERROR",
+      "agent_name": "agent-analyzer",
+      "task_id": "test-analyzer-simple",
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Task test-analyzer-simple failed in 57680.97ms",
+      "metadata": {
+        "execution_time_ms": 57680.97186088562
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936712.268484,
+      "datetime_str": "2025-10-08T11:18:32.268487",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "test-analyzer-simple"
+        ],
+        "success_count": 0
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    },
+    {
+      "timestamp": 1759936712.272788,
+      "datetime_str": "2025-10-08T11:18:32.272790",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Coordinator completed: 0/1 succeeded, 1 failed",
+      "metadata": {
+        "total_time_ms": 57697.13878631592,
+        "tasks_completed": 1,
+        "success_count": 0
+      },
+      "duration_ms": 57697.153091430664,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759936712.27345,
+      "datetime_str": "2025-10-08T11:18:32.273451",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759936654575_5090500048",
+      "message": "Parallel execution complete: 1 tasks in 57697.14ms",
+      "metadata": {
+        "total_time_ms": 57697.13878631592,
+        "results": {
+          "test-analyzer-simple": false
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759936654575_5090500048"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "test-analyzer-simple",
+        "description": "Analyze the architecture patterns in agent_model.py"
+      }
+    ]
+  }
+}

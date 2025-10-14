@@ -85,8 +85,16 @@ class ValidatedTaskArchitect:
 
             if result.decision == ValidationDecision.PASS:
                 print(f"\n✅ Validation PASSED on attempt {attempt + 1}")
+
+                # Add final validation task using agent-workflow-coordinator
+                enhanced_breakdown = self._add_final_validation_task(
+                    task_breakdown,
+                    user_prompt,
+                    global_context
+                )
+
                 return {
-                    "breakdown": task_breakdown,
+                    "breakdown": enhanced_breakdown,
                     "validated": True,
                     "attempts": attempt + 1,
                     "quorum_result": {
@@ -174,13 +182,17 @@ class ValidatedTaskArchitect:
             input_data["global_context"] = global_context
 
         try:
+            # Get absolute path to task_architect.py (same directory as this file)
+            task_architect_path = Path(__file__).parent / "task_architect.py"
+
             # Call task_architect.py as subprocess
             result = subprocess.run(
-                ["python3", "task_architect.py"],
+                ["python3", str(task_architect_path)],
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
                 timeout=30,
+                cwd=str(Path(__file__).parent)  # Set working directory
             )
 
             if result.returncode != 0:
@@ -218,6 +230,65 @@ class ValidatedTaskArchitect:
             ],
             "fallback": True,
             "reason": "task_architect unavailable",
+        }
+
+    def _add_final_validation_task(
+        self,
+        task_breakdown: Dict[str, Any],
+        user_prompt: str,
+        global_context: Dict[str, Any] = None,
+    ) -> Dict[str, Any]:
+        """Add final validation task using agent-workflow-coordinator
+
+        Args:
+            task_breakdown: Original task breakdown from task_architect
+            user_prompt: Original user request
+            global_context: Optional pre-gathered context
+
+        Returns:
+            Enhanced task breakdown with validation task appended
+        """
+        tasks = task_breakdown.get("tasks", [])
+
+        # Collect all task IDs for dependencies
+        all_task_ids = [task.get("task_id") for task in tasks]
+
+        # Create validation task that depends on all previous tasks
+        validation_task = {
+            "task_id": "validation-final",
+            "description": f"Validate output for: {user_prompt}",
+            "agent": "agent-workflow-coordinator",  # Use full agent name for subagent routing
+            "input_data": {
+                "validation_type": "output_quality_check",
+                "original_request": user_prompt,
+                "context_summary": {
+                    "has_context": global_context is not None,
+                    "context_keys": list(global_context.keys()) if global_context else []
+                },
+                "validation_criteria": [
+                    "Does output meet original requirements?",
+                    "Is code quality production-ready?",
+                    "Are all requested features implemented?",
+                    "Does implementation follow best practices?",
+                    "Are there any missing error handlers?",
+                    "Is documentation complete?"
+                ]
+            },
+            "context_requirements": [
+                "rag:validation-patterns",
+                "previous-task-outputs"  # Special marker for outputs from dependencies
+            ],
+            "dependencies": all_task_ids  # Depends on all previous tasks
+        }
+
+        # Append validation task
+        enhanced_tasks = tasks + [validation_task]
+
+        # Return enhanced breakdown
+        return {
+            **task_breakdown,
+            "tasks": enhanced_tasks,
+            "has_validation_task": True
         }
 
     def _augment_prompt(

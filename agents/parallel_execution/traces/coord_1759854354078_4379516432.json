@@ -1,0 +1,617 @@
+{
+  "trace_id": "coord_1759854354078_4379516432",
+  "coordinator_type": "parallel",
+  "start_time": 1759854354.07844,
+  "end_time": 1759854354.103093,
+  "duration_ms": 24.652957916259766,
+  "total_agents": 1,
+  "completed_agents": 1,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-debug-intelligence_1759854354085_4379516432",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "start_time": 1759854354.085471,
+      "end_time": 1759854354.093427,
+      "duration_ms": 7.956027984619141,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759854354.085634,
+          "datetime_str": "2025-10-07T12:25:54.085635",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-debug-intelligence for task task1",
+          "metadata": {
+            "domain": "debug_intelligence",
+            "input_data": {
+              "node_type": "Effect",
+              "node_name": "NodePostgreSQLAdapterEffect",
+              "pre_gathered_context": {
+                "rag:postgres adapter kafka event bus integration": {
+                  "type": "rag",
+                  "content": {
+                    "success": true,
+                    "query": "postgres adapter kafka event bus integration",
+                    "context": "general",
+                    "timestamp": "2025-10-07T16:24:26.450806",
+                    "duration_ms": 1,
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG",
+                      "Vector Search",
+                      "Knowledge Graph"
+                    ],
+                    "total_results": 5,
+                    "results": {
+                      "rag_search": {
+                        "success": true,
+                        "source": "rag_search",
+                        "results": [],
+                        "query": "postgres adapter kafka event bus integration",
+                        "reranked": false
+                      },
+                      "vector_search": {
+                        "success": true,
+                        "source": "qdrant_vector_search",
+                        "results": [
+                          {
+                            "entity_id": "doc_0_2",
+                            "entity_type": "page",
+                            "title": "ONEX Canonical Examples",
+                            "content": "# ONEX Canonical Examples - Quick Start\n\n## 15 Canonical Patterns\n\n1. Container Injection - ONEXContainer for dependency injection\n2. Transaction Management - Rollback support with LIFO order  \n3. Circuit Breaker - Prevent cascading failures (CLOSED/OPEN/HALF_OPEN)\n4. Retry Logic - Exponential backoff with jitter\n5. Security Assessment - Path traversal detection, sandbox compliance\n6. Multiple Operations - File, HTTP, database, email, audit handlers\n7. Input Validation - Comprehensive with errors AND warnings\n8. Performance Metrics - Per-operation timing and success rates\n9. Strong Typing - Pydantic BaseModel + Python Enum  \n10. Rollback Instructions - Human-readable recovery steps\n11. Contract Loading - YAML contracts with Pydantic validation\n12. Error Handling - OnexError with structured details\n13. Structured Logging - emit_log_event with correlation IDs\n14. Async Context Managers - Resource cleanup with RAII\n15. Semaphore Concurrency - Prevent resource exhaustion\n\n## Canonical Effect Node Structure\n\n```python\nclass NodeDatabaseWriterEffect(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Initialize transaction manager\n        # Initialize circuit breaker\n        # Initialize retry logic\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # 1. Validate input\n        # 2. Assess security risk\n        # 3. Execute with transaction\n        # 4. Track performance metrics\n        # 5. Handle rollback if needed\n```\n\n## Key Patterns to Keep\n\nInfrastructure (ALWAYS keep):\n- Container injection\n- Transaction management with rollback\n- Circuit breaker for external services  \n- Retry logic with exponential backoff\n- Input validation with errors/warnings\n- Security risk assessment\n- Performance metrics tracking\n- Structured logging with correlation IDs\n- OnexError for exceptions\n- Pydantic models for all data\n\nBusiness Logic (Customize):\n- Operation handlers\n- Validation rules\n- Security checks\n- Rollback instructions",
+                            "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/examples/QUICKSTART.md",
+                            "relevance_score": 0.3626812,
+                            "semantic_score": 0.3626812,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "page_111",
+                            "entity_type": "page",
+                            "title": "https://docs.anthropic.com/en/docs/claude-code/monitoring-usage",
+                            "content": "#### \n\u200b\nTool Result Event\nLogged when a tool completes execution.\n**Event Name** : `claude_code.tool_result`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"tool_result\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `tool_name`: Name of the tool\n  * `success`: `\"true\"` or `\"false\"`\n  * `duration_ms`: Execution time in milliseconds\n  * `error`: Error message (if failed)\n  * `decision`: Either `\"accept\"` or `\"reject\"`\n  * `source`: Decision source - `\"config\"`, `\"user_permanent\"`, `\"user_temporary\"`, `\"user_abort\"`, or `\"user_reject\"`\n  * `tool_parameters`: JSON string containing tool-specific parameters (when available) \n    * For Bash tool: includes `bash_command`, `full_command`, `timeout`, `description`, `sandbox`\n\n\n#### \n\u200b\nAPI Request Event\nLogged for each API request to Claude.\n**Event Name** : `claude_code.api_request`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"api_request\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `model`: Model used (e.g., \u201cclaude-3-5-sonnet-20241022\u201d)\n  * `cost_usd`: Estimated cost in USD\n  * `duration_ms`: Request duration in milliseconds\n  * `input_tokens`: Number of input tokens\n  * `output_tokens`: Number of output tokens\n  * `cache_read_tokens`: Number of tokens read from cache\n  * `cache_creation_tokens`: Number of tokens used for cache creation\n\n\n#### \n\u200b\nAPI Error Event\nLogged when an API request to Claude fails.\n**Event Name** : `claude_code.api_error`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"api_error\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `model`: Model used (e.g., \u201cclaude-3-5-sonnet-20241022\u201d)\n  * `error`: Error message\n  * `status_code`: HTTP status code (if applicable)\n  * `duration_ms`: Request duration in milliseconds\n  * `attempt`: Attempt number (for retried requests)\n\n\n#### \n\u200b\nTool Decision Event\nLogged when a tool permission decision is made (accept/reject).\n**Event Name** : `claude_code.tool_decision`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"tool_decision\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `tool_name`: Name of the tool (e.g., \u201cRead\u201d, \u201cEdit\u201d, \u201cMultiEdit\u201d, \u201cWrite\u201d, \u201cNotebookEdit\u201d, etc.)\n  * `decision`: Either `\"accept\"` or `\"reject\"`\n  * `source`: Decision source - `\"config\"`, `\"user_permanent\"`, `\"user_temporary\"`, `\"user_abort\"`, or `\"user_reject\"`\n\n\n## \n\u200b\nInterpreting Metrics and Events Data\nThe metrics exported by Claude Code provide valuable insights into usage patterns and productivity. Here are some common visualizations and analyses you can create:\n### \n\u200b\nUsage Monitoring\nMetric| Analysis Opportunity  \n---|---  \n`claude_code.token.usage`| Break down by `type` (input/output), user, team, or model  \n`claude_code.session.count`| Track adoption and engagement over time  \n`claude_code.lines_of_code.count`| Measure productivity by tracking code additions/removals  \n`claude_code.commit.count` & `claude_code.pull_request.count`| Understand impact on development workflows  \n### \n\u200b\nCost Monitoring\nThe `claude_code.cost.usage` metric helps with:\n  * Tracking usage trends across teams or individuals\n  * Identifying high-usage sessions for optimization\n\n\nCost metrics are approximations. For official billing data, refer to your API provider (Anthropic Console, AWS Bedrock, or Google Cloud Vertex).\n### \n\u200b\nAlerting and Segmentation\nCommon alerts to consider:\n  * Cost spikes\n  * Unusual token consumption\n  * High session volume from specific users\n\n\nAll metrics can be segmented by `user.account_uuid`, `organization.id`, `session.id`, `model`, and `app.version`.\n### \n\u200b\nEvent Analysis\nThe event data provides detailed insights into Claude Code interactions:\n**Tool Usage Patterns** : Analyze tool result events to identify:\n  * Most frequently used tools\n  * Tool success rates\n  * Average tool execution times\n  * Error patterns by tool type\n\n\n**Performance Monitoring** : Track API request durations and tool execution times to identify performance bottlenecks.\n## \n\u200b\nBackend Considerations\nYour choice of metrics and logs backends will determine the types of analyses you can perform:\n### \n\u200b\nFor Metrics:\n  * **Time series databases (e.g., Prometheus)** : Rate calculations, aggregated metrics\n  * **Columnar stores (e.g., ClickHouse)** : Complex queries, unique user analysis\n  * **Full-featured observability platforms (e.g., Honeycomb, Datadog)** : Advanced querying, visualization, alerting",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/monitoring-usage",
+                            "relevance_score": 0.3519476,
+                            "semantic_score": 0.3519476,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:48:07.768659+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "page_111",
+                            "entity_type": "page",
+                            "title": "https://docs.anthropic.com/en/docs/claude-code/monitoring-usage",
+                            "content": "#### \n\u200b\nTool Result Event\nLogged when a tool completes execution.\n**Event Name** : `claude_code.tool_result`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"tool_result\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `tool_name`: Name of the tool\n  * `success`: `\"true\"` or `\"false\"`\n  * `duration_ms`: Execution time in milliseconds\n  * `error`: Error message (if failed)\n  * `decision`: Either `\"accept\"` or `\"reject\"`\n  * `source`: Decision source - `\"config\"`, `\"user_permanent\"`, `\"user_temporary\"`, `\"user_abort\"`, or `\"user_reject\"`\n  * `tool_parameters`: JSON string containing tool-specific parameters (when available) \n    * For Bash tool: includes `bash_command`, `full_command`, `timeout`, `description`, `sandbox`\n\n\n#### \n\u200b\nAPI Request Event\nLogged for each API request to Claude.\n**Event Name** : `claude_code.api_request`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"api_request\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `model`: Model used (e.g., \u201cclaude-3-5-sonnet-20241022\u201d)\n  * `cost_usd`: Estimated cost in USD\n  * `duration_ms`: Request duration in milliseconds\n  * `input_tokens`: Number of input tokens\n  * `output_tokens`: Number of output tokens\n  * `cache_read_tokens`: Number of tokens read from cache\n  * `cache_creation_tokens`: Number of tokens used for cache creation\n\n\n#### \n\u200b\nAPI Error Event\nLogged when an API request to Claude fails.\n**Event Name** : `claude_code.api_error`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"api_error\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `model`: Model used (e.g., \u201cclaude-3-5-sonnet-20241022\u201d)\n  * `error`: Error message\n  * `status_code`: HTTP status code (if applicable)\n  * `duration_ms`: Request duration in milliseconds\n  * `attempt`: Attempt number (for retried requests)\n\n\n#### \n\u200b\nTool Decision Event\nLogged when a tool permission decision is made (accept/reject).\n**Event Name** : `claude_code.tool_decision`\n**Attributes** :\n  * All [standard attributes](https://docs.anthropic.com/en/docs/claude-code/monitoring-usage#standard-attributes)\n  * `event.name`: `\"tool_decision\"`\n  * `event.timestamp`: ISO 8601 timestamp\n  * `tool_name`: Name of the tool (e.g., \u201cRead\u201d, \u201cEdit\u201d, \u201cMultiEdit\u201d, \u201cWrite\u201d, \u201cNotebookEdit\u201d, etc.)\n  * `decision`: Either `\"accept\"` or `\"reject\"`\n  * `source`: Decision source - `\"config\"`, `\"user_permanent\"`, `\"user_temporary\"`, `\"user_abort\"`, or `\"user_reject\"`\n\n\n## \n\u200b\nInterpreting Metrics and Events Data\nThe metrics exported by Claude Code provide valuable insights into usage patterns and productivity. Here are some common visualizations and analyses you can create:\n### \n\u200b\nUsage Monitoring\nMetric| Analysis Opportunity  \n---|---  \n`claude_code.token.usage`| Break down by `type` (input/output), user, team, or model  \n`claude_code.session.count`| Track adoption and engagement over time  \n`claude_code.lines_of_code.count`| Measure productivity by tracking code additions/removals  \n`claude_code.commit.count` & `claude_code.pull_request.count`| Understand impact on development workflows  \n### \n\u200b\nCost Monitoring\nThe `claude_code.cost.usage` metric helps with:\n  * Tracking usage trends across teams or individuals\n  * Identifying high-usage sessions for optimization\n\n\nCost metrics are approximations. For official billing data, refer to your API provider (Anthropic Console, AWS Bedrock, or Google Cloud Vertex).\n### \n\u200b\nAlerting and Segmentation\nCommon alerts to consider:\n  * Cost spikes\n  * Unusual token consumption\n  * High session volume from specific users\n\n\nAll metrics can be segmented by `user.account_uuid`, `organization.id`, `session.id`, `model`, and `app.version`.\n### \n\u200b\nEvent Analysis\nThe event data provides detailed insights into Claude Code interactions:\n**Tool Usage Patterns** : Analyze tool result events to identify:\n  * Most frequently used tools\n  * Tool success rates\n  * Average tool execution times\n  * Error patterns by tool type\n\n\n**Performance Monitoring** : Track API request durations and tool execution times to identify performance bottlenecks.\n## \n\u200b\nBackend Considerations\nYour choice of metrics and logs backends will determine the types of analyses you can perform:\n### \n\u200b\nFor Metrics:\n  * **Time series databases (e.g., Prometheus)** : Rate calculations, aggregated metrics\n  * **Columnar stores (e.g., ClickHouse)** : Complex queries, unique user analysis\n  * **Full-featured observability platforms (e.g., Honeycomb, Datadog)** : Advanced querying, visualization, alerting",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/monitoring-usage",
+                            "relevance_score": 0.3519476,
+                            "semantic_score": 0.3519476,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:48:07.768659+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_129",
+                            "entity_type": "code_example",
+                            "title": "json Code Example",
+                            "content": "{\n \"session_id\": \"abc123\",\n \"transcript_path\": \"~/.claude / projects /.../00893aaf -19fa -41d2-8238-13269b9b3ca0.jsonl\",\n \"hook_event_name\": \"SessionStart\",\n \"source\": \"startup\"\n}\n\n\u200bSessionEnd Input\nCopy{\n \"session_id\": \"abc123\",\n \"transcript_path\": \"~/.claude / projects /.../00893aaf -19fa -41d2-8238-13269b9b3ca0.jsonl\",\n \"cwd\": \"/ Users /...\",\n \"hook_event_name\": \"SessionEnd\",\n < spa",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/hooks",
+                            "relevance_score": 0.3277045,
+                            "semantic_score": 0.3277045,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:16.974256+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_129",
+                            "entity_type": "code_example",
+                            "title": "json Code Example",
+                            "content": "{\n \"session_id\": \"abc123\",\n \"transcript_path\": \"~/.claude / projects /.../00893aaf -19fa -41d2-8238-13269b9b3ca0.jsonl\",\n \"hook_event_name\": \"SessionStart\",\n \"source\": \"startup\"\n}\n\n\u200bSessionEnd Input\nCopy{\n \"session_id\": \"abc123\",\n \"transcript_path\": \"~/.claude / projects /.../00893aaf -19fa -41d2-8238-13269b9b3ca0.jsonl\",\n \"cwd\": \"/ Users /...\",\n \"hook_event_name\": \"SessionEnd\",\n < spa",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/hooks",
+                            "relevance_score": 0.3277045,
+                            "semantic_score": 0.3277045,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:16.974256+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          }
+                        ],
+                        "query": "postgres adapter kafka event bus integration"
+                      },
+                      "knowledge_graph": {
+                        "success": true,
+                        "source": "memgraph_knowledge_graph",
+                        "results": [],
+                        "query": "postgres adapter kafka event bus integration",
+                        "search_terms": [
+                          "postgres",
+                          "adapter",
+                          "kafka"
+                        ]
+                      }
+                    },
+                    "synthesis": {
+                      "key_findings": [
+                        "Identified 5 semantically similar items"
+                      ],
+                      "patterns_identified": [
+                        "Vector search found 5 semantically related items"
+                      ],
+                      "recommended_actions": [
+                        "Review RAG search results for documentation patterns",
+                        "Analyze vector search results for code similarities",
+                        "Explore knowledge graph connections for related concepts"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.5,
+                      "ecosystem_insights": [
+                        "Cross-referenced patterns across omninode ecosystem projects",
+                        "4-node architecture compliance and implementation patterns",
+                        "Integration opportunities between omniagent/omnimcp components",
+                        "Architectural consistency analysis across ecosystem"
+                      ],
+                      "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                      "ecosystem_integration_opportunities": [
+                        "Identify shared patterns between omnibase components",
+                        "Leverage 4-node architecture across ecosystem projects",
+                        "Optimize cross-component communication patterns"
+                      ]
+                    },
+                    "cache": {
+                      "hits": 3,
+                      "misses": 0,
+                      "hit_rate": 100.0,
+                      "stats": {
+                        "enabled": true,
+                        "total_keys": 15,
+                        "hits": 25,
+                        "misses": 33,
+                        "hit_rate": 43.103448275862064,
+                        "connected_clients": 0
+                      }
+                    }
+                  },
+                  "metadata": {
+                    "query": "postgres adapter kafka event bus integration",
+                    "result_count": 3,
+                    "timestamp": 1759854266.460047
+                  }
+                }
+              }
+            }
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759854354078_4379516432"
+        },
+        {
+          "timestamp": 1759854354.093837,
+          "datetime_str": "2025-10-07T12:25:54.093839",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-debug-intelligence (7.96ms)",
+          "metadata": {
+            "result": {
+              "task_id": "task1",
+              "agent_name": "agent-debug-intelligence",
+              "success": true,
+              "output_data": {
+                "error_message": "",
+                "intelligence_analysis": {},
+                "bfros_analysis": {
+                  "behavior_analysis": {
+                    "expected": "Correct execution without errors",
+                    "actual": "Error: ",
+                    "deviation": ""
+                  },
+                  "fault_localization": {
+                    "error_location": "Code snippet provided",
+                    "affected_components": [
+                      "Primary code block"
+                    ],
+                    "quality_score": 0.0,
+                    "compliance_score": 0.0
+                  },
+                  "root_cause_factors": {
+                    "quality_issues": [],
+                    "architectural_violations": [],
+                    "anti_patterns": []
+                  }
+                },
+                "root_cause": {
+                  "primary_cause": "Low code quality and architectural violations",
+                  "contributing_factors": {
+                    "quality_issues": [],
+                    "architectural_issues": [],
+                    "pattern_issues": []
+                  },
+                  "confidence_score": 0.3,
+                  "confidence_level": "Low",
+                  "validation_method": "Intelligence-based multi-factor analysis"
+                },
+                "solution": {
+                  "fix_description": "Address quality and architectural issues identified in root cause analysis",
+                  "implementation_steps": [
+                    "Fix immediate bug (symptom)",
+                    "Resolve quality issues (root cause)",
+                    "Fix architectural violations (prevention)",
+                    "Eliminate anti-patterns (systemic fix)",
+                    "Apply best practices from intelligence"
+                  ],
+                  "quality_improvements": [],
+                  "compliance_improvements": [],
+                  "tests_required": [
+                    "Unit test preventing recurrence",
+                    "Integration test for affected flow",
+                    "Regression test for similar scenarios"
+                  ],
+                  "prevention_measures": {
+                    "pattern_documented": true,
+                    "quality_gates_added": true,
+                    "monitoring_enabled": true
+                  }
+                },
+                "quality_improvement": {
+                  "before": 0.0,
+                  "after": 0.0,
+                  "delta": 0.0,
+                  "improvement_percentage": 0,
+                  "meets_minimum": false
+                },
+                "root_cause_confidence": 0.3,
+                "intelligence_sources": 0
+              },
+              "error": null,
+              "execution_time_ms": 7.66301155090332,
+              "trace_id": "agent_agent-debug-intelligence_1759854354085_4379516432"
+            },
+            "error": null
+          },
+          "duration_ms": 7.956027984619141,
+          "parent_trace_id": "coord_1759854354078_4379516432"
+        }
+      ],
+      "result": {
+        "task_id": "task1",
+        "agent_name": "agent-debug-intelligence",
+        "success": true,
+        "output_data": {
+          "error_message": "",
+          "intelligence_analysis": {},
+          "bfros_analysis": {
+            "behavior_analysis": {
+              "expected": "Correct execution without errors",
+              "actual": "Error: ",
+              "deviation": ""
+            },
+            "fault_localization": {
+              "error_location": "Code snippet provided",
+              "affected_components": [
+                "Primary code block"
+              ],
+              "quality_score": 0.0,
+              "compliance_score": 0.0
+            },
+            "root_cause_factors": {
+              "quality_issues": [],
+              "architectural_violations": [],
+              "anti_patterns": []
+            }
+          },
+          "root_cause": {
+            "primary_cause": "Low code quality and architectural violations",
+            "contributing_factors": {
+              "quality_issues": [],
+              "architectural_issues": [],
+              "pattern_issues": []
+            },
+            "confidence_score": 0.3,
+            "confidence_level": "Low",
+            "validation_method": "Intelligence-based multi-factor analysis"
+          },
+          "solution": {
+            "fix_description": "Address quality and architectural issues identified in root cause analysis",
+            "implementation_steps": [
+              "Fix immediate bug (symptom)",
+              "Resolve quality issues (root cause)",
+              "Fix architectural violations (prevention)",
+              "Eliminate anti-patterns (systemic fix)",
+              "Apply best practices from intelligence"
+            ],
+            "quality_improvements": [],
+            "compliance_improvements": [],
+            "tests_required": [
+              "Unit test preventing recurrence",
+              "Integration test for affected flow",
+              "Regression test for similar scenarios"
+            ],
+            "prevention_measures": {
+              "pattern_documented": true,
+              "quality_gates_added": true,
+              "monitoring_enabled": true
+            }
+          },
+          "quality_improvement": {
+            "before": 0.0,
+            "after": 0.0,
+            "delta": 0.0,
+            "improvement_percentage": 0,
+            "meets_minimum": false
+          },
+          "root_cause_confidence": 0.3,
+          "intelligence_sources": 0
+        },
+        "error": null,
+        "execution_time_ms": 7.66301155090332,
+        "trace_id": "agent_agent-debug-intelligence_1759854354085_4379516432"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759854354.0786839,
+      "datetime_str": "2025-10-07T12:25:54.078687",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task1",
+            "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759854354.0822542,
+      "datetime_str": "2025-10-07T12:25:54.082255",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.082626,
+      "datetime_str": "2025-10-07T12:25:54.082627",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.082918,
+      "datetime_str": "2025-10-07T12:25:54.082918",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Task task1 assigned to agent-debug-intelligence",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.085721,
+      "datetime_str": "2025-10-07T12:25:54.085721",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Starting intelligence-enhanced debugging: Build an ONEX Effect node called NodePostgreSQLAdapterEffect",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.087682,
+      "datetime_str": "2025-10-07T12:25:54.087685",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Phase 1: Using pre-gathered context (1 items)",
+      "metadata": {
+        "context_items": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.089046,
+      "datetime_str": "2025-10-07T12:25:54.089047",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Extracted 0 intelligence sources from pre-gathered context",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.089689,
+      "datetime_str": "2025-10-07T12:25:54.089690",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Phase 2: Applying BFROS framework",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.091569,
+      "datetime_str": "2025-10-07T12:25:54.091570",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Phase 3: Determining root cause with confidence scoring",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.092421,
+      "datetime_str": "2025-10-07T12:25:54.092422",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Phase 4: Generating optimal solution",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.0951521,
+      "datetime_str": "2025-10-07T12:25:54.095153",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Debug analysis complete: confidence=0.30",
+      "metadata": {
+        "execution_time_ms": 7.66301155090332
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.096991,
+      "datetime_str": "2025-10-07T12:25:54.096994",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Task task1 succeeded in 7.66ms",
+      "metadata": {
+        "execution_time_ms": 7.66301155090332
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.100493,
+      "datetime_str": "2025-10-07T12:25:54.100495",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "task1"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    },
+    {
+      "timestamp": 1759854354.103136,
+      "datetime_str": "2025-10-07T12:25:54.103138",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Coordinator completed: 1/1 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 25.27594566345215,
+        "tasks_completed": 1,
+        "success_count": 1
+      },
+      "duration_ms": 24.652957916259766,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759854354.121238,
+      "datetime_str": "2025-10-07T12:25:54.121239",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759854354078_4379516432",
+      "message": "Parallel execution complete: 1 tasks in 25.28ms",
+      "metadata": {
+        "total_time_ms": 25.27594566345215,
+        "results": {
+          "task1": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759854354078_4379516432"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task1",
+        "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+      }
+    ]
+  }
+}

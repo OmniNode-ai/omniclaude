@@ -1,0 +1,213 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Cursor Rule: Canonical ONEX Node Standards
+
+> **Status:** Canonical
+> **Last Updated:** 2025-06-23
+
+## Rule
+
+All ONEX nodes must conform to the canonical structure, code generation, and interface patterns established in the `node_cli` node. The `node_cli` is now the **primary canonical reference** for all ONEX node patterns, replacing previous references.
+
+- The `node_cli` is the **single source of truth** for:
+  - Node directory and file structure
+  - Contract schema patterns and associated documents
+  - Linked document architecture (contract.yaml + node_config.yaml + deployment_config.yaml)
+  - Canonical base state patterns (OnexInputState/OnexOutputState inheritance)
+  - Shared schema references and clean project root paths
+  - Future-proof extensibility patterns (optional documents, execution capabilities)
+  - CLI interface declarations and execution patterns
+  - Code generation (models, error codes, etc.)
+  - Dependency injection and protocol-first design
+  - Error handling and introspection
+  - Scenario-driven testing and fixture usage
+  - Documentation and decision capture patterns
+
+- The `node_kafka_event_bus` serves as a **secondary reference** for nodes requiring complex backend/event bus logic and advanced configuration patterns.
+
+- All new nodes and node migrations **must**:
+  - Use the `node_cli` as the primary reference for all patterns
+  - Follow the linked document architecture pattern
+  - Use canonical base state inheritance (OnexInputState/OnexOutputState)
+  - Reference shared schemas with project root paths
+  - Use auto-generated models and error codes from `contract.yaml`
+  - Follow the canonical dependency injection and protocol interface patterns
+  - Document and justify any deviation in the node's root-level `README.md`, subject to maintainer review
+
+---
+
+## Canonical Node Directory Structure
+
+Each ONEX node **must** follow this directory structure (based on `node_cli` canonical pattern):
+
+```
+node_name/
+  README.md                       # Node-level documentation (required at node root)
+  ARCHITECTURE_DECISIONS.md       # Architectural decisions with rationale
+  CLI_ARCHITECTURE_STATUS.md      # Implementation status (if applicable)
+  protocols/                      # Protocol interfaces (always at node root, never versioned)
+  v1_0_0/                        # Versioned implementation directory
+    SCHEMA_DECISIONS.md          # Schema-specific design decisions
+    contract.yaml                # Main interface contract (source of truth)
+    contracts/                   # Subcontract definitions (NEW CANONICAL)
+      contract_actions.yaml      # Action model definitions
+      contract_models.yaml       # Data structure definitions
+      contract_validation.yaml   # Validation rule definitions
+      contract_cli.yaml         # CLI interface definitions (optional)
+      contract_capabilities.yaml # Execution capability definitions (optional)
+    node_config.yaml             # Operational configuration (linked document)
+    deployment_config.yaml       # Deployment configuration (linked document)
+    models/                      # Pydantic models (auto-generated from contracts)
+      state.py                   # Auto-generated main state models
+      model_contract_actions.py  # Auto-generated from contract_actions.yaml
+      model_contract_models.py   # Auto-generated from contract_models.yaml
+      model_contract_validation.py # Auto-generated from contract_validation.yaml
+      model_contract_cli.py      # Auto-generated from contract_cli.yaml (optional)
+      model_contract_capabilities.py # Auto-generated from contract_capabilities.yaml (optional)
+      error_codes.py             # Auto-generated error codes
+    tools/                       # Node-specific helpers, business logic
+    handlers/                    # (If needed) Output/input handlers
+    registry/                    # (If needed) Registries for handlers, plugins, etc.
+    node_tests/                  # All tests (scenario-driven, fixture-injected)
+    scenarios/                   # Scenario YAMLs and index.yaml
+    snapshots/                   # Snapshot YAMLs for regression testing
+    introspection.py             # Standards-compliant introspection logic
+    node.py                      # Main node entrypoint (reducer pattern)
+    node.onex.yaml              # Node metadata (schema-valid)
+    README.md                    # Node-specific documentation (versioned, optional)
+    __init__.py                 # (Optional, for package structure)
+```
+
+## Canonical Contract Patterns
+
+Based on `node_cli/v1_0_0/contract.yaml`, all contracts **must** include:
+
+### **1. Linked Document Architecture**
+```yaml
+# Links to associated configuration documents
+associated_documents:
+  node_config:
+    $ref: "node_config.yaml"
+  deployment_config:
+    $ref: "deployment_config.yaml"
+  # Optional documents for future capabilities
+  optional_feature_config:
+    $ref: "optional_config.yaml"
+    optional: true
+    required_capability: "feature_name"
+```
+
+### **2. Canonical Base State Pattern**
+```yaml
+# Input state: Only node-specific fields (inherits from OnexInputState)
+input_state:
+  type: object
+  properties:
+    action:
+      type: string
+      enum: ["action1", "action2", "action3"]
+    # Only node-specific fields here
+  required: ["action"]
+
+# Output state: Only node-specific fields (inherits from OnexOutputState)
+output_state:
+  type: object
+  properties:
+    # Only node-specific fields (common fields inherited)
+    exit_code:
+      type: integer
+      default: 0
+  required: []
+```
+
+### **3. Shared Schema References**
+```yaml
+# Definitions: Reference shared schemas with project root paths
+definitions:
+  OnexFieldModel:
+    $ref: 'schemas/onex_field_model.schema.yaml#/'
+  SemVerModel:
+    $ref: 'schemas/semver_model.schema.yaml#/'
+  # Node-specific schemas
+  NodeSpecificConfig:
+    $ref: 'schemas/domain/node_specific.schema.yaml#/'
+```
+
+### **4. Subcontract Architecture (NEW CANONICAL)**
+```yaml
+# Main contract.yaml references subcontract definitions
+input_state:
+  type: object
+  properties:
+    action:
+      $ref: "contracts/contract_actions.yaml#/NodeActionModel"
+    validation_config:
+      $ref: "contracts/contract_validation.yaml#/ValidationConfig"
+
+definitions:
+  # External references only - no inline model definitions
+  OnexFieldModel:
+    $ref: 'omnibase/schemas/core/onex_field_model.schema.yaml#/'
+  SemVerModel:
+    $ref: 'omnibase/schemas/core/semver_model.schema.yaml#/'
+```
+
+**Benefits of Subcontract Pattern:**
+- **Separation of Concerns**: Interface vs data structure definitions
+- **Maintainability**: Complex contracts broken into focused files
+- **Reusability**: Action models can be shared across nodes
+- **Modularity**: Evolve models independently
+- **Tool-as-a-Service Ready**: Each subcontract becomes a microservice contract
+
+### **5. Future-Proof Patterns**
+```yaml
+# CLI Interface (if applicable)
+cli_interface:
+  entrypoint: "poetry run onex exec node_name"
+  commands: [...]
+
+# Execution Capabilities
+execution_capabilities:
+  supported_node_types: ["full"]
+  supported_delivery_modes: ["direct", "inmemory", "kafka"]
+  performance_constraints:
+    max_concurrent_executions: 10
+    timeout_ms: 30000
+```
+
+## Documentation Requirements
+
+Based on `node_cli` pattern, all nodes **must** include:
+
+### **1. Architecture Decisions Document**
+- `ARCHITECTURE_DECISIONS.md` - Key architectural choices with rationale
+- Decision format: Date, Status, Context, Options, Rationale, Consequences
+
+### **2. Schema Decisions Document**
+- `v1_0_0/SCHEMA_DECISIONS.md` - Schema-specific design decisions
+- Implementation notes and validation strategies
+
+### **3. Status Tracking (if applicable)**
+- Implementation completion status
+- Phase-based development tracking
+- Success criteria and next steps
+
+**Notes:**
+- Only the versioned directory (`v1_0_0/`, etc.) contains implementation, models, tests, and contract artifacts
+- All files and directories must follow naming conventions (lowercase, underscores, parent directory prefix where required)
+- All schema references must use project root paths (`schemas/...`) not relative paths
+- Any deviation must be documented and justified in the node's root-level `README.md`
+
+---
+
+### Enforcement
+- Node standards compliance is required for all PRs and node migrations
+- Automated checks and code review will enforce this rule
+- Any deviation must be justified in the PR and reviewed by maintainers
+
+### Canonical Source
+- This rule is a summary; in case of conflict, the `node_cli` directory and its documentation prevail
+- Secondary reference: `node_kafka_event_bus` for complex backend patterns only

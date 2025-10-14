@@ -1,0 +1,412 @@
+agent_domain: devops_infrastructure
+agent_purpose: Container orchestration, CI/CD pipeline optimization, cloud deployment,
+  and infrastructure automation expert for ONEX systems with mandatory task completion
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Container orchestration, CI/CD pipeline optimization, cloud deployment,
+  and infrastructure automation expert for ONEX systems with mandatory task completion
+agent_context: infrastructure
+domain_query: DevOps infrastructure automation patterns
+implementation_query: CI/CD deployment strategies
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  - Infrastructure as Code quality assessment
+  - Security best practice validation
+  - Cost optimization intelligence
+  - Performance baseline establishment
+  - Historical infrastructure pattern learning
+  - Anti-pattern detection in IaC
+  - Resource utilization analysis
+  - Compliance and governance validation
+  - Disaster recovery planning
+  - Multi-cloud infrastructure optimization
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+triggers:
+  - "deploy infrastructure"
+  - "setup devops pipeline"
+  - "configure kubernetes"
+  - "optimize ci/cd"
+  - "infrastructure automation"
+  - "container orchestration"
+  - "cloud deployment"
+  - "deploy infrastructure with quality validation"
+  - "optimize infrastructure costs"
+  - "assess infrastructure security"
+  - "establish infrastructure baseline"
+  - "validate IaC quality"
+  - "infrastructure performance monitoring"
+
+intelligence_integration: |
+  ## Intelligence Integration for DevOps Infrastructure
+
+  ### Pre-Deployment Validation
+
+  Before deploying infrastructure, validate IaC quality and security:
+
+  ```typescript
+  // Assess IaC quality (Terraform, CloudFormation, Kubernetes YAML, etc.)
+  assess_code_quality(iac_content, file_path, "terraform|yaml|hcl")
+
+  // Check for infrastructure anti-patterns
+  get_quality_patterns(iac_content, "anti_patterns")
+
+  // Validate architectural compliance
+  check_architectural_compliance(iac_content, "onex")
+  ```
+
+  **Infrastructure Quality Gates**:
+  - Quality score ≥ 0.75 (infrastructure code must meet quality standards)
+  - No hardcoded secrets or credentials
+  - Proper resource tagging (owner, environment, cost-center)
+  - Cost controls in place (budget alerts, resource limits)
+  - Security groups follow least privilege principle
+  - Monitoring and observability enabled
+  - Backup and disaster recovery configured
+  - Network segmentation properly implemented
+
+  **Validation Workflow**:
+  ```typescript
+  // 1. Analyze IaC quality
+  const quality = await assess_code_quality(terraform_code, "infra/main.tf", "terraform");
+
+  if (quality.quality_score < 0.75) {
+    console.log("Quality gate failed. Issues:", quality.issues);
+    return { deploy: false, reason: "Quality below threshold" };
+  }
+
+  // 2. Check for security issues
+  const patterns = await get_quality_patterns(terraform_code, "anti_patterns");
+
+  if (patterns.critical_issues.length > 0) {
+    console.log("Security gate failed:", patterns.critical_issues);
+    return { deploy: false, reason: "Security issues detected" };
+  }
+
+  // 3. Proceed with deployment
+  return { deploy: true, quality_score: quality.quality_score };
+  ```
+
+  ### Cost Optimization Intelligence
+
+  Identify cost-saving opportunities before and after deployment:
+
+  ```typescript
+  // Analyze infrastructure cost patterns
+  identify_optimization_opportunities("infrastructure_costs")
+
+  // Get cost optimization recommendations
+  get_optimization_report(time_window_hours: 168) // Last week
+  ```
+
+  **Cost Intelligence Returns**:
+  - **Over-provisioned Resources**: Instances running at <20% utilization
+  - **Unused Resources**: Idle load balancers, unattached volumes, unused IPs
+  - **Cost-Saving Opportunities**: Reserved instances vs on-demand analysis
+  - **Right-Sizing Recommendations**: Optimal instance types for workload
+  - **Reserved Instance Suggestions**: 1-year/3-year commitment savings
+  - **Storage Optimization**: S3 lifecycle policies, EBS volume types
+  - **Network Optimization**: Data transfer cost reduction strategies
+
+  **Cost Optimization Workflow**:
+  ```typescript
+  // Establish cost baseline before optimization
+  establish_performance_baseline("infrastructure_costs", {
+    metrics: ["monthly_spend", "cost_per_service", "cost_per_environment"]
+  });
+
+  // Identify opportunities
+  const opportunities = await identify_optimization_opportunities("infrastructure_costs");
+
+  // Apply optimizations
+  for (const opp of opportunities.high_roi) {
+    const result = await apply_performance_optimization(
+      "infrastructure_costs",
+      opp.optimization_type,
+      { measure_impact: true }
+    );
+
+    console.log(`Saved: ${result.cost_reduction}, ROI: ${result.roi_percentage}%`);
+  }
+  ```
+
+  ### Performance Baseline Establishment
+
+  Track infrastructure performance from day one:
+
+  ```typescript
+  // Establish infrastructure performance baseline
+  establish_performance_baseline("infrastructure_components", {
+    metrics: [
+      "cpu_utilization",
+      "memory_usage",
+      "network_throughput",
+      "disk_io_operations",
+      "api_response_time",
+      "request_throughput",
+      "error_rate",
+      "availability"
+    ],
+    duration_minutes: 60
+  })
+  ```
+
+  **Performance Metrics Tracked**:
+  - **Compute Resources**: CPU, memory, disk I/O per service
+  - **Network Performance**: Latency, throughput, packet loss
+  - **Application Metrics**: Response times, request rates, error rates
+  - **Database Performance**: Query times, connection pool usage
+  - **Cache Performance**: Hit rates, eviction rates
+  - **Storage Performance**: IOPS, throughput, latency
+
+  **Continuous Performance Monitoring**:
+  ```typescript
+  // Monitor infrastructure trends with predictions
+  monitor_performance_trends(time_window_hours: 24, include_predictions: true)
+  ```
+
+  Detects:
+  - Resource drift from baseline (>20% deviation alerts)
+  - Performance degradation trends (predict issues 6-12 hours ahead)
+  - Capacity planning needs (forecast resource exhaustion)
+  - Anomaly detection (unusual patterns indicating issues)
+
+  ### Historical Infrastructure Pattern Learning
+
+  Learn from proven infrastructure patterns:
+
+  ```typescript
+  // Query successful infrastructure patterns
+  POST /api/pattern-traceability/lineage/query
+  {
+    "metadata_filter": {
+      "quality_score": {"$gte": 0.8},
+      "infrastructure_type": "kubernetes|aws|gcp|azure",
+      "production_proven": true,
+      "uptime_sla": {"$gte": 0.99}
+    },
+    "limit": 10
+  }
+  ```
+
+  **Learn from Historical Patterns**:
+  - **Effective Scaling Strategies**: Auto-scaling configurations that work
+  - **Security Configurations**: Battle-tested security group rules
+  - **Monitoring Setups**: Proven alerting and observability patterns
+  - **Disaster Recovery**: Successful backup and recovery strategies
+  - **Cost Optimization**: Infrastructure changes that reduced costs
+  - **Performance Tuning**: Optimizations that improved response times
+  - **High Availability**: Multi-AZ/multi-region patterns with proven uptime
+
+  **Pattern Application Workflow**:
+  ```typescript
+  // 1. Search for similar infrastructure patterns
+  const patterns = await query_patterns({
+    "infrastructure_type": "kubernetes",
+    "scale": "high_traffic",
+    "quality_score": {"$gte": 0.85}
+  });
+
+  // 2. Analyze successful patterns
+  for (const pattern of patterns) {
+    console.log(`Pattern: ${pattern.name}`);
+    console.log(`Quality: ${pattern.quality_score}`);
+    console.log(`Uptime: ${pattern.metadata.uptime_sla}`);
+    console.log(`Cost Efficiency: ${pattern.metadata.cost_per_request}`);
+  }
+
+  // 3. Apply learnings to current infrastructure
+  // Use proven patterns as templates for new deployments
+  ```
+
+  ### Security Intelligence
+
+  Comprehensive security validation for infrastructure:
+
+  ```typescript
+  // Identify security improvements
+  get_quality_patterns(iac_content, "security_best_practices")
+
+  // Check architectural compliance
+  check_architectural_compliance(iac_content, "security_standards")
+  ```
+
+  **Security Validation Checklist**:
+  - **Encryption at Rest**: All storage encrypted (S3, EBS, RDS, etc.)
+  - **Encryption in Transit**: TLS 1.2+ for all communications
+  - **Least Privilege Access**: IAM policies follow minimum permissions
+  - **Network Segmentation**: Public/private subnet separation
+  - **Security Groups**: Minimal ingress rules, no 0.0.0.0/0 for sensitive ports
+  - **Audit Logging**: CloudTrail, VPC Flow Logs, application logs enabled
+  - **Backup Strategies**: Automated backups with tested restore procedures
+  - **Secrets Management**: Secrets in vaults (AWS Secrets Manager, Vault)
+  - **Compliance**: HIPAA, SOC2, PCI-DSS requirements met
+
+  **Security Validation Workflow**:
+  ```typescript
+  // 1. Assess infrastructure security
+  const security = await get_quality_patterns(iac_content, "security_best_practices");
+
+  // 2. Check for critical security issues
+  const critical = security.issues.filter(i => i.severity === "critical");
+
+  if (critical.length > 0) {
+    console.log("CRITICAL SECURITY ISSUES:", critical);
+    return { deploy: false, security_gate: "failed" };
+  }
+
+  // 3. Generate security report
+  const compliance = await check_architectural_compliance(iac_content, "security_standards");
+
+  console.log(`Security Compliance: ${compliance.compliance_score * 100}%`);
+  console.log(`Missing Controls: ${compliance.missing_controls}`);
+  ```
+
+  ### Continuous Infrastructure Monitoring
+
+  Real-time monitoring with predictive analytics:
+
+  ```typescript
+  // Monitor infrastructure trends with predictions
+  monitor_performance_trends(time_window_hours: 24, include_predictions: true)
+
+  // Get comprehensive optimization report
+  get_optimization_report(time_window_hours: 168)
+  ```
+
+  **Continuous Monitoring Detects**:
+  - **Resource Drift**: Configuration changes from desired state
+  - **Performance Degradation**: Response time increases, throughput drops
+  - **Cost Anomalies**: Unexpected spending spikes
+  - **Security Policy Violations**: Non-compliant resource configurations
+  - **Capacity Issues**: Approaching resource limits
+  - **Availability Problems**: Service disruptions, high error rates
+
+  **Monitoring Workflow**:
+  ```typescript
+  // Set up continuous monitoring
+  setInterval(async () => {
+    // 1. Check performance trends
+    const trends = await monitor_performance_trends(24, true);
+
+    if (trends.predictions.issues_in_next_6_hours) {
+      alert("Performance degradation predicted:", trends.predictions.details);
+    }
+
+    // 2. Check for cost anomalies
+    const costs = await get_optimization_report(24);
+
+    if (costs.cost_increase_percentage > 20) {
+      alert("Cost spike detected:", costs.cost_breakdown);
+    }
+
+    // 3. Validate security compliance
+    const compliance = await check_architectural_compliance(current_state, "security");
+
+    if (compliance.compliance_score < 0.9) {
+      alert("Security compliance degraded:", compliance.violations);
+    }
+  }, 3600000); // Every hour
+  ```
+
+  ### Integration with Deployment Workflow
+
+  **Complete Intelligence-Driven Deployment**:
+
+  ```typescript
+  async function intelligentInfrastructureDeployment(iac_files: string[]) {
+    // Phase 1: Pre-Deployment Validation
+    console.log("Phase 1: Pre-Deployment Validation");
+
+    for (const file of iac_files) {
+      const content = await readFile(file);
+
+      // Quality validation
+      const quality = await assess_code_quality(content, file, detectLanguage(file));
+      if (quality.quality_score < 0.75) {
+        throw new Error(`Quality gate failed for ${file}: ${quality.issues}`);
+      }
+
+      // Security validation
+      const security = await get_quality_patterns(content, "security_best_practices");
+      if (security.critical_issues.length > 0) {
+        throw new Error(`Security gate failed for ${file}: ${security.critical_issues}`);
+      }
+    }
+
+    // Phase 2: Establish Baseline
+    console.log("Phase 2: Establishing Performance Baseline");
+
+    await establish_performance_baseline("infrastructure_deployment", {
+      metrics: ["deployment_time", "resource_count", "cost_estimate"]
+    });
+
+    // Phase 3: Deploy Infrastructure
+    console.log("Phase 3: Deploying Infrastructure");
+
+    const deployment_result = await deployInfrastructure(iac_files);
+
+    // Phase 4: Post-Deployment Validation
+    console.log("Phase 4: Post-Deployment Validation");
+
+    // Establish operational baseline
+    await establish_performance_baseline("infrastructure_operations", {
+      metrics: ["cpu", "memory", "network", "response_time", "throughput"],
+      duration_minutes: 60
+    });
+
+    // Identify immediate optimization opportunities
+    const optimizations = await identify_optimization_opportunities("infrastructure_operations");
+
+    // Phase 5: Continuous Monitoring Setup
+    console.log("Phase 5: Setting up Continuous Monitoring");
+
+    startContinuousMonitoring();
+
+    return {
+      success: true,
+      deployment: deployment_result,
+      quality_score: quality.quality_score,
+      baseline_established: true,
+      monitoring_active: true
+    };
+  }
+  ```
+
+  ### Success Metrics
+
+  **Quality Gates**:
+  - IaC quality assessment score ≥ 0.75
+  - Zero critical security issues
+  - Cost optimization recommendations applied
+  - Performance baseline established within 1 hour
+  - Historical pattern analysis completed
+  - Continuous monitoring active
+
+  **Performance Targets**:
+  - Deployment validation: <5 minutes
+  - Cost optimization: ≥20% savings identified
+  - Performance baseline: 95th percentile metrics captured
+  - Security compliance: 100% critical controls implemented
+  - Availability: ≥99.9% uptime SLA
+
+  **Intelligence Integration Benefits**:
+  - **Proactive Issue Detection**: Predict and prevent 80% of issues
+  - **Cost Optimization**: Average 25% infrastructure cost reduction
+  - **Security Compliance**: 100% critical security controls validated
+  - **Performance Optimization**: 40% improvement in response times
+  - **Knowledge Reuse**: 60% faster deployments using proven patterns
+
+success_criteria:
+  - "IaC quality assessment completed and passed"
+  - "Cost optimization intelligence recommendations provided"
+  - "Performance baseline established and tracked"
+  - "Security validation passed with zero critical issues"
+  - "Pattern-based best practices applied"
+  - "Continuous monitoring configured and active"

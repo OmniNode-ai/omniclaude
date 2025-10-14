@@ -1,0 +1,70 @@
+{
+  "tasks": [
+    {
+      "task_id": "debug-api-performance",
+      "agent": "debug",
+      "description": "Analyze API endpoint performance degradation",
+      "input_data": {
+        "problem_description": "API endpoints responding 2x slower than baseline, 95th percentile latency at 2.5 seconds",
+        "affected_files": [
+          "/tmp/examples/api/endpoints.py",
+          "/tmp/examples/database/query_builder.py",
+          "/tmp/examples/cache/cache_manager.py"
+        ],
+        "error_traces": [],
+        "analysis_depth": "standard",
+        "hypothesis": ""
+      },
+      "dependencies": []
+    },
+    {
+      "task_id": "gen-cache-reducer",
+      "agent": "coder",
+      "description": "Generate caching Reducer node for API responses",
+      "input_data": {
+        "contract_description": "Reducer node that implements Redis caching for API responses with TTL management",
+        "node_type": "Reducer",
+        "output_path": "/tmp/examples/node_api_cache_reducer.py",
+        "context_files": [],
+        "validation_level": "moderate"
+      },
+      "dependencies": []
+    },
+    {
+      "task_id": "debug-cache-integration",
+      "agent": "debug",
+      "description": "Validate cache integration correctness",
+      "input_data": {
+        "problem_description": "Verify new cache layer integrates correctly with existing API infrastructure",
+        "affected_files": [
+          "/tmp/examples/node_api_cache_reducer.py",
+          "/tmp/examples/api/endpoints.py"
+        ],
+        "error_traces": [],
+        "analysis_depth": "quick",
+        "hypothesis": ""
+      },
+      "dependencies": ["gen-cache-reducer"]
+    },
+    {
+      "task_id": "gen-query-optimizer",
+      "agent": "coder",
+      "description": "Generate database query optimizer Compute node",
+      "input_data": {
+        "contract_description": "Compute node that optimizes database queries by analyzing and rewriting query plans",
+        "node_type": "Compute",
+        "output_path": "/tmp/examples/node_query_optimizer_compute.py",
+        "context_files": [
+          "/tmp/examples/database/query_builder.py"
+        ],
+        "validation_level": "moderate"
+      },
+      "dependencies": ["debug-api-performance"]
+    }
+  ],
+  "config": {
+    "max_workers": 5,
+    "timeout_seconds": 300,
+    "trace_dir": "./traces"
+  }
+}

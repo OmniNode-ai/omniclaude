@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "parallel_execution", from = "agents"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 pydantic = "^2.0.0"
 pyyaml = "^6.0"
 httpx = "^0.28.1"
@@ -17,12 +17,25 @@ pydantic-ai = "^1.0.15"
 opentelemetry-api = "^1.37.0"
 opentelemetry-sdk = "^1.37.0"
 python-dotenv = "^1.1.1"
+asyncpg = "^0.29.0"
+watchdog = "^6.0.0"
+numpy = "^2.3.3"
+omnibase-core = {path = "../omnibase_core", develop = true}
+aiokafka = "^0.10.0"
+
+[tool.poetry.group.kafka.dependencies]
+confluent-kafka = "^2.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
 pytest-asyncio = "^0.23.0"
 black = "^24.0.0"
 ruff = "^0.3.0"
+google-generativeai = "^0.8.5"
+jsonschema = "^4.23.0"
+pyyaml = "^6.0.3"
+neo4j = "^6.0.2"
+asyncpg = "^0.29.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -30,11 +43,11 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 120
-target-version = ['py311']
+target-version = ['py312']
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py312"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

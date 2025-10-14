@@ -1,0 +1,236 @@
+{
+  "trace_id": "coord_1759860649201_4549686352",
+  "coordinator_type": "parallel",
+  "start_time": 1759860649.2011058,
+  "end_time": 1759860651.957639,
+  "duration_ms": 2756.533145904541,
+  "total_agents": 1,
+  "completed_agents": 0,
+  "failed_agents": 1,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759860649203_4549686352",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "start_time": 1759860649.203128,
+      "end_time": 1759860651.9560099,
+      "duration_ms": 2752.8817653656006,
+      "status": "failed",
+      "events": [
+        {
+          "timestamp": 1759860649.203136,
+          "datetime_str": "2025-10-07T14:10:49.203136",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task task1",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759860649201_4549686352"
+        },
+        {
+          "timestamp": 1759860651.956043,
+          "datetime_str": "2025-10-07T14:10:51.956045",
+          "event_type": "AGENT_ERROR",
+          "level": "ERROR",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent failed: agent-contract-driven-generator (2752.88ms)",
+          "metadata": {
+            "result": null,
+            "error": "Code generation failed: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}"
+          },
+          "duration_ms": 2752.8817653656006,
+          "parent_trace_id": "coord_1759860649201_4549686352"
+        }
+      ],
+      "result": null,
+      "error": "Code generation failed: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}"
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759860649.201119,
+      "datetime_str": "2025-10-07T14:10:49.201120",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task1",
+            "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759860649.2022772,
+      "datetime_str": "2025-10-07T14:10:49.202278",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860649.202573,
+      "datetime_str": "2025-10-07T14:10:49.202573",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860649.202828,
+      "datetime_str": "2025-10-07T14:10:49.202828",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Task task1 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860649.203143,
+      "datetime_str": "2025-10-07T14:10:49.203143",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Generating Effect node: NodePostgreSQLAdapterEffect",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860651.78647,
+      "datetime_str": "2025-10-07T14:10:51.786472",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860651.956586,
+      "datetime_str": "2025-10-07T14:10:51.956587",
+      "event_type": "AGENT_ERROR",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Code generation failed: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860651.9569511,
+      "datetime_str": "2025-10-07T14:10:51.956952",
+      "event_type": "TASK_FAILED",
+      "level": "ERROR",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Task task1 failed in 2752.88ms",
+      "metadata": {
+        "execution_time_ms": 2752.882957458496
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860651.9573262,
+      "datetime_str": "2025-10-07T14:10:51.957326",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "task1"
+        ],
+        "success_count": 0
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    },
+    {
+      "timestamp": 1759860651.95765,
+      "datetime_str": "2025-10-07T14:10:51.957650",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Coordinator completed: 0/1 succeeded, 1 failed",
+      "metadata": {
+        "total_time_ms": 2756.5391063690186,
+        "tasks_completed": 1,
+        "success_count": 0
+      },
+      "duration_ms": 2756.533145904541,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759860651.957993,
+      "datetime_str": "2025-10-07T14:10:51.957994",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759860649201_4549686352",
+      "message": "Parallel execution complete: 1 tasks in 2756.54ms",
+      "metadata": {
+        "total_time_ms": 2756.5391063690186,
+        "results": {
+          "task1": false
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759860649201_4549686352"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task1",
+        "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+      }
+    ]
+  }
+}

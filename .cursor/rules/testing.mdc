@@ -1,0 +1,229 @@
+---
+description:
+globs: *.py
+alwaysApply: false
+---
+# ONEX Testing Standards (Canonical)
+
+> **Status:** CANONICAL | **Updated:** 2025-07-01 | **Enforcement:** MANDATORY
+
+**Purpose:** Scenario-driven YAML testing with registry resolution and fixture injection
+
+## Core Philosophy: Scenario-Driven Testing
+
+### 🚫 CRITICAL: NEVER CREATE SCENARIOS FROM SCRATCH
+**ALWAYS clone existing scenarios** - complexity makes manual creation error-prone:
+- Required fields frequently forgotten
+- Version formats must be precise (no "v" prefix)
+- Tool configurations need exact syntax
+- Existing scenarios contain canonical patterns
+
+### Scenario YAML Pattern
+```yaml
+scenario_id: "scenario_health_check"
+description: "Basic health check"
+input_field: "action"
+expected_status: "success"
+
+input_state:
+  action: "health_check"
+
+expected_output_state:
+  status: "success"
+  message: "Health check passed"
+
+tools:
+  tool_name: "module.path:ToolClass"
+```
+
+### Test Execution Pattern
+```python
+@pytest.mark.parametrize("scenario_path", get_scenario_paths())
+async def test_scenario_yaml(scenario_path, scenario_test_harness):
+    """Canonical scenario test pattern."""
+    registry = None  # Forces harness to use registry resolver
+
+    output, expected = await scenario_test_harness.run_scenario_test(
+        node_class=NodeClass,
+        scenario_path=scenario_path,
+        registry=registry,
+        logger_tool=logger_tool,
+    )
+```
+
+## Scenario Creation Workflow
+
+### 1. Clone Existing Scenario
+```bash
+# Find canonical sources
+find src/omnibase/nodes -name "scenario_*.yaml" | grep -i "smoke"
+
+# Clone closest match
+cp ../node_registry/v1_0_0/scenarios/scenario_smoke.yaml scenario_new.yaml
+
+# Modify ONLY needed fields
+```
+
+### 2. Canonical Sources to Clone
+| Type | Clone From | Purpose |
+|------|------------|---------|
+| **smoke** | `scenario_smoke.yaml` | Basic functionality |
+| **error** | `scenario_missing_required.yaml` | Error handling |
+| **tool** | `scenario_tool_*.yaml` | Tool-specific tests |
+| **integration** | `scenario_integration.yaml` | External services |
+| **cli** | `scenario_cli_*.yaml` | CLI commands |
+
+### 3. Modify Only These Fields
+```yaml
+# Config section
+scenario_name: "Your scenario"     # Update
+description: "Your description"    # Update
+# PRESERVE: version, registry_tools
+
+# Chain section
+node: target_node_name            # Update
+input:
+  your_field: "your_value"        # Update test data
+expect:
+  message: "Your message"         # Update expected
+```
+
+## Critical Format Rules
+
+### Version Format (NO "v" PREFIX)
+```yaml
+# ✅ CORRECT
+version: "1.0.0"
+node_version: "1.0.0"
+
+# ❌ FORBIDDEN
+version: "v1.0.0"
+```
+
+### Tool Configuration
+```yaml
+# ✅ Full Python path
+tools:
+  tool_name: "omnibase.nodes.node_name.v1_0_0.tools.tool_class:ToolClass"
+
+# ✅ Registry tools with !!python/name
+registry_tools:
+  inmemory: !!python/name:omnibase.runtime.tools.ToolEventBusInMemory
+```
+
+## Registry Resolution
+
+### Canonical Pattern
+```python
+# Let harness resolve registry with scenario tools
+registry = None  # Forces registry resolver usage
+
+# Registry resolver merges:
+# 1. Canonical tools from registry class
+# 2. Scenario-specific tools from YAML
+# 3. Dependency mode tools (mock/real)
+```
+
+### Anti-Pattern (FORBIDDEN)
+```python
+# ❌ Don't manually create registry
+registry = RegistryClass(tool_collection={...})
+```
+
+## Fixture Patterns
+
+### Context-Based Fixtures
+```python
+UNIT_CONTEXT = 1
+INTEGRATION_CONTEXT = 2
+
+@pytest.fixture(params=[
+    pytest.param(UNIT_CONTEXT, id="unit", marks=pytest.mark.mock),
+    pytest.param(INTEGRATION_CONTEXT, id="integration", marks=pytest.mark.integration),
+])
+def event_bus(request):
+    if request.param == UNIT_CONTEXT:
+        return ToolEventBusInMemory()
+    else:
+        return KafkaEventBus()
+```
+
+### Dynamic Fixture Injection
+```python
+# Detect required fixtures from constructor
+import inspect
+node_sig = inspect.signature(node_class)
+if 'logger_tool' in node_sig.parameters:
+    logger_tool = request.getfixturevalue('logger_tool')
+```
+
+## CI Markers
+
+### Marker Usage (FIXTURE PARAMS ONLY)
+```python
+# ✅ CORRECT: On fixture parameters
+@pytest.fixture(params=[
+    pytest.param(UNIT_CONTEXT, marks=pytest.mark.mock),
+])
+
+# ❌ FORBIDDEN: On test functions
+@pytest.mark.mock  # NEVER DO THIS
+def test_something():
+```
+
+### Test Execution
+```bash
+# Mock tests only (fast CI)
+poetry run pytest -m "mock or (not integration)"
+
+# Integration tests
+poetry run pytest -m "integration"
+
+# Specific scenario
+poetry run pytest -k scenario_name
+```
+
+## Directory Structure
+```
+node_name/v1_0_0/
+├── scenarios/
+│   ├── index.yaml              # Scenario registry
+│   ├── scenario_smoke.yaml     # Basic functionality
+│   ├── scenario_error.yaml     # Error handling
+│   └── scenario_tool.yaml      # Tool-specific
+├── snapshots/                  # Expected outputs
+└── node_tests/
+    └── test_scenarios.py       # Single test file
+```
+
+## Validation Checklist
+
+Before committing scenarios:
+- [ ] Cloned from existing scenario (not created from scratch)
+- [ ] Version fields use "1.0.0" format (no "v" prefix)
+- [ ] Tool paths use full Python import syntax
+- [ ] Registry tools use !!python/name syntax
+- [ ] All required fields present
+- [ ] Scenario runs successfully
+
+## Anti-Patterns (FORBIDDEN)
+
+❌ Creating scenarios from scratch
+❌ Using "v" prefix in versions
+❌ Markers on test functions/classes
+❌ Manual registry creation
+❌ String literals instead of enums
+❌ Testing internal implementation
+❌ Incorrect tool syntax
+❌ Missing required fields
+
+## Enforcement
+
+- **Scenario validation** in CI
+- **Clone verification** in code review
+- **Registry resolver** usage mandatory
+- **Fixture injection** required
+- **Format compliance** automated checks
+
+```.cursor/rules/testing.mdc
+<code_block_to_apply_changes_from>
