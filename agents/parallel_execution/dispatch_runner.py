@@ -46,6 +46,7 @@ Usage:
 
 import asyncio
 import json
+import logging
 import sys
 import time
 from dataclasses import dataclass, asdict, field
@@ -54,80 +55,76 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Pydantic imports for handling typed agent outputs
+try:
+    from pydantic import BaseModel
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    BaseModel = None
+    PYDANTIC_AVAILABLE = False
+
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Configure logging to write to both stderr and file
+log_file = Path("/tmp/logging_implementation_coord.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='a'),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+logger = logging.getLogger(__name__)
+logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_file)
 
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask, AgentConfig
 from context_manager import ContextManager
 from agent_architect import ArchitectAgent
+from agent_registry import agent_exists, get_agent_module_name
 
-# Import workflow phase models
-from workflow.phase_models import (
-    ExecutionPhase,
-    PhaseConfig,
-    PhaseResult,
-    PhaseState
-)
-# Add parent directory to path for imports
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from agents.lib.lineage import LineageWriter, LineageEdge
-from agents.lib.debug_loop import record_workflow_step
-from agents.lib.state_snapshots import capture_workflow_state
-from agents.lib.error_logging import log_execution_error
-from agents.lib.success_logging import log_phase_success
-from agents.lib.logging_config import debug_logger, LogLevel
-
-# Import retry manager for robust error handling
+# Import all agents to trigger self-registration via decorators
+# This ensures agents register themselves when dispatch_runner loads
+logger.info("[AgentImport] Starting agent module imports...")
 try:
-    from agents.lib.retry_manager import (
-        execute_with_retry,
-        execute_with_circuit_breaker,
-        STANDARD_RETRY_CONFIG,
-        API_RETRY_CONFIG,
-        DATABASE_RETRY_CONFIG
-    )
-    RETRY_MANAGER_AVAILABLE = True
-except ImportError:
-    RETRY_MANAGER_AVAILABLE = False
-    print("[DispatchRunner] Warning: Retry manager unavailable (retry_manager.py not found)", file=sys.stderr)
+    logger.info("[AgentImport] Importing agent_analyzer...")
+    import agent_analyzer
+    logger.info("[AgentImport] Successfully imported agent_analyzer")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_analyzer: %s", e)
 
-# Import performance monitor for real-time tracking
 try:
-    from agents.lib.performance_monitor import (
-        track_phase_performance,
-        check_performance_threshold,
-        get_performance_level,
-        get_performance_summary
-    )
-    PERFORMANCE_MONITOR_AVAILABLE = True
-except ImportError:
-    PERFORMANCE_MONITOR_AVAILABLE = False
-    print("[DispatchRunner] Warning: Performance monitor unavailable (performance_monitor.py not found)", file=sys.stderr)
+    logger.info("[AgentImport] Importing agent_researcher...")
+    import agent_researcher
+    logger.info("[AgentImport] Successfully imported agent_researcher")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_researcher: %s", e)
 
-# Import input validator for security and quality checks
 try:
-    from agents.lib.input_validator import (
-        validate_and_sanitize,
-        sanitize_prompt,
-        validate_json_input,
-        InputType
-    )
-    INPUT_VALIDATOR_AVAILABLE = True
-except ImportError:
-    INPUT_VALIDATOR_AVAILABLE = False
-    print("[DispatchRunner] Warning: Input validator unavailable (input_validator.py not found)", file=sys.stderr)
+    logger.info("[AgentImport] Importing agent_validator...")
+    import agent_validator
+    logger.info("[AgentImport] Successfully imported agent_validator")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_validator: %s", e)
+
+try:
+    logger.info("[AgentImport] Importing agent_debug_intelligence...")
+    import agent_debug_intelligence
+    logger.info("[AgentImport] Successfully imported agent_debug_intelligence")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_debug_intelligence: %s", e)
+
+logger.info("[AgentImport] Agent module imports completed")
 
 # Import quorum validation (optional dependency)
 try:
-    from quorum_validator import QuorumValidator, ValidationDecision
+    from quorum_minimal import MinimalQuorum, ValidationDecision
     QUORUM_AVAILABLE = True
 except ImportError:
     QUORUM_AVAILABLE = False
-    print("[DispatchRunner] Warning: Quorum validation unavailable (quorum_validator.py not found)", file=sys.stderr)
+    print("[DispatchRunner] Warning: Quorum validation unavailable (quorum_minimal.py not found)", file=sys.stderr)
 
 # Import interactive validator (optional dependency)
 try:
@@ -142,6 +139,144 @@ try:
 except ImportError:
     INTERACTIVE_AVAILABLE = False
     print("[DispatchRunner] Warning: Interactive mode unavailable (interactive_validator.py not found)", file=sys.stderr)
+
+
+# ============================================================================
+# Phase Control Models
+# ============================================================================
+
+class ExecutionPhase(Enum):
+    """Workflow execution phases with numeric ordering."""
+    CONTEXT_GATHERING = 0
+    QUORUM_VALIDATION = 1
+    TASK_PLANNING = 2
+    CONTEXT_FILTERING = 3
+    PARALLEL_EXECUTION = 4
+
+
+@dataclass
+class PhaseConfig:
+    """Configuration for phase execution control."""
+
+    only_phase: Optional[int] = None  # Execute only this phase
+    stop_after_phase: Optional[int] = None  # Stop after completing this phase
+    skip_phases: List[int] = field(default_factory=list)  # Skip these phases
+    save_state_file: Optional[Path] = None  # Save phase state to file
+    load_state_file: Optional[Path] = None  # Load phase state from file
+
+    def should_execute_phase(self, phase: ExecutionPhase) -> bool:
+        """Check if a phase should be executed based on configuration."""
+        phase_num = phase.value
+
+        # Check skip list
+        if phase_num in self.skip_phases:
+            return False
+
+        # Check only_phase constraint
+        if self.only_phase is not None:
+            return phase_num == self.only_phase
+
+        # Check stop_after_phase constraint (execute up to and including the phase)
+        if self.stop_after_phase is not None:
+            return phase_num <= self.stop_after_phase
+
+        return True
+
+    def should_stop_after_phase(self, phase: ExecutionPhase) -> bool:
+        """Check if execution should stop after this phase."""
+        phase_num = phase.value
+
+        # Stop if this is the only_phase
+        if self.only_phase is not None and phase_num == self.only_phase:
+            return True
+
+        # Stop if this is the stop_after_phase
+        if self.stop_after_phase is not None and phase_num == self.stop_after_phase:
+            return True
+
+        return False
+
+
+@dataclass
+class PhaseResult:
+    """Result from executing a single phase."""
+
+    phase: ExecutionPhase
+    phase_name: str
+    success: bool
+    duration_ms: float
+    started_at: str
+    completed_at: str
+    output_data: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    skipped: bool = False
+    retry_count: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result = asdict(self)
+        result['phase'] = self.phase.name
+        return result
+
+
+@dataclass
+class PhaseState:
+    """Complete phase execution state for persistence."""
+
+    phases_executed: List[PhaseResult] = field(default_factory=list)
+    current_phase: Optional[int] = None
+    global_context: Optional[Dict[str, Any]] = None
+    quorum_result: Optional[Dict[str, Any]] = None
+    tasks_data: List[Dict[str, Any]] = field(default_factory=list)
+    user_prompt: str = ""
+
+    def save(self, path: Path) -> None:
+        """Save state to JSON file."""
+        with open(path, 'w') as f:
+            data = {
+                'phases_executed': [p.to_dict() for p in self.phases_executed],
+                'current_phase': self.current_phase,
+                'global_context': self.global_context,
+                'quorum_result': self.quorum_result,
+                'tasks_data': self.tasks_data,
+                'user_prompt': self.user_prompt,
+                'saved_at': datetime.now().isoformat()
+            }
+            json.dump(data, f, indent=2)
+        print(f"[DispatchRunner] Phase state saved to: {path}", file=sys.stderr)
+
+    @classmethod
+    def load(cls, path: Path) -> 'PhaseState':
+        """Load state from JSON file."""
+        with open(path, 'r') as f:
+            data = json.load(f)
+
+        # Reconstruct PhaseResult objects
+        phases_executed = []
+        for p in data.get('phases_executed', []):
+            phase_result = PhaseResult(
+                phase=ExecutionPhase[p['phase']],
+                phase_name=p['phase_name'],
+                success=p['success'],
+                duration_ms=p['duration_ms'],
+                started_at=p['started_at'],
+                completed_at=p['completed_at'],
+                output_data=p.get('output_data', {}),
+                error=p.get('error'),
+                skipped=p.get('skipped', False),
+                retry_count=p.get('retry_count', 0)
+            )
+            phases_executed.append(phase_result)
+
+        print(f"[DispatchRunner] Phase state loaded from: {path}", file=sys.stderr)
+        return cls(
+            phases_executed=phases_executed,
+            current_phase=data.get('current_phase'),
+            global_context=data.get('global_context'),
+            quorum_result=data.get('quorum_result'),
+            tasks_data=data.get('tasks_data', []),
+            user_prompt=data.get('user_prompt', '')
+        )
 
 
 # ============================================================================
@@ -171,34 +306,21 @@ async def execute_phase_0_context_gathering(
     start_time = time.time()
     started_at = datetime.now().isoformat()
 
-    debug_logger.log_phase_start("Phase 0: Context Gathering", f"Queries: {len(rag_queries)}")
+    print(f"\n{'='*80}", file=sys.stderr)
+    print(f"[DispatchRunner] Phase 0: Context Gathering", file=sys.stderr)
+    print(f"[DispatchRunner] Queries: {len(rag_queries)}", file=sys.stderr)
+    print(f"{'='*80}\n", file=sys.stderr)
 
     try:
         context_manager = ContextManager()
 
-        debug_logger.log_progress("Gathering global context...")
-        
-        # Use retry logic for context gathering if available
-        if RETRY_MANAGER_AVAILABLE:
-            success, result = await execute_with_retry(
-                context_manager.gather_global_context,
-                user_prompt=user_prompt,
-                workspace_path=workspace_path,
-                rag_queries=rag_queries,
-                max_rag_results=5,
-                manager_name="context_gathering",
-                config=API_RETRY_CONFIG
-            )
-            if not success:
-                raise result
-            global_context = result
-        else:
-            global_context = await context_manager.gather_global_context(
-                user_prompt=user_prompt,
-                workspace_path=workspace_path,
-                rag_queries=rag_queries,
-                max_rag_results=5
-            )
+        print("[DispatchRunner] Gathering global context...", file=sys.stderr)
+        global_context = await context_manager.gather_global_context(
+            user_prompt=user_prompt,
+            workspace_path=workspace_path,
+            rag_queries=rag_queries,
+            max_rag_results=5
+        )
 
         # Print context summary
         summary = context_manager.get_context_summary()
@@ -292,9 +414,9 @@ async def execute_phase_0_context_gathering(
         phase_state.global_context = global_context
 
         duration_ms = (time.time() - start_time) * 1000
-        debug_logger.log_phase_complete("Phase 0: Context Gathering", duration_ms, success=True)
+        print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
 
-        result_obj = PhaseResult(
+        return PhaseResult(
             phase=phase,
             phase_name="Context Gathering",
             success=True,
@@ -307,115 +429,10 @@ async def execute_phase_0_context_gathering(
             }
         )
 
-        try:
-            await record_workflow_step(
-                run_id=phase_state.user_prompt[:16] or "run",
-                step_index=0,
-                phase=phase.name,
-                started_at=started_at,
-                completed_at=result_obj.completed_at,
-                duration_ms=duration_ms,
-                success=True,
-            )
-        except Exception:
-            pass
-        
-        # Log success event for Phase 0
-        try:
-            await log_phase_success(
-                run_id=phase_state.user_prompt[:16] or "run",
-                phase=phase.name,
-                duration_ms=duration_ms,
-                metadata={
-                    "context_summary": summary,
-                    "total_items": summary.get('total_items', 0)
-                }
-            )
-        except Exception:
-            pass
-        
-        # Track performance metrics
-        if PERFORMANCE_MONITOR_AVAILABLE:
-            try:
-                await track_phase_performance(
-                    phase=phase.name,
-                    duration_ms=duration_ms,
-                    success=True,
-                    metadata={
-                        "context_summary": summary,
-                        "total_items": summary.get('total_items', 0)
-                    }
-                )
-            except Exception:
-                pass
-
-        # Capture state snapshot for Phase 0
-        try:
-            await capture_workflow_state(
-                run_id=phase_state.user_prompt[:16] or "run",
-                phase=phase.name,
-                state_data={
-                    "global_context": global_context,
-                    "context_summary": summary,
-                    "phase_result": result_obj.to_dict()
-                },
-                is_success=True
-            )
-        except Exception:
-            pass
-        return result_obj
-
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 0 failed: {e}", file=sys.stderr)
         print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
-
-        # Log error event
-        try:
-            await log_execution_error(
-                run_id=phase_state.user_prompt[:16] or "run",
-                phase=phase.name,
-                task_id=None,
-                error=e,
-                details={
-                    "duration_ms": duration_ms,
-                    "started_at": started_at
-                }
-            )
-        except Exception:
-            pass
-        
-        # Track performance metrics for failure
-        if PERFORMANCE_MONITOR_AVAILABLE:
-            try:
-                await track_phase_performance(
-                    phase=phase.name,
-                    duration_ms=duration_ms,
-                    success=False,
-                    error_type=type(e).__name__,
-                    metadata={
-                        "duration_ms": duration_ms,
-                        "started_at": started_at
-                    }
-                )
-            except Exception:
-                pass
-
-        # Capture error state snapshot
-        try:
-            await capture_workflow_state(
-                run_id=phase_state.user_prompt[:16] or "run",
-                phase=phase.name,
-                state_data={
-                    "error": str(e),
-                    "duration_ms": duration_ms,
-                    "started_at": started_at,
-                    "phase_state": phase_state.to_dict() if hasattr(phase_state, 'to_dict') else {}
-                },
-                is_success=False
-            )
-        except Exception:
-            pass
 
         return PhaseResult(
             phase=phase,
@@ -480,28 +497,13 @@ async def execute_phase_1_quorum_validation(
     # Retry loop for quorum validation
     while retry_count <= max_retries:
         try:
-            quorum = QuorumValidator()
+            quorum = MinimalQuorum()
 
             if retry_count > 0:
                 print(f"\n[DispatchRunner] Retry attempt {retry_count}/{max_retries}", file=sys.stderr)
 
             print("[DispatchRunner] Validating task breakdown with AI quorum...", file=sys.stderr)
-            
-            # Use retry manager for quorum validation if available
-            if RETRY_MANAGER_AVAILABLE:
-                success, result = await execute_with_circuit_breaker(
-                    quorum.validate_intent,
-                    "quorum_validation",
-                    user_prompt,
-                    task_breakdown,
-                    manager_name="quorum_validation",
-                    config=API_RETRY_CONFIG
-                )
-                if not success:
-                    raise result
-                # result is now the actual QuorumResult, not a tuple
-            else:
-                result = await quorum.validate_intent(user_prompt, task_breakdown)
+            result = await quorum.validate_intent(user_prompt, task_breakdown)
 
             print(f"[DispatchRunner] Quorum decision: {result.decision.value} (confidence: {result.confidence:.1%})", file=sys.stderr)
 
@@ -597,7 +599,7 @@ async def execute_phase_1_quorum_validation(
             else:
                 print(f"[DispatchRunner] ⚠ Phase 1 completed with warnings in {duration_ms:.0f}ms\n", file=sys.stderr)
 
-            result_obj = PhaseResult(
+            return PhaseResult(
                 phase=phase,
                 phase_name="Quorum Validation",
                 success=quorum_result_dict.get("validated", False),
@@ -607,20 +609,6 @@ async def execute_phase_1_quorum_validation(
                 output_data=quorum_result_dict,
                 retry_count=retry_count
             )
-            try:
-                await record_workflow_step(
-                    run_id=phase_state.user_prompt[:16] or "run",
-                    step_index=1,
-                    phase=phase.name,
-                    started_at=started_at,
-                    completed_at=result_obj.completed_at,
-                    duration_ms=duration_ms,
-                    success=result_obj.success,
-                    error=result_obj.error,
-                )
-            except Exception:
-                pass
-            return result_obj
 
         except Exception as e:
             retry_count += 1
@@ -750,7 +738,7 @@ async def execute_phase_2_task_architecture(
 
         await architect.cleanup()
 
-        result_obj = PhaseResult(
+        return PhaseResult(
             phase=phase,
             phase_name="Task Architecture",
             success=True,
@@ -765,19 +753,6 @@ async def execute_phase_2_task_architecture(
                 'parallel_capable': breakdown.get('parallel_capable', False)
             }
         )
-        try:
-            await record_workflow_step(
-                run_id=phase_state.user_prompt[:16] or "run",
-                step_index=2,
-                phase=phase.name,
-                started_at=started_at,
-                completed_at=result_obj.completed_at,
-                duration_ms=duration_ms,
-                success=True,
-            )
-        except Exception:
-            pass
-        return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
@@ -820,11 +795,125 @@ async def execute_phase_4_parallel_execution(
     print(f"{'='*80}\n", file=sys.stderr)
 
     coordinator = ParallelCoordinator()
-    lineage = LineageWriter()
 
     try:
         print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
+
+        # Log execution start for each task
+        for task in tasks:
+            agent_name = getattr(task, 'agent_name', 'unknown-agent')
+            logger.info("[AgentExecution] Starting: %s for task '%s'", agent_name, task.task_id)
+            logger.info("[AgentExecution] Task: '%s'", task.description)
+
+        execution_start = time.time()
         results = await coordinator.execute_parallel(tasks)
+        execution_duration = (time.time() - execution_start) * 1000
+
+        # Log execution completion for each task
+        for task_id, result in results.items():
+            logger.info(
+                "[AgentExecution] Completed: %s (success=%s, time=%.1fms)",
+                result.agent_name, result.success, result.execution_time_ms
+            )
+            if not result.success and result.error:
+                logger.error("[AgentExecution] Error for task '%s': %s", task_id, result.error)
+
+        # Automatic code extraction from debug agent outputs
+        # Supports both Pydantic AI typed outputs (BaseModel) and legacy JSON (dict)
+        for task_id, result in results.items():
+            if result.success and result.agent_name == "agent-debug-intelligence":
+                try:
+                    # Extract fixed code - support both Pydantic BaseModel and JSON dict
+                    output_data = result.output_data
+                    fixed_code = None
+                    extraction_method = None
+
+                    # Method 1: Pydantic BaseModel with typed attributes
+                    if PYDANTIC_AVAILABLE and isinstance(output_data, BaseModel):
+                        # Check for solution.fixed_code using attribute access
+                        if hasattr(output_data, "solution"):
+                            solution = output_data.solution
+                            if hasattr(solution, "fixed_code"):
+                                fixed_code = solution.fixed_code
+                                extraction_method = "Pydantic BaseModel (solution.fixed_code)"
+
+                        print(
+                            f"[DispatchRunner] Pydantic extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code attribute'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 2: Legacy JSON dict with nested keys
+                    elif isinstance(output_data, dict):
+                        solution = output_data.get("solution", {})
+                        fixed_code = solution.get("fixed_code") if isinstance(solution, dict) else None
+                        extraction_method = "JSON dict (solution.fixed_code)" if fixed_code else None
+
+                        print(
+                            f"[DispatchRunner] JSON extraction for {task_id}: "
+                            f"{'found' if fixed_code else 'no fixed_code key'}",
+                            file=sys.stderr
+                        )
+
+                    # Method 3: Handle None or unexpected types gracefully
+                    else:
+                        output_type = type(output_data).__name__ if output_data is not None else "None"
+                        print(
+                            f"[DispatchRunner] Skipping {task_id}: "
+                            f"output_data is {output_type}, expected BaseModel or dict",
+                            file=sys.stderr
+                        )
+
+                    if fixed_code:
+                        # Find the corresponding task to get output file info
+                        task = next((t for t in tasks if t.task_id == task_id), None)
+                        if not task:
+                            print(
+                                f"[DispatchRunner] Warning: Task {task_id} not found for code extraction",
+                                file=sys.stderr
+                            )
+                            continue
+
+                        # Determine output file path
+                        input_data = task.input_data or {}
+                        output_files = input_data.get("output_files", [])
+                        target_directory = input_data.get("target_directory", ".")
+
+                        if output_files and len(output_files) > 0:
+                            output_file = Path(target_directory) / output_files[0]
+                        else:
+                            # Fallback: use task_id as filename
+                            output_file = Path(target_directory) / f"agent_{task_id}.py"
+
+                        # Ensure directory exists
+                        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                        # Write the extracted code
+                        output_file.write_text(fixed_code, encoding="utf-8")
+
+                        print(
+                            f"[DispatchRunner] ✓ Code extracted from {task_id} using {extraction_method}: {output_file}",
+                            file=sys.stderr
+                        )
+
+                        # Update result metadata - preserve BaseModel or create dict
+                        if isinstance(output_data, dict):
+                            result.output_data["_code_extracted"] = True
+                            result.output_data["_extracted_file"] = str(output_file)
+                            result.output_data["_extraction_method"] = extraction_method
+                        else:
+                            # For BaseModel, store metadata separately to avoid mutating the model
+                            if not hasattr(result, "_extraction_metadata"):
+                                result._extraction_metadata = {}
+                            result._extraction_metadata["code_extracted"] = True
+                            result._extraction_metadata["extracted_file"] = str(output_file)
+                            result._extraction_metadata["extraction_method"] = extraction_method
+
+                except Exception as e:
+                    print(
+                        f"[DispatchRunner] Warning: Failed to extract code from {task_id}: {e}",
+                        file=sys.stderr
+                    )
 
         # Interactive checkpoint: Review execution results
         if validator and INTERACTIVE_AVAILABLE:
@@ -859,35 +948,14 @@ async def execute_phase_4_parallel_execution(
                 print("[DispatchRunner] User requested retry of agent execution", file=sys.stderr)
                 print("[DispatchRunner] Note: Retry of agent execution not yet implemented", file=sys.stderr)
 
-        # Count successes and emit lineage edges per task result (best-effort)
+        # Count successes
         successful = sum(1 for r in results.values() if r.success)
         failed = len(results) - successful
-
-        try:
-            run_id = phase_state.user_prompt[:16] or "run"
-            for task_id, result in results.items():
-                attrs = {
-                    "agent": result.agent_name,
-                    "success": result.success,
-                    "execution_time_ms": result.execution_time_ms,
-                }
-                if result.trace_id:
-                    attrs["trace_id"] = result.trace_id
-                await lineage.emit(LineageEdge(
-                    edge_type="EXECUTED",
-                    src_type="run",
-                    src_id=run_id,
-                    dst_type="task",
-                    dst_id=task_id,
-                    attributes=attrs,
-                ))
-        except Exception:
-            pass
 
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✓ Phase 4 completed in {duration_ms:.0f}ms ({successful} succeeded, {failed} failed)\n", file=sys.stderr)
 
-        result_obj = PhaseResult(
+        return PhaseResult(
             phase=phase,
             phase_name="Parallel Execution",
             success=True,
@@ -913,19 +981,6 @@ async def execute_phase_4_parallel_execution(
                 }
             }
         )
-        try:
-            await record_workflow_step(
-                run_id=phase_state.user_prompt[:16] or "run",
-                step_index=4,
-                phase=phase.name,
-                started_at=started_at,
-                completed_at=result_obj.completed_at,
-                duration_ms=duration_ms,
-                success=True,
-            )
-        except Exception:
-            pass
-        return result_obj
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
@@ -944,6 +999,54 @@ async def execute_phase_4_parallel_execution(
 
     finally:
         await coordinator.cleanup()
+
+
+async def extract_code_from_results(output: dict, output_dir: str):
+    """Extract Python code files from agent results using the new architecture."""
+    print("[DispatchRunner] Extracting Python code files...", file=sys.stderr)
+
+    try:
+        # Import the new code extractor
+        from code_extractor import ExtractCode
+
+        # Create extractor and extract code
+        extractor = ExtractCode(output_dir)
+        code_files = extractor.extract_from_results(output)
+
+        # Write code files
+        extractor.write_code_files(code_files)
+
+        # Write manifest
+        extractor.write_manifest(code_files)
+
+        print(f"[DispatchRunner] ✓ Extracted {len(code_files)} code files to {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import code extractor: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Code extraction failed: {e}", file=sys.stderr)
+
+
+async def generate_markdown_docs(output: dict, output_dir: str):
+    """Generate human-readable Markdown documentation using the new architecture."""
+    print("[DispatchRunner] Generating Markdown documentation...", file=sys.stderr)
+
+    try:
+        # Import the new doc generator
+        from doc_generator import MarkdownDocGenerator
+
+        # Create generator and generate docs
+        doc_generator = MarkdownDocGenerator(output_dir)
+        doc_generator.generate_from_results(output)
+
+        print(f"[DispatchRunner] ✓ Generated documentation in {output_dir}", file=sys.stderr)
+
+    except ImportError as e:
+        print(f"[DispatchRunner] ✗ Failed to import doc generator: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[DispatchRunner] ✗ Documentation generation failed: {e}", file=sys.stderr)
+
+
 
 
 # ============================================================================
@@ -990,16 +1093,12 @@ Phase Control Examples:
     # Input/session management
     parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
     parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
-    
-    # Logging control
-    parser.add_argument("--log-level", choices=["silent", "quiet", "normal", "verbose"], 
-                       default="normal", help="Set logging verbosity level")
+    parser.add_argument("--output-file", "-o", type=str, help="Write JSON output to file instead of stdout")
+    parser.add_argument("--extract-code", "-c", action="store_true", help="Extract Python code files from agent results")
+    parser.add_argument("--generate-md", "-m", action="store_true", help="Generate human-readable Markdown documentation")
+    parser.add_argument("--output-dir", type=str, default="generated_code", help="Directory for extracted code and docs")
 
     args = parser.parse_args()
-
-    # Initialize logging level
-    log_level = LogLevel(args.log_level)
-    debug_logger.set_level(log_level)
 
     # Build phase configuration
     skip_phases = []
@@ -1022,22 +1121,22 @@ Phase Control Examples:
 
     # Print phase configuration
     if phase_config.only_phase is not None:
-        debug_logger.log_info(f"Executing only Phase {phase_config.only_phase}")
+        print(f"[DispatchRunner] Executing only Phase {phase_config.only_phase}", file=sys.stderr)
     elif phase_config.stop_after_phase is not None:
-        debug_logger.log_info(f"Stopping after Phase {phase_config.stop_after_phase}")
+        print(f"[DispatchRunner] Stopping after Phase {phase_config.stop_after_phase}", file=sys.stderr)
     if skip_phases:
-        debug_logger.log_info(f"Skipping phases: {skip_phases}")
+        print(f"[DispatchRunner] Skipping phases: {skip_phases}", file=sys.stderr)
 
     # Create validator
     validator = None
     if enable_interactive and INTERACTIVE_AVAILABLE:
-        debug_logger.log_info("Interactive mode enabled")
+        print("[DispatchRunner] Interactive mode enabled", file=sys.stderr)
         validator = create_validator(
             interactive=True,
             session_file=resume_session_file
         )
     elif enable_interactive and not INTERACTIVE_AVAILABLE:
-        debug_logger.log_warning("Interactive mode requested but unavailable")
+        print("[DispatchRunner] Warning: Interactive mode requested but unavailable", file=sys.stderr)
 
     # Initialize phase state
     phase_state = PhaseState()
@@ -1079,43 +1178,6 @@ Phase Control Examples:
     # Parse user prompt and tasks
     user_prompt = input_data.get("user_prompt", "")
     tasks_data = input_data.get("tasks", [])
-    
-    # Validate and sanitize user input
-    if INPUT_VALIDATOR_AVAILABLE:
-        try:
-            # Validate user prompt
-            prompt_result = await validate_and_sanitize(user_prompt, InputType.USER_PROMPT)
-            if not prompt_result.is_valid:
-                print(f"[DispatchRunner] Input validation failed: {prompt_result.errors}", file=sys.stderr)
-                if prompt_result.errors:
-                    print(json.dumps({
-                        "success": False,
-                        "error": "Input validation failed",
-                        "validation_errors": prompt_result.errors
-                    }))
-                    sys.exit(1)
-            user_prompt = prompt_result.sanitized_input
-            
-            # Validate tasks data
-            if tasks_data:
-                tasks_result = await validate_and_sanitize(tasks_data, InputType.TASK_DATA)
-                if not tasks_result.is_valid:
-                    print(f"[DispatchRunner] Tasks validation failed: {tasks_result.errors}", file=sys.stderr)
-                    if tasks_result.errors:
-                        print(json.dumps({
-                            "success": False,
-                            "error": "Tasks validation failed",
-                            "validation_errors": tasks_result.errors
-                        }))
-                        sys.exit(1)
-                tasks_data = tasks_result.sanitized_input
-                
-        except Exception as e:
-            print(f"[DispatchRunner] Input validation error: {e}", file=sys.stderr)
-            # Continue without validation if validator fails
-    else:
-        # Basic sanitization without full validation
-        user_prompt = sanitize_prompt(user_prompt) if user_prompt else ""
 
     # If no tasks provided, Phase 2 (architect) will generate them
     if not tasks_data and not user_prompt:
@@ -1135,28 +1197,7 @@ Phase Control Examples:
     # Enable architect if no tasks provided
     enable_architect = not tasks_data
     if enable_architect:
-        debug_logger.log_info("No tasks provided - architect agent will generate breakdown")
-
-    # ========================================================================
-    # STARTUP BANNER
-    # ========================================================================
-
-    correlation_id = input_data.get("correlation_id", "N/A")
-    workspace_path = input_data.get("workspace_path", "N/A")
-
-    debug_logger.log_startup_banner(
-        user_prompt=user_prompt,
-        correlation_id=correlation_id,
-        workspace_path=workspace_path,
-        enable_context=enable_context,
-        enable_quorum=enable_quorum,
-        enable_interactive=enable_interactive,
-        enable_architect=enable_architect,
-        phase_config={
-            'only_phase': phase_config.only_phase,
-            'stop_after_phase': phase_config.stop_after_phase
-        }
-    )
+        print("[DispatchRunner] No tasks provided - architect agent will generate breakdown", file=sys.stderr)
 
     # ========================================================================
     # Phase Execution
@@ -1280,24 +1321,59 @@ Phase Control Examples:
             sys.exit(0)
 
     # Phase 3: Context Filtering
+    # Initialize tasks list before Phase 3 (needed when skipping to Phase 4)
+    tasks = []
+
     if phase_config.should_execute_phase(ExecutionPhase.CONTEXT_FILTERING):
         # Convert tasks and apply context filtering
-        tasks = []
-
         for task_data in tasks_data:
             try:
                 # Map agent name from architect's generic names to actual agent implementations
-                agent_name_mapping = {
-                    "coder": "agent-contract-driven-generator",
-                    "debug": "agent-debug-intelligence",
-                    "debugger": "agent-debug-intelligence",
-                    # Map research/analysis tasks to coder for now (they can generate code/docs)
-                    "researcher": "agent-contract-driven-generator",
-                    "analyzer": "agent-contract-driven-generator",
-                    # Map validation to debug intelligence (can analyze and validate)
-                    "validator": "agent-debug-intelligence"
+                # Use dynamic agent registry to check if agent exists, with intelligent fallbacks
+                requested_agent = task_data.get("agent", "")
+                task_id = task_data.get("task_id", "unknown")
+
+                logger.info("[AgentSelection] Requested agent: '%s' for task '%s'", requested_agent, task_id)
+
+                # Static mappings for known aliases
+                agent_alias_mapping = {
+                    "coder": "contract-driven-generator",
+                    "debug": "debug-intelligence",
+                    "debugger": "debug-intelligence",
                 }
-                agent_name = agent_name_mapping.get(task_data.get("agent"), task_data.get("agent"))
+
+                # Resolve alias first
+                agent_base_name = agent_alias_mapping.get(requested_agent, requested_agent)
+                if requested_agent in agent_alias_mapping:
+                    logger.info("[AgentSelection] Agent alias resolved: '%s' -> '%s'", requested_agent, agent_base_name)
+
+                # Check if the agent exists in the registry
+                logger.info("[AgentSelection] Checking if agent exists: %s", agent_base_name)
+                agent_exists_result = agent_exists(agent_base_name)
+                logger.info("[AgentSelection] agent_exists('%s') = %s", agent_base_name, agent_exists_result)
+
+                if not agent_exists_result:
+                    # Agent doesn't exist - fail immediately with clear error
+                    error_msg = (
+                        f"Agent '{agent_base_name}' not found in registry for task '{task_id}'. "
+                        f"Available agents: {', '.join(sorted(list_registered_agents()))}"
+                    )
+                    logger.error("[AgentSelection] %s", error_msg)
+                    print(f"[DispatchRunner] ERROR: {error_msg}", file=sys.stderr)
+
+                    print(json.dumps({
+                        "success": False,
+                        "error": error_msg,
+                        "task_id": task_id,
+                        "requested_agent": requested_agent,
+                        "available_agents": list_registered_agents()
+                    }), file=sys.stderr)
+                    sys.exit(1)
+
+                # Agent exists, use it
+                agent_name = f"agent-{agent_base_name}"
+                logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
+                agent_metadata = {"agent_source": "registry"}
 
                 # Filter context for this task (if enabled)
                 input_data_with_context = task_data.get("input_data", {}).copy()
@@ -1328,6 +1404,9 @@ Phase Control Examples:
                             f"{len(filtered_context)} context items attached",
                             file=sys.stderr
                         )
+
+                # Add agent metadata to input_data for tracking
+                input_data_with_context["_agent_metadata"] = agent_metadata
 
                 task = AgentTask(
                     task_id=task_data["task_id"],
@@ -1360,25 +1439,28 @@ Phase Control Examples:
                 "tasks_prepared": len(tasks)
             }, indent=2))
             sys.exit(0)
+    else:
+        # Phase 3 was skipped - build tasks directly from tasks_data
+        for task_data in tasks_data:
+            try:
+                agent_name = f"agent-{task_data.get('agent', '')}"
+                task = AgentTask(
+                    task_id=task_data["task_id"],
+                    description=task_data["description"],
+                    agent_name=agent_name,
+                    input_data=task_data.get("input_data", {}),
+                    dependencies=task_data.get("dependencies", [])
+                )
+                tasks.append(task)
+            except Exception as e:
+                print(json.dumps({
+                    "success": False,
+                    "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}"
+                }), file=sys.stderr)
+                sys.exit(1)
 
     # Phase 4: Parallel Execution
     if phase_config.should_execute_phase(ExecutionPhase.PARALLEL_EXECUTION):
-        # Print task dispatch banner
-        print("\n" + "="*80)
-        print(f"DISPATCHING {len(tasks)} TASKS TO AGENTS")
-        print("="*80)
-        for i, task in enumerate(tasks, 1):
-            agent_display = task.agent_name.replace("agent-", "").replace("-", " ").title()
-            print(f"\n  Task {i}: {task.task_id}")
-            print(f"    Agent: {agent_display}")
-            print(f"    Description: {task.description[:100]}{'...' if len(task.description) > 100 else ''}")
-            if task.dependencies:
-                print(f"    Dependencies: {', '.join(task.dependencies)}")
-        print("\n" + "="*80)
-        print("EXECUTING IN PARALLEL")
-        print("="*80 + "\n")
-        sys.stdout.flush()
-
         result = await execute_phase_4_parallel_execution(
             tasks=tasks,
             validator=validator,
@@ -1468,8 +1550,25 @@ Phase Control Examples:
     if phase_config.save_state_file:
         phase_state.save(phase_config.save_state_file)
 
-    # Print results to stdout
-    print(json.dumps(output, indent=2))
+    # Write results to output file or stdout
+    output_json = json.dumps(output, indent=2)
+    if args.output_file:
+        with open(args.output_file, 'w') as f:
+            f.write(output_json)
+        print(f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr)
+    else:
+        print(output_json)
+
+    # Extract code and generate docs if requested
+    if args.extract_code or args.generate_md:
+        import os
+        os.makedirs(args.output_dir, exist_ok=True)
+        print(f"[DispatchRunner] Output directory: {args.output_dir}", file=sys.stderr)
+
+        if args.extract_code:
+            await extract_code_from_results(output, args.output_dir)
+        if args.generate_md:
+            await generate_markdown_docs(output, args.output_dir)
 
     # Cleanup
     if context_manager:
