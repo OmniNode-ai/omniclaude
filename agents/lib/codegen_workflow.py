@@ -19,6 +19,8 @@ from omnibase_core.errors import OnexError, CoreErrorCode
 from .simple_prd_analyzer import SimplePRDAnalyzer, SimplePRDAnalysisResult
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .version_config import get_config
+from .persistence import CodegenPersistence
+from .prd_intelligence_client import PRDIntelligenceClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,8 @@ class CodegenWorkflow:
         self.prd_analyzer = SimplePRDAnalyzer()
         self.template_engine = OmniNodeTemplateEngine()
         self.logger = logging.getLogger(__name__)
+        self.persistence = CodegenPersistence()
+        self.prd_intel = PRDIntelligenceClient()
     
     async def generate_from_prd(
         self,
@@ -81,7 +85,34 @@ class CodegenWorkflow:
             
             # Step 1: Analyze PRD
             self.logger.info("Step 1: Analyzing PRD content")
-            prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
+            # Persist session start
+            await self.persistence.upsert_session(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                prd_content=prd_content,
+                status="started",
+            )
+            if getattr(self.config, "enable_event_driven_analysis", False):
+                try:
+                    resp = await self.prd_intel.analyze(
+                        prd_content=prd_content,
+                        workspace_context=workspace_context or {},
+                        timeout_seconds=float(getattr(self.config, "analysis_timeout_seconds", 30))
+                    )
+                    if resp and isinstance(resp, dict) and resp.get("analysis"):
+                        local = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
+                        hints = resp["analysis"].get("node_type_hints") or {}
+                        mixins = resp["analysis"].get("recommended_mixins") or []
+                        local.node_type_hints.update(hints)
+                        if mixins:
+                            local.recommended_mixins = list({*local.recommended_mixins, *mixins})
+                        prd_analysis = local
+                    else:
+                        prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
+                except Exception:
+                    prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
+            else:
+                prd_analysis = await self.prd_analyzer.analyze_prd(prd_content, workspace_context)
             
             # Step 2: Determine node types to generate
             self.logger.info("Step 2: Determining node types")
@@ -110,6 +141,26 @@ class CodegenWorkflow:
                 
                 generated_nodes.append(node_result)
                 total_files += len(node_result.get("generated_files", [])) + 1  # +1 for main file
+                # Persist artifacts when available
+                try:
+                    files = node_result.get("generated_files", [])
+                    for f in files:
+                        path = f.get("path") or f.get("file_path")
+                        content = f.get("content", "")
+                        if path:
+                            await self.persistence.insert_artifact(
+                                session_id=session_id,
+                                artifact_id=uuid4(),
+                                artifact_type=node_type,
+                                file_path=str(path),
+                                content=content,
+                                quality_score=None,
+                                validation_status=None,
+                                template_version=None,
+                            )
+                except Exception:
+                    # Non-fatal for MVP
+                    pass
             
             # Step 4: Validate generated code
             self.logger.info("Step 4: Validating generated code")
@@ -124,6 +175,9 @@ class CodegenWorkflow:
                 total_files=total_files,
                 success=True
             )
+            # Mark session complete
+            await self.persistence.complete_session(session_id)
+            await self.persistence.close()
             
             self.logger.info(f"Code generation workflow completed for session {session_id}")
             self.logger.info(f"Generated {len(generated_nodes)} nodes with {total_files} total files")
