@@ -14,7 +14,7 @@ from uuid import UUID
 from datetime import datetime
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, CoreErrorCode
+from omnibase_core.errors import OnexError, EnumCoreErrorCode
 from omnibase_core.enums.enum_node_type import EnumNodeType
 
 # TODO: Add omnibase_spi imports when available
@@ -123,7 +123,7 @@ class OmniNodeTemplateEngine:
             template = self.templates.get(node_type)
             if not template:
                 raise OnexError(
-                    code=CoreErrorCode.VALIDATION_ERROR,
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"No template found for node type: {node_type}",
                     details={"available_templates": list(self.templates.keys())}
                 )
@@ -178,7 +178,7 @@ class OmniNodeTemplateEngine:
         except Exception as e:
             self.logger.error(f"Node generation failed: {str(e)}")
             raise OnexError(
-                code=CoreErrorCode.OPERATION_FAILED,
+                code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Node generation failed: {str(e)}",
                 details={
                     "node_type": node_type,
@@ -290,7 +290,10 @@ class OmniNodeTemplateEngine:
         """Extract operations from task decomposition"""
         operations = []
         for task in decomposition_result.tasks[:3]:  # Top 3 tasks
-            operations.append(task.title)
+            if isinstance(task, dict):
+                operations.append(task.get("title", "Unknown Task"))
+            else:
+                operations.append(task.title)
         return operations
     
     async def _generate_additional_files(
