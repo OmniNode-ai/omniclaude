@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 """
-Event-driven Intelligence Client for PRD Analysis
+PRD Intelligence Client
 
-Publishes CodegenAnalysisRequest and awaits CodegenAnalysisResponse via Kafka.
+Publishes CodegenAnalysisRequest events and awaits CodegenAnalysisResponse by correlation_id.
+Prefers aiokafka via KafkaCodegenClient with automatic confluent-kafka fallback.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any, Dict, Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from .codegen_events import CodegenAnalysisRequest
 from .kafka_codegen_client import KafkaCodegenClient
+from .version_config import get_config
 
 
 class PRDIntelligenceClient:
     def __init__(self, bootstrap_servers: Optional[str] = None) -> None:
-        self.client = KafkaCodegenClient(bootstrap_servers=bootstrap_servers)
+        cfg = get_config()
+        self.bootstrap_servers = bootstrap_servers or cfg.kafka_bootstrap_servers
+        self._kafka = KafkaCodegenClient(bootstrap_servers=self.bootstrap_servers)
 
     async def analyze(
         self,
@@ -26,22 +29,37 @@ class PRDIntelligenceClient:
         workspace_context: Optional[Dict[str, Any]] = None,
         timeout_seconds: float = 30.0,
     ) -> Optional[Dict[str, Any]]:
-        correlation_id = uuid4()
         req = CodegenAnalysisRequest()
-        req.correlation_id = correlation_id
+        req.correlation_id = uuid4()
+        # Attach request payload
         req.payload = {
             "prd_content": prd_content,
             "workspace_context": workspace_context or {},
         }
-        await self.client.publish(req)
 
-        def matches(payload: Dict[str, Any]) -> bool:
-            return payload.get("correlation_id") == str(correlation_id)
+        # Publish request
+        await self._kafka.publish(req)
 
+        # Await response by correlation id
         topic = "dev.omniclaude.codegen.analyze.response.v1"
-        resp = await self.client.consume_until(topic, matches, timeout_seconds=timeout_seconds)
-        await self.client.stop_producer()
-        await self.client.stop_consumer()
-        return resp
+
+        def _matches(payload: Dict[str, Any]) -> bool:
+            return payload.get("correlation_id") == str(req.correlation_id)
+
+        try:
+            response = await self._kafka.consume_until(
+                topic=topic,
+                predicate=_matches,
+                timeout_seconds=timeout_seconds,
+            )
+        finally:
+            # Best-effort close consumer/producer
+            await asyncio.gather(
+                self._kafka.stop_consumer(),
+                self._kafka.stop_producer(),
+                return_exceptions=True,
+            )
+
+        return response
 
 
