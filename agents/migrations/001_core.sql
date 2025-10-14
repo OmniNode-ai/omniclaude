@@ -186,11 +186,4 @@ CREATE TABLE IF NOT EXISTS lineage_edges (
 CREATE INDEX IF NOT EXISTS idx_lineage_src ON lineage_edges(src_type, src_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_lineage_dst ON lineage_edges(dst_type, dst_id, created_at DESC);
 
--- Insert migration record
-INSERT INTO schema_migrations (id, name, filename, applied_at) 
-VALUES (
-    gen_random_uuid(),
-    '001_core',
-    '001_core.sql',
-    NOW()
-) ON CONFLICT (name) DO NOTHING;
+-- (Tracking handled by migration runner)

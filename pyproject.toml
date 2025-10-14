@@ -17,9 +17,14 @@ pydantic-ai = "^1.0.15"
 opentelemetry-api = "^1.37.0"
 opentelemetry-sdk = "^1.37.0"
 python-dotenv = "^1.1.1"
-asyncpg = "^0.30.0"
+asyncpg = "^0.29.0"
 watchdog = "^6.0.0"
 numpy = "^2.3.3"
+omnibase-core = {path = "../omnibase_core", develop = true}
+aiokafka = "^0.10.0"
+
+[tool.poetry.group.kafka.dependencies]
+confluent-kafka = "^2.6.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -30,7 +35,7 @@ google-generativeai = "^0.8.5"
 jsonschema = "^4.23.0"
 pyyaml = "^6.0.3"
 neo4j = "^6.0.2"
-asyncpg = "^0.30.0"
+asyncpg = "^0.29.0"
 
 [build-system]
 requires = ["poetry-core"]

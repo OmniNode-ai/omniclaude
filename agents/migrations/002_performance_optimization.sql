@@ -165,11 +165,4 @@ FROM agent_performance
 GROUP BY DATE_TRUNC('hour', created_at), agent_id, task_type
 ORDER BY time_bucket DESC;
 
--- Insert migration record
-INSERT INTO schema_migrations (id, name, filename, applied_at) 
-VALUES (
-    gen_random_uuid(),
-    '002_performance_optimization',
-    '002_performance_optimization.sql',
-    NOW()
-) ON CONFLICT (name) DO NOTHING;
+-- (Tracking handled by migration runner)

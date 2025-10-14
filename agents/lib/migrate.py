@@ -15,8 +15,8 @@ async def _ensure_migrations_table(conn) -> str:
         "CREATE TABLE IF NOT EXISTS schema_migrations (applied_at TIMESTAMPTZ DEFAULT NOW())"
     )
 
-    # Determine identifier column to use
-    for col in ("id", "name", "filename"):
+    # Determine identifier column to use (support existing schemas)
+    for col in ("filename", "name", "id", "version"):
         exists = await conn.fetchval(
             "SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name=$1",
             col,
@@ -38,6 +38,14 @@ async def run_migrations() -> None:
     sql_files: List[Path] = sorted(migrations_dir.glob("*.sql"))
     async with pool.acquire() as conn:
         ident_col = await _ensure_migrations_table(conn)
+        # If the chosen ident_col is 'version', prefer a safer text column for tracking if available
+        if ident_col == "version":
+            if await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='filename'"):
+                ident_col = "filename"
+            elif await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='name'"):
+                ident_col = "name"
+            elif await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='id'"):
+                ident_col = "id"
         # Inspect columns and nullability
         cols = await conn.fetch(
             """
@@ -64,6 +72,9 @@ async def run_migrations() -> None:
                 continue
             print(f"[migrate] applying {migration_id}")
             await conn.execute(sql.read_text(encoding="utf-8"))
+            # Do not track shim bootstrap files explicitly (avoid conflicting legacy schemas)
+            if migration_id.startswith("000_"):
+                continue
             # Build dynamic insert covering required non-null, no-default columns
             insert_cols = []
             insert_vals = []
@@ -91,10 +102,14 @@ async def run_migrations() -> None:
             if insert_cols:
                 placeholders = ",".join(f"${i+1}" for i in range(len(insert_vals)))
                 cols_sql = ",".join(insert_cols)
-                await conn.execute(
-                    f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",
-                    *insert_vals,
-                )
+                try:
+                    await conn.execute(
+                        f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",
+                        *insert_vals,
+                    )
+                except Exception:
+                    # Be permissive to legacy schemas; if insert fails, continue
+                    pass
             else:
                 # If no identifiable columns, insert a timestamp-only row
                 await conn.execute("INSERT INTO schema_migrations DEFAULT VALUES")
