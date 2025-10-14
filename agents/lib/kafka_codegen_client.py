@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import AsyncIterator, Callable, Optional, Dict
 
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
@@ -41,6 +42,7 @@ class KafkaCodegenClient:
         self.host_rewrite = {**default_rewrite, **(host_rewrite or {})}
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+        self.logger = logging.getLogger(__name__)
 
     def _rewrite_bootstrap(self, servers: str) -> str:
         if not self.host_rewrite:
