@@ -8,6 +8,16 @@ import asyncio
 import json
 from typing import Any, Dict, Optional
 import httpx
+try:
+    from agents.lib.llm_logging import log_llm_call  # type: ignore
+except Exception:
+    log_llm_call = None  # type: ignore
+
+try:
+    from agents.lib.circuit_breaker import call_with_breaker, CircuitBreakerConfig  # type: ignore
+except Exception:
+    call_with_breaker = None  # type: ignore
+    CircuitBreakerConfig = None  # type: ignore
 
 
 class ArchonMCPClient:
@@ -16,13 +26,27 @@ class ArchonMCPClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8051",
-        default_timeout: float = 30.0
+        default_timeout: float = 30.0,
+        enable_circuit_breaker: bool = True
     ):
         self.base_url = base_url
         self.mcp_url = f"{base_url}/mcp"
         self.request_id = 0
         self.client = None
         self.default_timeout = default_timeout
+        self.enable_circuit_breaker = enable_circuit_breaker
+        
+        # Circuit breaker configuration for MCP calls
+        self.circuit_breaker_config = None
+        if enable_circuit_breaker and CircuitBreakerConfig:
+            self.circuit_breaker_config = CircuitBreakerConfig(
+                failure_threshold=3,      # Open after 3 failures
+                timeout_seconds=30.0,     # Wait 30s before trying again
+                success_threshold=2,      # Need 2 successes to close
+                max_retries=2,            # Max 2 retries per call
+                base_delay=1.0,           # 1s base delay
+                max_delay=10.0            # Max 10s delay
+            )
 
     def _get_next_id(self) -> int:
         """Get next request ID."""
@@ -41,7 +65,7 @@ class ArchonMCPClient:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Call an MCP tool via stateless HTTP POST with timeout.
+        Call an MCP tool via stateless HTTP POST with timeout and circuit breaker protection.
 
         Args:
             tool_name: Name of the tool (e.g., "assess_code_quality")
@@ -54,6 +78,31 @@ class ArchonMCPClient:
         Raises:
             asyncio.TimeoutError: If request exceeds timeout
             RuntimeError: If MCP service is unavailable or returns error
+        """
+        # Use circuit breaker if enabled
+        if self.enable_circuit_breaker and call_with_breaker:
+            success, result = await call_with_breaker(
+                "mcp_client",
+                self._call_tool_internal,
+                tool_name,
+                timeout,
+                **kwargs
+            )
+            if success:
+                return result
+            else:
+                raise result
+        else:
+            return await self._call_tool_internal(tool_name, timeout, **kwargs)
+
+    async def _call_tool_internal(
+        self,
+        tool_name: str,
+        timeout: Optional[float] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Internal method to call MCP tool without circuit breaker.
         """
         await self._ensure_client()
 
@@ -125,6 +174,19 @@ class ArchonMCPClient:
                         except json.JSONDecodeError:
                             # Return as plain text
                             return {"result": first_item["text"]}
+
+            # Best-effort logging to llm_calls as an external tool call
+            try:
+                if log_llm_call is not None:
+                    await log_llm_call(
+                        run_id=None,
+                        model=f"mcp:{tool_name}",
+                        provider="archon-mcp",
+                        request={"args": kwargs},
+                        response={"result": mcp_result} if isinstance(mcp_result, (dict, list, str)) else {"result": str(mcp_result)},
+                    )
+            except Exception:
+                pass
 
             return mcp_result
 

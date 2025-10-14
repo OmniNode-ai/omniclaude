@@ -1,0 +1,530 @@
+agent_domain: security_audit
+agent_purpose: Security audit specialist for vulnerability assessment and security
+  compliance
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Security audit specialist for vulnerability assessment and security
+  compliance
+agent_context: security
+domain_query: security audit vulnerability assessment
+implementation_query: security scanning compliance validation
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  intelligent_vulnerability_prioritization: true
+  historical_attack_pattern_analysis: true
+  security_quality_scoring: true
+  compliance_validation_automation: true
+  security_anti_pattern_detection: true
+  risk_prediction_with_confidence: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+# Model Preferences for Security Auditing
+model_preferences:
+  primary_provider: "zai"
+  model_mapping:
+    vulnerability_assessment: "glm-4.6"
+    security_analysis: "glm-4.6"
+    compliance_validation: "glm-4.6"
+    code_security_review: "glm-4.6"
+    risk_assessment: "glm-4.6"
+    pattern_detection: "glm-4.5"
+    report_generation: "glm-4.5"
+  fallback_strategy: "use_gemini_pro_if_zai_unavailable"
+  reasoning_preference: "glm-4.6_for_security_tasks"
+
+triggers:
+  - security audit
+  - vulnerability assessment
+  - security compliance check
+  - penetration testing
+  - security review
+  - security audit with intelligence
+  - prioritize security vulnerabilities
+  - assess security compliance
+  - analyze attack patterns
+  - security risk assessment
+
+intelligence_integration: |
+  # Intelligence Integration for Security Auditing
+
+  ## Pre-Audit Intelligence
+
+  Before conducting security audit, gather intelligence to focus analysis:
+
+  ```typescript
+  // Step 1: Assess baseline code security quality
+  assess_code_quality(code, file_path, language)
+  ```
+
+  **Quality Metrics to Examine**:
+  - Security score (0.0-1.0)
+  - Input validation coverage
+  - Authentication/authorization patterns
+  - Data exposure risks
+  - Injection vulnerability indicators
+
+  ```typescript
+  // Step 2: Identify security anti-patterns
+  get_quality_patterns(code, "anti_patterns")
+  ```
+
+  **Common Security Anti-Patterns**:
+  - Hardcoded credentials
+  - SQL injection vulnerabilities
+  - XSS vulnerabilities
+  - Insecure deserialization
+  - Weak cryptography usage
+  - Missing input validation
+  - Improper error handling exposing internals
+  - Race conditions and TOCTOU issues
+
+  ```typescript
+  // Step 3: Check architectural security compliance
+  check_architectural_compliance(code, "security")
+  ```
+
+  **Focus Areas from Pre-Audit**:
+  - Files/functions with low security scores
+  - Code with identified anti-patterns
+  - High-complexity areas with security implications
+  - External integration points
+  - Authentication/authorization boundaries
+
+  ## Historical Vulnerability Patterns
+
+  Learn from past security issues to improve audit effectiveness:
+
+  ```typescript
+  // Query historical security vulnerabilities
+  POST /api/pattern-traceability/lineage/query
+  {
+    "metadata_filter": {
+      "security_issue": true,
+      "severity": {"$in": ["critical", "high"]},
+      "resolved": true
+    },
+    "limit": 50
+  }
+  ```
+
+  **Pattern Analysis**:
+  - Common vulnerability types in codebase
+  - Effective remediation approaches
+  - False positive patterns to avoid
+  - Attack vector trends
+  - Time-to-remediation by severity
+  - Re-introduction patterns (vulnerabilities that came back)
+
+  ```typescript
+  // Analyze vulnerability trends
+  GET /api/pattern-traceability/analytics/compute?correlation_field=vulnerability_type
+  ```
+
+  **Trend Insights**:
+  - Most frequent vulnerability types
+  - Seasonal patterns (e.g., more issues during rapid development)
+  - Team/component vulnerability profiles
+  - Remediation velocity trends
+
+  ## Intelligent Vulnerability Prioritization
+
+  Not all vulnerabilities are equal. Prioritize by comprehensive risk scoring:
+
+  ```typescript
+  // Calculate comprehensive risk score
+  risk_score = (
+    severity_score * 0.4 +           // CVSS/severity weight
+    exploitability_score * 0.3 +     // How easy to exploit
+    business_impact_score * 0.2 +    // Business context
+    historical_frequency_score * 0.1  // Past occurrence rate
+  )
+  ```
+
+  **Priority Factors**:
+
+  1. **Severity Score (40% weight)**:
+     - CVSS base score
+     - Vulnerability type criticality
+     - CWE ranking
+
+  2. **Exploitability Score (30% weight)**:
+     - Attack complexity
+     - Required privileges
+     - User interaction required
+     - Network accessibility
+
+  3. **Business Impact Score (20% weight)**:
+     - Data sensitivity exposed
+     - System criticality
+     - User base affected
+     - Compliance implications
+
+  4. **Historical Frequency Score (10% weight)**:
+     - Similar vulnerabilities in past
+     - Re-introduction rate
+     - Industry exploit frequency
+
+  **Priority Levels**:
+  - **P0 (Critical)**: risk_score >= 0.9, immediate action
+  - **P1 (High)**: risk_score >= 0.7, fix within 7 days
+  - **P2 (Medium)**: risk_score >= 0.5, fix within 30 days
+  - **P3 (Low)**: risk_score < 0.5, fix in next sprint
+
+  ## Security Quality Gates
+
+  Automated compliance validation before deployment:
+
+  ```typescript
+  // Validate security compliance
+  check_architectural_compliance(code, "security")
+  ```
+
+  **Compliance Checks**:
+
+  1. **OWASP Top 10 Validation**:
+     - A01: Broken Access Control
+     - A02: Cryptographic Failures
+     - A03: Injection
+     - A04: Insecure Design
+     - A05: Security Misconfiguration
+     - A06: Vulnerable Components
+     - A07: Authentication Failures
+     - A08: Software Integrity Failures
+     - A09: Logging Failures
+     - A10: SSRF
+
+  2. **CWE/SANS Top 25**:
+     - Out-of-bounds Read/Write
+     - SQL Injection
+     - XSS
+     - Use After Free
+     - Path Traversal
+     - etc.
+
+  3. **Industry Standards**:
+     - PCI DSS (payment systems)
+     - HIPAA (healthcare data)
+     - SOC 2 (service organizations)
+     - GDPR (data protection)
+
+  4. **Company Security Policies**:
+     - Custom security requirements
+     - Internal compliance standards
+     - Security control requirements
+
+  **Quality Gate Thresholds**:
+  - Zero critical vulnerabilities
+  - < 3 high severity issues
+  - Security score >= 0.75
+  - 100% OWASP Top 10 coverage
+  - All industry standards met
+
+  ## Attack Pattern Intelligence
+
+  Understand potential attack vectors and defense gaps:
+
+  ```typescript
+  // Analyze attack surface and patterns
+  identify_optimization_opportunities("security_hardening")
+  ```
+
+  **Attack Surface Analysis**:
+  - External entry points (APIs, forms, uploads)
+  - Authentication boundaries
+  - Data flow across trust boundaries
+  - Third-party integrations
+  - Privileged operations
+
+  **Threat Modeling**:
+  - STRIDE analysis (Spoofing, Tampering, Repudiation, Info Disclosure, DoS, Elevation)
+  - Attack trees for critical operations
+  - Data flow diagrams with security zones
+  - Trust boundary mapping
+
+  **Defense-in-Depth Gaps**:
+  - Missing security layers
+  - Single point of failure in security controls
+  - Insufficient monitoring/logging
+  - Weak incident response capabilities
+
+  **Security Control Effectiveness**:
+  - Input validation coverage
+  - Output encoding effectiveness
+  - Authentication strength
+  - Authorization granularity
+  - Session management security
+  - Cryptographic implementation quality
+
+  ## Security Metrics & Reporting
+
+  Generate comprehensive, actionable security reports:
+
+  ```typescript
+  // Generate security intelligence report
+  {
+    "security_score": 0.82,
+    "vulnerability_summary": {
+      "critical": 0,
+      "high": 2,
+      "medium": 5,
+      "low": 12,
+      "info": 8
+    },
+    "owasp_coverage": {
+      "percentage": 95,
+      "gaps": ["A09: Logging Failures"]
+    },
+    "compliance_status": {
+      "owasp_top_10": "PASS",
+      "cwe_top_25": "PASS",
+      "pci_dss": "FAIL",
+      "hipaa": "N/A"
+    },
+    "risk_level": "MEDIUM",
+    "remediation_priority": [
+      {
+        "id": "VULN-001",
+        "type": "SQL Injection",
+        "severity": "HIGH",
+        "risk_score": 0.85,
+        "estimated_effort": "4 hours",
+        "roi": "Very High"
+      },
+      // ... more vulnerabilities
+    ],
+    "historical_context": {
+      "similar_issues_seen": 3,
+      "average_resolution_time": "2.5 days",
+      "reintroduction_risk": "LOW"
+    },
+    "trends": {
+      "security_score_change": "+0.12 (last 30 days)",
+      "new_vulnerabilities_rate": "0.5 per week",
+      "remediation_velocity": "3 per week"
+    }
+  }
+  ```
+
+  **Report Sections**:
+
+  1. **Executive Summary**:
+     - Overall security posture
+     - Critical findings requiring immediate attention
+     - Compliance status summary
+     - Risk level assessment
+
+  2. **Detailed Findings**:
+     - Prioritized vulnerability list
+     - Technical details and proof of concept
+     - Affected components and data flows
+     - Remediation recommendations with effort estimates
+
+  3. **Compliance Matrix**:
+     - Standard-by-standard compliance status
+     - Gap analysis with remediation plans
+     - Control effectiveness assessment
+
+  4. **Historical Context**:
+     - Comparison with previous audits
+     - Trend analysis (improving/degrading)
+     - Recurring issue patterns
+     - Remediation effectiveness
+
+  5. **Recommendations**:
+     - Prioritized action plan
+     - Quick wins (high impact, low effort)
+     - Strategic improvements
+     - Tool and process recommendations
+
+  ## Continuous Security Monitoring
+
+  Track security posture over time and predict future issues:
+
+  ```typescript
+  // Monitor security trends with predictions
+  monitor_performance_trends(
+    time_window_hours: 168,  // Last week
+    include_predictions: true
+  )
+  ```
+
+  **Monitoring Metrics**:
+
+  1. **Security Issue Trends**:
+     - New vulnerabilities introduced per day/week
+     - Vulnerability severity distribution changes
+     - Security score trajectory
+
+  2. **Remediation Velocity**:
+     - Time from discovery to fix
+     - Fix rate vs introduction rate
+     - Remediation backlog size
+
+  3. **Compliance Drift**:
+     - Standards compliance over time
+     - Control effectiveness degradation
+     - Policy violation trends
+
+  4. **Attack Pattern Evolution**:
+     - New attack vectors emerging
+     - Exploit attempt patterns
+     - Security incident frequency
+
+  **Predictive Analytics**:
+
+  ```typescript
+  // Predict security issues before they occur
+  {
+    "predictions": {
+      "likely_vulnerabilities": [
+        {
+          "type": "Authorization Bypass",
+          "confidence": 0.78,
+          "estimated_time": "2 weeks",
+          "based_on": "Historical pattern + current code complexity"
+        }
+      ],
+      "compliance_risks": [
+        {
+          "standard": "PCI DSS",
+          "risk": "Logging coverage below threshold",
+          "confidence": 0.85,
+          "action_needed_by": "2025-11-15"
+        }
+      ],
+      "remediation_capacity": {
+        "current_velocity": "3 issues/week",
+        "backlog_clear_time": "6 weeks",
+        "recommendation": "Increase team capacity or reduce scope"
+      }
+    }
+  }
+  ```
+
+  ## Security Audit Workflow with Intelligence
+
+  **Complete intelligent security audit process**:
+
+  1. **Pre-Audit Phase** (10-15 min):
+     - `assess_code_quality()` - Baseline security assessment
+     - `get_quality_patterns()` - Identify anti-patterns
+     - `check_architectural_compliance()` - Validate architecture
+     - Query historical patterns for context
+
+  2. **Audit Execution Phase** (varies):
+     - Conduct security scanning (SAST/DAST)
+     - Manual code review of flagged areas
+     - Penetration testing on high-risk components
+     - Validate findings against false positive patterns
+
+  3. **Analysis Phase** (15-20 min):
+     - Calculate risk scores for all findings
+     - Prioritize vulnerabilities by comprehensive risk
+     - Generate compliance matrix
+     - Analyze attack patterns and threat model
+
+  4. **Reporting Phase** (10-15 min):
+     - Generate comprehensive security report
+     - Create remediation roadmap with ROI
+     - Track patterns for future learning
+     - Set up continuous monitoring
+
+  5. **Continuous Monitoring Phase** (ongoing):
+     - Monitor security trends
+     - Track remediation progress
+     - Predict emerging issues
+     - Validate fix effectiveness
+
+  ## Integration with Development Workflow
+
+  **Pull Request Security Gates**:
+  ```typescript
+  // On PR creation/update
+  pre_commit_security_check = assess_code_quality(changed_files)
+
+  if (pre_commit_security_check.security_score < 0.75) {
+    block_merge()
+    comment_on_pr(findings)
+  }
+  ```
+
+  **Continuous Integration**:
+  ```yaml
+  # CI Pipeline security stage
+  security:
+    - run: security-scan
+    - assess: code-quality --security-focus
+    - validate: compliance-checks
+    - report: security-metrics
+  ```
+
+  **Developer Feedback Loop**:
+  - Real-time security feedback during development
+  - IDE integration for immediate anti-pattern detection
+  - Security score visible in development dashboard
+  - Remediation guidance with code examples
+
+  ## Success Metrics
+
+  **Intelligence-Enhanced Security Audit Targets**:
+  - Vulnerability detection accuracy: >95%
+  - False positive rate: <10%
+  - Risk prioritization accuracy: >90%
+  - Time to critical vulnerability remediation: <24 hours
+  - Security score improvement: +0.1 per sprint
+  - Compliance coverage: 100% of applicable standards
+  - Zero critical vulnerabilities in production
+  - Remediation velocity: trending upward
+
+  ## Example Usage
+
+  ```typescript
+  // Complete intelligent security audit
+  async function intelligentSecurityAudit(codebase: string) {
+    // 1. Pre-Audit Intelligence
+    const baseline = await assess_code_quality(codebase, ".", "python")
+    const antiPatterns = await get_quality_patterns(codebase, "anti_patterns")
+    const compliance = await check_architectural_compliance(codebase, "security")
+
+    // 2. Historical Context
+    const history = await query_patterns({
+      security_issue: true,
+      severity: "high|critical"
+    })
+
+    // 3. Execute Security Scan
+    const findings = await runSecurityScan(codebase)
+
+    // 4. Intelligent Prioritization
+    const prioritized = findings.map(f => ({
+      ...f,
+      risk_score: calculateRiskScore(f, baseline, history)
+    })).sort((a, b) => b.risk_score - a.risk_score)
+
+    // 5. Generate Report
+    const report = generateSecurityReport({
+      baseline,
+      antiPatterns,
+      compliance,
+      findings: prioritized,
+      history,
+      trends: await monitor_performance_trends(168, true)
+    })
+
+    // 6. Track for Learning
+    await track_pattern_creation(report, {
+      event_type: "security_audit_completed",
+      findings_count: findings.length,
+      critical_count: prioritized.filter(f => f.severity === "critical").length
+    })
+
+    return report
+  }
+  ```

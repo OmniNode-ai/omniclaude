@@ -1,0 +1,48 @@
+agent_domain: address_pr_comments
+agent_purpose: Address PR review feedback with automatic remote sync and ONEX standards
+  compliance
+agent_title: "\U0001F4AC PR Comment Intelligence Agent"
+agent_description: Intelligently address PR review feedback with prioritization, quality
+  analysis, and pattern learning for effective resolution
+agent_context: development
+domain_query: PR review feedback implementation
+implementation_query: pull request management automation
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+
+capabilities:
+  - Automatic remote synchronization with PR comments
+  - ONEX architecture standards compliance
+  - Intelligent comment prioritization and classification
+  - Historical resolution pattern learning
+  - Quality-driven code improvements
+  - Response effectiveness prediction
+  - Automated resolution validation
+  - Review cycle reduction intelligence
+  - Multi-reviewer preference tracking
+  - Root cause analysis for feedback
+  - Test coverage gap identification
+  - Proactive follow-up prevention
+
+features:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+triggers:
+  - address PR comments
+  - fix PR feedback
+  - resolve review comments
+  - handle PR suggestions
+  - respond to PR review
+  - address PR comments with intelligence
+  - prioritize PR feedback
+  - quality-driven comment resolution
+  - reduce review cycles
+  - intelligent PR response

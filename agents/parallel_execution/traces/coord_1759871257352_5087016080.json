@@ -1,0 +1,311 @@
+{
+  "trace_id": "coord_1759871257352_5087016080",
+  "coordinator_type": "parallel",
+  "start_time": 1759871257.352268,
+  "end_time": 1759871362.50048,
+  "duration_ms": 105148.21195602417,
+  "total_agents": 1,
+  "completed_agents": 1,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-contract-driven-generator_1759871257354_5087016080",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "start_time": 1759871257.354857,
+      "end_time": 1759871362.4968052,
+      "duration_ms": 105141.94822311401,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759871257.354868,
+          "datetime_str": "2025-10-07T17:07:37.354869",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task_3_1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-contract-driven-generator for task task_3_1",
+          "metadata": {
+            "using_pydantic_ai": true
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759871257352_5087016080"
+        },
+        {
+          "timestamp": 1759871362.497026,
+          "datetime_str": "2025-10-07T17:09:22.497032",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-contract-driven-generator",
+          "task_id": "task_3_1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-contract-driven-generator (105141.95ms)",
+          "metadata": {
+            "result": {
+              "task_id": "task_3_1",
+              "agent_name": "agent-contract-driven-generator",
+              "success": true,
+              "output_data": {
+                "generated_code": "\"\"\"\nUnknownNode - ONEX Compute Node\n\nThe node name 'UnknownNode' deviates from the ONEX convention that node classes should start with 'Node' (e.g., 'NodeUnknownCompute'). This was done to comply with the explicit user requirement to 'Use EXACT node name: UnknownNode'. All other aspects, including contract model structure, inheritance from NodeCompute, container injection, and explicit error handling, adhere to canonical ONEX patterns. The contract model is unified, and input/output schemas are defined as Pydantic models referenced within the contract and used in the process method. Conceptual implementations for transaction management, retry logic, and circuit breakers are included.\n\"\"\"\n\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\nfrom omnibase_core.core.common_types import ModelScalarValue\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom pydantic import BaseModel, Field\nfrom typing import Literal, Optional, List\n\n# ============================================================================\n# Contract Model\n# ============================================================================\n\n\nclass ModelIOOperationConfig(BaseModel):\n    \"\"\"Configuration for an I/O operation (conceptual for a Compute node).\"\"\"\n    source: str = Field(..., description=\"Source of input data.\")\n    destination: str = Field(..., description=\"Destination for output data.\")\n    format: str = Field(\"json\", description=\"Data format.\")\n\nclass ModelTransactionConfig(BaseModel):\n    \"\"\"Configuration for transaction management (conceptual for a Compute node).\"\"\"\n    enabled: bool = Field(False, description=\"Enable transaction-like behavior (e.g., idempotency).\")\n    isolation_level: Optional[str] = Field(None, description=\"Isolation level if applicable, e.g., 'READ_COMMITTED'.\")\n\nclass ModelRetryPolicy(BaseModel):\n    \"\"\"Configuration for retry policies.\"\"\"\n    enabled: bool = Field(False, description=\"Enable retry logic.\")\n    max_retries: int = Field(3, description=\"Maximum number of retries.\")\n    backoff_factor: float = Field(0.5, description=\"Factor by which to increase delay between retries.\")\n    delay_seconds: int = Field(1, description=\"Initial delay in seconds.\")\n\nclass ModelCircuitBreakerConfig(BaseModel):\n    \"\"\"Configuration for circuit breaker pattern.\"\"\"\n    enabled: bool = Field(False, description=\"Enable circuit breaker.\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open circuit.\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds before attempting a half-open state.\")\n    minimum_requests: int = Field(10, description=\"Minimum requests to start tracking failures.\")\n\n\nclass ModelComputeInput(BaseModel):\n    \"\"\"Input model for the UnknownNode Compute node.\"\"\"\n    research_topic: str = Field(..., description=\"The main topic for researching best practices for cross-workflow contracts.\")\n    scope_keywords: Optional[List[str]] = Field(None, description=\"Keywords to narrow down the research scope, e.g., ['microservices', 'event-driven'].\")\n    depth: Literal[\"shallow\", \"medium\", \"deep\"] = Field(\"medium\", description=\"Depth of the research effort.\")\n\nclass ModelComputeOutput(BaseModel):\n    \"\"\"Output model for the UnknownNode Compute node.\"\"\"\n    best_practices_summary: str = Field(..., description=\"A comprehensive summary of the identified best practices for cross-workflow interface contracts.\")\n    standards_referenced: List[str] = Field(..., description=\"List of relevant industry standards or frameworks, e.g., ['OpenAPI', 'AsyncAPI', 'JSON Schema'].\")\n    integration_points_guidance: str = Field(..., description=\"Guidance and patterns for defining robust integration points.\")\n    api_specification_recommendations: str = Field(..., description=\"Recommendations for effective API specification strategies.\")\n    research_timestamp: str = Field(..., description=\"Timestamp indicating when the research was hypothetically conducted (ISO 8601 format).\")\n\n\nclass ModelContractUnknownCompute(ModelContractBase):\n    \"\"\"Unified contract model for the UnknownNode Compute node.\n\n    This contract defines all necessary configurations for the research best practices\n    compute operation, including operational settings like retries and transaction\n    management.\n    \"\"\"\n    io_operations: ModelIOOperationConfig = Field(\n        default_factory=lambda: ModelIOOperationConfig(source=\"internal_knowledge_base\", destination=\"node_output\", format=\"json\"),\n        description=\"Configuration for conceptual I/O operations of the compute node.\"\n    )\n    transaction_management: ModelTransactionConfig = Field(\n        default_factory=lambda: ModelTransactionConfig(enabled=True, isolation_level=\"SERIALIZABLE\"),\n        description=\"Configuration for transaction management, ensuring idempotency for compute.\"\n    )\n    retry_policies: ModelRetryPolicy = Field(\n        default_factory=lambda: ModelRetryPolicy(enabled=False),\n        description=\"Retry policy for any internal sub-operations if needed.\"\n    )\n    circuit_breaker_config: ModelCircuitBreakerConfig = Field(\n        default_factory=lambda: ModelCircuitBreakerConfig(enabled=False),\n        description=\"Circuit breaker configuration for internal sub-operations.\"\n    )\n    # Input and Output data structures for the process method\n    input_schema: type[ModelComputeInput] = Field(default=ModelComputeInput, description=\"Pydantic schema for node input data.\")\n    output_schema: type[ModelComputeOutput] = Field(default=ModelComputeOutput, description=\"Pydantic schema for node output data.\")\n\n\n\n# ============================================================================\n# Subcontract Models\n# ============================================================================\n\nfrom pydantic import BaseModel, Field\nfrom typing import Optional, List, Dict, Any\n\nclass ModelIOOperationConfig(BaseModel):\n    \"\"\"Configuration for an I/O operation (conceptual for a Compute node).\"\"\"\n    source: str = Field(..., description=\"Source of input data.\")\n    destination: str = Field(..., description=\"Destination for output data.\")\n    format: str = Field(\"json\", description=\"Data format.\")\n\nclass ModelTransactionConfig(BaseModel):\n    \"\"\"Configuration for transaction management (conceptual for a Compute node).\"\"\"\n    enabled: bool = Field(False, description=\"Enable transaction-like behavior (e.g., idempotency).\")\n    isolation_level: Optional[str] = Field(None, description=\"Isolation level if applicable, e.g., 'READ_COMMITTED'.\")\n\nclass ModelRetryPolicy(BaseModel):\n    \"\"\"Configuration for retry policies.\"\"\"\n    enabled: bool = Field(False, description=\"Enable retry logic.\")\n    max_retries: int = Field(3, description=\"Maximum number of retries.\")\n    backoff_factor: float = Field(0.5, description=\"Factor by which to increase delay between retries.\")\n    delay_seconds: int = Field(1, description=\"Initial delay in seconds.\")\n\nclass ModelCircuitBreakerConfig(BaseModel):\n    \"\"\"Configuration for circuit breaker pattern.\"\"\"\n    enabled: bool = Field(False, description=\"Enable circuit breaker.\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open circuit.\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds before attempting a half-open state.\")\n    minimum_requests: int = Field(10, description=\"Minimum requests to start tracking failures.\")\n\n\n# ============================================================================\n# Node Implementation\n# ============================================================================\n\n\nclass UnknownNode(NodeCompute):\n    \"\"\"UnknownNode is a Compute node dedicated to researching best practices for cross-workflow interface contracts.\n\n    This node simulates research into industry standards, integration points, and API specifications\n    for complex systems. It adheres to ONEX canonical patterns for Compute nodes.\n    \"\"\"\n\n    def __init__(self, container: ONEXContainer):\n        \"\"\"Initializes the UnknownNode Compute node.\n\n        Args:\n            container: The ONEXContainer providing access to services and configuration.\n        \"\"\"\n        super().__init__(container)\n        self.contract: ModelContractUnknownCompute = self.container.get_contract(self.__class__.__name__)\n\n    async def process(self, input_data: ModelComputeInput) -> ModelComputeOutput:\n        \"\"\"Processes the research request and returns best practices and standards.\n\n        This method simulates the research process, incorporating transaction management,\n        retry logic (conceptual for compute), and circuit breaker patterns.\n\n        Args:\n            input_data: An instance of ModelComputeInput containing the research topic and scope.\n\n        Returns:\n            An instance of ModelComputeOutput with the research findings.\n\n        Raises:\n            OnexError: If the research process encounters a critical error or is unresolvable.\n        \"\"\"\n        self.logger.info(f\"Starting research for topic: {input_data.research_topic} with depth: {input_data.depth}\")\n\n        # --- Apply Transaction Management (Conceptual for Compute) ---\n        # For a Compute node, \"transaction management\" might imply ensuring idempotency\n        # or managing internal state consistency if sub-operations were involved.\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Transaction management conceptually enabled for idempotency.\")\n            # In a real scenario, this would involve specific logic to ensure the compute\n            # operation is atomic or idempotent (e.g., check if already processed).\n            # For this simulation, we assume internal processing is inherently idempotent\n            # or recoverable.\n\n        # --- Apply Circuit Breaker (Conceptual) ---\n        # For internal sub-calls or dependencies a compute node might have.\n        if self.contract.circuit_breaker_config.enabled:\n            self.logger.debug(\"Circuit breaker conceptually active for internal dependencies.\")\n            # In a real implementation, a circuit breaker library would wrap external calls\n            # if the compute node depended on them.\n\n        # --- Research Logic Simulation ---\n        try:\n            best_practices_summary = self._simulate_research(\n                input_data.research_topic,\n                input_data.scope_keywords,\n                input_data.depth\n            )\n            standards_referenced = self._get_standards(input_data.research_topic)\n            integration_guidance = self._get_integration_guidance(input_data.research_topic, input_data.depth)\n            api_recommendations = self._get_api_recommendations(input_data.research_topic)\n\n            # --- Apply Retry Logic (Conceptual) ---\n            # If _simulate_research or _get_standards involved retriable sub-operations.\n            if self.contract.retry_policies.enabled:\n                self.logger.debug(\"Retry policy conceptually applied to internal sub-operations.\")\n                # A real retry decorator/logic would be here if internal calls were retryable.\n\n        except Exception as e:\n            self.logger.error(f\"Research failed for topic {input_data.research_topic}: {e}\")\n            raise OnexError(\n                error_code=CoreErrorCode.COMPUTE_PROCESSING_ERROR,\n                message=f\"Failed to complete research for {input_data.research_topic}\",\n                details=str(e)\n            )\n\n        self.logger.info(f\"Research complete for topic: {input_data.research_topic}\")\n\n        return ModelComputeOutput(\n            best_practices_summary=best_practices_summary,\n            standards_referenced=standards_referenced,\n            integration_points_guidance=integration_guidance,\n            api_specification_recommendations=api_recommendations,\n            research_timestamp=self.container.clock.now().isoformat()\n        )\n\n    def _simulate_research(self, topic: str, keywords: Optional[List[str]], depth: Literal[\"shallow\", \"medium\", \"deep\"]) -> str:\n        \"\"\"Simulates the research process based on topic, keywords, and depth.\"\"\"\n        base_summary = f\"Comprehensive research on {topic} for cross-workflow interface contracts. \"\n        if keywords:\n            base_summary += f\"Focusing on areas like {', '.join(keywords)}. \"\n\n        if depth == \"shallow\":\n            return base_summary + \"Provides an overview of basic principles and common practices.\"\n        elif depth == \"medium\":\n            return base_summary + \"Delves into established patterns, architectural styles, and common challenges/solutions.\"\n        else: # deep\n            return base_summary + \"Explores advanced topics, emerging trends, security considerations, and performance optimization for highly complex systems.\"\n\n    def _get_standards(self, topic: str) -> List[str]:\n        \"\"\"Simulates fetching relevant standards based on the topic.\"\"\"\n        if \"API\" in topic.upper() or \"INTEGRATION\" in topic.upper():\n            return [\"OpenAPI Specification (OAS)\", \"AsyncAPI Specification\", \"JSON Schema\", \"GraphQL Specification\"]\n        return [\"ISO/IEC 42010 (Architecture description)\", \"TOGAF (The Open Group Architecture Framework)\"]\n\n    def _get_integration_guidance(self, topic: str, depth: Literal[\"shallow\", \"medium\", \"deep\"]) -> str:\n        \"\"\"Simulates providing guidance on integration points.\"\"\"\n        guidance = f\"Guidance for defining integration points for {topic}: \"\n        if depth == \"shallow\":\n            return guidance + \"Focus on clear contract definitions and basic error handling.\"\n        elif depth == \"medium\":\n            return guidance + \"Emphasize loose coupling, idempotency, versioning, and observability.\"\n        else: # deep\n            return guidance + \"Cover distributed transaction patterns, event-driven architectures, choreography vs. orchestration, and security considerations.\"\n\n    def _get_api_recommendations(self, topic: str) -> str:\n        \"\"\"Simulates providing API specification recommendations.\"\"\"\n        if \"API\" in topic.upper():\n            return \"Recommend using declarative API specifications like OpenAPI for REST and AsyncAPI for event-driven interfaces. Ensure comprehensive documentation, versioning, and validation.\"\n        return \"Focus on well-defined interfaces, consistent data models, and clear communication protocols.\"\n",
+                "node_type": "Compute",
+                "node_name": "UnknownNode",
+                "dependencies": [
+                  "pydantic>=1.8.2",
+                  "omnibase_core"
+                ],
+                "intelligence_gathered": {},
+                "quality_metrics": {
+                  "success": false,
+                  "quality_score": 0.0,
+                  "error": "MCP tool call timed out after 30.0s. Tool: assess_code_quality, Server: http://localhost:8051"
+                },
+                "quality_score": 0.0,
+                "lines_generated": 247,
+                "validation_passed": false,
+                "onex_compliance_notes": "The node name 'UnknownNode' deviates from the ONEX convention that node classes should start with 'Node' (e.g., 'NodeUnknownCompute'). This was done to comply with the explicit user requirement to 'Use EXACT node name: UnknownNode'. All other aspects, including contract model structure, inheritance from NodeCompute, container injection, and explicit error handling, adhere to canonical ONEX patterns. The contract model is unified, and input/output schemas are defined as Pydantic models referenced within the contract and used in the process method. Conceptual implementations for transaction management, retry logic, and circuit breakers are included.",
+                "pydantic_ai_metadata": {
+                  "model_used": "gemini-1.5-flash",
+                  "structured_output": true,
+                  "tools_available": 3
+                }
+              },
+              "error": null,
+              "execution_time_ms": 105141.49475097656,
+              "trace_id": "agent_agent-contract-driven-generator_1759871257354_5087016080"
+            },
+            "error": null
+          },
+          "duration_ms": 105141.94822311401,
+          "parent_trace_id": "coord_1759871257352_5087016080"
+        }
+      ],
+      "result": {
+        "task_id": "task_3_1",
+        "agent_name": "agent-contract-driven-generator",
+        "success": true,
+        "output_data": {
+          "generated_code": "\"\"\"\nUnknownNode - ONEX Compute Node\n\nThe node name 'UnknownNode' deviates from the ONEX convention that node classes should start with 'Node' (e.g., 'NodeUnknownCompute'). This was done to comply with the explicit user requirement to 'Use EXACT node name: UnknownNode'. All other aspects, including contract model structure, inheritance from NodeCompute, container injection, and explicit error handling, adhere to canonical ONEX patterns. The contract model is unified, and input/output schemas are defined as Pydantic models referenced within the contract and used in the process method. Conceptual implementations for transaction management, retry logic, and circuit breakers are included.\n\"\"\"\n\nfrom omnibase_core.core.onex_container import ONEXContainer\nfrom omnibase_core.core.errors.core_errors import CoreErrorCode, OnexError\nfrom omnibase_core.core.common_types import ModelScalarValue\nfrom omnibase_core.models.rsd.model_contract_base import ModelContractBase\nfrom omnibase_core.core.node_compute import NodeCompute\nfrom pydantic import BaseModel, Field\nfrom typing import Literal, Optional, List\n\n# ============================================================================\n# Contract Model\n# ============================================================================\n\n\nclass ModelIOOperationConfig(BaseModel):\n    \"\"\"Configuration for an I/O operation (conceptual for a Compute node).\"\"\"\n    source: str = Field(..., description=\"Source of input data.\")\n    destination: str = Field(..., description=\"Destination for output data.\")\n    format: str = Field(\"json\", description=\"Data format.\")\n\nclass ModelTransactionConfig(BaseModel):\n    \"\"\"Configuration for transaction management (conceptual for a Compute node).\"\"\"\n    enabled: bool = Field(False, description=\"Enable transaction-like behavior (e.g., idempotency).\")\n    isolation_level: Optional[str] = Field(None, description=\"Isolation level if applicable, e.g., 'READ_COMMITTED'.\")\n\nclass ModelRetryPolicy(BaseModel):\n    \"\"\"Configuration for retry policies.\"\"\"\n    enabled: bool = Field(False, description=\"Enable retry logic.\")\n    max_retries: int = Field(3, description=\"Maximum number of retries.\")\n    backoff_factor: float = Field(0.5, description=\"Factor by which to increase delay between retries.\")\n    delay_seconds: int = Field(1, description=\"Initial delay in seconds.\")\n\nclass ModelCircuitBreakerConfig(BaseModel):\n    \"\"\"Configuration for circuit breaker pattern.\"\"\"\n    enabled: bool = Field(False, description=\"Enable circuit breaker.\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open circuit.\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds before attempting a half-open state.\")\n    minimum_requests: int = Field(10, description=\"Minimum requests to start tracking failures.\")\n\n\nclass ModelComputeInput(BaseModel):\n    \"\"\"Input model for the UnknownNode Compute node.\"\"\"\n    research_topic: str = Field(..., description=\"The main topic for researching best practices for cross-workflow contracts.\")\n    scope_keywords: Optional[List[str]] = Field(None, description=\"Keywords to narrow down the research scope, e.g., ['microservices', 'event-driven'].\")\n    depth: Literal[\"shallow\", \"medium\", \"deep\"] = Field(\"medium\", description=\"Depth of the research effort.\")\n\nclass ModelComputeOutput(BaseModel):\n    \"\"\"Output model for the UnknownNode Compute node.\"\"\"\n    best_practices_summary: str = Field(..., description=\"A comprehensive summary of the identified best practices for cross-workflow interface contracts.\")\n    standards_referenced: List[str] = Field(..., description=\"List of relevant industry standards or frameworks, e.g., ['OpenAPI', 'AsyncAPI', 'JSON Schema'].\")\n    integration_points_guidance: str = Field(..., description=\"Guidance and patterns for defining robust integration points.\")\n    api_specification_recommendations: str = Field(..., description=\"Recommendations for effective API specification strategies.\")\n    research_timestamp: str = Field(..., description=\"Timestamp indicating when the research was hypothetically conducted (ISO 8601 format).\")\n\n\nclass ModelContractUnknownCompute(ModelContractBase):\n    \"\"\"Unified contract model for the UnknownNode Compute node.\n\n    This contract defines all necessary configurations for the research best practices\n    compute operation, including operational settings like retries and transaction\n    management.\n    \"\"\"\n    io_operations: ModelIOOperationConfig = Field(\n        default_factory=lambda: ModelIOOperationConfig(source=\"internal_knowledge_base\", destination=\"node_output\", format=\"json\"),\n        description=\"Configuration for conceptual I/O operations of the compute node.\"\n    )\n    transaction_management: ModelTransactionConfig = Field(\n        default_factory=lambda: ModelTransactionConfig(enabled=True, isolation_level=\"SERIALIZABLE\"),\n        description=\"Configuration for transaction management, ensuring idempotency for compute.\"\n    )\n    retry_policies: ModelRetryPolicy = Field(\n        default_factory=lambda: ModelRetryPolicy(enabled=False),\n        description=\"Retry policy for any internal sub-operations if needed.\"\n    )\n    circuit_breaker_config: ModelCircuitBreakerConfig = Field(\n        default_factory=lambda: ModelCircuitBreakerConfig(enabled=False),\n        description=\"Circuit breaker configuration for internal sub-operations.\"\n    )\n    # Input and Output data structures for the process method\n    input_schema: type[ModelComputeInput] = Field(default=ModelComputeInput, description=\"Pydantic schema for node input data.\")\n    output_schema: type[ModelComputeOutput] = Field(default=ModelComputeOutput, description=\"Pydantic schema for node output data.\")\n\n\n\n# ============================================================================\n# Subcontract Models\n# ============================================================================\n\nfrom pydantic import BaseModel, Field\nfrom typing import Optional, List, Dict, Any\n\nclass ModelIOOperationConfig(BaseModel):\n    \"\"\"Configuration for an I/O operation (conceptual for a Compute node).\"\"\"\n    source: str = Field(..., description=\"Source of input data.\")\n    destination: str = Field(..., description=\"Destination for output data.\")\n    format: str = Field(\"json\", description=\"Data format.\")\n\nclass ModelTransactionConfig(BaseModel):\n    \"\"\"Configuration for transaction management (conceptual for a Compute node).\"\"\"\n    enabled: bool = Field(False, description=\"Enable transaction-like behavior (e.g., idempotency).\")\n    isolation_level: Optional[str] = Field(None, description=\"Isolation level if applicable, e.g., 'READ_COMMITTED'.\")\n\nclass ModelRetryPolicy(BaseModel):\n    \"\"\"Configuration for retry policies.\"\"\"\n    enabled: bool = Field(False, description=\"Enable retry logic.\")\n    max_retries: int = Field(3, description=\"Maximum number of retries.\")\n    backoff_factor: float = Field(0.5, description=\"Factor by which to increase delay between retries.\")\n    delay_seconds: int = Field(1, description=\"Initial delay in seconds.\")\n\nclass ModelCircuitBreakerConfig(BaseModel):\n    \"\"\"Configuration for circuit breaker pattern.\"\"\"\n    enabled: bool = Field(False, description=\"Enable circuit breaker.\")\n    failure_threshold: int = Field(5, description=\"Number of consecutive failures to open circuit.\")\n    recovery_timeout_seconds: int = Field(30, description=\"Time in seconds before attempting a half-open state.\")\n    minimum_requests: int = Field(10, description=\"Minimum requests to start tracking failures.\")\n\n\n# ============================================================================\n# Node Implementation\n# ============================================================================\n\n\nclass UnknownNode(NodeCompute):\n    \"\"\"UnknownNode is a Compute node dedicated to researching best practices for cross-workflow interface contracts.\n\n    This node simulates research into industry standards, integration points, and API specifications\n    for complex systems. It adheres to ONEX canonical patterns for Compute nodes.\n    \"\"\"\n\n    def __init__(self, container: ONEXContainer):\n        \"\"\"Initializes the UnknownNode Compute node.\n\n        Args:\n            container: The ONEXContainer providing access to services and configuration.\n        \"\"\"\n        super().__init__(container)\n        self.contract: ModelContractUnknownCompute = self.container.get_contract(self.__class__.__name__)\n\n    async def process(self, input_data: ModelComputeInput) -> ModelComputeOutput:\n        \"\"\"Processes the research request and returns best practices and standards.\n\n        This method simulates the research process, incorporating transaction management,\n        retry logic (conceptual for compute), and circuit breaker patterns.\n\n        Args:\n            input_data: An instance of ModelComputeInput containing the research topic and scope.\n\n        Returns:\n            An instance of ModelComputeOutput with the research findings.\n\n        Raises:\n            OnexError: If the research process encounters a critical error or is unresolvable.\n        \"\"\"\n        self.logger.info(f\"Starting research for topic: {input_data.research_topic} with depth: {input_data.depth}\")\n\n        # --- Apply Transaction Management (Conceptual for Compute) ---\n        # For a Compute node, \"transaction management\" might imply ensuring idempotency\n        # or managing internal state consistency if sub-operations were involved.\n        if self.contract.transaction_management.enabled:\n            self.logger.debug(\"Transaction management conceptually enabled for idempotency.\")\n            # In a real scenario, this would involve specific logic to ensure the compute\n            # operation is atomic or idempotent (e.g., check if already processed).\n            # For this simulation, we assume internal processing is inherently idempotent\n            # or recoverable.\n\n        # --- Apply Circuit Breaker (Conceptual) ---\n        # For internal sub-calls or dependencies a compute node might have.\n        if self.contract.circuit_breaker_config.enabled:\n            self.logger.debug(\"Circuit breaker conceptually active for internal dependencies.\")\n            # In a real implementation, a circuit breaker library would wrap external calls\n            # if the compute node depended on them.\n\n        # --- Research Logic Simulation ---\n        try:\n            best_practices_summary = self._simulate_research(\n                input_data.research_topic,\n                input_data.scope_keywords,\n                input_data.depth\n            )\n            standards_referenced = self._get_standards(input_data.research_topic)\n            integration_guidance = self._get_integration_guidance(input_data.research_topic, input_data.depth)\n            api_recommendations = self._get_api_recommendations(input_data.research_topic)\n\n            # --- Apply Retry Logic (Conceptual) ---\n            # If _simulate_research or _get_standards involved retriable sub-operations.\n            if self.contract.retry_policies.enabled:\n                self.logger.debug(\"Retry policy conceptually applied to internal sub-operations.\")\n                # A real retry decorator/logic would be here if internal calls were retryable.\n\n        except Exception as e:\n            self.logger.error(f\"Research failed for topic {input_data.research_topic}: {e}\")\n            raise OnexError(\n                error_code=CoreErrorCode.COMPUTE_PROCESSING_ERROR,\n                message=f\"Failed to complete research for {input_data.research_topic}\",\n                details=str(e)\n            )\n\n        self.logger.info(f\"Research complete for topic: {input_data.research_topic}\")\n\n        return ModelComputeOutput(\n            best_practices_summary=best_practices_summary,\n            standards_referenced=standards_referenced,\n            integration_points_guidance=integration_guidance,\n            api_specification_recommendations=api_recommendations,\n            research_timestamp=self.container.clock.now().isoformat()\n        )\n\n    def _simulate_research(self, topic: str, keywords: Optional[List[str]], depth: Literal[\"shallow\", \"medium\", \"deep\"]) -> str:\n        \"\"\"Simulates the research process based on topic, keywords, and depth.\"\"\"\n        base_summary = f\"Comprehensive research on {topic} for cross-workflow interface contracts. \"\n        if keywords:\n            base_summary += f\"Focusing on areas like {', '.join(keywords)}. \"\n\n        if depth == \"shallow\":\n            return base_summary + \"Provides an overview of basic principles and common practices.\"\n        elif depth == \"medium\":\n            return base_summary + \"Delves into established patterns, architectural styles, and common challenges/solutions.\"\n        else: # deep\n            return base_summary + \"Explores advanced topics, emerging trends, security considerations, and performance optimization for highly complex systems.\"\n\n    def _get_standards(self, topic: str) -> List[str]:\n        \"\"\"Simulates fetching relevant standards based on the topic.\"\"\"\n        if \"API\" in topic.upper() or \"INTEGRATION\" in topic.upper():\n            return [\"OpenAPI Specification (OAS)\", \"AsyncAPI Specification\", \"JSON Schema\", \"GraphQL Specification\"]\n        return [\"ISO/IEC 42010 (Architecture description)\", \"TOGAF (The Open Group Architecture Framework)\"]\n\n    def _get_integration_guidance(self, topic: str, depth: Literal[\"shallow\", \"medium\", \"deep\"]) -> str:\n        \"\"\"Simulates providing guidance on integration points.\"\"\"\n        guidance = f\"Guidance for defining integration points for {topic}: \"\n        if depth == \"shallow\":\n            return guidance + \"Focus on clear contract definitions and basic error handling.\"\n        elif depth == \"medium\":\n            return guidance + \"Emphasize loose coupling, idempotency, versioning, and observability.\"\n        else: # deep\n            return guidance + \"Cover distributed transaction patterns, event-driven architectures, choreography vs. orchestration, and security considerations.\"\n\n    def _get_api_recommendations(self, topic: str) -> str:\n        \"\"\"Simulates providing API specification recommendations.\"\"\"\n        if \"API\" in topic.upper():\n            return \"Recommend using declarative API specifications like OpenAPI for REST and AsyncAPI for event-driven interfaces. Ensure comprehensive documentation, versioning, and validation.\"\n        return \"Focus on well-defined interfaces, consistent data models, and clear communication protocols.\"\n",
+          "node_type": "Compute",
+          "node_name": "UnknownNode",
+          "dependencies": [
+            "pydantic>=1.8.2",
+            "omnibase_core"
+          ],
+          "intelligence_gathered": {},
+          "quality_metrics": {
+            "success": false,
+            "quality_score": 0.0,
+            "error": "MCP tool call timed out after 30.0s. Tool: assess_code_quality, Server: http://localhost:8051"
+          },
+          "quality_score": 0.0,
+          "lines_generated": 247,
+          "validation_passed": false,
+          "onex_compliance_notes": "The node name 'UnknownNode' deviates from the ONEX convention that node classes should start with 'Node' (e.g., 'NodeUnknownCompute'). This was done to comply with the explicit user requirement to 'Use EXACT node name: UnknownNode'. All other aspects, including contract model structure, inheritance from NodeCompute, container injection, and explicit error handling, adhere to canonical ONEX patterns. The contract model is unified, and input/output schemas are defined as Pydantic models referenced within the contract and used in the process method. Conceptual implementations for transaction management, retry logic, and circuit breakers are included.",
+          "pydantic_ai_metadata": {
+            "model_used": "gemini-1.5-flash",
+            "structured_output": true,
+            "tools_available": 3
+          }
+        },
+        "error": null,
+        "execution_time_ms": 105141.49475097656,
+        "trace_id": "agent_agent-contract-driven-generator_1759871257354_5087016080"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759871257.352282,
+      "datetime_str": "2025-10-07T17:07:37.352283",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task_3_1",
+            "description": "Research best practices and standards for defining cross-workflow interface contracts, integration points, and API specifications for complex systems."
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759871257.353434,
+      "datetime_str": "2025-10-07T17:07:37.353436",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871257.35395,
+      "datetime_str": "2025-10-07T17:07:37.353951",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task_3_1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871257.354442,
+      "datetime_str": "2025-10-07T17:07:37.354443",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Task task_3_1 assigned to agent-contract-driven-generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871257.35488,
+      "datetime_str": "2025-10-07T17:07:37.354880",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Generating Compute node: UnknownNode",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871287.3697312,
+      "datetime_str": "2025-10-07T17:08:07.369766",
+      "event_type": "AGENT_ERROR",
+      "level": "WARNING",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Intelligence gathering failed (continuing): MCP tool call timed out after 30.0s. Tool: perform_rag_query, Server: http://localhost:8051",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871287.373455,
+      "datetime_str": "2025-10-07T17:08:07.373457",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Invoking Pydantic AI code generator",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871362.498472,
+      "datetime_str": "2025-10-07T17:09:22.498472",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Code generation complete: 14536 chars, quality=0.00",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871362.499268,
+      "datetime_str": "2025-10-07T17:09:22.499268",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-contract-driven-generator",
+      "task_id": "task_3_1",
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Task task_3_1 succeeded in 105141.49ms",
+      "metadata": {
+        "execution_time_ms": 105141.49475097656
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871362.499938,
+      "datetime_str": "2025-10-07T17:09:22.499938",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "task_3_1"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    },
+    {
+      "timestamp": 1759871362.500499,
+      "datetime_str": "2025-10-07T17:09:22.500499",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Coordinator completed: 1/1 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 105148.21791648865,
+        "tasks_completed": 1,
+        "success_count": 1
+      },
+      "duration_ms": 105148.21195602417,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759871362.501048,
+      "datetime_str": "2025-10-07T17:09:22.501049",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759871257352_5087016080",
+      "message": "Parallel execution complete: 1 tasks in 105148.22ms",
+      "metadata": {
+        "total_time_ms": 105148.21791648865,
+        "results": {
+          "task_3_1": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759871257352_5087016080"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task_3_1",
+        "description": "Research best practices and standards for defining cross-workflow interface contracts, integration points, and API specifications for complex systems."
+      }
+    ]
+  }
+}

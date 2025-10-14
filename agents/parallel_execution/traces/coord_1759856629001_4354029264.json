@@ -1,0 +1,857 @@
+{
+  "trace_id": "coord_1759856629001_4354029264",
+  "coordinator_type": "parallel",
+  "start_time": 1759856629.001194,
+  "end_time": 1759856633.4559948,
+  "duration_ms": 4454.800844192505,
+  "total_agents": 1,
+  "completed_agents": 1,
+  "failed_agents": 0,
+  "agent_traces": [
+    {
+      "trace_id": "agent_agent-debug-intelligence_1759856629005_4354029264",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "start_time": 1759856629.005395,
+      "end_time": 1759856633.4496288,
+      "duration_ms": 4444.2338943481445,
+      "status": "completed",
+      "events": [
+        {
+          "timestamp": 1759856629.005453,
+          "datetime_str": "2025-10-07T13:03:49.005453",
+          "event_type": "AGENT_START",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent started: agent-debug-intelligence for task task1",
+          "metadata": {
+            "domain": "debug_intelligence",
+            "input_data": {
+              "node_type": "Effect",
+              "node_name": "NodePostgreSQLAdapterEffect"
+            }
+          },
+          "duration_ms": null,
+          "parent_trace_id": "coord_1759856629001_4354029264"
+        },
+        {
+          "timestamp": 1759856633.450201,
+          "datetime_str": "2025-10-07T13:03:53.450203",
+          "event_type": "AGENT_END",
+          "level": "INFO",
+          "agent_name": "agent-debug-intelligence",
+          "task_id": "task1",
+          "coordinator_id": null,
+          "message": "Agent completed: agent-debug-intelligence (4444.23ms)",
+          "metadata": {
+            "result": {
+              "task_id": "task1",
+              "agent_name": "agent-debug-intelligence",
+              "success": true,
+              "output_data": {
+                "error_message": "",
+                "intelligence_analysis": {
+                  "code_quality": {
+                    "success": false,
+                    "error": {
+                      "type": "validation_error",
+                      "message": "Content cannot be empty",
+                      "suggestion": "Provide code content to assess"
+                    }
+                  },
+                  "architectural_compliance": {
+                    "success": false,
+                    "error": {
+                      "type": "validation_error",
+                      "message": "Content cannot be empty",
+                      "suggestion": "Provide code content to check architectural compliance"
+                    }
+                  },
+                  "anti_patterns": {
+                    "success": false,
+                    "error": {
+                      "type": "validation_error",
+                      "message": "Content cannot be empty",
+                      "suggestion": "Provide code content to analyze for patterns"
+                    }
+                  },
+                  "domain_patterns": {
+                    "success": true,
+                    "query": "debugging  systematic root cause analysis",
+                    "context": "debugging",
+                    "timestamp": "2025-10-07T17:03:49.228824",
+                    "duration_ms": 4086,
+                    "sources_queried": [
+                      "RAG/Enhanced Search",
+                      "Qdrant Vector DB",
+                      "Memgraph Knowledge Graph"
+                    ],
+                    "sources_successful": [
+                      "RAG",
+                      "Vector Search",
+                      "Knowledge Graph"
+                    ],
+                    "total_results": 5,
+                    "results": {
+                      "rag_search": {
+                        "success": true,
+                        "source": "rag_search",
+                        "results": [],
+                        "query": "debugging  systematic root cause analysis",
+                        "reranked": false
+                      },
+                      "vector_search": {
+                        "success": true,
+                        "source": "qdrant_vector_search",
+                        "results": [
+                          {
+                            "entity_id": "code_112",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> trace the login process from front - end to database\n\nTips:\nBe specific about what you\u2019re looking for\nUse domain language from the project\n\n\n\u200bFix bugs efficiently\nSuppose you\u2019ve encountered an error message and need to find and fix its source.\n1Share the error with ClaudeCopy < div class =\"min - w - fu",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.3998932,
+                            "semantic_score": 0.3998932,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:15.060092+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_112",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> trace the login process from front - end to database\n\nTips:\nBe specific about what you\u2019re looking for\nUse domain language from the project\n\n\n\u200bFix bugs efficiently\nSuppose you\u2019ve encountered an error message and need to find and fix its source.\n1Share the error with ClaudeCopy < div class =\"min - w - fu",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.3998932,
+                            "semantic_score": 0.3998932,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:15.060092+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_86",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.35005814,
+                            "semantic_score": 0.35005814,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:12.963261+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "code_86",
+                            "entity_type": "code_example",
+                            "title": "plaintext Code Example",
+                            "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                            "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                            "relevance_score": 0.35005814,
+                            "semantic_score": 0.35005814,
+                            "structural_score": null,
+                            "source_id": "9a532b2b74e5d48a",
+                            "project_id": null,
+                            "created_at": "2025-09-01T15:49:12.963261+00:00",
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          },
+                          {
+                            "entity_id": "doc_0_2",
+                            "entity_type": "page",
+                            "title": "ONEX Canonical Examples",
+                            "content": "# ONEX Canonical Examples - Quick Start\n\n## 15 Canonical Patterns\n\n1. Container Injection - ONEXContainer for dependency injection\n2. Transaction Management - Rollback support with LIFO order  \n3. Circuit Breaker - Prevent cascading failures (CLOSED/OPEN/HALF_OPEN)\n4. Retry Logic - Exponential backoff with jitter\n5. Security Assessment - Path traversal detection, sandbox compliance\n6. Multiple Operations - File, HTTP, database, email, audit handlers\n7. Input Validation - Comprehensive with errors AND warnings\n8. Performance Metrics - Per-operation timing and success rates\n9. Strong Typing - Pydantic BaseModel + Python Enum  \n10. Rollback Instructions - Human-readable recovery steps\n11. Contract Loading - YAML contracts with Pydantic validation\n12. Error Handling - OnexError with structured details\n13. Structured Logging - emit_log_event with correlation IDs\n14. Async Context Managers - Resource cleanup with RAII\n15. Semaphore Concurrency - Prevent resource exhaustion\n\n## Canonical Effect Node Structure\n\n```python\nclass NodeDatabaseWriterEffect(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Initialize transaction manager\n        # Initialize circuit breaker\n        # Initialize retry logic\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # 1. Validate input\n        # 2. Assess security risk\n        # 3. Execute with transaction\n        # 4. Track performance metrics\n        # 5. Handle rollback if needed\n```\n\n## Key Patterns to Keep\n\nInfrastructure (ALWAYS keep):\n- Container injection\n- Transaction management with rollback\n- Circuit breaker for external services  \n- Retry logic with exponential backoff\n- Input validation with errors/warnings\n- Security risk assessment\n- Performance metrics tracking\n- Structured logging with correlation IDs\n- OnexError for exceptions\n- Pydantic models for all data\n\nBusiness Logic (Customize):\n- Operation handlers\n- Validation rules\n- Security checks\n- Rollback instructions",
+                            "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/examples/QUICKSTART.md",
+                            "relevance_score": 0.34316495,
+                            "semantic_score": 0.34316495,
+                            "structural_score": null,
+                            "source_id": null,
+                            "project_id": null,
+                            "created_at": null,
+                            "updated_at": null,
+                            "relationships": null,
+                            "path_to_query": null
+                          }
+                        ],
+                        "query": "debugging  systematic root cause analysis"
+                      },
+                      "knowledge_graph": {
+                        "success": true,
+                        "source": "memgraph_knowledge_graph",
+                        "results": [],
+                        "query": "debugging  systematic root cause analysis",
+                        "search_terms": [
+                          "debugging",
+                          "systematic",
+                          "root"
+                        ]
+                      }
+                    },
+                    "synthesis": {
+                      "key_findings": [
+                        "Identified 5 semantically similar items"
+                      ],
+                      "patterns_identified": [
+                        "Vector search found 5 semantically related items"
+                      ],
+                      "recommended_actions": [
+                        "Look for known issues and solutions in RAG results",
+                        "Check for similar error patterns in vector search results"
+                      ],
+                      "cross_source_connections": [],
+                      "confidence_score": 0.5,
+                      "ecosystem_insights": [
+                        "Cross-referenced patterns across omninode ecosystem projects",
+                        "4-node architecture compliance and implementation patterns",
+                        "Integration opportunities between omniagent/omnimcp components",
+                        "Architectural consistency analysis across ecosystem"
+                      ],
+                      "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                      "ecosystem_integration_opportunities": [
+                        "Identify shared patterns between omnibase components",
+                        "Leverage 4-node architecture across ecosystem projects",
+                        "Optimize cross-component communication patterns"
+                      ]
+                    },
+                    "cache": {
+                      "hits": 0,
+                      "misses": 3,
+                      "hit_rate": 0.0,
+                      "stats": {
+                        "enabled": true,
+                        "total_keys": 15,
+                        "hits": 91,
+                        "misses": 111,
+                        "hit_rate": 45.04950495049505,
+                        "connected_clients": 0
+                      }
+                    }
+                  }
+                },
+                "bfros_analysis": {
+                  "behavior_analysis": {
+                    "expected": "Correct execution without errors",
+                    "actual": "Error: ",
+                    "deviation": ""
+                  },
+                  "fault_localization": {
+                    "error_location": "Code snippet provided",
+                    "affected_components": [
+                      "Primary code block"
+                    ],
+                    "quality_score": 0.0,
+                    "compliance_score": 0.0
+                  },
+                  "root_cause_factors": {
+                    "quality_issues": [],
+                    "architectural_violations": [],
+                    "anti_patterns": []
+                  }
+                },
+                "root_cause": {
+                  "primary_cause": "Low code quality and architectural violations",
+                  "contributing_factors": {
+                    "quality_issues": [],
+                    "architectural_issues": [],
+                    "pattern_issues": []
+                  },
+                  "confidence_score": 0.5,
+                  "confidence_level": "Medium",
+                  "validation_method": "Intelligence-based multi-factor analysis"
+                },
+                "solution": {
+                  "fix_description": "Address quality and architectural issues identified in root cause analysis",
+                  "implementation_steps": [
+                    "Fix immediate bug (symptom)",
+                    "Resolve quality issues (root cause)",
+                    "Fix architectural violations (prevention)",
+                    "Eliminate anti-patterns (systemic fix)",
+                    "Apply best practices from intelligence"
+                  ],
+                  "quality_improvements": [],
+                  "compliance_improvements": [],
+                  "tests_required": [
+                    "Unit test preventing recurrence",
+                    "Integration test for affected flow",
+                    "Regression test for similar scenarios"
+                  ],
+                  "prevention_measures": {
+                    "pattern_documented": true,
+                    "quality_gates_added": true,
+                    "monitoring_enabled": true
+                  }
+                },
+                "quality_improvement": {
+                  "before": 0.0,
+                  "after": 0.0,
+                  "delta": 0.0,
+                  "improvement_percentage": 0,
+                  "meets_minimum": false
+                },
+                "root_cause_confidence": 0.5,
+                "intelligence_sources": 3
+              },
+              "error": null,
+              "execution_time_ms": 4444.111108779907,
+              "trace_id": "agent_agent-debug-intelligence_1759856629005_4354029264"
+            },
+            "error": null
+          },
+          "duration_ms": 4444.2338943481445,
+          "parent_trace_id": "coord_1759856629001_4354029264"
+        }
+      ],
+      "result": {
+        "task_id": "task1",
+        "agent_name": "agent-debug-intelligence",
+        "success": true,
+        "output_data": {
+          "error_message": "",
+          "intelligence_analysis": {
+            "code_quality": {
+              "success": false,
+              "error": {
+                "type": "validation_error",
+                "message": "Content cannot be empty",
+                "suggestion": "Provide code content to assess"
+              }
+            },
+            "architectural_compliance": {
+              "success": false,
+              "error": {
+                "type": "validation_error",
+                "message": "Content cannot be empty",
+                "suggestion": "Provide code content to check architectural compliance"
+              }
+            },
+            "anti_patterns": {
+              "success": false,
+              "error": {
+                "type": "validation_error",
+                "message": "Content cannot be empty",
+                "suggestion": "Provide code content to analyze for patterns"
+              }
+            },
+            "domain_patterns": {
+              "success": true,
+              "query": "debugging  systematic root cause analysis",
+              "context": "debugging",
+              "timestamp": "2025-10-07T17:03:49.228824",
+              "duration_ms": 4086,
+              "sources_queried": [
+                "RAG/Enhanced Search",
+                "Qdrant Vector DB",
+                "Memgraph Knowledge Graph"
+              ],
+              "sources_successful": [
+                "RAG",
+                "Vector Search",
+                "Knowledge Graph"
+              ],
+              "total_results": 5,
+              "results": {
+                "rag_search": {
+                  "success": true,
+                  "source": "rag_search",
+                  "results": [],
+                  "query": "debugging  systematic root cause analysis",
+                  "reranked": false
+                },
+                "vector_search": {
+                  "success": true,
+                  "source": "qdrant_vector_search",
+                  "results": [
+                    {
+                      "entity_id": "code_112",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> trace the login process from front - end to database\n\nTips:\nBe specific about what you\u2019re looking for\nUse domain language from the project\n\n\n\u200bFix bugs efficiently\nSuppose you\u2019ve encountered an error message and need to find and fix its source.\n1Share the error with ClaudeCopy < div class =\"min - w - fu",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.3998932,
+                      "semantic_score": 0.3998932,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:15.060092+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "code_112",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> trace the login process from front - end to database\n\nTips:\nBe specific about what you\u2019re looking for\nUse domain language from the project\n\n\n\u200bFix bugs efficiently\nSuppose you\u2019ve encountered an error message and need to find and fix its source.\n1Share the error with ClaudeCopy < div class =\"min - w - fu",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.3998932,
+                      "semantic_score": 0.3998932,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:15.060092+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "code_86",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.35005814,
+                      "semantic_score": 0.35005814,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:12.963261+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "code_86",
+                      "entity_type": "code_example",
+                      "title": "plaintext Code Example",
+                      "content": "> explain the main architecture patterns used here\nCopy > what are the key data models?\nCopy > how is authentication handled?\n\n< path d =\"M3.12794 12.4232C3.12794 12.5954 3.1776 12.7634 3.27244 12.907L3.74114 13.6095C3.88471 13.8248 4.21067 14 4.46964 14H6.15606C6.41415 14 6.74017 13.825 6.88373 13.6095L7.3508 12.9073C7.43114 12.7859 7.49705 12.569 7.49705 12.4232L7.50055 11.3513H3.12521L3.12794 12.4232ZM5.31288 0C2.52414 0.00875889 0.5 2.26889 0.5 4.78826C0.5 6.00188 0.949566 7.10829 1.69119 7.95492C2.14321 8.47011 2.84901 9.54727 3.11919 10.4557C3.12005 10.4625 3.12175 10.4698 3.12261 10.4771H7.50342C7.50427 10.4698 7.50598 10.463 7.50684 10.4557C7.77688 9.54727 8.48281 8.47011 8.93484 7.95492C9.67728 7.13181 10.1258 6.02703 10.1258 4.78826C10.1258 2.15486 7.9709 0.000106649 5.31288 0ZM7.94902 7.11267C7.52078 7.60079 6.99082 8.37878 6.6077 9.18794H4.02051C3.63739 8.37878 3.10743 7.60079 2.67947 7.11294C2.11997 6.47551 1.8126 5.63599 1.8126 4.78826C1.8126 3.098",
+                      "url": "https://docs.anthropic.com/en/docs/claude-code/common-workflows",
+                      "relevance_score": 0.35005814,
+                      "semantic_score": 0.35005814,
+                      "structural_score": null,
+                      "source_id": "9a532b2b74e5d48a",
+                      "project_id": null,
+                      "created_at": "2025-09-01T15:49:12.963261+00:00",
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    },
+                    {
+                      "entity_id": "doc_0_2",
+                      "entity_type": "page",
+                      "title": "ONEX Canonical Examples",
+                      "content": "# ONEX Canonical Examples - Quick Start\n\n## 15 Canonical Patterns\n\n1. Container Injection - ONEXContainer for dependency injection\n2. Transaction Management - Rollback support with LIFO order  \n3. Circuit Breaker - Prevent cascading failures (CLOSED/OPEN/HALF_OPEN)\n4. Retry Logic - Exponential backoff with jitter\n5. Security Assessment - Path traversal detection, sandbox compliance\n6. Multiple Operations - File, HTTP, database, email, audit handlers\n7. Input Validation - Comprehensive with errors AND warnings\n8. Performance Metrics - Per-operation timing and success rates\n9. Strong Typing - Pydantic BaseModel + Python Enum  \n10. Rollback Instructions - Human-readable recovery steps\n11. Contract Loading - YAML contracts with Pydantic validation\n12. Error Handling - OnexError with structured details\n13. Structured Logging - emit_log_event with correlation IDs\n14. Async Context Managers - Resource cleanup with RAII\n15. Semaphore Concurrency - Prevent resource exhaustion\n\n## Canonical Effect Node Structure\n\n```python\nclass NodeDatabaseWriterEffect(NodeEffect):\n    def __init__(self, container: ModelOnexContainer) -> None:\n        super().__init__(container)\n        # Initialize transaction manager\n        # Initialize circuit breaker\n        # Initialize retry logic\n    \n    async def execute_effect(self, contract: ModelContractEffectStandard):\n        # 1. Validate input\n        # 2. Assess security risk\n        # 3. Execute with transaction\n        # 4. Track performance metrics\n        # 5. Handle rollback if needed\n```\n\n## Key Patterns to Keep\n\nInfrastructure (ALWAYS keep):\n- Container injection\n- Transaction management with rollback\n- Circuit breaker for external services  \n- Retry logic with exponential backoff\n- Input validation with errors/warnings\n- Security risk assessment\n- Performance metrics tracking\n- Structured logging with correlation IDs\n- OnexError for exceptions\n- Pydantic models for all data\n\nBusiness Logic (Customize):\n- Operation handlers\n- Validation rules\n- Security checks\n- Rollback instructions",
+                      "url": "file:///Volumes/PRO-G40/Code/omniarchon/docs/onex/examples/QUICKSTART.md",
+                      "relevance_score": 0.34316495,
+                      "semantic_score": 0.34316495,
+                      "structural_score": null,
+                      "source_id": null,
+                      "project_id": null,
+                      "created_at": null,
+                      "updated_at": null,
+                      "relationships": null,
+                      "path_to_query": null
+                    }
+                  ],
+                  "query": "debugging  systematic root cause analysis"
+                },
+                "knowledge_graph": {
+                  "success": true,
+                  "source": "memgraph_knowledge_graph",
+                  "results": [],
+                  "query": "debugging  systematic root cause analysis",
+                  "search_terms": [
+                    "debugging",
+                    "systematic",
+                    "root"
+                  ]
+                }
+              },
+              "synthesis": {
+                "key_findings": [
+                  "Identified 5 semantically similar items"
+                ],
+                "patterns_identified": [
+                  "Vector search found 5 semantically related items"
+                ],
+                "recommended_actions": [
+                  "Look for known issues and solutions in RAG results",
+                  "Check for similar error patterns in vector search results"
+                ],
+                "cross_source_connections": [],
+                "confidence_score": 0.5,
+                "ecosystem_insights": [
+                  "Cross-referenced patterns across omninode ecosystem projects",
+                  "4-node architecture compliance and implementation patterns",
+                  "Integration opportunities between omniagent/omnimcp components",
+                  "Architectural consistency analysis across ecosystem"
+                ],
+                "cross_project_scope": "Searched across entire omninode ecosystem including omnibase-core, omnibase-spi, omniagent, omnimcp",
+                "ecosystem_integration_opportunities": [
+                  "Identify shared patterns between omnibase components",
+                  "Leverage 4-node architecture across ecosystem projects",
+                  "Optimize cross-component communication patterns"
+                ]
+              },
+              "cache": {
+                "hits": 0,
+                "misses": 3,
+                "hit_rate": 0.0,
+                "stats": {
+                  "enabled": true,
+                  "total_keys": 15,
+                  "hits": 91,
+                  "misses": 111,
+                  "hit_rate": 45.04950495049505,
+                  "connected_clients": 0
+                }
+              }
+            }
+          },
+          "bfros_analysis": {
+            "behavior_analysis": {
+              "expected": "Correct execution without errors",
+              "actual": "Error: ",
+              "deviation": ""
+            },
+            "fault_localization": {
+              "error_location": "Code snippet provided",
+              "affected_components": [
+                "Primary code block"
+              ],
+              "quality_score": 0.0,
+              "compliance_score": 0.0
+            },
+            "root_cause_factors": {
+              "quality_issues": [],
+              "architectural_violations": [],
+              "anti_patterns": []
+            }
+          },
+          "root_cause": {
+            "primary_cause": "Low code quality and architectural violations",
+            "contributing_factors": {
+              "quality_issues": [],
+              "architectural_issues": [],
+              "pattern_issues": []
+            },
+            "confidence_score": 0.5,
+            "confidence_level": "Medium",
+            "validation_method": "Intelligence-based multi-factor analysis"
+          },
+          "solution": {
+            "fix_description": "Address quality and architectural issues identified in root cause analysis",
+            "implementation_steps": [
+              "Fix immediate bug (symptom)",
+              "Resolve quality issues (root cause)",
+              "Fix architectural violations (prevention)",
+              "Eliminate anti-patterns (systemic fix)",
+              "Apply best practices from intelligence"
+            ],
+            "quality_improvements": [],
+            "compliance_improvements": [],
+            "tests_required": [
+              "Unit test preventing recurrence",
+              "Integration test for affected flow",
+              "Regression test for similar scenarios"
+            ],
+            "prevention_measures": {
+              "pattern_documented": true,
+              "quality_gates_added": true,
+              "monitoring_enabled": true
+            }
+          },
+          "quality_improvement": {
+            "before": 0.0,
+            "after": 0.0,
+            "delta": 0.0,
+            "improvement_percentage": 0,
+            "meets_minimum": false
+          },
+          "root_cause_confidence": 0.5,
+          "intelligence_sources": 3
+        },
+        "error": null,
+        "execution_time_ms": 4444.111108779907,
+        "trace_id": "agent_agent-debug-intelligence_1759856629005_4354029264"
+      },
+      "error": null
+    }
+  ],
+  "events": [
+    {
+      "timestamp": 1759856629.001316,
+      "datetime_str": "2025-10-07T13:03:49.001319",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Coordinator started: parallel with 1 agents",
+      "metadata": {
+        "tasks": [
+          {
+            "task_id": "task1",
+            "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+          }
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759856629.0036402,
+      "datetime_str": "2025-10-07T13:03:49.003642",
+      "event_type": "COORDINATOR_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Starting parallel execution of 1 tasks",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.004142,
+      "datetime_str": "2025-10-07T13:03:49.004142",
+      "event_type": "PARALLEL_BATCH_START",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Executing batch of 1 tasks in parallel",
+      "metadata": {
+        "task_ids": [
+          "task1"
+        ]
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.004488,
+      "datetime_str": "2025-10-07T13:03:49.004489",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Task task1 assigned to agent-debug-intelligence",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.00548,
+      "datetime_str": "2025-10-07T13:03:49.005480",
+      "event_type": "TASK_ASSIGNED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Starting intelligence-enhanced debugging: Build an ONEX Effect node called NodePostgreSQLAdapterEffect",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.005995,
+      "datetime_str": "2025-10-07T13:03:49.005996",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Phase 1: Gathering pre-investigation intelligence (no pre-gathered context)",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.006433,
+      "datetime_str": "2025-10-07T13:03:49.006434",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Assessing code quality at bug location",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.1915278,
+      "datetime_str": "2025-10-07T13:03:49.191530",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Checking architectural compliance",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.205871,
+      "datetime_str": "2025-10-07T13:03:49.205874",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Identifying anti-patterns",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856629.219626,
+      "datetime_str": "2025-10-07T13:03:49.219628",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Searching for similar bug patterns",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.4342358,
+      "datetime_str": "2025-10-07T13:03:53.434268",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Phase 2: Applying BFROS framework",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.437058,
+      "datetime_str": "2025-10-07T13:03:53.437062",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Phase 3: Determining root cause with confidence scoring",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.438271,
+      "datetime_str": "2025-10-07T13:03:53.438272",
+      "event_type": "AGENT_START",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Phase 4: Generating optimal solution",
+      "metadata": {},
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.451807,
+      "datetime_str": "2025-10-07T13:03:53.451809",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Debug analysis complete: confidence=0.50",
+      "metadata": {
+        "execution_time_ms": 4444.111108779907
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.4530041,
+      "datetime_str": "2025-10-07T13:03:53.453005",
+      "event_type": "TASK_COMPLETED",
+      "level": "INFO",
+      "agent_name": "agent-debug-intelligence",
+      "task_id": "task1",
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Task task1 succeeded in 4444.11ms",
+      "metadata": {
+        "execution_time_ms": 4444.111108779907
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.454875,
+      "datetime_str": "2025-10-07T13:03:53.454876",
+      "event_type": "PARALLEL_BATCH_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Batch complete: 1 tasks finished",
+      "metadata": {
+        "completed": [
+          "task1"
+        ],
+        "success_count": 1
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    },
+    {
+      "timestamp": 1759856633.45603,
+      "datetime_str": "2025-10-07T13:03:53.456030",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Coordinator completed: 1/1 succeeded, 0 failed",
+      "metadata": {
+        "total_time_ms": 4454.914093017578,
+        "tasks_completed": 1,
+        "success_count": 1
+      },
+      "duration_ms": 4454.800844192505,
+      "parent_trace_id": null
+    },
+    {
+      "timestamp": 1759856633.457601,
+      "datetime_str": "2025-10-07T13:03:53.457601",
+      "event_type": "COORDINATOR_END",
+      "level": "INFO",
+      "agent_name": null,
+      "task_id": null,
+      "coordinator_id": "coord_1759856629001_4354029264",
+      "message": "Parallel execution complete: 1 tasks in 4454.91ms",
+      "metadata": {
+        "total_time_ms": 4454.914093017578,
+        "results": {
+          "task1": true
+        }
+      },
+      "duration_ms": null,
+      "parent_trace_id": "coord_1759856629001_4354029264"
+    }
+  ],
+  "metadata": {
+    "tasks": [
+      {
+        "task_id": "task1",
+        "description": "Build an ONEX Effect node called NodePostgreSQLAdapterEffect"
+      }
+    ]
+  }
+}

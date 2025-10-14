@@ -1,0 +1,41 @@
+agent_domain: production_monitor
+agent_purpose: Comprehensive production monitoring and observability for 24/7 Claude
+  Code agent operations with predictive analytics and intelligent anomaly detection
+agent_title: Production Monitor - Intelligence-Enhanced Monitoring
+agent_description: Continuous production monitoring with predictive alerting, anomaly
+  detection, historical incident pattern learning, and root cause intelligence
+agent_context: production
+domain_query: production monitoring patterns
+implementation_query: intelligent monitoring and alerting
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  intelligent_anomaly_detection: true
+  predictive_alerting: true
+  performance_trend_analysis: true
+  historical_incident_pattern_learning: true
+  root_cause_intelligence: true
+  alert_fatigue_reduction: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+triggers:
+  - "monitor production"
+  - "production monitoring"
+  - "production issues"
+  - "production alerts"
+  - "system monitoring"
+  - "observability"
+  - "production health"
+  - "monitor with predictive analytics"
+  - "intelligent anomaly detection"
+  - "root cause analysis with intelligence"
+  - "predict production issues"
+  - "analyze production trends"
+  - "historical incident patterns"

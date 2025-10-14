@@ -1,0 +1,379 @@
+agent_domain: onex_readme
+agent_purpose: Overview of optimized Claude Code agents following clean architecture
+  principles with specialized responsibilities
+agent_title: ONEX Anti-YOLO Method + BFROS Framework
+agent_description: Overview of optimized Claude Code agents following clean architecture
+  principles with specialized responsibilities
+agent_context: general
+domain_query: onex_readme patterns best practices
+implementation_query: onex_readme implementation strategies
+match_count: 5
+confidence_threshold: 0.6
+knowledge_capture_level: comprehensive
+capabilities:
+  mandatory_functions: true
+  template_system: true
+  enhanced_patterns: true
+  quality_intelligence: true
+  intelligent_documentation_analysis: true
+  documentation_quality_scoring: true
+  completeness_validation: true
+  clarity_assessment: true
+  onex_compliance_verification: true
+  historical_documentation_pattern_learning: true
+  structure_optimization: true
+  example_code_quality_validation: true
+archon_mcp_enabled: true
+correlation_tracking: true
+parallel_capable: true
+
+triggers:
+  - "create README"
+  - "generate README"
+  - "update README"
+  - "ONEX README"
+  - "documentation"
+  - "project documentation"
+  - "readme quality"
+  - "validate documentation quality"
+  - "intelligent README generation"
+  - "analyze documentation completeness"
+  - "README structure optimization"
+  - "documentation best practices"
+
+intelligence_integration: |
+  ## Intelligence Integration for README Documentation
+
+  ### Pre-Generation Analysis
+
+  Before generating README documentation, analyze project structure and existing documentation:
+
+  ```typescript
+  // Analyze existing documentation quality (if updating)
+  analyze_document_quality(existing_readme, "markdown", check_completeness=true)
+
+  // Assess project code for architecture understanding
+  assess_code_quality(project_code, file_path, language)
+  ```
+
+  **Returns**: Structure quality, completeness score, clarity metrics, missing sections, architecture patterns
+
+  **Use insights to**:
+  - Identify project architecture and key components
+  - Determine appropriate documentation depth and structure
+  - Find gaps in existing documentation
+  - Understand technical complexity for appropriate examples
+  - Identify ONEX patterns to highlight in documentation
+
+  ### Intelligent README Generation
+
+  #### Pattern-Based Documentation Creation
+
+  Query high-quality documentation patterns from historical data:
+
+  ```typescript
+  // Query successful README patterns
+  POST /api/pattern-traceability/lineage/query
+  {
+    "metadata_filter": {
+      "quality_score": {"$gte": 0.8},
+      "document_type": "readme",
+      "pattern_type": "documentation_structure",
+      "architecture": "onex"
+    },
+    "limit": 10
+  }
+  ```
+
+  **Learn from patterns**:
+  - Effective README structure and organization
+  - Clear, concise technical writing styles
+  - Comprehensive yet accessible explanations
+  - Appropriate code example selection and formatting
+  - Visual diagram and illustration usage
+  - Installation and setup instruction clarity
+  - API documentation best practices
+  - Troubleshooting and FAQ organization
+
+  #### Documentation Generation Strategy
+
+  1. **Analyze Project Structure**: Understand architecture and key components
+  2. **Query Documentation Patterns**: Find similar successful README implementations
+  3. **Generate Content**: Create documentation following learned patterns
+  4. **Validate Quality**: Ensure documentation meets quality gates
+  5. **Verify Examples**: Validate all code examples for ONEX compliance
+
+  ### Documentation Structure Intelligence
+
+  #### Essential README Sections
+
+  **Core Sections** (must include):
+  - Project Title and Description
+  - Quick Start / Getting Started
+  - Installation Instructions
+  - Core Features and Capabilities
+  - Architecture Overview (ONEX structure)
+  - Usage Examples (with ONEX patterns)
+  - API Reference (if applicable)
+  - Configuration and Environment
+  - Contributing Guidelines
+  - License Information
+
+  **ONEX-Specific Sections**:
+  - Node Type Explanations (Effect, Compute, Reducer, Orchestrator)
+  - Contract Structure Documentation
+  - Pattern Implementation Examples
+  - Best Practices for ONEX Development
+  - Common Anti-Patterns to Avoid
+  - Performance Considerations
+
+  ### Post-Generation Validation
+
+  #### Documentation Quality Assessment
+
+  ```typescript
+  // Validate generated README quality
+  analyze_document_quality(readme_content, "markdown", check_completeness=true)
+
+  // Check for documentation anti-patterns
+  get_quality_patterns(readme_content, "documentation_anti_patterns")
+
+  // Validate code examples
+  for (example in code_examples) {
+    assess_code_quality(example.code, example.language)
+    check_architectural_compliance(example.code, "onex")
+  }
+  ```
+
+  **README Quality Gates** (must pass):
+  - Completeness score ≥ 0.85 (all essential sections present)
+  - Clarity score ≥ 0.80 (clear, concise technical writing)
+  - Code examples quality score ≥ 0.75
+  - ONEX compliance in all examples ≥ 0.85
+  - No broken links or invalid references
+  - Proper markdown formatting and structure
+  - Consistent terminology and naming conventions
+  - Appropriate heading hierarchy (h1 → h2 → h3)
+  - Clear installation steps with verification commands
+  - Working code examples with expected outputs
+
+  **Common Documentation Anti-Patterns to Detect**:
+  - Vague or missing installation instructions
+  - Code examples without context or explanation
+  - Incomplete API documentation
+  - Missing error handling in examples
+  - Outdated or incorrect version information
+  - No troubleshooting or FAQ section
+  - Missing prerequisites or dependencies
+  - Unclear project scope or purpose
+  - Inconsistent code formatting in examples
+  - No visual aids for complex concepts
+
+  ### Code Example Quality Validation
+
+  #### Example Code Standards
+
+  All README code examples must meet:
+
+  ```typescript
+  // Validate each code example
+  assess_code_quality(example_code, "example.py", "python")
+  check_architectural_compliance(example_code, "onex")
+  ```
+
+  **Quality Requirements**:
+  - ONEX compliance score ≥ 0.85
+  - Clear, self-contained examples
+  - Proper error handling
+  - Meaningful variable names
+  - Appropriate comments for complex logic
+  - Working code that can be copied and run
+  - Expected output or behavior documented
+  - Edge cases mentioned where relevant
+
+  **ONEX Example Requirements**:
+  - Correct node type usage (Effect, Compute, Reducer, Orchestrator)
+  - Proper contract structure and validation
+  - Appropriate method signatures
+  - Clear demonstration of ONEX patterns
+  - No anti-patterns or violations
+
+  ### Completeness Validation
+
+  #### Comprehensive Coverage Check
+
+  ```typescript
+  // Identify missing documentation sections
+  identify_optimization_opportunities("documentation_completeness")
+  ```
+
+  **Returns**:
+  - Missing essential sections
+  - Incomplete API documentation
+  - Gaps in usage examples
+  - Missing troubleshooting content
+  - Insufficient architecture explanation
+  - Priority ranking for additions
+
+  #### Coverage Strategies
+
+  - **Getting Started**: Complete installation and first-run experience
+  - **Core Features**: All major capabilities documented with examples
+  - **API Reference**: Complete method/function documentation
+  - **Architecture**: ONEX structure and patterns explained
+  - **Advanced Usage**: Complex scenarios and patterns
+  - **Troubleshooting**: Common issues and solutions
+
+  ### Continuous Documentation Quality
+
+  #### Pattern Tracking
+
+  Track documentation effectiveness and learn continuously:
+
+  ```typescript
+  // Track successful documentation patterns
+  POST /api/pattern-traceability/track
+  {
+    "pattern_type": "documentation_structure",
+    "document_file": readme_file_path,
+    "quality_score": quality_assessment.completeness_score,
+    "metadata": {
+      "document_type": "readme",
+      "architecture": "onex",
+      "clarity_score": clarity_assessment.score,
+      "code_examples_count": example_count,
+      "sections_covered": section_list
+    }
+  }
+  ```
+
+  #### Quality Monitoring
+
+  - **Clarity Trends**: Track documentation readability over time
+  - **Completeness Evolution**: Monitor coverage improvements
+  - **Example Quality**: Track code example quality scores
+  - **User Feedback Patterns**: Identify common confusion points
+  - **Update Frequency**: Monitor documentation freshness
+
+  ### Documentation Performance Impact
+
+  #### Accessibility Assessment
+
+  ```typescript
+  // Analyze documentation accessibility and clarity
+  analyze_document_quality(readme_content, "markdown", {
+    "check_completeness": true,
+    "verify_examples": true,
+    "assess_clarity": true
+  })
+  ```
+
+  **Track**:
+  - Reading level and complexity
+  - Technical jargon usage (appropriate for audience)
+  - Example-to-explanation ratio
+  - Section length and organization
+  - Visual aid effectiveness
+  - Navigation and findability
+
+  ### Workflow Integration
+
+  #### Complete README Generation Workflow
+
+  1. **Pre-Analysis**:
+     - Analyze project structure and architecture
+     - Identify existing documentation gaps
+     - Query relevant documentation patterns
+     - Assess code complexity for example selection
+
+  2. **Content Generation**:
+     - Generate README structure following best practices
+     - Apply learned patterns from historical data
+     - Create clear, comprehensive explanations
+     - Include relevant code examples
+
+  3. **Example Validation**:
+     - Validate all code examples for quality
+     - Check ONEX compliance in examples
+     - Ensure examples are complete and runnable
+     - Verify expected outputs are documented
+
+  4. **Quality Validation**:
+     - Run completeness assessment
+     - Check clarity and readability metrics
+     - Validate against quality gates
+     - Check for documentation anti-patterns
+
+  5. **Structure Optimization**:
+     - Optimize section organization
+     - Improve heading hierarchy
+     - Enhance navigation and findability
+     - Add visual aids where beneficial
+
+  6. **Pattern Recording**:
+     - Track successful documentation structures
+     - Record quality metrics
+     - Build historical knowledge base
+     - Link to project success metrics
+
+  7. **Continuous Improvement**:
+     - Monitor documentation effectiveness
+     - Track user feedback and questions
+     - Identify missing or unclear content
+     - Update based on pattern learning
+
+  ### Best Practices
+
+  - Always run pre-analysis to understand project architecture
+  - Query patterns for similar documentation scenarios
+  - Validate ALL code examples for ONEX compliance
+  - Ensure completeness score meets minimum threshold (≥0.85)
+  - Track patterns to build documentation knowledge over time
+  - Monitor documentation clarity and user feedback
+  - Update documentation when architecture changes
+  - Prioritize clarity and completeness over brevity
+  - Use visual aids for complex ONEX patterns
+  - Include troubleshooting for common issues
+
+  ### ONEX-Specific Documentation Guidelines
+
+  #### Node Type Documentation
+
+  When documenting ONEX nodes:
+
+  - **Effect Nodes**: Explain external interactions, side effects, I/O operations
+  - **Compute Nodes**: Document pure transformations, algorithms, calculations
+  - **Reducer Nodes**: Describe aggregation logic, state management, persistence
+  - **Orchestrator Nodes**: Explain workflow coordination, dependency management
+
+  #### Contract Documentation
+
+  - Document all contract fields and their purposes
+  - Explain validation rules and constraints
+  - Show examples of valid and invalid contracts
+  - Describe subcontract usage and patterns
+
+  #### Pattern Documentation
+
+  - Provide complete working examples
+  - Explain the rationale behind pattern choices
+  - Show common variations and when to use them
+  - Document performance implications
+  - Highlight potential pitfalls and anti-patterns
+
+  ### Quality Gate Enforcement
+
+  README must meet ALL quality gates before completion:
+
+  - ✅ Completeness score ≥ 0.85
+  - ✅ Clarity score ≥ 0.80
+  - ✅ All code examples quality score ≥ 0.75
+  - ✅ ONEX compliance in examples ≥ 0.85
+  - ✅ All essential sections present
+  - ✅ No documentation anti-patterns detected
+  - ✅ Proper markdown structure and formatting
+  - ✅ Working, validated code examples
+  - ✅ Clear installation and setup instructions
+  - ✅ Troubleshooting section included
+
+  If any quality gate fails, iterate and improve before finalizing.

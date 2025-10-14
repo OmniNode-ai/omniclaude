@@ -1,0 +1,48 @@
+{
+  "tasks": [
+    {
+      "task_id": "gen-user-effect",
+      "agent": "coder",
+      "description": "Generate user database writer Effect node",
+      "input_data": {
+        "contract_description": "Effect node that writes user data to PostgreSQL users table with validation",
+        "node_type": "Effect",
+        "output_path": "/tmp/examples/node_user_writer_effect.py",
+        "context_files": [],
+        "validation_level": "strict"
+      },
+      "dependencies": []
+    },
+    {
+      "task_id": "gen-product-effect",
+      "agent": "coder",
+      "description": "Generate product database reader Effect node",
+      "input_data": {
+        "contract_description": "Effect node that reads product data from PostgreSQL products table with caching",
+        "node_type": "Effect",
+        "output_path": "/tmp/examples/node_product_reader_effect.py",
+        "context_files": [],
+        "validation_level": "strict"
+      },
+      "dependencies": []
+    },
+    {
+      "task_id": "gen-order-effect",
+      "agent": "coder",
+      "description": "Generate order status updater Effect node",
+      "input_data": {
+        "contract_description": "Effect node that updates order status in PostgreSQL orders table with event emission",
+        "node_type": "Effect",
+        "output_path": "/tmp/examples/node_order_updater_effect.py",
+        "context_files": [],
+        "validation_level": "strict"
+      },
+      "dependencies": []
+    }
+  ],
+  "config": {
+    "max_workers": 5,
+    "timeout_seconds": 300,
+    "trace_dir": "./traces"
+  }
+}
