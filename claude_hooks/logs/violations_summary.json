@@ -1,74 +1,78 @@
 {
-  "last_updated": "2025-10-13T12:23:23Z",
-  "total_violations_today": 13,
+  "last_updated": "2025-10-14T11:18:19Z",
+  "total_violations_today": 17,
   "files_with_violations": [
     {
-      "path": "tests/unit/mixins/test_mixin_canonical_serialization.py",
+      "path": "src/omnibase_core/infrastructure/node_base.py",
       "violations": 1,
-      "timestamp": "2025-10-13T12:04:26Z",
+      "timestamp": "2025-10-14T09:35:17Z",
       "suggestions": [
-        "MixinTestCanonicalYAMLSerializer"
+        "snake_case"
       ]
     },
     {
-      "path": "tests/unit/mixins/test_mixin_discovery_responder.py",
-      "violations": 3,
-      "timestamp": "2025-10-13T12:04:35Z",
+      "path": "src/omnibase_core/validation/contract_validator.py",
+      "violations": 5,
+      "timestamp": "2025-10-14T09:38:53Z",
       "suggestions": [
-        "MixinTestDiscoveryResponderInitialization",
-        "ModelIntrospectionResponse",
-        "ModelChannels"
-      ]
-    },
-    {
-      "path": "tests/unit/mixins/test_mixin_health_check.py",
-      "violations": 1,
-      "timestamp": "2025-10-13T12:05:14Z",
-      "suggestions": [
-        "MixinTestHealthCheck"
-      ]
-    },
-    {
-      "path": "tests/unit/mixins/test_mixin_introspection_publisher.py",
-      "violations": 1,
-      "timestamp": "2025-10-13T12:06:19Z",
-      "suggestions": [
-        "MixinTestIntrospectionPublisher"
-      ]
-    },
-    {
-      "path": "tests/unit/mixins/test_mixin_event_listener.py",
-      "violations": 1,
-      "timestamp": "2025-10-13T12:07:22Z",
-      "suggestions": [
-        "MixinTestEventListener"
-      ]
-    },
-    {
-      "path": "tests/unit/mixins/test_mixin_service_registry.py",
-      "violations": 1,
-      "timestamp": "2025-10-13T12:08:29Z",
-      "suggestions": [
-        "MixinTestServiceRegistry"
-      ]
-    },
-    {
-      "path": "tests/unit/mixins/test_mixin_discovery_responder.py",
-      "violations": 1,
-      "timestamp": "2025-10-13T12:08:46Z",
-      "suggestions": [
-        "MixinTestDiscoveryResponderInitialization"
-      ]
-    },
-    {
-      "path": "tests/load/test_workflow_orchestrator_load.py",
-      "violations": 4,
-      "timestamp": "2025-10-13T12:23:23Z",
-      "suggestions": [
+        "ModelContractValidationResult",
         "snake_case",
         "snake_case",
         "snake_case",
         "snake_case"
+      ]
+    },
+    {
+      "path": "src/omnibase_core/discovery/mixin_discovery.py",
+      "violations": 1,
+      "timestamp": "2025-10-14T09:38:59Z",
+      "suggestions": [
+        "ModelMixinInfo"
+      ]
+    },
+    {
+      "path": "tests/unit/discovery/test_mixin_discovery.py",
+      "violations": 3,
+      "timestamp": "2025-10-14T09:40:34Z",
+      "suggestions": [
+        "MixinTestInfo",
+        "MixinTestDiscovery",
+        "MixinTestDiscoveryIntegration"
+      ]
+    },
+    {
+      "path": "tests/unit/core/test_model_generic_factory.py",
+      "violations": 3,
+      "timestamp": "2025-10-14T11:08:26Z",
+      "suggestions": [
+        "ModelTestResultModel",
+        "ModelTestCapabilityModel",
+        "ModelTestValidationModel"
+      ]
+    },
+    {
+      "path": "src/omnibase_core/models/results/model_generic_metadata.py",
+      "violations": 1,
+      "timestamp": "2025-10-14T11:11:17Z",
+      "suggestions": [
+        "snake_case"
+      ]
+    },
+    {
+      "path": "src/omnibase_core/logging/emit.py",
+      "violations": 2,
+      "timestamp": "2025-10-14T11:11:44Z",
+      "suggestions": [
+        "UPPER_SNAKE_CASE",
+        "UPPER_SNAKE_CASE"
+      ]
+    },
+    {
+      "path": "tests/unit/core/test_model_generic_factory.py",
+      "violations": 1,
+      "timestamp": "2025-10-14T11:18:19Z",
+      "suggestions": [
+        "ModelCapabilityModelSample"
       ]
     }
   ]
