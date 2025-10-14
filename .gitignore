@@ -48,13 +48,23 @@ credentials.json
 traces/
 *.trace
 *.prof
+.cache
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.pytest_cache/
+coverage.xml
+nosetests.xml
+*.cover
+*.py,cover
 
 # Test artifacts
-.pytest_cache/
 .coverage
 htmlcov/
 .tox/
+.nox/
 .hypothesis/
+cover/
 
 # Temporary files
 *.tmp
@@ -69,10 +79,18 @@ Thumbs.db
 # Project-specific
 agents/parallel_execution/traces/
 agents/parallel_execution/__pycache__/
+/backups
+reports/
+generated/
+logs/
+secrets/
 
 # Generated code and output
 generated_code/
 output_files/
+__pypackages__/
+site/
+docs/_build/
 
 # Backup files
 *.bak
@@ -81,3 +99,26 @@ output_files/
 
 # Claude Code internal
 .claude/internal/
+.claude/
+.claude/settings.local.json
+
+# Env files
+.env
+.env.*
+
+# Poetry/lock and PDM preferences (keep lock in VCS if desired)
+poetry.lock
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# Editors/IDEs
+.idea/
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
+
+# OS
+.DS_Store
+Thumbs.db
