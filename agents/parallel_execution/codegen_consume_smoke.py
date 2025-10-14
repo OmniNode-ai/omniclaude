@@ -22,6 +22,7 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bootstrap", type=str, default=None)
     parser.add_argument("--correlation-id", type=str, default=None)
+    parser.add_argument("--rpk", action="store_true", help="Consume via rpk inside container")
     args = parser.parse_args()
 
     topic = "dev.omniclaude.codegen.analyze.response.v1"
@@ -31,14 +32,35 @@ async def main() -> None:
             return payload.get("correlation_id") == args.correlation_id
         return True
 
-    client = KafkaCodegenClient(bootstrap_servers=args.bootstrap)
-    msg = await client.consume_until(topic, matches, timeout_seconds=10.0)
-    if msg is None:
-        print("No message received within timeout")
+    if args.rpk:
+        import subprocess, json
+        # Use rpk inside the container; read a single message and filter client-side
+        cmd = [
+            "bash", "-lc",
+            "docker exec omninode-bridge-redpanda bash -lc 'rpk topic consume dev.omniclaude.codegen.analyze.response.v1 -n 1 -f \"{{.message.value}}\" --brokers localhost:9092'"
+        ]
+        try:
+            out = subprocess.check_output(cmd, text=True)
+            try:
+                payload = json.loads(out.strip())
+                if matches(payload):
+                    print(json.dumps(payload, indent=2))
+                else:
+                    print("No matching message (correlation_id mismatch)")
+            except Exception:
+                print("Received non-JSON payload from rpk")
+        except Exception as e:
+            print(f"rpk consume failed: {e}")
+        return
     else:
-        import json
-        print(json.dumps(msg, indent=2))
-    await client.stop_consumer()
+        client = KafkaCodegenClient(bootstrap_servers=args.bootstrap)
+        msg = await client.consume_until(topic, matches, timeout_seconds=10.0)
+        if msg is None:
+            print("No message received within timeout")
+        else:
+            import json
+            print(json.dumps(msg, indent=2))
+        await client.stop_consumer()
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import AsyncIterator, Callable, Optional, Dict
 
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
@@ -34,9 +35,14 @@ class KafkaCodegenClient:
         cfg = get_config()
         self.bootstrap_servers = bootstrap_servers or cfg.kafka_bootstrap_servers
         self.group_id = group_id or "omniclaude-codegen-consumer"
-        self.host_rewrite = host_rewrite or {}
+        # Default host rewrite to smooth local Redpanda dev: container host -> localhost mapped port
+        default_rewrite = {
+            "omninode-bridge-redpanda:9092": "localhost:29092",            
+        }
+        self.host_rewrite = {**default_rewrite, **(host_rewrite or {})}
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+        self.logger = logging.getLogger(__name__)
 
     def _rewrite_bootstrap(self, servers: str) -> str:
         if not self.host_rewrite:
@@ -93,8 +99,9 @@ class KafkaCodegenClient:
                 "payload": event.payload,
             }).encode("utf-8")
             await self._producer.send_and_wait(topic, payload)
-        except Exception:
+        except Exception as e:
             # Fallback to confluent client if available
+            self.logger.warning(f"aiokafka publish failed, attempting confluent fallback: {e}")
             if ConfluentKafkaClient is None:
                 raise
             client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers))
@@ -117,7 +124,8 @@ class KafkaCodegenClient:
                 except Exception:
                     # Skip malformed messages
                     continue
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"aiokafka consume failed, attempting confluent fallback: {e}")
             if ConfluentKafkaClient is None:
                 raise
             # Confluent client does not support async iteration; yield one and return
@@ -141,7 +149,8 @@ class KafkaCodegenClient:
                         return payload
                 return None
             return await asyncio.wait_for(_wait(), timeout=timeout_seconds)
-        except Exception:
+        except Exception as e:
+            self.logger.warning(f"aiokafka consume_until failed, attempting confluent fallback: {e}")
             if ConfluentKafkaClient is None:
                 raise
             client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers), self.group_id)
