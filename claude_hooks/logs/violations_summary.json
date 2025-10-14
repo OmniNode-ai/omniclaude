@@ -4,10 +4,10 @@
   "commit_sha": "deadbeef",
   "branch": "feature/phase-2-intelligence-integration",
   "env": "local",
-  "last_updated": "2025-10-14T18:29:43Z",
+  "last_updated": "2025-10-14T21:09:12Z",
   "window_start": "2025-10-14T00:00:00Z",
   "window_end": "2025-10-14T23:59:59Z",
-  "total_violations_today": 25,
+  "total_violations_today": 32,
   "files_with_violations": [
     {
       "path": "src/omnibase_core/infrastructure/node_base.py",
@@ -122,6 +122,27 @@
       "violations": 1,
       "timestamp": "2025-10-14T18:29:43Z",
       "suggestions": [
+        "snake_case"
+      ]
+    },
+    {
+      "path": "tests/integration/dashboard/test_codegen_event_tracer_integration.py",
+      "violations": 3,
+      "timestamp": "2025-10-14T21:08:25Z",
+      "suggestions": [
+        "snake_case",
+        "snake_case",
+        "snake_case"
+      ]
+    },
+    {
+      "path": "tests/integration/monitoring/test_codegen_dlq_monitor_integration.py",
+      "violations": 4,
+      "timestamp": "2025-10-14T21:09:12Z",
+      "suggestions": [
+        "snake_case",
+        "snake_case",
+        "snake_case",
         "snake_case"
       ]
     }
