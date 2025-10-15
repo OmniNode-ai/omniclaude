@@ -243,23 +243,23 @@ class TestOmniNodeTemplateEngine:
     def test_mixin_generation(self):
         """Test mixin-related code generation"""
         engine = OmniNodeTemplateEngine()
-        
+
         mixins = ["MixinEventBus", "MixinCaching", "MixinHealthCheck"]
-        
+
         # Test mixin imports
         imports = engine._generate_mixin_imports(mixins)
         assert "from omnibase_core.mixins.mixineventbus import MixinEventBus" in imports
         assert "from omnibase_core.mixins.mixincaching import MixinCaching" in imports
         assert "from omnibase_core.mixins.mixinhealthcheck import MixinHealthCheck" in imports
-        
+
         # Test mixin inheritance
         inheritance = engine._generate_mixin_inheritance(mixins)
         assert "MixinEventBus" in inheritance
         assert "MixinCaching" in inheritance
         assert "MixinHealthCheck" in inheritance
-        
-        # Test mixin initialization
+
+        # Test mixin initialization (ONEX compliant - mixins handle their own init)
         initialization = engine._generate_mixin_initialization(mixins)
-        assert "self._event_bus = EventBus()" in initialization
-        assert "self._cache = Cache()" in initialization
-        assert "self._health_checker = HealthChecker()" in initialization
+        # In ONEX architecture, mixins handle their own initialization via __init__
+        # so the initialization code should be empty
+        assert initialization == ""

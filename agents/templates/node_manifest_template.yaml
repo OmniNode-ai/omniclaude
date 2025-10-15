@@ -1,0 +1,97 @@
+schema_version: {major: 1, minor: 0, patch: 0}
+name: "node_{DOMAIN}_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
+uuid: "{NODE_UUID}"
+author: "OmniClaude Code Generation"
+created_at: "{CREATED_AT}"
+last_modified_at: "{LAST_MODIFIED_AT}"
+description: "{BUSINESS_DESCRIPTION}"
+state_contract: "state_contract://{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}_schema.json"
+lifecycle: "active"
+hash: "{NODE_HASH}"
+entrypoint:
+  type: "python"
+  target: "v1_0_0/node.py"
+namespace: "omninode.generated.{DOMAIN}.node_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
+meta_type: "node"
+runtime_language_hint: "python>=3.11"
+
+# === NODE CAPABILITIES ===
+capabilities:
+{CAPABILITIES_LIST}
+
+protocols_supported:
+{PROTOCOLS_SUPPORTED}
+
+dependencies:
+{DEPENDENCIES_MANIFEST}
+
+# === VERSION MANAGEMENT (via x_extensions) ===
+x_extensions:
+  version_management:
+    # Current version information
+    current_stable: {major: 1, minor: 0, patch: 0}
+    current_development: null
+
+    # Version catalog with lifecycle states
+    versions:
+      v1_0_0:
+        version: {major: 1, minor: 0, patch: 0}
+        status: "active"
+        release_date: "{RELEASE_DATE}"
+        breaking_changes: false
+        recommended: true
+        deprecation_date: null
+        end_of_life: null
+
+    # Discovery configuration for services loading this node
+    discovery:
+      auto_load_strategy: "current_stable"
+      fallback_versions: [{major: 1, minor: 0, patch: 0}]
+      version_directory_pattern: "v{major}_{minor}_{patch}"
+      implementation_file: "node.py"
+      contract_file: "contract.yaml"
+      main_class_name: "Node{MICROSERVICE_NAME_PASCAL}{NODE_TYPE_PASCAL}"
+
+    # Service loading configuration
+    service_integration:
+      load_as_module: true
+      requires_separate_port: false
+      initialization_order: {INITIALIZATION_ORDER}
+      shutdown_timeout: 30
+      health_check_via_service: true
+
+# === EXECUTION METADATA ===
+execution_mode: "async"
+execution_constraints:
+  max_memory_mb: {MAX_MEMORY_MB}
+  max_cpu_percent: {MAX_CPU_PERCENT}
+  timeout_seconds: {TIMEOUT_SECONDS}
+
+# === TESTING METADATA ===
+testing:
+  required_ci_tiers:
+    - "mock"
+    - "integration"
+  minimum_coverage_percentage: {MIN_COVERAGE}
+  canonical_test_case_ids:
+{CANONICAL_TEST_CASES}
+
+# === SECURITY METADATA ===
+data_handling_declaration:
+  processes_sensitive_data: {PROCESSES_SENSITIVE_DATA}
+  data_classification: "{DATA_CLASSIFICATION}"
+
+security_context:
+  requires_network_access: {REQUIRES_NETWORK_ACCESS}
+  external_endpoints:
+{EXTERNAL_ENDPOINTS}
+
+# === LOGGING CONFIGURATION ===
+logging_config:
+  level: "info"
+  format: "json"
+  audit_events:
+{AUDIT_EVENTS}
+
+tags:
+{TAGS_LIST}
