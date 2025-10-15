@@ -310,10 +310,6 @@ class EnumGenerator:
         if '"""' not in source_code[:200]:  # Check near the top
             errors.append("Missing class docstring")
 
-        # Check naming convention (enum_{service}_{type}.py pattern)
-        if not re.match(r'enum_[a-z_]+\.(operation_type|status|[a-z_]+)', source_code):
-            self.logger.warning("File naming pattern may not match ONEX convention")
-
         if errors:
             raise OnexError(
                 code=EnumCoreErrorCode.VALIDATION_ERROR,

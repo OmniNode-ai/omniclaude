@@ -1,0 +1,6 @@
+{
+  "user_prompt": "Generate OmniNode code for a notification service. Requirements:\n\n# Notification Microservice PRD\n\n## Overview\nBuild a multi-channel notification service supporting email, SMS, and push notifications.\n\n## Functional Requirements\n1. Queue-based notification processing\n2. Template management for message formatting\n3. Delivery tracking and status updates\n4. Retry mechanism for failed deliveries\n5. Rate limiting per user and channel\n\n## Technical Requirements\n- RabbitMQ for message queue\n- PostgreSQL for notification history\n- Integration with SendGrid (email), Twilio (SMS), FCM (push)\n- Async processing with worker pool\n\n## Success Criteria\n- Process 10,000+ notifications per minute\n- 99% delivery success rate\n- Sub-second queuing latency",
+  "enable_context": false,
+  "enable_quorum": false,
+  "enable_architect": true
+}

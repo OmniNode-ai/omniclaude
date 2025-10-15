@@ -639,10 +639,20 @@ class NodeUserManagementEffect(NodeEffect, MixinEventBus, MixinHealthCheck, Mixi
         # Implementation stub
         return {"user_id": "new_user_id", "status": "created"}
 
+    async def _get_user(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Get user by ID"""
+        # Implementation stub
+        return {"user_id": data.get("user_id"), "status": "found"}
+
     async def _update_user(self, data: Dict[str, str]) -> Dict[str, str]:
         """Update existing user"""
         # Implementation stub
         return {"user_id": data.get("user_id"), "status": "updated"}
+
+    async def _delete_user(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Delete user"""
+        # Implementation stub
+        return {"user_id": data.get("user_id"), "status": "deleted"}
 '''
 
 INVALID_SYNTAX_CODE = '''#!/usr/bin/env python3
