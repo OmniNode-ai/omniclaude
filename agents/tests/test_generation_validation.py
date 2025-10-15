@@ -301,6 +301,9 @@ from enum import Enum
 class EnumOperationType(str, Enum):
     CREATE = "create"
     READ = "read"
+
+    def __str__(self) -> str:
+        return self.value
 """
         tree, _ = parse_generated_python(enum_code)
         is_valid, violations = validate_enum_serialization(tree)
