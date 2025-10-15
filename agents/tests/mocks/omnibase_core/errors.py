@@ -16,6 +16,10 @@ class EnumCoreErrorCode(str, Enum):
     DEPENDENCY_ERROR = "DEPENDENCY_ERROR"
 
 
+# Alias for compatibility
+CoreErrorCode = EnumCoreErrorCode
+
+
 class OnexError(Exception):
     """Mock OnexError for testing"""
 
