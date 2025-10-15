@@ -5,10 +5,11 @@ Parallel Task Dispatch Runner with Phase-by-Phase Control & Debug Support
 Entry point for executing parallel agent tasks with intelligent context management,
 AI-powered validation, and granular phase-level debugging capabilities.
 
-Implements the enhanced 5-phase workflow with debug control:
+Implements the enhanced 6-phase workflow with debug control:
 - Phase 0: Global context gathering (once per dispatch)
 - Phase 1: Intent validation with AI quorum (validates task breakdown)
 - Phase 2: Task planning with context awareness
+- Phase 2.5: Code generation (autonomous OmniNode generation from PRD)
 - Phase 3: Context filtering per task
 - Phase 4: Parallel execution with filtered context
 
@@ -116,6 +117,13 @@ try:
 except ImportError as e:
     logger.error("[AgentImport] Failed to import agent_debug_intelligence: %s", e)
 
+try:
+    logger.info("[AgentImport] Importing agent_code_generator...")
+    import agent_code_generator
+    logger.info("[AgentImport] Successfully imported agent_code_generator")
+except ImportError as e:
+    logger.error("[AgentImport] Failed to import agent_code_generator: %s", e)
+
 logger.info("[AgentImport] Agent module imports completed")
 
 # Import quorum validation (optional dependency)
@@ -150,6 +158,7 @@ class ExecutionPhase(Enum):
     CONTEXT_GATHERING = 0
     QUORUM_VALIDATION = 1
     TASK_PLANNING = 2
+    CODE_GENERATION = 25  # Phase 2.5: Code generation (between planning and filtering)
     CONTEXT_FILTERING = 3
     PARALLEL_EXECUTION = 4
 
@@ -770,6 +779,256 @@ async def execute_phase_2_task_architecture(
         )
 
 
+async def execute_phase_25_code_generation(
+    user_prompt: str,
+    tasks_data: List[Dict[str, Any]],
+    validator: Optional[Any],
+    phase_state: PhaseState
+) -> PhaseResult:
+    """Phase 2.5: Code generation for tasks requiring OmniNode generation.
+
+    Detects tasks that require code generation (PRD-based or single node) and
+    generates OmniNode implementations using the CodegenWorkflow.
+
+    Args:
+        user_prompt: User's original request
+        tasks_data: Task breakdown from Phase 2
+        validator: Optional interactive validator
+        phase_state: Current phase state
+
+    Returns:
+        PhaseResult with code generation results
+    """
+    phase = ExecutionPhase.CODE_GENERATION
+    start_time = time.time()
+    started_at = datetime.now().isoformat()
+
+    print(f"\n{'='*80}", file=sys.stderr)
+    print(f"[DispatchRunner] Phase 2.5: Code Generation", file=sys.stderr)
+    print(f"[DispatchRunner] Analyzing tasks for code generation requirements...", file=sys.stderr)
+    print(f"{'='*80}\n", file=sys.stderr)
+
+    try:
+        # Detect if any tasks require code generation
+        codegen_tasks = []
+        for task_data in tasks_data:
+            if _is_codegen_task(task_data, user_prompt):
+                codegen_tasks.append(task_data)
+
+        if not codegen_tasks:
+            print("[DispatchRunner] No code generation tasks detected, skipping phase", file=sys.stderr)
+            duration_ms = (time.time() - start_time) * 1000
+            return PhaseResult(
+                phase=phase,
+                phase_name="Code Generation",
+                success=True,
+                duration_ms=duration_ms,
+                started_at=started_at,
+                completed_at=datetime.now().isoformat(),
+                skipped=True,
+                output_data={'reason': 'No code generation tasks detected'}
+            )
+
+        print(f"[DispatchRunner] Found {len(codegen_tasks)} code generation task(s)", file=sys.stderr)
+
+        # Import code generator agent
+        from agent_code_generator import CodeGeneratorAgent
+
+        # Create code generator agent
+        code_generator = CodeGeneratorAgent()
+
+        # Execute code generation for each task
+        generation_results = []
+        total_files = 0
+
+        for task_data in codegen_tasks:
+            task_id = task_data.get("task_id", "unknown")
+            print(f"[DispatchRunner] Generating code for task: {task_id}", file=sys.stderr)
+
+            # Build agent task
+            codegen_input = _build_codegen_input(task_data, user_prompt, phase_state)
+
+            codegen_task = AgentTask(
+                task_id=task_id,
+                description=task_data.get("description", "Code generation task"),
+                agent_name="agent-code-generator",
+                input_data=codegen_input
+            )
+
+            # Execute code generation
+            result = await code_generator.execute(codegen_task)
+
+            if result.success:
+                generation_results.append({
+                    "task_id": task_id,
+                    "success": True,
+                    "output_data": result.output_data,
+                    "execution_time_ms": result.execution_time_ms
+                })
+                total_files += result.output_data.get("statistics", {}).get("total_files", 0)
+                print(f"[DispatchRunner] ✓ Code generation succeeded for {task_id}", file=sys.stderr)
+            else:
+                generation_results.append({
+                    "task_id": task_id,
+                    "success": False,
+                    "error": result.error
+                })
+                print(f"[DispatchRunner] ✗ Code generation failed for {task_id}: {result.error}", file=sys.stderr)
+
+        # Interactive checkpoint: Review code generation results
+        if validator and INTERACTIVE_AVAILABLE:
+            successful = sum(1 for r in generation_results if r.get("success", False))
+            failed = len(generation_results) - successful
+
+            checkpoint_result = validator.checkpoint(
+                checkpoint_id="code_generation",
+                checkpoint_type=CheckpointType.AGENT_EXECUTION,
+                step_number=2,
+                total_steps=4,
+                step_name=f"Code Generation ({successful} succeeded, {failed} failed)",
+                output_data={
+                    "summary": {
+                        "total_tasks": len(generation_results),
+                        "successful": successful,
+                        "failed": failed,
+                        "total_files_generated": total_files
+                    },
+                    "results": generation_results
+                }
+            )
+
+            if checkpoint_result.choice == UserChoice.RETRY:
+                print("[DispatchRunner] User requested retry of code generation", file=sys.stderr)
+                print("[DispatchRunner] Note: Retry of code generation not yet implemented", file=sys.stderr)
+
+        # Count successes
+        successful = sum(1 for r in generation_results if r.get("success", False))
+        failed = len(generation_results) - successful
+
+        duration_ms = (time.time() - start_time) * 1000
+        print(f"[DispatchRunner] ✓ Phase 2.5 completed in {duration_ms:.0f}ms ({successful} succeeded, {failed} failed)\n", file=sys.stderr)
+
+        # Cleanup
+        await code_generator.cleanup()
+
+        return PhaseResult(
+            phase=phase,
+            phase_name="Code Generation",
+            success=True,
+            duration_ms=duration_ms,
+            started_at=started_at,
+            completed_at=datetime.now().isoformat(),
+            output_data={
+                'generation_results': generation_results,
+                'summary': {
+                    'total_tasks': len(generation_results),
+                    'successful': successful,
+                    'failed': failed,
+                    'total_files_generated': total_files
+                }
+            }
+        )
+
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000
+        print(f"[DispatchRunner] ✗ Phase 2.5 failed: {e}", file=sys.stderr)
+        print(f"[DispatchRunner] Phase 2.5 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+
+        return PhaseResult(
+            phase=phase,
+            phase_name="Code Generation",
+            success=False,
+            duration_ms=duration_ms,
+            started_at=started_at,
+            completed_at=datetime.now().isoformat(),
+            error=str(e)
+        )
+
+
+def _is_codegen_task(task_data: Dict[str, Any], user_prompt: str) -> bool:
+    """
+    Detect if a task requires code generation.
+
+    Detection criteria:
+    - Task description contains keywords: "generate", "code", "node", "PRD", "implementation"
+    - Task input_data contains "prd_content" field
+    - Task agent is "code-generator" or similar
+    - User prompt mentions code generation
+
+    Args:
+        task_data: Task data dictionary
+        user_prompt: User's original request
+
+    Returns:
+        True if task requires code generation
+    """
+    # Check agent name
+    agent = task_data.get("agent", "").lower()
+    if "code" in agent or "generator" in agent or "codegen" in agent:
+        return True
+
+    # Check task description
+    description = task_data.get("description", "").lower()
+    codegen_keywords = ["generate", "code", "node", "prd", "implementation", "omninode", "contract"]
+    if any(keyword in description for keyword in codegen_keywords):
+        return True
+
+    # Check input_data
+    input_data = task_data.get("input_data", {})
+    if "prd_content" in input_data:
+        return True
+    if all(key in input_data for key in ["node_type", "microservice_name", "domain"]):
+        return True
+
+    # Check user prompt
+    prompt_lower = user_prompt.lower()
+    if any(keyword in prompt_lower for keyword in ["generate code", "prd", "omninode", "create node"]):
+        return True
+
+    return False
+
+
+def _build_codegen_input(
+    task_data: Dict[str, Any],
+    user_prompt: str,
+    phase_state: PhaseState
+) -> Dict[str, Any]:
+    """
+    Build input_data for code generation agent.
+
+    Extracts PRD content, node specifications, or other generation parameters
+    from task data and context.
+
+    Args:
+        task_data: Task data dictionary
+        user_prompt: User's original request
+        phase_state: Current phase state
+
+    Returns:
+        Dictionary suitable for CodeGeneratorAgent input_data
+    """
+    input_data = task_data.get("input_data", {}).copy()
+
+    # If no explicit prd_content, use user_prompt as PRD
+    if "prd_content" not in input_data and "node_type" not in input_data:
+        # Assume PRD mode if user prompt looks like a PRD
+        input_data["prd_content"] = user_prompt
+        input_data["generation_mode"] = "prd"
+
+    # Set output directory if not specified
+    if "output_directory" not in input_data:
+        input_data["output_directory"] = "./generated_code"
+
+    # Add workspace context from phase state
+    if phase_state.global_context and "workspace_context" not in input_data:
+        input_data["workspace_context"] = {
+            "context_available": True,
+            "sources": list(phase_state.global_context.keys()) if phase_state.global_context else []
+        }
+
+    return input_data
+
+
 async def execute_phase_4_parallel_execution(
     tasks: List[AgentTask],
     validator: Optional[Any],
@@ -1067,6 +1326,8 @@ Phase Control Examples:
   --only-phase 0              Execute only Phase 0 (context gathering)
   --stop-after-phase 1        Execute Phases 0-1, then stop
   --skip-phases 0,1           Skip Phases 0-1, execute 2-4
+  --only-phase 25             Execute only Phase 2.5 (code generation)
+  --stop-after-phase 25       Stop after Phase 2.5 (code generation)
 
   --save-phase-state out.json Save phase state for inspection
   --load-phase-state in.json  Load phase state to resume
@@ -1079,12 +1340,12 @@ Phase Control Examples:
     parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive checkpoints")
 
     # Phase control flags
-    parser.add_argument("--only-phase", type=int, choices=[0, 1, 2, 3, 4],
-                       help="Execute only this phase (0-4)")
-    parser.add_argument("--stop-after-phase", type=int, choices=[0, 1, 2, 3, 4],
-                       help="Stop after completing this phase (0-4)")
+    parser.add_argument("--only-phase", type=int, choices=[0, 1, 2, 25, 3, 4],
+                       help="Execute only this phase (0, 1, 2, 25 [2.5], 3, 4)")
+    parser.add_argument("--stop-after-phase", type=int, choices=[0, 1, 2, 25, 3, 4],
+                       help="Stop after completing this phase (0, 1, 2, 25 [2.5], 3, 4)")
     parser.add_argument("--skip-phases", type=str,
-                       help="Comma-separated phases to skip (e.g., '0,1')")
+                       help="Comma-separated phases to skip (e.g., '0,1' or '25' for phase 2.5)")
 
     # State management
     parser.add_argument("--save-phase-state", type=str, help="Save phase state to JSON file")
@@ -1317,6 +1578,34 @@ Phase Control Examples:
                 "phase_results": [p.to_dict() for p in phase_state.phases_executed],
                 "stopped_after_phase": 2,
                 "tasks_breakdown": tasks_data
+            }, indent=2))
+            sys.exit(0)
+
+    # Phase 2.5: Code Generation
+    if phase_config.should_execute_phase(ExecutionPhase.CODE_GENERATION):
+        result = await execute_phase_25_code_generation(
+            user_prompt=user_prompt,
+            tasks_data=tasks_data,
+            validator=validator,
+            phase_state=phase_state
+        )
+        phase_state.phases_executed.append(result)
+        phase_state.current_phase = 25
+
+        if not result.success and not result.skipped:
+            print("[DispatchRunner] Code generation failed, continuing with remaining phases", file=sys.stderr)
+            # Code generation failure is not fatal - continue with other phases
+
+        if phase_config.should_stop_after_phase(ExecutionPhase.CODE_GENERATION):
+            print("[DispatchRunner] Stopping after Phase 2.5 as requested", file=sys.stderr)
+            if phase_config.save_state_file:
+                phase_state.save(phase_config.save_state_file)
+
+            print(json.dumps({
+                "success": True,
+                "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                "stopped_after_phase": 25,
+                "code_generation_summary": result.output_data.get("summary", {})
             }, indent=2))
             sys.exit(0)
 

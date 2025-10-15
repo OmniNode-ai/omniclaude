@@ -1,0 +1,105 @@
+# {MICROSERVICE_NAME_PASCAL} {NODE_TYPE} - ONEX Contract
+# {NODE_TYPE} node for {BUSINESS_DESCRIPTION}
+
+# === REQUIRED ROOT FIELDS ===
+contract_version: {major: 1, minor: 0, patch: 0}
+node_name: "{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
+node_version: {major: 1, minor: 0, patch: 0}
+contract_name: "{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}_contract"
+description: "{BUSINESS_DESCRIPTION}"
+node_type: "{NODE_TYPE}"
+name: "{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
+version: {major: 1, minor: 0, patch: 0}
+input_model: "Model{MICROSERVICE_NAME_PASCAL}Input"
+output_model: "Model{MICROSERVICE_NAME_PASCAL}Output"
+
+# === NODE CLASSIFICATION ===
+# (node_type already defined above)
+
+# === MODEL SPECIFICATIONS ===
+
+{ALGORITHM_SECTION}
+
+tool_specification:
+  tool_name: "node_{DOMAIN}_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
+  version: {major: 1, minor: 0, patch: 0}
+  description: "{BUSINESS_DESCRIPTION}"
+  main_tool_class: "Node{MICROSERVICE_NAME_PASCAL}{NODE_TYPE_PASCAL}"
+  container_injection: "ONEXContainer"
+  business_logic_pattern: "{NODE_TYPE_LOWER}"
+
+# === METADATA ===
+metadata:
+  tier: 3
+  specialization: "{NODE_TYPE_LOWER}"
+  category: "{DOMAIN}"
+  architectural_pattern: "node_{NODE_TYPE_LOWER}"
+  complexity: "medium"
+
+# === SERVICE CONFIGURATION ===
+service_configuration:
+  is_persistent_service: {IS_PERSISTENT_SERVICE}
+  requires_external_dependencies: {REQUIRES_EXTERNAL_DEPS}
+
+# === INPUT/OUTPUT ===
+input_state:
+  object_type: "object"
+  required: {INPUT_REQUIRED_FIELDS}
+  optional: {INPUT_OPTIONAL_FIELDS}
+
+output_state:
+  object_type: "object"
+  required: {OUTPUT_REQUIRED_FIELDS}
+  optional: {OUTPUT_OPTIONAL_FIELDS}
+
+# === ACTIONS ===
+actions:
+{ACTIONS_LIST}
+
+# === DEPENDENCIES ===
+dependencies:
+{DEPENDENCIES_LIST}
+
+# === PERFORMANCE ===
+performance:
+{PERFORMANCE_REQUIREMENTS}
+
+# === EVENT TYPE CONFIGURATION ===
+event_type:
+  primary_events: {PRIMARY_EVENTS}
+  event_categories: {EVENT_CATEGORIES}
+  publish_events: {PUBLISH_EVENTS}
+  subscribe_events: {SUBSCRIBE_EVENTS}
+  event_routing: "{DOMAIN}"
+
+# === SERVICE RESOLUTION ===
+service_resolution:
+{SERVICE_RESOLUTION}
+
+infrastructure:
+{INFRASTRUCTURE}
+
+# === ONEX COMPLIANCE ===
+contract_driven: true
+strong_typing: true
+zero_any_types: true
+protocol_based: true
+
+# === VALIDATION ===
+validation_rules:
+  strict_typing_enabled: true
+  input_validation_enabled: true
+  output_validation_enabled: true
+  performance_validation_enabled: true
+  constraint_definitions:
+{CONSTRAINT_DEFINITIONS}
+
+# === SUBCONTRACTS ===
+subcontracts:
+{SUBCONTRACTS}
+
+# === DEFINITIONS (Required by ModelContractContent) ===
+definitions:
+  models: {}
+  schemas: {}
+  responses: {}

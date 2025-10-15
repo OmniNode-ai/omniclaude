@@ -1,0 +1,79 @@
+# ONEX Version Manifest - {MICROSERVICE_NAME_PASCAL} {NODE_TYPE_PASCAL} v1.0.0
+# Tier 3: Version-specific implementation details
+
+# === VERSION IDENTITY ===
+version: {major: 1, minor: 0, patch: 0}
+version_string: {major: 1, minor: 0, patch: 0}
+status: "active"
+release_date: "{RELEASE_DATE}"
+security_profile: "SP0_BOOTSTRAP"
+
+# === IMPLEMENTATION ===
+implementation:
+  contract_file: "contract.yaml"
+  main_implementation: "node.py"
+  module_init: "__init__.py"
+
+  model_files:
+    - "models/model_{MICROSERVICE_NAME}_input.py"
+    - "models/model_{MICROSERVICE_NAME}_output.py"
+    - "models/model_{MICROSERVICE_NAME}_config.py"
+    - "models/model_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}_contract.py"
+
+  enum_files:
+    - "enums/enum_{MICROSERVICE_NAME}_operation_type.py"
+
+  contract_files:
+    - "contracts/{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}_contract.yaml"
+
+# === VALIDATION ===
+validation:
+  contract_compliance:
+    onex_pattern: true
+    required_fields: ["contract_version", "node_name", "node_type", "input_model", "output_model"]
+    strong_typing: true
+
+  testing_requirements:
+    unit_tests: true
+    integration_tests: true
+    contract_validation: true
+    coverage_minimum: {MIN_COVERAGE}
+
+# === DEPLOYMENT ===
+deployment:
+  execution_constraints:
+    min_memory_mb: {MIN_MEMORY_MB}
+    max_memory_mb: {MAX_MEMORY_MB}
+    cpu_cores: {CPU_CORES}
+
+  runtime_requirements:
+    python_version: ">=3.11"
+    container_support: true
+    event_bus_required: {EVENT_BUS_REQUIRED}
+
+# === SECURITY ===
+security:
+  data_handling:
+    input_validation: "strict"
+    output_sanitization: true
+    sensitive_data: {PROCESSES_SENSITIVE_DATA}
+
+  security_context:
+    sp0_compliant: true
+    authentication_required: true
+    authorization_levels: ["service"]
+
+# === API SURFACE ===
+api_surface:
+  primary_entry_point: "{PRIMARY_ENTRY_POINT}"
+  model_contracts:
+    input: "Model{MICROSERVICE_NAME_PASCAL}Input"
+    output: "Model{MICROSERVICE_NAME_PASCAL}Output"
+    contract: "Model{MICROSERVICE_NAME_PASCAL}{NODE_TYPE_PASCAL}Contract"
+
+# === QUALITY METRICS ===
+quality_metrics:
+  code_coverage: {CODE_COVERAGE}
+  cyclomatic_complexity: {CYCLOMATIC_COMPLEXITY}
+  maintainability_index: {MAINTAINABILITY_INDEX}
+  technical_debt_ratio: {TECHNICAL_DEBT_RATIO}

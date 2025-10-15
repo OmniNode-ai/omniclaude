@@ -301,14 +301,23 @@ class QualityValidator:
             import_score = self._check_import_organization(tree, violations, suggestions)
 
             # Calculate weighted compliance score
+            # Give higher weight to critical type safety (any_type_score)
             compliance_score = (
-                naming_score * 0.25 +
-                type_hint_score * 0.20 +
-                any_type_score * 0.15 +
+                naming_score * 0.20 +
+                type_hint_score * 0.15 +
+                any_type_score * 0.18 +  # Increased from 0.15 for stricter checking
                 error_handling_score * 0.15 +
-                async_score * 0.15 +
+                async_score * 0.22 +
                 import_score * 0.10
             )
+
+            # Critical check: if type safety is severely violated, cap the compliance score
+            # Only cap for severe violations (multiple bare Any + incomplete generics)
+            if any_type_score <= 0.3:
+                compliance_score = min(compliance_score, 0.5)
+
+            # Clamp to [0.0, 1.0] to handle floating point precision
+            compliance_score = min(max(compliance_score, 0.0), 1.0)
 
             return compliance_score, violations, suggestions
 
@@ -419,19 +428,33 @@ class QualityValidator:
         score = 1.0
 
         # Pattern to find bare Any usage (not Dict[str, Any], List[Any], etc.)
-        bare_any_pattern = re.compile(r':\s*Any(?![\[\]])')
+        # Match both parameter types (: Any) and return types (-> Any)
+        bare_any_pattern = re.compile(r'(?::\s*|->\s*)Any(?!\[)')
+        any_matches = bare_any_pattern.findall(code)
 
-        matches = bare_any_pattern.findall(code)
-
-        if matches:
+        if any_matches:
             violations.append(
-                f"Found {len(matches)} instances of bare 'Any' type. "
+                f"Found {len(any_matches)} instances of bare 'Any' type. "
                 "Use Dict[str, Any], List[Any], or specific types instead"
             )
             suggestions.append("Replace bare 'Any' with specific types or Dict[str, Any]")
-            score = max(0.0, 1.0 - (len(matches) * 0.1))
+            # Penalize heavily for bare Any (0.25 per instance)
+            score -= len(any_matches) * 0.25
 
-        return score
+        # Also check for incomplete generic types (Dict, List, Set without type parameters)
+        incomplete_generic_pattern = re.compile(r'(?::\s*|->\s*)(Dict|List|Set|Tuple)(?!\[)')
+        incomplete_matches = incomplete_generic_pattern.findall(code)
+
+        if incomplete_matches:
+            violations.append(
+                f"Found {len(incomplete_matches)} incomplete generic types. "
+                "Specify type parameters (e.g., Dict[str, Any], List[str])"
+            )
+            suggestions.append("Add type parameters to generic types")
+            # Penalize moderately for incomplete generics (0.12 per instance)
+            score -= len(incomplete_matches) * 0.12
+
+        return max(0.0, score)
 
     def _check_error_handling(
         self,
@@ -621,6 +644,7 @@ class QualityValidator:
                 # Check if capability method exists
                 method_variants = [
                     cap_method,
+                    f"_{cap_method}",  # Private method variant
                     f"process_{cap_method}",
                     f"handle_{cap_method}",
                     cap_method.replace('_', '')
@@ -966,13 +990,27 @@ class QualityValidator:
 
         try:
             tree = ast.parse(code)
-            score = self._check_naming_conventions(
-                tree,
-                expected_class_suffix,
-                violations,
-                suggestions
-            )
-            is_valid = score >= 0.8
+
+            # Check that ALL classes follow the expected naming pattern
+            has_class = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    has_class = True
+                    class_name = node.name
+
+                    # Check if class follows expected pattern
+                    if not class_name.startswith(expected_class_prefix):
+                        violations.append(
+                            f"Naming violation: Class '{class_name}' does not start with '{expected_class_prefix}'"
+                        )
+                    elif not class_name.endswith(expected_class_suffix):
+                        violations.append(
+                            f"Naming violation: Class '{class_name}' does not end with '{expected_class_suffix}'"
+                        )
+
+            # If no classes found but code is valid, that's ok
+            is_valid = len(violations) == 0
+
         except Exception as e:
             violations.append(f"Naming validation failed: {str(e)}")
             is_valid = False
@@ -1006,7 +1044,8 @@ class QualityValidator:
 
             has_type_annotations = type_hint_score > 0.5
             uses_bare_any = any_type_score < 1.0
-            is_valid = type_hint_score >= 0.8 and any_type_score >= 0.8
+            # Stricter validation: must have good type hints AND no bare Any
+            is_valid = type_hint_score >= 0.8 and not uses_bare_any
 
         except Exception as e:
             violations.append(f"Type safety check failed: {str(e)}")
@@ -1095,11 +1134,20 @@ class QualityValidator:
                 if isinstance(cap, dict) and 'name' in cap
             ]
 
-            # Check missing methods
-            missing_methods = [
-                method for method in expected_methods
-                if method not in implemented_methods
-            ]
+            # Check missing methods with variant matching
+            missing_methods = []
+            for method in expected_methods:
+                # Check if capability method exists (including variants)
+                method_variants = [
+                    method,
+                    f"_{method}",  # Private method variant
+                    f"process_{method}",
+                    f"handle_{method}",
+                    method.replace('_', '')
+                ]
+
+                if not any(variant in implemented_methods for variant in method_variants):
+                    missing_methods.append(method)
 
             all_methods_present = len(missing_methods) == 0
             is_valid = all_methods_present
