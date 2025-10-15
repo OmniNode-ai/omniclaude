@@ -590,6 +590,340 @@ Basic service
 
 
 # ============================================================================
+# PHASE 5: GENERATED CODE SAMPLES
+# ============================================================================
+
+VALID_EFFECT_NODE_CODE = '''#!/usr/bin/env python3
+"""
+User Management Effect Node
+"""
+
+from typing import Dict, List, Optional
+from uuid import UUID
+from datetime import datetime
+
+from omnibase_core.node_effect import NodeEffect
+from omnibase_core.errors import OnexError
+from omnibase_core.mixins import MixinEventBus, MixinHealthCheck, MixinCaching
+
+
+class NodeUserManagementEffect(NodeEffect, MixinEventBus, MixinHealthCheck, MixinCaching):
+    """Effect node for user management operations"""
+
+    async def execute_effect(self, input_data: Dict[str, str]) -> Dict[str, str]:
+        """
+        Execute user management effect
+
+        Args:
+            input_data: Input data containing operation and parameters
+
+        Returns:
+            Result of the effect operation
+
+        Raises:
+            OnexError: If operation fails
+        """
+        try:
+            operation = input_data.get("operation")
+            if operation == "create":
+                return await self._create_user(input_data)
+            elif operation == "update":
+                return await self._update_user(input_data)
+            else:
+                raise OnexError(f"Unknown operation: {operation}")
+        except Exception as e:
+            raise OnexError(f"Effect execution failed: {str(e)}") from e
+
+    async def _create_user(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Create new user"""
+        # Implementation stub
+        return {"user_id": "new_user_id", "status": "created"}
+
+    async def _update_user(self, data: Dict[str, str]) -> Dict[str, str]:
+        """Update existing user"""
+        # Implementation stub
+        return {"user_id": data.get("user_id"), "status": "updated"}
+'''
+
+INVALID_SYNTAX_CODE = '''#!/usr/bin/env python3
+"""
+Malformed code with syntax errors
+"""
+
+class InvalidNode:
+    def missing_return_arrow(self):
+        # Missing return type
+        pass
+
+    async def bad_syntax(self, data: Dict[str, Any])  # Missing colon
+        return {}
+'''
+
+ONEX_VIOLATION_CODE = '''#!/usr/bin/env python3
+"""
+Code with ONEX violations
+"""
+
+from typing import Any
+
+# Violation: Uses Any type
+class NodeViolationEffect:
+    def process(self, data: Any) -> Any:  # Uses Any
+        result: Dict = {}  # Missing type parameter
+        items: List = []  # Missing type parameter
+        return result
+'''
+
+MISSING_ERROR_HANDLING_CODE = '''#!/usr/bin/env python3
+"""
+Code without proper error handling
+"""
+
+class NodeMissingErrorHandlingEffect:
+    async def execute_effect(self, data):
+        # No try/except block
+        # No OnexError usage
+        result = self.process_data(data)
+        return result
+'''
+
+
+# ============================================================================
+# PHASE 5: VALIDATION RESULTS
+# ============================================================================
+
+VALID_CODE_QUALITY_RESULT = {
+    "valid": True,
+    "quality_score": 0.95,
+    "violations": [],
+    "checks_passed": {
+        "syntax_valid": True,
+        "onex_naming": True,
+        "type_safety": True,
+        "error_handling": True,
+        "contract_conformance": True
+    },
+    "metrics": {
+        "num_classes": 1,
+        "num_methods": 3,
+        "coverage_score": 0.95
+    }
+}
+
+INVALID_CODE_QUALITY_RESULT = {
+    "valid": False,
+    "quality_score": 0.45,
+    "violations": [
+        "Syntax error at line 12: invalid syntax",
+        "Missing type annotations in method 'process'",
+        "Uses bare 'Any' type (ONEX violation)",
+        "Missing error handling with OnexError"
+    ],
+    "checks_passed": {
+        "syntax_valid": False,
+        "onex_naming": True,
+        "type_safety": False,
+        "error_handling": False,
+        "contract_conformance": False
+    },
+    "metrics": {
+        "num_classes": 1,
+        "num_methods": 2,
+        "coverage_score": 0.45
+    }
+}
+
+
+# ============================================================================
+# PHASE 5: PATTERN TEST CASES
+# ============================================================================
+
+CRUD_PATTERN_CONTRACT = {
+    "capabilities": [
+        {"name": "create_user", "type": "create", "required": True},
+        {"name": "read_user", "type": "read", "required": True},
+        {"name": "update_user", "type": "update", "required": True},
+        {"name": "delete_user", "type": "delete", "required": True}
+    ]
+}
+
+TRANSFORMATION_PATTERN_CONTRACT = {
+    "capabilities": [
+        {"name": "transform_csv_to_json", "type": "transform", "required": True},
+        {"name": "validate_data", "type": "validate", "required": True}
+    ]
+}
+
+AGGREGATION_PATTERN_CONTRACT = {
+    "capabilities": [
+        {"name": "aggregate_metrics", "type": "aggregate", "required": True},
+        {"name": "compute_statistics", "type": "compute", "required": True},
+        {"name": "persist_results", "type": "persist", "required": True}
+    ]
+}
+
+ORCHESTRATION_PATTERN_CONTRACT = {
+    "capabilities": [
+        {"name": "coordinate_workflow", "type": "orchestrate", "required": True},
+        {"name": "handle_failures", "type": "error_handling", "required": True},
+        {"name": "track_state", "type": "state_management", "required": True}
+    ]
+}
+
+PATTERN_DETECTION_CASES = [
+    {
+        "contract": CRUD_PATTERN_CONTRACT,
+        "expected_pattern": "CRUD",
+        "expected_confidence": 0.95,
+        "expected_methods": ["create", "read", "update", "delete"]
+    },
+    {
+        "contract": TRANSFORMATION_PATTERN_CONTRACT,
+        "expected_pattern": "Transformation",
+        "expected_confidence": 0.90,
+        "expected_methods": ["transform", "validate"]
+    },
+    {
+        "contract": AGGREGATION_PATTERN_CONTRACT,
+        "expected_pattern": "Aggregation",
+        "expected_confidence": 0.88,
+        "expected_methods": ["aggregate", "reduce", "persist"]
+    },
+    {
+        "contract": ORCHESTRATION_PATTERN_CONTRACT,
+        "expected_pattern": "Orchestration",
+        "expected_confidence": 0.92,
+        "expected_methods": ["coordinate", "handle_failure", "track_state"]
+    }
+]
+
+
+# ============================================================================
+# PHASE 5: SAMPLE CONTRACTS WITH CAPABILITIES
+# ============================================================================
+
+SAMPLE_CONTRACT_WITH_CRUD = {
+    "version": "1.0.0",
+    "node_type": "EFFECT",
+    "domain": "user_management",
+    "service_name": "user_service",
+    "capabilities": [
+        {
+            "name": "create_user",
+            "description": "Create new user account",
+            "type": "create",
+            "required": True,
+            "input": {"username": "str", "email": "str", "password": "str"},
+            "output": {"user_id": "UUID", "status": "str"}
+        },
+        {
+            "name": "get_user",
+            "description": "Retrieve user by ID",
+            "type": "read",
+            "required": True,
+            "input": {"user_id": "UUID"},
+            "output": {"user": "Dict[str, str]"}
+        },
+        {
+            "name": "update_user",
+            "description": "Update user profile",
+            "type": "update",
+            "required": True,
+            "input": {"user_id": "UUID", "updates": "Dict[str, str]"},
+            "output": {"success": "bool"}
+        },
+        {
+            "name": "delete_user",
+            "description": "Delete user account",
+            "type": "delete",
+            "required": True,
+            "input": {"user_id": "UUID"},
+            "output": {"success": "bool"}
+        }
+    ],
+    "subcontracts": [
+        {
+            "mixin": "MixinEventBus",
+            "config": {"bootstrap_servers": "localhost:9092"}
+        }
+    ]
+}
+
+SAMPLE_CONTRACT_WITH_TRANSFORMATION = {
+    "version": "1.0.0",
+    "node_type": "COMPUTE",
+    "domain": "data_processing",
+    "service_name": "transformer_service",
+    "capabilities": [
+        {
+            "name": "transform_csv_to_json",
+            "description": "Transform CSV to JSON",
+            "type": "transform",
+            "required": True,
+            "input": {"csv_data": "str"},
+            "output": {"json_data": "List[Dict[str, str]]"}
+        },
+        {
+            "name": "validate_schema",
+            "description": "Validate data against schema",
+            "type": "validate",
+            "required": True,
+            "input": {"data": "Dict[str, str]", "schema": "Dict[str, str]"},
+            "output": {"valid": "bool", "errors": "List[str]"}
+        }
+    ],
+    "subcontracts": []
+}
+
+
+# ============================================================================
+# PHASE 5: EXPECTED GENERATED CODE PATTERNS
+# ============================================================================
+
+EXPECTED_CRUD_METHOD_STUBS = '''
+    async def create_user(self, username: str, email: str, password: str) -> Dict[str, str]:
+        """
+        Create new user account
+
+        Args:
+            username: Username for the account
+            email: Email address
+            password: Password for the account
+
+        Returns:
+            Dictionary containing user_id and status
+
+        Raises:
+            OnexError: If creation fails
+        """
+        try:
+            # TODO: Implement create_user logic
+            raise NotImplementedError("create_user not implemented")
+        except Exception as e:
+            raise OnexError(f"Failed to create_user: {str(e)}") from e
+
+    async def get_user(self, user_id: UUID) -> Dict[str, str]:
+        """
+        Retrieve user by ID
+
+        Args:
+            user_id: UUID of the user
+
+        Returns:
+            Dictionary containing user data
+
+        Raises:
+            OnexError: If retrieval fails
+        """
+        try:
+            # TODO: Implement get_user logic
+            raise NotImplementedError("get_user not implemented")
+        except Exception as e:
+            raise OnexError(f"Failed to get_user: {str(e)}") from e
+'''
+
+
+# ============================================================================
 # EXPORT ALL FIXTURES
 # ============================================================================
 
@@ -633,4 +967,28 @@ __all__ = [
 
     # Helper Functions
     "create_mock_analysis_result",
+
+    # Phase 5: Generated Code Samples
+    "VALID_EFFECT_NODE_CODE",
+    "INVALID_SYNTAX_CODE",
+    "ONEX_VIOLATION_CODE",
+    "MISSING_ERROR_HANDLING_CODE",
+
+    # Phase 5: Validation Results
+    "VALID_CODE_QUALITY_RESULT",
+    "INVALID_CODE_QUALITY_RESULT",
+
+    # Phase 5: Pattern Test Cases
+    "CRUD_PATTERN_CONTRACT",
+    "TRANSFORMATION_PATTERN_CONTRACT",
+    "AGGREGATION_PATTERN_CONTRACT",
+    "ORCHESTRATION_PATTERN_CONTRACT",
+    "PATTERN_DETECTION_CASES",
+
+    # Phase 5: Sample Contracts
+    "SAMPLE_CONTRACT_WITH_CRUD",
+    "SAMPLE_CONTRACT_WITH_TRANSFORMATION",
+
+    # Phase 5: Expected Code Patterns
+    "EXPECTED_CRUD_METHOD_STUBS",
 ]
