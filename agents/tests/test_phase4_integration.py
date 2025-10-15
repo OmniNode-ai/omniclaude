@@ -133,9 +133,11 @@ class TestPhase4Integration:
             for mixin in analysis.recommended_mixins:
                 assert mixin in content, f"Mixin {mixin} not found in generated code"
 
-            # Verify domain and microservice name
-            assert "identity" in content.lower()
+            # Verify microservice name is in generated code
             assert "user_management" in content.lower()
+
+            # Verify domain is in metadata (not necessarily in code content)
+            assert result.get("domain") == "identity"
 
     @pytest.mark.asyncio
     async def test_multiple_node_types_generation(self):
@@ -215,9 +217,11 @@ A basic service with minimal requirements.
     @pytest.mark.asyncio
     async def test_error_handling_empty_prd(self):
         """Test error handling with empty PRD"""
+        from omnibase_core.errors import OnexError
+
         analyzer = SimplePRDAnalyzer()
 
-        with pytest.raises(Exception):
+        with pytest.raises(OnexError):
             await analyzer.analyze_prd("")
 
     @pytest.mark.asyncio

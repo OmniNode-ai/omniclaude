@@ -163,15 +163,24 @@ class OmniNodeTemplateEngine:
             metadata = self._generate_node_metadata(
                 node_type, microservice_name, domain, analysis_result
             )
-            
+
+            # Build full file paths for generated_files
+            full_file_paths = [str(node_path / file_path) for file_path in generated_files.keys()]
+
             return {
                 "node_type": node_type,
                 "microservice_name": microservice_name,
                 "domain": domain,
                 "output_path": str(node_path),
                 "main_file": str(main_file_path),
-                "generated_files": list(generated_files.keys()),
-                "metadata": metadata,
+                "generated_files": full_file_paths,
+                "metadata": {
+                    "session_id": str(analysis_result.session_id),
+                    "correlation_id": str(analysis_result.correlation_id),
+                    "node_metadata": metadata,
+                    "confidence_score": analysis_result.confidence_score,
+                    "quality_baseline": analysis_result.quality_baseline,
+                },
                 "context": context
             }
             
