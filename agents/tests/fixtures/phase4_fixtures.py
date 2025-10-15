@@ -7,7 +7,7 @@ Comprehensive fixtures for testing contract, model, and enum generators.
 
 from typing import Dict, Any, List
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from agents.lib.simple_prd_analyzer import (
     SimpleParsedPRD,
     SimpleDecompositionResult,
@@ -279,7 +279,7 @@ def create_mock_analysis_result(
         external_systems=external_systems or ["PostgreSQL", "Redis"],
         quality_baseline=0.85,
         confidence_score=0.90,
-        analysis_timestamp=datetime.utcnow()
+        analysis_timestamp=datetime.now(timezone.utc)
     )
 
 
