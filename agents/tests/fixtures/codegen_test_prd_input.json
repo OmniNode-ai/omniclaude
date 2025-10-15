@@ -1,0 +1,23 @@
+{
+  "user_prompt": "Generate OmniNode implementation for a user authentication microservice with registration, login, and JWT token management",
+  "tasks": [
+    {
+      "task_id": "codegen-task-001",
+      "agent": "code-generator",
+      "description": "Generate OmniNode authentication service from PRD specification",
+      "input_data": {
+        "prd_content": "# User Authentication Microservice\n\n## Overview\nImplement a secure user authentication service using OmniNode architecture.\n\n## Functional Requirements\n1. User registration with email validation\n2. Secure password hashing (bcrypt)\n3. JWT token generation for authenticated sessions\n4. Token validation and refresh mechanism\n5. Password reset functionality\n\n## Technical Details\n- PostgreSQL database for user credential storage\n- Redis cache for session token management\n- Email service integration for account verification\n- Rate limiting for login attempts (5 attempts per 15 minutes)\n- HTTPS-only communication\n\n## Success Criteria\n- All user operations complete within 200ms\n- 99.9% uptime requirement\n- OWASP Top 10 security compliance\n- Comprehensive logging and audit trail",
+        "output_directory": "/tmp/generated_auth_service",
+        "workspace_context": {
+          "project_type": "microservice",
+          "language": "python",
+          "framework": "omninode"
+        }
+      },
+      "dependencies": [],
+      "context_requirements": []
+    }
+  ],
+  "enable_context": false,
+  "enable_quorum": false
+}

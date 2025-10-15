@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, CoreErrorCode
+from omnibase_core.errors import OnexError, EnumCoreErrorCode
 
 # Local imports
 from .simple_prd_analyzer import SimplePRDAnalyzer, SimplePRDAnalysisResult
@@ -329,7 +329,7 @@ class CodegenWorkflow:
         except Exception as e:
             self.logger.error(f"Single node generation failed: {str(e)}")
             raise OnexError(
-                code=CoreErrorCode.OPERATION_FAILED,
+                code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Single node generation failed: {str(e)}",
                 details={
                     "node_type": node_type,
