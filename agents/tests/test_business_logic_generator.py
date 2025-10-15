@@ -481,18 +481,25 @@ class TestTypeHintGeneration:
 
         code = result["code"]
 
-        # Check for bare Any usage
+        # Check for bare Any usage in type annotations (not in imports)
         import re
-        bare_any_pattern = r'\bAny\b(?!\w)'
-        matches = re.findall(bare_any_pattern, code)
+        # Match patterns like ": Any" or "-> Any" but not "Dict[str, Any]" or "List[Any]" or "import Any"
+        bare_any_in_annotations = re.compile(r'(?::\s*|->\s*)Any(?!\[)')
 
-        # Allow Dict[str, Any] but not bare Any
-        for match in matches:
-            # Get context around match
-            index = code.index(match)
-            context = code[max(0, index-20):min(len(code), index+20)]
-            if "Dict[str, Any]" not in context:
-                pytest.fail(f"Bare Any type found: {context}")
+        # Exclude import lines
+        lines = code.split('\n')
+        violations = []
+        for i, line in enumerate(lines):
+            # Skip import lines
+            if 'import' in line:
+                continue
+
+            matches = bare_any_in_annotations.findall(line)
+            if matches:
+                violations.append(f"Line {i+1}: {line.strip()}")
+
+        if violations:
+            pytest.fail(f"Bare Any type found in type annotations:\n" + "\n".join(violations))
 
 
 # ============================================================================
