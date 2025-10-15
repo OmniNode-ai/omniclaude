@@ -6,6 +6,7 @@ Generates YAML contracts and subcontracts from PRD analysis results.
 Supports all 4 ONEX node types (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR).
 """
 
+import re
 import yaml
 import logging
 from typing import Dict, Any, List, Optional
@@ -21,6 +22,22 @@ from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .version_config import get_config
 
 logger = logging.getLogger(__name__)
+
+# Configuration constants
+MAX_CAPABILITY_NAME_LENGTH = 50
+DEFAULT_CACHE_TTL_SECONDS = 3600
+DEFAULT_CACHE_MAX_SIZE = 1000
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_INITIAL_RETRY_DELAY_MS = 100
+DEFAULT_MAX_RETRY_DELAY_MS = 5000
+DEFAULT_RETRY_BACKOFF_MULTIPLIER = 2.0
+DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
+DEFAULT_CIRCUIT_BREAKER_TIMEOUT_SECONDS = 60
+DEFAULT_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS = 3
+DEFAULT_HEALTH_CHECK_INTERVAL_SECONDS = 30
+DEFAULT_HEALTH_CHECK_TIMEOUT_SECONDS = 5
+DEFAULT_JWT_TOKEN_EXPIRY_SECONDS = 3600
+DEFAULT_METRICS_PORT = 9090
 
 
 class ContractGenerator:
@@ -43,32 +60,32 @@ class ContractGenerator:
             "MixinCaching": {
                 "cache_type": "redis",
                 "config": {
-                    "ttl_seconds": 3600,
-                    "max_size": 1000,
+                    "ttl_seconds": DEFAULT_CACHE_TTL_SECONDS,
+                    "max_size": DEFAULT_CACHE_MAX_SIZE,
                     "eviction_policy": "lru"
                 }
             },
             "MixinHealthCheck": {
                 "health_endpoints": ["/health", "/ready"],
                 "config": {
-                    "check_interval_seconds": 30,
-                    "timeout_seconds": 5
+                    "check_interval_seconds": DEFAULT_HEALTH_CHECK_INTERVAL_SECONDS,
+                    "timeout_seconds": DEFAULT_HEALTH_CHECK_TIMEOUT_SECONDS
                 }
             },
             "MixinRetry": {
                 "retry_strategy": "exponential_backoff",
                 "config": {
-                    "max_retries": 3,
-                    "initial_delay_ms": 100,
-                    "max_delay_ms": 5000,
-                    "backoff_multiplier": 2.0
+                    "max_retries": DEFAULT_MAX_RETRIES,
+                    "initial_delay_ms": DEFAULT_INITIAL_RETRY_DELAY_MS,
+                    "max_delay_ms": DEFAULT_MAX_RETRY_DELAY_MS,
+                    "backoff_multiplier": DEFAULT_RETRY_BACKOFF_MULTIPLIER
                 }
             },
             "MixinCircuitBreaker": {
-                "failure_threshold": 5,
+                "failure_threshold": DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
                 "config": {
-                    "timeout_seconds": 60,
-                    "half_open_max_calls": 3
+                    "timeout_seconds": DEFAULT_CIRCUIT_BREAKER_TIMEOUT_SECONDS,
+                    "half_open_max_calls": DEFAULT_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS
                 }
             },
             "MixinLogging": {
@@ -81,14 +98,14 @@ class ContractGenerator:
             "MixinMetrics": {
                 "metrics_backend": "prometheus",
                 "config": {
-                    "port": 9090,
+                    "port": DEFAULT_METRICS_PORT,
                     "path": "/metrics"
                 }
             },
             "MixinSecurity": {
                 "authentication": "jwt",
                 "config": {
-                    "token_expiry_seconds": 3600,
+                    "token_expiry_seconds": DEFAULT_JWT_TOKEN_EXPIRY_SECONDS,
                     "algorithm": "HS256"
                 }
             },
@@ -391,10 +408,9 @@ class ContractGenerator:
     def _sanitize_capability_name(self, text: str) -> str:
         """Convert text to valid capability name"""
         # Remove special characters and convert to snake_case
-        import re
         name = re.sub(r'[^\w\s-]', '', text.lower())
         name = re.sub(r'[-\s]+', '_', name)
-        return name[:50]  # Limit length
+        return name[:MAX_CAPABILITY_NAME_LENGTH]
 
     def _infer_capability_type(self, requirement: str, node_type: str) -> str:
         """Infer capability type from requirement text"""
