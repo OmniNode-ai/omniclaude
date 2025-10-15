@@ -20,8 +20,9 @@ python-dotenv = "^1.1.1"
 asyncpg = "^0.29.0"
 watchdog = "^6.0.0"
 numpy = "^2.3.3"
-omnibase-core = {path = "../omnibase_core", develop = true}
+omnibase-core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "main"}
 aiokafka = "^0.10.0"
+omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", rev = "main"}
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"

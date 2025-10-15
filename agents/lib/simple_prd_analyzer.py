@@ -13,7 +13,7 @@ from datetime import datetime
 from dataclasses import dataclass
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, CoreErrorCode
+from omnibase_core.errors import OnexError, EnumCoreErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class SimplePRDAnalyzer:
         except Exception as e:
             self.logger.error(f"Simple PRD analysis failed: {str(e)}")
             raise OnexError(
-                code=CoreErrorCode.OPERATION_FAILED,
+                code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Simple PRD analysis failed: {str(e)}",
                 details={"prd_length": len(prd_content) if prd_content else 0}
             )

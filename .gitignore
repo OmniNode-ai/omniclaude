@@ -223,6 +223,11 @@ env.bak/
 # Misc
 *.log
 
+# Hook system logs (auto-generated, should not be committed)
+claude_hooks/logs/
+**/logs/*.json
+**/logs/*.log
+
 # OmniBase/ONEX specific
 # (add any project-specific ignores here)
 
