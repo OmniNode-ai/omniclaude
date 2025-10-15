@@ -257,7 +257,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         imports = [
             "import asyncio",
             "import logging",
-            "from typing import Dict, Optional, List",
+            "from typing import Dict, Optional, List, Any",
             "from uuid import UUID, uuid4",
             "from datetime import datetime, timezone",
             "",
@@ -612,18 +612,17 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         """Generate stub for a specific mixin method"""
 
         stub = f'''
-    async def {method_name}(self, *args: Any, **kwargs: Any) -> Any:
+    async def {method_name}(self, **kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """
         {mixin} - {method_name}
 
         TODO: Implement {method_name} for {mixin}
 
         Args:
-            *args: Positional arguments
-            **kwargs: Keyword arguments
+            **kwargs: Keyword arguments for the operation
 
         Returns:
-            Any: Method result
+            Dict[str, Any]: Method result
 
         Raises:
             OnexError: If operation fails
