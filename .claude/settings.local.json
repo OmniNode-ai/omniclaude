@@ -13,7 +13,8 @@
       "WebFetch(domain:python.useinstructor.com)",
       "Bash(PGPASSWORD=\"omninode-bridge-postgres-dev-2024\" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c \"SELECT created_at, agent_name, detection_method, confidence FROM agent_routing_decisions ORDER BY created_at DESC LIMIT 5;\")",
       "Read(//Users/jonah/.claude/hooks/**)",
-      "Read(//Volumes/PRO-G40/Code/**)"
+      "Read(//Volumes/PRO-G40/Code/**)",
+      "Bash(gh pr checks:*)"
     ],
     "deny": [],
     "ask": []

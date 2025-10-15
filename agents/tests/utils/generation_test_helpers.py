@@ -210,7 +210,7 @@ def extract_class_definitions(tree: ast.Module) -> List[Dict[str, Any]]:
 
             # Extract methods
             for item in node.body:
-                if isinstance(item, ast.FunctionDef):
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     class_info["methods"].append(item.name)
                 elif isinstance(item, ast.AnnAssign):
                     if isinstance(item.target, ast.Name):
