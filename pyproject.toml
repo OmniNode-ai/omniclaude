@@ -37,6 +37,8 @@ jsonschema = "^4.23.0"
 pyyaml = "^6.0.3"
 neo4j = "^6.0.2"
 asyncpg = "^0.29.0"
+pytest-cov = "^7.0.0"
+psutil = "^6.1.0"
 
 [build-system]
 requires = ["poetry-core"]

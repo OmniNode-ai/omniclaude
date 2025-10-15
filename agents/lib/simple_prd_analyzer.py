@@ -9,7 +9,7 @@ import re
 import logging
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 
 # Import from omnibase_core
@@ -47,11 +47,19 @@ class SimplePRDAnalyzer:
     async def analyze_prd(self, prd_content: str, workspace_context: Optional[Dict[str, Any]] = None) -> 'SimplePRDAnalysisResult':
         """Analyze PRD content and extract requirements"""
         try:
+            # Validate PRD content
+            if not prd_content or not prd_content.strip():
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message="PRD content cannot be empty",
+                    details={"prd_length": len(prd_content) if prd_content else 0}
+                )
+
             session_id = uuid4()
             correlation_id = uuid4()
-            
+
             self.logger.info(f"Starting simple PRD analysis for session {session_id}")
-            
+
             # Parse PRD content
             parsed_prd = self._parse_prd_content(prd_content)
             
@@ -385,4 +393,4 @@ class SimplePRDAnalysisResult:
     
     def __post_init__(self):
         if self.analysis_timestamp is None:
-            self.analysis_timestamp = datetime.utcnow()
+            self.analysis_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
