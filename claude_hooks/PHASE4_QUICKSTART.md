@@ -62,7 +62,7 @@ psql "$TRACEABILITY_DB_URL_EXTERNAL" -c "SELECT 1"
 
 ```bash
 # Run migrations
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence alembic upgrade head
 
 # Verify tables exist
@@ -125,7 +125,7 @@ docker exec archon-postgres psql -U postgres -d archon \
 import asyncio
 from uuid import uuid4
 import sys
-sys.path.append('/Users/jonah/.claude/hooks')
+sys.path.append('${HOME}/.claude/hooks')
 
 from lib.tracing.tracer import ExecutionTracer
 
@@ -258,7 +258,7 @@ docker compose logs intelligence | tail -50
 
 ```bash
 # Run migrations
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence alembic upgrade head
 ```
 
@@ -266,10 +266,10 @@ docker compose exec intelligence alembic upgrade head
 
 ```bash
 # Verify hooks directory
-ls -la /Users/jonah/.claude/hooks/lib/tracing/
+ls -la ${HOME}/.claude/hooks/lib/tracing/
 
 # Verify Python can find module
-python -c "import sys; sys.path.append('/Users/jonah/.claude/hooks'); from lib.tracing.tracer import ExecutionTracer; print('OK')"
+python -c "import sys; sys.path.append('${HOME}/.claude/hooks'); from lib.tracing.tracer import ExecutionTracer; print('OK')"
 ```
 
 ---

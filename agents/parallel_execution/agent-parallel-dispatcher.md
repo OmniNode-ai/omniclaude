@@ -830,7 +830,7 @@ async def validate_with_quorum(
 
 ## References
 
-- [ONEX Architecture Patterns](/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md)
+- [ONEX Architecture Patterns](External Archon project - ${ARCHON_ROOT}/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md)
 - [Agent Framework Documentation](../AGENT_FRAMEWORK.md)
 - [Quality Gates Specification](../quality-gates-spec.yaml)
 - [Performance Thresholds](../performance-thresholds.yaml)

@@ -9,7 +9,7 @@ An intelligent system that gathers context **once** and distributes filtered, re
 ### Enable Context Filtering
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 
 # Run with context filtering
 python dispatch_runner.py --enable-context < your_tasks.json
@@ -164,7 +164,7 @@ Phase 3: Parallel Execution (with filtered context)
 
 ## Support
 
-- Implementation: `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/`
+- Implementation: `${PROJECT_ROOT}/agents/parallel_execution/`
 - Documentation: `CONTEXT_FILTERING_IMPLEMENTATION.md`
 - Examples: `example_context_filtering.json`
 - Tests: `test_context_filtering.sh`

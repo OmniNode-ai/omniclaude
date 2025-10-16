@@ -14,17 +14,15 @@ import sys
 from typing import Any, Dict, Optional
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from agent_model import AgentConfig, AgentTask, AgentResult
-from agent_registry import register_agent
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+# Import from parallel_execution package
+from agents.parallel_execution.agent_model import AgentConfig, AgentTask, AgentResult
+from agents.parallel_execution.agent_registry import register_agent
+from agents.parallel_execution.trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
 # Import code generation components
 try:
-    from lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
-    from lib.codegen_config import CodegenConfig
+    from agents.lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
+    from agents.lib.codegen_config import CodegenConfig
     CODEGEN_AVAILABLE = True
 except ImportError as e:
     CODEGEN_AVAILABLE = False
@@ -368,6 +366,51 @@ class CodeGeneratorAgent:
         """Cleanup resources."""
         # CodegenWorkflow handles its own cleanup
         pass
+
+
+# ============================================================================
+# Parallel Code Generator (for testing and parallel execution)
+# ============================================================================
+
+class ParallelCodeGenerator:
+    """
+    Wrapper for parallel code generation.
+
+    This class provides a simple interface for parallel code generation
+    used by integration tests and parallel execution frameworks.
+    """
+
+    def __init__(self, max_workers: int = 4):
+        """
+        Initialize parallel code generator.
+
+        Args:
+            max_workers: Maximum number of parallel workers
+        """
+        self.max_workers = max_workers
+        self.agent = CodeGeneratorAgent()
+
+    async def generate_parallel(self, tasks: list[AgentTask]) -> list[AgentResult]:
+        """
+        Generate code for multiple tasks in parallel.
+
+        Args:
+            tasks: List of agent tasks to execute
+
+        Returns:
+            List of agent results
+        """
+        # Simple sequential execution for now
+        # TODO: Implement true parallel execution with asyncio.gather
+        results = []
+        for task in tasks:
+            result = await self.agent.execute(task)
+            results.append(result)
+        return results
+
+    async def cleanup(self):
+        """Cleanup resources."""
+        await self.agent.cleanup()
 
 
 # ============================================================================

@@ -1,7 +1,7 @@
 # Omninode/Omnibase Naming Conventions - Documentation Analysis
 
 **Analysis Date**: 2025-09-30
-**Base Repository**: `/Volumes/PRO-G40/Code/omnibase_core`
+**Base Repository**: External omnibase_core project - `${OMNIBASE_CORE}`
 **Documentation Sources**: 17 files analyzed
 **Purpose**: Extract ACTUAL naming conventions for Archon quality enforcement
 

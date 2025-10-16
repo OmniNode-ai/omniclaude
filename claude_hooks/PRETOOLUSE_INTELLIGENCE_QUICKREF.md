@@ -143,7 +143,7 @@ ORDER BY avg_ms DESC;
 
 ```bash
 # Run full test suite
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python3 test_enhanced_metadata.py
 
 # Test specific tool
@@ -192,10 +192,10 @@ print(f'Time: {result.analysis_time_ms:.2f}ms')
 
 ## Key Files
 
-- `/Users/jonah/.claude/hooks/lib/tool_selection_intelligence.py` - Intelligence module
-- `/Users/jonah/.claude/hooks/quality_enforcer.py` - Integration
-- `/Users/jonah/.claude/hooks/pre-tool-use-quality.sh` - Hook script
-- `/Users/jonah/.claude/hooks/test_enhanced_metadata.py` - Test suite
+- `${HOME}/.claude/hooks/lib/tool_selection_intelligence.py` - Intelligence module
+- `${HOME}/.claude/hooks/quality_enforcer.py` - Integration
+- `${HOME}/.claude/hooks/pre-tool-use-quality.sh` - Hook script
+- `${HOME}/.claude/hooks/test_enhanced_metadata.py` - Test suite
 
 ## Example Output
 

@@ -284,7 +284,7 @@ if __name__ == "__main__":
 ### Test 1: Basic Pattern Tracking
 
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python3 -c "
 import asyncio
 from lib.pattern_tracker import PatternTracker
@@ -386,7 +386,7 @@ asyncio.run(test())
 
 ```bash
 # Run comprehensive test suite
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python -m pytest lib/test_resilience.py -v
 
 # Run integration test

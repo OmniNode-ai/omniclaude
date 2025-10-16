@@ -15,6 +15,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!agents/lib/
+!agents/lib/**
 lib64/
 parts/
 sdist/
@@ -131,8 +133,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.venv
+.env*
+.venv/
 env/
 venv/
 ENV/
@@ -195,8 +197,6 @@ PR_DESCRIPTION.md
 
 # Project-specific
 /backups
-/reports
-reports/
 *_report*.json
 *_analysis*.json
 *_errors*.txt
@@ -204,36 +204,21 @@ mypy_*.txt
 
 # OmniBase / ONEX .gitignore
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-env.bak/
-
 # VS Code
 .vscode/
 
 # MacOS
 .DS_Store
 
-# Env files
-.env
-.env.*
-
-# Misc
-*.log
-
 # Hook system logs (auto-generated, should not be committed)
 claude_hooks/logs/
-**/logs/*.json
-**/logs/*.log
+**/logs/
 
 # OmniBase/ONEX specific
 # (add any project-specific ignores here)
 
 # Docker runtime data directories
 data/
-logs/
 generated/
 reports/
 secrets/
@@ -249,8 +234,8 @@ docs_private/
 .onex_cache/
 docs_archived/
 
-# Codanna index files (keep configuration, ignore generated index data)
-.codanna/index/*
+# Codanna index files (tool-generated, should not be committed)
+.codanna/
 .serena/cache/*
 
 # AI Tools and Generated Content
@@ -282,3 +267,8 @@ examples_*.py
 factory_pattern_analysis.md
 migration_guide_*.md
 coverage.json
+
+# Machine Learning Models (auto-generated)
+*.pkl
+agents/models/
+test_results.txt

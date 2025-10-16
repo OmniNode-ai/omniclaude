@@ -22,7 +22,7 @@ Comprehensive pytest-based test suite covering:
 **Usage:**
 ```bash
 # Run all tests
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 pytest tests/test_phase4_integration.py -v
 
 # Run specific test
@@ -177,7 +177,7 @@ DB_HOST=localhost DB_PORT=5432 DB_NAME=omninode_bridge bash tests/validate_datab
 ### Quick Start (All Tests)
 
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 
 # 1. Check API health first
 bash tests/check_phase4_health.sh
@@ -246,7 +246,7 @@ echo "✓ All Phase 4 tests passed!"
 curl http://localhost:8053/health
 
 # Start service if needed
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose up intelligence -d
 ```
 
@@ -269,7 +269,7 @@ TRACEABILITY_DB_URL=postgresql://localhost/omninode_bridge
 
 **Solution:**
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 pip install -r requirements.txt
 
 # Or install specific packages
@@ -342,7 +342,7 @@ All tests must pass with:
 
 ## Related Documentation
 
-- [Phase 4 API Documentation](/Volumes/PRO-G40/Code/Archon/services/intelligence/PHASE4_API_DOCUMENTATION.md)
+- [Phase 4 API Documentation](External Archon project - ${ARCHON_ROOT}/services/intelligence/PHASE4_API_DOCUMENTATION.md)
 - [Pattern Tracker Usage](../lib/pattern_tracker.py)
 - [Pattern ID System](../lib/pattern_id_system.py)
 - [Phase 4 API Client](../lib/phase4_api_client.py)

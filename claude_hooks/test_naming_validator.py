@@ -747,7 +747,7 @@ class TestAutoDetection:
         """Paths with Archon should NOT be detected as Omninode repos."""
         assert not NamingValidator.is_omninode_repo("/path/to/Archon/models.py")
         assert not NamingValidator.is_omninode_repo("/home/user/archon/service.py")
-        assert not NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/Archon/test.py")
+        assert not NamingValidator.is_omninode_repo("/workspace/Archon/test.py")
 
     def test_random_repo_detection(self):
         """Random paths should NOT be detected as Omninode repos."""
@@ -822,7 +822,7 @@ class User(BaseModel):
     username: str
 """
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/Volumes/PRO-G40/Code/Archon/models.py")
+        violations = validator.validate_content(code, "/workspace/Archon/models.py")
 
         # Should have no violations - User is valid PascalCase
         class_violations = [v for v in violations if v.violation_type == "class"]

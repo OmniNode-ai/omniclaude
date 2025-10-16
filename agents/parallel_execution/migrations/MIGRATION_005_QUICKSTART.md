@@ -294,7 +294,7 @@ VACUUM ANALYZE debug_workflow_steps;
 
 ## Documentation
 
-- **Full Schema Design**: `/Volumes/PRO-G40/Code/omniclaude/DEBUG_LOOP_SCHEMA.md`
+- **Full Schema Design**: `DEBUG_LOOP_SCHEMA.md`
 - **Migration SQL**: `005_debug_state_management.sql`
 - **Rollback SQL**: `005_rollback_debug_state_management.sql`
 - **Python Example**: `debug_state_integration_example.py`

@@ -172,14 +172,14 @@ Run the built-in tests:
 
 ```bash
 # From hooks directory
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python test_pattern_tracker_sync_verify.py
 ```
 
 Or test the module directly:
 
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python -m lib.pattern_tracker_sync
 ```
 
@@ -191,7 +191,7 @@ python -m lib.pattern_tracker_sync
 
 **Solution:** Run from parent directory:
 ```bash
-cd /Users/jonah/.claude/hooks  # Not hooks/lib
+cd ${HOME}/.claude/hooks  # Not hooks/lib
 python -m lib.pattern_tracker_sync
 ```
 

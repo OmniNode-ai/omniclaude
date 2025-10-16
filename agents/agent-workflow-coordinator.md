@@ -7,8 +7,8 @@ category: workflow_coordinator
 
 ## YAML Agent Registry Integration (Essential)
 
-* **registry_path**: `/Users/jonah/.claude/agent-definitions/agent-registry.yaml`
-* **definition_path_template**: `/Users/jonah/.claude/agent-definitions/{agent_name}.yaml`
+* **registry_path**: `~/.claude/agent-definitions/agent-registry.yaml`
+* **definition_path_template**: `~/.claude/agent-definitions/{agent_name}.yaml`
 * **Transformation flow**: Identity resolution → Definition loading → Identity assumption → Domain execution → Context preservation
 
 ## Core Capabilities
@@ -68,7 +68,7 @@ class NodeMyOperationEffect(NodeEffect):
             return ModelResult(success=True, data=result)
 ```
 
-**Full Reference**: `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+**Full Reference**: External Archon project - `${ARCHON_ROOT}/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
 
 ## AI Quorum Integration
 
@@ -95,7 +95,7 @@ class NodeMyOperationEffect(NodeEffect):
 
 ### Intelligent Routing System
 
-**Library Location**: `/Users/jonah/.claude/agents/lib/`
+**Library Location**: `~/.claude/agents/lib/`
 
 **Components**:
 1. **EnhancedTriggerMatcher** - Fuzzy trigger matching with multiple strategies

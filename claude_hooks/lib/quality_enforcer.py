@@ -192,13 +192,59 @@ class ViolationsLogger:
     ) -> None:
         """Update violations_summary.json with new violation data."""
         try:
-            # Load existing summary
-            summary = {"last_updated": "", "total_violations_today": 0, "files_with_violations": []}
+            import subprocess
+            import uuid
+
+            # Get git info
+            try:
+                commit_sha = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                    text=True
+                ).strip()[:40]
+            except Exception:
+                commit_sha = "0000000"
+
+            try:
+                branch = subprocess.check_output(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                    text=True
+                ).strip()
+            except Exception:
+                branch = "unknown"
+
+            # Detect environment
+            env = "ci" if os.getenv("CI") else "local"
+
+            # Generate run ID
+            run_id = str(uuid.uuid4())
+
+            # Load existing summary or create new one with all required fields
+            summary = {
+                "schema_version": "1.0.0",
+                "run_id": run_id,
+                "commit_sha": commit_sha,
+                "branch": branch,
+                "env": env,
+                "last_updated": timestamp,
+                "window_start": timestamp,
+                "window_end": timestamp,
+                "total_violations_today": 0,
+                "files_with_violations": []
+            }
 
             if self.violations_summary.exists():
                 try:
                     with open(self.violations_summary, "r", encoding="utf-8") as f:
-                        summary = json.load(f)
+                        existing = json.load(f)
+                        # Preserve window_start if it exists and is from today
+                        today = datetime.utcnow().strftime("%Y-%m-%d")
+                        existing_date = existing.get("last_updated", "")[:10]
+                        if existing_date == today:
+                            summary["window_start"] = existing.get("window_start", timestamp)
+                            summary["total_violations_today"] = existing.get("total_violations_today", 0)
+                            summary["files_with_violations"] = existing.get("files_with_violations", [])
                 except (json.JSONDecodeError, ValueError):
                     # Start fresh if corrupted
                     pass
@@ -208,12 +254,18 @@ class ViolationsLogger:
             last_update_date = summary.get("last_updated", "")[:10]
 
             if last_update_date != today:
-                # New day, reset counter
+                # New day, reset counter and window
                 summary["total_violations_today"] = 0
                 summary["files_with_violations"] = []
+                summary["window_start"] = timestamp
 
             # Update summary
+            summary["run_id"] = run_id  # New run ID for this update
+            summary["commit_sha"] = commit_sha  # Current commit
+            summary["branch"] = branch  # Current branch
+            summary["env"] = env  # Current environment
             summary["last_updated"] = timestamp
+            summary["window_end"] = timestamp
             summary["total_violations_today"] += len(violations)
 
             # Add file entry
@@ -231,9 +283,10 @@ class ViolationsLogger:
                     -self.max_violations_history :
                 ]
 
-            # Write updated summary
+            # Write updated summary with trailing newline
             with open(self.violations_summary, "w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2)
+                f.write("\n")  # Add trailing newline
 
         except Exception as e:
             print(f"[Warning] Failed to update violations summary: {e}", file=sys.stderr)

@@ -581,13 +581,16 @@ class ManualInputState(BaseModel):  # Generate from contract.yaml
 ```
 
 ### ❌ Legacy Contract Patterns
+
+**DON'T:** Use old contract patterns without base state inheritance
 ```yaml
-# DON'T: Use old contract patterns
 input_state:
   properties:
     # Direct field definitions without inheritance
+```
 
-# DO: Use canonical base state inheritance
+**DO:** Use canonical base state inheritance
+```yaml
 input_state:
   type: object
   properties:

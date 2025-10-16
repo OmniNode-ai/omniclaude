@@ -95,7 +95,7 @@ if tool_name == "Write":
 ### Run All Tests
 
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python -m pytest lib/test_resilience.py -v
 
 # Expected output:

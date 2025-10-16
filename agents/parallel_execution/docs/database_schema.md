@@ -352,7 +352,7 @@ async with pool.acquire() as conn:
 ### Applying Migrations
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/migrations
+cd ${PROJECT_ROOT}/agents/parallel_execution/migrations
 ./apply_migrations.sh
 ```
 
@@ -458,7 +458,7 @@ All database operations follow ONEX Effect node patterns:
 
 - PostgreSQL 14 Documentation: https://www.postgresql.org/docs/14/
 - asyncpg Documentation: https://magicstack.github.io/asyncpg/
-- ONEX Architecture Patterns: `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+- ONEX Architecture Patterns: External Archon project - `${ARCHON_ROOT}/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
 
 ---
 

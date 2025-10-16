@@ -50,7 +50,7 @@ cat > tasks.json << 'EOF'
 EOF
 
 # Execute
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python dispatch_runner.py < tasks.json
 
 # View results
@@ -305,8 +305,8 @@ cat traces/dispatch-*.json | jq '.tasks[] | select(.status=="error")'
 **Cause**: Wrong working directory or Python path
 **Solution**:
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
-export PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude:$PYTHONPATH
+cd ${PROJECT_ROOT}/agents/parallel_execution
+export PYTHONPATH=${PROJECT_ROOT}:$PYTHONPATH
 python dispatch_runner.py < tasks.json
 ```
 

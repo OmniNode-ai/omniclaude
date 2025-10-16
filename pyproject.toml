@@ -23,6 +23,7 @@ numpy = "^2.3.3"
 omnibase-core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "main"}
 aiokafka = "^0.10.0"
 omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", rev = "main"}
+scikit-learn = "^1.7.2"
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"

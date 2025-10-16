@@ -469,10 +469,10 @@
    docker compose exec intelligence pip-audit
 
    # Check file permissions
-   ls -la /Users/jonah/.claude/hooks/
+   ls -la ${HOME}/.claude/hooks/
 
    # Check for exposed credentials
-   grep -r "password\|secret\|key" /Users/jonah/.claude/hooks/ --exclude-dir=.git
+   grep -r "password\|secret\|key" ${HOME}/.claude/hooks/ --exclude-dir=.git
    ```
 
 5. **Documentation Update**:
@@ -649,9 +649,9 @@
 - **Operations Team**: ops@example.com
 
 ### Documentation
-- **Resilience Guide**: `/Users/jonah/.claude/hooks/docs/PATTERN_TRACKING_RESILIENCE_GUIDE.md`
-- **API Documentation**: `/Users/jonah/.claude/hooks/docs/API_REFERENCE.md`
-- **Troubleshooting Guide**: `/Users/jonah/.claude/hooks/docs/TROUBLESHOOTING.md`
+- **Resilience Guide**: `${HOME}/.claude/hooks/docs/PATTERN_TRACKING_RESILIENCE_GUIDE.md`
+- **API Documentation**: `${HOME}/.claude/hooks/docs/API_REFERENCE.md`
+- **Troubleshooting Guide**: `${HOME}/.claude/hooks/docs/TROUBLESHOOTING.md`
 
 ### Monitoring Dashboards
 - **System Health**: http://localhost:3000/d/pattern-tracking
@@ -686,9 +686,9 @@ python -c "from pattern_tracker import PatternTracker; print(PatternTracker().ge
 ```
 
 ### Configuration Files
-- **Main Config**: `/Users/jonah/.claude/hooks/config.yaml`
-- **Resilience Config**: `/Users/jonah/.claude/hooks/resilience.yaml`
-- **Logging Config**: `/Users/jonah/.claude/hooks/logging.yaml`
+- **Main Config**: `${HOME}/.claude/hooks/config.yaml`
+- **Resilience Config**: `${HOME}/.claude/hooks/resilience.yaml`
+- **Logging Config**: `${HOME}/.claude/hooks/logging.yaml`
 
 ### Log Files
 - **Pattern Tracker**: `/var/log/pattern-tracker.log`

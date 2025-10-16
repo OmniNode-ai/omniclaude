@@ -4,6 +4,12 @@ Kafka Client for Codegen Events
 
 Lightweight wrapper around aiokafka for publishing/subscribing codegen events.
 Follows resilience patterns similar to omninode_bridge Kafka client.
+
+Phase 7 Enhancements:
+- Event optimizer integration for batch processing
+- Circuit breaker for failure resilience
+- Connection pooling for better performance
+- Performance target: p95 latency ≤200ms
 """
 
 from __future__ import annotations
@@ -11,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Callable, Optional, Dict
+from typing import AsyncIterator, Callable, Optional, Dict, List
 
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 
@@ -24,6 +30,13 @@ try:
 except Exception:  # pragma: no cover
     ConfluentKafkaClient = None  # type: ignore
 
+# Optional event optimizer
+try:
+    from .event_optimizer import EventOptimizer, OptimizerConfig  # type: ignore
+except Exception:  # pragma: no cover
+    EventOptimizer = None  # type: ignore
+    OptimizerConfig = None  # type: ignore
+
 
 class KafkaCodegenClient:
     def __init__(
@@ -31,17 +44,25 @@ class KafkaCodegenClient:
         bootstrap_servers: Optional[str] = None,
         group_id: Optional[str] = None,
         host_rewrite: Optional[Dict[str, str]] = None,
+        enable_optimizer: bool = True,
+        optimizer_config: Optional[OptimizerConfig] = None,
     ) -> None:
         cfg = get_config()
         self.bootstrap_servers = bootstrap_servers or cfg.kafka_bootstrap_servers
         self.group_id = group_id or "omniclaude-codegen-consumer"
         # Default host rewrite to smooth local Redpanda dev: container host -> localhost mapped port
         default_rewrite = {
-            "omninode-bridge-redpanda:9092": "localhost:29092",            
+            "omninode-bridge-redpanda:9092": "localhost:29092",
         }
         self.host_rewrite = {**default_rewrite, **(host_rewrite or {})}
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+
+        # Phase 7: Event optimizer integration
+        self._optimizer: Optional[EventOptimizer] = None
+        self._enable_optimizer = enable_optimizer and EventOptimizer is not None
+        self._optimizer_config = optimizer_config
+
         self.logger = logging.getLogger(__name__)
 
     def _rewrite_bootstrap(self, servers: str) -> str:
@@ -68,6 +89,11 @@ class KafkaCodegenClient:
             await self._producer.stop()
             self._producer = None
 
+        # Cleanup optimizer
+        if self._optimizer is not None:
+            await self._optimizer.cleanup()
+            self._optimizer = None
+
     async def start_consumer(self, topic: str) -> None:
         if self._consumer is None:
             bs = self._rewrite_bootstrap(self.bootstrap_servers)
@@ -85,7 +111,33 @@ class KafkaCodegenClient:
             await self._consumer.stop()
             self._consumer = None
 
+    async def _ensure_optimizer(self) -> EventOptimizer:
+        """Ensure event optimizer is initialized"""
+        if self._optimizer is None:
+            bs = self._rewrite_bootstrap(self.bootstrap_servers)
+            self._optimizer = EventOptimizer(
+                bootstrap_servers=bs,
+                config=self._optimizer_config
+            )
+        return self._optimizer
+
     async def publish(self, event: BaseEvent) -> None:
+        """
+        Publish single event.
+
+        Phase 7: Uses event optimizer if enabled for better performance.
+        Falls back to direct publishing if optimizer unavailable.
+        """
+        # Try optimizer first if enabled
+        if self._enable_optimizer:
+            try:
+                optimizer = await self._ensure_optimizer()
+                await optimizer.publish_event(event)
+                return
+            except Exception as e:
+                self.logger.warning(f"Optimizer publish failed, falling back to direct: {e}")
+
+        # Fallback to direct publishing
         try:
             await self.start_producer()
             assert self._producer is not None
@@ -113,6 +165,32 @@ class KafkaCodegenClient:
                 "metadata": event.metadata,
                 "payload": event.payload,
             })
+
+    async def publish_batch(self, events: List[BaseEvent]) -> None:
+        """
+        Publish batch of events efficiently.
+
+        Phase 7: Uses event optimizer for optimized batch processing.
+        Performance target: p95 latency ≤200ms
+
+        Args:
+            events: List of events to publish
+        """
+        if not events:
+            return
+
+        # Try optimizer first if enabled
+        if self._enable_optimizer:
+            try:
+                optimizer = await self._ensure_optimizer()
+                await optimizer.publish_batch(events)
+                return
+            except Exception as e:
+                self.logger.warning(f"Batch publish via optimizer failed, falling back: {e}")
+
+        # Fallback: publish individually
+        for event in events:
+            await self.publish(event)
 
     async def consume(self, topic: str) -> AsyncIterator[dict]:
         try:

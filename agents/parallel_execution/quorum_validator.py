@@ -30,6 +30,10 @@ class ValidationDecision(Enum):
     FAIL = "FAIL"
 
 
+# Minimum percentage of configured models that must participate (0.0-1.0)
+MIN_MODEL_PARTICIPATION = 0.60  # 60% of models must respond
+
+
 @dataclass
 class QuorumResult:
     decision: ValidationDecision
@@ -313,6 +317,23 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 deficiencies=["No models responded successfully"],
                 scores={},
                 model_responses=[],
+            )
+
+        # Enforce MIN_MODEL_PARTICIPATION threshold
+        total_models = len(self.models)
+        participating_models = len(valid_results)
+        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+
+        if participation_rate < MIN_MODEL_PARTICIPATION:
+            return QuorumResult(
+                decision=ValidationDecision.FAIL,
+                confidence=0.0,
+                deficiencies=[
+                    f"Insufficient model participation: {participating_models}/{total_models} "
+                    f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required"
+                ],
+                scores={"participation_rate": participation_rate},
+                model_responses=valid_results,
             )
 
         # Calculate weighted votes

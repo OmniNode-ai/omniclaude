@@ -21,13 +21,22 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
 
-# Add agent framework to path
-AGENT_FRAMEWORK_PATH = Path("/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution")
-sys.path.insert(0, str(AGENT_FRAMEWORK_PATH))
+# Add agent framework to path (use environment variable or relative path)
+AGENT_FRAMEWORK_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
+if AGENT_FRAMEWORK_PATH:
+    AGENT_FRAMEWORK_PATH = Path(AGENT_FRAMEWORK_PATH)
+else:
+    # Try to find it relative to the project root
+    current_dir = Path(__file__).resolve().parent.parent.parent
+    AGENT_FRAMEWORK_PATH = current_dir / "agents" / "parallel_execution"
+
+if AGENT_FRAMEWORK_PATH.exists():
+    sys.path.insert(0, str(AGENT_FRAMEWORK_PATH))
 
 # Add hooks lib to path
-HOOKS_LIB_PATH = Path("/Users/jonah/.claude/hooks/lib")
-sys.path.insert(0, str(HOOKS_LIB_PATH))
+HOOKS_LIB_PATH = Path.home() / ".claude" / "hooks" / "lib"
+if HOOKS_LIB_PATH.exists():
+    sys.path.insert(0, str(HOOKS_LIB_PATH))
 
 try:
     from agent_model import AgentTask, AgentResult

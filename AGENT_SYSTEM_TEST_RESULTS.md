@@ -207,13 +207,13 @@ Execution: ✗ "Unknown agent: performance" (no Python class)
 - Context injection: COMMENTED OUT
 - Passthrough mode: ACTIVE (normal Claude behavior)
 
-**Location**: `/Users/jonah/.claude/hooks/user-prompt-submit-enhanced.sh`
+**Location**: `~/.claude/hooks/user-prompt-submit-enhanced.sh`
 
 ### Re-enable Procedure
 
 Follow the step-by-step guide in:
 ```
-/Volumes/PRO-G40/Code/omniclaude/AGENT_HOOK_REACTIVATION_CHECKLIST.md
+AGENT_HOOK_REACTIVATION_CHECKLIST.md
 ```
 
 **Quick Re-enable** (if you're confident):
@@ -364,7 +364,7 @@ All 52 agents are available for immediate use via `@agent-name` syntax:
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ UserPromptSubmit Hook                                        │
-│ /Users/jonah/.claude/hooks/user-prompt-submit-enhanced.sh   │
+│ ~/.claude/hooks/user-prompt-submit-enhanced.sh              │
 └──────────────────────┬──────────────────────────────────────┘
                        │
                        ▼
@@ -432,24 +432,24 @@ All 52 agents are available for immediate use via `@agent-name` syntax:
 ## Files Modified/Created
 
 ### Dependencies
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/pyproject.toml` - Added google-generativeai, watchdog
+- ✅ `pyproject.toml` - Added google-generativeai, watchdog
 
 ### New Modules (Production-Ready)
-- ✅ `/Users/jonah/.claude/hooks/lib/agent_pathway_detector.py` - Pathway detection (264 lines)
-- ✅ `/Users/jonah/.claude/hooks/lib/agent_invoker.py` - Agent invocation (462 lines)
-- ✅ `/Users/jonah/.claude/hooks/lib/invoke_agent_from_hook.py` - Hook integration (175 lines)
+- ✅ `~/.claude/hooks/lib/agent_pathway_detector.py` - Pathway detection (264 lines)
+- ✅ `~/.claude/hooks/lib/agent_invoker.py` - Agent invocation (462 lines)
+- ✅ `~/.claude/hooks/lib/invoke_agent_from_hook.py` - Hook integration (175 lines)
 
 ### Test Scripts
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/test_agent_pathways.py` - Unit test suite
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/test_agent_task_simulation.py` - E2E simulation
+- ✅ `test_agent_pathways.py` - Unit test suite
+- ✅ `test_agent_task_simulation.py` - E2E simulation
 
 ### Documentation
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/DUAL_PATHWAY_ARCHITECTURE.md` - Architecture spec
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/AGENT_HOOK_REACTIVATION_CHECKLIST.md` - Re-enable guide
+- ✅ `agents/parallel_execution/DUAL_PATHWAY_ARCHITECTURE.md` - Architecture spec
+- ✅ `AGENT_HOOK_REACTIVATION_CHECKLIST.md` - Re-enable guide
 - ✅ This file - Test results and recommendations
 
 ### Hook (Temporarily Disabled)
-- ⚠️ `/Users/jonah/.claude/hooks/user-prompt-submit-enhanced.sh` - DISABLED (safe to re-enable)
+- ⚠️ `~/.claude/hooks/user-prompt-submit-enhanced.sh` - DISABLED (safe to re-enable)
 
 ---
 
@@ -498,14 +498,14 @@ LIMIT 10;
 
 **Test pathway detector**:
 ```bash
-cd /Users/jonah/.claude/hooks/lib
+cd ~/.claude/hooks/lib
 python3 agent_pathway_detector.py "@agent-testing Test coverage"
 ```
 
 **Test agent invoker**:
 ```bash
-PYTHONPATH="/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution:/Users/jonah/.claude/hooks/lib" \
-  poetry run python3 /Users/jonah/.claude/hooks/lib/agent_invoker.py \
+PYTHONPATH="${PROJECT_ROOT}/agents/parallel_execution:${HOME}/.claude/hooks/lib" \
+  poetry run python3 ~/.claude/hooks/lib/agent_invoker.py \
   "@agent-testing Analyze test coverage" --mode auto
 ```
 

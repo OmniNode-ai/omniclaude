@@ -122,7 +122,7 @@ echo '{"tasks": [...]}' | \
 
 **Run Tests**:
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python test_interactive_mode.py
 # or
 pytest test_interactive_mode.py -v
@@ -144,7 +144,7 @@ pytest test_interactive_mode.py -v
 
 **Run Examples**:
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 ./example_interactive_workflow.sh
 ```
 

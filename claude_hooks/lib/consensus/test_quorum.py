@@ -230,6 +230,59 @@ def test_prompt_generation():
     print()
 
 
+def test_min_model_participation():
+    """Test MIN_MODEL_PARTICIPATION threshold enforcement."""
+    print("Test: MIN_MODEL_PARTICIPATION Enforcement")
+
+    # Create quorum with 5 models
+    models = [
+        ModelConfig(name=f"model-{i}", provider=ModelProvider.OLLAMA, weight=1.0)
+        for i in range(5)
+    ]
+
+    quorum = AIQuorum(models=models, stub_mode=False, enable_ai_scoring=True)
+
+    # Simulate scenario with only 2/5 models responding (40% < 60% threshold)
+    mock_scores = [
+        (models[0], {"score": 0.8, "reasoning": "Good", "recommendation": "APPROVE"}),
+        (models[1], {"score": 0.9, "reasoning": "Excellent", "recommendation": "APPROVE"}),
+        Exception("Model timeout"),  # Model 2 failed
+        Exception("Model timeout"),  # Model 3 failed
+        Exception("Model timeout"),  # Model 4 failed
+    ]
+
+    result = quorum._calculate_consensus(mock_scores)
+
+    # Should fail due to insufficient participation
+    assert result.recommendation == "FAIL_PARTICIPATION"
+    assert result.consensus_score == 0.0
+    assert result.requires_human_review
+    assert "Insufficient model participation" in result.model_reasoning.get("quorum_error", "")
+
+    print("  ✓ Correctly rejected with 2/5 models (40%)")
+    print(f"  ✓ Recommendation: {result.recommendation}")
+    print(f"  ✓ Error message included")
+
+    # Now test with 3/5 models responding (60% >= 60% threshold)
+    mock_scores_passing = [
+        (models[0], {"score": 0.8, "reasoning": "Good", "recommendation": "APPROVE"}),
+        (models[1], {"score": 0.9, "reasoning": "Excellent", "recommendation": "APPROVE"}),
+        (models[2], {"score": 0.85, "reasoning": "Good", "recommendation": "APPROVE"}),
+        Exception("Model timeout"),  # Model 3 failed
+        Exception("Model timeout"),  # Model 4 failed
+    ]
+
+    result_passing = quorum._calculate_consensus(mock_scores_passing)
+
+    # Should pass participation threshold and calculate normally
+    assert result_passing.recommendation != "FAIL_PARTICIPATION"
+    assert result_passing.consensus_score > 0.0
+
+    print("  ✓ Correctly accepted with 3/5 models (60%)")
+    print(f"  ✓ Consensus score: {result_passing.consensus_score:.2f}")
+    print()
+
+
 def run_all_tests():
     """Run all tests."""
     print("=" * 60)
@@ -246,6 +299,7 @@ def run_all_tests():
         test_correction_metadata,
         test_model_provider_enum,
         test_prompt_generation,
+        test_min_model_participation,
     ]
 
     passed = 0
