@@ -15,6 +15,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from ..lib.version_config import get_config
 
 
 class MarkdownDocGenerator:
@@ -515,11 +516,14 @@ asyncio.run(register_service())
 
 ```python
 async def manage_config():
+    # Get configuration
+    config = get_config()
+    
     # Set configuration value
     await adapter.execute_effect({
         "operation": "kv_set",
         "key": "config/database_url",
-        "value": "postgresql://localhost:5432/mydb"
+        "value": f"postgresql://{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
     })
 
     # Get configuration value

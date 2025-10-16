@@ -12,8 +12,10 @@ from uuid import UUID
 from datetime import datetime
 
 # Core imports
-from omnibase_core.core.node_reducer import NodeReducerService
-from omnibase_core.core.onex_error import OnexError, CoreErrorCode
+from omnibase_core.nodes.node_reducer import NodeReducer
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.errors.error_codes import EnumCoreErrorCode
 
 # Mixin imports
 {MIXIN_IMPORTS}
@@ -26,9 +28,9 @@ from .enums.enum_{MICROSERVICE_NAME}_operation_type import Enum{MICROSERVICE_NAM
 
 logger = logging.getLogger(__name__)
 
-class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITANCE}):
+class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
     """
-    {MICROSERVICE_NAME} REDUCER Node Service
+    {MICROSERVICE_NAME} REDUCER Node
     
     {BUSINESS_DESCRIPTION}
     
@@ -36,15 +38,15 @@ class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITA
 {FEATURES}
     """
     
-    def __init__(self, config: Model{MICROSERVICE_NAME_PASCAL}Config):
-        super().__init__()
-        self.config = config
+    def __init__(self, container: ModelONEXContainer):
+        super().__init__(container)
+        self.container = container
         self.logger = logging.getLogger(__name__)
         
         # Mixin initialization
 {MIXIN_INITIALIZATION}
     
-    async def execute_reduce(
+    async def process(
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input,
         correlation_id: Optional[UUID] = None

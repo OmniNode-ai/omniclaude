@@ -13,12 +13,17 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import asyncpg
+from .version_config import get_config
 
 
 class CodegenPersistence:
     def __init__(self, dsn: Optional[str] = None) -> None:
-        # DSN example: postgresql://user:pass@localhost:5432/dbname
-        self.dsn = dsn or "postgresql://postgres:postgres@localhost:5432/omniclaude"
+        if dsn:
+            self.dsn = dsn
+        else:
+            # Build DSN from configuration
+            config = get_config()
+            self.dsn = f"postgresql://{config.postgres_user}:{config.postgres_password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
         self._pool: Optional[asyncpg.Pool] = None
 
     async def _ensure_pool(self) -> asyncpg.Pool:

@@ -1297,9 +1297,17 @@ tags:
         deps = []
         for system in analysis_result.external_systems[:3]:
             system_lower = system.lower().replace(" ", "_")
+            # Use configuration for database connections
+            if "postgres" in system.lower() or "database" in system.lower():
+                target = f"{system_lower}://{self.config.postgres_host}:{self.config.postgres_port}"
+            elif "redis" in system.lower() or "cache" in system.lower():
+                target = f"{system_lower}://{self.config.redis_host}:{self.config.redis_port}"
+            else:
+                target = f"{system_lower}://localhost:8080"  # Default fallback
+            
             deps.append(f'''  - name: "{system_lower}"
     type: "external_service"
-    target: "{system_lower}://localhost:5432"
+    target: "{target}"
     binding: "runtime_lookup"
     optional: false
     description: "{system} service for data operations"''')
@@ -1323,11 +1331,11 @@ tags:
         endpoints = []
         for system in analysis_result.external_systems[:3]:
             if "postgres" in system.lower() or "database" in system.lower():
-                endpoints.append('    - "postgresql://localhost:5432"')
+                endpoints.append(f'    - "postgresql://{self.config.postgres_host}:{self.config.postgres_port}"')
             elif "redis" in system.lower() or "cache" in system.lower():
-                endpoints.append('    - "redis://localhost:6379"')
+                endpoints.append(f'    - "redis://{self.config.redis_host}:{self.config.redis_port}"')
             elif "kafka" in system.lower():
-                endpoints.append('    - "kafka://localhost:9092"')
+                endpoints.append(f'    - "kafka://{self.config.kafka_bootstrap_servers}"')
 
         return "\n".join(endpoints) if endpoints else "    []"
 
