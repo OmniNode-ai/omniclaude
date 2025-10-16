@@ -297,19 +297,26 @@ Be concise. Match user intent to agent domain and triggers."""
         try:
             # Use poetry to call Zen MCP chat tool
             # This leverages the existing Zen MCP integration
+            # Determine hooks lib path dynamically
+            hooks_lib = Path.home() / ".claude" / "hooks" / "lib"
+
+            # Find project root (walk up from current file)
+            project_root = Path(__file__).resolve().parent.parent.parent
+
             result = subprocess.run(
                 [
                     "poetry", "run", "python3", "-c",
                     f"""
 import sys
-sys.path.insert(0, '/Users/jonah/.claude/hooks/lib')
+from pathlib import Path
+sys.path.insert(0, str(Path.home() / '.claude' / 'hooks' / 'lib'))
 
 # Would call Zen MCP here if available
 # For now, return None to use fallback
 print("CLOUD_MODEL_PLACEHOLDER")
 """
                 ],
-                cwd="/Volumes/PRO-G40/Code/omniclaude",
+                cwd=str(project_root),
                 capture_output=True,
                 text=True,
                 timeout=15

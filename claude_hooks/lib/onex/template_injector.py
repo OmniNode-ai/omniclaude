@@ -26,8 +26,8 @@ class ONEXNodeType(Enum):
 class ONEXTemplateInjector:
     """Inject ONEX patterns into prompts based on intent analysis."""
 
-    # ONEX architecture patterns location
-    PATTERNS_DOC = Path("/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md")
+    # ONEX architecture patterns location (configurable via environment variable)
+    PATTERNS_DOC = Path(os.getenv("ONEX_PATTERNS_DOC", "~/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md")).expanduser()
 
     # Intent patterns for node type detection
     NODE_INTENT_PATTERNS = {
@@ -202,7 +202,7 @@ class ONEXTemplateInjector:
 
 {injection}
 
-**Note**: Follow ONEX architecture patterns above. Full reference: /Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md
+**Note**: Follow ONEX architecture patterns above. Full reference: Set ONEX_PATTERNS_DOC environment variable to locate the complete patterns document.
 """
 
         return enhanced_prompt

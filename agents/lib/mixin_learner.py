@@ -91,8 +91,8 @@ class MixinLearner:
     - Model persistence and versioning
     """
 
-    DEFAULT_MODEL_PATH = Path("/Volumes/PRO-G40/Code/omniclaude/agents/models/mixin_compatibility_rf.pkl")
-    DEFAULT_METRICS_PATH = Path("/Volumes/PRO-G40/Code/omniclaude/agents/models/mixin_compatibility_metrics.pkl")
+    DEFAULT_MODEL_PATH = Path(__file__).parent.parent / "models" / "mixin_compatibility_rf.pkl"
+    DEFAULT_METRICS_PATH = Path(__file__).parent.parent / "models" / "mixin_compatibility_metrics.pkl"
 
     def __init__(
         self,

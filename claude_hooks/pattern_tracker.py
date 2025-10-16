@@ -33,8 +33,11 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-# Add resilience imports
-sys.path.insert(0, "/Volumes/PRO-G40/Code/Archon/services/intelligence/src/hooks/lib")
+# Add resilience imports (if available via environment variable or in path)
+resilience_lib_path = os.getenv("ARCHON_HOOKS_LIB_PATH")
+if resilience_lib_path and Path(resilience_lib_path).exists():
+    sys.path.insert(0, resilience_lib_path)
+
 try:
     from error_handling import CircuitBreaker, resilient_operation
     from resilience import ResilientAPIClient, PatternCache

@@ -87,7 +87,7 @@ class AgentDeps:
 # System prompt for ONEX-compliant code generation following canonical patterns
 ONEX_SYSTEM_PROMPT = """You are an expert ONEX architecture code generator following canonical patterns from omniarchon examples.
 
-**CANONICAL ONEX PATTERNS (from /Volumes/PRO-G40/Code/omniarchon/docs/onex/examples):**
+**CANONICAL ONEX PATTERNS (from omniarchon documentation):**
 
 1. **ONE Contract Model** (not separate Input/Output):
    - Class: ModelContract<Name><Type> (e.g., ModelContractPostgreSQLAdapterEffect)
