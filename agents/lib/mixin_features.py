@@ -330,6 +330,7 @@ class MixinFeatureExtractor:
         # Feature dimensions
         self.mixin_feature_dim = len(self.mixin_to_idx)
         self.node_type_feature_dim = len(self.node_type_to_idx)
+        self.node_type_profile_dim = 4  # Profile features for node type
         self.category_feature_dim = len(self.category_to_idx)
         self.characteristic_feature_dim = 10  # Binary characteristics
         self.interaction_feature_dim = 15  # Interaction features
@@ -337,7 +338,8 @@ class MixinFeatureExtractor:
         self.total_feature_dim = (
             self.mixin_feature_dim * 2 +  # Two mixins
             self.category_feature_dim * 2 +  # Two categories
-            self.node_type_feature_dim +  # Node type
+            self.node_type_feature_dim +  # Node type one-hot
+            self.node_type_profile_dim +  # Node type profile characteristics
             self.characteristic_feature_dim * 2 +  # Characteristics for both mixins
             self.interaction_feature_dim  # Interaction features
         )
