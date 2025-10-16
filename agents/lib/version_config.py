@@ -60,10 +60,10 @@ class VersionConfig:
     postgres_port: int = 5436
     postgres_db: str = "omninode_bridge"
     postgres_user: str = "postgres"
-    postgres_password: str = "omninode-bridge-postgres-dev-2024"
-    
+    postgres_password: str = ""  # REQUIRED: Set via POSTGRES_PASSWORD environment variable
+
     # ONEX MCP Service configuration
-    onex_mcp_host: str = "192.168.86.101"
+    onex_mcp_host: str = "localhost"  # Set via ONEX_MCP_HOST environment variable
     onex_mcp_port: int = 8151
     
     # Redis configuration
