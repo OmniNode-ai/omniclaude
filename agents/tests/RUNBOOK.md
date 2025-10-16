@@ -7,7 +7,7 @@
 
 ### 1. Check Dependency Status
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/tests
+cd ${PROJECT_ROOT}/agents/tests
 python monitor_dependencies.py
 ```
 
@@ -359,7 +359,7 @@ psql $POSTGRES_CONNECTION_STRING -c "SELECT 1;"
 echo $PYTHONPATH
 
 # Add project root to path
-export PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude:$PYTHONPATH
+export PYTHONPATH=${PROJECT_ROOT}:$PYTHONPATH
 
 # Reinstall dependencies
 poetry install

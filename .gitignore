@@ -14,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-/lib/
+lib/
+!agents/lib/
 lib64/
 parts/
 sdist/
@@ -131,8 +132,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
-.env.*
+.env*
 .venv/
 env/
 venv/

@@ -202,7 +202,7 @@ Execution Flow:
 
 1. **Use Read tool** to check schema reference:
    ```bash
-   Read: /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/task_schema.py
+   Read: agents/parallel_execution/task_schema.py
    ```
 
 2. **Build task JSON** following schema:
@@ -280,11 +280,11 @@ Execution Flow:
 2. **Execute dispatch runner with context filtering**:
    ```bash
    # With context filtering (recommended)
-   Bash: cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution && \
+   Bash: cd ${PROJECT_ROOT}/agents/parallel_execution && \
          python dispatch_runner.py --enable-context < /tmp/dispatch-tasks-{timestamp}.json > /tmp/dispatch-results-{timestamp}.json 2>&1
 
    # Without context filtering (legacy mode)
-   Bash: cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution && \
+   Bash: cd ${PROJECT_ROOT}/agents/parallel_execution && \
          python dispatch_runner.py < /tmp/dispatch-tasks-{timestamp}.json > /tmp/dispatch-results-{timestamp}.json 2>&1
    ```
 
@@ -544,7 +544,7 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "contract_description": "Effect node that writes user data to PostgreSQL users table",
         "node_type": "Effect",
-        "output_path": "/Volumes/PRO-G40/Code/project/node_user_writer_effect.py",
+        "output_path": "${OUTPUT_DIR}/node_user_writer_effect.py",
         "validation_level": "strict"
       },
       "dependencies": []
@@ -556,7 +556,7 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "contract_description": "Effect node that reads product data from PostgreSQL products table",
         "node_type": "Effect",
-        "output_path": "/Volumes/PRO-G40/Code/project/node_product_reader_effect.py",
+        "output_path": "${OUTPUT_DIR}/node_product_reader_effect.py",
         "validation_level": "strict"
       },
       "dependencies": []
@@ -568,7 +568,7 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "contract_description": "Effect node that updates order status in PostgreSQL orders table",
         "node_type": "Effect",
-        "output_path": "/Volumes/PRO-G40/Code/project/node_order_updater_effect.py",
+        "output_path": "${OUTPUT_DIR}/node_order_updater_effect.py",
         "validation_level": "strict"
       },
       "dependencies": []
@@ -607,8 +607,8 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "problem_description": "Authentication failures with 401 errors in production",
         "affected_files": [
-          "/Volumes/PRO-G40/Code/project/auth/authenticator.py",
-          "/Volumes/PRO-G40/Code/project/auth/token_manager.py"
+          "${PROJECT_DIR}/auth/authenticator.py",
+          "${PROJECT_DIR}/auth/token_manager.py"
         ],
         "error_traces": [
           "AuthenticationError: Invalid token signature"
@@ -624,9 +624,9 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "contract_description": "Effect node for authentication with proper token validation and error handling",
         "node_type": "Effect",
-        "output_path": "/Volumes/PRO-G40/Code/project/node_authenticator_effect_v2.py",
+        "output_path": "${OUTPUT_DIR}/node_authenticator_effect_v2.py",
         "context_files": [
-          "/Volumes/PRO-G40/Code/project/auth/authenticator.py"
+          "${PROJECT_DIR}/auth/authenticator.py"
         ],
         "validation_level": "strict"
       },
@@ -661,7 +661,7 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "problem_description": "API response times 2x slower than baseline",
         "affected_files": [
-          "/Volumes/PRO-G40/Code/project/api/endpoints.py"
+          "${PROJECT_DIR}/api/endpoints.py"
         ],
         "analysis_depth": "standard"
       },
@@ -674,7 +674,7 @@ def select_agent(task_description: str) -> str:
       "input_data": {
         "contract_description": "Reducer node that implements Redis caching for API responses",
         "node_type": "Reducer",
-        "output_path": "/Volumes/PRO-G40/Code/project/node_api_cache_reducer.py",
+        "output_path": "${OUTPUT_DIR}/node_api_cache_reducer.py",
         "validation_level": "moderate"
       },
       "dependencies": []

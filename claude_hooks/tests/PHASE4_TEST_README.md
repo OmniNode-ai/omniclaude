@@ -246,7 +246,7 @@ echo "✓ All Phase 4 tests passed!"
 curl http://localhost:8053/health
 
 # Start service if needed
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose up intelligence -d
 ```
 
@@ -342,7 +342,7 @@ All tests must pass with:
 
 ## Related Documentation
 
-- [Phase 4 API Documentation](/Volumes/PRO-G40/Code/Archon/services/intelligence/PHASE4_API_DOCUMENTATION.md)
+- [Phase 4 API Documentation](External Archon project - ${ARCHON_ROOT}/services/intelligence/PHASE4_API_DOCUMENTATION.md)
 - [Pattern Tracker Usage](../lib/pattern_tracker.py)
 - [Pattern ID System](../lib/pattern_id_system.py)
 - [Phase 4 API Client](../lib/phase4_api_client.py)

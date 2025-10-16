@@ -32,6 +32,10 @@ class ModelProvider(Enum):
     OPENAI = "openai"
 
 
+# Minimum percentage of configured models that must participate (0.0-1.0)
+MIN_MODEL_PARTICIPATION = 0.60  # 60% of models must respond
+
+
 @dataclass
 class ModelConfig:
     """Configuration for an AI model in the quorum."""
@@ -662,6 +666,25 @@ Provide your evaluation:"""
 
             weighted_score_sum += score * model.weight
             total_weight += model.weight
+
+        # Enforce MIN_MODEL_PARTICIPATION threshold
+        total_models = len(self.models)
+        participating_models = len(valid_scores)
+        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+
+        if participation_rate < MIN_MODEL_PARTICIPATION:
+            return QuorumScore(
+                consensus_score=0.0,
+                confidence=0.0,
+                model_scores=model_scores,
+                model_reasoning={
+                    **model_reasoning,
+                    "quorum_error": f"Insufficient model participation: {participating_models}/{total_models} "
+                                   f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required"
+                },
+                recommendation="FAIL_PARTICIPATION",
+                requires_human_review=True,
+            )
 
         # Calculate consensus score
         if total_weight > 0:

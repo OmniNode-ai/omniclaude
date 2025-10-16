@@ -38,7 +38,7 @@ claude-hooks-backup/          # Git-tracked development directory
 Edit files in `claude-hooks-backup/`:
 
 ```bash
-cd /Volumes/PRO-G40/Code/Archon/claude-hooks-backup
+cd ${ARCHON_ROOT}/claude-hooks-backup
 
 # Edit files
 vim lib/validators/naming_validator.py
@@ -61,7 +61,7 @@ Output:
 ║         Sync Repository to Live Hooks Directory             ║
 ╚══════════════════════════════════════════════════════════════╝
 
-Source: /Volumes/PRO-G40/Code/Archon/claude-hooks-backup
+Source: ${ARCHON_ROOT}/claude-hooks-backup
 Target: /Users/jonah/.claude/hooks
 
 Files to sync:

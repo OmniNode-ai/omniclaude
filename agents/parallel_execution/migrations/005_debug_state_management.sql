@@ -422,7 +422,7 @@ SELECT
   metadata->>'session_id' as session_id,
   metadata->>'correlation_id' as correlation_id,
   resource_id as tool_name,
-  payload->'quality_metrics'->>'quality_score' as quality_score,
+  CAST(payload->'quality_metrics'->>'quality_score' AS NUMERIC) as quality_score,
   (payload->>'success_classification')::TEXT as success_classification,
   created_at as call_timestamp
 FROM hook_events

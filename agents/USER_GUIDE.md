@@ -38,7 +38,7 @@ This guide provides comprehensive instructions for using Phase 7 features includ
 
 1. **Install dependencies**:
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+cd ${PROJECT_ROOT}
 poetry install
 ```
 

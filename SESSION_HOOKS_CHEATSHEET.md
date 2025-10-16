@@ -253,7 +253,7 @@ PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U post
 
 ## References
 
-- **Full Documentation**: `/Volumes/PRO-G40/Code/omniclaude/SESSION_START_HOOK_COMPLETE.md`
+- **Full Documentation**: `SESSION_START_HOOK_COMPLETE.md`
 - **Quick Start Guide**: `/tmp/SESSION_HOOKS_QUICKSTART.md`
 - **Implementation Summary**: `/tmp/SESSION_START_HOOK_IMPLEMENTATION_SUMMARY.md`
 - **Test Script**: `/tmp/test_session_intelligence.sh`

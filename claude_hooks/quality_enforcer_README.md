@@ -291,7 +291,7 @@ self.stats['custom_phase_time'] = time.time() - phase_start
 
 ## References
 
-- **Design Document**: `/Volumes/PRO-G40/Code/Archon/docs/agent-framework/ai-quality-enforcement-system.md`
+- **Design Document**: External Archon project - `${ARCHON_ROOT}/docs/agent-framework/ai-quality-enforcement-system.md`
 - **Validator**: `~/.claude/hooks/lib/validators/naming_validator.py`
 - **RAG Client**: `~/.claude/hooks/lib/intelligence/rag_client.py`
 - **AI Quorum**: `~/.claude/hooks/lib/consensus/quorum.py`

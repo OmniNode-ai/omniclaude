@@ -546,7 +546,7 @@ Task A ──┤              ├──→ Task C ──→ Results
 ### File System Integration
 
 **Paths**:
-- `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/`: System root
+- `${PROJECT_ROOT}/agents/parallel_execution/`: System root
 - `./traces/`: Trace output directory
 - `/tmp/`: Temporary task/result files
 - User-specified: Generated code output
