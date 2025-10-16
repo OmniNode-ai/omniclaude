@@ -746,7 +746,7 @@ cd ~/.claude/hooks
 python -m pytest tests/test_integration.py -v -k tracing
 
 # Run Phase 4 API tests
-cd /Volumes/PRO-G40/Code/Archon/services/intelligence
+cd ${ARCHON_ROOT}/services/intelligence
 python -m pytest tests/ -v -k phase4
 ```
 
@@ -769,7 +769,7 @@ docker exec -it archon-postgres psql -U postgres -d archon \
 python -m pytest tests/test_integration.py::test_tracing_performance -v
 
 # Benchmark Phase 4 APIs
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence python -m pytest \
   tests/test_phase4_performance.py -v
 ```
@@ -850,13 +850,13 @@ export TRACEABILITY_DB_URL_EXTERNAL="postgresql://user:pass@host:5432/archon"
 2. **Initialize Database Schema**:
 ```bash
 # Apply migrations
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence alembic upgrade head
 ```
 
 3. **Start Intelligence Service**:
 ```bash
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose up -d intelligence
 ```
 
@@ -903,8 +903,8 @@ docker exec archon-postgres psql -U postgres -d archon \
 ### Code Locations
 
 - **Tracing System**: `~/.claude/hooks/lib/tracing/`
-- **Phase 4 APIs**: `/Volumes/PRO-G40/Code/Archon/services/intelligence/src/api/phase4_traceability/`
-- **Database Migrations**: `/Volumes/PRO-G40/Code/Archon/services/intelligence/migrations/`
+- **Phase 4 APIs**: External Archon project - `${ARCHON_ROOT}/services/intelligence/src/api/phase4_traceability/`
+- **Database Migrations**: External Archon project - `${ARCHON_ROOT}/services/intelligence/migrations/`
 
 ### Getting Help
 

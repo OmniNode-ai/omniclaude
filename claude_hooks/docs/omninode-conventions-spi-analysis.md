@@ -2,7 +2,7 @@
 
 **Generated**: 2025-09-30
 **Codebase**: omnibase_spi (with comparison to omnibase_core)
-**Base Path**: `/Volumes/PRO-G40/Code/omnibase_spi/src/omnibase_spi`
+**Base Path**: External omnibase_spi project - `${OMNIBASE_SPI}/src/omnibase_spi`
 **Files Analyzed**: 95 Python files (SPI) vs 508 files (Core)
 
 ---

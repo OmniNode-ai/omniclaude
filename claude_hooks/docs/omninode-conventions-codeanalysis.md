@@ -2,7 +2,7 @@
 
 **Generated**: 2025-09-30
 **Codebase**: omnibase_core
-**Base Path**: `/Volumes/PRO-G40/Code/omnibase_core/src/omnibase_core`
+**Base Path**: External omnibase_core project - `${OMNIBASE_CORE}/src/omnibase_core`
 **Files Analyzed**: 508 Python files
 
 ---

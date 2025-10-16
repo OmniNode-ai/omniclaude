@@ -321,7 +321,7 @@ Location: `/Users/jonah/.claude/hooks/user-prompt-submit-enhanced.sh`
 Purpose: Hook integration for pathway detection and invocation
 
 ### 4. parallel_direct_executor.py (NEW)
-Location: `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/parallel_direct_executor.py`
+Location: `agents/parallel_execution/parallel_direct_executor.py`
 
 Purpose: Lightweight parallel executor for direct hook agents (without full coordinator overhead)
 

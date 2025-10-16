@@ -242,6 +242,7 @@ Output (JSON):
 {
     "agent": "agent-name",
     "confidence": 0.95,
+    "method": "ai",
     "reasoning": "Brief explanation of why this agent is best",
     "alternatives": ["agent-name-2", "agent-name-3"]
 }
@@ -261,23 +262,40 @@ Be precise. Only return confidence >0.8 if you're highly certain.
 
 **Updated Hook Flow** (`user-prompt-submit-enhanced.sh`):
 ```bash
-# Use hybrid selector instead of agent_detector
+# Use hybrid selector instead of agent_detector (returns JSON)
 AGENT_SELECTION=$(python3 "${HOOKS_LIB}/hybrid_agent_selector.py" "$PROMPT" \
     --enable-ai "$ENABLE_AI_AGENT_SELECTION" \
     --confidence-threshold "$AI_AGENT_CONFIDENCE_THRESHOLD" \
     --model-preference "$AI_MODEL_PREFERENCE" \
     --timeout "$AI_SELECTION_TIMEOUT_MS" \
-    2>>\"$LOG_FILE\" || echo "NO_AGENT_DETECTED")
+    2>>\"$LOG_FILE\" || echo '{"agent": null, "confidence": 0, "method": "error", "reasoning": "Selection failed"}')
 
-# Parse selection result
-AGENT_NAME=$(echo "$AGENT_SELECTION" | grep "AGENT_DETECTED:" | cut -d: -f2)
-CONFIDENCE=$(echo "$AGENT_SELECTION" | grep "CONFIDENCE:" | cut -d: -f2)
-SELECTION_METHOD=$(echo "$AGENT_SELECTION" | grep "METHOD:" | cut -d: -f2)
-REASONING=$(echo "$AGENT_SELECTION" | grep "REASONING:" | cut -d: -f2-)
+# Parse JSON selection result using jq
+AGENT_NAME=$(echo "$AGENT_SELECTION" | jq -r '.agent // empty')
+CONFIDENCE=$(echo "$AGENT_SELECTION" | jq -r '.confidence // 0')
+SELECTION_METHOD=$(echo "$AGENT_SELECTION" | jq -r '.method // "unknown"')
+REASONING=$(echo "$AGENT_SELECTION" | jq -r '.reasoning // "No reasoning provided"')
 
 # Log selection details
 echo "[$(date)] Agent: $AGENT_NAME, Confidence: $CONFIDENCE, Method: $SELECTION_METHOD" >> "$LOG_FILE"
 ```
+
+**Expected JSON Output Format**:
+```json
+{
+  "agent": "agent-name",           // Selected agent identifier (null if none)
+  "confidence": 0.95,               // Confidence score 0.0-1.0
+  "method": "ai|trigger|pattern",   // Selection method used
+  "reasoning": "Explanation text",  // Why this agent was selected
+  "alternatives": ["agent-2"]       // Optional: Alternative agents considered
+}
+```
+
+**JSON Parsing Requirements**:
+- Use `jq -r` for robust JSON parsing (not grep/sed)
+- Handle null values with `// empty` or `// default` operators
+- Fallback to valid JSON on errors (not plain text)
+- Validate JSON structure before parsing critical fields
 
 ---
 

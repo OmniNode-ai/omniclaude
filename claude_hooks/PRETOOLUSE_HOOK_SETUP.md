@@ -154,7 +154,7 @@ Here's a complete example with both UserPromptSubmit and PreToolUse hooks:
 
 To enable full quality enforcement (validation, RAG intelligence, AI consensus):
 
-1. Review the design document: `/Volumes/PRO-G40/Code/Archon/docs/agent-framework/ai-quality-enforcement-system.md`
+1. Review the design document: External Archon project - `${ARCHON_ROOT}/docs/agent-framework/ai-quality-enforcement-system.md`
 2. Implement the full `quality_enforcer.py` as specified (lines 821-1077)
 3. Create the required library modules in `~/.claude/hooks/lib/`:
    - `validators/naming_validator.py` - Fast validation
@@ -265,7 +265,7 @@ rm ~/.claude/hooks/quality_enforcer.py
 
 ## Additional Resources
 
-- Design Document: `/Volumes/PRO-G40/Code/Archon/docs/agent-framework/ai-quality-enforcement-system.md`
+- Design Document: External Archon project - `${ARCHON_ROOT}/docs/agent-framework/ai-quality-enforcement-system.md`
 - Claude Code Hooks Documentation: [Link to official docs]
 - Hook Library: `~/.claude/hooks/lib/` (when full implementation is added)
 

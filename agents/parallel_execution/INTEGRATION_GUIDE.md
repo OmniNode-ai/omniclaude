@@ -32,7 +32,7 @@ pip install pydantic>=2.0.0 pyyaml>=6.0 httpx>=0.27.0 aiofiles>=23.0.0
 
 Ensure the following structure exists:
 ```
-/Volumes/PRO-G40/Code/omniclaude/
+${PROJECT_ROOT}/
 ├── agents/
 │   ├── parallel_execution/
 │   │   ├── dispatch_runner.py
@@ -97,7 +97,7 @@ triggers:
   - "batch"
 
 instructions:
-  path: /Volumes/PRO-G40/Code/omniclaude/agents/agent-parallel-dispatcher.md
+  path: ${PROJECT_ROOT}/agents/agent-parallel-dispatcher.md
 
 metadata:
   domain: orchestration
@@ -217,7 +217,7 @@ cat > /tmp/test-task.json << 'EOF'
 EOF
 
 # Execute
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python dispatch_runner.py < /tmp/test-task.json
 
 # Check results
@@ -232,7 +232,7 @@ echo $?  # Should be 0 for success
 
 **Test 1: Task Schema Validation**
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 
 # Valid task should succeed
 cat > /tmp/valid-task.json << 'EOF'
@@ -344,7 +344,7 @@ else:
 **Test 3: Parallel Execution**
 ```bash
 # Run example parallel generation
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python dispatch_runner.py < examples/01_parallel_generation.json
 
 # Check exit code
@@ -405,7 +405,7 @@ cat > /tmp/e2e-test.json << 'EOF'
 EOF
 
 # Execute
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python dispatch_runner.py < /tmp/e2e-test.json > /tmp/e2e-result.json
 
 # Validate results
@@ -555,7 +555,7 @@ ModuleNotFoundError: No module named 'agents.agent_coder'
 **Solution**:
 ```bash
 # Add to PYTHONPATH
-export PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude:$PYTHONPATH
+export PYTHONPATH=${PROJECT_ROOT}:$PYTHONPATH
 
 # Or use absolute imports in dispatch_runner.py
 ```
@@ -711,7 +711,7 @@ tar -czf traces-$(date +%Y%m%d).tar.gz traces/
 
 ```bash
 # Pull latest code
-cd /Volumes/PRO-G40/Code/omniclaude
+cd ${PROJECT_ROOT}
 git pull origin main
 
 # Update dependencies

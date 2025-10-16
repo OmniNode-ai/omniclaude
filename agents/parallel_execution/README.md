@@ -56,7 +56,7 @@ cat > tasks.json << 'EOF'
 EOF
 
 # Execute
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 python dispatch_runner.py < tasks.json
 
 # View results
@@ -389,7 +389,7 @@ parallel_execution/
 
 ```bash
 # Run example workflows
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 
 # Test parallel generation
 python dispatch_runner.py < examples/01_parallel_generation.json
@@ -412,7 +412,7 @@ See [QUICK_START.md](QUICK_START.md#troubleshooting) for detailed troubleshootin
 ```bash
 # Verify working directory
 pwd
-# Should be: /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+# Should be: ${PROJECT_ROOT}/agents/parallel_execution
 
 # Test agent imports
 python -c "from agents.agent_coder import CoderAgent; print('OK')"

@@ -62,7 +62,7 @@ psql "$TRACEABILITY_DB_URL_EXTERNAL" -c "SELECT 1"
 
 ```bash
 # Run migrations
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence alembic upgrade head
 
 # Verify tables exist
@@ -258,7 +258,7 @@ docker compose logs intelligence | tail -50
 
 ```bash
 # Run migrations
-cd /Volumes/PRO-G40/Code/Archon
+cd ${ARCHON_ROOT}
 docker compose exec intelligence alembic upgrade head
 ```
 

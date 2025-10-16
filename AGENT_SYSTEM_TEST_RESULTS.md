@@ -213,7 +213,7 @@ Execution: ✗ "Unknown agent: performance" (no Python class)
 
 Follow the step-by-step guide in:
 ```
-/Volumes/PRO-G40/Code/omniclaude/AGENT_HOOK_REACTIVATION_CHECKLIST.md
+AGENT_HOOK_REACTIVATION_CHECKLIST.md
 ```
 
 **Quick Re-enable** (if you're confident):
@@ -432,7 +432,7 @@ All 52 agents are available for immediate use via `@agent-name` syntax:
 ## Files Modified/Created
 
 ### Dependencies
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/pyproject.toml` - Added google-generativeai, watchdog
+- ✅ `pyproject.toml` - Added google-generativeai, watchdog
 
 ### New Modules (Production-Ready)
 - ✅ `/Users/jonah/.claude/hooks/lib/agent_pathway_detector.py` - Pathway detection (264 lines)
@@ -440,12 +440,12 @@ All 52 agents are available for immediate use via `@agent-name` syntax:
 - ✅ `/Users/jonah/.claude/hooks/lib/invoke_agent_from_hook.py` - Hook integration (175 lines)
 
 ### Test Scripts
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/test_agent_pathways.py` - Unit test suite
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/test_agent_task_simulation.py` - E2E simulation
+- ✅ `test_agent_pathways.py` - Unit test suite
+- ✅ `test_agent_task_simulation.py` - E2E simulation
 
 ### Documentation
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/DUAL_PATHWAY_ARCHITECTURE.md` - Architecture spec
-- ✅ `/Volumes/PRO-G40/Code/omniclaude/AGENT_HOOK_REACTIVATION_CHECKLIST.md` - Re-enable guide
+- ✅ `agents/parallel_execution/DUAL_PATHWAY_ARCHITECTURE.md` - Architecture spec
+- ✅ `AGENT_HOOK_REACTIVATION_CHECKLIST.md` - Re-enable guide
 - ✅ This file - Test results and recommendations
 
 ### Hook (Temporarily Disabled)
@@ -504,7 +504,7 @@ python3 agent_pathway_detector.py "@agent-testing Test coverage"
 
 **Test agent invoker**:
 ```bash
-PYTHONPATH="/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution:/Users/jonah/.claude/hooks/lib" \
+PYTHONPATH="${PROJECT_ROOT}/agents/parallel_execution:/Users/jonah/.claude/hooks/lib" \
   poetry run python3 /Users/jonah/.claude/hooks/lib/agent_invoker.py \
   "@agent-testing Analyze test coverage" --mode auto
 ```

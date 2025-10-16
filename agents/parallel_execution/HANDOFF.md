@@ -65,7 +65,7 @@
 
 ## 🗂️ Key Files Modified
 
-### 1. `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/.env`
+### 1. `${PROJECT_ROOT}/agents/parallel_execution/.env`
 ```bash
 # Gemini API Key for Quorum Validation
 GEMINI_API_KEY=AIzaSyDaaj2noZRNefE7aRLoc5xmbMDpvrz8LzU
@@ -214,7 +214,7 @@ python3 dispatch_runner.py --input-file /tmp/test_with_context.json --interactiv
 
 ### Resume Testing
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+cd ${PROJECT_ROOT}/agents/parallel_execution
 
 # Run interactive workflow
 python3 dispatch_runner.py \
@@ -256,7 +256,7 @@ ls -lt /var/folders/*/T/interactive_session_*.json | head -1
 - `agents/performance-thresholds.yaml` - 33 performance thresholds
 
 ### External References
-- ONEX docs: `/Volumes/PRO-G40/Code/omniarchon/docs/onex/`
+- ONEX docs: External omniarchon project - `${OMNIARCHON_ROOT}/docs/onex/`
 - Archon MCP: Knowledge base service
 - Z.ai docs: https://api.z.ai/docs (Anthropic-compatible)
 - Gemini API: https://ai.google.dev/gemini-api/docs
@@ -275,8 +275,8 @@ ls -lt /var/folders/*/T/interactive_session_*.json | head -1
 
 ## 🔗 Quick Links
 
-- **Project Root**: `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/`
-- **ONEX Docs**: `/Volumes/PRO-G40/Code/omniarchon/docs/onex/`
+- **Project Root**: `${PROJECT_ROOT}/agents/parallel_execution/`
+- **ONEX Docs**: External omniarchon project - `${OMNIARCHON_ROOT}/docs/onex/`
 - **Test Input**: `/tmp/test_with_context.json`
 - **Latest Session**: `/var/folders/*/T/interactive_session_*.json`
 

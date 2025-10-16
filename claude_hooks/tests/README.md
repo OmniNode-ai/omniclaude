@@ -242,6 +242,6 @@ When adding new tests:
 
 ## Related Documentation
 
-- **Design Document**: `/Volumes/PRO-G40/Code/Archon/docs/agent-framework/ai-quality-enforcement-system.md`
+- **Design Document**: External Archon project - `${ARCHON_ROOT}/docs/agent-framework/ai-quality-enforcement-system.md`
 - **Validator Implementation**: `~/.claude/hooks/lib/validators/naming_validator.py`
 - **Main Hook Script**: `~/.claude/hooks/user-prompt-submit-enhanced.sh`

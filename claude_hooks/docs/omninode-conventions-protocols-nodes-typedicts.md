@@ -1,7 +1,7 @@
 # Protocol, Node, and TypedDict Naming Conventions in omnibase_core
 
 **Analysis Date**: 2025-09-30
-**Base Path**: /Volumes/PRO-G40/Code/omnibase_core
+**Base Path**: External omnibase_core project - ${OMNIBASE_CORE}
 **Purpose**: Extract comprehensive naming patterns for Protocol, Node, and TypedDict classes
 
 ---
@@ -1160,6 +1160,6 @@ src/omnibase_core/types/typed_dict_trace_info_data.py
 ---
 
 **Report Generated**: 2025-09-30
-**Analysis Scope**: /Volumes/PRO-G40/Code/omnibase_core
+**Analysis Scope**: External omnibase_core project - ${OMNIBASE_CORE}
 **Files Analyzed**: 140+ (96 Protocols, 29 Node models, 15 TypedDicts)
 **Confidence Level**: High (100% adherence in analyzed samples)
