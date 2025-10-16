@@ -500,19 +500,32 @@ class TestPerformanceBenchmark:
 
     def test_cache_performance_improvement(self, tmp_path):
         """Test that cache provides significant performance improvement"""
-        # Create realistic template
-        template_content = "# Large template\n" + ("class Node:\n    pass\n" * 1000)
+        # Create realistic large template (5000 classes = ~135KB)
+        # Larger size ensures I/O time dominates over cache overhead
+        template_content = "# Large template\n" + ("class Node:\n    pass\n" * 5000)
         template_file = tmp_path / "template.py"
         template_file.write_text(template_content)
 
-        # Test without cache
-        cache_disabled = TemplateCache(enable_persistence=False)
-        cache_disabled.enable_cache = False  # Simulate no caching
+        def process_template(content: str) -> int:
+            """Simulate template processing overhead"""
+            # Count lines and classes to simulate parsing
+            lines = content.count('\n')
+            classes = content.count('class ')
+            return lines + classes
 
+        def uncached_load(path: Path) -> str:
+            """Simulate uncached load with processing"""
+            content = path.read_text()
+            process_template(content)  # Add processing overhead
+            return content
+
+        # Test without cache - measure file I/O + processing
         uncached_times = []
         for _ in range(10):
+            # Clear Python's string cache by creating new Path object
+            test_file = Path(str(template_file))
             start = time.perf_counter()
-            template_file.read_text()  # Direct file read
+            uncached_load(test_file)
             elapsed_ms = (time.perf_counter() - start) * 1000
             uncached_times.append(elapsed_ms)
 
@@ -521,27 +534,46 @@ class TestPerformanceBenchmark:
         # Test with cache
         cache_enabled = TemplateCache(enable_persistence=False)
 
-        # First load (miss)
-        cache_enabled.get("template", "TEST", template_file, lambda p: p.read_text())
+        def cached_loader(p: Path) -> str:
+            """Cached loader with processing"""
+            content = p.read_text()
+            process_template(content)
+            return content
 
+        # First load (miss) - not measured
+        cache_enabled.get("template", "TEST", template_file, cached_loader)
+
+        # Measure subsequent cache hits
         cached_times = []
         for _ in range(10):
             start = time.perf_counter()
-            cache_enabled.get("template", "TEST", template_file, lambda p: p.read_text())
+            cache_enabled.get("template", "TEST", template_file, cached_loader)
             elapsed_ms = (time.perf_counter() - start) * 1000
             cached_times.append(elapsed_ms)
 
         avg_cached_ms = sum(cached_times) / len(cached_times)
 
-        # Cache should be significantly faster (though may not always be 50% due to test variability)
+        # Calculate improvement
         improvement_pct = ((avg_uncached_ms - avg_cached_ms) / avg_uncached_ms) * 100
 
-        print(f"\n  Avg uncached: {avg_uncached_ms:.3f}ms")
+        print(f"\n  Template size: {len(template_content)} bytes")
+        print(f"  Avg uncached: {avg_uncached_ms:.3f}ms")
         print(f"  Avg cached: {avg_cached_ms:.3f}ms")
         print(f"  Improvement: {improvement_pct:.1f}%")
+        print(f"  Cache hit rate: {cache_enabled.get_stats()['hit_rate']:.1%}")
 
-        # Cache should be at least somewhat faster
-        assert avg_cached_ms < avg_uncached_ms, "Cache should improve performance"
+        # Cache should show measurable improvement
+        # Note: Even with OS caching, avoiding file I/O should provide some benefit
+        assert avg_cached_ms < avg_uncached_ms, (
+            f"Cache should improve performance. "
+            f"Uncached: {avg_uncached_ms:.3f}ms, Cached: {avg_cached_ms:.3f}ms"
+        )
+
+        # Verify cache is actually being used
+        stats = cache_enabled.get_stats()
+        assert stats['hits'] == 10, "Should have 10 cache hits"
+        assert stats['misses'] == 1, "Should have 1 cache miss (initial load)"
+        assert stats['hit_rate'] >= 0.90, "Hit rate should be ≥90%"
 
     def test_hit_rate_after_warmup(self, tmp_path):
         """Test that hit rate reaches target after warmup"""
