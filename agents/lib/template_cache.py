@@ -162,15 +162,20 @@ class TemplateCache:
 
                         # Update metrics in background (non-blocking)
                         if self.enable_persistence:
-                            asyncio.create_task(
-                                self._update_cache_metrics_async(
-                                    template_name=template_name,
-                                    template_type=template_type,
-                                    file_path=str(file_path),
-                                    cache_hit=True,
-                                    load_time_ms=cached_time_ms
+                            try:
+                                loop = asyncio.get_running_loop()
+                                asyncio.create_task(
+                                    self._update_cache_metrics_async(
+                                        template_name=template_name,
+                                        template_type=template_type,
+                                        file_path=str(file_path),
+                                        cache_hit=True,
+                                        load_time_ms=cached_time_ms
+                                    )
                                 )
-                            )
+                            except RuntimeError:
+                                # No event loop running - skip async metrics update
+                                pass
 
                         return cached.content, True
 
@@ -211,17 +216,22 @@ class TemplateCache:
 
                 # Update metrics in background (non-blocking)
                 if self.enable_persistence:
-                    asyncio.create_task(
-                        self._update_cache_metrics_async(
-                            template_name=template_name,
-                            template_type=template_type,
-                            file_path=str(file_path),
-                            cache_hit=False,
-                            load_time_ms=load_time_ms,
-                            file_hash=file_hash,
-                            size_bytes=cached.size_bytes
+                    try:
+                        loop = asyncio.get_running_loop()
+                        asyncio.create_task(
+                            self._update_cache_metrics_async(
+                                template_name=template_name,
+                                template_type=template_type,
+                                file_path=str(file_path),
+                                cache_hit=False,
+                                load_time_ms=load_time_ms,
+                                file_hash=file_hash,
+                                size_bytes=cached.size_bytes
+                            )
                         )
-                    )
+                    except RuntimeError:
+                        # No event loop running - skip async metrics update
+                        pass
 
                 return content, False
 

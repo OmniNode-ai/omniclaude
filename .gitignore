@@ -14,8 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-!agents/lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -133,7 +132,8 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.env.*
+.venv/
 env/
 venv/
 ENV/
@@ -196,8 +196,6 @@ PR_DESCRIPTION.md
 
 # Project-specific
 /backups
-/reports
-reports/
 *_report*.json
 *_analysis*.json
 *_errors*.txt
@@ -205,36 +203,22 @@ mypy_*.txt
 
 # OmniBase / ONEX .gitignore
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-env.bak/
-
 # VS Code
 .vscode/
 
 # MacOS
 .DS_Store
 
-# Env files
-.env
-.env.*
-
-# Misc
-*.log
-
 # Hook system logs (auto-generated, should not be committed)
 claude_hooks/logs/
-**/logs/*.json
-**/logs/*.log
+**/logs/
 
 # OmniBase/ONEX specific
 # (add any project-specific ignores here)
 
 # Docker runtime data directories
 data/
-logs/
+**/logs/
 generated/
 reports/
 secrets/

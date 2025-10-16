@@ -58,7 +58,7 @@ async def trained_learner(persistence):
 
     # Train model
     try:
-        metrics = await learner.train_model(min_samples=30)
+        metrics = await learner.train_model(min_samples=10)
         return learner
     except ValueError as e:
         pytest.skip(f"Insufficient training data: {e}")
@@ -247,7 +247,7 @@ class TestMixinLearner:
 
         # Train model
         learner1 = MixinLearner(persistence=persistence, auto_train=False)
-        await learner1.train_model(min_samples=30)
+        await learner1.train_model(min_samples=10)
 
         # Get prediction
         pred1 = learner1.predict_compatibility('MixinLogging', 'MixinMetrics', 'EFFECT')
@@ -374,7 +374,7 @@ class TestIntegration:
 
         # 2. Train model
         learner = MixinLearner(persistence=persistence, auto_train=False)
-        metrics = await learner.train_model(min_samples=30)
+        metrics = await learner.train_model(min_samples=10)
 
         assert metrics.accuracy >= 0.95, \
             f"Accuracy {metrics.accuracy:.2%} below target"
@@ -415,7 +415,7 @@ class TestIntegration:
         await _ensure_training_data(persistence)
 
         # Train initial model
-        metrics1 = await learner.train_model(min_samples=30)
+        metrics1 = await learner.train_model(min_samples=10)
         initial_samples = metrics1.training_samples
 
         # Add new feedback
