@@ -19,12 +19,17 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-# Add agents directory to path
-AGENTS_PATH = Path.home() / "Code" / "omniclaude" / "agents" / "parallel_execution"
-if not AGENTS_PATH.exists():
-    AGENTS_PATH = Path("/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution")
+# Add agents directory to path (use environment variable or relative path)
+AGENTS_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
+if AGENTS_PATH:
+    AGENTS_PATH = Path(AGENTS_PATH)
+else:
+    # Try relative to current file location
+    current_dir = Path(__file__).resolve().parent.parent.parent
+    AGENTS_PATH = current_dir / "agents" / "parallel_execution"
 
-sys.path.insert(0, str(AGENTS_PATH))
+if AGENTS_PATH.exists():
+    sys.path.insert(0, str(AGENTS_PATH))
 
 try:
     from context_manager import ContextManager

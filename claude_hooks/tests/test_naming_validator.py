@@ -346,24 +346,24 @@ class TestOmninodeRepoDetection:
     """Test auto-detection for all actual Omninode repos."""
 
     def test_all_actual_repos_detection(self):
-        """Verify auto-detection for all actual repos in /Code/."""
+        """Verify auto-detection for all actual repos."""
         # Include repos (should enforce Omninode conventions)
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omniagent/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omniagent-main/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omnibase_core/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omnibase_infra/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omnibase_spi/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omnimcp/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omnimemory/test.py") == True
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omniplan/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omniagent/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omniagent-main/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omnibase_core/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omnibase_infra/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omnibase_spi/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omnimcp/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omnimemory/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omniplan/test.py") == True
 
         # Exclude repos (should use PEP 8)
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/omninode_bridge/test.py") == False
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/Archon/test.py") == False
+        assert NamingValidator.is_omninode_repo("/workspace/omninode_bridge/test.py") == False
+        assert NamingValidator.is_omninode_repo("/workspace/Archon/test.py") == False
 
         # Additional edge cases
         assert NamingValidator.is_omninode_repo("/some/other/repo/test.py") == False
-        assert NamingValidator.is_omninode_repo("/Volumes/PRO-G40/Code/random_project/test.py") == False
+        assert NamingValidator.is_omninode_repo("/workspace/random_project/test.py") == False
 
     def test_omninode_conventions_applied_correctly(self):
         """Verify Omninode repos get Omninode-specific validation."""
@@ -376,7 +376,7 @@ from pydantic import BaseModel
 class User(BaseModel):  # Should be ModelUser
     name: str
 """
-        omninode_path = "/Volumes/PRO-G40/Code/omnibase_core/models/user.py"
+        omninode_path = "/workspace/omnibase_core/models/user.py"
         violations = validator.validate_content(code, omninode_path)
 
         # Should detect violation for missing Model prefix
@@ -394,7 +394,7 @@ from pydantic import BaseModel
 class User(BaseModel):  # Should be allowed (standard PEP 8)
     name: str
 """
-        archon_path = "/Volumes/PRO-G40/Code/Archon/src/models/user.py"
+        archon_path = "/workspace/Archon/src/models/user.py"
         violations = validator.validate_content(code, archon_path)
 
         # Should NOT detect Model prefix violation in Archon
