@@ -1506,3 +1506,33 @@ classification:
   trust_score: {int(analysis_result.confidence_score * 100)}
 # === /OmniNode:Tool_Metadata ===
 '''
+
+    async def cleanup_async(self, timeout: float = 5.0):
+        """
+        Cleanup template cache background tasks.
+
+        Args:
+            timeout: Maximum time to wait for tasks to complete (seconds)
+        """
+        if self.enable_cache and self.template_cache:
+            await self.template_cache.cleanup_async(timeout)
+            self.logger.debug("Template cache cleanup complete")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup cache."""
+        await self.cleanup_async()
+        return False
+
+    def __del__(self):
+        """Destructor - warn if cache has pending tasks."""
+        if self.enable_cache and self.template_cache and hasattr(self.template_cache, '_background_tasks'):
+            if self.template_cache._background_tasks:
+                self.logger.warning(
+                    f"OmniNodeTemplateEngine destroyed with template cache having "
+                    f"{len(self.template_cache._background_tasks)} pending tasks. "
+                    f"Use async context manager or cleanup_async() to avoid this."
+                )

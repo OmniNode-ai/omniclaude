@@ -608,5 +608,22 @@ def tmp_path(tmp_path_factory):
     return tmp_path_factory.mktemp("template_cache_test")
 
 
+@pytest.fixture
+async def async_cleanup():
+    """Cleanup fixture for async background tasks"""
+    caches = []
+
+    def register_cache(cache):
+        """Register a cache for cleanup"""
+        caches.append(cache)
+        return cache
+
+    yield register_cache
+
+    # Cleanup all registered caches
+    for cache in caches:
+        await cache.cleanup_async(timeout=2.0)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
