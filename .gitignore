@@ -16,6 +16,7 @@ eggs/
 .eggs/
 lib/
 !agents/lib/
+!agents/lib/**
 lib64/
 parts/
 sdist/
@@ -218,7 +219,6 @@ claude_hooks/logs/
 
 # Docker runtime data directories
 data/
-**/logs/
 generated/
 reports/
 secrets/

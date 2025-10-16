@@ -394,7 +394,7 @@ Comprehensive test suite with 40+ tests covering:
 
 ```bash
 # Run full test suite
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python3 -m pytest lib/test_pattern_id_system.py -v
 
 # Run specific test class

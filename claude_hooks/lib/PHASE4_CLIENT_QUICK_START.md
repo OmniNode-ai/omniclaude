@@ -1,6 +1,6 @@
 # Phase 4 API Client - Quick Start Guide
 
-**File**: `/Users/jonah/.claude/hooks/lib/phase4_api_client.py`
+**File**: `${HOME}/.claude/hooks/lib/phase4_api_client.py`
 
 ## 🚀 Quick Start (30 seconds)
 
@@ -148,7 +148,7 @@ async with Phase4APIClient() as client:
 
 ## 📚 Full Documentation
 
-See `/Users/jonah/.claude/hooks/lib/PHASE4_API_CLIENT_DELIVERY.md` for:
+See `${HOME}/.claude/hooks/lib/PHASE4_API_CLIENT_DELIVERY.md` for:
 - Complete endpoint reference
 - Detailed retry logic explanation
 - Integration examples

@@ -22,7 +22,7 @@ await tracker.track_pattern_creation(
 ## 📦 File Locations
 
 ```
-/Users/jonah/.claude/hooks/lib/
+${HOME}/.claude/hooks/lib/
 ├── resilience.py                    # Core resilience layer (33KB)
 ├── pattern_tracker.py               # Pattern tracking integration (19KB)
 ├── test_resilience.py               # Test suite (18KB, 21 tests)
@@ -133,7 +133,7 @@ await tracker.track_pattern_merge(source_ids, merged_code, context)
 
 ```bash
 # Run all tests (21 tests, ~0.4s)
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python -m pytest lib/test_resilience.py -v
 
 # Expected: 21 passed in 0.40s ✅

@@ -137,10 +137,10 @@ CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
 ```
 
 ### Key Configuration Files
-- **Main Config**: `/Users/jonah/.claude/hooks/config.yaml`
-- **Resilience Config**: `/Users/jonah/.claude/hooks/resilience.yaml`
-- **Pattern Tracker**: `/Users/jonah/.claude/hooks/pattern_tracker.py`
-- **Sync Version**: `/Users/jonah/.claude/hooks/lib/pattern_tracker_sync.py`
+- **Main Config**: `${HOME}/.claude/hooks/config.yaml`
+- **Resilience Config**: `${HOME}/.claude/hooks/resilience.yaml`
+- **Pattern Tracker**: `${HOME}/.claude/hooks/pattern_tracker.py`
+- **Sync Version**: `${HOME}/.claude/hooks/lib/pattern_tracker_sync.py`
 
 ### Configuration Template
 ```yaml

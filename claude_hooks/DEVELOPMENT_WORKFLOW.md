@@ -62,7 +62,7 @@ Output:
 ╚══════════════════════════════════════════════════════════════╝
 
 Source: ${ARCHON_ROOT}/claude-hooks-backup
-Target: /Users/jonah/.claude/hooks
+Target: ${HOME}/.claude/hooks
 
 Files to sync:
 ----------------------------------------
