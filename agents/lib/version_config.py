@@ -123,18 +123,27 @@ class VersionConfig:
         
         # Database configuration
         self.postgres_host = os.getenv("POSTGRES_HOST", self.postgres_host)
-        self.postgres_port = int(os.getenv("POSTGRES_PORT", str(self.postgres_port)))
+        try:
+            self.postgres_port = int(os.getenv("POSTGRES_PORT", str(self.postgres_port)))
+        except ValueError as e:
+            raise ValueError(f"Invalid POSTGRES_PORT value. Must be a valid integer: {e}")
         self.postgres_db = os.getenv("POSTGRES_DB", self.postgres_db)
         self.postgres_user = os.getenv("POSTGRES_USER", self.postgres_user)
         self.postgres_password = os.getenv("POSTGRES_PASSWORD", self.postgres_password)
-        
+
         # ONEX MCP Service configuration
         self.onex_mcp_host = os.getenv("ONEX_MCP_HOST", self.onex_mcp_host)
-        self.onex_mcp_port = int(os.getenv("ONEX_MCP_PORT", str(self.onex_mcp_port)))
-        
+        try:
+            self.onex_mcp_port = int(os.getenv("ONEX_MCP_PORT", str(self.onex_mcp_port)))
+        except ValueError as e:
+            raise ValueError(f"Invalid ONEX_MCP_PORT value. Must be a valid integer: {e}")
+
         # Redis configuration
         self.redis_host = os.getenv("REDIS_HOST", self.redis_host)
-        self.redis_port = int(os.getenv("REDIS_PORT", str(self.redis_port)))
+        try:
+            self.redis_port = int(os.getenv("REDIS_PORT", str(self.redis_port)))
+        except ValueError as e:
+            raise ValueError(f"Invalid REDIS_PORT value. Must be a valid integer: {e}")
         
         # Kafka configuration
         self.kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", self.kafka_bootstrap_servers)

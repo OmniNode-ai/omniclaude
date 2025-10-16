@@ -1297,14 +1297,23 @@ tags:
         deps = []
         for system in analysis_result.external_systems[:3]:
             system_lower = system.lower().replace(" ", "_")
-            # Use configuration for database connections
+
+            # Proper URL scheme mapping with database name and config-based endpoints
             if "postgres" in system.lower() or "database" in system.lower():
-                target = f"{system_lower}://{self.config.postgres_host}:{self.config.postgres_port}"
+                # Include database name in PostgreSQL URL
+                target = f"postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"
             elif "redis" in system.lower() or "cache" in system.lower():
-                target = f"{system_lower}://{self.config.redis_host}:{self.config.redis_port}"
+                target = f"redis://{self.config.redis_host}:{self.config.redis_port}"
+            elif "kafka" in system.lower():
+                # Handle kafka_bootstrap_servers that may already include scheme
+                kafka_servers = self.config.kafka_bootstrap_servers
+                if kafka_servers.startswith("kafka://"):
+                    target = kafka_servers
+                else:
+                    target = f"kafka://{kafka_servers}"
             else:
-                target = f"{system_lower}://localhost:8080"  # Default fallback
-            
+                target = "http://localhost:8080"  # Default fallback
+
             deps.append(f'''  - name: "{system_lower}"
     type: "external_service"
     target: "{target}"
@@ -1331,11 +1340,17 @@ tags:
         endpoints = []
         for system in analysis_result.external_systems[:3]:
             if "postgres" in system.lower() or "database" in system.lower():
-                endpoints.append(f'    - "postgresql://{self.config.postgres_host}:{self.config.postgres_port}"')
+                # Include database name in PostgreSQL URL
+                endpoints.append(f'    - "postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"')
             elif "redis" in system.lower() or "cache" in system.lower():
                 endpoints.append(f'    - "redis://{self.config.redis_host}:{self.config.redis_port}"')
             elif "kafka" in system.lower():
-                endpoints.append(f'    - "kafka://{self.config.kafka_bootstrap_servers}"')
+                # Handle kafka_bootstrap_servers that may already include scheme
+                kafka_servers = self.config.kafka_bootstrap_servers
+                if kafka_servers.startswith("kafka://"):
+                    endpoints.append(f'    - "{kafka_servers}"')
+                else:
+                    endpoints.append(f'    - "kafka://{kafka_servers}"')
 
         return "\n".join(endpoints) if endpoints else "    []"
 

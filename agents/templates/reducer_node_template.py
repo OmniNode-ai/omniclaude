@@ -94,10 +94,10 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for reduction"""
         if not input_data.operation_type:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict()}
+                details={"input_data": input_data.model_dump()}
             )
         
         # Add reduction-specific validation
@@ -152,19 +152,19 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
 # Main execution
 if __name__ == "__main__":
     # Example usage
-    config = Model{MICROSERVICE_NAME_PASCAL}Config()
-    service = {MICROSERVICE_NAME_PASCAL}ReducerService(config)
-    
+    container = ModelONEXContainer()
+    node = Node{MICROSERVICE_NAME_PASCAL}Reducer(container)
+
     # Example input
     input_data = Model{MICROSERVICE_NAME_PASCAL}Input(
         operation_type="aggregate",
         parameters={"data": [1, 2, 3, 4, 5]},
         metadata={"reduction_type": "sum"}
     )
-    
-    # Run the service
+
+    # Run the node
     async def main():
-        result = await service.execute_reduce(input_data)
+        result = await node.process(input_data)
         print(f"Reduction result: {result}")
-    
+
     asyncio.run(main())

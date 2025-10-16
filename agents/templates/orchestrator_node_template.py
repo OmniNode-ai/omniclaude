@@ -62,7 +62,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
             Model{MICROSERVICE_NAME_PASCAL}Output: Result of the orchestration
             
         Raises:
-            OnexError: If orchestration fails
+            ModelOnexError: If orchestration fails
         """
         try:
             self.logger.info(f"Executing {MICROSERVICE_NAME} orchestration operation: {input_data.operation_type}")
@@ -94,10 +94,10 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for orchestration"""
         if not input_data.operation_type:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict()}
+                details={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else vars(input_data)}
             )
         
         # Add orchestration-specific validation
@@ -153,19 +153,19 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
 # Main execution
 if __name__ == "__main__":
     # Example usage
-    config = Model{MICROSERVICE_NAME_PASCAL}Config()
-    service = {MICROSERVICE_NAME_PASCAL}OrchestratorService(config)
-    
+    container = ModelONEXContainer()
+    node = Node{MICROSERVICE_NAME_PASCAL}Orchestrator(container)
+
     # Example input
     input_data = Model{MICROSERVICE_NAME_PASCAL}Input(
         operation_type="coordinate",
         parameters={"workflow": "example_workflow"},
         metadata={"orchestration_type": "sequential"}
     )
-    
-    # Run the service
+
+    # Run the node
     async def main():
-        result = await service.execute_orchestrate(input_data)
+        result = await node.process(input_data)
         print(f"Orchestration result: {result}")
-    
+
     asyncio.run(main())
