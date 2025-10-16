@@ -21,11 +21,13 @@ class ObservabilityReporter:
     def __init__(self, connection_string: Optional[str] = None):
         """Initialize reporter with database connection."""
         if connection_string is None:
+            # Note: Set password via environment variable
+            password = os.getenv("POSTGRES_PASSWORD", "YOUR_PASSWORD")  # Replace YOUR_PASSWORD
             connection_string = (
-                "host=localhost port=5436 "
-                "dbname=omninode_bridge "
-                "user=postgres "
-                "password=omninode-bridge-postgres-dev-2024"
+                f"host=localhost port=5436 "
+                f"dbname=omninode_bridge "
+                f"user=postgres "
+                f"password={password}"
             )
         self.conn = psycopg2.connect(connection_string)
 

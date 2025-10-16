@@ -143,7 +143,8 @@ ORDER BY detection_count DESC;
 ### Apply Migration
 
 ```bash
-export PGPASSWORD="omninode-bridge-postgres-dev-2024"
+# Note: Set PGPASSWORD environment variable before running
+export PGPASSWORD="${PGPASSWORD}"
 psql -h localhost -p 5436 -U postgres -d omninode_bridge \
   -f migrations/004_add_hook_intelligence_indexes.sql
 
@@ -171,7 +172,7 @@ psql -h localhost -p 5436 -U postgres -d omninode_bridge \
 ### Rollback Migration
 
 ```bash
-export PGPASSWORD="omninode-bridge-postgres-dev-2024"
+export PGPASSWORD="${PGPASSWORD}"
 psql -h localhost -p 5436 -U postgres -d omninode_bridge \
   -f migrations/004_rollback_hook_intelligence.sql
 ```

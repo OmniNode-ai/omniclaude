@@ -230,7 +230,7 @@ export PGHOST=localhost
 export PGPORT=5436
 export PGDATABASE=omninode_bridge
 export PGUSER=postgres
-export PGPASSWORD=omninode-bridge-postgres-dev-2024
+export PGPASSWORD="${PGPASSWORD}"  # Set your database password
 
 # Archon MCP URLs
 export ARCHON_MCP_URL=http://localhost:8051

@@ -36,7 +36,7 @@ class DatabaseConfig:
     port: int = 5436
     database: str = "omninode_bridge"
     user: str = "postgres"
-    password: str = "omninode-bridge-postgres-dev-2024"
+    password: str = ""  # Set via environment variable
 
     # Pool configuration
     min_size: int = 5
@@ -54,7 +54,7 @@ class DatabaseConfig:
             port=int(os.getenv("DB_PORT", "5436")),
             database=os.getenv("DB_NAME", "omninode_bridge"),
             user=os.getenv("DB_USER", "postgres"),
-            password=os.getenv("DB_PASSWORD", "omninode-bridge-postgres-dev-2024"),
+            password=os.getenv("DB_PASSWORD", ""),  # Must be set via environment
         )
 
     def get_dsn(self) -> str:

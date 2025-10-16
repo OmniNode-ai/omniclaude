@@ -19,12 +19,14 @@ from typing import Dict, List, Any, Optional
 
 
 # Database connection
+# Note: Set PGPASSWORD environment variable before running
+import os
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,
     "database": "omninode_bridge",
     "user": "postgres",
-    "password": "omninode-bridge-postgres-dev-2024"
+    "password": os.getenv("PGPASSWORD", "YOUR_PASSWORD")  # Set via environment
 }
 
 # Performance thresholds

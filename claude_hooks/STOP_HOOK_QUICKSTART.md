@@ -26,7 +26,8 @@ echo '{"session_id": "test-123", "completion_status": "complete", "tools_execute
 tail -20 logs/stop.log
 
 # Verify database entry
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge \
+# Note: Set PGPASSWORD environment variable before running
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT metadata->>'session_id' as session, payload->>'total_tools' as tools, payload->>'completion_status' as status FROM hook_events WHERE source = 'Stop' ORDER BY created_at DESC LIMIT 1;"
 ```
 

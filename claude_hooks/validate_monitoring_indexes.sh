@@ -6,11 +6,12 @@
 set -e
 
 # Database configuration
+# Note: Set DB_PASSWORD environment variable for database access
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-export PGPASSWORD="${DB_PASSWORD:-omninode-bridge-postgres-dev-2024}"
+export PGPASSWORD="${DB_PASSWORD}"
 
 # Colors for output
 RED='\033[0;31m'

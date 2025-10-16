@@ -53,12 +53,13 @@ psql -h localhost -p 5436 -U postgres -d omninode_bridge
 import asyncpg
 
 async def apply_migration():
+    import os
     conn = await asyncpg.connect(
         host='localhost',
         port=5436,
         database='omninode_bridge',
         user='postgres',
-        password='omninode-bridge-postgres-dev-2024'
+        password=os.getenv('DB_PASSWORD', 'your-password-here')  # Set via environment
     )
 
     # Read migration file

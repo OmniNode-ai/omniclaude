@@ -41,15 +41,44 @@ OmniClaude provides tools and configurations to extend Claude Code capabilities 
 
 Edit `claude-providers.json` to customize provider settings, add new providers, or adjust model mappings.
 
+### Environment Variables
+
+Before using the provider toggle script, you must set the required API keys as environment variables:
+
+```bash
+# Option 1: Copy and edit the example file (recommended)
+cp .env.example .env
+# Edit .env with your actual API keys, then:
+source .env
+
+# Option 2: Add to your shell profile
+# Add to your ~/.bashrc, ~/.zshrc, or ~/.profile
+export GEMINI_API_KEY="your_gemini_api_key_here"
+export ZAI_API_KEY="your_zai_api_key_here"
+```
+
+**Security Note**: Never commit API keys directly to the repository. Always use environment variables or secure credential management systems.
+
+**Important**: See [SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md) for:
+- How to obtain API keys from provider dashboards
+- Step-by-step key rotation procedures
+- Testing and troubleshooting guides
+- Security best practices
+
 ## Repository Structure
 
 ```
 omniclaude/
-├── README.md                    # This file
-├── toggle-claude-provider.sh    # Main provider toggle script
-├── claude-providers.json        # Provider configuration file
-├── ClaudeToggle.md             # Planning and documentation
-└── docs/                       # Additional documentation (planned)
+├── README.md                         # This file
+├── SECURITY_KEY_ROTATION.md          # API key security guide
+├── .env.example                      # Environment template
+├── toggle-claude-provider.sh         # Main provider toggle script
+├── claude-providers.json             # Provider configuration file
+├── ClaudeToggle.md                  # Planning and documentation
+├── agents/                           # Agent framework
+│   └── parallel_execution/           # Parallel execution agents
+│       └── .env.example              # Agent-specific env template
+└── docs/                            # Additional documentation (planned)
 ```
 
 ## Supported Providers

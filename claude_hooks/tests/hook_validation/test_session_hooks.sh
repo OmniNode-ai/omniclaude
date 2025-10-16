@@ -19,11 +19,12 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Database connection
+# Note: Set PGPASSWORD environment variable before running
 DB_HOST="localhost"
 DB_PORT="5436"
 DB_NAME="omninode_bridge"
 DB_USER="postgres"
-DB_PASS="omninode-bridge-postgres-dev-2024"
+DB_PASS="${PGPASSWORD}"
 
 # Test counters
 TESTS_RUN=0

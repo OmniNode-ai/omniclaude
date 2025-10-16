@@ -49,7 +49,7 @@ class DatabaseConfig(BaseModel):
     port: int = 5436
     database: str = "omninode_bridge"
     user: str = "postgres"
-    password: str = "omninode-bridge-postgres-dev-2024"
+    password: str = ""  # Set via environment variable
 
     # Connection pool settings
     pool_min_size: int = 5
@@ -86,7 +86,7 @@ class DatabaseConfig(BaseModel):
             port=int(os.getenv("POSTGRES_PORT", "5436")),
             database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
             user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"),
+            password=os.getenv("POSTGRES_PASSWORD", ""),  # Must be set via environment
             pool_min_size=int(os.getenv("POSTGRES_POOL_MIN_SIZE", "5")),
             pool_max_size=int(os.getenv("POSTGRES_POOL_MAX_SIZE", "20")),
             pool_exhaustion_threshold=float(os.getenv("POSTGRES_POOL_EXHAUSTION_THRESHOLD", "80.0")),

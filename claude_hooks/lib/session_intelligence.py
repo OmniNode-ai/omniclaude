@@ -259,12 +259,16 @@ def query_session_statistics() -> Dict[str, Any]:
         }
 
     try:
+        # Note: Set DB_PASSWORD environment variable for database access
+        import os
+        db_password = os.getenv("DB_PASSWORD", "")
+
         # Connect to database
         connection_string = (
             "host=localhost port=5436 "
             "dbname=omninode_bridge "
             "user=postgres "
-            "password=omninode-bridge-postgres-dev-2024"
+            f"password={db_password}"
         )
         conn = psycopg2.connect(connection_string)
 

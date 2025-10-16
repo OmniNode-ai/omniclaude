@@ -5,7 +5,8 @@
 set -e
 
 # Database connection settings
-export PGPASSWORD="omninode-bridge-postgres-dev-2024"
+# Note: Set PGPASSWORD environment variable before running
+export PGPASSWORD="${PGPASSWORD}"
 PGHOST="localhost"
 PGPORT="5436"
 PGUSER="postgres"

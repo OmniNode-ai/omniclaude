@@ -68,10 +68,10 @@
 ### 1. `${PROJECT_ROOT}/agents/parallel_execution/.env`
 ```bash
 # Gemini API Key for Quorum Validation
-GEMINI_API_KEY=***GEMINI_KEY_REMOVED***
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Z.ai API Key for GLM Models
-ZAI_API_KEY=***ZAI_KEY_REMOVED***
+ZAI_API_KEY=your_zai_api_key_here
 ```
 
 ### 2. `quorum_minimal.py`

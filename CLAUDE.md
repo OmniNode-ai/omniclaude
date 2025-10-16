@@ -36,6 +36,30 @@ OmniClaude is a toolkit for enhancing Claude Code capabilities with multi-provid
 ./toggle-claude-provider.sh status    # Check current state
 ```
 
+### Environment Setup
+
+Before using provider commands, set up environment variables:
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit with your API keys
+nano .env
+
+# Load environment variables
+source .env
+
+# Verify setup
+echo $GEMINI_API_KEY
+echo $ZAI_API_KEY
+```
+
+See [SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md) for:
+- Obtaining API keys from provider dashboards
+- Security best practices and key rotation
+- Testing and troubleshooting
+
 ## Architecture
 
 ### Core Components
@@ -102,6 +126,8 @@ The system modifies `~/.claude/settings.json` to:
 
 - `toggle-claude-provider.sh` - Main provider management script
 - `claude-providers.json` - Provider configuration file
+- `SECURITY_KEY_ROTATION.md` - API key security and rotation guide
+- `.env.example` - Environment variable template
 - `ClaudeToggle.md` - Planning and architecture documentation
 - `README.md` - Project overview and usage instructions
 
@@ -207,7 +233,17 @@ python -m agents.lib.enhanced_router  # Test routing system (if implemented)
 - Requires `jq` for JSON manipulation in provider toggle
 - Modifies `~/.claude/settings.json` (creates backups)
 - Requires Claude Code restart after provider changes
-- API keys are embedded in configuration (use environment variables for production)
+- **API keys must be set via environment variables** (see `.env.example`)
+- Never commit `.env` files with actual API keys to version control
 - Supports concurrent request optimization across providers
 - Agent framework requires ONEX compliance for all implementations
 - Quality gates provide automated validation with <200ms execution target
+
+## Security
+
+**Important**: This repository uses environment variables for API key management:
+
+1. **Never commit API keys** to version control
+2. **Use `.env.example`** as a template for your local `.env` file
+3. **Rotate keys regularly** (every 30-90 days recommended)
+4. **See [SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md)** for complete security procedures

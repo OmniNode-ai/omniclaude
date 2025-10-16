@@ -27,7 +27,7 @@
       "name": "Z.ai GLM Models",
       "description": "Z.ai GLM models with high concurrency limits",
       "base_url": "https://api.z.ai/api/anthropic",
-      "api_key": "***ZAI_KEY_REMOVED***",
+      "api_key": "${ZAI_API_KEY}",
       "models": {
         "haiku": "glm-4.5-air",
         "sonnet": "glm-4.5",
@@ -96,7 +96,7 @@
       "name": "Google Gemini Pro",
       "description": "Google's Gemini Pro models via Anthropic-compatible API",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
-      "api_key": "***GEMINI_KEY_REMOVED***",
+      "api_key": "${GEMINI_API_KEY}",
       "models": {
         "haiku": "gemini-1.5-flash",
         "sonnet": "gemini-1.5-pro",
@@ -118,7 +118,7 @@
       "name": "Google Gemini Flash",
       "description": "Google's Gemini Flash models optimized for speed",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
-      "api_key": "***GEMINI_KEY_REMOVED***",
+      "api_key": "${GEMINI_API_KEY}",
       "models": {
         "haiku": "gemini-1.5-flash",
         "sonnet": "gemini-1.5-flash",
@@ -140,7 +140,7 @@
       "name": "Google Gemini 2.5 Flash",
       "description": "Google's latest Gemini 2.5 Flash models with enhanced capabilities",
       "base_url": "https://generativelanguage.googleapis.com/v1beta/anthropic",
-      "api_key": "***GEMINI_KEY_REMOVED***",
+      "api_key": "${GEMINI_API_KEY}",
       "models": {
         "haiku": "gemini-2.5-flash",
         "sonnet": "gemini-2.5-flash",

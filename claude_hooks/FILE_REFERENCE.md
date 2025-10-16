@@ -68,7 +68,8 @@ python3 test_hook_integration.py
 ### View Metrics in Database
 ```bash
 # Recent PostToolUse events
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c \
+# Note: Set PGPASSWORD environment variable before running
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c \
 "SELECT 
   metadata->>'success_classification' as success,
   (metadata->'quality_metrics'->>'quality_score')::float as quality,
@@ -111,7 +112,7 @@ metrics = collect_post_tool_metrics(tool_info)
 - **Host**: `localhost`
 - **Port**: `5436`
 - **User**: `postgres`
-- **Password**: `omninode-bridge-postgres-dev-2024`
+- **Password**: Set via `PGPASSWORD` environment variable
 
 ## Performance Metrics
 

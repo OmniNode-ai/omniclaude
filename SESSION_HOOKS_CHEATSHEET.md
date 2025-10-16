@@ -33,7 +33,8 @@ tail -50 ~/.claude/hooks/hook-session-start.log
 
 ```bash
 # Connect to database
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge
+# Note: Set PGPASSWORD environment variable before running
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge
 
 # View recent sessions
 SELECT source, resource_id, created_at FROM hook_events WHERE source IN ('SessionStart', 'SessionEnd') ORDER BY created_at DESC LIMIT 10;
@@ -130,12 +131,12 @@ chmod +x ~/.claude/hooks/session-end.sh
 
 ### Test Database Connection
 ```bash
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1;"
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1;"
 ```
 
 ### Check Table Schema
 ```bash
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "\d hook_events"
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "\d hook_events"
 ```
 
 ### Performance Check
@@ -145,7 +146,7 @@ time git rev-parse --abbrev-ref HEAD
 time git status --porcelain
 
 # Database performance
-time PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT COUNT(*) FROM hook_events;"
+time PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT COUNT(*) FROM hook_events;"
 ```
 
 ### View Hook Processes
@@ -232,7 +233,7 @@ Both run asynchronously (non-blocking).
 
 ```bash
 # View recent hook events
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge << 'EOF'
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge << 'EOF'
 SELECT
   source,
   COUNT(*) as count,
@@ -248,7 +249,7 @@ grep -i error ~/.claude/hooks/hook-session-start.log | tail -10
 grep -i error ~/.claude/hooks/hook-enhanced.log | tail -10
 
 # View latest session
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM hook_events WHERE source = 'SessionEnd' ORDER BY created_at DESC LIMIT 1;"
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM hook_events WHERE source = 'SessionEnd' ORDER BY created_at DESC LIMIT 1;"
 ```
 
 ## References

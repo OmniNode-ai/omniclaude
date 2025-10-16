@@ -102,8 +102,10 @@ log ""
 log_info "Pre-flight checks..."
 
 # Check database connectivity
-if ! PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1" > /dev/null 2>&1; then
+# Note: Set PGPASSWORD environment variable before running
+if ! PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1" > /dev/null 2>&1; then
     log_error "Database not available! Tests require database connection."
+    log_error "Ensure PGPASSWORD environment variable is set."
     exit 1
 fi
 log_success "Database connectivity OK"

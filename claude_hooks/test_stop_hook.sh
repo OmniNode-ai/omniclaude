@@ -74,7 +74,8 @@ echo "Database Verification"
 echo "======================================"
 echo ""
 
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "
+# Note: Set PGPASSWORD environment variable before running
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "
 SELECT
     metadata->>'session_id' as session,
     payload->>'completion_status' as status,

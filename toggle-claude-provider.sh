@@ -8,7 +8,7 @@ set -e
 
 SETTINGS_FILE="$HOME/.claude/settings.json"
 BACKUP_FILE="$HOME/.claude/settings.json.backup"
-ZAI_API_KEY="***ZAI_KEY_REMOVED***"
+ZAI_API_KEY="${ZAI_API_KEY}"
 ZAI_BASE_URL="https://api.z.ai/api/anthropic"
 
 # Colors for output
@@ -227,7 +227,7 @@ switch_to_gemini_pro() {
     # Use jq to modify the JSON with proper model mapping
     local temp_file=$(mktemp)
     jq --arg base_url "https://generativelanguage.googleapis.com/v1beta/anthropic" \
-       --arg api_key "***GEMINI_KEY_REMOVED***" \
+       --arg api_key "${GEMINI_API_KEY}" \
        '.env.ANTHROPIC_BASE_URL = $base_url |
         .env.ANTHROPIC_AUTH_TOKEN = $api_key |
         .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "gemini-1.5-flash" |
@@ -257,7 +257,7 @@ switch_to_gemini_flash() {
     # Use jq to modify the JSON with proper model mapping
     local temp_file=$(mktemp)
     jq --arg base_url "https://generativelanguage.googleapis.com/v1beta/anthropic" \
-       --arg api_key "***GEMINI_KEY_REMOVED***" \
+       --arg api_key "${GEMINI_API_KEY}" \
        '.env.ANTHROPIC_BASE_URL = $base_url |
         .env.ANTHROPIC_AUTH_TOKEN = $api_key |
         .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "gemini-1.5-flash" |
@@ -287,7 +287,7 @@ switch_to_gemini_2_5_flash() {
     # Use jq to modify the JSON with proper model mapping
     local temp_file=$(mktemp)
     jq --arg base_url "https://generativelanguage.googleapis.com/v1beta/anthropic" \
-       --arg api_key "***GEMINI_KEY_REMOVED***" \
+       --arg api_key "${GEMINI_API_KEY}" \
        '.env.ANTHROPIC_BASE_URL = $base_url |
         .env.ANTHROPIC_AUTH_TOKEN = $api_key |
         .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "gemini-2.5-flash" |

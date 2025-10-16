@@ -45,9 +45,10 @@ except ImportError:
 
 
 # Test configuration
+# Note: Set TEST_PG_DSN environment variable with database password
 TEST_DSN = os.getenv(
     "TEST_PG_DSN",
-    "postgresql://postgres:omninode-bridge-postgres-dev-2024@localhost:5436/omninode_bridge"
+    "postgresql://postgres:YOUR_PASSWORD@localhost:5436/omninode_bridge"  # Replace YOUR_PASSWORD
 )
 
 # Performance target (ms)

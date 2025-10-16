@@ -256,7 +256,7 @@ Host: localhost
 Port: 5436
 Database: omninode_bridge
 User: postgres
-Password: omninode-bridge-postgres-dev-2024
+Password: Set via PGPASSWORD environment variable
 ```
 
 ### Python Dependencies
@@ -324,7 +324,7 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_PASSWORD: omninode-bridge-postgres-dev-2024
+          POSTGRES_PASSWORD: ${PGPASSWORD}  # Set in GitHub Secrets
         ports:
           - 5436:5432
 
@@ -363,7 +363,7 @@ If you see database connection errors:
 
 ```bash
 # Check if PostgreSQL is running
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
+PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
 
 # If not running, start it:
 # (command depends on your PostgreSQL setup)

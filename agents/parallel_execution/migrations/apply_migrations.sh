@@ -13,11 +13,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Database configuration
+# Note: Set DB_PASSWORD environment variable for database access
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-omninode-bridge-postgres-dev-2024}"
+DB_PASSWORD="${DB_PASSWORD}"
 
 # Migration directory
 MIGRATIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
