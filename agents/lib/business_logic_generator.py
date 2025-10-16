@@ -751,7 +751,12 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         return method
 
     def _detect_pattern_type(self, capability_name: str, capability_type: str) -> Optional[str]:
-        """Detect if capability follows a known pattern (CRUD, etc.)"""
+        """
+        Detect if capability follows a known pattern (CRUD, etc.)
+
+        Phase 7: Enhanced with feedback learning integration.
+        Pattern detection results can be recorded for continuous improvement.
+        """
 
         name_lower = capability_name.lower()
         type_lower = capability_type.lower()
@@ -775,6 +780,39 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             return "VALIDATION"
 
         return None
+
+    def record_pattern_detection(
+        self,
+        session_id: str,
+        capability_name: str,
+        detected_pattern: str,
+        confidence: float,
+        actual_pattern: Optional[str] = None,
+        feedback_type: str = "automated"
+    ) -> None:
+        """
+        Record pattern detection for feedback learning.
+
+        This method allows recording pattern matches for later analysis
+        and continuous improvement of pattern matching precision.
+
+        Args:
+            session_id: Generation session ID
+            capability_name: Name of capability being analyzed
+            detected_pattern: Pattern that was detected
+            confidence: Confidence score of detection
+            actual_pattern: Actual pattern (if known, for validation)
+            feedback_type: Type of feedback (automated, manual, validation)
+
+        Note: This is a placeholder for Phase 7 feedback integration.
+        Implementation requires PatternFeedbackCollector integration.
+        """
+        # TODO: Integrate with PatternFeedbackCollector
+        # For now, just log the detection
+        self.logger.debug(
+            f"Pattern detection: {capability_name} -> {detected_pattern} "
+            f"(confidence={confidence:.2f}, feedback={feedback_type})"
+        )
 
     def _infer_method_logic_hints(
         self,

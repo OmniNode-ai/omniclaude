@@ -1,0 +1,431 @@
+# Phase 7 Alert Configuration
+# Defines alert rules, notification channels, and escalation policies
+
+# Alert Rules
+# Each rule defines a threshold for a specific metric
+rules:
+  # Template Cache Alerts
+  - name: template_load_slow
+    metric_name: template_load_duration_ms
+    threshold: 50.0
+    severity: warning
+    comparison: greater_than
+    duration_seconds: 60
+    description: "Template load time exceeds 50ms warning threshold"
+    enabled: true
+    labels:
+      component: template_cache
+      priority: medium
+
+  - name: template_load_critical
+    metric_name: template_load_duration_ms
+    threshold: 100.0
+    severity: critical
+    comparison: greater_than
+    duration_seconds: 30
+    description: "Template load time exceeds 100ms critical threshold"
+    enabled: true
+    labels:
+      component: template_cache
+      priority: high
+
+  - name: cache_hit_rate_low
+    metric_name: cache_hit_rate
+    threshold: 0.70
+    severity: warning
+    comparison: less_than
+    duration_seconds: 300
+    description: "Cache hit rate below 70% warning threshold"
+    enabled: true
+    labels:
+      component: template_cache
+      priority: medium
+
+  - name: cache_hit_rate_critical
+    metric_name: cache_hit_rate
+    threshold: 0.60
+    severity: critical
+    comparison: less_than
+    duration_seconds: 300
+    description: "Cache hit rate below 60% critical threshold"
+    enabled: true
+    labels:
+      component: template_cache
+      priority: high
+
+  # Parallel Generation Alerts
+  - name: parallel_speedup_low
+    metric_name: parallel_speedup
+    threshold: 2.5
+    severity: warning
+    comparison: less_than
+    duration_seconds: 600
+    description: "Parallel speedup below 2.5x warning threshold"
+    enabled: true
+    labels:
+      component: parallel_generation
+      priority: medium
+
+  - name: parallel_speedup_critical
+    metric_name: parallel_speedup
+    threshold: 2.0
+    severity: critical
+    comparison: less_than
+    duration_seconds: 600
+    description: "Parallel speedup below 2.0x critical threshold"
+    enabled: true
+    labels:
+      component: parallel_generation
+      priority: high
+
+  - name: generation_time_slow
+    metric_name: generation_duration_ms
+    threshold: 3000.0
+    severity: warning
+    comparison: greater_than
+    duration_seconds: 300
+    description: "Code generation time exceeds 3s warning threshold"
+    enabled: true
+    labels:
+      component: parallel_generation
+      priority: medium
+
+  - name: generation_time_critical
+    metric_name: generation_duration_ms
+    threshold: 5000.0
+    severity: critical
+    comparison: greater_than
+    duration_seconds: 300
+    description: "Code generation time exceeds 5s critical threshold"
+    enabled: true
+    labels:
+      component: parallel_generation
+      priority: high
+
+  # Mixin Learning Alerts
+  - name: mixin_accuracy_low
+    metric_name: mixin_accuracy
+    threshold: 0.90
+    severity: warning
+    comparison: less_than
+    duration_seconds: 1800
+    description: "Mixin prediction accuracy below 90% warning threshold"
+    enabled: true
+    labels:
+      component: mixin_learning
+      priority: medium
+
+  - name: mixin_accuracy_critical
+    metric_name: mixin_accuracy
+    threshold: 0.85
+    severity: critical
+    comparison: less_than
+    duration_seconds: 1800
+    description: "Mixin prediction accuracy below 85% critical threshold"
+    enabled: true
+    labels:
+      component: mixin_learning
+      priority: high
+
+  - name: compatibility_score_low
+    metric_name: compatibility_score
+    threshold: 0.80
+    severity: warning
+    comparison: less_than
+    duration_seconds: 1800
+    description: "Mixin compatibility score below 80% warning threshold"
+    enabled: true
+    labels:
+      component: mixin_learning
+      priority: low
+
+  # Pattern Matching Alerts
+  - name: pattern_precision_low
+    metric_name: pattern_precision
+    threshold: 0.85
+    severity: warning
+    comparison: less_than
+    duration_seconds: 1800
+    description: "Pattern matching precision below 85% warning threshold"
+    enabled: true
+    labels:
+      component: pattern_matching
+      priority: medium
+
+  - name: pattern_precision_critical
+    metric_name: pattern_precision
+    threshold: 0.80
+    severity: critical
+    comparison: less_than
+    duration_seconds: 1800
+    description: "Pattern matching precision below 80% critical threshold"
+    enabled: true
+    labels:
+      component: pattern_matching
+      priority: high
+
+  - name: false_positive_rate_high
+    metric_name: false_positive_rate
+    threshold: 0.15
+    severity: warning
+    comparison: greater_than
+    duration_seconds: 1800
+    description: "Pattern matching false positive rate above 15% warning threshold"
+    enabled: true
+    labels:
+      component: pattern_matching
+      priority: medium
+
+  # Event Processing Alerts
+  - name: event_latency_high
+    metric_name: event_latency_p95_ms
+    threshold: 200.0
+    severity: warning
+    comparison: greater_than
+    duration_seconds: 300
+    description: "Event processing p95 latency above 200ms warning threshold"
+    enabled: true
+    labels:
+      component: event_processing
+      priority: medium
+
+  - name: event_latency_critical
+    metric_name: event_latency_p95_ms
+    threshold: 300.0
+    severity: critical
+    comparison: greater_than
+    duration_seconds: 300
+    description: "Event processing p95 latency above 300ms critical threshold"
+    enabled: true
+    labels:
+      component: event_processing
+      priority: high
+
+  - name: event_success_rate_low
+    metric_name: event_success_rate
+    threshold: 0.95
+    severity: warning
+    comparison: less_than
+    duration_seconds: 600
+    description: "Event processing success rate below 95% warning threshold"
+    enabled: true
+    labels:
+      component: event_processing
+      priority: high
+
+  - name: event_success_rate_critical
+    metric_name: event_success_rate
+    threshold: 0.90
+    severity: critical
+    comparison: less_than
+    duration_seconds: 600
+    description: "Event processing success rate below 90% critical threshold"
+    enabled: true
+    labels:
+      component: event_processing
+      priority: critical
+
+  # Quality Validation Alerts
+  - name: quality_score_low
+    metric_name: quality_score
+    threshold: 0.80
+    severity: warning
+    comparison: less_than
+    duration_seconds: 600
+    description: "Code quality score below 80% warning threshold"
+    enabled: true
+    labels:
+      component: quality_validation
+      priority: high
+
+  - name: quality_score_critical
+    metric_name: quality_score
+    threshold: 0.75
+    severity: critical
+    comparison: less_than
+    duration_seconds: 600
+    description: "Code quality score below 75% critical threshold"
+    enabled: true
+    labels:
+      component: quality_validation
+      priority: critical
+
+  - name: validation_pass_rate_low
+    metric_name: validation_pass_rate
+    threshold: 0.90
+    severity: warning
+    comparison: less_than
+    duration_seconds: 600
+    description: "Validation pass rate below 90% warning threshold"
+    enabled: true
+    labels:
+      component: quality_validation
+      priority: high
+
+# Notification Channels
+# Define where alerts should be sent
+channels:
+  # Log channel - always enabled for all alerts
+  - name: primary_log
+    type: log
+    enabled: true
+    config:
+      log_level: warning
+
+  # Critical alerts log channel
+  - name: critical_log
+    type: log
+    enabled: true
+    severity_filter:
+      - critical
+    config:
+      log_level: critical
+
+  # Webhook for critical alerts (example)
+  - name: critical_webhook
+    type: webhook
+    enabled: false  # Enable when webhook is configured
+    severity_filter:
+      - critical
+    config:
+      url: https://example.com/alerts/critical
+      method: POST
+      headers:
+        Content-Type: application/json
+      timeout_seconds: 5
+
+  # Email for critical alerts (example)
+  - name: critical_email
+    type: email
+    enabled: false  # Enable when SMTP is configured
+    severity_filter:
+      - critical
+    config:
+      recipients:
+        - ops-team@example.com
+      smtp_host: smtp.example.com
+      smtp_port: 587
+      from_address: monitoring@example.com
+
+  # Slack integration (example)
+  - name: slack_alerts
+    type: webhook
+    enabled: false  # Enable when Slack webhook is configured
+    severity_filter:
+      - critical
+      - warning
+    config:
+      url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+      method: POST
+
+# Escalation Policies
+# Define how alerts should escalate over time
+escalation_policies:
+  # Default escalation for critical alerts
+  - name: critical_escalation
+    initial_delay_seconds: 300  # 5 minutes
+    repeat_interval_seconds: 1800  # 30 minutes
+    max_escalations: 3
+    escalation_levels:
+      # Level 1: Immediate notification to primary channels
+      - level: 1
+        delay_seconds: 0
+        channels:
+          - primary_log
+          - critical_log
+        actions:
+          - log_alert
+
+      # Level 2: Escalate to webhook after 5 minutes
+      - level: 2
+        delay_seconds: 300
+        channels:
+          - critical_webhook
+        actions:
+          - send_webhook
+
+      # Level 3: Escalate to email after 10 minutes
+      - level: 3
+        delay_seconds: 600
+        channels:
+          - critical_email
+        actions:
+          - send_email
+
+  # Performance degradation escalation
+  - name: performance_degradation
+    initial_delay_seconds: 600  # 10 minutes
+    repeat_interval_seconds: 3600  # 1 hour
+    max_escalations: 2
+    escalation_levels:
+      - level: 1
+        delay_seconds: 0
+        channels:
+          - primary_log
+        actions:
+          - log_alert
+
+      - level: 2
+        delay_seconds: 600
+        channels:
+          - slack_alerts
+        actions:
+          - send_slack
+
+  # Quality alerts escalation
+  - name: quality_escalation
+    initial_delay_seconds: 900  # 15 minutes
+    repeat_interval_seconds: 3600  # 1 hour
+    max_escalations: 2
+    escalation_levels:
+      - level: 1
+        delay_seconds: 0
+        channels:
+          - primary_log
+        actions:
+          - log_alert
+
+      - level: 2
+        delay_seconds: 900
+        channels:
+          - critical_log
+        actions:
+          - log_critical
+
+# Maintenance Windows
+# Define periods when alerts should be suppressed
+maintenance_windows:
+  # Example: Weekly maintenance window
+  - name: weekly_maintenance
+    enabled: false
+    schedule:
+      day_of_week: sunday
+      start_time: "02:00"
+      end_time: "04:00"
+      timezone: UTC
+    suppress_severity:
+      - warning
+      - info
+
+# Global Settings
+settings:
+  # Default escalation policy for alerts without explicit policy
+  default_escalation_policy: critical_escalation
+
+  # Alert deduplication window (seconds)
+  deduplication_window_seconds: 300
+
+  # Alert auto-resolution timeout (seconds)
+  auto_resolution_timeout_seconds: 3600
+
+  # Maximum active alerts before suppression
+  max_active_alerts: 1000
+
+  # Alert history retention (days)
+  history_retention_days: 30
+
+  # Performance targets
+  performance:
+    alert_processing_ms: 100
+    escalation_processing_ms: 200
+    notification_timeout_ms: 5000
