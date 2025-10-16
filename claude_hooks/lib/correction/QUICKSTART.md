@@ -200,7 +200,7 @@ print(response.json())
 ```python
 # Make sure lib directory is in path
 import sys
-sys.path.insert(0, '/Users/jonah/.claude/hooks/lib')
+sys.path.insert(0, '${HOME}/.claude/hooks/lib')
 from correction import CorrectionGenerator
 ```
 

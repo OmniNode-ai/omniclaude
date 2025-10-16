@@ -3,7 +3,7 @@
 ## Implementation Files
 
 ### Core Implementation
-- **`/Users/jonah/.claude/hooks/lib/post_tool_metrics.py`**
+- **`${HOME}/.claude/hooks/lib/post_tool_metrics.py`**
   - 467 lines
   - Core metrics collector
   - Quality scoring logic (4 components)
@@ -11,45 +11,45 @@
   - Execution analysis
 
 ### Hook Integration
-- **`/Users/jonah/.claude/hooks/post-tool-use-quality.sh`**
+- **`${HOME}/.claude/hooks/post-tool-use-quality.sh`**
   - Lines 58-126 modified
   - Integrated metrics collection
   - Enhanced database logging
   - Async/non-blocking execution
 
 ### Test Suites
-- **`/Users/jonah/.claude/hooks/test_post_tool_metrics.py`**
+- **`${HOME}/.claude/hooks/test_post_tool_metrics.py`**
   - 350+ lines
   - 6 test suites (unit tests)
   - 100% coverage
   - Performance benchmarking
 
-- **`/Users/jonah/.claude/hooks/test_hook_integration.py`**
+- **`${HOME}/.claude/hooks/test_hook_integration.py`**
   - 200+ lines
   - 2 integration tests
   - Database verification
   - End-to-end validation
 
 ### Documentation
-- **`/Users/jonah/.claude/hooks/POST_TOOL_USE_METRICS_README.md`**
+- **`${HOME}/.claude/hooks/POST_TOOL_USE_METRICS_README.md`**
   - Complete usage documentation
   - Quality scoring details
   - Database query examples
   - Performance analysis
 
-- **`/Users/jonah/.claude/hooks/POSTTOOLUSE_ENHANCEMENT_COMPLETE.md`**
+- **`${HOME}/.claude/hooks/POSTTOOLUSE_ENHANCEMENT_COMPLETE.md`**
   - Detailed completion summary
   - Success criteria verification
   - Quality scoring examples
   - Database schema
 
-- **`/Users/jonah/.claude/hooks/IMPLEMENTATION_SUMMARY.md`**
+- **`${HOME}/.claude/hooks/IMPLEMENTATION_SUMMARY.md`**
   - Implementation overview
   - Test results summary
   - Performance breakdown
   - Achievement highlights
 
-- **`/Users/jonah/.claude/hooks/FILE_REFERENCE.md`**
+- **`${HOME}/.claude/hooks/FILE_REFERENCE.md`**
   - This file
   - Quick reference to all files
 
@@ -58,7 +58,7 @@
 ### Run Tests
 ```bash
 # Unit tests
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python3 test_post_tool_metrics.py
 
 # Integration tests
@@ -82,7 +82,7 @@ LIMIT 10;"
 ### Check Hook Logs
 ```bash
 # View recent hook executions
-tail -f /Users/jonah/.claude/hooks/logs/post-tool-use.log
+tail -f ${HOME}/.claude/hooks/logs/post-tool-use.log
 ```
 
 ## Import Paths

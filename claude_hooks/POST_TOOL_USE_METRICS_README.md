@@ -172,7 +172,7 @@ ORDER BY created_at DESC;
 ### Run Test Suite
 
 ```bash
-cd /Users/jonah/.claude/hooks
+cd ${HOME}/.claude/hooks
 python3 test_post_tool_metrics.py
 ```
 
@@ -251,7 +251,7 @@ All success criteria met:
 
 ## References
 
-- **Quality Enforcer**: `/Users/jonah/.claude/hooks/lib/quality_enforcer.py`
-- **Hook Event Logger**: `/Users/jonah/.claude/hooks/lib/hook_event_logger.py`
+- **Quality Enforcer**: `${HOME}/.claude/hooks/lib/quality_enforcer.py`
+- **Hook Event Logger**: `${HOME}/.claude/hooks/lib/hook_event_logger.py`
 - **Database Schema**: `omninode_bridge.hook_events` table
-- **Test Suite**: `/Users/jonah/.claude/hooks/test_post_tool_metrics.py`
+- **Test Suite**: `${HOME}/.claude/hooks/test_post_tool_metrics.py`

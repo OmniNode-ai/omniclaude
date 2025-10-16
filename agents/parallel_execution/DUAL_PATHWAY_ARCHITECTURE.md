@@ -306,17 +306,17 @@ CREATE INDEX idx_parallel_executions_status ON parallel_executions(execution_sta
 ## Implementation Files
 
 ### 1. agent_pathway_detector.py (NEW)
-Location: `/Users/jonah/.claude/hooks/lib/agent_pathway_detector.py`
+Location: `~/.claude/hooks/lib/agent_pathway_detector.py`
 
 Purpose: Detect which invocation pathway to use
 
 ### 2. agent_invoker.py (UPDATED)
-Location: `/Users/jonah/.claude/hooks/lib/agent_invoker.py`
+Location: `~/.claude/hooks/lib/agent_invoker.py`
 
 Purpose: Execute agents via detected pathway
 
 ### 3. user-prompt-submit-enhanced.sh (UPDATED)
-Location: `/Users/jonah/.claude/hooks/user-prompt-submit-enhanced.sh`
+Location: `~/.claude/hooks/user-prompt-submit-enhanced.sh`
 
 Purpose: Hook integration for pathway detection and invocation
 
