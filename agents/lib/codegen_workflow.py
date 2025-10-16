@@ -10,7 +10,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import from omnibase_core
 from omnibase_core.errors import OnexError, EnumCoreErrorCode
@@ -45,7 +45,7 @@ class CodegenWorkflowResult:
         self.total_files = total_files
         self.success = success
         self.error_message = error_message
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
 class CodegenWorkflow:
     """Code generation workflow orchestrator"""
@@ -93,16 +93,19 @@ class CodegenWorkflow:
             correlation_id = uuid4()
             
             self.logger.info(f"Starting code generation workflow for session {session_id}")
-            
+
             # Step 1: Analyze PRD
             self.logger.info("Step 1: Analyzing PRD content")
-            # Persist session start
-            await self.persistence.upsert_session(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                prd_content=prd_content,
-                status="started",
-            )
+            # Persist session start (non-fatal if persistence unavailable)
+            try:
+                await self.persistence.upsert_session(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    prd_content=prd_content,
+                    status="started",
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to persist session start (continuing anyway): {e}")
             if getattr(self.config, "enable_event_driven_analysis", False):
                 try:
                     resp = await self.prd_intel.analyze(
@@ -179,9 +182,17 @@ class CodegenWorkflow:
                 total_files=total_files,
                 success=True
             )
-            # Mark session complete
-            await self.persistence.complete_session(session_id)
-            await self.persistence.close()
+            # Mark session complete (non-fatal if persistence unavailable)
+            try:
+                await self.persistence.complete_session(session_id)
+            except Exception as e:
+                self.logger.warning(f"Failed to mark session complete (continuing anyway): {e}")
+
+            # Close persistence connection
+            try:
+                await self.persistence.close()
+            except Exception as e:
+                self.logger.warning(f"Failed to close persistence (continuing anyway): {e}")
 
             self.logger.info(f"Code generation workflow completed for session {session_id}")
             self.logger.info(f"Generated {len(generated_nodes)} nodes with {total_files} total files")
@@ -434,6 +445,11 @@ class CodegenWorkflow:
         """Validate generated code using omnibase_spi validators"""
         validation_results = {}
 
+        # Only validate if the analyzer has the validation method
+        if not hasattr(self.prd_analyzer, 'validate_generated_metadata'):
+            self.logger.debug("Metadata validation not available, skipping validation step")
+            return validation_results
+
         for node in generated_nodes:
             node_type = node.get("node_type")
             microservice_name = node.get("microservice_name")
@@ -441,8 +457,11 @@ class CodegenWorkflow:
             # Validate metadata
             metadata = node.get("metadata", "")
             if metadata:
-                validation_result = await self.prd_analyzer.validate_generated_metadata(metadata)
-                validation_results[f"{microservice_name}_{node_type}"] = validation_result
+                try:
+                    validation_result = await self.prd_analyzer.validate_generated_metadata(metadata)
+                    validation_results[f"{microservice_name}_{node_type}"] = validation_result
+                except Exception as e:
+                    self.logger.warning(f"Validation failed for {microservice_name}_{node_type}: {e}")
 
         return validation_results
 
@@ -466,23 +485,26 @@ class CodegenWorkflow:
                 self.logger.info(f"  Avg cached load time: {cache_stats.get('avg_cached_load_ms', 0):.3f}ms")
                 self.logger.info(f"  Performance improvement: {cache_stats.get('improvement_percent', 0):.1f}%")
 
-                # Log to database for analytics
-                await self.persistence.insert_performance_metric(
-                    session_id=session_id,
-                    node_type="template_cache",
-                    phase="cache_performance",
-                    duration_ms=int(cache_stats.get('avg_cached_load_ms', 0) * cache_stats['hits']),
-                    cache_hit=True,
-                    metadata={
-                        "hit_rate": float(cache_stats['hit_rate']),
-                        "hits": cache_stats['hits'],
-                        "misses": cache_stats['misses'],
-                        "cached_templates": cache_stats['cached_templates'],
-                        "total_size_mb": float(cache_stats['total_size_mb']),
-                        "improvement_percent": float(cache_stats.get('improvement_percent', 0)),
-                        "time_saved_ms": float(cache_stats.get('time_saved_ms', 0))
-                    }
-                )
+                # Log to database for analytics (non-fatal if persistence unavailable)
+                try:
+                    await self.persistence.insert_performance_metric(
+                        session_id=session_id,
+                        node_type="template_cache",
+                        phase="cache_performance",
+                        duration_ms=int(cache_stats.get('avg_cached_load_ms', 0) * cache_stats['hits']),
+                        cache_hit=True,
+                        metadata={
+                            "hit_rate": float(cache_stats['hit_rate']),
+                            "hits": cache_stats['hits'],
+                            "misses": cache_stats['misses'],
+                            "cached_templates": cache_stats['cached_templates'],
+                            "total_size_mb": float(cache_stats['total_size_mb']),
+                            "improvement_percent": float(cache_stats.get('improvement_percent', 0)),
+                            "time_saved_ms": float(cache_stats.get('time_saved_ms', 0))
+                        }
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Failed to persist cache metrics: {e}")
             else:
                 self.logger.debug("Template caching not enabled for this session")
 

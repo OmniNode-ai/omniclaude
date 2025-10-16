@@ -339,6 +339,7 @@ class ParallelGenerator:
         try:
             await self.persistence.insert_performance_metric(
                 session_id=session_id,
+                node_type="PARALLEL_BATCH",  # Special node type for parallel operations
                 phase="parallel_generation",
                 duration_ms=int(total_duration_ms),
                 parallel_execution=True,

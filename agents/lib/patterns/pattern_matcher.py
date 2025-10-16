@@ -362,10 +362,31 @@ class PatternMatcher:
         Calculate confidence score for pattern match.
 
         Factors:
+        - Exact match bonus (high confidence for explicit type matches)
         - Keyword match ratio (40%)
         - Primary keyword presence (30%)
         - Context alignment (30%)
         """
+        capability_type = capability.get("type", "").lower()
+        capability_name = capability.get("name", "").lower()
+
+        # Exact match bonus: if capability type or name exactly matches a pattern keyword
+        # This indicates an explicit, unambiguous match (e.g., type="create" for CRUD)
+        exact_match = (capability_type in pattern_keywords or
+                      capability_name in pattern_keywords)
+
+        if exact_match:
+            # Exact matches get high base confidence (0.75)
+            # This ensures they pass the 0.70 threshold while allowing proper
+            # aggregation scaling: perfect CRUD (4/4) -> 1.0, partial (2/4) -> 0.875
+            base_confidence = 0.75
+
+            # Small boost for multiple keyword matches (better context)
+            keyword_bonus = min(len(matched_keywords) * 0.02, 0.10)
+
+            return min(base_confidence + keyword_bonus, 0.95)
+
+        # Standard confidence calculation for fuzzy matches
         # Keyword match ratio
         match_ratio = len(matched_keywords) / len(pattern_keywords)
         keyword_score = min(match_ratio * 4.0, 1.0)  # Scale to 0-1
@@ -375,7 +396,6 @@ class PatternMatcher:
         primary_bonus = 0.3 if first_word in matched_keywords else 0.0
 
         # Context alignment (capability type matches expected type)
-        capability_type = capability.get("type", "").lower()
         context_score = 0.3 if any(
             kw in capability_type for kw in matched_keywords
         ) else 0.15

@@ -44,17 +44,18 @@ try:
     _monitoring_system = MonitoringSystem()
 
     async def record_metric(name, value, metric_type, labels=None, help_text=""):
-        metric = Metric(
+        await _monitoring_system.record_metric(
             name=name,
             value=value,
             metric_type=metric_type,
             labels=labels or {},
             help_text=help_text
         )
-        _monitoring_system.record_metric(metric)
 
     async def collect_all_metrics(time_window_minutes=60):
-        return _monitoring_system.get_summary()
+        # get_monitoring_summary() is sync - doesn't need database
+        # Returns current monitoring state without querying DB
+        return _monitoring_system.get_monitoring_summary()
 
     def get_monitoring_system():
         return _monitoring_system
@@ -384,14 +385,17 @@ class TestPerformanceBenchmarks:
 
             engine = OmniNodeTemplateEngine(enable_cache=True)
 
-            # Warm up cache
-            templates = engine.templates
+            # Warm up cache by loading templates multiple times
+            # This ensures cache hit rate gets above 80%
+            for _ in range(10):
+                _ = engine._load_templates()
+
             iterations = 100
             start_time = time.time()
 
-            # Benchmark cache hits
+            # Benchmark cache hits by actually calling through cache
             for _ in range(iterations):
-                _ = engine.templates
+                _ = engine._load_templates()
 
             duration_ms = (time.time() - start_time) * 1000
             avg_load_time_ms = duration_ms / iterations

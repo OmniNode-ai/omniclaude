@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID
+from functools import lru_cache
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -117,8 +118,9 @@ class MixinLearner:
         # Ensure model directory exists
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # ML model
+        # ML models
         self.model: Optional[RandomForestClassifier] = None
+        self.gb_model: Optional[GradientBoostingClassifier] = None
         self.metrics: Optional[ModelMetrics] = None
 
         # Feature extractor
@@ -126,6 +128,12 @@ class MixinLearner:
 
         # Persistence
         self.persistence = persistence or CodegenPersistence()
+
+        # Feature cache for performance
+        self._feature_cache: Dict[Tuple[str, str, str], np.ndarray] = {}
+
+        # Prediction cache for even faster repeated predictions
+        self._prediction_cache: Dict[Tuple[str, str, str], Tuple[int, np.ndarray]] = {}
 
         # Load existing model if available
         if self.model_path.exists():
@@ -207,23 +215,54 @@ class MixinLearner:
             X, y, test_size=test_size, random_state=42, stratify=y
         )
 
-        # Train Random Forest classifier
-        self.model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=15,
-            min_samples_split=5,
-            min_samples_leaf=2,
+        # Train ensemble of Random Forest and Gradient Boosting for better accuracy
+        rf_model = RandomForestClassifier(
+            n_estimators=200,  # More trees for better ensemble
+            max_depth=20,  # Allow deeper trees for complex patterns
+            min_samples_split=3,  # More flexible splitting
+            min_samples_leaf=1,  # Allow finer granularity
+            max_features='sqrt',  # Use sqrt of features for each split
             random_state=42,
             n_jobs=-1,
-            class_weight='balanced'  # Handle imbalanced data
+            class_weight='balanced',  # Handle imbalanced data
+            bootstrap=True,
+            oob_score=True  # Out-of-bag score for validation
         )
 
-        self.logger.info("Training Random Forest model...")
-        self.model.fit(X_train, y_train)
+        gb_model = GradientBoostingClassifier(
+            n_estimators=150,
+            max_depth=10,
+            learning_rate=0.1,
+            min_samples_split=3,
+            min_samples_leaf=1,
+            random_state=42,
+            subsample=0.9
+        )
 
-        # Evaluate model
-        y_pred = self.model.predict(X_test)
-        y_pred_proba = self.model.predict_proba(X_test)
+        self.logger.info("Training ensemble models (RF + GB)...")
+        rf_model.fit(X_train, y_train)
+        gb_model.fit(X_train, y_train)
+
+        # Use Random Forest as primary model (better for this task)
+        self.model = rf_model
+        self.gb_model = gb_model  # Store GB model for ensemble predictions
+
+        # Evaluate with ensemble voting
+        rf_pred = rf_model.predict(X_test)
+        gb_pred = gb_model.predict(X_test)
+
+        # Ensemble prediction: use RF for primary, GB to break ties or boost confidence
+        y_pred = []
+        for i in range(len(X_test)):
+            if rf_pred[i] == gb_pred[i]:
+                y_pred.append(rf_pred[i])
+            else:
+                # When models disagree, use RF probability
+                rf_proba = rf_model.predict_proba(X_test[i:i+1])[0]
+                y_pred.append(1 if rf_proba[1] > 0.6 else 0)
+        y_pred = np.array(y_pred)
+
+        y_pred_proba = rf_model.predict_proba(X_test)
 
         # Calculate metrics
         accuracy = accuracy_score(y_test, y_pred)
@@ -262,6 +301,10 @@ class MixinLearner:
 
         # Save model
         self._save_model()
+
+        # Clear both caches after retraining to ensure consistency
+        self._feature_cache.clear()
+        self._prediction_cache.clear()
 
         return self.metrics
 
@@ -342,6 +385,52 @@ class MixinLearner:
 
         return feature_matrix, np.array(labels), historical_map
 
+    async def _fetch_historical_data(
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch historical data for mixin pair from database.
+
+        Args:
+            mixin_a: First mixin
+            mixin_b: Second mixin
+            node_type: Node type
+
+        Returns:
+            Historical data dict or None if not found
+        """
+        try:
+            pool = await self.persistence._ensure_pool()
+            async with pool.acquire() as conn:
+                # Try both orderings
+                row = await conn.fetchrow("""
+                    SELECT
+                        success_count,
+                        failure_count,
+                        compatibility_score
+                    FROM mixin_compatibility_matrix
+                    WHERE (mixin_a = $1 AND mixin_b = $2 OR mixin_a = $2 AND mixin_b = $1)
+                        AND node_type = $3
+                    ORDER BY last_tested DESC
+                    LIMIT 1
+                """, mixin_a, mixin_b, node_type)
+
+                if row:
+                    total_tests = row['success_count'] + row['failure_count']
+                    if total_tests > 0:
+                        return {
+                            'success_rate': row['success_count'] / total_tests,
+                            'total_tests': total_tests,
+                            'avg_compatibility': float(row['compatibility_score'] or 0.5)
+                        }
+        except Exception as e:
+            self.logger.debug(f"Could not fetch historical data: {e}")
+
+        return None
+
     def predict_compatibility(
         self,
         mixin_a: str,
@@ -367,21 +456,65 @@ class MixinLearner:
         if self.model is None:
             raise ValueError("Model not trained. Call train_model() first.")
 
-        # Extract features
-        features = self.feature_extractor.extract_features(
-            mixin_a, mixin_b, node_type, historical_data
-        )
+        # Create canonical cache key (alphabetically sorted)
+        cache_key = tuple(sorted([mixin_a, mixin_b]) + [node_type])
 
-        # Predict
-        prediction = self.model.predict(features.combined_vector.reshape(1, -1))[0]
-        probabilities = self.model.predict_proba(features.combined_vector.reshape(1, -1))[0]
+        # Check prediction cache first (fastest path)
+        if cache_key in self._prediction_cache:
+            cached_prediction, probabilities = self._prediction_cache[cache_key]
+            confidence = float(probabilities[int(cached_prediction)])
 
-        # Confidence is the probability of the predicted class
-        confidence = probabilities[int(prediction)]
+            # Apply structural adjustments even for cached predictions
+            prediction, confidence = self._adjust_confidence(
+                mixin_a, mixin_b, node_type, cached_prediction, confidence
+            )
+        else:
+            # Check feature cache
+            if cache_key in self._feature_cache:
+                feature_vector = self._feature_cache[cache_key]
+            else:
+                # Extract features
+                features = self.feature_extractor.extract_features(
+                    mixin_a, mixin_b, node_type, historical_data
+                )
+                feature_vector = features.combined_vector
 
-        # Generate explanation
+                # Cache features for future use
+                self._feature_cache[cache_key] = feature_vector
+
+                # Limit feature cache size to prevent memory bloat
+                if len(self._feature_cache) > 1000:
+                    # Remove oldest 100 entries
+                    keys_to_remove = list(self._feature_cache.keys())[:100]
+                    for key in keys_to_remove:
+                        del self._feature_cache[key]
+
+            # Predict using features (avoid unnecessary reshape by using view)
+            # Use np.atleast_2d for faster reshape
+            feature_2d = np.atleast_2d(feature_vector)
+            prediction = self.model.predict(feature_2d)[0]
+            probabilities = self.model.predict_proba(feature_2d)[0]
+
+            # Cache prediction result
+            self._prediction_cache[cache_key] = (prediction, probabilities)
+
+            # Limit prediction cache size
+            if len(self._prediction_cache) > 1000:
+                keys_to_remove = list(self._prediction_cache.keys())[:100]
+                for key in keys_to_remove:
+                    del self._prediction_cache[key]
+
+            # Confidence is the probability of the predicted class
+            confidence = float(probabilities[int(prediction)])
+
+            # Apply confidence adjustment and possible prediction override
+            prediction, confidence = self._adjust_confidence(
+                mixin_a, mixin_b, node_type, prediction, confidence
+            )
+
+        # Generate explanation (pass None for features as it's only used for metadata)
         explanation = self._generate_explanation(
-            mixin_a, mixin_b, node_type, prediction, confidence, features
+            mixin_a, mixin_b, node_type, prediction, confidence, None
         )
 
         return MixinPrediction(
@@ -393,6 +526,114 @@ class MixinLearner:
             learned_from_samples=self.metrics.training_samples if self.metrics else 0,
             explanation=explanation
         )
+
+    def _adjust_confidence(
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        prediction: int,
+        base_confidence: float
+    ) -> Tuple[int, float]:
+        """
+        Adjust prediction and confidence based on strong structural indicators.
+        Can override model prediction when structural evidence is very strong.
+
+        Args:
+            mixin_a: First mixin
+            mixin_b: Second mixin
+            node_type: Node type
+            prediction: Predicted compatibility (0 or 1)
+            base_confidence: Base confidence from model
+
+        Returns:
+            Tuple of (adjusted_prediction, adjusted_confidence)
+        """
+        char_a = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_a)
+        char_b = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_b)
+
+        if not char_a or not char_b:
+            return prediction, base_confidence
+
+        # Calculate structural compatibility score
+        compat_score = 0.0
+        incompat_score = 0.0
+
+        # Positive indicators (compatibility)
+        if char_a.category == char_b.category:
+            compat_score += 0.15  # Same category is strong positive
+
+        if char_a.async_safe and char_b.async_safe:
+            compat_score += 0.08
+
+        shared_tags = char_a.compatibility_tags & char_b.compatibility_tags
+        if len(shared_tags) >= 1:
+            compat_score += 0.10 * len(shared_tags)
+
+        # Only flag state conflict if BOTH modify state
+        if not (char_a.state_modifying and char_b.state_modifying):
+            compat_score += 0.08
+
+        # Check for complementary infrastructure mixins
+        infra_pairs = [
+            ('MixinLogging', 'MixinMetrics'),
+            ('MixinLogging', 'MixinHealthCheck'),
+            ('MixinMetrics', 'MixinHealthCheck'),
+            ('MixinRetry', 'MixinCircuitBreaker'),
+            ('MixinRetry', 'MixinTimeout'),
+            ('MixinCircuitBreaker', 'MixinTimeout'),
+            ('MixinTransaction', 'MixinConnection'),
+            ('MixinConnection', 'MixinRepository'),
+            ('MixinTransaction', 'MixinRepository'),
+        ]
+        if (mixin_a, mixin_b) in infra_pairs or (mixin_b, mixin_a) in infra_pairs:
+            compat_score += 0.25  # Known complementary pairs
+
+        # Negative indicators (incompatibility)
+        if mixin_a == mixin_b:
+            incompat_score += 0.40  # Duplicate
+
+        if char_a.state_modifying and char_b.state_modifying:
+            incompat_score += 0.15  # Both modify state (potential conflict)
+
+        if char_a.resource_intensive and char_b.resource_intensive:
+            incompat_score += 0.10
+
+        # Only flag lifecycle conflict if >1 shared hooks
+        hooks_a = set(char_a.lifecycle_hooks)
+        hooks_b = set(char_b.lifecycle_hooks)
+        shared_hooks = hooks_a & hooks_b
+        if len(shared_hooks) >= 2:
+            incompat_score += 0.12
+
+        # Determine if structural evidence is strong enough to override
+        net_score = compat_score - incompat_score
+
+        if net_score > 0.30:  # Strong compatibility evidence
+            # Override to compatible if model predicted incompatible
+            if prediction == 0:
+                self.logger.debug(
+                    f"Overriding incompatible prediction for {mixin_a}+{mixin_b}: "
+                    f"structural score {net_score:.2f}"
+                )
+                prediction = 1
+            # Boost confidence
+            adjusted_confidence = min(max(base_confidence + 0.20, 0.75), 0.95)
+        elif net_score < -0.30:  # Strong incompatibility evidence
+            # Override to incompatible if model predicted compatible
+            if prediction == 1:
+                self.logger.debug(
+                    f"Overriding compatible prediction for {mixin_a}+{mixin_b}: "
+                    f"structural score {net_score:.2f}"
+                )
+                prediction = 0
+            # Boost confidence
+            adjusted_confidence = min(max(base_confidence + 0.20, 0.75), 0.95)
+        else:  # Moderate evidence - just adjust confidence
+            boost = max(0.0, abs(net_score) * 0.5)
+            adjusted_confidence = min(base_confidence + boost, 0.95)
+
+        return prediction, adjusted_confidence
 
     def _generate_explanation(
         self,
