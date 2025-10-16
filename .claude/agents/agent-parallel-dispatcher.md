@@ -24,7 +24,7 @@ You are a **simple orchestrator** that coordinates parallel agent execution. You
 Take the user's prompt and send it to the task architect:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+# Use current repo directory (should already be in omniclaude root)
 echo "USER_PROMPT" | poetry run python agents/parallel_execution/task_architect.py
 ```
 
@@ -51,7 +51,7 @@ The task architect returns JSON:
 Take the tasks from Phase 1 and dispatch them with context filtering enabled:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+# Execute from repo root directory
 echo 'TASKS_JSON' | poetry run python agents/parallel_execution/dispatch_runner.py --enable-context
 ```
 
@@ -288,8 +288,9 @@ Always mention trace file location so users can debug if needed.
 
 ## Notes
 
-- MCP server must be running on `http://localhost:8051`
+- MCP server must be running (default: `http://localhost:8051`, configurable via `MCP_SERVER_URL` environment variable)
 - Task architect uses LLM for intelligent planning
 - Dispatcher handles parallel execution automatically
 - **Context filtering is recommended for all multi-agent tasks**
 - You just coordinate between services and present results
+- All commands should be run from the repository root directory

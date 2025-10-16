@@ -234,8 +234,8 @@ docs_private/
 .onex_cache/
 docs_archived/
 
-# Codanna index files (keep configuration, ignore generated index data)
-.codanna/index/*
+# Codanna index files (tool-generated, should not be committed)
+.codanna/
 .serena/cache/*
 
 # AI Tools and Generated Content
