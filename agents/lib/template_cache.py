@@ -10,8 +10,25 @@ Features:
 - Time-to-live (TTL) expiration
 - Content-based invalidation (hash checking)
 - Thread-safe operations
-- Database metrics tracking
+- Database metrics tracking (async background tasks)
 - Cache warmup on startup
+- Async cleanup for background tasks
+
+Usage:
+    # Basic usage
+    cache = TemplateCache(enable_persistence=True)
+    content, hit = cache.get(name, type, path, loader)
+
+    # With async context manager (automatic cleanup)
+    async with TemplateCache(enable_persistence=True) as cache:
+        content, hit = cache.get(name, type, path, loader)
+
+    # Manual cleanup
+    cache = TemplateCache(enable_persistence=True)
+    try:
+        content, hit = cache.get(name, type, path, loader)
+    finally:
+        await cache.cleanup_async()
 
 Target Performance:
 - Template load time: 50ms (50% reduction from 100ms baseline)
@@ -19,7 +36,7 @@ Target Performance:
 - Memory usage: ≤50MB
 """
 
-from typing import Dict, Any, Optional, Tuple, Callable
+from typing import Dict, Any, Optional, Tuple, Callable, Set
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
@@ -91,6 +108,9 @@ class TemplateCache:
         self.max_size_bytes = max_size_mb * 1024 * 1024
         self.ttl_seconds = ttl_seconds
         self.enable_persistence = enable_persistence
+
+        # Background task tracking
+        self._background_tasks: Set[asyncio.Task] = set()
 
         # Metrics
         self.hits = 0
@@ -164,7 +184,7 @@ class TemplateCache:
                         if self.enable_persistence:
                             try:
                                 loop = asyncio.get_running_loop()
-                                asyncio.create_task(
+                                task = asyncio.create_task(
                                     self._update_cache_metrics_async(
                                         template_name=template_name,
                                         template_type=template_type,
@@ -173,6 +193,9 @@ class TemplateCache:
                                         load_time_ms=cached_time_ms
                                     )
                                 )
+                                # Track task and remove when done
+                                self._background_tasks.add(task)
+                                task.add_done_callback(self._background_tasks.discard)
                             except RuntimeError:
                                 # No event loop running - skip async metrics update
                                 pass
@@ -218,7 +241,7 @@ class TemplateCache:
                 if self.enable_persistence:
                     try:
                         loop = asyncio.get_running_loop()
-                        asyncio.create_task(
+                        task = asyncio.create_task(
                             self._update_cache_metrics_async(
                                 template_name=template_name,
                                 template_type=template_type,
@@ -229,6 +252,9 @@ class TemplateCache:
                                 size_bytes=cached.size_bytes
                             )
                         )
+                        # Track task and remove when done
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
                     except RuntimeError:
                         # No event loop running - skip async metrics update
                         pass
@@ -411,6 +437,80 @@ class TemplateCache:
         except Exception as e:
             # Don't fail cache operations due to persistence errors
             logger.warning(f"Failed to update cache metrics: {e}")
+
+    async def cleanup_async(self, timeout: float = 5.0):
+        """
+        Cleanup all pending background tasks.
+
+        Args:
+            timeout: Maximum time to wait for tasks to complete (seconds)
+        """
+        if not self._background_tasks:
+            return
+
+        logger.debug(f"Cleaning up {len(self._background_tasks)} background tasks")
+
+        # Wait for all tasks to complete with timeout
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self._background_tasks, return_exceptions=True),
+                timeout=timeout
+            )
+            logger.debug("All background tasks completed successfully")
+        except asyncio.TimeoutError:
+            # Cancel remaining tasks
+            logger.warning(f"Task cleanup timeout after {timeout}s, cancelling remaining tasks")
+            for task in self._background_tasks:
+                if not task.done():
+                    task.cancel()
+
+            # Wait for cancellations to complete
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+
+        self._background_tasks.clear()
+
+    def cleanup_sync(self, timeout: float = 5.0):
+        """
+        Synchronous cleanup for pending background tasks.
+
+        Args:
+            timeout: Maximum time to wait for tasks to complete (seconds)
+        """
+        if not self._background_tasks:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+            # If we have a running loop, schedule cleanup
+            asyncio.create_task(self.cleanup_async(timeout))
+        except RuntimeError:
+            # No event loop running - tasks will be cleaned up by garbage collector
+            logger.debug("No event loop running, skipping task cleanup")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup tasks."""
+        await self.cleanup_async()
+        return False
+
+    def __del__(self):
+        """Destructor - warn if tasks are still pending."""
+        if self._background_tasks:
+            logger.warning(
+                f"TemplateCache destroyed with {len(self._background_tasks)} pending background tasks. "
+                f"Use cleanup_async() or async context manager to avoid this warning."
+            )
+            # Cancel all pending tasks to prevent the warning
+            for task in self._background_tasks:
+                if not task.done():
+                    try:
+                        task.cancel()
+                    except RuntimeError:
+                        # Event loop is closed, task will be garbage collected
+                        pass
 
     def get_stats(self) -> Dict[str, Any]:
         """

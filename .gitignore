@@ -267,3 +267,8 @@ examples_*.py
 factory_pattern_analysis.md
 migration_guide_*.md
 coverage.json
+
+# Machine Learning Models (auto-generated)
+*.pkl
+agents/models/
+test_results.txt
