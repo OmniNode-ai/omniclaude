@@ -1,6 +1,6 @@
 import os
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import asyncpg
 
@@ -50,5 +50,45 @@ async def close_pg_pool() -> None:
     if _pool is not None:
         await _pool.close()
         _pool = None
+
+
+async def execute_query(query: str, *args) -> Any:
+    """Execute a query and return results.
+
+    Helper function for Phase 7 schema operations.
+
+    Args:
+        query: SQL query string
+        *args: Query parameters
+
+    Returns:
+        Query results
+    """
+    pool = await get_pg_pool()
+    if pool is None:
+        return None
+
+    async with pool.acquire() as conn:
+        return await conn.fetch(query, *args)
+
+
+async def execute_command(query: str, *args) -> str:
+    """Execute a command (INSERT, UPDATE, DELETE) and return status.
+
+    Helper function for Phase 7 schema operations.
+
+    Args:
+        query: SQL command string
+        *args: Command parameters
+
+    Returns:
+        Command status string
+    """
+    pool = await get_pg_pool()
+    if pool is None:
+        return ""
+
+    async with pool.acquire() as conn:
+        return await conn.execute(query, *args)
 
 

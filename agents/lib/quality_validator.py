@@ -26,6 +26,13 @@ from omnibase_core.errors import OnexError, EnumCoreErrorCode
 from .codegen_config import CodegenConfig
 from .codegen_events import CodegenValidationRequest, CodegenValidationResponse
 
+# Phase 7: ML-powered mixin compatibility (optional import)
+try:
+    from .mixin_compatibility import MixinCompatibilityManager, CompatibilityLevel
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,15 +75,29 @@ class QualityValidator:
     and quality best practices. Provides detailed scoring and feedback.
     """
 
-    def __init__(self, config: Optional[CodegenConfig] = None):
+    def __init__(self, config: Optional[CodegenConfig] = None, enable_ml_validation: bool = True):
         """
         Initialize quality validator.
 
         Args:
             config: Optional codegen configuration (uses default if not provided)
+            enable_ml_validation: Whether to enable ML-powered mixin validation
         """
         self.config = config or CodegenConfig()
         self.logger = logging.getLogger(__name__)
+
+        # Phase 7: Initialize ML-powered mixin compatibility manager
+        self.enable_ml = enable_ml_validation and ML_AVAILABLE
+        if self.enable_ml:
+            try:
+                self.mixin_manager = MixinCompatibilityManager(enable_ml=True)
+                self.logger.info("ML-powered mixin validation enabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize ML validation: {e}")
+                self.enable_ml = False
+                self.mixin_manager = None
+        else:
+            self.mixin_manager = None
 
         # ONEX naming patterns
         self.node_class_pattern = re.compile(r'^Node[A-Z][a-zA-Z0-9]+(Effect|Compute|Reducer|Orchestrator)$')
@@ -714,6 +735,78 @@ class QualityValidator:
                     return 1.0
 
         return 0.5  # Node class not found
+
+    async def validate_mixin_compatibility(
+        self,
+        code: str,
+        node_type: str
+    ) -> Tuple[float, List[str], List[str]]:
+        """
+        Validate mixin compatibility using ML-powered compatibility manager.
+
+        Args:
+            code: Generated code to validate
+            node_type: ONEX node type
+
+        Returns:
+            Tuple of (compatibility_score, violations, suggestions)
+        """
+        violations = []
+        suggestions = []
+
+        try:
+            tree = ast.parse(code)
+
+            # Extract inherited mixins from code
+            mixins = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    if node.name.startswith('Node'):
+                        for base in node.bases:
+                            if isinstance(base, ast.Name):
+                                if base.id.startswith('Mixin'):
+                                    mixins.append(base.id)
+
+            if not mixins:
+                # No mixins found - this is okay
+                return 1.0, violations, suggestions
+
+            # Validate mixin set compatibility if ML is enabled
+            if self.enable_ml and self.mixin_manager:
+                try:
+                    mixin_set = await self.mixin_manager.validate_mixin_set(mixins, node_type)
+
+                    # Add warnings as violations
+                    if mixin_set.warnings:
+                        for warning in mixin_set.warnings:
+                            violations.append(f"Mixin compatibility: {warning}")
+
+                    # Check overall compatibility
+                    if mixin_set.overall_compatibility < 0.6:
+                        violations.append(
+                            f"Overall mixin compatibility score is low: {mixin_set.overall_compatibility:.2f}"
+                        )
+                        suggestions.append(
+                            "Consider reviewing mixin selection or resolving compatibility conflicts"
+                        )
+
+                    return mixin_set.overall_compatibility, violations, suggestions
+
+                except Exception as e:
+                    self.logger.warning(f"ML mixin validation failed: {e}")
+                    # Fall through to rule-based validation
+
+            # Rule-based validation (fallback)
+            # Check for duplicate mixins
+            if len(mixins) != len(set(mixins)):
+                violations.append("Duplicate mixin inheritance detected")
+                return 0.5, violations, suggestions
+
+            return 1.0, violations, suggestions
+
+        except Exception as e:
+            violations.append(f"Mixin compatibility validation failed: {str(e)}")
+            return 0.5, violations, suggestions
 
     def _check_code_quality(
         self,

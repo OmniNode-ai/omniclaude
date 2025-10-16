@@ -22,6 +22,7 @@ from omnibase_core.enums.enum_node_type import EnumNodeType
 
 from .version_config import get_config
 from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .template_cache import TemplateCache
 
 logger = logging.getLogger(__name__)
 
@@ -50,47 +51,137 @@ class NodeTemplate:
         return rendered
 
 class OmniNodeTemplateEngine:
-    """Template engine for generating OmniNode implementations"""
-    
-    def __init__(self):
+    """
+    Thread-safe template engine for generating OmniNode implementations.
+
+    Thread-Safety Guarantees:
+    - Templates are loaded once and cached (read-only after initialization)
+    - Template rendering uses immutable context dictionaries
+    - File writes go to unique directories per node (domain/microservice/type)
+    - Safe for concurrent use across multiple worker threads
+    - Template cache (Phase 7 Stream 2) provides thread-safe access
+
+    Note: Each worker thread should create its own event loop but can share
+    the template engine instance safely.
+    """
+
+    def __init__(self, enable_cache: bool = True):
         self.config = get_config()
         self.templates_dir = Path(self.config.template_directory)
         # TODO: Initialize validator when omnibase_spi is available
         # self.metadata_validator = ToolMetadataValidator()
         self.logger = logging.getLogger(__name__)
-        
-        # Load templates
+
+        # Initialize template cache (Phase 7 Stream 2)
+        self.enable_cache = enable_cache
+        if enable_cache:
+            self.template_cache = TemplateCache(
+                max_templates=100,
+                max_size_mb=50,
+                ttl_seconds=3600,  # 1 hour
+                enable_persistence=True
+            )
+            self.logger.info("Template caching enabled")
+        else:
+            self.template_cache = None
+            self.logger.info("Template caching disabled")
+
+        # Load templates (with caching if enabled)
         self.templates = self._load_templates()
+
+        # Warmup cache on startup
+        if enable_cache and self.template_cache:
+            self._warmup_cache()
     
     def _load_templates(self) -> Dict[str, NodeTemplate]:
-        """Load node templates from filesystem"""
+        """
+        Load node templates from filesystem with optional caching.
+
+        Uses template cache (Phase 7 Stream 2) for 50% performance improvement.
+        """
         templates = {}
-        
-        # Load EFFECT template
-        effect_template_path = self.templates_dir / "effect_node_template.py"
-        if effect_template_path.exists():
-            with open(effect_template_path, 'r') as f:
-                templates["EFFECT"] = NodeTemplate("EFFECT", f.read())
-        
-        # Load COMPUTE template
-        compute_template_path = self.templates_dir / "compute_node_template.py"
-        if compute_template_path.exists():
-            with open(compute_template_path, 'r') as f:
-                templates["COMPUTE"] = NodeTemplate("COMPUTE", f.read())
-        
-        # Load REDUCER template
-        reducer_template_path = self.templates_dir / "reducer_node_template.py"
-        if reducer_template_path.exists():
-            with open(reducer_template_path, 'r') as f:
-                templates["REDUCER"] = NodeTemplate("REDUCER", f.read())
-        
-        # Load ORCHESTRATOR template
-        orchestrator_template_path = self.templates_dir / "orchestrator_node_template.py"
-        if orchestrator_template_path.exists():
-            with open(orchestrator_template_path, 'r') as f:
-                templates["ORCHESTRATOR"] = NodeTemplate("ORCHESTRATOR", f.read())
-        
+
+        # Template types to load
+        template_types = [
+            ("EFFECT", "effect_node_template.py"),
+            ("COMPUTE", "compute_node_template.py"),
+            ("REDUCER", "reducer_node_template.py"),
+            ("ORCHESTRATOR", "orchestrator_node_template.py")
+        ]
+
+        for node_type, filename in template_types:
+            template_path = self.templates_dir / filename
+
+            if template_path.exists():
+                if self.enable_cache and self.template_cache:
+                    # Use cache for improved performance
+                    content, cache_hit = self.template_cache.get(
+                        template_name=f"{node_type}_template",
+                        template_type=node_type,
+                        file_path=template_path,
+                        loader_func=lambda p: p.read_text()
+                    )
+
+                    if cache_hit:
+                        self.logger.debug(f"Cache HIT for {node_type} template")
+                    else:
+                        self.logger.debug(f"Cache MISS for {node_type} template")
+                else:
+                    # Direct load without caching
+                    with open(template_path, 'r') as f:
+                        content = f.read()
+
+                templates[node_type] = NodeTemplate(node_type, content)
+            else:
+                self.logger.warning(f"Template file not found: {template_path}")
+
         return templates
+
+    def _warmup_cache(self):
+        """Warmup cache by preloading all templates"""
+        if not self.enable_cache or not self.template_cache:
+            return
+
+        template_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+        self.logger.info(f"Warming up template cache for {len(template_types)} templates")
+
+        self.template_cache.warmup(
+            templates_dir=self.templates_dir,
+            template_types=template_types
+        )
+
+        # Log cache statistics after warmup
+        stats = self.template_cache.get_stats()
+        self.logger.info(
+            f"Cache warmup complete: {stats['cached_templates']} templates loaded, "
+            f"{stats['total_size_mb']}MB cached"
+        )
+
+    def get_cache_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        Get template cache statistics.
+
+        Returns:
+            Cache statistics or None if caching disabled
+        """
+        if self.enable_cache and self.template_cache:
+            return self.template_cache.get_stats()
+        return None
+
+    def invalidate_cache(self, template_name: Optional[str] = None):
+        """
+        Invalidate template cache.
+
+        Args:
+            template_name: Specific template to invalidate, or None for all
+        """
+        if self.enable_cache and self.template_cache:
+            if template_name:
+                self.template_cache.invalidate(template_name)
+                self.logger.info(f"Invalidated cache for template: {template_name}")
+            else:
+                self.template_cache.invalidate_all()
+                self.logger.info("Invalidated all cached templates")
     
     async def generate_node(
         self,

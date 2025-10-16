@@ -3,6 +3,7 @@
 Simple PRD Analyzer for Phase 0
 
 A simplified PRD analyzer that doesn't depend on legacy omniagent code.
+Updated for Phase 7 Stream 4: ML-powered mixin recommendations.
 """
 
 import re
@@ -14,6 +15,13 @@ from dataclasses import dataclass
 
 # Import from omnibase_core
 from omnibase_core.errors import OnexError, EnumCoreErrorCode
+
+# Phase 7: ML-powered mixin compatibility (optional import)
+try:
+    from .mixin_compatibility import MixinCompatibilityManager
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +48,28 @@ class SimpleDecompositionResult:
 
 class SimplePRDAnalyzer:
     """Simple PRD analyzer for Phase 0"""
-    
-    def __init__(self):
+
+    def __init__(self, enable_ml_recommendations: bool = True):
+        """
+        Initialize PRD analyzer.
+
+        Args:
+            enable_ml_recommendations: Whether to use ML-powered mixin recommendations
+        """
         self.logger = logging.getLogger(__name__)
+
+        # Phase 7: Initialize ML-powered mixin compatibility manager
+        self.enable_ml = enable_ml_recommendations and ML_AVAILABLE
+        if self.enable_ml:
+            try:
+                self.mixin_manager = MixinCompatibilityManager(enable_ml=True)
+                self.logger.info("ML-powered mixin recommendations enabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize ML recommendations: {e}. Using rule-based fallback.")
+                self.enable_ml = False
+                self.mixin_manager = None
+        else:
+            self.mixin_manager = None
     
     async def analyze_prd(self, prd_content: str, workspace_context: Optional[Dict[str, Any]] = None) -> 'SimplePRDAnalysisResult':
         """Analyze PRD content and extract requirements"""
@@ -246,49 +273,132 @@ class SimplePRDAnalyzer:
         
         return hints
     
-    def _recommend_mixins(self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult) -> List[str]:
-        """Recommend mixins based on PRD analysis"""
-        mixins = []
-        
-        # Analyze requirements for mixin needs
+    async def _recommend_mixins_async(
+        self,
+        parsed_prd: SimpleParsedPRD,
+        decomposition_result: SimpleDecompositionResult,
+        node_type_hints: Dict[str, float]
+    ) -> List[str]:
+        """
+        Recommend mixins based on PRD analysis using ML when available.
+
+        Args:
+            parsed_prd: Parsed PRD content
+            decomposition_result: Task decomposition result
+            node_type_hints: Node type hints with scores
+
+        Returns:
+            List of recommended mixin names
+        """
+        # Extract required capabilities from PRD
         requirements_text = " ".join(parsed_prd.functional_requirements + parsed_prd.features).lower()
-        
+        required_capabilities = self._extract_capabilities(requirements_text)
+
+        # Determine primary node type
+        primary_node_type = max(node_type_hints.items(), key=lambda x: x[1])[0] if node_type_hints else "EFFECT"
+
+        # Use ML recommendations if available
+        if self.enable_ml and self.mixin_manager:
+            try:
+                recommendations = await self.mixin_manager.recommend_mixins(
+                    node_type=primary_node_type,
+                    required_capabilities=required_capabilities,
+                    existing_mixins=[],
+                    max_recommendations=8
+                )
+
+                # Extract mixin names from recommendations
+                mixins = [rec.mixin_name for rec in recommendations if rec.confidence >= 0.6]
+
+                # Validate mixin set for compatibility
+                if mixins:
+                    mixin_set = await self.mixin_manager.validate_mixin_set(mixins, primary_node_type)
+
+                    if mixin_set.warnings:
+                        self.logger.warning(f"Mixin compatibility warnings: {mixin_set.warnings}")
+
+                self.logger.info(f"ML recommendations: {mixins}")
+                return mixins
+
+            except Exception as e:
+                self.logger.warning(f"ML recommendation failed: {e}. Using rule-based fallback.")
+                # Fall through to rule-based recommendations
+
+        # Fallback to rule-based recommendations
+        return self._recommend_mixins_rule_based(requirements_text)
+
+    def _extract_capabilities(self, requirements_text: str) -> List[str]:
+        """Extract required capabilities from requirements text"""
+        capabilities = []
+
+        capability_keywords = {
+            "cache": ["cache", "caching", "performance", "speed"],
+            "logging": ["log", "logging", "audit", "trace"],
+            "metrics": ["metric", "monitoring", "analytics", "kpi"],
+            "health": ["health", "monitoring", "status", "alive"],
+            "events": ["event", "notification", "publish", "subscribe"],
+            "retry": ["retry", "resilient", "fault", "error"],
+            "circuit-breaker": ["circuit", "breaker", "fallback", "timeout"],
+            "validation": ["validate", "validation", "check", "verify"],
+            "security": ["security", "auth", "encrypt", "secure"],
+            "transaction": ["transaction", "commit", "rollback", "atomic"],
+        }
+
+        for capability, keywords in capability_keywords.items():
+            if any(keyword in requirements_text for keyword in keywords):
+                capabilities.append(capability)
+
+        return capabilities
+
+    def _recommend_mixins(self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult) -> List[str]:
+        """
+        Synchronous wrapper for mixin recommendations (for backward compatibility).
+
+        Note: This is deprecated. Use _recommend_mixins_async for ML-powered recommendations.
+        """
+        requirements_text = " ".join(parsed_prd.functional_requirements + parsed_prd.features).lower()
+        return self._recommend_mixins_rule_based(requirements_text)
+
+    def _recommend_mixins_rule_based(self, requirements_text: str) -> List[str]:
+        """Rule-based mixin recommendations (fallback when ML not available)"""
+        mixins = []
+
         # Event-driven patterns
         if any(keyword in requirements_text for keyword in ["event", "notification", "publish", "subscribe"]):
             mixins.append("MixinEventBus")
-        
+
         # Caching patterns
         if any(keyword in requirements_text for keyword in ["cache", "caching", "performance", "speed"]):
             mixins.append("MixinCaching")
-        
+
         # Health monitoring
         if any(keyword in requirements_text for keyword in ["health", "monitoring", "status", "alive"]):
             mixins.append("MixinHealthCheck")
-        
+
         # Retry patterns
         if any(keyword in requirements_text for keyword in ["retry", "resilient", "fault", "error"]):
             mixins.append("MixinRetry")
-        
+
         # Circuit breaker patterns
         if any(keyword in requirements_text for keyword in ["circuit", "breaker", "fallback", "timeout"]):
             mixins.append("MixinCircuitBreaker")
-        
+
         # Logging patterns
         if any(keyword in requirements_text for keyword in ["log", "logging", "audit", "trace"]):
             mixins.append("MixinLogging")
-        
+
         # Metrics patterns
         if any(keyword in requirements_text for keyword in ["metric", "monitoring", "analytics", "kpi"]):
             mixins.append("MixinMetrics")
-        
+
         # Security patterns
         if any(keyword in requirements_text for keyword in ["security", "auth", "encrypt", "secure"]):
             mixins.append("MixinSecurity")
-        
+
         # Validation patterns
         if any(keyword in requirements_text for keyword in ["validate", "validation", "check", "verify"]):
             mixins.append("MixinValidation")
-        
+
         return mixins
     
     def _identify_external_systems(self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult) -> List[str]:
