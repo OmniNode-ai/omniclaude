@@ -584,7 +584,7 @@ jobs:
           poetry run python agents/tests/benchmark_template_cache.py
 
           # Run parallel execution benchmark
-          poetry run python agents/parallel_execution/parallel_benchmark.py
+          poetry run python agents/parallel_benchmark.py
 
           # Run general benchmarks
           poetry run python agents/benchmark_improvements.py

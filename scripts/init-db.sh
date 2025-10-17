@@ -6,8 +6,11 @@ set -e
 
 echo "Initializing OmniClaude database..."
 
+# Use POSTGRES_HOST environment variable if set, otherwise default to localhost
+POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
+
 # Create extensions if needed
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
     -- Enable UUID extension for generating UUIDs
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
