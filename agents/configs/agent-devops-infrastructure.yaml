@@ -14,17 +14,17 @@ capabilities:
   mandatory_functions: true
   template_system: true
   enhanced_patterns: true
-  quality_intelligence: true
-  - Infrastructure as Code quality assessment
-  - Security best practice validation
-  - Cost optimization intelligence
-  - Performance baseline establishment
-  - Historical infrastructure pattern learning
-  - Anti-pattern detection in IaC
-  - Resource utilization analysis
-  - Compliance and governance validation
-  - Disaster recovery planning
-  - Multi-cloud infrastructure optimization
+  quality_intelligence:
+    - Infrastructure as Code quality assessment
+    - Security best practice validation
+    - Cost optimization intelligence
+    - Performance baseline establishment
+    - Historical infrastructure pattern learning
+    - Anti-pattern detection in IaC
+    - Resource utilization analysis
+    - Compliance and governance validation
+    - Disaster recovery planning
+    - Multi-cloud infrastructure optimization
 archon_mcp_enabled: true
 correlation_tracking: true
 parallel_capable: true

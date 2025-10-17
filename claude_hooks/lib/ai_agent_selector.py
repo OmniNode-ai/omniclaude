@@ -71,13 +71,22 @@ class AIAgentSelector:
                     config = yaml.safe_load(f)
 
                     # Extract key metadata for AI selection
+                    # Handle capabilities as either dict or list
+                    capabilities = config.get("capabilities", {})
+                    if isinstance(capabilities, dict):
+                        capabilities_list = list(capabilities.keys())
+                    elif isinstance(capabilities, list):
+                        capabilities_list = capabilities
+                    else:
+                        capabilities_list = []
+
                     agent_meta = {
                         "name": yaml_file.stem,
                         "domain": config.get("agent_domain", ""),
                         "purpose": config.get("agent_purpose", ""),
                         "description": config.get("agent_description", ""),
                         "triggers": config.get("triggers", []),
-                        "capabilities": list(config.get("capabilities", {}).keys())
+                        "capabilities": capabilities_list
                     }
                     agents.append(agent_meta)
 
