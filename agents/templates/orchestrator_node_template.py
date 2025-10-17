@@ -12,8 +12,10 @@ from uuid import UUID
 from datetime import datetime
 
 # Core imports
-from omnibase_core.core.node_orchestrator import NodeOrchestratorService
-from omnibase_core.core.onex_error import OnexError, CoreErrorCode
+from omnibase_core.nodes.node_orchestrator import NodeOrchestrator
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.errors.error_codes import EnumCoreErrorCode
 
 # Mixin imports
 {MIXIN_IMPORTS}
@@ -26,9 +28,9 @@ from .enums.enum_{MICROSERVICE_NAME}_operation_type import Enum{MICROSERVICE_NAM
 
 logger = logging.getLogger(__name__)
 
-class {MICROSERVICE_NAME_PASCAL}OrchestratorService(NodeOrchestratorService{MIXIN_INHERITANCE}):
+class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITANCE}):
     """
-    {MICROSERVICE_NAME} ORCHESTRATOR Node Service
+    {MICROSERVICE_NAME} ORCHESTRATOR Node
     
     {BUSINESS_DESCRIPTION}
     
@@ -36,15 +38,15 @@ class {MICROSERVICE_NAME_PASCAL}OrchestratorService(NodeOrchestratorService{MIXI
 {FEATURES}
     """
     
-    def __init__(self, config: Model{MICROSERVICE_NAME_PASCAL}Config):
-        super().__init__()
-        self.config = config
+    def __init__(self, container: ModelONEXContainer):
+        super().__init__(container)
+        self.container = container
         self.logger = logging.getLogger(__name__)
         
         # Mixin initialization
 {MIXIN_INITIALIZATION}
     
-    async def execute_orchestrate(
+    async def process(
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input,
         correlation_id: Optional[UUID] = None
@@ -60,7 +62,7 @@ class {MICROSERVICE_NAME_PASCAL}OrchestratorService(NodeOrchestratorService{MIXI
             Model{MICROSERVICE_NAME_PASCAL}Output: Result of the orchestration
             
         Raises:
-            OnexError: If orchestration fails
+            ModelOnexError: If orchestration fails
         """
         try:
             self.logger.info(f"Executing {MICROSERVICE_NAME} orchestration operation: {input_data.operation_type}")
@@ -92,10 +94,10 @@ class {MICROSERVICE_NAME_PASCAL}OrchestratorService(NodeOrchestratorService{MIXI
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for orchestration"""
         if not input_data.operation_type:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict()}
+                details={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else vars(input_data)}
             )
         
         # Add orchestration-specific validation
@@ -151,19 +153,19 @@ class {MICROSERVICE_NAME_PASCAL}OrchestratorService(NodeOrchestratorService{MIXI
 # Main execution
 if __name__ == "__main__":
     # Example usage
-    config = Model{MICROSERVICE_NAME_PASCAL}Config()
-    service = {MICROSERVICE_NAME_PASCAL}OrchestratorService(config)
-    
+    container = ModelONEXContainer()
+    node = Node{MICROSERVICE_NAME_PASCAL}Orchestrator(container)
+
     # Example input
     input_data = Model{MICROSERVICE_NAME_PASCAL}Input(
         operation_type="coordinate",
         parameters={"workflow": "example_workflow"},
         metadata={"orchestration_type": "sequential"}
     )
-    
-    # Run the service
+
+    # Run the node
     async def main():
-        result = await service.execute_orchestrate(input_data)
+        result = await node.process(input_data)
         print(f"Orchestration result: {result}")
-    
+
     asyncio.run(main())

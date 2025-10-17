@@ -10,15 +10,29 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
 from uuid import UUID
 
 import asyncpg
+from .version_config import get_config
 
 
 class CodegenPersistence:
     def __init__(self, dsn: Optional[str] = None) -> None:
-        # DSN example: postgresql://user:pass@localhost:5432/dbname
-        self.dsn = dsn or "postgresql://postgres:postgres@localhost:5432/omniclaude"
+        if dsn:
+            self.dsn = dsn
+        else:
+            # Build DSN from configuration with URL encoding for credentials
+            config = get_config()
+            if not config.postgres_password:
+                raise ValueError(
+                    "POSTGRES_PASSWORD environment variable is required. "
+                    "Please set it in your environment or .env file."
+                )
+            # URL-encode credentials to handle special characters
+            user = quote_plus(config.postgres_user)
+            password = quote_plus(config.postgres_password)
+            self.dsn = f"postgresql://{user}:{password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
         self._pool: Optional[asyncpg.Pool] = None
 
     async def _ensure_pool(self) -> asyncpg.Pool:
