@@ -372,8 +372,12 @@ def main():
 
     args = parser.parse_args()
 
-    # Join prompt parts
-    prompt = " ".join(args.prompt)
+    # Join prompt parts or read from stdin
+    if len(args.prompt) == 1 and args.prompt[0] == "-":
+        # Read from stdin (Unix convention)
+        prompt = sys.stdin.read().strip()
+    else:
+        prompt = " ".join(args.prompt)
 
     # Initialize selector
     selector = HybridAgentSelector(
