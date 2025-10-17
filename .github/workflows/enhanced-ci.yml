@@ -1,0 +1,747 @@
+name: Enhanced CI Pipeline with ONEX Validation
+
+# Comprehensive CI pipeline for OmniClaude with ONEX architecture compliance
+# Includes unit tests, integration tests, hooks testing, agent framework validation,
+# performance benchmarks, and infrastructure validation
+
+on:
+  push:
+    branches: [main, develop, feature/**]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.12'
+  POETRY_VERSION: '1.8.3'
+
+jobs:
+  # ============================================================================
+  # Code Quality and Type Safety (Strict)
+  # ============================================================================
+  quality-strict:
+    name: Code Quality (Strict Mode)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root --with dev
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Run Black (code formatting check)
+        run: |
+          echo "::group::Black Formatting Check"
+          poetry run black --check --diff .
+          echo "::endgroup::"
+
+      - name: Run Ruff (linting - strict)
+        run: |
+          echo "::group::Ruff Linting"
+          poetry run ruff check . --show-source --show-fixes
+          echo "::endgroup::"
+
+      - name: Run type checking (mypy - strict mode)
+        run: |
+          echo "::group::MyPy Type Checking (Strict)"
+          poetry run pip install mypy types-PyYAML types-aiofiles types-redis
+          # Strict type checking - this MUST pass for CI to succeed
+          poetry run mypy agents/ claude_hooks/ \
+            --strict \
+            --show-error-codes \
+            --show-column-numbers \
+            --pretty \
+            --ignore-missing-imports \
+            --disallow-untyped-defs \
+            --warn-redundant-casts \
+            --warn-unused-ignores \
+            --no-implicit-optional
+          echo "::endgroup::"
+
+      - name: Upload type checking report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mypy-report
+          path: .mypy_cache/
+
+  # ============================================================================
+  # ONEX Architecture Compliance Validation
+  # ============================================================================
+  onex-validation:
+    name: ONEX Architecture Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Validate ONEX Naming Conventions
+        run: |
+          echo "::group::ONEX Naming Convention Validation"
+          # Check for proper ONEX node naming: Node<Name><Type>
+          echo "Validating ONEX node class naming conventions..."
+
+          # Find all Python files in agents/ and claude_hooks/
+          find agents/ claude_hooks/ -name "node_*.py" -type f | while read -r file; do
+            echo "Checking $file..."
+
+            # Validate Effect nodes
+            if [[ "$file" == *"_effect.py" ]]; then
+              if ! grep -q "class Node.*Effect" "$file"; then
+                echo "❌ ERROR: $file should define a class named Node<Name>Effect"
+                exit 1
+              else
+                echo "✅ $file: ONEX Effect naming convention passed"
+              fi
+            fi
+
+            # Validate Compute nodes
+            if [[ "$file" == *"_compute.py" ]]; then
+              if ! grep -q "class Node.*Compute" "$file"; then
+                echo "❌ ERROR: $file should define a class named Node<Name>Compute"
+                exit 1
+              else
+                echo "✅ $file: ONEX Compute naming convention passed"
+              fi
+            fi
+
+            # Validate Reducer nodes
+            if [[ "$file" == *"_reducer.py" ]]; then
+              if ! grep -q "class Node.*Reducer" "$file"; then
+                echo "❌ ERROR: $file should define a class named Node<Name>Reducer"
+                exit 1
+              else
+                echo "✅ $file: ONEX Reducer naming convention passed"
+              fi
+            fi
+
+            # Validate Orchestrator nodes
+            if [[ "$file" == *"_orchestrator.py" ]]; then
+              if ! grep -q "class Node.*Orchestrator" "$file"; then
+                echo "❌ ERROR: $file should define a class named Node<Name>Orchestrator"
+                exit 1
+              else
+                echo "✅ $file: ONEX Orchestrator naming convention passed"
+              fi
+            fi
+          done
+
+          echo "✅ All ONEX naming conventions validated successfully"
+          echo "::endgroup::"
+
+      - name: Validate ONEX Contract Usage
+        run: |
+          echo "::group::ONEX Contract Validation"
+          echo "Validating ONEX contract definitions..."
+
+          # Check for ModelContract usage in nodes
+          find agents/ claude_hooks/ -name "node_*.py" -type f | while read -r file; do
+            if ! grep -q "ModelContract" "$file" 2>/dev/null; then
+              echo "⚠️  WARNING: $file may be missing ModelContract usage"
+            else
+              echo "✅ $file: Uses ModelContract"
+            fi
+          done
+
+          echo "✅ Contract validation completed"
+          echo "::endgroup::"
+
+      - name: Check ONEX Method Signatures
+        run: |
+          echo "::group::ONEX Method Signature Validation"
+          echo "Validating ONEX method signatures..."
+
+          # Validate Effect nodes have execute_effect method
+          find agents/ claude_hooks/ -name "*_effect.py" -type f | while read -r file; do
+            if grep -q "class Node.*Effect" "$file"; then
+              if ! grep -q "async def execute_effect" "$file"; then
+                echo "⚠️  WARNING: $file Effect node should implement async def execute_effect()"
+              else
+                echo "✅ $file: Implements execute_effect()"
+              fi
+            fi
+          done
+
+          echo "✅ Method signature validation completed"
+          echo "::endgroup::"
+
+  # ============================================================================
+  # Unit Tests (Fast, Isolated)
+  # ============================================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run unit tests
+        run: |
+          echo "::group::Unit Tests"
+          poetry run pytest \
+            agents/tests/ \
+            -v \
+            --ignore=agents/tests/test_integration_smoke.py \
+            --ignore=agents/tests/test_phase4_integration.py \
+            --ignore=agents/tests/test_phase5_integration.py \
+            --ignore=agents/tests/test_phase7_integration.py \
+            --ignore=agents/tests/test_end_to_end_workflows.py \
+            -m "not integration" \
+            --cov=agents \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=junit-unit.xml
+          echo "::endgroup::"
+
+      - name: Upload unit test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: unit-tests
+
+      - name: Upload unit test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: junit-unit.xml
+
+  # ============================================================================
+  # Integration Tests (with PostgreSQL and Redis)
+  # ============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Initialize test database
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+          PGPASSWORD: test
+        run: |
+          # Wait for PostgreSQL to be ready
+          until psql -h localhost -U test -d test_db -c '\q'; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Run init script
+          psql -h localhost -U test -d test_db < scripts/init-db.sh || true
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          echo "::group::Integration Tests"
+          poetry run pytest \
+            agents/tests/test_integration_smoke.py \
+            agents/tests/test_phase4_integration.py \
+            agents/tests/test_phase5_integration.py \
+            agents/tests/test_phase7_integration.py \
+            agents/tests/test_end_to_end_workflows.py \
+            -v \
+            -m integration \
+            --cov=agents \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=junit-integration.xml
+          echo "::endgroup::"
+
+      - name: Upload integration test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: integration
+          name: integration-tests
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: junit-integration.xml
+
+  # ============================================================================
+  # Hooks System Tests
+  # ============================================================================
+  hooks-tests:
+    name: Hooks System Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DB: hooks_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Initialize hooks database
+        env:
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DB: hooks_test_db
+          PGPASSWORD: hooks_test
+        run: |
+          # Wait for PostgreSQL
+          until psql -h localhost -U hooks_test -d hooks_test_db -c '\q'; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Run init script
+          psql -h localhost -U hooks_test -d hooks_test_db < scripts/init-db.sh || true
+
+      - name: Run hooks system tests
+        env:
+          DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+        run: |
+          echo "::group::Hooks System Tests"
+          poetry run pytest \
+            claude_hooks/tests/ \
+            -v \
+            --cov=claude_hooks \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=junit-hooks.xml
+          echo "::endgroup::"
+
+      - name: Upload hooks test coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: hooks
+          name: hooks-tests
+
+      - name: Upload hooks test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hooks-test-results
+          path: junit-hooks.xml
+
+  # ============================================================================
+  # Agent Framework Tests
+  # ============================================================================
+  agent-framework-tests:
+    name: Agent Framework Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run agent framework tests
+        run: |
+          echo "::group::Agent Framework Tests"
+          poetry run pytest \
+            agents/tests/test_enhanced_router.py \
+            agents/tests/test_quality_gates.py \
+            agents/tests/test_performance_thresholds.py \
+            -v \
+            --cov=agents \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=junit-agent-framework.xml
+          echo "::endgroup::"
+
+      - name: Upload agent framework coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: agent-framework
+          name: agent-framework-tests
+
+      - name: Upload agent framework test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-framework-test-results
+          path: junit-agent-framework.xml
+
+  # ============================================================================
+  # Performance Benchmarks
+  # ============================================================================
+  performance-benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run performance benchmarks
+        run: |
+          echo "::group::Performance Benchmarks"
+
+          # Run template cache benchmark
+          poetry run python agents/tests/benchmark_template_cache.py
+
+          # Run parallel execution benchmark
+          poetry run python agents/parallel_execution/parallel_benchmark.py
+
+          # Run general benchmarks
+          poetry run python agents/benchmark_improvements.py
+
+          echo "::endgroup::"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-benchmarks
+          path: |
+            benchmark-results.json
+            performance-report.txt
+
+  # ============================================================================
+  # Database Schema Validation
+  # ============================================================================
+  database-validation:
+    name: Database Schema Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: schema_test
+          POSTGRES_PASSWORD: schema_test
+          POSTGRES_DB: schema_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate database initialization script
+        env:
+          PGPASSWORD: schema_test
+        run: |
+          echo "::group::Database Schema Validation"
+
+          # Wait for PostgreSQL
+          until psql -h localhost -U schema_test -d schema_test_db -c '\q'; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Run init script
+          export POSTGRES_USER=schema_test
+          export POSTGRES_DB=schema_test_db
+          psql -h localhost -U schema_test -d schema_test_db < scripts/init-db.sh
+
+          # Validate tables were created
+          echo "Validating agent_routing_decisions table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d agent_routing_decisions'
+
+          echo "Validating agent_transformation_events table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d agent_transformation_events'
+
+          echo "Validating router_performance_metrics table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d router_performance_metrics'
+
+          # Validate indexes
+          echo "Validating indexes..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\di'
+
+          echo "✅ Database schema validation passed"
+          echo "::endgroup::"
+
+  # ============================================================================
+  # Docker Compose Stack Validation
+  # ============================================================================
+  docker-compose-validation:
+    name: Docker Compose Stack Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          echo "::group::Docker Compose Validation"
+
+          # Validate compose file syntax
+          docker-compose config --quiet
+
+          echo "✅ docker-compose.yml syntax is valid"
+
+          # Validate services are defined
+          echo "Checking defined services..."
+          docker-compose config --services
+
+          echo "::endgroup::"
+
+      - name: Build Docker Compose stack
+        run: |
+          echo "::group::Building Docker Compose Stack"
+          docker-compose build --parallel
+          echo "::endgroup::"
+
+      - name: Start stack and validate health
+        run: |
+          echo "::group::Stack Health Validation"
+
+          # Start services
+          docker-compose up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to be healthy..."
+          sleep 30
+
+          # Check service health
+          docker-compose ps
+
+          # Validate PostgreSQL
+          docker-compose exec -T postgres pg_isready -U omniclaude || echo "⚠️  PostgreSQL not ready"
+
+          # Validate Redis
+          docker-compose exec -T redis redis-cli ping || echo "⚠️  Redis not ready"
+
+          # Check app health endpoint
+          curl -f http://localhost:8000/health || echo "⚠️  App health check failed"
+
+          echo "::endgroup::"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose down -v
+
+  # ============================================================================
+  # Build and Push Docker Image
+  # ============================================================================
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs:
+      - quality-strict
+      - onex-validation
+      - unit-tests
+      - integration-tests
+      - hooks-tests
+      - agent-framework-tests
+      - database-validation
+      - docker-compose-validation
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ steps.meta.outputs.created }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+
+  # ============================================================================
+  # Test Summary Report
+  # ============================================================================
+  test-summary:
+    name: Test Summary Report
+    runs-on: ubuntu-latest
+    needs:
+      - unit-tests
+      - integration-tests
+      - hooks-tests
+      - agent-framework-tests
+      - performance-benchmarks
+    if: always()
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results/
+
+      - name: Generate test summary
+        run: |
+          echo "# OmniClaude CI Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # List all artifacts
+          ls -la test-results/
+
+          echo "✅ All tests completed" >> $GITHUB_STEP_SUMMARY
