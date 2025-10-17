@@ -12,8 +12,10 @@ from uuid import UUID
 from datetime import datetime
 
 # Core imports
-from omnibase_core.core.node_compute import NodeComputeService
-from omnibase_core.core.onex_error import OnexError, CoreErrorCode
+from omnibase_core.nodes.node_compute import NodeCompute
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.errors.error_codes import EnumCoreErrorCode
 
 # Mixin imports
 {MIXIN_IMPORTS}
@@ -26,9 +28,9 @@ from .enums.enum_{MICROSERVICE_NAME}_operation_type import Enum{MICROSERVICE_NAM
 
 logger = logging.getLogger(__name__)
 
-class {MICROSERVICE_NAME_PASCAL}ComputeService(NodeComputeService{MIXIN_INHERITANCE}):
+class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
     """
-    {MICROSERVICE_NAME} COMPUTE Node Service
+    {MICROSERVICE_NAME} COMPUTE Node
     
     {BUSINESS_DESCRIPTION}
     
@@ -36,15 +38,15 @@ class {MICROSERVICE_NAME_PASCAL}ComputeService(NodeComputeService{MIXIN_INHERITA
 {FEATURES}
     """
     
-    def __init__(self, config: Model{MICROSERVICE_NAME_PASCAL}Config):
-        super().__init__()
-        self.config = config
+    def __init__(self, container: ModelONEXContainer):
+        super().__init__(container)
+        self.container = container
         self.logger = logging.getLogger(__name__)
         
         # Mixin initialization
 {MIXIN_INITIALIZATION}
     
-    async def execute_compute(
+    async def process(
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input,
         correlation_id: Optional[UUID] = None
@@ -63,7 +65,7 @@ class {MICROSERVICE_NAME_PASCAL}ComputeService(NodeComputeService{MIXIN_INHERITA
             OnexError: If computation fails
         """
         try:
-            self.logger.info(f"Executing {MICROSERVICE_NAME} compute operation: {input_data.operation_type}")
+            self.logger.info(f"Processing {MICROSERVICE_NAME} compute operation: {input_data.operation_type}")
             
             # Validate input
             await self._validate_input(input_data)
@@ -83,19 +85,19 @@ class {MICROSERVICE_NAME_PASCAL}ComputeService(NodeComputeService{MIXIN_INHERITA
             
         except Exception as e:
             self.logger.error(f"{MICROSERVICE_NAME} compute operation failed: {str(e)}")
-            return Model{MICROSERVICE_NAME_PASCAL}Output(
-                result_data={},
-                success=False,
-                error_message=str(e)
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.PROCESSING_ERROR,
+                message=f"{MICROSERVICE_NAME} compute operation failed: {str(e)}",
+                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
             )
     
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for computation"""
         if not input_data.operation_type:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict()}
+                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
             )
         
         # Add computation-specific validation
@@ -150,8 +152,8 @@ class {MICROSERVICE_NAME_PASCAL}ComputeService(NodeComputeService{MIXIN_INHERITA
 # Main execution
 if __name__ == "__main__":
     # Example usage
-    config = Model{MICROSERVICE_NAME_PASCAL}Config()
-    service = {MICROSERVICE_NAME_PASCAL}ComputeService(config)
+    container = ModelONEXContainer()
+    node = Node{MICROSERVICE_NAME_PASCAL}Compute(container)
     
     # Example input
     input_data = Model{MICROSERVICE_NAME_PASCAL}Input(
@@ -160,9 +162,9 @@ if __name__ == "__main__":
         metadata={"algorithm": "example"}
     )
     
-    # Run the service
+    # Run the node
     async def main():
-        result = await service.execute_compute(input_data)
+        result = await node.process(input_data)
         print(f"Computation result: {result}")
     
     asyncio.run(main())

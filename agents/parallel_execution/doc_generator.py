@@ -15,6 +15,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from ..lib.version_config import get_config
 
 
 class MarkdownDocGenerator:
@@ -417,10 +418,38 @@ Formatted Response
 
 ## Security Considerations
 
-- **Input Validation**: All inputs validated before processing
-- **Error Information**: Sanitized error messages
-- **Resource Access**: Controlled external system access
-- **Configuration**: Externalized configuration management
+### Input Validation
+- All inputs validated before processing
+- Type checking and constraint validation via Pydantic models
+- Sanitization of user-provided data
+
+### Credential Management
+- **NEVER store credentials in Consul KV** without encryption
+- Use dedicated secret management systems:
+  - HashiCorp Vault
+  - AWS Secrets Manager
+  - Azure Key Vault
+  - GCP Secret Manager
+- Store only references to secrets, not actual credentials
+- Implement proper ACLs on sensitive configuration paths
+- Rotate credentials regularly using automated processes
+
+### Error Handling
+- Sanitized error messages that don't expose internal details
+- Avoid leaking sensitive information in stack traces
+- Log security events for audit purposes
+
+### Access Control
+- Controlled external system access with proper authentication
+- Implement least-privilege principle for service accounts
+- Use mutual TLS for service-to-service communication
+- Monitor and audit API access patterns
+
+### Configuration Security
+- Externalized configuration management
+- Environment-specific configuration isolation
+- Secure defaults for all configuration parameters
+- Configuration validation at startup
 """
 
         with open(arch_file, 'w') as f:
@@ -515,21 +544,64 @@ asyncio.run(register_service())
 
 ```python
 async def manage_config():
-    # Set configuration value
+    # Get configuration
+    config = get_config()
+
+    # ⚠️ SECURITY WARNING: This is a simplified example for demonstration purposes.
+    #
+    # In production environments:
+    # 1. NEVER store credentials in Consul KV without encryption
+    # 2. Use secret management systems (Vault, AWS Secrets Manager, etc.)
+    # 3. Store only references to secrets, not the secrets themselves
+    # 4. Implement proper ACLs on Consul KV paths containing sensitive data
+    # 5. Use environment variables or secure secret injection at runtime
+    #
+    # Better approach: Store only connection metadata, retrieve credentials securely
+    # Example: Store "db_host", "db_port", "db_name" separately,
+    #          retrieve credentials from Vault at runtime
+
+    # SAFE: Store non-sensitive connection metadata
     await adapter.execute_effect({
         "operation": "kv_set",
-        "key": "config/database_url",
-        "value": "postgresql://localhost:5432/mydb"
+        "key": "config/database/host",
+        "value": config.postgres_host
+    })
+
+    await adapter.execute_effect({
+        "operation": "kv_set",
+        "key": "config/database/port",
+        "value": str(config.postgres_port)
+    })
+
+    await adapter.execute_effect({
+        "operation": "kv_set",
+        "key": "config/database/name",
+        "value": config.postgres_db
+    })
+
+    # UNSAFE - DON'T DO THIS IN PRODUCTION:
+    # Storing full connection strings with credentials exposes sensitive data
+    # await adapter.execute_effect({
+    #     "operation": "kv_set",
+    #     "key": "config/database_url",
+    #     "value": f"postgresql://user:password@{host}:{port}/{db}"  # ❌ NEVER DO THIS
+    # })
+
+    # RECOMMENDED: Reference secret manager path instead
+    await adapter.execute_effect({
+        "operation": "kv_set",
+        "key": "config/database/credentials_path",
+        "value": "vault://secrets/database/postgres/credentials"  # ✅ Reference, not secret
     })
 
     # Get configuration value
     result = await adapter.execute_effect({
         "operation": "kv_get",
-        "key": "config/database_url"
+        "key": "config/database/host"
     })
 
     if result['success']:
-        print(f"Database URL: {result['value']}")
+        print(f"Database Host: {result['value']}")
 
 asyncio.run(manage_config())
 ```
@@ -724,13 +796,55 @@ TIMEOUT="5s"
 - Cache frequently accessed data
 - Monitor performance metrics
 
-### Security Considerations
+### Security Best Practices
 
-- Use TLS for Consul connections
-- Implement proper ACL policies
-- Rotate tokens regularly
-- Monitor access logs
-- Validate all inputs
+#### Secret Management
+- **NEVER hardcode credentials** in configuration files or code
+- Use dedicated secret management systems (Vault, AWS Secrets Manager, etc.)
+- Inject secrets at runtime via environment variables or secret providers
+- Implement automatic credential rotation
+- Audit all secret access with centralized logging
+
+#### Network Security
+- Use TLS/HTTPS for all Consul connections in production
+- Implement mutual TLS (mTLS) for service-to-service communication
+- Use network policies to restrict service access
+- Enable certificate validation and pinning
+
+#### Access Control
+- Implement proper ACL policies with least-privilege principle
+- Use service-specific tokens with minimal required permissions
+- Rotate tokens regularly (recommended: every 30-90 days)
+- Monitor and audit access logs for suspicious activity
+- Implement token expiration and automatic renewal
+
+#### Input Validation
+- Validate all inputs at API boundaries
+- Sanitize user-provided data to prevent injection attacks
+- Implement rate limiting to prevent abuse
+- Use schema validation for all configuration data
+
+#### Example: Secure Configuration Loading
+
+```python
+import os
+from pathlib import Path
+
+# ✅ RECOMMENDED: Load from environment or secret manager
+CONSUL_URL = os.getenv('CONSUL_URL', 'http://localhost:8500')
+CONSUL_TOKEN = os.getenv('CONSUL_TOKEN')  # Retrieved from secret manager
+
+# ✅ RECOMMENDED: Validate configuration at startup
+if not CONSUL_URL.startswith(('http://', 'https://')):
+    raise ValueError("Invalid CONSUL_URL format")
+
+# ❌ NEVER DO THIS: Hardcoded credentials
+# CONSUL_TOKEN = "hardcoded-token-value"  # DON'T DO THIS
+
+# ❌ NEVER DO THIS: Credentials in version control
+# with open('.secrets.json') as f:  # DON'T COMMIT THIS FILE
+#     secrets = json.load(f)
+```
 """
 
         with open(impl_file, 'w') as f:

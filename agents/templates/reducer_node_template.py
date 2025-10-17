@@ -12,8 +12,10 @@ from uuid import UUID
 from datetime import datetime
 
 # Core imports
-from omnibase_core.core.node_reducer import NodeReducerService
-from omnibase_core.core.onex_error import OnexError, CoreErrorCode
+from omnibase_core.nodes.node_reducer import NodeReducer
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.errors.error_codes import EnumCoreErrorCode
 
 # Mixin imports
 {MIXIN_IMPORTS}
@@ -26,9 +28,9 @@ from .enums.enum_{MICROSERVICE_NAME}_operation_type import Enum{MICROSERVICE_NAM
 
 logger = logging.getLogger(__name__)
 
-class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITANCE}):
+class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
     """
-    {MICROSERVICE_NAME} REDUCER Node Service
+    {MICROSERVICE_NAME} REDUCER Node
     
     {BUSINESS_DESCRIPTION}
     
@@ -36,15 +38,15 @@ class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITA
 {FEATURES}
     """
     
-    def __init__(self, config: Model{MICROSERVICE_NAME_PASCAL}Config):
-        super().__init__()
-        self.config = config
+    def __init__(self, container: ModelONEXContainer):
+        super().__init__(container)
+        self.container = container
         self.logger = logging.getLogger(__name__)
         
         # Mixin initialization
 {MIXIN_INITIALIZATION}
     
-    async def execute_reduce(
+    async def process(
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input,
         correlation_id: Optional[UUID] = None
@@ -92,10 +94,10 @@ class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITA
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for reduction"""
         if not input_data.operation_type:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
+            raise ModelOnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict()}
+                details={"input_data": input_data.model_dump()}
             )
         
         # Add reduction-specific validation
@@ -150,19 +152,19 @@ class {MICROSERVICE_NAME_PASCAL}ReducerService(NodeReducerService{MIXIN_INHERITA
 # Main execution
 if __name__ == "__main__":
     # Example usage
-    config = Model{MICROSERVICE_NAME_PASCAL}Config()
-    service = {MICROSERVICE_NAME_PASCAL}ReducerService(config)
-    
+    container = ModelONEXContainer()
+    node = Node{MICROSERVICE_NAME_PASCAL}Reducer(container)
+
     # Example input
     input_data = Model{MICROSERVICE_NAME_PASCAL}Input(
         operation_type="aggregate",
         parameters={"data": [1, 2, 3, 4, 5]},
         metadata={"reduction_type": "sum"}
     )
-    
-    # Run the service
+
+    # Run the node
     async def main():
-        result = await service.execute_reduce(input_data)
+        result = await node.process(input_data)
         print(f"Reduction result: {result}")
-    
+
     asyncio.run(main())
