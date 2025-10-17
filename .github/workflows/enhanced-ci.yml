@@ -662,21 +662,21 @@ jobs:
   # ============================================================================
   # Docker Compose Stack Validation
   # ============================================================================
-  docker-compose-validation:
+  docker compose-validation:
     name: Docker Compose Stack Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate docker-compose.yml
+      - name: Validate docker compose.yml
         run: |
           echo "::group::Docker Compose Validation"
 
           # Validate compose file syntax (use v2 syntax: docker compose)
           docker compose config --quiet
 
-          echo "✅ docker-compose.yml syntax is valid"
+          echo "✅ docker compose.yml syntax is valid"
 
           # Validate services are defined
           echo "Checking defined services..."
@@ -734,7 +734,7 @@ jobs:
       - hooks-tests
       - agent-framework-tests
       - database-validation
-      - docker-compose-validation
+      - docker compose-validation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
