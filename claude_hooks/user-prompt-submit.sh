@@ -171,35 +171,56 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
-# Context blocks
+# Context blocks - AGENT DISPATCH DIRECTIVE
 # -----------------------------
 AGENT_CONTEXT="$(cat <<EOF
 
----
-[Agent Framework Context - Auto-injected by hooks]
+========================================================================
+🎯 AGENT DISPATCH DIRECTIVE (Auto-detected by hooks)
+========================================================================
 
-Agent Detected: ${AGENT_NAME}
-Agent Domain: ${AGENT_DOMAIN}
-Agent Purpose: ${AGENT_PURPOSE}
+DETECTED AGENT: ${AGENT_NAME}
+Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
+Domain: ${AGENT_DOMAIN}
+Purpose: ${AGENT_PURPOSE}
 
-Framework References:
-- @MANDATORY_FUNCTIONS.md (47 required functions across 11 categories)
-- @quality-gates-spec.yaml (23 quality gates for validation)
-- @performance-thresholds.yaml (33 performance thresholds)
-- @COMMON_WORKFLOW.md (Agent workflow patterns)
+REQUIRED ACTION: Use the Task tool to dispatch this request to agent-workflow-coordinator
 
-Intelligence Gathering:
-- Domain Query: ${DOMAIN_QUERY:0:80}...
-- Implementation Query: ${IMPL_QUERY:0:80}...
-- RAG queries executed in background (check /tmp/agent_intelligence_*)
-- Correlation ID: ${CORRELATION_ID}
+Task Tool Configuration:
+┌────────────────────────────────────────────────────────────────────┐
+│ description: "${AGENT_DOMAIN} task execution"                       │
+│ subagent_type: "agent-workflow-coordinator"                         │
+│ prompt: "Route to ${AGENT_NAME} and execute the following request: │
+│                                                                      │
+│   ${PROMPT:0:200}...                                                │
+│                                                                      │
+│   Intelligence Context (pre-gathered by hooks):                    │
+│   - Agent: ${AGENT_NAME}                                            │
+│   - Domain: ${AGENT_DOMAIN}                                         │
+│   - Purpose: ${AGENT_PURPOSE}                                       │
+│   - Detection Confidence: ${CONFIDENCE}                             │
+│   - Detection Method: ${SELECTION_METHOD}                           │
+│   - Detection Reasoning: ${SELECTION_REASONING:0:120}...            │
+│   - RAG Domain Intelligence: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json │
+│   - RAG Implementation Intelligence: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
+│   - Correlation ID: ${CORRELATION_ID}                               │
+│   - Archon MCP: ${ARCHON_MCP_URL}                                   │
+│                                                                      │
+│   Framework Requirements:                                            │
+│   - 47 mandatory functions (IC-001 to FI-004)                       │
+│   - 23 quality gates validation                                     │
+│   - Performance thresholds compliance                                │
+│                                                                      │
+│   The agent-workflow-coordinator will handle routing, execution,    │
+│   and intelligence integration for this task."                       │
+└────────────────────────────────────────────────────────────────────┘
 
-Archon MCP Integration:
-- MCP Server: ${ARCHON_MCP_URL}
-- Intelligence Service: ${ARCHON_INTELLIGENCE_URL}
+Why this dispatch is recommended:
+- ${SELECTION_REASONING:0:200}
 
-Mandatory Execution:
-All 47 mandatory functions (IC-001 to FI-004) and 23 quality gates will be enforced through PreToolUse and PostToolUse hooks.
+Alternative: If you prefer manual execution, the above intelligence context
+is available for your direct use.
+========================================================================
 EOF
 )"
 
