@@ -98,7 +98,12 @@ log "Reasoning: ${SELECTION_REASONING:0:120}..."
 # -----------------------------
 # Correlation ID
 # -----------------------------
-CORRELATION_ID="$(uuidgen | tr "[:upper:]" "[:lower:]")"
+# Use uuidgen if available, fallback to Python
+if command -v uuidgen >/dev/null 2>&1; then
+    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+else
+    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
 
 # -----------------------------
 # Metadata extraction
@@ -228,10 +233,13 @@ WORKFLOW_CONTEXT=""
 if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
   log "Launching automated workflow with output capture"
 
+  # Get repository root dynamically
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${WORKSPACE_PATH:-$PWD}")"
+
   # Create workflow input JSON
   WORKFLOW_JSON="$(jq -n \
     --arg prompt "$PROMPT" \
-    --arg workspace "/Volumes/PRO-G40/Code/omniclaude" \
+    --arg workspace "$REPO_ROOT" \
     --arg corr_id "$CORRELATION_ID" \
     '{user_prompt: $prompt, workspace_path: $workspace, correlation_id: $corr_id}')"
 
@@ -239,7 +247,7 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
   OUTPUT_FILE="/tmp/workflow_${CORRELATION_ID}.log"
 
   (
-    cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+    cd "$REPO_ROOT/agents/parallel_execution" 2>/dev/null || cd "${WORKSPACE_PATH:-$PWD}/agents/parallel_execution"
     echo "$WORKFLOW_JSON" | python3 dispatch_runner.py --enable-context --enable-quorum > "$OUTPUT_FILE" 2>&1
   ) &
   WORKFLOW_PID=$!
