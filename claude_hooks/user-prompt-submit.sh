@@ -13,6 +13,10 @@ export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 export ARCHON_MCP_URL="${ARCHON_MCP_URL:-http://localhost:8051}"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
+# Database credentials for hook event logging (required from .env)
+# Set DB_PASSWORD in your .env file or environment
+export DB_PASSWORD="${DB_PASSWORD:-}"
+
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 b64() { printf %s "$1" | base64; }
 
