@@ -1,5 +1,3 @@
-version: '3.9'
-
 # OmniClaude Production-Ready Docker Compose Stack
 # Includes application, database, monitoring, and observability components
 # Security-hardened with health checks, resource limits, and network segmentation
@@ -289,12 +287,12 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 172.22.0.0/16
   monitoring_network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.21.0.0/16
+        - subnet: 172.23.0.0/16
 
 # ============================================================================
 # Volumes - Persistent data storage

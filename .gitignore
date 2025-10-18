@@ -18,6 +18,8 @@ eggs/
 lib/
 !agents/lib/
 !agents/lib/**
+!claude_hooks/lib/
+!claude_hooks/lib/**
 lib64/
 parts/
 sdist/

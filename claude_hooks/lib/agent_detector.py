@@ -159,7 +159,17 @@ class AgentDetector:
 
         try:
             with open(config_path, "r") as f:
-                return yaml.safe_load(f)
+                # Use safe_load_all to handle files with multiple YAML documents
+                # Take the first document (agent config)
+                docs = list(yaml.safe_load_all(f))
+                if not docs:
+                    return None
+                config = docs[0]
+
+                if not isinstance(config, dict):
+                    return None
+
+                return config
         except Exception as e:
             print(f"Error loading agent config: {e}", file=sys.stderr)
             return None
