@@ -1,0 +1,19 @@
+# Bandit configuration for OmniClaude
+# Exclude test assertions (B101) in test files as they are expected
+
+[bandit]
+# Skip specific tests in specific paths
+skips: B101
+
+# Exclude test directories from certain checks
+exclude_dirs:
+    - /agents/tests/
+    - /agents/templates/
+    - /claude_hooks/tests/
+
+# Test files are allowed to use asserts
+[B101]
+exclude:
+    - */tests/*
+    - */test_*.py
+    - *_test.py
