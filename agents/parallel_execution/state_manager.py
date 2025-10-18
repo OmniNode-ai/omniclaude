@@ -19,7 +19,7 @@ ONEX Compliance:
 - Naming: Node<Name><Type> pattern
 
 Integration:
-- Database: Uses DEBUG_LOOP_SCHEMA.md tables
+- Database: Uses docs/archive/DEBUG_LOOP_SCHEMA.md tables
 - Agents: Integrates with agent-debug-intelligence workflow
 - Context: Maintains correlation_id throughout lifecycle
 """

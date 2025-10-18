@@ -1,4 +1,4 @@
-# Phase 7 Architecture Documentation
+# Agent Framework Architecture Documentation
 
 **Version**: 1.0
 **Status**: Complete (Streams 1-8)
@@ -21,7 +21,7 @@
 
 ## Executive Overview
 
-Phase 7 delivers a comprehensive refinement and optimization system for the OmniNode code generation pipeline, implementing 8 parallel streams that enhance performance, reliability, and intelligence through ML learning, caching, monitoring, and structured logging.
+The agent framework delivers a comprehensive refinement and optimization system for the OmniNode code generation pipeline, implementing 8 parallel streams that enhance performance, reliability, and intelligence through ML learning, caching, monitoring, and structured logging.
 
 ### Architecture Goals
 
@@ -52,7 +52,7 @@ Phase 7 delivers a comprehensive refinement and optimization system for the Omni
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Phase 7 Architecture                          │
+│               Agent Framework Architecture                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────┐       │
@@ -95,7 +95,7 @@ Phase 7 delivers a comprehensive refinement and optimization system for the Omni
 #### Layer 1: Foundation (Stream 1)
 - **PostgreSQL Database Schema**: 5 tables, 5 analytics views, 30 indexes, 2 stored functions
 - **Performance**: <50ms write operations (10-25ms actual)
-- **Purpose**: Persistent storage for all Phase 7 components
+- **Purpose**: Persistent storage for all framework components
 
 #### Layer 2: Core Services (Streams 2, 3, 6)
 - **Template Caching**: LRU cache with 99% hit rate, TTL-based expiration
@@ -116,7 +116,7 @@ Phase 7 delivers a comprehensive refinement and optimization system for the Omni
 
 ### Stream 1: Database Schema
 
-**Purpose**: Persistent storage foundation for all Phase 7 components
+**Purpose**: Persistent storage foundation for all framework components
 
 **Components**:
 - 5 tables: `mixin_compatibility_matrix`, `pattern_feedback_log`, `generation_performance_metrics`, `template_cache_metadata`, `event_processing_metrics`
@@ -727,7 +727,7 @@ logger.info("Manual context", metadata={"key": "value"})
 
 ## Data Flow
 
-### Code Generation Flow with Phase 7 Enhancements
+### Code Generation Flow with Framework Enhancements
 
 ```
 1. Input: PRD Document
@@ -852,7 +852,7 @@ Component Metrics
 
 ### 1. Database-First Integration
 
-All Phase 7 components use database-first integration pattern:
+All framework components use database-first integration pattern:
 
 ```python
 # Step 1: Component performs operation
@@ -1183,7 +1183,7 @@ Total: 100ms
 
 ## ONEX Compliance
 
-All Phase 7 components follow ONEX architecture patterns and naming conventions.
+All framework components follow ONEX architecture patterns and naming conventions.
 
 ### Node Type Patterns
 
@@ -1320,7 +1320,7 @@ async def record_metric(name: str, value: float) -> None:
 - [User Guide](./USER_GUIDE.md) - Usage examples and best practices
 - [Operations Guide](./OPERATIONS_GUIDE.md) - Deployment and operations
 - [Integration Guide](./INTEGRATION_GUIDE.md) - Integration patterns and workflows
-- [Summary](./SUMMARY.md) - Executive summary of Phase 7
+- [Summary](./SUMMARY.md) - Executive summary of agent framework
 
 ---
 

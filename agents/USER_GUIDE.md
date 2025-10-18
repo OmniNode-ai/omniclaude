@@ -4,7 +4,7 @@
 **Last Updated**: 2025-10-15
 **Target Audience**: Developers, DevOps Engineers, System Administrators
 
-This guide provides comprehensive instructions for using Phase 7 features including template caching, parallel generation, mixin learning, pattern feedback, event optimization, monitoring, and structured logging.
+This guide provides comprehensive instructions for using agent framework features including template caching, parallel generation, mixin learning, pattern feedback, event optimization, monitoring, and structured logging.
 
 ---
 
@@ -49,7 +49,7 @@ poetry run python -m agents.lib.migrations apply
 
 3. **Verify installation**:
 ```bash
-poetry run python -c "from agents.lib.template_cache import TemplateCache; print('✅ Phase 7 installed')"
+poetry run python -c "from agents.lib.template_cache import TemplateCache; print('✅ Agent framework installed')"
 ```
 
 ### Environment Setup

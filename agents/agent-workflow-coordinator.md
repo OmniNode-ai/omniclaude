@@ -204,7 +204,7 @@ class NodeMyOperationEffect(NodeEffect):
             return ModelResult(success=True, data=result)
 ```
 
-**Full Reference**: External Archon project - `${ARCHON_ROOT}/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+**Full Reference**: See `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` for complete ONEX architecture patterns
 
 ## AI Quorum Integration
 
