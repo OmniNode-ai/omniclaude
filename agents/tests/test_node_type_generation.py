@@ -191,8 +191,8 @@ class TestComputeNodeGeneration:
             with open(result["main_file"], "r") as f:
                 content = f.read()
 
-            # Check for NodeComputeService import
-            assert "NodeComputeService" in content or "node_compute_service" in content
+            # Check for NodeCompute import (ONEX architecture pattern)
+            assert "NodeCompute" in content or "node_compute" in content
 
 
 class TestReducerNodeGeneration:

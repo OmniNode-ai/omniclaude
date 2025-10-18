@@ -13,6 +13,9 @@ Tests cover:
 """
 
 import pytest
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor

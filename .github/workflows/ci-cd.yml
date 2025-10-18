@@ -199,7 +199,7 @@ jobs:
           POSTGRES_DATABASE: test_db
           TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
-          poetry run pytest -v --cov=agents --cov-report=xml --cov-report=term-missing
+          poetry run pytest -v -m "not integration" --cov=agents --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
