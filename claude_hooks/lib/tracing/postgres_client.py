@@ -101,7 +101,7 @@ class PostgresTracingClient:
 
         # Fallback to direct PostgreSQL connection
         host = os.getenv('POSTGRES_HOST', 'localhost')
-        port = os.getenv('POSTGRES_PORT', '5432')
+        port = os.getenv('POSTGRES_PORT', '5436')
         db = os.getenv('POSTGRES_DB', 'archon')
         user = os.getenv('POSTGRES_USER', 'postgres')
         password = os.getenv('POSTGRES_PASSWORD', '')
