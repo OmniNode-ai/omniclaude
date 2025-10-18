@@ -1,17 +1,19 @@
 # Security: API Key Rotation Guide
 
-## ⚠️ URGENT: Exposed API Keys Requiring Immediate Rotation
+## ✅ Status: Keys Sanitized (Updated 2025-10-18)
 
-The following API keys have been exposed in version control and **MUST** be rotated immediately:
+**Good news**: API keys in this repository have been sanitized and removed from version control.
 
-### Exposed Keys (ROTATE NOW)
+### Previously Exposed Keys (NOW REMOVED)
 
-| Provider | Key Type | Exposed Value | Location |
-|----------|----------|---------------|----------|
-| Google Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | `***GEMINI_KEY_REMOVED***` | `toggle-claude-provider.sh` |
-| Z.ai | `ZAI_API_KEY` | `***ZAI_KEY_REMOVED***` | `toggle-claude-provider.sh` |
+| Provider | Key Type | Status | Location |
+|----------|----------|--------|----------|
+| Google Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | ✅ Sanitized | `toggle-claude-provider.sh` |
+| Z.ai | `ZAI_API_KEY` | ✅ Sanitized | `toggle-claude-provider.sh` |
 
-**Impact**: These keys provide full API access and should be considered compromised.
+**Current State**: All keys have been replaced with placeholders (`***GEMINI_KEY_REMOVED***`, `***ZAI_KEY_REMOVED***`). The script now reads keys from environment variables only.
+
+**Action Required**: If you cloned this repository before 2025-10-18, verify you're not using the old exposed keys. Follow the setup instructions below to configure your own keys.
 
 ---
 
