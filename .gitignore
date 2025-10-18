@@ -20,6 +20,11 @@ lib/
 !agents/lib/**
 !claude_hooks/lib/
 !claude_hooks/lib/**
+# Re-exclude __pycache__ within excepted lib directories
+agents/lib/__pycache__/
+agents/lib/**/__pycache__/
+claude_hooks/lib/__pycache__/
+claude_hooks/lib/**/__pycache__/
 lib64/
 parts/
 sdist/
