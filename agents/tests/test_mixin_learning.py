@@ -19,6 +19,9 @@ from agents.lib.mixin_learner import MixinLearner
 from agents.lib.mixin_compatibility import MixinCompatibilityManager, CompatibilityLevel
 from agents.lib.persistence import CodegenPersistence
 
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
+
 
 # Test configuration
 # Support both CI environment (TEST_PG_DSN) and local environment (individual vars)

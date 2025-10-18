@@ -7,6 +7,9 @@ to ensure ≥90% precision target is achievable.
 """
 
 import pytest
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 from uuid import uuid4
 from typing import Dict, Any, List
 from datetime import datetime, timezone

@@ -20,6 +20,9 @@ Test Coverage:
 """
 
 import pytest
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 import time
 from uuid import uuid4
 from pathlib import Path
