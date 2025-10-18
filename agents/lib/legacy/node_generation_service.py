@@ -53,23 +53,13 @@ class ModelNodeGenerationRequest(BaseModel):
 
     node_type: NodeType = Field(..., description="Type of node to generate")
     generation_type: GenerationType = Field(..., description="Type of generation")
-    code_quality: CodeQuality = Field(
-        default=CodeQuality.PRODUCTION, description="Quality level"
-    )
+    code_quality: CodeQuality = Field(default=CodeQuality.PRODUCTION, description="Quality level")
 
     # Context data
-    contracts: List[Dict[str, Any]] = Field(
-        default_factory=list, description="ONEX contracts"
-    )
-    dependencies: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Dependencies"
-    )
-    method_signatures: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Method signatures"
-    )
-    canary_template: Optional[Dict[str, Any]] = Field(
-        default=None, description="Canary template data"
-    )
+    contracts: List[Dict[str, Any]] = Field(default_factory=list, description="ONEX contracts")
+    dependencies: List[Dict[str, Any]] = Field(default_factory=list, description="Dependencies")
+    method_signatures: List[Dict[str, Any]] = Field(default_factory=list, description="Method signatures")
+    canary_template: Optional[Dict[str, Any]] = Field(default=None, description="Canary template data")
 
     # Generation options
     output_directory: str = Field(default="./generated", description="Output directory")
@@ -82,31 +72,21 @@ class ModelNodeGenerationResponse(BaseModel):
 
     success: bool = Field(..., description="Generation success status")
     task_id: str = Field(..., description="Task identifier")
-    generation_type: GenerationType = Field(
-        ..., description="Type of generation performed"
-    )
+    generation_type: GenerationType = Field(..., description="Type of generation performed")
 
     # Generated content
-    generated_files: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Generated files"
-    )
-    main_code: Optional[str] = Field(
-        default=None, description="Main implementation code"
-    )
+    generated_files: List[Dict[str, Any]] = Field(default_factory=list, description="Generated files")
+    main_code: Optional[str] = Field(default=None, description="Main implementation code")
     test_code: Optional[str] = Field(default=None, description="Test code")
     documentation: Optional[str] = Field(default=None, description="Documentation")
 
     # Metadata
     lines_of_code: int = Field(default=0, description="Total lines of code generated")
-    generation_time: float = Field(
-        default=0.0, description="Generation time in seconds"
-    )
+    generation_time: float = Field(default=0.0, description="Generation time in seconds")
     quality_score: float = Field(default=0.0, description="Estimated quality score")
 
     # Error handling
-    error_message: Optional[str] = Field(
-        default=None, description="Error message if failed"
-    )
+    error_message: Optional[str] = Field(default=None, description="Error message if failed")
     warnings: List[str] = Field(default_factory=list, description="Warning messages")
 
 
@@ -127,9 +107,7 @@ class NodeGenerationService:
             self.smart_responder_chain = SmartResponderChain()
         return self.smart_responder_chain
 
-    async def generate_node(
-        self, request: ModelNodeGenerationRequest
-    ) -> ModelNodeGenerationResponse:
+    async def generate_node(self, request: ModelNodeGenerationRequest) -> ModelNodeGenerationResponse:
         """
         Generate a complete node implementation based on the request.
 
@@ -163,9 +141,7 @@ class NodeGenerationService:
                 error_message=str(e),
             )
 
-    async def _generate_final_node(
-        self, request: ModelNodeGenerationRequest
-    ) -> ModelNodeGenerationResponse:
+    async def _generate_final_node(self, request: ModelNodeGenerationRequest) -> ModelNodeGenerationResponse:
         """Generate the final node implementation."""
         self.logger.info("Generating final node implementation")
 
@@ -184,9 +160,7 @@ class NodeGenerationService:
         # response has .content attribute, no success/error_message
 
         # Process the generated content
-        generated_code = (
-            response.content if hasattr(response, "content") else str(response)
-        )
+        generated_code = response.content if hasattr(response, "content") else str(response)
 
         # Create response
         return ModelNodeGenerationResponse(
@@ -202,19 +176,11 @@ class NodeGenerationService:
                 }
             ],
             lines_of_code=len(generated_code.split("\n")),
-            generation_time=(
-                response.response.get("processing_time", 0.0)
-                if response.response
-                else 0.0
-            ),
-            quality_score=(
-                response.response.get("confidence", 0.0) if response.response else 0.0
-            ),
+            generation_time=(response.response.get("processing_time", 0.0) if response.response else 0.0),
+            quality_score=(response.response.get("confidence", 0.0) if response.response else 0.0),
         )
 
-    async def _clone_canary_template(
-        self, request: ModelNodeGenerationRequest
-    ) -> ModelNodeGenerationResponse:
+    async def _clone_canary_template(self, request: ModelNodeGenerationRequest) -> ModelNodeGenerationResponse:
         """Clone a canary node template."""
         self.logger.info("Cloning canary template")
 
@@ -282,9 +248,7 @@ class CanaryNode(BaseOnexTool):
             quality_score=0.8,
         )
 
-    async def _generate_tests(
-        self, request: ModelNodeGenerationRequest
-    ) -> ModelNodeGenerationResponse:
+    async def _generate_tests(self, request: ModelNodeGenerationRequest) -> ModelNodeGenerationResponse:
         """Generate test code for the node."""
         self.logger.info("Generating test code")
 
@@ -342,9 +306,7 @@ if __name__ == "__main__":
             quality_score=0.7,
         )
 
-    async def _generate_documentation(
-        self, request: ModelNodeGenerationRequest
-    ) -> ModelNodeGenerationResponse:
+    async def _generate_documentation(self, request: ModelNodeGenerationRequest) -> ModelNodeGenerationResponse:
         """Generate documentation for the node."""
         self.logger.info("Generating documentation")
 
@@ -413,9 +375,7 @@ pytest test_{request.task_title.lower().replace(' ', '_')}_node.py
         # Contract info
         contract_info = ""
         if request.contracts:
-            contract_info = (
-                f"Contracts: {len(request.contracts)} contract(s) to implement"
-            )
+            contract_info = f"Contracts: {len(request.contracts)} contract(s) to implement"
 
         # Dependencies info
         deps_info = ""
@@ -462,9 +422,7 @@ pytest test_{request.task_title.lower().replace(' ', '_')}_node.py
 
         return "\n".join(contract_summaries)
 
-    def _format_dependencies_for_prompt(
-        self, dependencies: List[Dict[str, Any]]
-    ) -> str:
+    def _format_dependencies_for_prompt(self, dependencies: List[Dict[str, Any]]) -> str:
         """Format dependencies for inclusion in prompt."""
         if not dependencies:
             return "No dependencies specified."
@@ -477,9 +435,7 @@ pytest test_{request.task_title.lower().replace(' ', '_')}_node.py
 
         return "\n".join(dep_summaries)
 
-    def _format_method_signatures_for_prompt(
-        self, methods: List[Dict[str, Any]]
-    ) -> str:
+    def _format_method_signatures_for_prompt(self, methods: List[Dict[str, Any]]) -> str:
         """Format method signatures for inclusion in prompt."""
         if not methods:
             return "No specific method signatures required."

@@ -244,7 +244,6 @@ class QuorumIntegrationTest:
         # This test would require temporarily breaking quorum access
         # For now, we just verify the code path exists
 
-
         try:
             # Check that the code has graceful degradation logic
             dispatch_code = self.dispatch_runner.read_text()

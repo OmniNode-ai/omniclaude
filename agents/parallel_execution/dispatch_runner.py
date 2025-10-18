@@ -597,9 +597,7 @@ async def execute_phase_1_quorum_validation(
                     continue
                 else:
                     # Max retries exceeded, log warning but continue
-                    print(
-                        "[DispatchRunner] ⚠ Max retries exceeded, proceeding with current breakdown", file=sys.stderr
-                    )
+                    print("[DispatchRunner] ⚠ Max retries exceeded, proceeding with current breakdown", file=sys.stderr)
 
             # Validation passed or max retries exceeded
             phase_state.quorum_result = quorum_result_dict
