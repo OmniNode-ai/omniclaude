@@ -174,18 +174,14 @@ class FrameworkMethodDetector:
         # 4. Check for framework method via inheritance
         parent_class = self._get_parent_class(func_node, tree)
         if parent_class:
-            inheritance_pattern = self._check_framework_inheritance(
-                func_node, parent_class, tree
-            )
+            inheritance_pattern = self._check_framework_inheritance(func_node, parent_class, tree)
             if inheritance_pattern:
                 self.detected_patterns.append(inheritance_pattern)
                 return inheritance_pattern
 
         return None
 
-    def _check_framework_decorators(
-        self, func_node: ast.FunctionDef
-    ) -> Optional[FrameworkPattern]:
+    def _check_framework_decorators(self, func_node: ast.FunctionDef) -> Optional[FrameworkPattern]:
         """Check if function has framework decorators."""
         for decorator in func_node.decorator_list:
             decorator_name = self._get_decorator_name(decorator)
@@ -218,9 +214,7 @@ class FrameworkMethodDetector:
                 method_name = func_node.name
                 for pattern in framework_methods:
                     # Check for exact match or prefix match (e.g., visit_*)
-                    if method_name == pattern or (
-                        pattern.endswith("_") and method_name.startswith(pattern)
-                    ):
+                    if method_name == pattern or (pattern.endswith("_") and method_name.startswith(pattern)):
                         return FrameworkPattern(
                             framework=base_class,
                             pattern_type="inheritance",
@@ -239,9 +233,7 @@ class FrameworkMethodDetector:
 
         return set()
 
-    def _get_parent_class(
-        self, func_node: ast.FunctionDef, tree: ast.Module
-    ) -> Optional[ast.ClassDef]:
+    def _get_parent_class(self, func_node: ast.FunctionDef, tree: ast.Module) -> Optional[ast.ClassDef]:
         """Find the parent class of a function definition."""
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
@@ -301,10 +293,7 @@ class FrameworkMethodDetector:
             return "FastAPI"
         elif "pytest" in decorator:
             return "pytest"
-        elif any(
-            django_dec in decorator
-            for django_dec in ["csrf_exempt", "login_required", "permission_required"]
-        ):
+        elif any(django_dec in decorator for django_dec in ["csrf_exempt", "login_required", "permission_required"]):
             return "Django"
         return "Unknown"
 
@@ -320,9 +309,7 @@ class FrameworkMethodDetector:
 # Convenience functions
 
 
-def is_framework_method(
-    func_node: ast.FunctionDef, tree: ast.Module, file_path: str = ""
-) -> bool:
+def is_framework_method(func_node: ast.FunctionDef, tree: ast.Module, file_path: str = "") -> bool:
     """
     Convenience function to check if a method is a framework method.
 

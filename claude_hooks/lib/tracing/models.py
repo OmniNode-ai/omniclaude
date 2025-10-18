@@ -42,7 +42,9 @@ class ExecutionTrace(BaseModel):
     prompt_text: Optional[str] = Field(default=None, description="Original user prompt or request text")
 
     # Execution metadata
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When execution started")
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="When execution started"
+    )
     completed_at: Optional[datetime] = Field(default=None, description="When execution completed")
     duration_ms: Optional[int] = Field(default=None, ge=0, description="Execution duration in milliseconds")
     status: str = Field(default="in_progress", description="in_progress, completed, failed, cancelled")
@@ -57,11 +59,16 @@ class ExecutionTrace(BaseModel):
     tags: Optional[List[str]] = Field(default=None, description="Tags for categorization and filtering")
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp"
+    )
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -70,7 +77,7 @@ class ExecutionTrace(BaseModel):
                 "source": "claude_code",
                 "prompt_text": "Implement user authentication",
                 "status": "in_progress",
-                "tags": ["authentication", "security"]
+                "tags": ["authentication", "security"],
             }
         }
 
@@ -162,7 +169,9 @@ class HookExecution(BaseModel):
     # Input/Output
     input_data: Optional[Dict[str, Any]] = Field(default=None, description="Hook input data as JSON")
     output_data: Optional[Dict[str, Any]] = Field(default=None, description="Hook output data as JSON")
-    modifications_made: Optional[Dict[str, Any]] = Field(default=None, description="Any file modifications or actions taken")
+    modifications_made: Optional[Dict[str, Any]] = Field(
+        default=None, description="Any file modifications or actions taken"
+    )
 
     # Intelligence integration
     rag_query_performed: bool = Field(default=False, description="Whether RAG query was performed")
@@ -181,11 +190,16 @@ class HookExecution(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata as JSON")
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp"
+    )
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "trace_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -195,7 +209,7 @@ class HookExecution(BaseModel):
                 "tool_name": "Write",
                 "file_path": "/path/to/file.py",
                 "rag_query_performed": True,
-                "quality_check_performed": True
+                "quality_check_performed": True,
             }
         }
 
@@ -203,14 +217,7 @@ class HookExecution(BaseModel):
     @classmethod
     def validate_hook_type(cls, v: str) -> str:
         """Validate hook type is one of the allowed values"""
-        allowed = {
-            "UserPromptSubmit",
-            "PreToolUse",
-            "PostToolUse",
-            "Stop",
-            "SessionStart",
-            "SessionEnd"
-        }
+        allowed = {"UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionStart", "SessionEnd"}
         if v not in allowed:
             raise ValueError(f"Hook type must be one of {allowed}, got '{v}'")
         return v
@@ -290,11 +297,12 @@ class TraceContext(BaseModel):
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
                 "root_id": "550e8400-e29b-41d4-a716-446655440000",
-                "session_id": "660e8400-e29b-41d4-a716-446655440001"
+                "session_id": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
 
@@ -305,7 +313,7 @@ class TraceContext(BaseModel):
             correlation_id=trace.correlation_id,
             root_id=trace.root_id,
             parent_id=trace.parent_id,
-            session_id=trace.session_id
+            session_id=trace.session_id,
         )
 
     def to_dict(self) -> Dict[str, str]:
@@ -314,7 +322,7 @@ class TraceContext(BaseModel):
             "correlation_id": str(self.correlation_id),
             "root_id": str(self.root_id),
             "parent_id": str(self.parent_id) if self.parent_id else None,
-            "session_id": str(self.session_id)
+            "session_id": str(self.session_id),
         }
 
 
@@ -346,6 +354,7 @@ class HookMetadata(BaseModel):
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "violations_found": 3,
@@ -353,7 +362,7 @@ class HookMetadata(BaseModel):
                 "quality_score": 0.85,
                 "rag_matches": 5,
                 "rag_confidence": 0.92,
-                "processing_time_ms": 150
+                "processing_time_ms": 150,
             }
         }
 
@@ -381,6 +390,7 @@ class HookExecutionSummary(BaseModel):
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "hook_name": "quality_validation_hook",
@@ -389,7 +399,7 @@ class HookExecutionSummary(BaseModel):
                 "status": "completed",
                 "success": True,
                 "rag_query_performed": True,
-                "quality_check_performed": True
+                "quality_check_performed": True,
             }
         }
 
@@ -404,7 +414,7 @@ class HookExecutionSummary(BaseModel):
             success=hook.status == "completed" and hook.error_message is None,
             rag_query_performed=hook.rag_query_performed,
             quality_check_performed=hook.quality_check_performed,
-            error_message=hook.error_message
+            error_message=hook.error_message,
         )
 
 
@@ -501,7 +511,7 @@ def create_trace_context(
     correlation_id: Optional[UUID] = None,
     root_id: Optional[UUID] = None,
     parent_id: Optional[UUID] = None,
-    session_id: Optional[UUID] = None
+    session_id: Optional[UUID] = None,
 ) -> TraceContext:
     """
     Create a new TraceContext with optional parameters.
@@ -532,12 +542,7 @@ def create_trace_context(
     if session_id is None:
         session_id = generate_session_id()
 
-    return TraceContext(
-        correlation_id=correlation_id,
-        root_id=root_id,
-        parent_id=parent_id,
-        session_id=session_id
-    )
+    return TraceContext(correlation_id=correlation_id, root_id=root_id, parent_id=parent_id, session_id=session_id)
 
 
 def create_new_trace(
@@ -547,7 +552,7 @@ def create_new_trace(
     user_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-    parent_trace: Optional[ExecutionTrace] = None
+    parent_trace: Optional[ExecutionTrace] = None,
 ) -> ExecutionTrace:
     """
     Create a new ExecutionTrace with proper defaults.
@@ -592,7 +597,7 @@ def create_new_trace(
         source=source,
         prompt_text=prompt_text,
         context=context,
-        tags=tags
+        tags=tags,
     )
 
 
@@ -603,7 +608,7 @@ def create_new_hook_execution(
     execution_order: int,
     tool_name: Optional[str] = None,
     file_path: Optional[str] = None,
-    input_data: Optional[Dict[str, Any]] = None
+    input_data: Optional[Dict[str, Any]] = None,
 ) -> HookExecution:
     """
     Create a new HookExecution with proper defaults.
@@ -637,5 +642,5 @@ def create_new_hook_execution(
         execution_order=execution_order,
         tool_name=tool_name,
         file_path=file_path,
-        input_data=input_data
+        input_data=input_data,
     )

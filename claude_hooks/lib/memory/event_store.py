@@ -22,12 +22,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import uuid
 
-from .event_models import (
-    WorkflowEvent,
-    EventType,
-    WorkflowSummary,
-    IntentContextData
-)
+from .event_models import WorkflowEvent, EventType, WorkflowSummary, IntentContextData
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +46,7 @@ class EventStore:
         storage_path: Path,
         qdrant_url: str = "http://localhost:6333",
         ollama_url: str = "http://192.168.86.200:11434",
-        retention_days: int = 90
+        retention_days: int = 90,
     ):
         """
         Initialize Event Store.
@@ -87,7 +82,8 @@ class EventStore:
         cursor = conn.cursor()
 
         # Events table - stores all workflow events
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS events (
                 event_id TEXT PRIMARY KEY,
                 correlation_id TEXT NOT NULL,
@@ -106,33 +102,44 @@ class EventStore:
                 metadata_json TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
-        """)
+        """
+        )
 
         # Indexes for fast queries
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_correlation_id
             ON events(correlation_id)
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_event_type
             ON events(event_type)
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_timestamp
             ON events(timestamp)
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_success
             ON events(success)
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_file_path
             ON events(file_path)
-        """)
+        """
+        )
 
         conn.commit()
         conn.close()
@@ -152,10 +159,10 @@ class EventStore:
 
             if response.status_code == 200:
                 # Check if our collection exists
-                collections = response.json().get('result', {}).get('collections', [])
-                collection_names = [c['name'] for c in collections]
+                collections = response.json().get("result", {}).get("collections", [])
+                collection_names = [c["name"] for c in collections]
 
-                if 'workflow_events' not in collection_names:
+                if "workflow_events" not in collection_names:
                     # Create collection for workflow events
                     self._create_qdrant_collection()
 
@@ -174,18 +181,9 @@ class EventStore:
         import httpx
 
         # Use nomic-embed-text model (768 dimensions)
-        collection_config = {
-            "vectors": {
-                "size": 768,
-                "distance": "Cosine"
-            }
-        }
+        collection_config = {"vectors": {"size": 768, "distance": "Cosine"}}
 
-        response = httpx.put(
-            f"{self.qdrant_url}/collections/workflow_events",
-            json=collection_config,
-            timeout=5.0
-        )
+        response = httpx.put(f"{self.qdrant_url}/collections/workflow_events", json=collection_config, timeout=5.0)
 
         if response.status_code in [200, 201]:
             logger.info("Created Qdrant collection: workflow_events")
@@ -238,30 +236,33 @@ class EventStore:
         scores_json = json.dumps(event.scores.to_dict()) if event.scores else None
         metadata_json = json.dumps(event.metadata)
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO events (
                 event_id, correlation_id, timestamp, event_type,
                 tool_name, file_path, content_hash,
                 intent_json, violations_json, corrections_json, scores_json,
                 success, iteration_number, parent_event_id, metadata_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            event.event_id,
-            event.correlation_id,
-            event.timestamp.isoformat(),
-            event.event_type.value,
-            event.tool_name,
-            event.file_path,
-            event.content_hash,
-            intent_json,
-            violations_json,
-            corrections_json,
-            scores_json,
-            1 if event.success else 0,
-            event.iteration_number,
-            event.parent_event_id,
-            metadata_json
-        ))
+        """,
+            (
+                event.event_id,
+                event.correlation_id,
+                event.timestamp.isoformat(),
+                event.event_type.value,
+                event.tool_name,
+                event.file_path,
+                event.content_hash,
+                intent_json,
+                violations_json,
+                corrections_json,
+                scores_json,
+                1 if event.success else 0,
+                event.iteration_number,
+                event.parent_event_id,
+                metadata_json,
+            ),
+        )
 
         conn.commit()
         conn.close()
@@ -290,14 +291,12 @@ class EventStore:
                 "timestamp": event.timestamp.isoformat(),
                 "success": event.success,
                 "intent_category": event.intent.primary_intent if event.intent else "unknown",
-                "embedding_text": embedding_text
-            }
+                "embedding_text": embedding_text,
+            },
         }
 
         response = httpx.put(
-            f"{self.qdrant_url}/collections/workflow_events/points",
-            json={"points": [point]},
-            timeout=3.0
+            f"{self.qdrant_url}/collections/workflow_events/points", json={"points": [point]}, timeout=3.0
         )
 
         if response.status_code not in [200, 201]:
@@ -309,11 +308,7 @@ class EventStore:
 
         Combines key event details into semantic representation.
         """
-        parts = [
-            f"Tool: {event.tool_name}",
-            f"File: {Path(event.file_path).name}",
-            f"Event: {event.event_type.value}"
-        ]
+        parts = [f"Tool: {event.tool_name}", f"File: {Path(event.file_path).name}", f"Event: {event.event_type.value}"]
 
         if event.intent:
             parts.append(f"Intent: {event.intent.primary_intent}")
@@ -350,16 +345,11 @@ class EventStore:
             import httpx
 
             response = httpx.post(
-                f"{self.ollama_url}/api/embeddings",
-                json={
-                    "model": "nomic-embed-text",
-                    "prompt": text
-                },
-                timeout=5.0
+                f"{self.ollama_url}/api/embeddings", json={"model": "nomic-embed-text", "prompt": text}, timeout=5.0
             )
 
             if response.status_code == 200:
-                embedding = response.json().get('embedding')
+                embedding = response.json().get("embedding")
 
                 # Cache for future use
                 self._embedding_cache[text] = embedding
@@ -389,11 +379,14 @@ class EventStore:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM events
             WHERE correlation_id = ?
             ORDER BY timestamp ASC
-        """, (correlation_id,))
+        """,
+            (correlation_id,),
+        )
 
         rows = cursor.fetchall()
         conn.close()
@@ -410,53 +403,53 @@ class EventStore:
         """Convert SQLite row to WorkflowEvent."""
         # Parse JSON fields
         intent = None
-        if row['intent_json']:
-            intent_data = json.loads(row['intent_json'])
+        if row["intent_json"]:
+            intent_data = json.loads(row["intent_json"])
             intent = IntentContextData(**intent_data)
 
         violations = None
-        if row['violations_json']:
+        if row["violations_json"]:
             from .event_models import Violation
-            violations_data = json.loads(row['violations_json'])
+
+            violations_data = json.loads(row["violations_json"])
             violations = [Violation(**v) for v in violations_data]
 
         corrections = None
-        if row['corrections_json']:
+        if row["corrections_json"]:
             from .event_models import Correction
-            corrections_data = json.loads(row['corrections_json'])
+
+            corrections_data = json.loads(row["corrections_json"])
             corrections = [Correction(**c) for c in corrections_data]
 
         scores = None
-        if row['scores_json']:
+        if row["scores_json"]:
             from .event_models import AIQuorumScore
-            scores_data = json.loads(row['scores_json'])
+
+            scores_data = json.loads(row["scores_json"])
             scores = AIQuorumScore(**scores_data)
 
-        metadata = json.loads(row['metadata_json']) if row['metadata_json'] else {}
+        metadata = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
 
         return WorkflowEvent(
-            event_id=row['event_id'],
-            correlation_id=row['correlation_id'],
-            timestamp=datetime.fromisoformat(row['timestamp']),
-            event_type=EventType(row['event_type']),
-            tool_name=row['tool_name'],
-            file_path=row['file_path'],
-            content_hash=row['content_hash'],
+            event_id=row["event_id"],
+            correlation_id=row["correlation_id"],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+            event_type=EventType(row["event_type"]),
+            tool_name=row["tool_name"],
+            file_path=row["file_path"],
+            content_hash=row["content_hash"],
             intent=intent,
             violations=violations,
             corrections=corrections,
             scores=scores,
-            success=bool(row['success']) if row['success'] is not None else None,
-            iteration_number=row['iteration_number'],
-            parent_event_id=row['parent_event_id'],
-            metadata=metadata
+            success=bool(row["success"]) if row["success"] is not None else None,
+            iteration_number=row["iteration_number"],
+            parent_event_id=row["parent_event_id"],
+            metadata=metadata,
         )
 
     def find_similar_successes(
-        self,
-        query_event: WorkflowEvent,
-        limit: int = 5,
-        threshold: float = 0.7
+        self, query_event: WorkflowEvent, limit: int = 5, threshold: float = 0.7
     ) -> List[Tuple[WorkflowEvent, float]]:
         """
         Find similar successful workflows using vector search.
@@ -491,30 +484,24 @@ class EventStore:
                 "limit": limit,
                 "score_threshold": threshold,
                 "with_payload": True,
-                "filter": {
-                    "must": [
-                        {"key": "success", "match": {"value": True}}
-                    ]
-                }
+                "filter": {"must": [{"key": "success", "match": {"value": True}}]},
             }
 
             response = httpx.post(
-                f"{self.qdrant_url}/collections/workflow_events/points/search",
-                json=search_request,
-                timeout=3.0
+                f"{self.qdrant_url}/collections/workflow_events/points/search", json=search_request, timeout=3.0
             )
 
             if response.status_code != 200:
                 logger.warning(f"Qdrant search failed: {response.text}")
                 return []
 
-            results = response.json().get('result', [])
+            results = response.json().get("result", [])
 
             # Fetch full events from SQLite
             similar_events = []
             for result in results:
-                event_id = result['id']
-                score = result['score']
+                event_id = result["id"]
+                score = result["score"]
 
                 # Get full event from SQLite
                 event = self._get_event_by_id(event_id)
@@ -527,11 +514,7 @@ class EventStore:
             logger.error(f"Vector search failed: {e}")
             return []
 
-    def _find_similar_sqlite(
-        self,
-        query_event: WorkflowEvent,
-        limit: int
-    ) -> List[Tuple[WorkflowEvent, float]]:
+    def _find_similar_sqlite(self, query_event: WorkflowEvent, limit: int) -> List[Tuple[WorkflowEvent, float]]:
         """
         Fallback similarity search using SQLite.
 
@@ -545,7 +528,8 @@ class EventStore:
         cursor = conn.cursor()
 
         # Find successful events with same intent category
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM events
             WHERE success = 1
               AND event_type = ?
@@ -553,12 +537,9 @@ class EventStore:
               AND intent_json LIKE ?
             ORDER BY timestamp DESC
             LIMIT ?
-        """, (
-            EventType.WRITE_SUCCESS.value,
-            query_event.tool_name,
-            f'%{query_event.intent.primary_intent}%',
-            limit
-        ))
+        """,
+            (EventType.WRITE_SUCCESS.value, query_event.tool_name, f"%{query_event.intent.primary_intent}%", limit),
+        )
 
         rows = cursor.fetchall()
         conn.close()
@@ -585,11 +566,7 @@ class EventStore:
             return self._row_to_event(row)
         return None
 
-    def get_recent_workflows(
-        self,
-        days: int = 7,
-        success_only: bool = False
-    ) -> List[str]:
+    def get_recent_workflows(self, days: int = 7, success_only: bool = False) -> List[str]:
         """
         Get recent workflow correlation IDs.
 
@@ -634,10 +611,13 @@ class EventStore:
         conn = sqlite3.connect(str(self.storage_path))
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             DELETE FROM events
             WHERE timestamp < ?
-        """, (cutoff.isoformat(),))
+        """,
+            (cutoff.isoformat(),),
+        )
 
         deleted_count = cursor.rowcount
         conn.commit()
@@ -660,25 +640,27 @@ class EventStore:
 
         # Total events
         cursor.execute("SELECT COUNT(*) FROM events")
-        stats['total_events'] = cursor.fetchone()[0]
+        stats["total_events"] = cursor.fetchone()[0]
 
         # Success rate
         cursor.execute("SELECT COUNT(*) FROM events WHERE success = 1")
         success_count = cursor.fetchone()[0]
-        stats['success_count'] = success_count
-        stats['success_rate'] = success_count / stats['total_events'] if stats['total_events'] > 0 else 0.0
+        stats["success_count"] = success_count
+        stats["success_rate"] = success_count / stats["total_events"] if stats["total_events"] > 0 else 0.0
 
         # Events by type
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT event_type, COUNT(*)
             FROM events
             GROUP BY event_type
-        """)
-        stats['events_by_type'] = dict(cursor.fetchall())
+        """
+        )
+        stats["events_by_type"] = dict(cursor.fetchall())
 
         # Unique workflows
         cursor.execute("SELECT COUNT(DISTINCT correlation_id) FROM events")
-        stats['unique_workflows'] = cursor.fetchone()[0]
+        stats["unique_workflows"] = cursor.fetchone()[0]
 
         conn.close()
 

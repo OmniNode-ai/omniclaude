@@ -108,8 +108,8 @@ def main():
                 "timestamp": datetime.utcnow().isoformat(),
                 "quality_score": 1.0,  # Intents don't have quality violations
                 "violations_found": 0,
-                "reason": f"User requested {args.agent} agent for: {intent_summary}"
-            }
+                "reason": f"User requested {args.agent} agent for: {intent_summary}",
+            },
         )
 
         if pattern_id:
@@ -125,6 +125,7 @@ def main():
     except Exception as e:
         print(f"❌ [track_intent] Unexpected exception: {type(e).__name__}: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         # Don't fail the hook - graceful degradation
         sys.exit(0)

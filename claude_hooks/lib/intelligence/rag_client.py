@@ -78,9 +78,7 @@ class RAGIntelligenceClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create async HTTP client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                timeout=self.timeout, headers={"Content-Type": "application/json"}
-            )
+            self._client = httpx.AsyncClient(timeout=self.timeout, headers={"Content-Type": "application/json"})
         return self._client
 
     async def close(self):
@@ -139,9 +137,7 @@ class RAGIntelligenceClient:
         self._cache[cache_key] = value
         self._cache_timestamps[cache_key] = time.time()
 
-    async def get_naming_conventions(
-        self, language: str, context: Optional[str] = None
-    ) -> List[NamingConvention]:
+    async def get_naming_conventions(self, language: str, context: Optional[str] = None) -> List[NamingConvention]:
         """
         Get naming conventions for language.
 
@@ -156,9 +152,7 @@ class RAGIntelligenceClient:
             List of naming conventions
         """
         # Generate cache key
-        cache_key = self._generate_cache_key(
-            "naming", language=language, context=context or "general"
-        )
+        cache_key = self._generate_cache_key("naming", language=language, context=context or "general")
 
         # Check cache
         cached = self._get_cached(cache_key)
@@ -180,9 +174,7 @@ class RAGIntelligenceClient:
         self._set_cached(cache_key, result)
         return result
 
-    async def get_code_examples(
-        self, pattern: str, language: str, max_results: int = 3
-    ) -> List[CodeExample]:
+    async def get_code_examples(self, pattern: str, language: str, max_results: int = 3) -> List[CodeExample]:
         """
         Get code examples matching pattern.
 
@@ -198,9 +190,7 @@ class RAGIntelligenceClient:
             List of code examples
         """
         # Generate cache key
-        cache_key = self._generate_cache_key(
-            "examples", pattern=pattern, language=language, max_results=max_results
-        )
+        cache_key = self._generate_cache_key("examples", pattern=pattern, language=language, max_results=max_results)
 
         # Check cache
         cached = self._get_cached(cache_key)
@@ -257,9 +247,7 @@ class RAGIntelligenceClient:
     #     data = response.json()
     #     return self._parse_code_examples(data)
 
-    def _fallback_naming_rules(
-        self, language: str, context: Optional[str]
-    ) -> List[NamingConvention]:
+    def _fallback_naming_rules(self, language: str, context: Optional[str]) -> List[NamingConvention]:
         """
         Fallback naming conventions when RAG unavailable.
 
@@ -362,9 +350,7 @@ class RAGIntelligenceClient:
 
         return rules
 
-    def _fallback_code_examples(
-        self, pattern: str, language: str, max_results: int
-    ) -> List[CodeExample]:
+    def _fallback_code_examples(self, pattern: str, language: str, max_results: int) -> List[CodeExample]:
         """
         Fallback code examples when RAG unavailable.
 
@@ -529,12 +515,8 @@ interface UserRepository {
         return {
             "size": len(self._cache),
             "ttl_seconds": self._cache_ttl,
-            "oldest_entry": min(self._cache_timestamps.values())
-            if self._cache_timestamps
-            else None,
-            "newest_entry": max(self._cache_timestamps.values())
-            if self._cache_timestamps
-            else None,
+            "oldest_entry": min(self._cache_timestamps.values()) if self._cache_timestamps else None,
+            "newest_entry": max(self._cache_timestamps.values()) if self._cache_timestamps else None,
         }
 
 

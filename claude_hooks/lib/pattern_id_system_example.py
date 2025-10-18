@@ -20,7 +20,7 @@ from pattern_id_system import (
     generate_pattern_id,
     detect_pattern_derivation,
     register_pattern,
-    get_global_deduplicator
+    get_global_deduplicator,
 )
 import threading
 from typing import List, Dict
@@ -28,9 +28,9 @@ from typing import List, Dict
 
 def example1_basic_id_generation():
     """Example 1: Basic pattern ID generation"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 1: Basic Pattern ID Generation")
-    print("="*60)
+    print("=" * 60)
 
     # Same code, different comments/whitespace
     code1 = """
@@ -66,38 +66,47 @@ def example1_basic_id_generation():
 
 def example2_version_evolution():
     """Example 2: Track pattern evolution over time"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 2: Pattern Version Evolution")
-    print("="*60)
+    print("=" * 60)
 
     dedup = PatternDeduplicator()
 
     # Evolution of a function over time
     evolution = [
-        ("v1.0.0 - Initial", """
+        (
+            "v1.0.0 - Initial",
+            """
         def process_data(data):
             return [x * 2 for x in data]
-        """),
-
-        ("v1.0.1 - Variable rename", """
+        """,
+        ),
+        (
+            "v1.0.1 - Variable rename",
+            """
         def process_data(data):
             return [item * 2 for item in data]
-        """),
-
-        ("v1.1.0 - Add validation", """
+        """,
+        ),
+        (
+            "v1.1.0 - Add validation",
+            """
         def process_data(data):
             if not data:
                 return []
             return [item * 2 for item in data]
-        """),
-
-        ("v2.0.0 - Class refactor", """
+        """,
+        ),
+        (
+            "v2.0.0 - Class refactor",
+            """
         class DataProcessor:
             def process(self, data):
                 if not data:
                     return []
                 return [item * 2 for item in data]
-        """),
+        """,
+        ),
     ]
 
     print("Tracking evolution:\n")
@@ -129,58 +138,74 @@ def example2_version_evolution():
 
 def example3_similarity_analysis():
     """Example 3: Similarity analysis and modification classification"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 3: Similarity Analysis")
-    print("="*60)
+    print("=" * 60)
 
     test_cases = [
-        ("Identical", """
+        (
+            "Identical",
+            """
         def foo(x):
             return x * 2
-        """, """
+        """,
+            """
         def foo(x):
             return x * 2
-        """),
-
-        ("Patch (>90%)", """
+        """,
+        ),
+        (
+            "Patch (>90%)",
+            """
         def calculate(x, y):
             result = x + y
             return result
-        """, """
+        """,
+            """
         def calculate(x, y):
             total = x + y
             return total
-        """),
-
-        ("Minor (70-90%)", """
+        """,
+        ),
+        (
+            "Minor (70-90%)",
+            """
         def greet(name):
             return f"Hello, {name}"
-        """, """
+        """,
+            """
         def greet(name):
             greeting = f"Hello, {name}"
             print(greeting)
             return greeting
-        """),
-
-        ("Major (50-70%)", """
+        """,
+        ),
+        (
+            "Major (50-70%)",
+            """
         def simple_sum(a, b):
             return a + b
-        """, """
+        """,
+            """
         class Calculator:
             def sum(self, a, b):
                 return a + b
-        """),
-
-        ("Unrelated (<50%)", """
+        """,
+        ),
+        (
+            "Unrelated (<50%)",
+            """
         def foo():
             return 42
-        """, """
+        """,
+            """
         class CompletelyDifferent:
             def __init__(self):
                 self.data = []
             def process(self):
                 return self.data
-        """),
+        """,
+        ),
     ]
 
     print("\nSimilarity classification:\n")
@@ -191,7 +216,7 @@ def example3_similarity_analysis():
         print(f"{label}:")
         print(f"  Similarity: {result['similarity_score']:.2%}")
         print(f"  Is derived: {result['is_derived']}")
-        if result['modification_type']:
+        if result["modification_type"]:
             print(f"  Type: {result['modification_type'].value}")
             print(f"  Suggested version: {result['suggested_version']}")
         print()
@@ -199,9 +224,9 @@ def example3_similarity_analysis():
 
 def example4_deduplication():
     """Example 4: Pattern deduplication in action"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 4: Pattern Deduplication")
-    print("="*60)
+    print("=" * 60)
 
     dedup = PatternDeduplicator()
 
@@ -229,7 +254,7 @@ def example4_deduplication():
             print(f"Variation {i}: DUPLICATE (ID: {duplicate.pattern_id})")
             registered_ids.add(duplicate.pattern_id)
         else:
-            meta = dedup.register_pattern(code, tags={'utility'})
+            meta = dedup.register_pattern(code, tags={"utility"})
             print(f"Variation {i}: NEW (ID: {meta.pattern_id})")
             registered_ids.add(meta.pattern_id)
 
@@ -239,9 +264,9 @@ def example4_deduplication():
 
 def example5_thread_safety():
     """Example 5: Thread-safe concurrent registration"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 5: Thread-Safe Concurrent Operations")
-    print("="*60)
+    print("=" * 60)
 
     dedup = get_global_deduplicator()
     results = []
@@ -252,7 +277,7 @@ def example5_thread_safety():
         local_results = []
         for i in range(pattern_count):
             code = f"def thread_{thread_id}_pattern_{i}(x): return x * {i}"
-            meta = dedup.register_pattern(code, tags={f'thread-{thread_id}'})
+            meta = dedup.register_pattern(code, tags={f"thread-{thread_id}"})
             local_results.append(meta.pattern_id)
 
         with lock:
@@ -290,37 +315,50 @@ def example5_thread_safety():
 
 def example6_multi_language():
     """Example 6: Multi-language support"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 6: Multi-Language Support")
-    print("="*60)
+    print("=" * 60)
 
     patterns = [
-        ("Python", """
+        (
+            "Python",
+            """
         def hello(name):
             # Python comment
             print(f"Hello, {name}")
-        """, 'python'),
-
-        ("JavaScript", """
+        """,
+            "python",
+        ),
+        (
+            "JavaScript",
+            """
         function hello(name) {
             // JavaScript comment
             console.log(`Hello, ${name}`);
         }
-        """, 'javascript'),
-
-        ("TypeScript", """
+        """,
+            "javascript",
+        ),
+        (
+            "TypeScript",
+            """
         function hello(name: string): void {
             // TypeScript comment
             console.log(`Hello, ${name}`);
         }
-        """, 'typescript'),
-
-        ("Java", """
+        """,
+            "typescript",
+        ),
+        (
+            "Java",
+            """
         public void hello(String name) {
             // Java comment
             System.out.println("Hello, " + name);
         }
-        """, 'java'),
+        """,
+            "java",
+        ),
     ]
 
     print("Generating IDs for different languages:\n")
@@ -334,9 +372,9 @@ def example6_multi_language():
 
 def example7_lineage_visualization():
     """Example 7: Visualize pattern lineage tree"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 7: Pattern Lineage Visualization")
-    print("="*60)
+    print("=" * 60)
 
     dedup = PatternDeduplicator()
 
@@ -366,8 +404,10 @@ def example7_lineage_visualization():
     current = root_code
     for code in branch_a:
         _, child_meta = dedup.register_with_lineage(current, code)
-        print(f"  ├─ {child_meta.pattern_id[:8]} v{child_meta.version} "
-              f"(similarity: {child_meta.similarity_score:.0%})")
+        print(
+            f"  ├─ {child_meta.pattern_id[:8]} v{child_meta.version} "
+            f"(similarity: {child_meta.similarity_score:.0%})"
+        )
         current = code
 
     # Build branch B
@@ -375,8 +415,10 @@ def example7_lineage_visualization():
     current = root_code
     for code in branch_b:
         _, child_meta = dedup.register_with_lineage(current, code)
-        print(f"  ├─ {child_meta.pattern_id[:8]} v{child_meta.version} "
-              f"(similarity: {child_meta.similarity_score:.0%})")
+        print(
+            f"  ├─ {child_meta.pattern_id[:8]} v{child_meta.version} "
+            f"(similarity: {child_meta.similarity_score:.0%})"
+        )
         current = code
 
     # Show children of root
@@ -386,18 +428,18 @@ def example7_lineage_visualization():
 
 def example8_metadata_enrichment():
     """Example 8: Rich metadata and tagging"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 8: Metadata Enrichment")
-    print("="*60)
+    print("=" * 60)
 
     dedup = PatternDeduplicator()
 
     # Register patterns with rich metadata
     patterns_with_tags = [
-        ("Utility function", "def square(x): return x ** 2", {'utility', 'math', 'pure'}),
-        ("API endpoint", "def get_user(id): return db.query(id)", {'api', 'database', 'crud'}),
-        ("Test helper", "def assert_valid(data): assert data is not None", {'test', 'validation'}),
-        ("Algorithm", "def quicksort(arr): return sorted(arr)", {'algorithm', 'sorting', 'performance'}),
+        ("Utility function", "def square(x): return x ** 2", {"utility", "math", "pure"}),
+        ("API endpoint", "def get_user(id): return db.query(id)", {"api", "database", "crud"}),
+        ("Test helper", "def assert_valid(data): assert data is not None", {"test", "validation"}),
+        ("Algorithm", "def quicksort(arr): return sorted(arr)", {"algorithm", "sorting", "performance"}),
     ]
 
     print("Registering patterns with tags:\n")
@@ -415,9 +457,9 @@ def example8_metadata_enrichment():
 
 def example9_statistics_and_insights():
     """Example 9: Statistics and insights"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("Example 9: Statistics and Insights")
-    print("="*60)
+    print("=" * 60)
 
     dedup = PatternDeduplicator()
 
@@ -451,9 +493,9 @@ def example9_statistics_and_insights():
 
 def main():
     """Run all examples"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("PATTERN ID SYSTEM - COMPREHENSIVE EXAMPLES")
-    print("="*60)
+    print("=" * 60)
 
     examples = [
         example1_basic_id_generation,
@@ -473,9 +515,9 @@ def main():
         except Exception as e:
             print(f"\n❌ Error in {example.__name__}: {e}")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("EXAMPLES COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print("\nAll examples demonstrate production-ready capabilities:")
     print("  ✓ Deterministic ID generation")
     print("  ✓ Version evolution tracking")
@@ -486,5 +528,5 @@ def main():
     print("  ✓ Statistical insights")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

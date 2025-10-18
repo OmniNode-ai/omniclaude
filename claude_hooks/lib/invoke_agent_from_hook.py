@@ -30,19 +30,12 @@ try:
     from agent_pathway_detector import AgentPathwayDetector
     from agent_invoker import AgentInvoker
 except ImportError as e:
-    print(json.dumps({
-        "success": False,
-        "error": f"Failed to import agent modules: {e}",
-        "context_injection": None
-    }))
+    print(json.dumps({"success": False, "error": f"Failed to import agent modules: {e}", "context_injection": None}))
     sys.exit(1)
 
 
 async def process_agent_invocation(
-    prompt: str,
-    correlation_id: str,
-    session_id: str,
-    context: Dict[str, Any]
+    prompt: str, correlation_id: str, session_id: str, context: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Process agent invocation from hook.
@@ -61,7 +54,7 @@ async def process_agent_invocation(
         correlation_id=correlation_id,
         use_enhanced_router=True,
         router_confidence_threshold=0.6,
-        enable_database_logging=True
+        enable_database_logging=True,
     )
 
     try:
@@ -83,7 +76,7 @@ async def process_agent_invocation(
                 "agent_name": agent_name,
                 "context_injection": context_yaml,
                 "execution_time_ms": result.get("execution_time_ms", 0),
-                "message": f"Context prepared for agent: {agent_name}"
+                "message": f"Context prepared for agent: {agent_name}",
             }
 
         elif result.get("pathway") == "coordinator":
@@ -94,7 +87,7 @@ async def process_agent_invocation(
                 "coordinator_invocation_required": True,
                 "task_description": result.get("task", prompt),
                 "execution_time_ms": result.get("execution_time_ms", 0),
-                "message": "Coordinator invocation prepared"
+                "message": "Coordinator invocation prepared",
             }
 
         elif result.get("pathway") == "direct_parallel":
@@ -106,7 +99,7 @@ async def process_agent_invocation(
                 "parallel_execution_required": True,
                 "task_description": result.get("task", prompt),
                 "execution_time_ms": result.get("execution_time_ms", 0),
-                "message": f"Parallel execution prepared for {len(result.get('agents_invoked', []))} agents"
+                "message": f"Parallel execution prepared for {len(result.get('agents_invoked', []))} agents",
             }
 
         else:
@@ -115,15 +108,11 @@ async def process_agent_invocation(
                 "success": True,
                 "pathway": None,
                 "context_injection": None,
-                "message": "No agent invocation required"
+                "message": "No agent invocation required",
             }
 
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "context_injection": None
-        }
+        return {"success": False, "error": str(e), "context_injection": None}
 
     finally:
         await invoker.cleanup()
@@ -191,22 +180,14 @@ def main():
         input_data = sys.stdin.read()
 
         if not input_data.strip():
-            print(json.dumps({
-                "success": False,
-                "error": "No input provided",
-                "context_injection": None
-            }))
+            print(json.dumps({"success": False, "error": "No input provided", "context_injection": None}))
             sys.exit(1)
 
         # Parse JSON input
         try:
             data = json.loads(input_data)
         except json.JSONDecodeError as e:
-            print(json.dumps({
-                "success": False,
-                "error": f"Invalid JSON input: {e}",
-                "context_injection": None
-            }))
+            print(json.dumps({"success": False, "error": f"Invalid JSON input: {e}", "context_injection": None}))
             sys.exit(1)
 
         # Extract parameters
@@ -216,20 +197,15 @@ def main():
         context = data.get("context", {})
 
         if not prompt:
-            print(json.dumps({
-                "success": False,
-                "error": "No prompt provided",
-                "context_injection": None
-            }))
+            print(json.dumps({"success": False, "error": "No prompt provided", "context_injection": None}))
             sys.exit(1)
 
         # Process agent invocation
-        result = asyncio.run(process_agent_invocation(
-            prompt=prompt,
-            correlation_id=correlation_id,
-            session_id=session_id,
-            context=context
-        ))
+        result = asyncio.run(
+            process_agent_invocation(
+                prompt=prompt, correlation_id=correlation_id, session_id=session_id, context=context
+            )
+        )
 
         # Output result
         print(json.dumps(result, indent=2))
@@ -238,13 +214,13 @@ def main():
         sys.exit(0)
 
     except Exception as e:
-        print(json.dumps({
-            "success": False,
-            "error": f"Unexpected error: {e}",
-            "context_injection": None
-        }), file=sys.stderr)
+        print(
+            json.dumps({"success": False, "error": f"Unexpected error: {e}", "context_injection": None}),
+            file=sys.stderr,
+        )
 
         import traceback
+
         traceback.print_exc(file=sys.stderr)
 
         sys.exit(1)

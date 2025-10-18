@@ -27,12 +27,10 @@ class HookEventLogger:
         if connection_string is None:
             # Note: Set DB_PASSWORD environment variable for database access
             import os
+
             db_password = os.getenv("DB_PASSWORD", "")
             connection_string = (
-                "host=localhost port=5436 "
-                "dbname=omninode_bridge "
-                "user=postgres "
-                f"password={db_password}"
+                "host=localhost port=5436 " "dbname=omninode_bridge " "user=postgres " f"password={db_password}"
             )
 
         self.connection_string = connection_string
@@ -51,7 +49,7 @@ class HookEventLogger:
         resource: str,
         resource_id: Optional[str] = None,
         payload: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Log a hook event to the database.
 
@@ -77,11 +75,12 @@ class HookEventLogger:
             event_metadata = metadata or {}
 
             # Add timestamp to metadata
-            event_metadata['logged_at'] = datetime.now(timezone.utc).isoformat()
+            event_metadata["logged_at"] = datetime.now(timezone.utc).isoformat()
 
             # Insert event
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (
                         id, source, action, resource, resource_id,
                         payload, metadata, processed, retry_count, created_at
@@ -89,18 +88,20 @@ class HookEventLogger:
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s
                     )
-                """, (
-                    event_id,
-                    source,
-                    action,
-                    resource,
-                    resource_id,
-                    Json(event_payload),
-                    Json(event_metadata),
-                    False,  # processed
-                    0,      # retry_count
-                    datetime.now(timezone.utc)
-                ))
+                """,
+                    (
+                        event_id,
+                        source,
+                        action,
+                        resource,
+                        resource_id,
+                        Json(event_payload),
+                        Json(event_metadata),
+                        False,  # processed
+                        0,  # retry_count
+                        datetime.now(timezone.utc),
+                    ),
+                )
                 conn.commit()
 
             return event_id
@@ -120,7 +121,7 @@ class HookEventLogger:
         tool_name: str,
         tool_input: Dict[str, Any],
         correlation_id: Optional[str] = None,
-        quality_check_result: Optional[Dict[str, Any]] = None
+        quality_check_result: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Log PreToolUse hook event.
 
@@ -133,16 +134,9 @@ class HookEventLogger:
         Returns:
             Event ID if successful, None if failed
         """
-        metadata = {
-            "hook_type": "PreToolUse",
-            "correlation_id": correlation_id
-        }
+        metadata = {"hook_type": "PreToolUse", "correlation_id": correlation_id}
 
-        payload = {
-            "tool_name": tool_name,
-            "tool_input": tool_input,
-            "quality_check": quality_check_result
-        }
+        payload = {"tool_name": tool_name, "tool_input": tool_input, "quality_check": quality_check_result}
 
         return self.log_event(
             source="PreToolUse",
@@ -150,7 +144,7 @@ class HookEventLogger:
             resource="tool",
             resource_id=tool_name,
             payload=payload,
-            metadata=metadata
+            metadata=metadata,
         )
 
     def log_posttooluse(
@@ -159,7 +153,7 @@ class HookEventLogger:
         tool_output: Optional[Dict[str, Any]] = None,
         file_path: Optional[str] = None,
         auto_fix_applied: bool = False,
-        auto_fix_details: Optional[Dict[str, Any]] = None
+        auto_fix_details: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Log PostToolUse hook event.
 
@@ -173,16 +167,13 @@ class HookEventLogger:
         Returns:
             Event ID if successful, None if failed
         """
-        metadata = {
-            "hook_type": "PostToolUse",
-            "auto_fix_applied": auto_fix_applied
-        }
+        metadata = {"hook_type": "PostToolUse", "auto_fix_applied": auto_fix_applied}
 
         payload = {
             "tool_name": tool_name,
             "tool_output": tool_output,
             "file_path": file_path,
-            "auto_fix_details": auto_fix_details
+            "auto_fix_details": auto_fix_details,
         }
 
         return self.log_event(
@@ -191,7 +182,7 @@ class HookEventLogger:
             resource="tool",
             resource_id=tool_name,
             payload=payload,
-            metadata=metadata
+            metadata=metadata,
         )
 
     def log_userprompt(
@@ -205,7 +196,7 @@ class HookEventLogger:
         detection_method: Optional[str] = None,
         confidence: Optional[float] = None,
         latency_ms: Optional[float] = None,
-        reasoning: Optional[str] = None
+        reasoning: Optional[str] = None,
     ) -> Optional[str]:
         """Log UserPromptSubmit hook event.
 
@@ -229,7 +220,7 @@ class HookEventLogger:
             "correlation_id": correlation_id,
             "agent_detected": agent_detected is not None,
             "detection_method": detection_method,
-            "detection_latency_ms": latency_ms
+            "detection_latency_ms": latency_ms,
         }
 
         # Merge enhanced metadata if provided
@@ -244,7 +235,7 @@ class HookEventLogger:
             "detection_method": detection_method,
             "confidence": confidence,
             "latency_ms": latency_ms,
-            "reasoning": reasoning[:200] if reasoning else None  # Truncate reasoning
+            "reasoning": reasoning[:200] if reasoning else None,  # Truncate reasoning
         }
 
         return self.log_event(
@@ -253,7 +244,7 @@ class HookEventLogger:
             resource="prompt",
             resource_id=agent_detected or "no_agent",
             payload=payload,
-            metadata=event_metadata
+            metadata=event_metadata,
         )
 
     def close(self):
@@ -295,17 +286,16 @@ def log_userprompt(prompt: str, **kwargs) -> Optional[str]:
     return get_logger().log_userprompt(prompt, **kwargs)
 
 
-def log_hook_event(source: str, action: str, resource_id: Optional[str] = None,
-                    payload: Optional[Dict[str, Any]] = None,
-                    metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
+def log_hook_event(
+    source: str,
+    action: str,
+    resource_id: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
     """Quick log generic hook event."""
     return get_logger().log_event(
-        source=source,
-        action=action,
-        resource="workflow",
-        resource_id=resource_id,
-        payload=payload,
-        metadata=metadata
+        source=source, action=action, resource="workflow", resource_id=resource_id, payload=payload, metadata=metadata
     )
 
 
@@ -319,7 +309,7 @@ if __name__ == "__main__":
     event_id = logger.log_pretooluse(
         tool_name="Write",
         tool_input={"file_path": "/test/example.py", "content": "# test"},
-        correlation_id="test-correlation-123"
+        correlation_id="test-correlation-123",
     )
     print(f"✓ PreToolUse event logged: {event_id}")
 
@@ -328,7 +318,7 @@ if __name__ == "__main__":
         tool_name="Write",
         file_path="/test/example.py",
         auto_fix_applied=True,
-        auto_fix_details={"fixes": ["renamed_variable"]}
+        auto_fix_details={"fixes": ["renamed_variable"]},
     )
     print(f"✓ PostToolUse event logged: {event_id}")
 
@@ -337,7 +327,7 @@ if __name__ == "__main__":
         prompt="Create a function to calculate fibonacci",
         agent_detected="agent-code-generator",
         agent_domain="code_generation",
-        correlation_id="test-correlation-456"
+        correlation_id="test-correlation-456",
     )
     print(f"✓ UserPromptSubmit event logged: {event_id}")
 

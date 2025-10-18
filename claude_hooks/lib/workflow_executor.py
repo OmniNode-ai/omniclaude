@@ -36,6 +36,7 @@ try:
     from validated_task_architect import ValidatedTaskArchitect
     from agent_dispatcher import ParallelCoordinator
     from agent_model import AgentTask
+
     COMPONENTS_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Agent components not available: {e}", file=sys.stderr)
@@ -49,12 +50,7 @@ class WorkflowExecutor:
     Designed to be invoked from hooks when agent-workflow-coordinator is detected.
     """
 
-    def __init__(
-        self,
-        correlation_id: Optional[str] = None,
-        workspace: Optional[str] = None,
-        db_logging: bool = True
-    ):
+    def __init__(self, correlation_id: Optional[str] = None, workspace: Optional[str] = None, db_logging: bool = True):
         """
         Initialize workflow executor.
 
@@ -69,9 +65,7 @@ class WorkflowExecutor:
         self.execution_trace = []
 
     async def execute_workflow(
-        self,
-        user_prompt: str,
-        agent_context: Optional[Dict[str, Any]] = None
+        self, user_prompt: str, agent_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Execute complete 6-phase workflow orchestration.
@@ -88,7 +82,7 @@ class WorkflowExecutor:
             return {
                 "success": False,
                 "error": "Agent components not available",
-                "fallback_message": "Workflow executor requires agent components"
+                "fallback_message": "Workflow executor requires agent components",
             }
 
         workflow_start = time.time()
@@ -102,9 +96,7 @@ class WorkflowExecutor:
 
             context_manager = ContextManager()
             global_context = await context_manager.gather_global_context(
-                user_prompt=user_prompt,
-                workspace_path=self.workspace,
-                max_rag_results=5
+                user_prompt=user_prompt, workspace_path=self.workspace, max_rag_results=5
             )
 
             context_summary = context_manager.get_context_summary()
@@ -116,18 +108,21 @@ class WorkflowExecutor:
                 {
                     "duration_ms": phase_time,
                     "context_items": context_summary["total_items"],
-                    "total_tokens": context_summary["total_tokens_estimate"]
-                }
+                    "total_tokens": context_summary["total_tokens_estimate"],
+                },
             )
 
             if self.db_logging:
-                await self._log_to_database("context_gathering", {
-                    "phase": "context_gathering",
-                    "duration_ms": phase_time,
-                    "items_gathered": context_summary["total_items"],
-                    "items_by_type": context_summary["items_by_type"],
-                    "correlation_id": self.correlation_id
-                })
+                await self._log_to_database(
+                    "context_gathering",
+                    {
+                        "phase": "context_gathering",
+                        "duration_ms": phase_time,
+                        "items_gathered": context_summary["total_items"],
+                        "items_by_type": context_summary["items_by_type"],
+                        "correlation_id": self.correlation_id,
+                    },
+                )
 
             # =================================================================
             # PHASE 1: TASK DECOMPOSITION WITH VALIDATION
@@ -143,12 +138,11 @@ class WorkflowExecutor:
                 serializable_context[key] = {
                     "type": context_item.context_type,
                     "content": context_item.content,
-                    "metadata": context_item.metadata
+                    "metadata": context_item.metadata,
                 }
 
             breakdown_result = await architect.breakdown_tasks_with_validation(
-                user_prompt=user_prompt,
-                global_context=serializable_context
+                user_prompt=user_prompt, global_context=serializable_context
             )
 
             phase_time = (time.time() - phase_start) * 1000
@@ -161,7 +155,7 @@ class WorkflowExecutor:
                     "error": breakdown_result.get("error", "Task decomposition validation failed"),
                     "attempts": breakdown_result.get("attempts", 0),
                     "quorum_result": breakdown_result.get("quorum_result"),
-                    "execution_time_ms": (time.time() - workflow_start) * 1000
+                    "execution_time_ms": (time.time() - workflow_start) * 1000,
                 }
 
             task_plan = breakdown_result["breakdown"]
@@ -174,19 +168,22 @@ class WorkflowExecutor:
                     "duration_ms": phase_time,
                     "tasks_identified": len(task_plan.get("tasks", [])),
                     "validation_attempts": breakdown_result["attempts"],
-                    "quorum_confidence": quorum_confidence
-                }
+                    "quorum_confidence": quorum_confidence,
+                },
             )
 
             if self.db_logging:
-                await self._log_to_database("task_decomposition", {
-                    "phase": "task_decomposition",
-                    "duration_ms": phase_time,
-                    "task_count": len(task_plan.get("tasks", [])),
-                    "validation_confidence": quorum_confidence,
-                    "validation_attempts": breakdown_result["attempts"],
-                    "correlation_id": self.correlation_id
-                })
+                await self._log_to_database(
+                    "task_decomposition",
+                    {
+                        "phase": "task_decomposition",
+                        "duration_ms": phase_time,
+                        "task_count": len(task_plan.get("tasks", [])),
+                        "validation_confidence": quorum_confidence,
+                        "validation_attempts": breakdown_result["attempts"],
+                        "correlation_id": self.correlation_id,
+                    },
+                )
 
             # =================================================================
             # PHASE 2: CONTEXT FILTERING
@@ -198,8 +195,7 @@ class WorkflowExecutor:
             for task_def in task_plan.get("tasks", []):
                 requirements = task_def.get("context_requirements", [])
                 filtered_contexts[task_def["task_id"]] = context_manager.filter_context(
-                    context_requirements=requirements,
-                    max_tokens=5000
+                    context_requirements=requirements, max_tokens=5000
                 )
 
             phase_time = (time.time() - phase_start) * 1000
@@ -207,10 +203,7 @@ class WorkflowExecutor:
             self._log_phase(
                 "PHASE 2: Context Filtering",
                 "completed",
-                {
-                    "duration_ms": phase_time,
-                    "contexts_filtered": len(filtered_contexts)
-                }
+                {"duration_ms": phase_time, "contexts_filtered": len(filtered_contexts)},
             )
 
             # =================================================================
@@ -219,10 +212,7 @@ class WorkflowExecutor:
             phase_start = time.time()
             self._log_phase("PHASE 3: Parallel Agent Execution", "started")
 
-            coordinator = ParallelCoordinator(
-                use_enhanced_router=True,
-                router_confidence_threshold=0.6
-            )
+            coordinator = ParallelCoordinator(use_enhanced_router=True, router_confidence_threshold=0.6)
             await coordinator.initialize()
 
             # Convert to AgentTask objects with filtered context
@@ -233,9 +223,9 @@ class WorkflowExecutor:
                     description=task_def["description"],
                     input_data={
                         **task_def.get("input_data", {}),
-                        "pre_gathered_context": filtered_contexts.get(task_def["task_id"], {})
+                        "pre_gathered_context": filtered_contexts.get(task_def["task_id"], {}),
                     },
-                    dependencies=task_def.get("dependencies", [])
+                    dependencies=task_def.get("dependencies", []),
                 )
                 tasks.append(task)
 
@@ -251,19 +241,22 @@ class WorkflowExecutor:
                     "duration_ms": phase_time,
                     "tasks_executed": len(results),
                     "successful": sum(1 for r in results.values() if r.success),
-                    "failed": sum(1 for r in results.values() if not r.success)
-                }
+                    "failed": sum(1 for r in results.values() if not r.success),
+                },
             )
 
             if self.db_logging:
-                await self._log_to_database("parallel_execution", {
-                    "phase": "parallel_execution",
-                    "duration_ms": phase_time,
-                    "total_tasks": len(results),
-                    "successful_tasks": sum(1 for r in results.values() if r.success),
-                    "router_stats": coordinator.get_router_stats(),
-                    "correlation_id": self.correlation_id
-                })
+                await self._log_to_database(
+                    "parallel_execution",
+                    {
+                        "phase": "parallel_execution",
+                        "duration_ms": phase_time,
+                        "total_tasks": len(results),
+                        "successful_tasks": sum(1 for r in results.values() if r.success),
+                        "router_stats": coordinator.get_router_stats(),
+                        "correlation_id": self.correlation_id,
+                    },
+                )
 
             # =================================================================
             # PHASE 4: RESULT AGGREGATION
@@ -281,8 +274,8 @@ class WorkflowExecutor:
                 {
                     "duration_ms": phase_time,
                     "code_files_generated": len(aggregated.get("generated_code", {})),
-                    "average_quality": aggregated.get("average_quality_score", 0)
-                }
+                    "average_quality": aggregated.get("average_quality_score", 0),
+                },
             )
 
             # =================================================================
@@ -300,20 +293,20 @@ class WorkflowExecutor:
                     "task_decomposition": self.execution_trace[1] if len(self.execution_trace) > 1 else {},
                     "context_filtering": self.execution_trace[2] if len(self.execution_trace) > 2 else {},
                     "parallel_execution": self.execution_trace[3] if len(self.execution_trace) > 3 else {},
-                    "result_aggregation": self.execution_trace[4] if len(self.execution_trace) > 4 else {}
+                    "result_aggregation": self.execution_trace[4] if len(self.execution_trace) > 4 else {},
                 },
                 "tasks": {
                     "total": len(tasks),
                     "successful": aggregated["successful_tasks"],
-                    "failed": aggregated["failed_tasks"]
+                    "failed": aggregated["failed_tasks"],
                 },
                 "quality": {
                     "average_score": aggregated.get("average_quality_score", 0),
-                    "validation_passed": aggregated.get("average_quality_score", 0) >= 0.7
+                    "validation_passed": aggregated.get("average_quality_score", 0) >= 0.7,
                 },
                 "outputs": aggregated.get("outputs", {}),
                 "generated_code": aggregated.get("generated_code", {}),
-                "router_performance": coordinator.get_router_stats()
+                "router_performance": coordinator.get_router_stats(),
             }
 
             self._log_phase(
@@ -322,19 +315,22 @@ class WorkflowExecutor:
                 {
                     "total_workflow_time_ms": total_workflow_time,
                     "overall_success": final_result["success"],
-                    "quality_validation_passed": final_result["quality"]["validation_passed"]
-                }
+                    "quality_validation_passed": final_result["quality"]["validation_passed"],
+                },
             )
 
             if self.db_logging:
-                await self._log_to_database("workflow_complete", {
-                    "phase": "workflow_complete",
-                    "total_time_ms": total_workflow_time,
-                    "successful": final_result["success"],
-                    "tasks_completed": aggregated["successful_tasks"],
-                    "average_quality": aggregated.get("average_quality_score", 0),
-                    "correlation_id": self.correlation_id
-                })
+                await self._log_to_database(
+                    "workflow_complete",
+                    {
+                        "phase": "workflow_complete",
+                        "total_time_ms": total_workflow_time,
+                        "successful": final_result["success"],
+                        "tasks_completed": aggregated["successful_tasks"],
+                        "average_quality": aggregated.get("average_quality_score", 0),
+                        "correlation_id": self.correlation_id,
+                    },
+                )
 
             # Cleanup
             await context_manager.cleanup()
@@ -351,17 +347,20 @@ class WorkflowExecutor:
                 "error_type": type(e).__name__,
                 "execution_time_ms": error_time,
                 "correlation_id": self.correlation_id,
-                "execution_trace": self.execution_trace
+                "execution_trace": self.execution_trace,
             }
 
             if self.db_logging:
-                await self._log_to_database("workflow_error", {
-                    "phase": "workflow_error",
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                    "duration_ms": error_time,
-                    "correlation_id": self.correlation_id
-                })
+                await self._log_to_database(
+                    "workflow_error",
+                    {
+                        "phase": "workflow_error",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "duration_ms": error_time,
+                        "correlation_id": self.correlation_id,
+                    },
+                )
 
             return error_result
 
@@ -375,7 +374,7 @@ class WorkflowExecutor:
             "failed_tasks": sum(1 for r in results.values() if not r.success),
             "outputs": {},
             "quality_metrics": {},
-            "generated_code": {}
+            "generated_code": {},
         }
 
         for task_id, result in results.items():
@@ -393,7 +392,7 @@ class WorkflowExecutor:
                 aggregated["outputs"][task_id] = {
                     "agent": result.agent_name,
                     "execution_time_ms": result.execution_time_ms,
-                    "summary": output_data
+                    "summary": output_data,
                 }
 
         # Calculate overall quality
@@ -412,7 +411,7 @@ class WorkflowExecutor:
             "phase": phase_name,
             "status": status,
             "timestamp": datetime.utcnow().isoformat(),
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
 
         self.execution_trace.append(log_entry)
@@ -434,10 +433,7 @@ class WorkflowExecutor:
                 action=event_type,
                 resource_id=self.correlation_id,
                 payload=payload,
-                metadata={
-                    "correlation_id": self.correlation_id,
-                    "workspace": self.workspace
-                }
+                metadata={"correlation_id": self.correlation_id, "workspace": self.workspace},
             )
         except Exception as e:
             print(f"[WorkflowExecutor] Database logging failed: {e}", file=sys.stderr)
@@ -447,7 +443,7 @@ async def execute_from_hook(
     user_prompt: str,
     correlation_id: str,
     workspace: Optional[str] = None,
-    agent_context: Optional[Dict[str, Any]] = None
+    agent_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Entry point for hook invocation.
@@ -462,16 +458,9 @@ async def execute_from_hook(
         Workflow execution result
     """
 
-    executor = WorkflowExecutor(
-        correlation_id=correlation_id,
-        workspace=workspace,
-        db_logging=True
-    )
+    executor = WorkflowExecutor(correlation_id=correlation_id, workspace=workspace, db_logging=True)
 
-    return await executor.execute_workflow(
-        user_prompt=user_prompt,
-        agent_context=agent_context
-    )
+    return await executor.execute_workflow(user_prompt=user_prompt, agent_context=agent_context)
 
 
 def main():
@@ -485,11 +474,13 @@ def main():
     correlation_id = sys.argv[2] if len(sys.argv) > 2 else None
     workspace = sys.argv[3] if len(sys.argv) > 3 else None
 
-    result = asyncio.run(execute_from_hook(
-        user_prompt=user_prompt,
-        correlation_id=correlation_id or "test-" + str(int(time.time())),
-        workspace=workspace
-    ))
+    result = asyncio.run(
+        execute_from_hook(
+            user_prompt=user_prompt,
+            correlation_id=correlation_id or "test-" + str(int(time.time())),
+            workspace=workspace,
+        )
+    )
 
     print(json.dumps(result, indent=2))
 

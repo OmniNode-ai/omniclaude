@@ -27,21 +27,12 @@ class PatternTrackerSync:
         self._session = requests.Session()
         self._pattern_id_cache = {}
         self._cache_ttl = 300  # 5 minutes
-        self._metrics = {
-            'total_requests': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'total_time_ms': 0
-        }
+        self._metrics = {"total_requests": 0, "cache_hits": 0, "cache_misses": 0, "total_time_ms": 0}
 
         # Configure session with connection pooling
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=10,
-            pool_maxsize=20,
-            max_retries=3
-        )
-        self._session.mount('http://', adapter)
-        self._session.mount('https://', adapter)
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=3)
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
 
         # Health check
         self._check_api_health()
@@ -65,14 +56,14 @@ class PatternTrackerSync:
 
     def is_api_available(self) -> bool:
         """Check if API is available for tracking."""
-        return hasattr(self, '_api_healthy') and self._api_healthy
+        return hasattr(self, "_api_healthy") and self._api_healthy
 
     def track_pattern_creation_sync(
         self,
         code: str,
         context: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> Optional[str]:
         """Synchronous wrapper for track_pattern_creation - matches expected interface.
 
@@ -137,22 +128,20 @@ class PatternTrackerSync:
                     "quality_score": context.get("quality_score", 1.0),
                     "violations_found": context.get("violations_found", 0),
                     "timestamp": datetime.utcnow().isoformat(),
-                }
+                },
             }
 
             # Make synchronous API call with connection pooling
             start_time = time.time()
             print(f"📤 [PatternTrackerSync] Sending pattern to Phase 4 API...", file=sys.stderr)
             response = self._session.post(
-                f"{self.base_url}/api/pattern-traceability/lineage/track",
-                json=payload,
-                timeout=self.timeout
+                f"{self.base_url}/api/pattern-traceability/lineage/track", json=payload, timeout=self.timeout
             )
             response.raise_for_status()
 
             response_time_ms = (time.time() - start_time) * 1000
-            self._metrics['total_requests'] += 1
-            self._metrics['total_time_ms'] += response_time_ms
+            self._metrics["total_requests"] += 1
+            self._metrics["total_time_ms"] += response_time_ms
 
             result = response.json()
             print(f"✅ [PatternTrackerSync] Pattern tracked: {pattern_id}", file=sys.stderr)
@@ -174,6 +163,7 @@ class PatternTrackerSync:
         except Exception as e:
             print(f"❌ [PatternTrackerSync] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
             import traceback
+
             traceback.print_exc(file=sys.stderr)
             return None
 
@@ -192,7 +182,7 @@ class PatternTrackerSync:
         if cache_key in self._pattern_id_cache:
             cached_time, pattern_id = self._pattern_id_cache[cache_key]
             if current_time - cached_time < self._cache_ttl:
-                self._metrics['cache_hits'] += 1
+                self._metrics["cache_hits"] += 1
                 return pattern_id
 
         # Generate new pattern ID
@@ -201,7 +191,7 @@ class PatternTrackerSync:
 
         # Cache the result
         self._pattern_id_cache[cache_key] = (current_time, pattern_id)
-        self._metrics['cache_misses'] += 1
+        self._metrics["cache_misses"] += 1
 
         return pattern_id
 
@@ -211,13 +201,13 @@ class PatternTrackerSync:
         Returns:
             Dictionary with performance metrics
         """
-        total_requests = self._metrics['total_requests']
-        cache_hits = self._metrics['cache_hits']
-        cache_misses = self._metrics['cache_misses']
+        total_requests = self._metrics["total_requests"]
+        cache_hits = self._metrics["cache_hits"]
+        cache_misses = self._metrics["cache_misses"]
 
         avg_response_time = 0
         if total_requests > 0:
-            avg_response_time = self._metrics['total_time_ms'] / total_requests
+            avg_response_time = self._metrics["total_time_ms"] / total_requests
 
         cache_hit_rate = 0
         total_cache_ops = cache_hits + cache_misses
@@ -230,9 +220,9 @@ class PatternTrackerSync:
             "cache_misses": cache_misses,
             "cache_hit_rate": cache_hit_rate,
             "average_response_time_ms": avg_response_time,
-            "total_time_ms": self._metrics['total_time_ms'],
+            "total_time_ms": self._metrics["total_time_ms"],
             "session_id": self.session_id,
-            "base_url": self.base_url
+            "base_url": self.base_url,
         }
 
     def print_performance_summary(self):
@@ -286,7 +276,7 @@ def example_function():
         "language": "python",
         "reason": "Test pattern tracking",
         "quality_score": 0.95,
-        "violations_found": 1
+        "violations_found": 1,
     }
 
     # Performance test - multiple tracking operations

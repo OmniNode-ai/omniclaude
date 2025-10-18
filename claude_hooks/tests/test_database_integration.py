@@ -124,9 +124,7 @@ class TestConnectionManagement:
 
             # Should not crash, just log warning
             try:
-                logger.log_event(
-                    source="Test", action="test", resource="test", resource_id="test-id", payload={}
-                )
+                logger.log_event(source="Test", action="test", resource="test", resource_id="test-id", payload={})
                 # Graceful degradation - returns None or continues
                 assert True
             except Exception:

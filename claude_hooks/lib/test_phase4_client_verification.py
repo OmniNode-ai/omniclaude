@@ -23,13 +23,13 @@ def verify_client_implementation():
 
     # Required methods (7 core endpoints)
     required_methods = [
-        "track_lineage",          # Endpoint 1: POST /lineage/track
-        "query_lineage",          # Endpoint 2: GET /lineage/{id}
-        "compute_analytics",      # Endpoint 3: POST /analytics/compute
-        "get_analytics",          # Endpoint 4: GET /analytics/{id}
-        "analyze_feedback",       # Endpoint 5: POST /feedback/analyze
-        "search_patterns",        # Endpoint 6: POST /search
-        "validate_integrity",     # Endpoint 7: POST /validate
+        "track_lineage",  # Endpoint 1: POST /lineage/track
+        "query_lineage",  # Endpoint 2: GET /lineage/{id}
+        "compute_analytics",  # Endpoint 3: POST /analytics/compute
+        "get_analytics",  # Endpoint 4: GET /analytics/{id}
+        "analyze_feedback",  # Endpoint 5: POST /feedback/analyze
+        "search_patterns",  # Endpoint 6: POST /search
+        "validate_integrity",  # Endpoint 7: POST /validate
     ]
 
     # Bonus methods
@@ -39,7 +39,7 @@ def verify_client_implementation():
         "track_pattern_modification",
         "get_pattern_health",
         "_retry_request",
-        "close"
+        "close",
     ]
 
     print("\n1. Checking Required Endpoints (7 core methods):")
@@ -85,14 +85,14 @@ def verify_client_implementation():
     print(f"   api_key:       {params['api_key'].default}")
 
     # Verify timeout default is 2.0s
-    if params['timeout'].default == 2.0:
+    if params["timeout"].default == 2.0:
         print(f"\n   ✅ Default timeout is 2.0 seconds (as required)")
     else:
         print(f"\n   ❌ Default timeout is {params['timeout'].default}s (should be 2.0s)")
         return False
 
     # Verify max_retries default is 3
-    if params['max_retries'].default == 3:
+    if params["max_retries"].default == 3:
         print(f"   ✅ Default max_retries is 3 (exponential backoff: 1s, 2s, 4s)")
     else:
         print(f"   ❌ Default max_retries is {params['max_retries'].default} (should be 3)")
@@ -147,9 +147,9 @@ def verify_client_implementation():
         # Should NOT have bare raise statements (except in retry logic)
         # Should return {"success": False, "error": ...}
         has_graceful_error = (
-            '{"success": False' in method_source or
-            '"success": False' in method_source or
-            "success': False" in method_source
+            '{"success": False' in method_source
+            or '"success": False' in method_source
+            or "success': False" in method_source
         )
 
         status = "✅" if has_graceful_error else "❌"

@@ -108,9 +108,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             if new_name:
                 logger.debug(f"Renaming class '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
-                updated_node = updated_node.with_changes(
-                    name=cst.Name(value=new_name)
-                )
+                updated_node = updated_node.with_changes(name=cst.Name(value=new_name))
         except Exception as e:
             logger.error(f"Error during class renaming: {e}")
 
@@ -136,9 +134,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             # Find corresponding function in original AST
             for ast_node in ast.walk(self.original_tree):
                 if isinstance(ast_node, ast.FunctionDef) and ast_node.name == old_name:
-                    pattern = self.framework_detector.is_framework_method(
-                        ast_node, self.original_tree
-                    )
+                    pattern = self.framework_detector.is_framework_method(ast_node, self.original_tree)
                     if pattern:
                         logger.debug(
                             f"Preserving framework method: {pattern.framework}.{pattern.method_name} "
@@ -155,9 +151,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             if new_name:
                 logger.debug(f"Renaming function '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
-                updated_node = updated_node.with_changes(
-                    name=cst.Name(value=new_name)
-                )
+                updated_node = updated_node.with_changes(name=cst.Name(value=new_name))
         except Exception as e:
             logger.error(f"Error during function renaming: {e}")
 
@@ -223,9 +217,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
                 if isinstance(ast_node, ast.FunctionDef):
                     if ast_node.name == func_name:
                         # Check if this is a framework method
-                        pattern = self.framework_detector.is_framework_method(
-                            ast_node, self.original_tree
-                        )
+                        pattern = self.framework_detector.is_framework_method(ast_node, self.original_tree)
                         if pattern:
                             logger.debug(
                                 f"Framework method detected: {pattern.framework}.{pattern.method_name} "
@@ -313,9 +305,7 @@ def apply_corrections_with_ast(
 
         # Create transformer with metadata wrapper
         wrapper = metadata.MetadataWrapper(module)
-        transformer = ContextAwareRenameTransformer(
-            correction_index, framework_detector, original_ast
-        )
+        transformer = ContextAwareRenameTransformer(correction_index, framework_detector, original_ast)
 
         # Apply transformations
         try:

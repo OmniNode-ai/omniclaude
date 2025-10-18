@@ -114,16 +114,10 @@ class ResilientExecutor:
             except Exception as e:
                 self._error_count += 1
                 # Log but don't raise - fire-and-forget pattern
-                logger.warning(
-                    f"[PatternTracker] Background task failed: {e}",
-                    exc_info=True
-                )
+                logger.warning(f"[PatternTracker] Background task failed: {e}", exc_info=True)
         except Exception as e:
             # Even the error handler shouldn't fail
-            print(
-                f"[PatternTracker] Error in task completion handler: {e}",
-                file=sys.stderr
-            )
+            print(f"[PatternTracker] Error in task completion handler: {e}", file=sys.stderr)
 
     def get_stats(self) -> Dict[str, int]:
         """Get executor statistics"""
@@ -132,11 +126,7 @@ class ResilientExecutor:
             "active_tasks": len(self._active_tasks),
             "success_count": self._success_count,
             "error_count": self._error_count,
-            "success_rate": (
-                self._success_count / self._task_count
-                if self._task_count > 0
-                else 0.0
-            )
+            "success_rate": (self._success_count / self._task_count if self._task_count > 0 else 0.0),
         }
 
     async def wait_for_completion(self, timeout: float = 5.0) -> bool:
@@ -153,16 +143,10 @@ class ResilientExecutor:
             if not self._active_tasks:
                 return True
 
-            await asyncio.wait_for(
-                asyncio.gather(*self._active_tasks, return_exceptions=True),
-                timeout=timeout
-            )
+            await asyncio.wait_for(asyncio.gather(*self._active_tasks, return_exceptions=True), timeout=timeout)
             return True
         except asyncio.TimeoutError:
-            logger.warning(
-                f"[PatternTracker] {len(self._active_tasks)} tasks did not "
-                f"complete within {timeout}s"
-            )
+            logger.warning(f"[PatternTracker] {len(self._active_tasks)} tasks did not " f"complete within {timeout}s")
             return False
 
 
@@ -174,6 +158,7 @@ class ResilientExecutor:
 @dataclass
 class CircuitBreakerState:
     """Circuit breaker state tracking"""
+
     state: str  # "closed", "open", "half_open"
     failure_count: int
     last_failure_time: Optional[float]
@@ -202,12 +187,7 @@ class CircuitBreaker:
             await cache.cache_pattern_event(event)
     """
 
-    def __init__(
-        self,
-        failure_threshold: int = 3,
-        timeout: int = 60,
-        half_open_max_calls: int = 1
-    ):
+    def __init__(self, failure_threshold: int = 3, timeout: int = 60, half_open_max_calls: int = 1):
         """
         Initialize circuit breaker.
 
@@ -221,11 +201,7 @@ class CircuitBreaker:
         self.half_open_max_calls = half_open_max_calls
 
         self._state = CircuitBreakerState(
-            state="closed",
-            failure_count=0,
-            last_failure_time=None,
-            last_success_time=None,
-            consecutive_successes=0
+            state="closed", failure_count=0, last_failure_time=None, last_success_time=None, consecutive_successes=0
         )
         self._half_open_calls = 0
 
@@ -255,10 +231,7 @@ class CircuitBreaker:
         # Check half-open call limit
         if self._state.state == "half_open":
             if self._half_open_calls >= self.half_open_max_calls:
-                logger.debug(
-                    "[PatternTracker] Circuit breaker half-open limit reached, "
-                    "skipping call"
-                )
+                logger.debug("[PatternTracker] Circuit breaker half-open limit reached, " "skipping call")
                 return None
             self._half_open_calls += 1
 
@@ -306,8 +279,7 @@ class CircuitBreaker:
         if self._state.failure_count >= self.failure_threshold:
             if self._state.state != "open":
                 logger.warning(
-                    f"[PatternTracker] Circuit breaker opening after "
-                    f"{self._state.failure_count} failures"
+                    f"[PatternTracker] Circuit breaker opening after " f"{self._state.failure_count} failures"
                 )
                 self._state.state = "open"
 
@@ -327,18 +299,14 @@ class CircuitBreaker:
                 if self._state.last_success_time
                 else None
             ),
-            "is_available": self._state.state in ["closed", "half_open"]
+            "is_available": self._state.state in ["closed", "half_open"],
         }
 
     def reset(self) -> None:
         """Manually reset circuit breaker to closed state"""
         logger.info("[PatternTracker] Circuit breaker manually reset")
         self._state = CircuitBreakerState(
-            state="closed",
-            failure_count=0,
-            last_failure_time=None,
-            last_success_time=None,
-            consecutive_successes=0
+            state="closed", failure_count=0, last_failure_time=None, last_success_time=None, consecutive_successes=0
         )
         self._half_open_calls = 0
 
@@ -351,6 +319,7 @@ class CircuitBreaker:
 @dataclass
 class CachedPatternEvent:
     """Cached pattern event for offline storage"""
+
     event_id: str
     timestamp: str
     event_type: str
@@ -385,12 +354,7 @@ class PatternCache:
         print(f"Synced {synced} events")
     """
 
-    def __init__(
-        self,
-        cache_dir: Optional[Path] = None,
-        max_age_days: int = 7,
-        max_cache_size_mb: int = 50
-    ):
+    def __init__(self, cache_dir: Optional[Path] = None, max_age_days: int = 7, max_cache_size_mb: int = 50):
         """
         Initialize pattern cache.
 
@@ -399,9 +363,7 @@ class PatternCache:
             max_age_days: Maximum age for cached events before cleanup
             max_cache_size_mb: Maximum cache size in megabytes
         """
-        self._cache_dir = cache_dir or (
-            Path.home() / ".claude" / "hooks" / ".cache" / "patterns"
-        )
+        self._cache_dir = cache_dir or (Path.home() / ".claude" / "hooks" / ".cache" / "patterns")
         self.max_age_days = max_age_days
         self.max_cache_size_mb = max_cache_size_mb
 
@@ -442,7 +404,7 @@ class PatternCache:
     def _save_metadata(self) -> None:
         """Save cache metadata"""
         try:
-            with open(self.metadata_file, 'w') as f:
+            with open(self.metadata_file, "w") as f:
                 json.dump(self._metadata, f, indent=2)
         except Exception as e:
             logger.warning(f"Failed to save cache metadata: {e}")
@@ -467,22 +429,19 @@ class PatternCache:
                 timestamp=datetime.utcnow().isoformat(),
                 event_type=event.get("event_type", "unknown"),
                 pattern_id=event.get("pattern_id", "unknown"),
-                event_data=event
+                event_data=event,
             )
 
             # Save to file
             cache_file = self.cache_dir / f"pending_{event_id}.json"
-            with open(cache_file, 'w') as f:
+            with open(cache_file, "w") as f:
                 json.dump(asdict(cached_event), f, indent=2)
 
             # Update metadata
             self._metadata["total_cached"] = self._metadata.get("total_cached", 0) + 1
             self._save_metadata()
 
-            logger.info(
-                f"[PatternTracker] Cached event {event_id} locally "
-                f"(type: {cached_event.event_type})"
-            )
+            logger.info(f"[PatternTracker] Cached event {event_id} locally " f"(type: {cached_event.event_type})")
 
             return event_id
 
@@ -491,11 +450,7 @@ class PatternCache:
             # Don't raise - caching failure shouldn't break workflow
             return ""
 
-    async def sync_cached_events(
-        self,
-        api_client,
-        max_retries: int = 3
-    ) -> Dict[str, Any]:
+    async def sync_cached_events(self, api_client, max_retries: int = 3) -> Dict[str, Any]:
         """
         Sync cached events when API becomes available.
 
@@ -506,12 +461,7 @@ class PatternCache:
         Returns:
             Dict with sync statistics
         """
-        stats = {
-            "total_found": 0,
-            "synced": 0,
-            "failed": 0,
-            "skipped": 0
-        }
+        stats = {"total_found": 0, "synced": 0, "failed": 0, "skipped": 0}
 
         try:
             # Find all pending cache files
@@ -522,9 +472,7 @@ class PatternCache:
                 logger.debug("[PatternTracker] No cached events to sync")
                 return stats
 
-            logger.info(
-                f"[PatternTracker] Syncing {len(cache_files)} cached events..."
-            )
+            logger.info(f"[PatternTracker] Syncing {len(cache_files)} cached events...")
 
             for cache_file in cache_files:
                 try:
@@ -536,8 +484,7 @@ class PatternCache:
                     # Check retry limit
                     if cached_event.retry_count >= max_retries:
                         logger.warning(
-                            f"[PatternTracker] Skipping event {cached_event.event_id} "
-                            f"(max retries reached)"
+                            f"[PatternTracker] Skipping event {cached_event.event_id} " f"(max retries reached)"
                         )
                         stats["skipped"] += 1
                         continue
@@ -549,9 +496,7 @@ class PatternCache:
                     cache_file.unlink()
                     stats["synced"] += 1
 
-                    logger.info(
-                        f"[PatternTracker] Synced cached event {cached_event.event_id}"
-                    )
+                    logger.info(f"[PatternTracker] Synced cached event {cached_event.event_id}")
 
                 except Exception as e:
                     # Update retry count
@@ -559,19 +504,14 @@ class PatternCache:
                     cached_event.last_retry = datetime.utcnow().isoformat()
 
                     # Save updated event
-                    with open(cache_file, 'w') as f:
+                    with open(cache_file, "w") as f:
                         json.dump(asdict(cached_event), f, indent=2)
 
                     stats["failed"] += 1
-                    logger.warning(
-                        f"[PatternTracker] Failed to sync event "
-                        f"{cached_event.event_id}: {e}"
-                    )
+                    logger.warning(f"[PatternTracker] Failed to sync event " f"{cached_event.event_id}: {e}")
 
             # Update metadata
-            self._metadata["total_synced"] = (
-                self._metadata.get("total_synced", 0) + stats["synced"]
-            )
+            self._metadata["total_synced"] = self._metadata.get("total_synced", 0) + stats["synced"]
             self._save_metadata()
 
             logger.info(
@@ -605,18 +545,13 @@ class PatternCache:
                     if timestamp < cutoff_time:
                         cache_file.unlink()
                         cleaned += 1
-                        logger.info(
-                            f"[PatternTracker] Cleaned up old cached event: "
-                            f"{event_data['event_id']}"
-                        )
+                        logger.info(f"[PatternTracker] Cleaned up old cached event: " f"{event_data['event_id']}")
 
                 except Exception as e:
                     logger.warning(f"Failed to clean up {cache_file}: {e}")
 
             if cleaned > 0:
-                logger.info(
-                    f"[PatternTracker] Cleaned up {cleaned} old cached events"
-                )
+                logger.info(f"[PatternTracker] Cleaned up {cleaned} old cached events")
 
         except Exception as e:
             logger.error(f"[PatternTracker] Error during cleanup: {e}", exc_info=True)
@@ -632,7 +567,7 @@ class PatternCache:
             "total_cached": self._metadata.get("total_cached", 0),
             "total_synced": self._metadata.get("total_synced", 0),
             "cache_dir": str(self.cache_dir),
-            "max_age_days": self.max_age_days
+            "max_age_days": self.max_age_days,
         }
 
 
@@ -661,12 +596,7 @@ class Phase4HealthChecker:
             result = await api_client.track_lineage(...)
     """
 
-    def __init__(
-        self,
-        base_url: str = "http://localhost:8053",
-        check_interval: int = 30,
-        timeout: float = 1.0
-    ):
+    def __init__(self, base_url: str = "http://localhost:8053", check_interval: int = 30, timeout: float = 1.0):
         """
         Initialize health checker.
 
@@ -675,7 +605,7 @@ class Phase4HealthChecker:
             check_interval: Seconds between health checks
             timeout: Health check timeout in seconds
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.check_interval = check_interval
         self.timeout = timeout
 
@@ -704,9 +634,7 @@ class Phase4HealthChecker:
 
             # Check health endpoint
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.base_url}/api/pattern-traceability/health"
-                )
+                response = await client.get(f"{self.base_url}/api/pattern-traceability/health")
 
                 if response.status_code == 200:
                     self.last_health_data = response.json()
@@ -716,9 +644,7 @@ class Phase4HealthChecker:
 
                     # Log recovery
                     if self.consecutive_successes == 1:
-                        logger.info(
-                            "[PatternTracker] Phase 4 API recovered and is now healthy"
-                        )
+                        logger.info("[PatternTracker] Phase 4 API recovered and is now healthy")
                 else:
                     self.is_healthy = False
                     self.consecutive_failures += 1
@@ -731,9 +657,7 @@ class Phase4HealthChecker:
 
             # Only log first failure to avoid spam
             if self.consecutive_failures == 1:
-                logger.warning(
-                    f"[PatternTracker] Phase 4 API health check failed: {e}"
-                )
+                logger.warning(f"[PatternTracker] Phase 4 API health check failed: {e}")
 
         self.last_check = time.time()
         return self.is_healthy
@@ -742,15 +666,11 @@ class Phase4HealthChecker:
         """Get detailed health status"""
         return {
             "is_healthy": self.is_healthy,
-            "last_check": (
-                datetime.fromtimestamp(self.last_check).isoformat()
-                if self.last_check > 0
-                else None
-            ),
+            "last_check": (datetime.fromtimestamp(self.last_check).isoformat() if self.last_check > 0 else None),
             "consecutive_failures": self.consecutive_failures,
             "consecutive_successes": self.consecutive_successes,
             "last_health_data": self.last_health_data,
-            "base_url": self.base_url
+            "base_url": self.base_url,
         }
 
 
@@ -788,10 +708,7 @@ def graceful_tracking(fallback_return=None, log_errors=True):
                 return await func(*args, **kwargs)
             except Exception as e:
                 if log_errors:
-                    logger.warning(
-                        f"[PatternTracker] Error in {func.__name__}: {e}",
-                        exc_info=True
-                    )
+                    logger.warning(f"[PatternTracker] Error in {func.__name__}: {e}", exc_info=True)
                 return fallback_return
 
         return wrapper
@@ -826,10 +743,7 @@ class ResilientAPIClient:
     """
 
     def __init__(
-        self,
-        base_url: str = "http://localhost:8053",
-        enable_caching: bool = True,
-        enable_circuit_breaker: bool = True
+        self, base_url: str = "http://localhost:8053", enable_caching: bool = True, enable_circuit_breaker: bool = True
     ):
         """
         Initialize resilient API client.
@@ -839,7 +753,7 @@ class ResilientAPIClient:
             enable_caching: Enable local caching for offline scenarios
             enable_circuit_breaker: Enable circuit breaker pattern
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.enable_caching = enable_caching
         self.enable_circuit_breaker = enable_circuit_breaker
 
@@ -848,10 +762,7 @@ class ResilientAPIClient:
         self.health_checker = Phase4HealthChecker(base_url=base_url)
 
         if enable_circuit_breaker:
-            self.circuit_breaker = CircuitBreaker(
-                failure_threshold=3,
-                timeout=60
-            )
+            self.circuit_breaker = CircuitBreaker(failure_threshold=3, timeout=60)
         else:
             self.circuit_breaker = None
 
@@ -862,11 +773,7 @@ class ResilientAPIClient:
 
     @graceful_tracking(fallback_return=None)
     async def _call_api(
-        self,
-        endpoint: str,
-        method: str = "POST",
-        data: Optional[Dict] = None,
-        timeout: float = 2.0
+        self, endpoint: str, method: str = "POST", data: Optional[Dict] = None, timeout: float = 2.0
     ) -> Optional[Dict]:
         """
         Internal API call method with resilience.
@@ -896,12 +803,7 @@ class ResilientAPIClient:
             return response.json()
 
     async def track_pattern_resilient(
-        self,
-        event_type: str,
-        pattern_id: str,
-        pattern_name: str = "",
-        pattern_data: Optional[Dict] = None,
-        **kwargs
+        self, event_type: str, pattern_id: str, pattern_name: str = "", pattern_data: Optional[Dict] = None, **kwargs
     ) -> Dict[str, Any]:
         """
         Track pattern lineage with full resilience.
@@ -931,7 +833,7 @@ class ResilientAPIClient:
             "pattern_id": pattern_id,
             "pattern_name": pattern_name,
             "pattern_data": pattern_data or {},
-            **kwargs
+            **kwargs,
         }
 
         # If not healthy, cache and return
@@ -942,20 +844,14 @@ class ResilientAPIClient:
                     "success": False,
                     "cached": True,
                     "event_id": event_id,
-                    "message": "API unavailable, event cached locally"
+                    "message": "API unavailable, event cached locally",
                 }
-            return {
-                "success": False,
-                "cached": False,
-                "message": "API unavailable, caching disabled"
-            }
+            return {"success": False, "cached": False, "message": "API unavailable, caching disabled"}
 
         # Try to call API through circuit breaker
         async def api_call():
             return await self._call_api(
-                endpoint="/api/pattern-traceability/lineage/track",
-                method="POST",
-                data=event_data
+                endpoint="/api/pattern-traceability/lineage/track", method="POST", data=event_data
             )
 
         if self.circuit_breaker:
@@ -971,26 +867,15 @@ class ResilientAPIClient:
                     "success": False,
                     "cached": True,
                     "event_id": event_id,
-                    "message": "API call failed, event cached locally"
+                    "message": "API call failed, event cached locally",
                 }
-            return {
-                "success": False,
-                "cached": False,
-                "message": "API call failed, caching disabled"
-            }
+            return {"success": False, "cached": False, "message": "API call failed, caching disabled"}
 
         # Success - try to sync cached events in background
         if self.cache:
-            self.executor.fire_and_forget(
-                self.cache.sync_cached_events(self)
-            )
+            self.executor.fire_and_forget(self.cache.sync_cached_events(self))
 
-        return {
-            "success": True,
-            "cached": False,
-            "data": result,
-            "message": "Pattern tracked successfully"
-        }
+        return {"success": True, "cached": False, "data": result, "message": "Pattern tracked successfully"}
 
     async def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive resilience statistics"""
@@ -1027,9 +912,9 @@ async def example_usage():
         pattern_data={
             "code": "function authenticateUser(token) { ... }",
             "language": "javascript",
-            "framework": "express"
+            "framework": "express",
         },
-        triggered_by="claude-code"
+        triggered_by="claude-code",
     )
 
     print(f"Tracking result: {result}")
