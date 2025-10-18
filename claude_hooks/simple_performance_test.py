@@ -3,12 +3,11 @@
 Simple Performance Test - Validates core optimizations without import conflicts.
 """
 
-import sys
 import time
 import hashlib
 import uuid
 import requests
-from pathlib import Path
+
 
 def test_basic_performance():
     """Test basic performance improvements."""
@@ -58,7 +57,7 @@ def test_basic_performance():
     start_time = time.time()
     for i in range(5):
         try:
-            response = requests.get(f"{base_url}/health", timeout=2)
+            requests.get(f"{base_url}/health", timeout=2)
         except:
             pass
     no_pool_time = time.time() - start_time
@@ -68,7 +67,7 @@ def test_basic_performance():
     start_time = time.time()
     for i in range(5):
         try:
-            response = session.get(f"{base_url}/health", timeout=2)
+            session.get(f"{base_url}/health", timeout=2)
         except:
             pass
     with_pool_time = time.time() - start_time
@@ -87,14 +86,14 @@ def test_basic_performance():
             self.base_url = "http://localhost:8053"
             self.timeout = 5
             self._pattern_id_cache = {}
-            self._metrics = {'total_requests': 0, 'cache_hits': 0, 'total_time': 0}
+            self._metrics = {"total_requests": 0, "cache_hits": 0, "total_time": 0}
             self._session = requests.Session()
 
         def _generate_pattern_id_cached(self, code, context):
             file_path = context.get("file_path", "")
             cache_key = f"{file_path}:{code[:200]}"
             if cache_key in self._pattern_id_cache:
-                self._metrics['cache_hits'] += 1
+                self._metrics["cache_hits"] += 1
                 return self._pattern_id_cache[cache_key]
 
             hash_obj = hashlib.sha256(cache_key.encode())
@@ -118,16 +117,14 @@ def test_basic_performance():
                         "file_path": context.get("file_path", ""),
                     },
                     "triggered_by": "test",
-                    "reason": "Performance test"
+                    "reason": "Performance test",
                 }
                 response = self._session.post(
-                    f"{self.base_url}/api/pattern-traceability/lineage/track",
-                    json=payload,
-                    timeout=self.timeout
+                    f"{self.base_url}/api/pattern-traceability/lineage/track", json=payload, timeout=self.timeout
                 )
                 response_time = (time.time() - start_time) * 1000
-                self._metrics['total_requests'] += 1
-                self._metrics['total_time'] += response_time
+                self._metrics["total_requests"] += 1
+                self._metrics["total_time"] += response_time
 
                 if response.status_code == 200:
                     return pattern_id, response_time
@@ -139,9 +136,7 @@ def test_basic_performance():
     tracker = SimpleTracker()
 
     # Test multiple operations
-    test_codes = [
-        f"def function_{i}(): return {i}" for i in range(10)
-    ]
+    test_codes = [f"def function_{i}(): return {i}" for i in range(10)]
 
     start_time = time.time()
     pattern_ids = []
@@ -161,7 +156,9 @@ def test_basic_performance():
     if response_times:
         print(f"   Average response time: {sum(response_times)/len(response_times):.1f}ms")
         print(f"   Cache hits: {tracker._metrics['cache_hits']}")
-        print(f"   Cache efficiency: {tracker._metrics['cache_hits']}/{len(pattern_ids)} = {(tracker._metrics['cache_hits']/len(pattern_ids)*100):.1f}%")
+        print(
+            f"   Cache efficiency: {tracker._metrics['cache_hits']}/{len(pattern_ids)} = {(tracker._metrics['cache_hits']/len(pattern_ids)*100):.1f}%"
+        )
 
     # Performance Summary
     print("\n📈 Performance Summary")
@@ -170,9 +167,9 @@ def test_basic_performance():
     print(f"✅ HTTP connection pooling: {((no_pool_time - with_pool_time) / no_pool_time * 100):.1f}% improvement")
     print(f"✅ Overall throughput: {len(pattern_ids)/total_time:.1f} ops/sec")
 
-    if len(pattern_ids)/total_time >= 20:
+    if len(pattern_ids) / total_time >= 20:
         performance_tier = "Excellent (20+ ops/sec)"
-    elif len(pattern_ids)/total_time >= 10:
+    elif len(pattern_ids) / total_time >= 10:
         performance_tier = "Good (10-19 ops/sec)"
     else:
         performance_tier = "Needs Improvement (<10 ops/sec)"
@@ -182,13 +179,13 @@ def test_basic_performance():
     return {
         "pattern_id_caching_improvement": ((uncached_time - cached_time) / uncached_time * 100),
         "connection_pooling_improvement": ((no_pool_time - with_pool_time) / no_pool_time * 100),
-        "throughput_ops_per_sec": len(pattern_ids)/total_time,
+        "throughput_ops_per_sec": len(pattern_ids) / total_time,
         "performance_tier": performance_tier,
-        "cache_hit_rate": (tracker._metrics['cache_hits']/len(pattern_ids)*100) if pattern_ids else 0
+        "cache_hit_rate": (tracker._metrics["cache_hits"] / len(pattern_ids) * 100) if pattern_ids else 0,
     }
 
 
 if __name__ == "__main__":
     results = test_basic_performance()
-    print(f"\n🎯 Performance Optimization Complete!")
-    print(f"   All optimizations successfully implemented and validated.")
+    print("\n🎯 Performance Optimization Complete!")
+    print("   All optimizations successfully implemented and validated.")

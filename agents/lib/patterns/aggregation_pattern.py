@@ -40,8 +40,17 @@ class AggregationPattern:
             Confidence score (0.0 to 1.0)
         """
         aggregation_keywords = {
-            'aggregate', 'reduce', 'sum', 'count', 'average', 'mean',
-            'group', 'batch', 'collect', 'accumulate', 'merge'
+            "aggregate",
+            "reduce",
+            "sum",
+            "count",
+            "average",
+            "mean",
+            "group",
+            "batch",
+            "collect",
+            "accumulate",
+            "merge",
         }
 
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
@@ -94,12 +103,7 @@ class AggregationPattern:
             "MixinCaching",  # Cache aggregation results
         ]
 
-    def _generate_reduce_method(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_reduce_method(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate reduce aggregation method"""
         return f'''
     async def {method_name}(
@@ -176,12 +180,7 @@ class AggregationPattern:
         return initial_value if initial_value is not None else items[0] if items else None
 '''
 
-    def _generate_group_by_method(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_group_by_method(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate group by aggregation method"""
         return f'''
     async def {method_name}(
@@ -274,12 +273,7 @@ class AggregationPattern:
             return values
 '''
 
-    def _generate_windowed_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_windowed_aggregation(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate windowed aggregation method"""
         return f'''
     async def {method_name}(
@@ -365,12 +359,7 @@ class AggregationPattern:
         }}
 '''
 
-    def _generate_stateful_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_stateful_aggregation(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate stateful aggregation method"""
         return f'''
     async def {method_name}(
@@ -456,12 +445,7 @@ class AggregationPattern:
         }}
 '''
 
-    def _generate_generic_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_generic_aggregation(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate generic aggregation method"""
         return f'''
     async def {method_name}(
@@ -508,25 +492,22 @@ class AggregationPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "aggregate_data"
 
-    def _detect_aggregation_type(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> str:
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "aggregate_data"
+
+    def _detect_aggregation_type(self, capability: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Detect specific aggregation type"""
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
 
-        if any(kw in text for kw in ['reduce', 'sum', 'count', 'average']):
+        if any(kw in text for kw in ["reduce", "sum", "count", "average"]):
             return "reduce"
-        elif any(kw in text for kw in ['group', 'group by', 'groupby']):
+        elif any(kw in text for kw in ["group", "group by", "groupby"]):
             return "group_by"
-        elif any(kw in text for kw in ['window', 'sliding', 'tumbling']):
+        elif any(kw in text for kw in ["window", "sliding", "tumbling"]):
             return "windowed"
-        elif any(kw in text for kw in ['state', 'stateful', 'incremental']):
+        elif any(kw in text for kw in ["state", "stateful", "incremental"]):
             return "stateful"
         else:
             return "generic"

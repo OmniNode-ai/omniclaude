@@ -26,7 +26,6 @@ Usage:
 
 import json
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -65,7 +64,7 @@ class DebugStateManager:
         agent_state: Dict[str, Any],
         task_description: Optional[str] = None,
         session_id: Optional[UUID] = None,
-        execution_step: Optional[int] = None
+        execution_step: Optional[int] = None,
     ) -> UUID:
         """
         Capture agent state snapshot.
@@ -95,12 +94,11 @@ class DebugStateManager:
             task_description,
             session_id,
             execution_step,
-            fetch="val"
+            fetch="val",
         )
 
         logger.debug(
-            f"Captured {snapshot_type} snapshot {snapshot_id} "
-            f"for {agent_name} (correlation: {correlation_id})"
+            f"Captured {snapshot_type} snapshot {snapshot_id} " f"for {agent_name} (correlation: {correlation_id})"
         )
 
         return snapshot_id
@@ -115,9 +113,7 @@ class DebugStateManager:
         return dict(row) if row else None
 
     async def get_workflow_snapshots(
-        self,
-        correlation_id: UUID,
-        snapshot_type: Optional[str] = None
+        self, correlation_id: UUID, snapshot_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Get all snapshots for a workflow."""
         if snapshot_type:
@@ -126,9 +122,7 @@ class DebugStateManager:
                 WHERE correlation_id = $1 AND snapshot_type = $2
                 ORDER BY captured_at
             """
-            rows = await self.db.execute_query(
-                query, correlation_id, snapshot_type, fetch="all"
-            )
+            rows = await self.db.execute_query(query, correlation_id, snapshot_type, fetch="all")
         else:
             query = """
                 SELECT * FROM debug_state_snapshots
@@ -155,7 +149,7 @@ class DebugStateManager:
         execution_step: Optional[int] = None,
         session_id: Optional[UUID] = None,
         task_description: Optional[str] = None,
-        is_recoverable: bool = False
+        is_recoverable: bool = False,
     ) -> UUID:
         """
         Capture error with state snapshot.
@@ -184,7 +178,7 @@ class DebugStateManager:
             agent_state=agent_state,
             task_description=task_description,
             session_id=session_id,
-            execution_step=execution_step
+            execution_step=execution_step,
         )
 
         # Then, create error event
@@ -216,7 +210,7 @@ class DebugStateManager:
             execution_step,
             snapshot_id,
             is_recoverable,
-            fetch="val"
+            fetch="val",
         )
 
         logger.error(
@@ -226,12 +220,7 @@ class DebugStateManager:
 
         return error_id
 
-    async def mark_error_recovered(
-        self,
-        error_id: UUID,
-        recovery_strategy: str,
-        recovery_successful: bool = True
-    ):
+    async def mark_error_recovered(self, error_id: UUID, recovery_strategy: str, recovery_successful: bool = True):
         """Mark error as recovered."""
         query = """
             UPDATE debug_error_events
@@ -242,13 +231,10 @@ class DebugStateManager:
             WHERE id = $1
         """
 
-        await self.db.execute_query(
-            query, error_id, recovery_successful, recovery_strategy
-        )
+        await self.db.execute_query(query, error_id, recovery_successful, recovery_strategy)
 
         logger.info(
-            f"Marked error {error_id} as recovered "
-            f"(strategy: {recovery_strategy}, success: {recovery_successful})"
+            f"Marked error {error_id} as recovered " f"(strategy: {recovery_strategy}, success: {recovery_successful})"
         )
 
     # =========================================================================
@@ -267,7 +253,7 @@ class DebugStateManager:
         session_id: Optional[UUID] = None,
         execution_step: Optional[int] = None,
         task_description: Optional[str] = None,
-        success_factors: Optional[Dict[str, Any]] = None
+        success_factors: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Capture success with state snapshot.
@@ -296,7 +282,7 @@ class DebugStateManager:
             agent_state=agent_state,
             task_description=task_description,
             session_id=session_id,
-            execution_step=execution_step
+            execution_step=execution_step,
         )
 
         # Create success event
@@ -323,7 +309,7 @@ class DebugStateManager:
             quality_score,
             execution_time_ms,
             json.dumps(success_factors or {}),
-            fetch="val"
+            fetch="val",
         )
 
         logger.info(
@@ -347,7 +333,7 @@ class DebugStateManager:
         step_description: Optional[str] = None,
         session_id: Optional[UUID] = None,
         parent_step_id: Optional[UUID] = None,
-        input_data: Optional[Dict[str, Any]] = None
+        input_data: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Start tracking a workflow step.
@@ -388,13 +374,10 @@ class DebugStateManager:
             step_description,
             parent_step_id,
             json.dumps(input_data or {}),
-            fetch="val"
+            fetch="val",
         )
 
-        logger.debug(
-            f"Started workflow step {step_id} (step {step_number}): "
-            f"{agent_name}.{operation_name}"
-        )
+        logger.debug(f"Started workflow step {step_id} (step {step_number}): " f"{agent_name}.{operation_name}")
 
         return step_id
 
@@ -404,7 +387,7 @@ class DebugStateManager:
         success: bool = True,
         error_event_id: Optional[UUID] = None,
         success_event_id: Optional[UUID] = None,
-        output_data: Optional[Dict[str, Any]] = None
+        output_data: Optional[Dict[str, Any]] = None,
     ):
         """
         Mark workflow step as completed.
@@ -430,17 +413,10 @@ class DebugStateManager:
         """
 
         await self.db.execute_query(
-            query,
-            step_id,
-            status,
-            error_event_id,
-            success_event_id,
-            json.dumps(output_data or {})
+            query, step_id, status, error_event_id, success_event_id, json.dumps(output_data or {})
         )
 
-        logger.debug(
-            f"Completed workflow step {step_id} with status: {status}"
-        )
+        logger.debug(f"Completed workflow step {step_id} with status: {status}")
 
     # =========================================================================
     # Error-Success Correlation
@@ -453,7 +429,7 @@ class DebugStateManager:
         correlation_id: UUID,
         recovery_strategy: str,
         recovery_path: Optional[str] = None,
-        confidence_score: float = 1.0
+        confidence_score: float = 1.0,
     ) -> UUID:
         """
         Link an error to eventual success for recovery pattern learning.
@@ -487,13 +463,10 @@ class DebugStateManager:
             recovery_strategy,
             recovery_path,
             confidence_score,
-            fetch="val"
+            fetch="val",
         )
 
-        logger.info(
-            f"Correlated error {error_event_id} to success {success_event_id} "
-            f"via {recovery_strategy}"
-        )
+        logger.info(f"Correlated error {error_event_id} to success {success_event_id} " f"via {recovery_strategy}")
 
         return corr_id
 
@@ -501,10 +474,7 @@ class DebugStateManager:
     # Analysis and Reporting
     # =========================================================================
 
-    async def get_workflow_debug_summary(
-        self,
-        correlation_id: UUID
-    ) -> Optional[Dict[str, Any]]:
+    async def get_workflow_debug_summary(self, correlation_id: UUID) -> Optional[Dict[str, Any]]:
         """Get comprehensive debug summary for a workflow."""
         query = """
             SELECT * FROM get_workflow_debug_summary($1)
@@ -514,9 +484,7 @@ class DebugStateManager:
         return dict(row) if row else None
 
     async def get_recovery_patterns(
-        self,
-        error_type: Optional[str] = None,
-        min_confidence: float = 0.5
+        self, error_type: Optional[str] = None, min_confidence: float = 0.5
     ) -> List[Dict[str, Any]]:
         """
         Get error recovery patterns for learning.
@@ -534,9 +502,7 @@ class DebugStateManager:
                 WHERE error_type = $1
                 AND avg_confidence >= $2
             """
-            rows = await self.db.execute_query(
-                query, error_type, min_confidence, fetch="all"
-            )
+            rows = await self.db.execute_query(query, error_type, min_confidence, fetch="all")
         else:
             query = """
                 SELECT * FROM debug_error_recovery_patterns
@@ -546,11 +512,7 @@ class DebugStateManager:
 
         return [dict(row) for row in rows]
 
-    async def get_workflow_errors(
-        self,
-        correlation_id: UUID,
-        include_recovered: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def get_workflow_errors(self, correlation_id: UUID, include_recovered: bool = False) -> List[Dict[str, Any]]:
         """Get all errors for a workflow."""
         if include_recovered:
             query = """
@@ -569,10 +531,7 @@ class DebugStateManager:
         rows = await self.db.execute_query(query, correlation_id, fetch="all")
         return [dict(row) for row in rows]
 
-    async def get_llm_calls(
-        self,
-        correlation_id: UUID
-    ) -> List[Dict[str, Any]]:
+    async def get_llm_calls(self, correlation_id: UUID) -> List[Dict[str, Any]]:
         """Get LLM calls for a workflow from hook_events."""
         query = """
             SELECT * FROM debug_llm_call_summary
@@ -580,15 +539,14 @@ class DebugStateManager:
             ORDER BY call_timestamp
         """
 
-        rows = await self.db.execute_query(
-            query, str(correlation_id), fetch="all"
-        )
+        rows = await self.db.execute_query(query, str(correlation_id), fetch="all")
         return [dict(row) for row in rows]
 
 
 # =============================================================================
 # Example Usage
 # =============================================================================
+
 
 async def example_usage():
     """Example of using DebugStateManager."""
@@ -614,7 +572,7 @@ async def example_usage():
             agent_name="agent-workflow-coordinator",
             operation_name="initialize_workflow",
             step_type="initialization",
-            session_id=session_id
+            session_id=session_id,
         )
 
         # Simulate some work that might fail
@@ -634,21 +592,15 @@ async def example_usage():
                 operation_name="initialize_workflow",
                 execution_step=1,
                 session_id=session_id,
-                is_recoverable=True
+                is_recoverable=True,
             )
 
             # Mark step as failed
-            await debug_mgr.complete_workflow_step(
-                step_id=step_id,
-                success=False,
-                error_event_id=error_id
-            )
+            await debug_mgr.complete_workflow_step(step_id=step_id, success=False, error_event_id=error_id)
 
             # Attempt recovery
             await debug_mgr.mark_error_recovered(
-                error_id=error_id,
-                recovery_strategy="retry_with_fallback",
-                recovery_successful=True
+                error_id=error_id, recovery_strategy="retry_with_fallback", recovery_successful=True
             )
 
             # Capture success after recovery
@@ -661,7 +613,7 @@ async def example_usage():
                 quality_score=0.85,
                 execution_time_ms=1500,
                 session_id=session_id,
-                execution_step=1
+                execution_step=1,
             )
 
             # Link error to success
@@ -670,7 +622,7 @@ async def example_usage():
                 success_event_id=success_id,
                 correlation_id=correlation_id,
                 recovery_strategy="retry_with_fallback",
-                confidence_score=0.9
+                confidence_score=0.9,
             )
 
         # Get debug summary
@@ -688,4 +640,5 @@ async def example_usage():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(example_usage())

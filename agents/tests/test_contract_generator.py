@@ -8,18 +8,13 @@ and validation logic.
 
 import pytest
 import yaml
-from datetime import datetime
 from uuid import uuid4
 from pathlib import Path
 import tempfile
 import shutil
 
 from agents.lib.contract_generator import ContractGenerator
-from agents.lib.simple_prd_analyzer import (
-    SimplePRDAnalysisResult,
-    SimpleParsedPRD,
-    SimpleDecompositionResult
-)
+from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
 from omnibase_core.errors import OnexError
 
 
@@ -34,31 +29,23 @@ def sample_prd_analysis():
             "Must authenticate users with username and password",
             "Shall generate JWT tokens for authenticated users",
             "Required to validate existing JWT tokens",
-            "Must handle password reset functionality"
+            "Must handle password reset functionality",
         ],
         features=[
             "Multi-factor authentication support",
             "Session management and timeout",
-            "OAuth integration for social login"
+            "OAuth integration for social login",
         ],
-        success_criteria=[
-            "Authentication response time < 200ms",
-            "Support 1000 concurrent users",
-            "99.9% uptime"
-        ],
+        success_criteria=["Authentication response time < 200ms", "Support 1000 concurrent users", "99.9% uptime"],
         technical_details=[
             "Use PostgreSQL for user data storage",
             "Use Redis for session caching",
-            "JWT tokens with HS256 algorithm"
+            "JWT tokens with HS256 algorithm",
         ],
-        dependencies=[
-            "PostgreSQL database",
-            "Redis cache",
-            "Email service for password reset"
-        ],
+        dependencies=["PostgreSQL database", "Redis cache", "Email service for password reset"],
         extracted_keywords=["Authentication", "Security", "Session", "Token"],
         sections=["Overview", "Requirements", "Features"],
-        word_count=250
+        word_count=250,
     )
 
     decomposition_result = SimpleDecompositionResult(
@@ -68,25 +55,25 @@ def sample_prd_analysis():
                 "title": "Implement user authentication endpoint",
                 "description": "Create API endpoint for user login",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_2",
                 "title": "Implement JWT token generation",
                 "description": "Generate and sign JWT tokens",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_3",
                 "title": "Implement token validation",
                 "description": "Validate and decode JWT tokens",
                 "priority": "high",
-                "complexity": "low"
-            }
+                "complexity": "low",
+            },
         ],
         total_tasks=3,
-        verification_successful=True
+        verification_successful=True,
     )
 
     return SimplePRDAnalysisResult(
@@ -95,22 +82,11 @@ def sample_prd_analysis():
         prd_content="Sample PRD content",
         parsed_prd=parsed_prd,
         decomposition_result=decomposition_result,
-        node_type_hints={
-            "EFFECT": 0.8,
-            "COMPUTE": 0.3,
-            "REDUCER": 0.1,
-            "ORCHESTRATOR": 0.2
-        },
-        recommended_mixins=[
-            "MixinEventBus",
-            "MixinCaching",
-            "MixinHealthCheck",
-            "MixinSecurity",
-            "MixinValidation"
-        ],
+        node_type_hints={"EFFECT": 0.8, "COMPUTE": 0.3, "REDUCER": 0.1, "ORCHESTRATOR": 0.2},
+        recommended_mixins=["MixinEventBus", "MixinCaching", "MixinHealthCheck", "MixinSecurity", "MixinValidation"],
         external_systems=["PostgreSQL", "Redis", "Email Service"],
         quality_baseline=0.85,
-        confidence_score=0.78
+        confidence_score=0.78,
     )
 
 
@@ -137,7 +113,7 @@ async def test_generate_effect_contract(contract_generator, sample_prd_analysis,
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory=temp_output_dir
+        output_directory=temp_output_dir,
     )
 
     # Verify result structure
@@ -172,7 +148,7 @@ async def test_generate_compute_contract(contract_generator, sample_prd_analysis
         analysis_result=sample_prd_analysis,
         node_type="COMPUTE",
         microservice_name="data_processor",
-        domain="processing"
+        domain="processing",
     )
 
     contract = result["contract"]
@@ -193,7 +169,7 @@ async def test_generate_reducer_contract(contract_generator, sample_prd_analysis
         analysis_result=sample_prd_analysis,
         node_type="REDUCER",
         microservice_name="data_aggregator",
-        domain="analytics"
+        domain="analytics",
     )
 
     contract = result["contract"]
@@ -213,7 +189,7 @@ async def test_generate_orchestrator_contract(contract_generator, sample_prd_ana
         analysis_result=sample_prd_analysis,
         node_type="ORCHESTRATOR",
         microservice_name="workflow_manager",
-        domain="coordination"
+        domain="coordination",
     )
 
     contract = result["contract"]
@@ -232,33 +208,26 @@ async def test_generate_subcontracts(contract_generator):
     """Test subcontract generation for mixins"""
     recommended_mixins = ["MixinEventBus", "MixinCaching", "MixinHealthCheck"]
     contract_fields = {
-        "capabilities": [
-            {"name": "test_capability", "type": "operation"}
-        ],
+        "capabilities": [{"name": "test_capability", "type": "operation"}],
         "operations": [],
-        "external_systems": []
+        "external_systems": [],
     }
 
     subcontracts = await contract_generator.generate_subcontracts(
-        recommended_mixins=recommended_mixins,
-        contract_fields=contract_fields
+        recommended_mixins=recommended_mixins, contract_fields=contract_fields
     )
 
     assert len(subcontracts) == 3
 
     # Verify EventBus subcontract
-    event_bus_subcontract = next(
-        (sc for sc in subcontracts if sc["mixin"] == "MixinEventBus"), None
-    )
+    event_bus_subcontract = next((sc for sc in subcontracts if sc["mixin"] == "MixinEventBus"), None)
     assert event_bus_subcontract is not None
     assert "config" in event_bus_subcontract
     assert "bootstrap_servers" in event_bus_subcontract["config"]
     assert event_bus_subcontract["required"] is True
 
     # Verify Caching subcontract
-    caching_subcontract = next(
-        (sc for sc in subcontracts if sc["mixin"] == "MixinCaching"), None
-    )
+    caching_subcontract = next((sc for sc in subcontracts if sc["mixin"] == "MixinCaching"), None)
     assert caching_subcontract is not None
     assert "config" in caching_subcontract
     assert "ttl_seconds" in caching_subcontract["config"]
@@ -271,8 +240,7 @@ async def test_generate_subcontracts_unknown_mixin(contract_generator):
     contract_fields = {"capabilities": [], "operations": [], "external_systems": []}
 
     subcontracts = await contract_generator.generate_subcontracts(
-        recommended_mixins=recommended_mixins,
-        contract_fields=contract_fields
+        recommended_mixins=recommended_mixins, contract_fields=contract_fields
     )
 
     assert len(subcontracts) == 1
@@ -285,8 +253,7 @@ async def test_generate_subcontracts_unknown_mixin(contract_generator):
 async def test_infer_contract_fields(contract_generator, sample_prd_analysis):
     """Test contract field inference from PRD analysis"""
     contract_fields = await contract_generator.infer_contract_fields(
-        analysis_result=sample_prd_analysis,
-        node_type="EFFECT"
+        analysis_result=sample_prd_analysis, node_type="EFFECT"
     )
 
     assert "capabilities" in contract_fields
@@ -309,33 +276,23 @@ async def test_infer_contract_fields(contract_generator, sample_prd_analysis):
 async def test_capability_type_inference(contract_generator):
     """Test capability type inference from requirement text"""
     # Test create operation
-    create_type = contract_generator._infer_capability_type(
-        "Create new user account", "EFFECT"
-    )
+    create_type = contract_generator._infer_capability_type("Create new user account", "EFFECT")
     assert create_type == "create"
 
     # Test read operation
-    read_type = contract_generator._infer_capability_type(
-        "Fetch user profile data", "EFFECT"
-    )
+    read_type = contract_generator._infer_capability_type("Fetch user profile data", "EFFECT")
     assert read_type == "read"
 
     # Test update operation
-    update_type = contract_generator._infer_capability_type(
-        "Update user settings", "EFFECT"
-    )
+    update_type = contract_generator._infer_capability_type("Update user settings", "EFFECT")
     assert update_type == "update"
 
     # Test delete operation
-    delete_type = contract_generator._infer_capability_type(
-        "Delete inactive accounts", "EFFECT"
-    )
+    delete_type = contract_generator._infer_capability_type("Delete inactive accounts", "EFFECT")
     assert delete_type == "delete"
 
     # Test compute operation
-    compute_type = contract_generator._infer_capability_type(
-        "Process payment transactions", "COMPUTE"
-    )
+    compute_type = contract_generator._infer_capability_type("Process payment transactions", "COMPUTE")
     assert compute_type == "compute"
 
 
@@ -348,23 +305,9 @@ async def test_validate_valid_contract(contract_generator):
         "node_type": "EFFECT",
         "domain": "test",
         "service_name": "test_service",
-        "capabilities": [
-            {
-                "name": "test_capability",
-                "type": "operation",
-                "required": True
-            }
-        ],
-        "subcontracts": [
-            {
-                "mixin": "MixinEventBus",
-                "config": {}
-            }
-        ],
-        "dependencies": {
-            "external_systems": [],
-            "required_mixins": ["MixinEventBus"]
-        }
+        "capabilities": [{"name": "test_capability", "type": "operation", "required": True}],
+        "subcontracts": [{"mixin": "MixinEventBus", "config": {}}],
+        "dependencies": {"external_systems": [], "required_mixins": ["MixinEventBus"]},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -378,7 +321,7 @@ async def test_validate_missing_required_fields(contract_generator):
     """Test validation with missing required fields"""
     contract = {
         "version": "1.0.0",
-        "node_type": "EFFECT"
+        "node_type": "EFFECT",
         # Missing: domain, service_name, capabilities, dependencies
     }
 
@@ -399,7 +342,7 @@ async def test_validate_invalid_node_type(contract_generator):
         "service_name": "test_service",
         "capabilities": [],
         "subcontracts": [],
-        "dependencies": {}
+        "dependencies": {},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -417,10 +360,8 @@ async def test_validate_invalid_subcontract(contract_generator):
         "domain": "test",
         "service_name": "test_service",
         "capabilities": [],
-        "subcontracts": [
-            {"config": {}}  # Missing 'mixin' field
-        ],
-        "dependencies": {}
+        "subcontracts": [{"config": {}}],  # Missing 'mixin' field
+        "dependencies": {},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -438,7 +379,7 @@ async def test_invalid_node_type_raises_error(contract_generator, sample_prd_ana
             analysis_result=sample_prd_analysis,
             node_type="INVALID_TYPE",
             microservice_name="test_service",
-            domain="test"
+            domain="test",
         )
 
     assert "Invalid node type" in str(exc_info.value)
@@ -453,7 +394,7 @@ async def test_full_contract_generation_workflow(contract_generator, sample_prd_
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory=temp_output_dir
+        output_directory=temp_output_dir,
     )
 
     # Verify all components are present
@@ -479,10 +420,7 @@ async def test_full_contract_generation_workflow(contract_generator, sample_prd_
 async def test_contract_yaml_format(contract_generator, sample_prd_analysis):
     """Test that generated YAML is properly formatted"""
     result = await contract_generator.generate_contract_yaml(
-        analysis_result=sample_prd_analysis,
-        node_type="EFFECT",
-        microservice_name="test_service",
-        domain="test"
+        analysis_result=sample_prd_analysis, node_type="EFFECT", microservice_name="test_service", domain="test"
     )
 
     yaml_content = result["contract_yaml"]
@@ -504,16 +442,12 @@ async def test_mixin_integration_points(contract_generator):
     contract_fields = {"capabilities": [], "operations": [], "external_systems": []}
 
     # Test EventBus integration points
-    event_bus_points = contract_generator._extract_mixin_integration_points(
-        "MixinEventBus", contract_fields
-    )
+    event_bus_points = contract_generator._extract_mixin_integration_points("MixinEventBus", contract_fields)
     assert "on_event_received" in event_bus_points
     assert "publish_event" in event_bus_points
 
     # Test Caching integration points
-    caching_points = contract_generator._extract_mixin_integration_points(
-        "MixinCaching", contract_fields
-    )
+    caching_points = contract_generator._extract_mixin_integration_points("MixinCaching", contract_fields)
     assert "cache_get" in caching_points
     assert "cache_set" in caching_points
     assert "cache_invalidate" in caching_points
@@ -523,15 +457,11 @@ async def test_mixin_integration_points(contract_generator):
 async def test_capability_name_sanitization(contract_generator):
     """Test capability name sanitization"""
     # Test with special characters
-    sanitized = contract_generator._sanitize_capability_name(
-        "Create User Account (with validation!)"
-    )
+    sanitized = contract_generator._sanitize_capability_name("Create User Account (with validation!)")
     assert sanitized == "create_user_account_with_validation"
 
     # Test with spaces and hyphens
-    sanitized = contract_generator._sanitize_capability_name(
-        "Update-User Profile Data"
-    )
+    sanitized = contract_generator._sanitize_capability_name("Update-User Profile Data")
     assert sanitized == "update_user_profile_data"
 
     # Test length limit

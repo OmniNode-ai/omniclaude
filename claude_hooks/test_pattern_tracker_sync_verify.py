@@ -30,10 +30,10 @@ def calculate_fibonacci(n: int) -> int:
         "language": "python",
         "reason": "Code generation via Claude Code hook",
         "quality_score": 0.85,
-        "violations_found": 2
+        "violations_found": 2,
     }
 
-    print(f"\n📝 Tracking pattern...", file=sys.stderr)
+    print("\n📝 Tracking pattern...", file=sys.stderr)
     pattern_id = tracker.track_pattern_creation(code, context)
 
     if pattern_id:
@@ -42,7 +42,7 @@ def calculate_fibonacci(n: int) -> int:
         print(f"   Quality: {context['quality_score']}", file=sys.stderr)
         return True
     else:
-        print(f"\n❌ FAILED! Pattern was not tracked", file=sys.stderr)
+        print("\n❌ FAILED! Pattern was not tracked", file=sys.stderr)
         return False
 
 
@@ -50,7 +50,7 @@ def test_quality_calculation():
     """Test quality score calculation."""
     tracker = PatternTrackerSync()
 
-    print(f"\n" + "=" * 60, file=sys.stderr)
+    print("\n" + "=" * 60, file=sys.stderr)
     print("Testing Quality Score Calculation", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
@@ -80,15 +80,15 @@ if __name__ == "__main__":
     test1_passed = test_basic_tracking()
     test2_passed = test_quality_calculation()
 
-    print(f"\n" + "=" * 60, file=sys.stderr)
+    print("\n" + "=" * 60, file=sys.stderr)
     print("Test Summary", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     print(f"Basic Tracking: {'✅ PASSED' if test1_passed else '❌ FAILED'}", file=sys.stderr)
     print(f"Quality Calculation: {'✅ PASSED' if test2_passed else '❌ FAILED'}", file=sys.stderr)
 
     if test1_passed and test2_passed:
-        print(f"\n🎉 All tests passed!", file=sys.stderr)
+        print("\n🎉 All tests passed!", file=sys.stderr)
         sys.exit(0)
     else:
-        print(f"\n⚠️ Some tests failed", file=sys.stderr)
+        print("\n⚠️ Some tests failed", file=sys.stderr)
         sys.exit(1)

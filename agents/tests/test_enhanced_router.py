@@ -18,46 +18,47 @@ from pathlib import Path
 
 # Add parent directory to path for imports
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.trigger_matcher import EnhancedTriggerMatcher
 from lib.confidence_scorer import ConfidenceScorer, ConfidenceScore
 from lib.capability_index import CapabilityIndex
 from lib.result_cache import ResultCache
-from lib.enhanced_router import EnhancedAgentRouter, AgentRecommendation
+from lib.enhanced_router import EnhancedAgentRouter
 
 
 # Sample test registry data
 SAMPLE_REGISTRY = {
-    'agents': {
-        'agent-debug-intelligence': {
-            'title': 'Debug Intelligence Agent',
-            'definition_path': '/path/to/debug.yaml',
-            'activation_triggers': ['debug', 'error', 'bug', 'troubleshoot'],
-            'capabilities': ['error_analysis', 'root_cause', 'debugging'],
-            'domain_context': 'debugging'
+    "agents": {
+        "agent-debug-intelligence": {
+            "title": "Debug Intelligence Agent",
+            "definition_path": "/path/to/debug.yaml",
+            "activation_triggers": ["debug", "error", "bug", "troubleshoot"],
+            "capabilities": ["error_analysis", "root_cause", "debugging"],
+            "domain_context": "debugging",
         },
-        'agent-api-architect': {
-            'title': 'API Architect',
-            'definition_path': '/path/to/api.yaml',
-            'activation_triggers': ['api', 'endpoint', 'rest', 'design api'],
-            'capabilities': ['api_design', 'rest', 'architecture'],
-            'domain_context': 'api_development'
+        "agent-api-architect": {
+            "title": "API Architect",
+            "definition_path": "/path/to/api.yaml",
+            "activation_triggers": ["api", "endpoint", "rest", "design api"],
+            "capabilities": ["api_design", "rest", "architecture"],
+            "domain_context": "api_development",
         },
-        'agent-performance': {
-            'title': 'Performance Optimizer',
-            'definition_path': '/path/to/performance.yaml',
-            'activation_triggers': ['optimize', 'performance', 'slow', 'speed up'],
-            'capabilities': ['optimization', 'performance_analysis', 'profiling'],
-            'domain_context': 'performance'
+        "agent-performance": {
+            "title": "Performance Optimizer",
+            "definition_path": "/path/to/performance.yaml",
+            "activation_triggers": ["optimize", "performance", "slow", "speed up"],
+            "capabilities": ["optimization", "performance_analysis", "profiling"],
+            "domain_context": "performance",
         },
-        'agent-testing': {
-            'title': 'Testing Agent',
-            'definition_path': '/path/to/testing.yaml',
-            'activation_triggers': ['test', 'testing', 'unit test', 'integration test'],
-            'capabilities': ['testing', 'test_generation', 'quality_assurance'],
-            'domain_context': 'testing'
-        }
+        "agent-testing": {
+            "title": "Testing Agent",
+            "definition_path": "/path/to/testing.yaml",
+            "activation_triggers": ["test", "testing", "unit test", "integration test"],
+            "capabilities": ["testing", "test_generation", "quality_assurance"],
+            "domain_context": "testing",
+        },
     }
 }
 
@@ -65,6 +66,7 @@ SAMPLE_REGISTRY = {
 # ============================================================================
 # TriggerMatcher Tests
 # ============================================================================
+
 
 class TestEnhancedTriggerMatcher:
     """Test EnhancedTriggerMatcher functionality."""
@@ -81,7 +83,7 @@ class TestEnhancedTriggerMatcher:
         assert len(matches) > 0
         # Should match agent-debug-intelligence
         agent_names = [m[0] for m in matches]
-        assert 'agent-debug-intelligence' in agent_names
+        assert "agent-debug-intelligence" in agent_names
 
         # First match should have high score
         assert matches[0][1] >= 0.8
@@ -93,7 +95,7 @@ class TestEnhancedTriggerMatcher:
 
         assert len(matches) > 0
         # Should still match debug agent
-        assert any('debug' in m[0] for m in matches)
+        assert any("debug" in m[0] for m in matches)
 
     def test_keyword_overlap(self, matcher):
         """Test keyword overlap scoring."""
@@ -101,7 +103,7 @@ class TestEnhancedTriggerMatcher:
 
         agent_names = [m[0] for m in matches]
         # Should match both api and performance agents
-        assert 'agent-api-architect' in agent_names or 'agent-performance' in agent_names
+        assert "agent-api-architect" in agent_names or "agent-performance" in agent_names
 
     def test_capability_match(self, matcher):
         """Test capability-based matching."""
@@ -109,7 +111,7 @@ class TestEnhancedTriggerMatcher:
 
         agent_names = [m[0] for m in matches]
         # Should match performance agent due to capabilities
-        assert 'agent-performance' in agent_names
+        assert "agent-performance" in agent_names
 
     def test_no_match(self, matcher):
         """Test when no good matches found."""
@@ -135,6 +137,7 @@ class TestEnhancedTriggerMatcher:
 # ConfidenceScorer Tests
 # ============================================================================
 
+
 class TestConfidenceScorer:
     """Test ConfidenceScorer functionality."""
 
@@ -145,14 +148,14 @@ class TestConfidenceScorer:
 
     def test_score_calculation(self, scorer):
         """Test comprehensive score calculation."""
-        agent_data = SAMPLE_REGISTRY['agents']['agent-debug-intelligence']
+        agent_data = SAMPLE_REGISTRY["agents"]["agent-debug-intelligence"]
 
         score = scorer.score(
-            agent_name='agent-debug-intelligence',
+            agent_name="agent-debug-intelligence",
             agent_data=agent_data,
-            user_request='debug this error',
-            context={'domain': 'debugging'},
-            trigger_score=0.9
+            user_request="debug this error",
+            context={"domain": "debugging"},
+            trigger_score=0.9,
         )
 
         assert isinstance(score, ConfidenceScore)
@@ -166,14 +169,14 @@ class TestConfidenceScorer:
 
     def test_perfect_context_match(self, scorer):
         """Test perfect domain context matching."""
-        agent_data = SAMPLE_REGISTRY['agents']['agent-debug-intelligence']
+        agent_data = SAMPLE_REGISTRY["agents"]["agent-debug-intelligence"]
 
         score = scorer.score(
-            agent_name='agent-debug-intelligence',
+            agent_name="agent-debug-intelligence",
             agent_data=agent_data,
-            user_request='test',
-            context={'domain': 'debugging'},  # Matches agent domain
-            trigger_score=0.5
+            user_request="test",
+            context={"domain": "debugging"},  # Matches agent domain
+            trigger_score=0.5,
         )
 
         # Perfect context match should give 1.0
@@ -181,14 +184,14 @@ class TestConfidenceScorer:
 
     def test_general_context(self, scorer):
         """Test general domain handling."""
-        agent_data = SAMPLE_REGISTRY['agents']['agent-debug-intelligence']
+        agent_data = SAMPLE_REGISTRY["agents"]["agent-debug-intelligence"]
 
         score = scorer.score(
-            agent_name='agent-debug-intelligence',
+            agent_name="agent-debug-intelligence",
             agent_data=agent_data,
-            user_request='test',
-            context={'domain': 'general'},
-            trigger_score=0.5
+            user_request="test",
+            context={"domain": "general"},
+            trigger_score=0.5,
         )
 
         # General domain should give moderate score
@@ -196,14 +199,14 @@ class TestConfidenceScorer:
 
     def test_weighted_scoring(self, scorer):
         """Test that scoring uses correct weights."""
-        agent_data = SAMPLE_REGISTRY['agents']['agent-debug-intelligence']
+        agent_data = SAMPLE_REGISTRY["agents"]["agent-debug-intelligence"]
 
         score = scorer.score(
-            agent_name='agent-debug-intelligence',
+            agent_name="agent-debug-intelligence",
             agent_data=agent_data,
-            user_request='test',
+            user_request="test",
             context={},
-            trigger_score=1.0  # Perfect trigger
+            trigger_score=1.0,  # Perfect trigger
         )
 
         # Trigger is 40% weight, so with perfect trigger and moderate others,
@@ -215,6 +218,7 @@ class TestConfidenceScorer:
 # CapabilityIndex Tests
 # ============================================================================
 
+
 class TestCapabilityIndex:
     """Test CapabilityIndex functionality."""
 
@@ -223,33 +227,32 @@ class TestCapabilityIndex:
         """Create capability index with sample registry."""
         # Write sample registry to temp file
         import yaml
+
         registry_file = tmp_path / "test-registry.yaml"
-        with open(registry_file, 'w') as f:
+        with open(registry_file, "w") as f:
             yaml.dump(SAMPLE_REGISTRY, f)
 
         return CapabilityIndex(str(registry_file))
 
     def test_find_by_capability(self, index):
         """Test finding agents by capability."""
-        agents = index.find_by_capability('debugging')
-        assert 'agent-debug-intelligence' in agents
+        agents = index.find_by_capability("debugging")
+        assert "agent-debug-intelligence" in agents
 
     def test_find_by_domain(self, index):
         """Test finding agents by domain."""
-        agents = index.find_by_domain('api_development')
-        assert 'agent-api-architect' in agents
+        agents = index.find_by_domain("api_development")
+        assert "agent-api-architect" in agents
 
     def test_get_capabilities(self, index):
         """Test getting capabilities for agent."""
-        caps = index.get_capabilities('agent-debug-intelligence')
-        assert 'debugging' in caps
-        assert 'error_analysis' in caps
+        caps = index.get_capabilities("agent-debug-intelligence")
+        assert "debugging" in caps
+        assert "error_analysis" in caps
 
     def test_multiple_capabilities(self, index):
         """Test finding agents with multiple capabilities."""
-        results = index.find_agents_with_multiple_capabilities(
-            ['debugging', 'error_analysis']
-        )
+        results = index.find_agents_with_multiple_capabilities(["debugging", "error_analysis"])
 
         # Should return list of (agent, count) tuples
         assert len(results) > 0
@@ -258,21 +261,22 @@ class TestCapabilityIndex:
 
         # agent-debug-intelligence should have both
         agent_names = [r[0] for r in results]
-        assert 'agent-debug-intelligence' in agent_names
+        assert "agent-debug-intelligence" in agent_names
 
     def test_stats(self, index):
         """Test index statistics."""
         stats = index.stats()
 
-        assert 'total_agents' in stats
-        assert 'total_capabilities' in stats
-        assert 'total_domains' in stats
-        assert stats['total_agents'] == 4  # Sample registry has 4 agents
+        assert "total_agents" in stats
+        assert "total_capabilities" in stats
+        assert "total_domains" in stats
+        assert stats["total_agents"] == 4  # Sample registry has 4 agents
 
 
 # ============================================================================
 # ResultCache Tests
 # ============================================================================
+
 
 class TestResultCache:
     """Test ResultCache functionality."""
@@ -296,11 +300,11 @@ class TestResultCache:
 
     def test_context_differentiation(self, cache):
         """Test that different contexts create different cache entries."""
-        cache.set("query", ["agent-1"], context={'domain': 'api'})
-        cache.set("query", ["agent-2"], context={'domain': 'debug'})
+        cache.set("query", ["agent-1"], context={"domain": "api"})
+        cache.set("query", ["agent-2"], context={"domain": "debug"})
 
-        result1 = cache.get("query", context={'domain': 'api'})
-        result2 = cache.get("query", context={'domain': 'debug'})
+        result1 = cache.get("query", context={"domain": "api"})
+        result2 = cache.get("query", context={"domain": "debug"})
 
         assert result1 == ["agent-1"]
         assert result2 == ["agent-2"]
@@ -327,7 +331,7 @@ class TestResultCache:
             cache.get("popular")
 
         stats = cache.stats()
-        assert stats['total_hits'] >= 5
+        assert stats["total_hits"] >= 5
 
     def test_invalidation(self, cache):
         """Test cache invalidation."""
@@ -342,15 +346,16 @@ class TestResultCache:
         cache.set("query1", ["agent-1"])
         cache.set("query2", ["agent-2"])
 
-        assert cache.stats()['entries'] == 2
+        assert cache.stats()["entries"] == 2
 
         cache.clear()
-        assert cache.stats()['entries'] == 0
+        assert cache.stats()["entries"] == 0
 
 
 # ============================================================================
 # EnhancedAgentRouter Integration Tests
 # ============================================================================
+
 
 class TestEnhancedAgentRouter:
     """Test EnhancedAgentRouter integration."""
@@ -359,8 +364,9 @@ class TestEnhancedAgentRouter:
     def router(self, tmp_path):
         """Create router with sample registry."""
         import yaml
+
         registry_file = tmp_path / "test-registry.yaml"
-        with open(registry_file, 'w') as f:
+        with open(registry_file, "w") as f:
             yaml.dump(SAMPLE_REGISTRY, f)
 
         return EnhancedAgentRouter(str(registry_file), cache_ttl=60)
@@ -370,7 +376,7 @@ class TestEnhancedAgentRouter:
         recommendations = router.route("use agent-api-architect to design API")
 
         assert len(recommendations) > 0
-        assert recommendations[0].agent_name == 'agent-api-architect'
+        assert recommendations[0].agent_name == "agent-api-architect"
         assert recommendations[0].confidence.total == 1.0
 
     def test_trigger_based_routing(self, router):
@@ -380,17 +386,14 @@ class TestEnhancedAgentRouter:
         assert len(recommendations) > 0
         # Should include debug agent
         agent_names = [r.agent_name for r in recommendations]
-        assert 'agent-debug-intelligence' in agent_names
+        assert "agent-debug-intelligence" in agent_names
 
         # Top recommendation should have good confidence
         assert recommendations[0].confidence.total > 0.5
 
     def test_multi_recommendation(self, router):
         """Test multiple recommendations."""
-        recommendations = router.route(
-            "optimize api performance",
-            max_recommendations=5
-        )
+        recommendations = router.route("optimize api performance", max_recommendations=5)
 
         assert len(recommendations) > 1
         # All should have valid confidence
@@ -418,7 +421,7 @@ class TestEnhancedAgentRouter:
             assert r1.agent_name == r2.agent_name
 
         # Cache hit count should increase
-        assert stats2['cache_hits'] > stats1['cache_hits']
+        assert stats2["cache_hits"] > stats1["cache_hits"]
 
     def test_confidence_breakdown(self, router):
         """Test confidence score breakdown."""
@@ -428,11 +431,11 @@ class TestEnhancedAgentRouter:
         conf = rec.confidence
 
         # Check all components present
-        assert hasattr(conf, 'trigger_score')
-        assert hasattr(conf, 'context_score')
-        assert hasattr(conf, 'capability_score')
-        assert hasattr(conf, 'historical_score')
-        assert hasattr(conf, 'total')
+        assert hasattr(conf, "trigger_score")
+        assert hasattr(conf, "context_score")
+        assert hasattr(conf, "capability_score")
+        assert hasattr(conf, "historical_score")
+        assert hasattr(conf, "total")
 
         # All should be valid
         assert 0.0 <= conf.trigger_score <= 1.0
@@ -448,22 +451,23 @@ class TestEnhancedAgentRouter:
     def test_routing_stats(self, router):
         """Test routing statistics tracking."""
         # Make some requests with same context
-        context = {'domain': 'testing'}
+        context = {"domain": "testing"}
         router.route("query 1", context=context)
         router.route("query 2", context=context)
         router.route("query 1", context=context)  # Cache hit
 
         stats = router.get_routing_stats()
 
-        assert stats['total_routes'] == 3
-        assert stats['cache_hits'] >= 1
-        assert 'cache_hit_rate' in stats
-        assert stats['cache_hit_rate'] >= 0.33  # At least 1 hit out of 3
+        assert stats["total_routes"] == 3
+        assert stats["cache_hits"] >= 1
+        assert "cache_hit_rate" in stats
+        assert stats["cache_hit_rate"] >= 0.33  # At least 1 hit out of 3
 
 
 # ============================================================================
 # Performance Tests
 # ============================================================================
+
 
 class TestPerformance:
     """Test performance targets."""
@@ -472,8 +476,9 @@ class TestPerformance:
     def router(self, tmp_path):
         """Create router with sample registry."""
         import yaml
+
         registry_file = tmp_path / "test-registry.yaml"
-        with open(registry_file, 'w') as f:
+        with open(registry_file, "w") as f:
             yaml.dump(SAMPLE_REGISTRY, f)
 
         return EnhancedAgentRouter(str(registry_file))
@@ -482,12 +487,7 @@ class TestPerformance:
         """Test that routing meets performance target (<100ms)."""
         import time
 
-        queries = [
-            "debug this error",
-            "optimize performance",
-            "design api endpoint",
-            "write unit tests"
-        ]
+        queries = ["debug this error", "optimize performance", "design api endpoint", "write unit tests"]
 
         for query in queries:
             start = time.time()

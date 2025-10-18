@@ -5,7 +5,7 @@ Demonstrates how to use the TraceLogger for routing decision logging.
 """
 
 import asyncio
-from trace_logger import TraceLogger, get_trace_logger
+from trace_logger import get_trace_logger
 
 
 async def example_routing_decision():
@@ -14,9 +14,7 @@ async def example_routing_decision():
 
     # Start a coordinator trace
     coord_id = await logger.start_coordinator_trace(
-        coordinator_type="routing",
-        total_agents=1,
-        metadata={"workflow": "agent_selection"}
+        coordinator_type="routing", total_agents=1, metadata={"workflow": "agent_selection"}
     )
 
     # Log a routing decision
@@ -29,20 +27,20 @@ async def example_routing_decision():
                 "agent_name": "agent-database-specialist",
                 "confidence": 0.85,
                 "match_type": "fuzzy",
-                "reason": "Database keyword match"
+                "reason": "Database keyword match",
             },
             {
                 "agent_name": "agent-debug-intelligence",
                 "confidence": 0.68,
                 "match_type": "capability",
-                "reason": "Performance analysis capability"
+                "reason": "Performance analysis capability",
             },
             {
                 "agent_name": "agent-code-quality",
                 "confidence": 0.42,
                 "match_type": "context",
-                "reason": "Code improvement context"
-            }
+                "reason": "Code improvement context",
+            },
         ],
         reasoning=(
             "Selected agent-performance-optimizer due to: "
@@ -51,12 +49,8 @@ async def example_routing_decision():
             "3) Strong capability alignment with performance optimization domain"
         ),
         routing_strategy="enhanced_fuzzy_matching",
-        context={
-            "domain": "performance_optimization",
-            "project_type": "database_heavy",
-            "previous_agent": None
-        },
-        routing_time_ms=45.3
+        context={"domain": "performance_optimization", "project_type": "database_heavy", "previous_agent": None},
+        routing_time_ms=45.3,
     )
 
     # Log another routing decision with lower confidence
@@ -69,14 +63,14 @@ async def example_routing_decision():
                 "agent_name": "agent-code-quality",
                 "confidence": 0.55,
                 "match_type": "generic",
-                "reason": "Generic fix request"
+                "reason": "Generic fix request",
             },
             {
                 "agent_name": "agent-workflow-coordinator",
                 "confidence": 0.51,
                 "match_type": "fallback",
-                "reason": "Low confidence fallback"
-            }
+                "reason": "Low confidence fallback",
+            },
         ],
         reasoning=(
             "Selected agent-debug-intelligence with low confidence due to: "
@@ -85,12 +79,8 @@ async def example_routing_decision():
             "3) Debug intelligence can handle general troubleshooting"
         ),
         routing_strategy="fallback",
-        context={
-            "domain": "general",
-            "ambiguity_score": 0.85,
-            "previous_agent": None
-        },
-        routing_time_ms=22.1
+        context={"domain": "general", "ambiguity_score": 0.85, "previous_agent": None},
+        routing_time_ms=22.1,
     )
 
     # End coordinator trace
@@ -103,9 +93,9 @@ async def example_query_routing_decisions():
     """Example of querying routing decisions."""
     logger = get_trace_logger()
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("📊 Routing Decision Query Examples")
-    print("="*80)
+    print("=" * 80)
 
     # Get recent routing decisions
     print("\n1. Recent routing decisions:")

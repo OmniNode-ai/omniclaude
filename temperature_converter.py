@@ -30,19 +30,15 @@ def celsius_to_fahrenheit(celsius: float) -> float:
     """
     # Type validation
     if not isinstance(celsius, (int, float)):
-        raise TypeError(
-            f"celsius must be a numeric type, got {type(celsius).__name__}"
-        )
+        raise TypeError(f"celsius must be a numeric type, got {type(celsius).__name__}")
 
     # Physical validation - absolute zero in Celsius
     ABSOLUTE_ZERO_C = -273.15
     if celsius < ABSOLUTE_ZERO_C:
-        raise ValueError(
-            f"Temperature {celsius}°C is below absolute zero ({ABSOLUTE_ZERO_C}°C)"
-        )
+        raise ValueError(f"Temperature {celsius}°C is below absolute zero ({ABSOLUTE_ZERO_C}°C)")
 
     # Conversion formula
-    return (celsius * 9/5) + 32
+    return (celsius * 9 / 5) + 32
 
 
 def fahrenheit_to_celsius(fahrenheit: float) -> float:
@@ -70,19 +66,15 @@ def fahrenheit_to_celsius(fahrenheit: float) -> float:
     """
     # Type validation
     if not isinstance(fahrenheit, (int, float)):
-        raise TypeError(
-            f"fahrenheit must be a numeric type, got {type(fahrenheit).__name__}"
-        )
+        raise TypeError(f"fahrenheit must be a numeric type, got {type(fahrenheit).__name__}")
 
     # Physical validation - absolute zero in Fahrenheit
     ABSOLUTE_ZERO_F = -459.67
     if fahrenheit < ABSOLUTE_ZERO_F:
-        raise ValueError(
-            f"Temperature {fahrenheit}°F is below absolute zero ({ABSOLUTE_ZERO_F}°F)"
-        )
+        raise ValueError(f"Temperature {fahrenheit}°F is below absolute zero ({ABSOLUTE_ZERO_F}°F)")
 
     # Conversion formula
-    return (fahrenheit - 32) * 5/9
+    return (fahrenheit - 32) * 5 / 9
 
 
 if __name__ == "__main__":

@@ -8,13 +8,14 @@ Enables agent-workflow-coordinator to transform into any agent.
 
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 from dataclasses import dataclass
 
 
 @dataclass
 class AgentIdentity:
     """Parsed agent identity for transformation."""
+
     name: str
     purpose: str
     domain: str
@@ -126,12 +127,11 @@ class AgentTransformer:
 
         if not config_path.exists():
             raise FileNotFoundError(
-                f"Agent config not found: {config_path}\n"
-                f"Available agents: {self.list_agents()}"
+                f"Agent config not found: {config_path}\n" f"Available agents: {self.list_agents()}"
             )
 
         # Load YAML
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
 
         # Parse capabilities (handle dict or list format)
@@ -170,14 +170,12 @@ class AgentTransformer:
             capabilities=capabilities,
             triggers=config.get("triggers", []),
             intelligence_integration=intelligence,
-            success_criteria=success_criteria
+            success_criteria=success_criteria,
         )
 
     def list_agents(self) -> list[str]:
         """List all available agent names."""
-        return sorted([
-            f.stem for f in self.config_dir.glob("agent-*.yaml")
-        ])
+        return sorted([f.stem for f in self.config_dir.glob("agent-*.yaml")])
 
     def transform(self, agent_name: str) -> str:
         """

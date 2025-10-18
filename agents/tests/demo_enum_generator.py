@@ -5,16 +5,11 @@ Demo script for Enum Generator
 Shows example usage and output of the enum generator.
 """
 
-import asyncio
 from uuid import uuid4
 from datetime import datetime
 
 from agents.lib.enum_generator import EnumGenerator
-from agents.lib.simple_prd_analyzer import (
-    SimplePRDAnalysisResult,
-    SimpleParsedPRD,
-    SimpleDecompositionResult
-)
+from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
 
 
 def create_sample_prd_analysis() -> SimplePRDAnalysisResult:
@@ -31,34 +26,26 @@ def create_sample_prd_analysis() -> SimplePRDAnalysisResult:
             "List all orders with pagination and filtering",
             "Process payment for orders",
             "Track order fulfillment and shipping",
-            "Notify customers of order status changes"
+            "Notify customers of order status changes",
         ],
         features=[
             "Real-time order tracking",
             "Automated status updates",
             "Payment integration",
             "Inventory validation",
-            "Customer notifications"
+            "Customer notifications",
         ],
-        success_criteria=[
-            "99.9% uptime",
-            "Sub-second order creation response time",
-            "Zero payment processing errors"
-        ],
+        success_criteria=["99.9% uptime", "Sub-second order creation response time", "Zero payment processing errors"],
         technical_details=[
             "PostgreSQL for order persistence",
             "Redis for caching active orders",
             "Kafka for event-driven architecture",
-            "Stripe API for payment processing"
+            "Stripe API for payment processing",
         ],
-        dependencies=[
-            "Payment service",
-            "Inventory service",
-            "Notification service"
-        ],
+        dependencies=["Payment service", "Inventory service", "Notification service"],
         extracted_keywords=["order", "payment", "fulfillment", "customer"],
         sections=["overview", "requirements", "features", "technical"],
-        word_count=350
+        word_count=350,
     )
 
     decomposition_result = SimpleDecompositionResult(
@@ -68,25 +55,25 @@ def create_sample_prd_analysis() -> SimplePRDAnalysisResult:
                 "title": "Create order endpoint",
                 "description": "Implement order creation with validation",
                 "priority": "high",
-                "complexity": "high"
+                "complexity": "high",
             },
             {
                 "id": "task_2",
                 "title": "Update order status endpoint",
                 "description": "Implement status update workflow",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_3",
                 "title": "Cancel order endpoint",
                 "description": "Implement order cancellation logic",
                 "priority": "medium",
-                "complexity": "medium"
-            }
+                "complexity": "medium",
+            },
         ],
         total_tasks=3,
-        verification_successful=True
+        verification_successful=True,
     )
 
     return SimplePRDAnalysisResult(
@@ -100,7 +87,7 @@ def create_sample_prd_analysis() -> SimplePRDAnalysisResult:
         external_systems=["PostgreSQL", "Redis", "Kafka", "Stripe"],
         quality_baseline=0.85,
         confidence_score=0.92,
-        analysis_timestamp=datetime.utcnow()
+        analysis_timestamp=datetime.utcnow(),
     )
 
 
@@ -117,7 +104,7 @@ def main():
     # Create sample PRD analysis
     print("Creating sample PRD analysis for E-Commerce Order Management...")
     prd_analysis = create_sample_prd_analysis()
-    print(f"  - Service: Order Management")
+    print("  - Service: Order Management")
     print(f"  - Functional Requirements: {len(prd_analysis.parsed_prd.functional_requirements)}")
     print(f"  - Confidence Score: {prd_analysis.confidence_score:.2%}")
     print()
@@ -126,10 +113,7 @@ def main():
     print("-" * 80)
     print("1. Generating Operation Type Enum")
     print("-" * 80)
-    operation_enum = generator.generate_operation_type_enum(
-        prd_analysis=prd_analysis,
-        service_name='order_management'
-    )
+    operation_enum = generator.generate_operation_type_enum(prd_analysis=prd_analysis, service_name="order_management")
 
     print(f"Class Name: {operation_enum.class_name}")
     print(f"File Path: {operation_enum.file_path}")
@@ -138,11 +122,11 @@ def main():
     print()
     print("Inferred Enum Values:")
     for value in operation_enum.values:
-        print(f"  - {value.name} = \"{value.value}\" ({value.description})")
+        print(f'  - {value.name} = "{value.value}" ({value.description})')
     print()
     print("Generated Source Code Preview (first 50 lines):")
     print("-" * 80)
-    source_lines = operation_enum.source_code.split('\n')
+    source_lines = operation_enum.source_code.split("\n")
     for i, line in enumerate(source_lines[:50], 1):
         print(f"{i:3d}: {line}")
     print()
@@ -152,9 +136,9 @@ def main():
     print("2. Generating Status Enum")
     print("-" * 80)
     status_enum = generator.generate_status_enum(
-        service_name='order_management',
+        service_name="order_management",
         prd_analysis=prd_analysis,
-        additional_statuses=['awaiting_payment', 'shipped', 'delivered']
+        additional_statuses=["awaiting_payment", "shipped", "delivered"],
     )
 
     print(f"Class Name: {status_enum.class_name}")
@@ -164,7 +148,7 @@ def main():
     print()
     print("Status Enum Values:")
     for value in sorted(status_enum.values, key=lambda x: x.name):
-        print(f"  - {value.name} = \"{value.value}\" ({value.description})")
+        print(f'  - {value.name} = "{value.value}" ({value.description})')
     print()
 
     # Test enum value inference
@@ -172,8 +156,8 @@ def main():
     print("3. Enum Value Inference Analysis")
     print("-" * 80)
 
-    operation_values = generator.infer_enum_values(prd_analysis, 'operation')
-    status_values = generator.infer_enum_values(prd_analysis, 'status')
+    operation_values = generator.infer_enum_values(prd_analysis, "operation")
+    status_values = generator.infer_enum_values(prd_analysis, "status")
 
     print(f"Operations inferred from PRD: {len(operation_values)}")
     print("  " + ", ".join(sorted(v.name for v in operation_values)))
@@ -188,16 +172,10 @@ def main():
     print("-" * 80)
 
     try:
-        is_valid = generator.validate_enum_code(
-            operation_enum.source_code,
-            operation_enum.class_name
-        )
+        is_valid = generator.validate_enum_code(operation_enum.source_code, operation_enum.class_name)
         print(f"Operation Enum Validation: {'✓ PASS' if is_valid else '✗ FAIL'}")
 
-        is_valid = generator.validate_enum_code(
-            status_enum.source_code,
-            status_enum.class_name
-        )
+        is_valid = generator.validate_enum_code(status_enum.source_code, status_enum.class_name)
         print(f"Status Enum Validation: {'✓ PASS' if is_valid else '✗ FAIL'}")
 
         print()

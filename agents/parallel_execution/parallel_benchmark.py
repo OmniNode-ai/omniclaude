@@ -10,10 +10,10 @@ import time
 import tempfile
 from pathlib import Path
 from uuid import uuid4
-from typing import List
 
 # Add parent directory to path
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.codegen_workflow import CodegenWorkflow
@@ -52,7 +52,7 @@ async def benchmark_sequential_generation(num_nodes: int = 6) -> float:
             prd_analysis=analysis,
             microservice_name="benchmark",
             domain="perf_test",
-            output_directory=temp_dir
+            output_directory=temp_dir,
         )
 
         total_time = time.time() - start_time
@@ -96,7 +96,7 @@ async def benchmark_parallel_generation(num_nodes: int = 6, max_workers: int = 3
             prd_analysis=analysis,
             microservice_name="benchmark",
             domain="perf_test",
-            output_directory=temp_dir
+            output_directory=temp_dir,
         )
 
         total_time = time.time() - start_time
@@ -149,7 +149,7 @@ async def run_comprehensive_benchmark():
             "sequential_time": sequential_time,
             "parallel_time": parallel_time,
             "speedup": speedup,
-            "throughput_improvement": throughput_improvement
+            "throughput_improvement": throughput_improvement,
         }
         results.append(result)
 
@@ -167,7 +167,9 @@ async def run_comprehensive_benchmark():
     print("-" * 60)
 
     for r in results:
-        print(f"{r['config']:<20} {r['nodes']:<8} {r['workers']:<10} {r['speedup']:.2f}x{'':<6} {r['throughput_improvement']:+.1f}%")
+        print(
+            f"{r['config']:<20} {r['nodes']:<8} {r['workers']:<10} {r['speedup']:.2f}x{'':<6} {r['throughput_improvement']:+.1f}%"
+        )
 
     # Target achievement check
     print("\n" + "=" * 60)

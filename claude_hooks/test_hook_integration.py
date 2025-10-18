@@ -46,12 +46,9 @@ def divide(a, b):
         return a / b
     except:
         return None
-"""
+""",
         },
-        "tool_response": {
-            "success": True,
-            "message": "File written successfully"
-        }
+        "tool_response": {"success": True, "message": "File written successfully"},
     }
 
     print("📝 Tool Info:")
@@ -91,15 +88,15 @@ def divide(a, b):
                 "file_path": tool_info["tool_input"]["file_path"],
                 "enhanced_metadata": enhanced_metadata,
                 "auto_fix_applied": False,
-                "auto_fix_details": None
+                "auto_fix_details": None,
             },
             metadata={
                 "hook_type": "PostToolUse",
                 "correlation_id": "test-correlation-123",
                 "agent_name": None,
                 "agent_domain": None,
-                **enhanced_metadata
-            }
+                **enhanced_metadata,
+            },
         )
 
         if event_id:
@@ -110,11 +107,11 @@ def divide(a, b):
 
         # 3. Report summary
         print("📊 Summary:")
-        success = enhanced_metadata['success_classification']
-        quality = enhanced_metadata['quality_metrics']['quality_score']
-        exec_time = enhanced_metadata['performance_metrics']['execution_time_ms']
-        bytes_written = enhanced_metadata['performance_metrics']['bytes_written']
-        lines_changed = enhanced_metadata['performance_metrics']['lines_changed']
+        success = enhanced_metadata["success_classification"]
+        quality = enhanced_metadata["quality_metrics"]["quality_score"]
+        exec_time = enhanced_metadata["performance_metrics"]["execution_time_ms"]
+        bytes_written = enhanced_metadata["performance_metrics"]["bytes_written"]
+        lines_changed = enhanced_metadata["performance_metrics"]["lines_changed"]
 
         print(f"  Success: {success}")
         print(f"  Quality Score: {quality:.2f}")
@@ -125,7 +122,7 @@ def divide(a, b):
 
         # Quality component breakdown
         print("🔍 Quality Breakdown:")
-        qm = enhanced_metadata['quality_metrics']
+        qm = enhanced_metadata["quality_metrics"]
         print(f"  Naming Conventions: {qm['naming_conventions']}")
         print(f"  Type Safety: {qm['type_safety']}")
         print(f"  Documentation: {qm['documentation']}")
@@ -143,6 +140,7 @@ def divide(a, b):
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -153,14 +151,8 @@ def simulate_failed_operation():
 
     tool_info = {
         "tool_name": "Edit",
-        "tool_input": {
-            "file_path": "/test/nonexistent.py",
-            "old_string": "foo",
-            "new_string": "bar"
-        },
-        "tool_response": {
-            "error": "File not found: /test/nonexistent.py"
-        }
+        "tool_input": {"file_path": "/test/nonexistent.py", "old_string": "foo", "new_string": "bar"},
+        "tool_response": {"error": "File not found: /test/nonexistent.py"},
     }
 
     print("📝 Tool Info:")
@@ -180,8 +172,8 @@ def simulate_failed_operation():
         print()
 
         # Display results
-        success = enhanced_metadata['success_classification']
-        deviation = enhanced_metadata['execution_analysis']['deviation_from_expected']
+        success = enhanced_metadata["success_classification"]
+        deviation = enhanced_metadata["execution_analysis"]["deviation_from_expected"]
 
         print("📈 Results:")
         print(f"  Success Classification: {success}")
@@ -198,6 +190,7 @@ def simulate_failed_operation():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

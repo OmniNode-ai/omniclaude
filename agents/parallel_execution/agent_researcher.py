@@ -22,6 +22,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -31,6 +32,7 @@ except ImportError:
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================
+
 
 class SourceReference(BaseModel):
     """Reference to a research source."""
@@ -45,7 +47,9 @@ class ResearchFindings(BaseModel):
 
     query: str = Field(..., description="The original research query.")
     summary: str = Field(..., description="A comprehensive summary of the findings.")
-    references: List[SourceReference] = Field(default_factory=list, description="List of sources referenced in the findings.")
+    references: List[SourceReference] = Field(
+        default_factory=list, description="List of sources referenced in the findings."
+    )
     raw_data: Dict[str, Any] | None = Field(None, description="Optional raw data from research sources.")
 
 
@@ -55,7 +59,10 @@ class ResearchQuery(BaseModel):
     topic: str = Field(..., description="The main topic or question for research.")
     keywords: List[str] = Field(default_factory=list, description="Keywords to refine the search.")
     depth: str = Field("medium", description="Desired depth of research (e.g., shallow, medium, deep).")
-    sources_to_include: List[str] = Field(default_factory=lambda: ["all"], description="Specific sources to prioritize (e.g., RAG, documentation, code_examples).")
+    sources_to_include: List[str] = Field(
+        default_factory=lambda: ["all"],
+        description="Specific sources to prioritize (e.g., RAG, documentation, code_examples).",
+    )
 
 
 class ResearchReport(BaseModel):
@@ -75,6 +82,7 @@ class ResearchReport(BaseModel):
 # ============================================================================
 # Dependencies for Pydantic AI Agent
 # ============================================================================
+
 
 @dataclass
 class AgentDeps:
@@ -127,16 +135,17 @@ Conduct thorough research using available tools and generate complete research r
 
 # Create the Pydantic AI agent
 research_intelligence_agent = Agent[AgentDeps, ResearchReport](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=ResearchReport,
-    system_prompt=RESEARCH_SYSTEM_PROMPT
+    system_prompt=RESEARCH_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @research_intelligence_agent.tool
 async def query_rag_intelligence(ctx: RunContext[AgentDeps]) -> str:
@@ -185,7 +194,9 @@ async def search_documentation(ctx: RunContext[AgentDeps]) -> str:
     query = deps.research_query
 
     # Simulate documentation search (in real implementation, would use MCP)
-    doc_content = f"Documentation search for '{query.topic}' revealed key concepts, implementation patterns, and best practices."
+    doc_content = (
+        f"Documentation search for '{query.topic}' revealed key concepts, implementation patterns, and best practices."
+    )
 
     return f"""**Documentation Findings:**
 - Topic Coverage: Comprehensive
@@ -271,11 +282,12 @@ async def analyze_research_quality(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+
 @register_agent(
     agent_name="researcher",
     agent_type="researcher",
     capabilities=["rag_intelligence", "documentation_search", "code_examples", "multi_source_synthesis"],
-    description="Multi-source research intelligence agent"
+    description="Multi-source research intelligence agent",
 )
 class ResearchIntelligenceAgent:
     """
@@ -293,7 +305,7 @@ class ResearchIntelligenceAgent:
             self.config = AgentConfig(
                 agent_name="agent-researcher",
                 agent_domain="research_intelligence",
-                agent_purpose="Research validation patterns and gather intelligence"
+                agent_purpose="Research validation patterns and gather intelligence",
             )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
@@ -313,20 +325,22 @@ class ResearchIntelligenceAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name,
-            task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
         )
 
         try:
             # Extract research query from task
             query_data = task.input_data.get("query", {})
             # Use query_data only if it has actual content (not empty dict)
-            research_query = ResearchQuery(**query_data) if (isinstance(query_data, dict) and query_data) else ResearchQuery(
-                topic=task.description,
-                keywords=task.input_data.get("keywords", []),
-                depth=task.input_data.get("depth", "medium"),
-                sources_to_include=task.input_data.get("sources", ["all"])
+            research_query = (
+                ResearchQuery(**query_data)
+                if (isinstance(query_data, dict) and query_data)
+                else ResearchQuery(
+                    topic=task.description,
+                    keywords=task.input_data.get("keywords", []),
+                    depth=task.input_data.get("depth", "medium"),
+                    sources_to_include=task.input_data.get("sources", ["all"]),
+                )
             )
 
             pre_gathered_context = task.input_data.get("pre_gathered_context", {})
@@ -336,13 +350,11 @@ class ResearchIntelligenceAgent:
                 message=f"Researching: {research_query.topic}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Gather intelligence
-            intelligence = await self._gather_intelligence(
-                task, research_query, pre_gathered_context
-            )
+            intelligence = await self._gather_intelligence(task, research_query, pre_gathered_context)
 
             # Create agent dependencies
             deps = AgentDeps(
@@ -352,7 +364,7 @@ class ResearchIntelligenceAgent:
                 trace_logger=self.trace_logger,
                 trace_id=self._current_trace_id,
                 research_query=research_query,
-                intelligence=intelligence
+                intelligence=intelligence,
             )
 
             # Build research prompt
@@ -364,7 +376,7 @@ class ResearchIntelligenceAgent:
                 message="Invoking Pydantic AI research analyzer",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await research_intelligence_agent.run(prompt, deps=deps)
@@ -378,10 +390,7 @@ class ResearchIntelligenceAgent:
                 "query": research_query.topic,
                 "summary": research_output.executive_summary,
                 "references": [ref.model_dump() for ref in research_output.references],
-                "raw_data": {
-                    "research_report": research_output.model_dump(),
-                    "intelligence_gathered": intelligence
-                },
+                "raw_data": {"research_report": research_output.model_dump(), "intelligence_gathered": intelligence},
                 # Additional fields from ResearchReport
                 "key_insights": research_output.key_insights,
                 "source_breakdown": research_output.source_breakdown,
@@ -392,8 +401,8 @@ class ResearchIntelligenceAgent:
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 4
-                }
+                    "tools_available": 4,
+                },
             }
 
             # Create result
@@ -403,13 +412,11 @@ class ResearchIntelligenceAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
@@ -417,7 +424,7 @@ class ResearchIntelligenceAgent:
                 message=f"Research complete: confidence={research_output.confidence_score:.2f}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -426,18 +433,14 @@ class ResearchIntelligenceAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Research failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -446,7 +449,7 @@ class ResearchIntelligenceAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     async def perform_research(self, query: ResearchQuery) -> ResearchFindings:
@@ -467,8 +470,8 @@ class ResearchIntelligenceAgent:
                 "query": query.model_dump(),
                 "keywords": query.keywords,
                 "depth": query.depth,
-                "sources": query.sources_to_include
-            }
+                "sources": query.sources_to_include,
+            },
         )
 
         # Execute using new pattern
@@ -481,22 +484,16 @@ class ResearchIntelligenceAgent:
                 query=output["query"],
                 summary=output["summary"],
                 references=[SourceReference(**ref) for ref in output["references"]],
-                raw_data=output.get("raw_data")
+                raw_data=output.get("raw_data"),
             )
         else:
             # Return empty findings on error
             return ResearchFindings(
-                query=query.topic,
-                summary=f"Research failed: {result.error}",
-                references=[],
-                raw_data=None
+                query=query.topic, summary=f"Research failed: {result.error}", references=[], raw_data=None
             )
 
     async def _gather_intelligence(
-        self,
-        task: AgentTask,
-        query: ResearchQuery,
-        pre_gathered_context: Dict[str, Any]
+        self, task: AgentTask, query: ResearchQuery, pre_gathered_context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
@@ -518,18 +515,13 @@ class ResearchIntelligenceAgent:
                 # RAG query for domain knowledge
                 if "RAG" in query.sources_to_include or "all" in query.sources_to_include:
                     rag_result = await self.mcp_client.perform_rag_query(
-                        query=query.topic,
-                        context="general",
-                        match_count=5
+                        query=query.topic, context="general", match_count=5
                     )
                     intelligence["rag_results"] = rag_result
 
                 # Code patterns search if requested
                 if "code_examples" in query.sources_to_include or "all" in query.sources_to_include:
-                    code_result = await self.mcp_client.search_code_examples(
-                        query=query.topic,
-                        match_count=5
-                    )
+                    code_result = await self.mcp_client.search_code_examples(query=query.topic, match_count=5)
                     intelligence["code_patterns"] = code_result
 
             except Exception as e:
@@ -538,7 +530,7 @@ class ResearchIntelligenceAgent:
                     message=f"Intelligence gathering failed (continuing): {str(e)}",
                     level=TraceLevel.WARNING,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
         return intelligence
@@ -596,13 +588,14 @@ Provide complete, actionable research report with high-quality insights."""
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()
 
 
 # ============================================================================
 # Example Usage
 # ============================================================================
+
 
 async def main():
     """Example usage of the research agent."""
@@ -617,9 +610,9 @@ async def main():
                 "topic": "Pydantic AI agent patterns",
                 "keywords": ["structured output", "type safety", "tools"],
                 "depth": "deep",
-                "sources_to_include": ["RAG", "documentation", "code_examples"]
+                "sources_to_include": ["RAG", "documentation", "code_examples"],
             }
-        }
+        },
     )
 
     result = await agent.execute(task)
@@ -631,7 +624,7 @@ async def main():
         topic="Pydantic model validation",
         keywords=["dataclasses", "type hints"],
         depth="deep",
-        sources_to_include=["RAG", "documentation"]
+        sources_to_include=["RAG", "documentation"],
     )
 
     findings = await agent.perform_research(research_query)

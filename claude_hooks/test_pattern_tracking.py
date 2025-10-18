@@ -10,10 +10,10 @@ import sys
 import os
 import tempfile
 import uuid
-from pathlib import Path
 
 # Add hooks to path
-sys.path.insert(0, '/Users/jonah/.claude/hooks')
+sys.path.insert(0, "/Users/jonah/.claude/hooks")
+
 
 def test_pattern_tracking():
     """Test end-to-end pattern tracking functionality."""
@@ -43,27 +43,19 @@ print(f"Result: {result}")
             "tool": "Write",
             "language": "python",
             "file_path": "/test/fibonacci.py",
-            "session_id": "test-session-123"
+            "session_id": "test-session-123",
         }
 
-        metadata = {
-            "author": "claude-code",
-            "test": True,
-            "purpose": "end-to-end validation"
-        }
+        metadata = {"author": "claude-code", "test": True, "purpose": "end-to-end validation"}
 
         # Get tracker and test pattern creation
         tracker = get_tracker()
         print(f"✓ Pattern tracker initialized (session: {tracker.session_id})")
 
         # Test the sync wrapper (used by hooks)
-        pattern_id = tracker.track_pattern_creation_sync(
-            code=test_code,
-            context=context,
-            metadata=metadata
-        )
+        pattern_id = tracker.track_pattern_creation_sync(code=test_code, context=context, metadata=metadata)
 
-        print(f"✓ Pattern creation tracked successfully")
+        print("✓ Pattern creation tracked successfully")
         print(f"  - Pattern ID: {pattern_id}")
         print(f"  - Session ID: {tracker.session_id}")
 
@@ -78,8 +70,10 @@ print(f"Result: {result}")
     except Exception as e:
         print(f"✗ Pattern tracking test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_hook_simulation():
     """Test the actual PostToolUse hook workflow."""
@@ -87,7 +81,7 @@ def test_hook_simulation():
 
     try:
         # Create a temporary Python file to trigger the hook
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             test_content = '''def test_function():
     """Test function for pattern tracking."""
     return "Pattern tracking test successful"
@@ -116,15 +110,17 @@ if __name__ == "__main__":
 
         # Clean up
         os.unlink(temp_file_path)
-        print(f"✓ Cleaned up test file")
+        print("✓ Cleaned up test file")
 
         return success
 
     except Exception as e:
         print(f"✗ Hook simulation test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_direct_api():
     """Test direct API call to Phase 4 endpoint."""
@@ -148,18 +144,15 @@ def test_direct_api():
                 "correlation_id": "corr-direct-001",
                 "timestamp": "2025-10-04T13:20:00Z",
                 "context": {"tool": "Write"},
-                "metadata": {"test": True}
+                "metadata": {"test": True},
             },
             "triggered_by": "test-script",
-            "reason": "Direct API test"
+            "reason": "Direct API test",
         }
 
         # Make direct API call
         with httpx.Client(timeout=10.0) as client:
-            response = client.post(
-                "http://localhost:8053/api/pattern-traceability/lineage/track",
-                json=test_payload
-            )
+            response = client.post("http://localhost:8053/api/pattern-traceability/lineage/track", json=test_payload)
 
             print(f"✓ API call completed with status: {response.status_code}")
 
@@ -174,8 +167,10 @@ def test_direct_api():
     except Exception as e:
         print(f"✗ Direct API test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def main():
     """Run all tests."""
@@ -184,10 +179,10 @@ def main():
     results = {
         "pattern_tracking": test_pattern_tracking(),
         "hook_simulation": test_hook_simulation(),
-        "direct_api": test_direct_api()
+        "direct_api": test_direct_api(),
     }
 
-    print(f"\n=== Test Results Summary ===")
+    print("\n=== Test Results Summary ===")
     for test_name, passed in results.items():
         status = "✓ PASS" if passed else "✗ FAIL"
         print(f"{test_name.replace('_', ' ').title()}: {status}")
@@ -203,6 +198,7 @@ def main():
     else:
         print("⚠ Some tests failed. Check the output above for details.")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

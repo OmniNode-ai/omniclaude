@@ -42,39 +42,51 @@ async def main() -> None:
 
     if args.dry_run:
         print("[DRY-RUN] Would publish to:", evt.to_kafka_topic())
-        print(json.dumps({
-            "id": str(evt.id),
-            "correlation_id": str(evt.correlation_id),
-            "payload": evt.payload,
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "id": str(evt.id),
+                    "correlation_id": str(evt.correlation_id),
+                    "payload": evt.payload,
+                },
+                indent=2,
+            )
+        )
         return
 
     if args.rpk:
         # Produce inside Redpanda container to bypass advertised-listener issues
-        import subprocess, shlex
+        import subprocess
+        import shlex
+
         topic = evt.to_kafka_topic()
-        payload = json.dumps({
-            "id": str(evt.id),
-            "service": evt.service,
-            "timestamp": evt.timestamp,
-            "correlation_id": str(evt.correlation_id),
-            "metadata": evt.metadata,
-            "payload": evt.payload,
-        })
+        payload = json.dumps(
+            {
+                "id": str(evt.id),
+                "service": evt.service,
+                "timestamp": evt.timestamp,
+                "correlation_id": str(evt.correlation_id),
+                "metadata": evt.metadata,
+                "payload": evt.payload,
+            }
+        )
         cmd = f"docker exec omninode-bridge-redpanda bash -lc 'echo {shlex.quote(payload)} | rpk topic produce {shlex.quote(topic)} --brokers localhost:9092'"
         subprocess.run(cmd, shell=True, check=False)
         print("[rpk] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     elif args.confluent:
         client = ConfluentKafkaClient(bootstrap_servers=args.bootstrap or "localhost:29092")
-        client.publish(evt.to_kafka_topic(), {
-            "id": str(evt.id),
-            "service": evt.service,
-            "timestamp": evt.timestamp,
-            "correlation_id": str(evt.correlation_id),
-            "metadata": evt.metadata,
-            "payload": evt.payload,
-        })
+        client.publish(
+            evt.to_kafka_topic(),
+            {
+                "id": str(evt.id),
+                "service": evt.service,
+                "timestamp": evt.timestamp,
+                "correlation_id": str(evt.correlation_id),
+                "metadata": evt.metadata,
+                "payload": evt.payload,
+            },
+        )
         print("[confluent] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     else:
@@ -88,5 +100,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-

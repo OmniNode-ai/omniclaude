@@ -8,6 +8,7 @@ from enum import Enum
 
 class EnumCoreErrorCode(str, Enum):
     """Mock error codes for testing"""
+
     VALIDATION_ERROR = "VALIDATION_ERROR"
     OPERATION_FAILED = "OPERATION_FAILED"
     INITIALIZATION_ERROR = "INITIALIZATION_ERROR"
@@ -23,12 +24,7 @@ CoreErrorCode = EnumCoreErrorCode
 class OnexError(Exception):
     """Mock OnexError for testing"""
 
-    def __init__(
-        self,
-        code: EnumCoreErrorCode,
-        message: str,
-        details: dict = None
-    ):
+    def __init__(self, code: EnumCoreErrorCode, message: str, details: dict = None):
         """
         Initialize mock ONEX error.
 

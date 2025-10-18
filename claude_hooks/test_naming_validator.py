@@ -280,9 +280,7 @@ class ModelCachingSubcontract(BaseModel):
     cache_config: dict
 """
         validator = NamingValidator(validation_mode="omninode")
-        violations = validator.validate_content(
-            code, "model_aggregation_subcontract.py"
-        )
+        violations = validator.validate_content(code, "model_aggregation_subcontract.py")
 
         # Should have no violations
         subcontract_violations = [v for v in violations if v.violation_type == "class"]

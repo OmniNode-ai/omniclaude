@@ -40,8 +40,16 @@ class OrchestrationPattern:
             Confidence score (0.0 to 1.0)
         """
         orchestration_keywords = {
-            'orchestrate', 'coordinate', 'workflow', 'sequence', 'parallel',
-            'execute', 'manage', 'control', 'schedule', 'dispatch'
+            "orchestrate",
+            "coordinate",
+            "workflow",
+            "sequence",
+            "parallel",
+            "execute",
+            "manage",
+            "control",
+            "schedule",
+            "dispatch",
         }
 
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
@@ -97,12 +105,7 @@ class OrchestrationPattern:
             "MixinCircuitBreaker",  # Circuit breaker for service calls
         ]
 
-    def _generate_sequential_orchestration(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_sequential_orchestration(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate sequential workflow orchestration"""
         return f'''
     async def {method_name}(
@@ -240,12 +243,7 @@ class OrchestrationPattern:
         pass
 '''
 
-    def _generate_parallel_orchestration(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_parallel_orchestration(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate parallel workflow orchestration"""
         return f'''
     async def {method_name}(
@@ -359,12 +357,7 @@ class OrchestrationPattern:
         return {{"task_result": "completed"}}
 '''
 
-    def _generate_compensating_orchestration(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_compensating_orchestration(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate orchestration with compensation logic"""
         return f'''
     async def {method_name}(
@@ -502,12 +495,7 @@ class OrchestrationPattern:
         pass
 '''
 
-    def _generate_saga_orchestration(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_saga_orchestration(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate saga pattern orchestration"""
         return f'''
     async def {method_name}(
@@ -611,12 +599,7 @@ class OrchestrationPattern:
         pass
 '''
 
-    def _generate_generic_orchestration(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_generic_orchestration(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate generic orchestration method"""
         return f'''
     async def {method_name}(
@@ -663,25 +646,22 @@ class OrchestrationPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "orchestrate_workflow"
 
-    def _detect_orchestration_type(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> str:
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "orchestrate_workflow"
+
+    def _detect_orchestration_type(self, capability: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Detect specific orchestration type"""
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
 
-        if any(kw in text for kw in ['saga', 'distributed transaction']):
+        if any(kw in text for kw in ["saga", "distributed transaction"]):
             return "saga"
-        elif any(kw in text for kw in ['compensate', 'rollback', 'undo']):
+        elif any(kw in text for kw in ["compensate", "rollback", "undo"]):
             return "compensating"
-        elif any(kw in text for kw in ['parallel', 'concurrent', 'async']):
+        elif any(kw in text for kw in ["parallel", "concurrent", "async"]):
             return "parallel"
-        elif any(kw in text for kw in ['sequential', 'sequence', 'step']):
+        elif any(kw in text for kw in ["sequential", "sequence", "step"]):
             return "sequential"
         else:
             return "generic"

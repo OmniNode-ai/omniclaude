@@ -33,11 +33,14 @@ async def main() -> None:
         return True
 
     if args.rpk:
-        import subprocess, json
+        import subprocess
+        import json
+
         # Use rpk inside the container; read a single message and filter client-side
         cmd = [
-            "bash", "-lc",
-            "docker exec omninode-bridge-redpanda bash -lc 'rpk topic consume dev.omniclaude.codegen.analyze.response.v1 -n 1 -f \"{{.message.value}}\" --brokers localhost:9092'"
+            "bash",
+            "-lc",
+            "docker exec omninode-bridge-redpanda bash -lc 'rpk topic consume dev.omniclaude.codegen.analyze.response.v1 -n 1 -f \"{{.message.value}}\" --brokers localhost:9092'",
         ]
         try:
             out = subprocess.check_output(cmd, text=True)
@@ -59,11 +62,10 @@ async def main() -> None:
             print("No message received within timeout")
         else:
             import json
+
             print(json.dumps(msg, indent=2))
         await client.stop_consumer()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-

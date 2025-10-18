@@ -4,8 +4,6 @@ Pydantic AI-based Refactoring Agent
 Analyzes and improves code quality, structure, and maintainability.
 """
 
-import asyncio
-import os
 import time
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
@@ -21,6 +19,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -30,6 +29,7 @@ except ImportError:
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================
+
 
 class RefactoringChange(BaseModel):
     """A single refactoring change recommendation."""
@@ -55,7 +55,9 @@ class RefactoringPlan(BaseModel):
     # Analysis
     code_smells: List[str] = Field(description="Detected code smells")
     complexity_issues: List[str] = Field(description="Complexity issues identified")
-    design_patterns_suggested: List[str] = Field(default_factory=list, description="Design patterns that could improve the code")
+    design_patterns_suggested: List[str] = Field(
+        default_factory=list, description="Design patterns that could improve the code"
+    )
 
     # Summary
     overall_assessment: str = Field(description="Overall code quality assessment")
@@ -66,6 +68,7 @@ class RefactoringPlan(BaseModel):
 # ============================================================================
 # Dependencies for Pydantic AI Agent
 # ============================================================================
+
 
 @dataclass
 class AgentDeps:
@@ -140,16 +143,17 @@ Analyze code thoroughly and provide actionable refactoring recommendations with 
 
 # Create the Pydantic AI agent
 refactoring_agent = Agent[AgentDeps, RefactoringPlan](
-    'google-gla:gemini-2.5-flash',
+    "google-gla:gemini-2.5-flash",
     deps_type=AgentDeps,
     output_type=RefactoringPlan,
-    system_prompt=REFACTORING_SYSTEM_PROMPT
+    system_prompt=REFACTORING_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @refactoring_agent.tool
 async def detect_code_smells(ctx: RunContext[AgentDeps], code_snippet: str) -> str:
@@ -162,7 +166,7 @@ async def detect_code_smells(ctx: RunContext[AgentDeps], code_snippet: str) -> s
     """
     smells = []
 
-    lines = code_snippet.split('\n')
+    lines = code_snippet.split("\n")
 
     # Long method
     if len(lines) > 20:
@@ -174,9 +178,9 @@ async def detect_code_smells(ctx: RunContext[AgentDeps], code_snippet: str) -> s
         smells.append(f"⚠️ Deep nesting (indent level {max_indent//4}) - Simplify control flow")
 
     # Long parameter list
-    if 'def ' in code_snippet:
+    if "def " in code_snippet:
         for line in lines:
-            if 'def ' in line and line.count(',') > 3:
+            if "def " in line and line.count(",") > 3:
                 smells.append("⚠️ Long parameter list - Consider parameter object pattern")
                 break
 
@@ -201,7 +205,7 @@ async def suggest_design_pattern(ctx: RunContext[AgentDeps], problem_description
         "observer": ["notify", "event", "listener", "subscribe"],
         "decorator": ["add behavior", "extend", "wrap"],
         "singleton": ["one instance", "global", "shared"],
-        "adapter": ["interface", "incompatible", "wrapper"]
+        "adapter": ["interface", "incompatible", "wrapper"],
     }
 
     desc_lower = problem_description.lower()
@@ -223,13 +227,13 @@ async def calculate_complexity(ctx: RunContext[AgentDeps], code_snippet: str) ->
     Returns: Complexity assessment
     """
     # Simple heuristic: count decision points
-    decision_keywords = ['if', 'elif', 'for', 'while', 'and', 'or', 'except']
+    decision_keywords = ["if", "elif", "for", "while", "and", "or", "except"]
     complexity = 1  # Base complexity
 
     code_lower = code_snippet.lower()
     for keyword in decision_keywords:
-        complexity += code_lower.count(f' {keyword} ')
-        complexity += code_lower.count(f'\n{keyword} ')
+        complexity += code_lower.count(f" {keyword} ")
+        complexity += code_lower.count(f"\n{keyword} ")
 
     if complexity <= 5:
         return f"✅ Low complexity ({complexity}) - Code is easy to understand"
@@ -242,6 +246,7 @@ async def calculate_complexity(ctx: RunContext[AgentDeps], code_snippet: str) ->
 # ============================================================================
 # Wrapper Class for Compatibility
 # ============================================================================
+
 
 class RefactoringAgent:
     """
@@ -270,9 +275,7 @@ class RefactoringAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name,
-            task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
         )
 
         try:
@@ -286,7 +289,7 @@ class RefactoringAgent:
                 message=f"Analyzing code for refactoring: {file_path}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Gather intelligence
@@ -299,7 +302,7 @@ class RefactoringAgent:
                 mcp_client=self.mcp_client,
                 trace_logger=self.trace_logger,
                 trace_id=self._current_trace_id,
-                intelligence=intelligence
+                intelligence=intelligence,
             )
 
             # Build refactoring prompt
@@ -311,7 +314,7 @@ class RefactoringAgent:
                 message="Invoking Pydantic AI refactoring agent",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await refactoring_agent.run(prompt, deps=deps)
@@ -333,8 +336,8 @@ class RefactoringAgent:
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 3
-                }
+                    "tools_available": 3,
+                },
             }
 
             # Create result
@@ -344,13 +347,11 @@ class RefactoringAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
@@ -358,7 +359,7 @@ class RefactoringAgent:
                 message=f"Refactoring analysis complete: {len(refactoring_plan.changes)} suggestions",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -367,18 +368,14 @@ class RefactoringAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Refactoring analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -387,12 +384,10 @@ class RefactoringAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(
-        self, task: AgentTask, pre_gathered_context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _gather_intelligence(self, task: AgentTask, pre_gathered_context: Dict[str, Any]) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
 
@@ -403,9 +398,7 @@ class RefactoringAgent:
         elif self.config.archon_mcp_enabled:
             try:
                 quality_intel = await self.mcp_client.perform_rag_query(
-                    query="code refactoring patterns clean code principles",
-                    context="quality",
-                    match_count=3
+                    query="code refactoring patterns clean code principles", context="quality", match_count=3
                 )
                 intelligence["quality_patterns"] = quality_intel
             except Exception as e:
@@ -414,7 +407,7 @@ class RefactoringAgent:
                     message=f"Intelligence gathering failed (continuing): {str(e)}",
                     level=TraceLevel.WARNING,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
         return intelligence
@@ -450,5 +443,5 @@ Generate a comprehensive refactoring plan with actionable recommendations."""
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()

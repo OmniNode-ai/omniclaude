@@ -41,7 +41,7 @@ class AgentConfig(BaseModel):
             domain_query=data.get("domain_query"),
             implementation_query=data.get("implementation_query"),
             match_count=data.get("match_count", 5),
-            instructions=data.get("instructions", "")
+            instructions=data.get("instructions", ""),
         )
 
     @classmethod

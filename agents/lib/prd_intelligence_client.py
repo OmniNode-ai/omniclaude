@@ -61,5 +61,3 @@ class PRDIntelligenceClient:
             )
 
         return response
-
-

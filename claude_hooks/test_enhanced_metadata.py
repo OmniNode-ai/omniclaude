@@ -33,7 +33,7 @@ def test_performance():
     extractor = MetadataExtractor()
     total_time = 0
     max_time = 0
-    min_time = float('inf')
+    min_time = float("inf")
 
     for i, prompt in enumerate(test_prompts, 1):
         start = time.perf_counter()
@@ -57,7 +57,7 @@ def test_performance():
     print(f"Average time: {avg_time:.2f}ms")
     print(f"Min time: {min_time:.2f}ms")
     print(f"Max time: {max_time:.2f}ms")
-    print(f"Target: <15ms")
+    print("Target: <15ms")
     print(f"Status: {'✅ PASS' if avg_time < 15 else '⚠️  FAIL'}")
 
 
@@ -131,9 +131,7 @@ def test_session_context():
     # Simulate multiple prompts
     for i in range(3):
         manager.set_correlation_id(
-            correlation_id=f"test-{i}",
-            agent_name="agent-test",
-            prompt_preview=f"Test prompt {i}"
+            correlation_id=f"test-{i}", agent_name="agent-test", prompt_preview=f"Test prompt {i}"
         )
 
         if i > 0:
@@ -196,8 +194,7 @@ def test_complete_metadata():
 
     extractor = MetadataExtractor()
     metadata = extractor.extract_all(
-        prompt="Implement a new authentication feature with tests",
-        agent_name="agent-feature-developer"
+        prompt="Implement a new authentication feature with tests", agent_name="agent-feature-developer"
     )
 
     print("\nComplete metadata:")
@@ -210,7 +207,7 @@ def test_complete_metadata():
         "editor_context",
         "session_context",
         "prompt_characteristics",
-        "extraction_time_ms"
+        "extraction_time_ms",
     ]
 
     missing_keys = [key for key in required_keys if key not in metadata]
@@ -241,5 +238,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

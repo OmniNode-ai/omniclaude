@@ -19,18 +19,19 @@ import psycopg2
 from psycopg2.extras import Json
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Tuple
+from typing import List, Tuple
 
 
 # Database connection
 # Note: Set PGPASSWORD environment variable before running
 import os
+
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,
     "database": "omninode_bridge",
     "user": "postgres",
-    "password": os.getenv("PGPASSWORD", "YOUR_PASSWORD")  # Set via environment
+    "password": os.getenv("PGPASSWORD", "YOUR_PASSWORD"),  # Set via environment
 }
 
 # Performance thresholds (milliseconds)
@@ -42,7 +43,7 @@ THRESHOLDS = {
     "stop_avg": 30,
     "stop_p95": 45,
     "metadata_overhead": 15,
-    "database_write": 10
+    "database_write": 10,
 }
 
 # Test configuration
@@ -90,13 +91,9 @@ class PerformanceTest:
         try:
             with self.conn.cursor() as cur:
                 for correlation_id in correlation_ids:
+                    cur.execute("DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s", (correlation_id,))
                     cur.execute(
-                        "DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s",
-                        (correlation_id,)
-                    )
-                    cur.execute(
-                        "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s",
-                        (correlation_id,)
+                        "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s", (correlation_id,)
                     )
                 self.conn.commit()
         except Exception as e:
@@ -116,7 +113,8 @@ class PerformanceTest:
 
             def insert_session():
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO service_sessions (id, service_name, instance_id, status, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -125,7 +123,9 @@ class PerformanceTest:
                             'active',
                             %s
                         )
-                    """, (Json({"correlation_id": correlation_id, "test": True}),))
+                    """,
+                        (Json({"correlation_id": correlation_id, "test": True}),),
+                    )
                     self.conn.commit()
 
             elapsed_ms = self.measure_time_ms(insert_session)
@@ -134,26 +134,22 @@ class PerformanceTest:
         avg_time = statistics.mean(times)
         p95_time = statistics.quantiles(times, n=20)[18]  # 95th percentile
 
-        self.results['session_start_avg'] = avg_time
-        self.results['session_start_p95'] = p95_time
+        self.results["session_start_avg"] = avg_time
+        self.results["session_start_p95"] = p95_time
 
         # Cleanup
         self.cleanup_test_data(correlation_ids)
 
         # Validate thresholds
-        if avg_time < THRESHOLDS['session_start_avg']:
-            self.log_success(
-                f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms)"
-            )
+        if avg_time < THRESHOLDS["session_start_avg"]:
+            self.log_success(f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms)")
         else:
             self.log_error(
                 f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms) - EXCEEDED"
             )
 
-        if p95_time < THRESHOLDS['session_start_p95']:
-            self.log_success(
-                f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms)"
-            )
+        if p95_time < THRESHOLDS["session_start_p95"]:
+            self.log_success(f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms)")
         else:
             self.log_error(
                 f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms) - EXCEEDED"
@@ -176,7 +172,8 @@ class PerformanceTest:
             session_ids.append(session_id)
 
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO service_sessions (id, service_name, instance_id, status, metadata)
                     VALUES (
                         %s::uuid,
@@ -185,20 +182,26 @@ class PerformanceTest:
                         'active',
                         %s
                     )
-                """, (session_id, Json({"correlation_id": correlation_id, "test": True})))
+                """,
+                    (session_id, Json({"correlation_id": correlation_id, "test": True})),
+                )
                 self.conn.commit()
 
         # Measure update times
         for session_id in session_ids:
+
             def update_session():
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE service_sessions
                         SET status = 'ended',
                             session_end = NOW(),
                             updated_at = NOW()
                         WHERE id = %s::uuid
-                    """, (session_id,))
+                    """,
+                        (session_id,),
+                    )
                     self.conn.commit()
 
             elapsed_ms = self.measure_time_ms(update_session)
@@ -207,30 +210,22 @@ class PerformanceTest:
         avg_time = statistics.mean(times)
         p95_time = statistics.quantiles(times, n=20)[18]
 
-        self.results['session_end_avg'] = avg_time
-        self.results['session_end_p95'] = p95_time
+        self.results["session_end_avg"] = avg_time
+        self.results["session_end_p95"] = p95_time
 
         # Cleanup
         self.cleanup_test_data(correlation_ids)
 
         # Validate thresholds
-        if avg_time < THRESHOLDS['session_end_avg']:
-            self.log_success(
-                f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms)"
-            )
+        if avg_time < THRESHOLDS["session_end_avg"]:
+            self.log_success(f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms)")
         else:
-            self.log_error(
-                f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms) - EXCEEDED"
-            )
+            self.log_error(f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms) - EXCEEDED")
 
-        if p95_time < THRESHOLDS['session_end_p95']:
-            self.log_success(
-                f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms)"
-            )
+        if p95_time < THRESHOLDS["session_end_p95"]:
+            self.log_success(f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms)")
         else:
-            self.log_error(
-                f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms) - EXCEEDED"
-            )
+            self.log_error(f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms) - EXCEEDED")
 
     def test_stop_hook_performance(self):
         """Test Stop hook performance."""
@@ -245,7 +240,8 @@ class PerformanceTest:
 
             def insert_stop_event():
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -256,10 +252,9 @@ class PerformanceTest:
                             %s,
                             %s
                         )
-                    """, (
-                        Json({"response_length": 1000}),
-                        Json({"correlation_id": correlation_id, "test": True})
-                    ))
+                    """,
+                        (Json({"response_length": 1000}), Json({"correlation_id": correlation_id, "test": True})),
+                    )
                     self.conn.commit()
 
             elapsed_ms = self.measure_time_ms(insert_stop_event)
@@ -268,30 +263,22 @@ class PerformanceTest:
         avg_time = statistics.mean(times)
         p95_time = statistics.quantiles(times, n=20)[18]
 
-        self.results['stop_avg'] = avg_time
-        self.results['stop_p95'] = p95_time
+        self.results["stop_avg"] = avg_time
+        self.results["stop_p95"] = p95_time
 
         # Cleanup
         self.cleanup_test_data(correlation_ids)
 
         # Validate thresholds
-        if avg_time < THRESHOLDS['stop_avg']:
-            self.log_success(
-                f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms)"
-            )
+        if avg_time < THRESHOLDS["stop_avg"]:
+            self.log_success(f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms)")
         else:
-            self.log_error(
-                f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms) - EXCEEDED"
-            )
+            self.log_error(f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms) - EXCEEDED")
 
-        if p95_time < THRESHOLDS['stop_p95']:
-            self.log_success(
-                f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms)"
-            )
+        if p95_time < THRESHOLDS["stop_p95"]:
+            self.log_success(f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms)")
         else:
-            self.log_error(
-                f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms) - EXCEEDED"
-            )
+            self.log_error(f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms) - EXCEEDED")
 
     def test_metadata_overhead(self):
         """Test enhanced metadata overhead."""
@@ -308,7 +295,8 @@ class PerformanceTest:
 
             def insert_basic():
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -319,7 +307,9 @@ class PerformanceTest:
                             '{"test": true}'::jsonb,
                             %s
                         )
-                    """, (Json({"correlation_id": correlation_id}),))
+                    """,
+                        (Json({"correlation_id": correlation_id}),),
+                    )
                     self.conn.commit()
 
             elapsed_ms = self.measure_time_ms(insert_basic)
@@ -332,7 +322,8 @@ class PerformanceTest:
 
             def insert_enhanced():
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -343,12 +334,18 @@ class PerformanceTest:
                             '{"test": true, "data": "value"}'::jsonb,
                             %s
                         )
-                    """, (Json({
-                        "correlation_id": correlation_id,
-                        "hook_version": "2.0",
-                        "quality_check": {"enabled": True, "violations": 0},
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }),))
+                    """,
+                        (
+                            Json(
+                                {
+                                    "correlation_id": correlation_id,
+                                    "hook_version": "2.0",
+                                    "quality_check": {"enabled": True, "violations": 0},
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                }
+                            ),
+                        ),
+                    )
                     self.conn.commit()
 
             elapsed_ms = self.measure_time_ms(insert_enhanced)
@@ -358,13 +355,13 @@ class PerformanceTest:
         avg_enhanced = statistics.mean(times_enhanced)
         overhead = avg_enhanced - avg_basic
 
-        self.results['metadata_overhead'] = overhead
+        self.results["metadata_overhead"] = overhead
 
         # Cleanup
         self.cleanup_test_data(correlation_ids)
 
         # Validate threshold
-        if overhead < THRESHOLDS['metadata_overhead']:
+        if overhead < THRESHOLDS["metadata_overhead"]:
             self.log_success(
                 f"Metadata overhead: {overhead:.2f}ms (basic: {avg_basic:.2f}ms, enhanced: {avg_enhanced:.2f}ms, target <{THRESHOLDS['metadata_overhead']}ms)"
             )
@@ -385,7 +382,8 @@ class PerformanceTest:
             conn = psycopg2.connect(**DB_CONFIG)
             try:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -396,7 +394,9 @@ class PerformanceTest:
                             '{"test": true}'::jsonb,
                             %s
                         )
-                    """, (Json({"correlation_id": correlation_id, "test": True}),))
+                    """,
+                        (Json({"correlation_id": correlation_id, "test": True}),),
+                    )
                     conn.commit()
             finally:
                 conn.close()
@@ -420,8 +420,8 @@ class PerformanceTest:
         avg_time = statistics.mean(times)
         max_time = max(times)
 
-        self.results['concurrent_avg'] = avg_time
-        self.results['concurrent_max'] = max_time
+        self.results["concurrent_avg"] = avg_time
+        self.results["concurrent_max"] = max_time
 
         # Cleanup
         self.cleanup_test_data(correlation_ids)
@@ -482,6 +482,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Test suite failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         exit_code = 1
     finally:

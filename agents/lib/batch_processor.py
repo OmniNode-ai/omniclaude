@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BatchConfig:
     """Batch processing configuration"""
+
     max_batch_size: int = 10
     max_wait_ms: int = 100
     enable_metrics: bool = True
@@ -93,9 +94,7 @@ class BatchProcessor:
 
             # Schedule flush if not already scheduled
             if not self.flush_task or self.flush_task.done():
-                self.flush_task = asyncio.create_task(
-                    self._flush_after_delay()
-                )
+                self.flush_task = asyncio.create_task(self._flush_after_delay())
 
             return None
 
@@ -132,12 +131,10 @@ class BatchProcessor:
                     event_source="batch_processor",
                     processing_duration_ms=int(duration_ms),
                     success=True,
-                    batch_size=batch_size
+                    batch_size=batch_size,
                 )
 
-            self.logger.debug(
-                f"Batch processed: {batch_size} events in {duration_ms:.0f}ms"
-            )
+            self.logger.debug(f"Batch processed: {batch_size} events in {duration_ms:.0f}ms")
 
             # Clear batch
             self.batch.clear()
@@ -156,7 +153,7 @@ class BatchProcessor:
                     success=False,
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    batch_size=batch_size
+                    batch_size=batch_size,
                 )
 
             self.logger.error(f"Batch processing failed: {e}")

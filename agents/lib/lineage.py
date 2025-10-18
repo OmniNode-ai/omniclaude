@@ -10,9 +10,9 @@ from .db import get_pg_pool
 @dataclass
 class LineageEdge:
     edge_type: str  # e.g., APPLIED_TF, USED_MODEL, PHASE_EXECUTED, FIXED_BY
-    src_type: str   # e.g., run, step, error
+    src_type: str  # e.g., run, step, error
     src_id: str
-    dst_type: str   # e.g., tf, model, phase
+    dst_type: str  # e.g., tf, model, phase
     dst_id: str
     attributes: Optional[Dict] = None
 
@@ -64,6 +64,7 @@ class MemgraphLineageStore:
     async def write_edge(self, edge: LineageEdge) -> None:
         if not self._enabled or self._driver is None:
             return
+
         def _write(tx):
             tx.run(
                 """
@@ -71,13 +72,15 @@ class MemgraphLineageStore:
                 MERGE (d:Entity {type:$dst_type, id:$dst_id})
                 MERGE (s)-[r:%s]->(d)
                 SET r += $attrs
-                """ % edge.edge_type,
+                """
+                % edge.edge_type,
                 src_type=edge.src_type,
                 src_id=edge.src_id,
                 dst_type=edge.dst_type,
                 dst_id=edge.dst_id,
                 attrs=edge.attributes or {},
             )
+
         try:
             # best-effort; do not await driver internals, run in thread
             loop = asyncio.get_running_loop()
@@ -100,5 +103,3 @@ class LineageWriter:
             asyncio.create_task(self._mg.write_edge(edge))
         except Exception:
             pass
-
-

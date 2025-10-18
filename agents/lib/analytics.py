@@ -6,44 +6,40 @@ Enables visualization of workflow performance, error patterns, cost analysis,
 and transformation function effectiveness.
 """
 
-import json
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from .db import get_pg_pool
 
 
 class DebugAnalytics:
     """Analytics engine for debug pipeline data."""
-    
+
     def __init__(self):
         self.pool = None
-    
+
     async def _get_pool(self):
         """Get database pool."""
         if self.pool is None:
             self.pool = await get_pg_pool()
         return self.pool
-    
-    async def get_workflow_performance_summary(
-        self, 
-        days: int = 7
-    ) -> Dict[str, Any]:
+
+    async def get_workflow_performance_summary(self, days: int = 7) -> Dict[str, Any]:
         """
         Get workflow performance summary for the last N days.
-        
+
         Args:
             days: Number of days to analyze
-            
+
         Returns:
             Performance summary with metrics
         """
         pool = await self._get_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get workflow steps summary
             steps_summary = await conn.fetchrow(
@@ -58,9 +54,9 @@ class DebugAnalytics:
                 FROM workflow_steps
                 WHERE started_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get phase breakdown
             phase_breakdown = await conn.fetch(
                 """
@@ -74,9 +70,9 @@ class DebugAnalytics:
                 GROUP BY phase
                 ORDER BY step_count DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get error events summary
             error_summary = await conn.fetchrow(
                 """
@@ -90,9 +86,9 @@ class DebugAnalytics:
                 FROM error_events
                 WHERE created_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get success events summary
             success_summary = await conn.fetchrow(
                 """
@@ -103,37 +99,34 @@ class DebugAnalytics:
                 FROM success_events
                 WHERE created_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             return {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "workflow_steps": dict(steps_summary) if steps_summary else {},
                 "phase_breakdown": [dict(row) for row in phase_breakdown],
                 "error_summary": dict(error_summary) if error_summary else {},
-                "success_summary": dict(success_summary) if success_summary else {}
+                "success_summary": dict(success_summary) if success_summary else {},
             }
-    
-    async def get_cost_analysis(
-        self, 
-        days: int = 7
-    ) -> Dict[str, Any]:
+
+    async def get_cost_analysis(self, days: int = 7) -> Dict[str, Any]:
         """
         Get cost analysis for LLM calls.
-        
+
         Args:
             days: Number of days to analyze
-            
+
         Returns:
             Cost analysis with breakdowns
         """
         pool = await self._get_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get total cost summary
             cost_summary = await conn.fetchrow(
@@ -147,9 +140,9 @@ class DebugAnalytics:
                 FROM llm_calls
                 WHERE created_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get cost by model
             cost_by_model = await conn.fetch(
                 """
@@ -166,9 +159,9 @@ class DebugAnalytics:
                 GROUP BY model, provider
                 ORDER BY total_cost_usd DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get cost by run
             cost_by_run = await conn.fetch(
                 """
@@ -183,36 +176,33 @@ class DebugAnalytics:
                 ORDER BY total_cost_usd DESC
                 LIMIT 10
                 """,
-                since_date
+                since_date,
             )
-            
+
             return {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "cost_summary": dict(cost_summary) if cost_summary else {},
                 "cost_by_model": [dict(row) for row in cost_by_model],
-                "cost_by_run": [dict(row) for row in cost_by_run]
+                "cost_by_run": [dict(row) for row in cost_by_run],
             }
-    
-    async def get_error_pattern_analysis(
-        self, 
-        days: int = 7
-    ) -> Dict[str, Any]:
+
+    async def get_error_pattern_analysis(self, days: int = 7) -> Dict[str, Any]:
         """
         Analyze error patterns and correlations.
-        
+
         Args:
             days: Number of days to analyze
-            
+
         Returns:
             Error pattern analysis
         """
         pool = await self._get_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get error frequency by type
             error_frequency = await conn.fetch(
@@ -226,9 +216,9 @@ class DebugAnalytics:
                 GROUP BY error_type
                 ORDER BY error_count DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get error-success correlations
             error_success_correlations = await conn.fetch(
                 """
@@ -243,9 +233,9 @@ class DebugAnalytics:
                 GROUP BY e.error_type
                 ORDER BY correlation_count DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get most problematic runs
             problematic_runs = await conn.fetch(
                 """
@@ -262,36 +252,33 @@ class DebugAnalytics:
                 ORDER BY error_count DESC
                 LIMIT 10
                 """,
-                since_date
+                since_date,
             )
-            
+
             return {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "error_frequency": [dict(row) for row in error_frequency],
                 "error_success_correlations": [dict(row) for row in error_success_correlations],
-                "problematic_runs": [dict(row) for row in problematic_runs]
+                "problematic_runs": [dict(row) for row in problematic_runs],
             }
-    
-    async def get_stf_effectiveness_analysis(
-        self, 
-        days: int = 7
-    ) -> Dict[str, Any]:
+
+    async def get_stf_effectiveness_analysis(self, days: int = 7) -> Dict[str, Any]:
         """
         Analyze STF effectiveness and usage patterns.
-        
+
         Args:
             days: Number of days to analyze
-            
+
         Returns:
             STF effectiveness analysis
         """
         pool = await self._get_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get STF usage summary
             stf_usage = await conn.fetch(
@@ -308,9 +295,9 @@ class DebugAnalytics:
                 GROUP BY dtf.id, dtf.name, dtf.version
                 ORDER BY execution_count DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get STF success rates
             stf_success_rates = await conn.fetch(
                 """
@@ -329,9 +316,9 @@ class DebugAnalytics:
                 HAVING COUNT(*) > 0
                 ORDER BY success_rate_percent DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get reward events summary
             reward_summary = await conn.fetchrow(
                 """
@@ -343,36 +330,33 @@ class DebugAnalytics:
                 FROM reward_events
                 WHERE created_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             return {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "stf_usage": [dict(row) for row in stf_usage],
                 "stf_success_rates": [dict(row) for row in stf_success_rates],
-                "reward_summary": dict(reward_summary) if reward_summary else {}
+                "reward_summary": dict(reward_summary) if reward_summary else {},
             }
-    
-    async def get_lineage_analysis(
-        self, 
-        days: int = 7
-    ) -> Dict[str, Any]:
+
+    async def get_lineage_analysis(self, days: int = 7) -> Dict[str, Any]:
         """
         Analyze lineage relationships and dependencies.
-        
+
         Args:
             days: Number of days to analyze
-            
+
         Returns:
             Lineage analysis
         """
         pool = await self._get_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get lineage edge summary
             lineage_summary = await conn.fetchrow(
@@ -385,9 +369,9 @@ class DebugAnalytics:
                 FROM lineage_edges
                 WHERE created_at >= $1
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get edge type breakdown
             edge_type_breakdown = await conn.fetch(
                 """
@@ -401,9 +385,9 @@ class DebugAnalytics:
                 GROUP BY edge_type
                 ORDER BY edge_count DESC
                 """,
-                since_date
+                since_date,
             )
-            
+
             # Get most connected entities
             connected_entities = await conn.fetch(
                 """
@@ -417,15 +401,15 @@ class DebugAnalytics:
                 ORDER BY connection_count DESC
                 LIMIT 10
                 """,
-                since_date
+                since_date,
             )
-            
+
             return {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "lineage_summary": dict(lineage_summary) if lineage_summary else {},
                 "edge_type_breakdown": [dict(row) for row in edge_type_breakdown],
-                "connected_entities": [dict(row) for row in connected_entities]
+                "connected_entities": [dict(row) for row in connected_entities],
             }
 
 
@@ -436,10 +420,10 @@ analytics = DebugAnalytics()
 async def get_dashboard_data(days: int = 7) -> Dict[str, Any]:
     """
     Get comprehensive dashboard data for the debug pipeline.
-    
+
     Args:
         days: Number of days to analyze
-        
+
     Returns:
         Complete dashboard data
     """
@@ -449,5 +433,5 @@ async def get_dashboard_data(days: int = 7) -> Dict[str, Any]:
         "errors": await analytics.get_error_pattern_analysis(days),
         "stf_effectiveness": await analytics.get_stf_effectiveness_analysis(days),
         "lineage": await analytics.get_lineage_analysis(days),
-        "generated_at": datetime.now().isoformat()
+        "generated_at": datetime.now().isoformat(),
     }

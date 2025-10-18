@@ -18,27 +18,27 @@ async def log_error_event(
     error_type: str,
     message: str,
     details: Optional[Dict[str, Any]] = None,
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
 ) -> str:
     """
     Log an error event to the database.
-    
+
     Args:
         run_id: The workflow run ID
         error_type: Type of error (e.g., "VALIDATION_ERROR", "EXECUTION_ERROR", "TIMEOUT")
         message: Human-readable error message
         details: Additional error details as JSON
         correlation_id: Optional correlation ID for linking related events
-        
+
     Returns:
         The error event ID
     """
     error_id = str(uuid.uuid4())
-    
+
     pool = await get_pg_pool()
     if pool is None:
         return error_id
-        
+
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -53,18 +53,14 @@ async def log_error_event(
             correlation_id,
             error_type,
             message,
-            json.dumps(details or {}, default=str)
+            json.dumps(details or {}, default=str),
         )
-    
+
     return error_id
 
 
 async def log_validation_error(
-    run_id: str,
-    phase: str,
-    validation_type: str,
-    message: str,
-    details: Optional[Dict[str, Any]] = None
+    run_id: str, phase: str, validation_type: str, message: str, details: Optional[Dict[str, Any]] = None
 ) -> str:
     """Log a validation error event."""
     return await log_error_event(
@@ -75,17 +71,13 @@ async def log_validation_error(
             "phase": phase,
             "validation_type": validation_type,
             "timestamp": datetime.now().isoformat(),
-            **(details or {})
-        }
+            **(details or {}),
+        },
     )
 
 
 async def log_execution_error(
-    run_id: str,
-    phase: str,
-    task_id: Optional[str],
-    error: Exception,
-    details: Optional[Dict[str, Any]] = None
+    run_id: str, phase: str, task_id: Optional[str], error: Exception, details: Optional[Dict[str, Any]] = None
 ) -> str:
     """Log an execution error event."""
     return await log_error_event(
@@ -97,16 +89,13 @@ async def log_execution_error(
             "task_id": task_id,
             "error_class": error.__class__.__name__,
             "timestamp": datetime.now().isoformat(),
-            **(details or {})
-        }
+            **(details or {}),
+        },
     )
 
 
 async def log_timeout_error(
-    run_id: str,
-    phase: str,
-    timeout_seconds: float,
-    details: Optional[Dict[str, Any]] = None
+    run_id: str, phase: str, timeout_seconds: float, details: Optional[Dict[str, Any]] = None
 ) -> str:
     """Log a timeout error event."""
     return await log_error_event(
@@ -117,8 +106,8 @@ async def log_timeout_error(
             "phase": phase,
             "timeout_seconds": timeout_seconds,
             "timestamp": datetime.now().isoformat(),
-            **(details or {})
-        }
+            **(details or {}),
+        },
     )
 
 
@@ -128,7 +117,7 @@ async def log_quorum_error(
     quorum_decision: str,
     confidence: float,
     deficiencies: list,
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log a quorum validation error."""
     return await log_error_event(
@@ -141,8 +130,8 @@ async def log_quorum_error(
             "confidence": confidence,
             "deficiencies": deficiencies,
             "timestamp": datetime.now().isoformat(),
-            **(details or {})
-        }
+            **(details or {}),
+        },
     )
 
 
@@ -151,7 +140,7 @@ async def get_error_events_for_run(run_id: str) -> list:
     pool = await get_pg_pool()
     if pool is None:
         return []
-        
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -160,9 +149,9 @@ async def get_error_events_for_run(run_id: str) -> list:
             WHERE run_id = $1
             ORDER BY created_at DESC
             """,
-            run_id
+            run_id,
         )
-        
+
         return [dict(row) for row in rows]
 
 
@@ -171,7 +160,7 @@ async def get_error_events_by_type(error_type: str, limit: int = 100) -> list:
     pool = await get_pg_pool()
     if pool is None:
         return []
-        
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -182,7 +171,7 @@ async def get_error_events_by_type(error_type: str, limit: int = 100) -> list:
             LIMIT $2
             """,
             error_type,
-            limit
+            limit,
         )
-        
+
         return [dict(row) for row in rows]

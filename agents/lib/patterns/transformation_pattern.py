@@ -40,8 +40,16 @@ class TransformationPattern:
             Confidence score (0.0 to 1.0)
         """
         transform_keywords = {
-            'transform', 'convert', 'parse', 'format', 'map',
-            'filter', 'normalize', 'sanitize', 'validate', 'encode'
+            "transform",
+            "convert",
+            "parse",
+            "format",
+            "map",
+            "filter",
+            "normalize",
+            "sanitize",
+            "validate",
+            "encode",
         }
 
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
@@ -93,12 +101,7 @@ class TransformationPattern:
             "MixinCaching",  # Cache transformation results (optional)
         ]
 
-    def _generate_format_conversion(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_format_conversion(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate format conversion method"""
         return f'''
     async def {method_name}(
@@ -181,12 +184,7 @@ class TransformationPattern:
             return data
 '''
 
-    def _generate_data_mapping(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_data_mapping(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate data mapping method"""
         return f'''
     async def {method_name}(
@@ -258,12 +256,7 @@ class TransformationPattern:
         return value
 '''
 
-    def _generate_validation_transform(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_validation_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate validation transformation method"""
         return f'''
     async def {method_name}(
@@ -370,12 +363,7 @@ class TransformationPattern:
         return value
 '''
 
-    def _generate_streaming_transform(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_streaming_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate streaming transformation method"""
         return f'''
     async def {method_name}(
@@ -443,12 +431,7 @@ class TransformationPattern:
         return item
 '''
 
-    def _generate_generic_transform(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _generate_generic_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
         """Generate generic transformation method"""
         return f'''
     async def {method_name}(self, input_data: Any) -> Any:
@@ -489,25 +472,22 @@ class TransformationPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "transform_data"
 
-    def _detect_transformation_type(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> str:
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "transform_data"
+
+    def _detect_transformation_type(self, capability: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Detect specific transformation type"""
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
 
-        if any(kw in text for kw in ['convert', 'format', 'parse']):
+        if any(kw in text for kw in ["convert", "format", "parse"]):
             return "format_conversion"
-        elif any(kw in text for kw in ['map', 'mapping', 'field']):
+        elif any(kw in text for kw in ["map", "mapping", "field"]):
             return "data_mapping"
-        elif any(kw in text for kw in ['validate', 'validation', 'check']):
+        elif any(kw in text for kw in ["validate", "validation", "check"]):
             return "validation"
-        elif any(kw in text for kw in ['stream', 'large', 'batch']):
+        elif any(kw in text for kw in ["stream", "large", "batch"]):
             return "streaming"
         else:
             return "generic"

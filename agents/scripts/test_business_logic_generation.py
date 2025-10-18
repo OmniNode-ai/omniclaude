@@ -17,7 +17,7 @@ from agents.lib.contract_generator import ContractGenerator
 from agents.tests.fixtures.phase4_fixtures import (
     EFFECT_ANALYSIS_RESULT,
     COMPUTE_ANALYSIS_RESULT,
-    SAMPLE_CONTRACT_WITH_CRUD
+    SAMPLE_CONTRACT_WITH_CRUD,
 )
 
 
@@ -32,19 +32,12 @@ async def test_effect_generation():
 
     # Generate contract
     contract_result = await contract_gen.generate_contract_yaml(
-        EFFECT_ANALYSIS_RESULT,
-        "EFFECT",
-        "user_management",
-        "identity"
+        EFFECT_ANALYSIS_RESULT, "EFFECT", "user_management", "identity"
     )
 
     # Generate implementation
     code = await generator.generate_node_implementation(
-        contract_result["contract"],
-        EFFECT_ANALYSIS_RESULT,
-        "EFFECT",
-        "user_management",
-        "identity"
+        contract_result["contract"], EFFECT_ANALYSIS_RESULT, "EFFECT", "user_management", "identity"
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
@@ -76,19 +69,12 @@ async def test_compute_generation():
 
     # Generate contract
     contract_result = await contract_gen.generate_contract_yaml(
-        COMPUTE_ANALYSIS_RESULT,
-        "COMPUTE",
-        "csv_json_transformer",
-        "data_processing"
+        COMPUTE_ANALYSIS_RESULT, "COMPUTE", "csv_json_transformer", "data_processing"
     )
 
     # Generate implementation
     code = await generator.generate_node_implementation(
-        contract_result["contract"],
-        COMPUTE_ANALYSIS_RESULT,
-        "COMPUTE",
-        "csv_json_transformer",
-        "data_processing"
+        contract_result["contract"], COMPUTE_ANALYSIS_RESULT, "COMPUTE", "csv_json_transformer", "data_processing"
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
@@ -109,11 +95,7 @@ async def test_crud_pattern_detection():
 
     # Generate implementation with CRUD contract
     code = await generator.generate_node_implementation(
-        SAMPLE_CONTRACT_WITH_CRUD,
-        EFFECT_ANALYSIS_RESULT,
-        "EFFECT",
-        "user_service",
-        "user_management"
+        SAMPLE_CONTRACT_WITH_CRUD, EFFECT_ANALYSIS_RESULT, "EFFECT", "user_service", "user_management"
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
@@ -138,16 +120,12 @@ async def test_syntax_validation():
     generator = BusinessLogicGenerator()
 
     code = await generator.generate_node_implementation(
-        SAMPLE_CONTRACT_WITH_CRUD,
-        EFFECT_ANALYSIS_RESULT,
-        "EFFECT",
-        "user_service",
-        "user_management"
+        SAMPLE_CONTRACT_WITH_CRUD, EFFECT_ANALYSIS_RESULT, "EFFECT", "user_service", "user_management"
     )
 
     # Try to compile the code
     try:
-        compile(code, '<generated>', 'exec')
+        compile(code, "<generated>", "exec")
         print("\n✓ Generated code has valid Python syntax")
         return True
     except SyntaxError as e:
@@ -173,7 +151,7 @@ async def main():
         await test_crud_pattern_detection()
 
         # Test syntax validation
-        syntax_valid = await test_syntax_validation()
+        await test_syntax_validation()
 
         print("\n" + "=" * 80)
         print("ALL TESTS PASSED ✓")
@@ -184,6 +162,7 @@ async def main():
     except Exception as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

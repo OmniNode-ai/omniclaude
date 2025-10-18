@@ -7,11 +7,8 @@ mixin integration, error handling patterns, and ONEX compliance.
 """
 
 import pytest
-import ast
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, List
-from uuid import uuid4
 
 from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.tests.fixtures.phase4_fixtures import (
@@ -22,13 +19,11 @@ from agents.tests.fixtures.phase4_fixtures import (
     NODE_TYPE_FIXTURES,
     SAMPLE_CONTRACT_WITH_CRUD,
     SAMPLE_CONTRACT_WITH_TRANSFORMATION,
-    EXPECTED_CRUD_METHOD_STUBS,
 )
 from agents.tests.utils.generation_test_helpers import (
     parse_generated_python,
     check_type_annotations,
     extract_class_definitions,
-    extract_imports,
     validate_onex_naming,
     validate_class_naming,
 )
@@ -38,6 +33,7 @@ from omnibase_core.errors import OnexError
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def business_logic_generator():
@@ -57,6 +53,7 @@ def temp_output_dir():
 # EFFECT NODE STUB GENERATION TESTS
 # ============================================================================
 
+
 class TestEffectNodeGeneration:
     """Tests for EFFECT node business logic generation"""
 
@@ -68,7 +65,7 @@ class TestEffectNodeGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Verify result structure
@@ -94,7 +91,7 @@ class TestEffectNodeGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Parse and extract methods
@@ -105,8 +102,7 @@ class TestEffectNodeGeneration:
         main_class = classes[0]
 
         # Verify execute_effect method exists
-        assert "execute_effect" in main_class["methods"], \
-            "execute_effect method not found in EFFECT node"
+        assert "execute_effect" in main_class["methods"], "execute_effect method not found in EFFECT node"
 
     @pytest.mark.asyncio
     async def test_effect_node_inherits_correct_base(self, business_logic_generator):
@@ -116,7 +112,7 @@ class TestEffectNodeGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
@@ -126,8 +122,7 @@ class TestEffectNodeGeneration:
         main_class = classes[0]
 
         # Verify NodeEffect is in bases
-        assert "NodeEffect" in main_class["bases"], \
-            "EFFECT node must inherit from NodeEffect"
+        assert "NodeEffect" in main_class["bases"], "EFFECT node must inherit from NodeEffect"
 
     @pytest.mark.asyncio
     async def test_effect_node_method_signatures_from_contract(self, business_logic_generator):
@@ -137,7 +132,7 @@ class TestEffectNodeGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
@@ -147,13 +142,13 @@ class TestEffectNodeGeneration:
         # Verify methods for each capability
         expected_methods = ["create_user", "get_user", "update_user", "delete_user"]
         for method_name in expected_methods:
-            assert method_name in main_class["methods"], \
-                f"Method {method_name} not generated from contract capability"
+            assert method_name in main_class["methods"], f"Method {method_name} not generated from contract capability"
 
 
 # ============================================================================
 # COMPUTE NODE STUB GENERATION TESTS
 # ============================================================================
+
 
 class TestComputeNodeGeneration:
     """Tests for COMPUTE node business logic generation"""
@@ -166,7 +161,7 @@ class TestComputeNodeGeneration:
             microservice_name="data_transformer",
             domain="data_processing",
             contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION,
-            analysis_result=COMPUTE_ANALYSIS_RESULT
+            analysis_result=COMPUTE_ANALYSIS_RESULT,
         )
 
         # Verify result structure
@@ -185,15 +180,14 @@ class TestComputeNodeGeneration:
             microservice_name="data_transformer",
             domain="data_processing",
             contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION,
-            analysis_result=COMPUTE_ANALYSIS_RESULT
+            analysis_result=COMPUTE_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
         classes = extract_class_definitions(tree)
         main_class = classes[0]
 
-        assert "execute_compute" in main_class["methods"], \
-            "execute_compute method not found in COMPUTE node"
+        assert "execute_compute" in main_class["methods"], "execute_compute method not found in COMPUTE node"
 
     @pytest.mark.asyncio
     async def test_compute_node_is_pure(self, business_logic_generator):
@@ -203,7 +197,7 @@ class TestComputeNodeGeneration:
             microservice_name="data_transformer",
             domain="data_processing",
             contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION,
-            analysis_result=COMPUTE_ANALYSIS_RESULT
+            analysis_result=COMPUTE_ANALYSIS_RESULT,
         )
 
         # Verify no external system imports
@@ -217,6 +211,7 @@ class TestComputeNodeGeneration:
 # REDUCER NODE STUB GENERATION TESTS
 # ============================================================================
 
+
 class TestReducerNodeGeneration:
     """Tests for REDUCER node business logic generation"""
 
@@ -228,7 +223,7 @@ class TestReducerNodeGeneration:
             microservice_name="analytics_aggregator",
             domain="analytics",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=REDUCER_ANALYSIS_RESULT
+            analysis_result=REDUCER_ANALYSIS_RESULT,
         )
 
         assert result["node_type"] == "REDUCER"
@@ -245,20 +240,20 @@ class TestReducerNodeGeneration:
             microservice_name="analytics_aggregator",
             domain="analytics",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=REDUCER_ANALYSIS_RESULT
+            analysis_result=REDUCER_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
         classes = extract_class_definitions(tree)
         main_class = classes[0]
 
-        assert "execute_reduction" in main_class["methods"], \
-            "execute_reduction method not found in REDUCER node"
+        assert "execute_reduction" in main_class["methods"], "execute_reduction method not found in REDUCER node"
 
 
 # ============================================================================
 # ORCHESTRATOR NODE STUB GENERATION TESTS
 # ============================================================================
+
 
 class TestOrchestratorNodeGeneration:
     """Tests for ORCHESTRATOR node business logic generation"""
@@ -271,7 +266,7 @@ class TestOrchestratorNodeGeneration:
             microservice_name="workflow_coordinator",
             domain="orchestration",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=ORCHESTRATOR_ANALYSIS_RESULT
+            analysis_result=ORCHESTRATOR_ANALYSIS_RESULT,
         )
 
         assert result["node_type"] == "ORCHESTRATOR"
@@ -288,20 +283,22 @@ class TestOrchestratorNodeGeneration:
             microservice_name="workflow_coordinator",
             domain="orchestration",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=ORCHESTRATOR_ANALYSIS_RESULT
+            analysis_result=ORCHESTRATOR_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
         classes = extract_class_definitions(tree)
         main_class = classes[0]
 
-        assert "execute_orchestration" in main_class["methods"], \
-            "execute_orchestration method not found in ORCHESTRATOR node"
+        assert (
+            "execute_orchestration" in main_class["methods"]
+        ), "execute_orchestration method not found in ORCHESTRATOR node"
 
 
 # ============================================================================
 # MIXIN INTEGRATION TESTS
 # ============================================================================
+
 
 class TestMixinIntegration:
     """Tests for mixin integration in generated code"""
@@ -314,8 +311,8 @@ class TestMixinIntegration:
             "subcontracts": [
                 {"mixin": "MixinEventBus", "config": {}},
                 {"mixin": "MixinCaching", "config": {}},
-                {"mixin": "MixinHealthCheck", "config": {}}
-            ]
+                {"mixin": "MixinHealthCheck", "config": {}},
+            ],
         }
 
         result = await business_logic_generator.generate_node_stub(
@@ -323,7 +320,7 @@ class TestMixinIntegration:
             microservice_name="user_management",
             domain="identity",
             contract=contract_with_mixins,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         code = result["code"]
@@ -336,10 +333,7 @@ class TestMixinIntegration:
         """Test that mixins are in class inheritance"""
         contract_with_mixins = {
             **SAMPLE_CONTRACT_WITH_CRUD,
-            "subcontracts": [
-                {"mixin": "MixinEventBus", "config": {}},
-                {"mixin": "MixinCaching", "config": {}}
-            ]
+            "subcontracts": [{"mixin": "MixinEventBus", "config": {}}, {"mixin": "MixinCaching", "config": {}}],
         }
 
         result = await business_logic_generator.generate_node_stub(
@@ -347,7 +341,7 @@ class TestMixinIntegration:
             microservice_name="user_management",
             domain="identity",
             contract=contract_with_mixins,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
@@ -362,6 +356,7 @@ class TestMixinIntegration:
 # ERROR HANDLING PATTERN TESTS
 # ============================================================================
 
+
 class TestErrorHandlingPatterns:
     """Tests for error handling pattern generation"""
 
@@ -373,7 +368,7 @@ class TestErrorHandlingPatterns:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         code = result["code"]
@@ -389,29 +384,31 @@ class TestErrorHandlingPatterns:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         code = result["code"]
-        assert "from omnibase_core.errors import OnexError" in code, \
-            "OnexError not imported"
-        assert "raise OnexError" in code, \
-            "OnexError not raised in exception handling"
+        assert "from omnibase_core.errors import OnexError" in code, "OnexError not imported"
+        assert "raise OnexError" in code, "OnexError not raised in exception handling"
 
 
 # ============================================================================
 # ONEX NAMING COMPLIANCE TESTS
 # ============================================================================
 
+
 class TestOnexNamingCompliance:
     """Tests for ONEX naming convention compliance"""
 
-    @pytest.mark.parametrize("node_type,suffix", [
-        ("EFFECT", "Effect"),
-        ("COMPUTE", "Compute"),
-        ("REDUCER", "Reducer"),
-        ("ORCHESTRATOR", "Orchestrator"),
-    ])
+    @pytest.mark.parametrize(
+        "node_type,suffix",
+        [
+            ("EFFECT", "Effect"),
+            ("COMPUTE", "Compute"),
+            ("REDUCER", "Reducer"),
+            ("ORCHESTRATOR", "Orchestrator"),
+        ],
+    )
     @pytest.mark.asyncio
     async def test_class_name_suffix(self, business_logic_generator, node_type, suffix):
         """Test that class names have correct suffix"""
@@ -420,11 +417,10 @@ class TestOnexNamingCompliance:
             microservice_name="test_service",
             domain="test",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=NODE_TYPE_FIXTURES[node_type]["analysis"]
+            analysis_result=NODE_TYPE_FIXTURES[node_type]["analysis"],
         )
 
-        assert result["class_name"].endswith(suffix), \
-            f"{node_type} node must end with {suffix}"
+        assert result["class_name"].endswith(suffix), f"{node_type} node must end with {suffix}"
 
     @pytest.mark.asyncio
     async def test_file_name_convention(self, business_logic_generator, temp_output_dir):
@@ -435,7 +431,7 @@ class TestOnexNamingCompliance:
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
             analysis_result=EFFECT_ANALYSIS_RESULT,
-            output_directory=temp_output_dir
+            output_directory=temp_output_dir,
         )
 
         file_path = Path(result["file_path"])
@@ -449,6 +445,7 @@ class TestOnexNamingCompliance:
 # TYPE HINT GENERATION TESTS
 # ============================================================================
 
+
 class TestTypeHintGeneration:
     """Tests for type hint generation"""
 
@@ -460,7 +457,7 @@ class TestTypeHintGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         tree, _ = parse_generated_python(result["code"])
@@ -476,22 +473,23 @@ class TestTypeHintGeneration:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         code = result["code"]
 
         # Check for bare Any usage in type annotations (not in imports)
         import re
+
         # Match patterns like ": Any" or "-> Any" but not "Dict[str, Any]" or "List[Any]" or "import Any"
-        bare_any_in_annotations = re.compile(r'(?::\s*|->\s*)Any(?!\[)')
+        bare_any_in_annotations = re.compile(r"(?::\s*|->\s*)Any(?!\[)")
 
         # Exclude import lines
-        lines = code.split('\n')
+        lines = code.split("\n")
         violations = []
         for i, line in enumerate(lines):
             # Skip import lines
-            if 'import' in line:
+            if "import" in line:
                 continue
 
             matches = bare_any_in_annotations.findall(line)
@@ -499,12 +497,13 @@ class TestTypeHintGeneration:
                 violations.append(f"Line {i+1}: {line.strip()}")
 
         if violations:
-            pytest.fail(f"Bare Any type found in type annotations:\n" + "\n".join(violations))
+            pytest.fail("Bare Any type found in type annotations:\n" + "\n".join(violations))
 
 
 # ============================================================================
 # ERROR SCENARIO TESTS
 # ============================================================================
+
 
 class TestErrorScenarios:
     """Tests for error handling and validation"""
@@ -518,7 +517,7 @@ class TestErrorScenarios:
                 microservice_name="test_service",
                 domain="test",
                 contract={},
-                analysis_result=EFFECT_ANALYSIS_RESULT
+                analysis_result=EFFECT_ANALYSIS_RESULT,
             )
 
         assert "Invalid node type" in str(exc_info.value)
@@ -531,7 +530,7 @@ class TestErrorScenarios:
             microservice_name="minimal_service",
             domain="test",
             contract={"capabilities": [], "subcontracts": []},
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Should still generate valid code

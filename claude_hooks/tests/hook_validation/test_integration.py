@@ -16,19 +16,18 @@ import uuid
 import time
 import psycopg2
 from psycopg2.extras import Json
-from datetime import datetime, timezone
-from typing import List, Dict, Optional
 
 
 # Database connection
 # Note: Set PGPASSWORD environment variable before running
 import os
+
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,
     "database": "omninode_bridge",
     "user": "postgres",
-    "password": os.getenv("PGPASSWORD", "YOUR_PASSWORD")  # Set via environment
+    "password": os.getenv("PGPASSWORD", "YOUR_PASSWORD"),  # Set via environment
 }
 
 
@@ -63,14 +62,8 @@ class IntegrationTest:
         """Cleanup test data from database."""
         try:
             with self.conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s",
-                    (correlation_id,)
-                )
-                cur.execute(
-                    "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s",
-                    (correlation_id,)
-                )
+                cur.execute("DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s", (correlation_id,))
+                cur.execute("DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s", (correlation_id,))
                 self.conn.commit()
         except Exception as e:
             print(f"⚠ Cleanup warning: {e}")
@@ -86,7 +79,8 @@ class IntegrationTest:
         try:
             # 1. Create session (SessionStart)
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO service_sessions (id, service_name, instance_id, status, metadata)
                     VALUES (
                         %s::uuid,
@@ -95,15 +89,15 @@ class IntegrationTest:
                         'active',
                         %s
                     )
-                """, (session_id, Json({
-                    "correlation_id": correlation_id,
-                    "test": "full_correlation_flow"
-                })))
+                """,
+                    (session_id, Json({"correlation_id": correlation_id, "test": "full_correlation_flow"})),
+                )
                 self.conn.commit()
 
             # 2. UserPromptSubmit
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata, created_at)
                     VALUES (
                         gen_random_uuid(),
@@ -115,10 +109,12 @@ class IntegrationTest:
                         %s,
                         NOW()
                     )
-                """, (
-                    Json({"prompt": "Create a function", "agent_detected": "agent-code-generator"}),
-                    Json({"correlation_id": correlation_id, "session_id": session_id})
-                ))
+                """,
+                    (
+                        Json({"prompt": "Create a function", "agent_detected": "agent-code-generator"}),
+                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                    ),
+                )
                 self.conn.commit()
 
             # Small delay to ensure timeline ordering
@@ -126,7 +122,8 @@ class IntegrationTest:
 
             # 3. PreToolUse
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata, created_at)
                     VALUES (
                         gen_random_uuid(),
@@ -138,17 +135,20 @@ class IntegrationTest:
                         %s,
                         NOW()
                     )
-                """, (
-                    Json({"file_path": "/test/example.py", "content_length": 200}),
-                    Json({"correlation_id": correlation_id, "session_id": session_id})
-                ))
+                """,
+                    (
+                        Json({"file_path": "/test/example.py", "content_length": 200}),
+                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                    ),
+                )
                 self.conn.commit()
 
             time.sleep(0.01)
 
             # 4. PostToolUse
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata, created_at)
                     VALUES (
                         gen_random_uuid(),
@@ -160,17 +160,20 @@ class IntegrationTest:
                         %s,
                         NOW()
                     )
-                """, (
-                    Json({"file_path": "/test/example.py", "success": True}),
-                    Json({"correlation_id": correlation_id, "session_id": session_id})
-                ))
+                """,
+                    (
+                        Json({"file_path": "/test/example.py", "success": True}),
+                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                    ),
+                )
                 self.conn.commit()
 
             time.sleep(0.01)
 
             # 5. Stop
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata, created_at)
                     VALUES (
                         gen_random_uuid(),
@@ -182,42 +185,52 @@ class IntegrationTest:
                         %s,
                         NOW()
                     )
-                """, (
-                    Json({"response_length": 1500, "model": "claude-sonnet-4-5"}),
-                    Json({"correlation_id": correlation_id, "session_id": session_id})
-                ))
+                """,
+                    (
+                        Json({"response_length": 1500, "model": "claude-sonnet-4-5"}),
+                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                    ),
+                )
                 self.conn.commit()
 
             # 6. End session (SessionEnd)
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE service_sessions
                     SET status = 'ended',
                         session_end = NOW(),
                         updated_at = NOW()
                     WHERE id = %s::uuid
-                """, (session_id,))
+                """,
+                    (session_id,),
+                )
                 self.conn.commit()
 
             # Verify all events exist and are correlated
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT source, action, created_at
                     FROM hook_events
                     WHERE metadata->>'correlation_id' = %s
                     ORDER BY created_at ASC
-                """, (correlation_id,))
+                """,
+                    (correlation_id,),
+                )
 
                 events = cur.fetchall()
 
             if len(events) == 4:  # UserPromptSubmit, PreToolUse, PostToolUse, Stop
-                expected_sources = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']
+                expected_sources = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
                 actual_sources = [event[0] for event in events]
 
                 if actual_sources == expected_sources:
                     self.log_success("Full correlation flow: All 4 hooks executed in correct order")
                 else:
-                    self.log_error(f"Full correlation flow: Incorrect order. Expected {expected_sources}, got {actual_sources}")
+                    self.log_error(
+                        f"Full correlation flow: Incorrect order. Expected {expected_sources}, got {actual_sources}"
+                    )
             else:
                 self.log_error(f"Full correlation flow: Expected 4 events, found {len(events)}")
 
@@ -235,9 +248,10 @@ class IntegrationTest:
 
         try:
             # Create events with same correlation ID
-            for source in ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']:
+            for source in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]:
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                         VALUES (
                             gen_random_uuid(),
@@ -248,20 +262,22 @@ class IntegrationTest:
                             '{"test": true}'::jsonb,
                             %s
                         )
-                    """, (source, Json({
-                        "correlation_id": correlation_id,
-                        "session_id": session_id
-                    })))
+                    """,
+                        (source, Json({"correlation_id": correlation_id, "session_id": session_id})),
+                    )
                     self.conn.commit()
 
             # Verify all events have same correlation ID
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COUNT(DISTINCT metadata->>'correlation_id') as distinct_correlations,
                            COUNT(*) as total_events
                     FROM hook_events
                     WHERE metadata->>'correlation_id' = %s
-                """, (correlation_id,))
+                """,
+                    (correlation_id,),
+                )
 
                 result = cur.fetchone()
                 distinct_correlations, total_events = result
@@ -269,7 +285,9 @@ class IntegrationTest:
             if distinct_correlations == 1 and total_events == 4:
                 self.log_success("Correlation ID propagation: All events share same correlation ID")
             else:
-                self.log_error(f"Correlation ID propagation: Expected 1 distinct ID and 4 events, got {distinct_correlations} and {total_events}")
+                self.log_error(
+                    f"Correlation ID propagation: Expected 1 distinct ID and 4 events, got {distinct_correlations} and {total_events}"
+                )
 
         except Exception as e:
             self.log_error(f"Correlation ID propagation failed: {e}")
@@ -285,17 +303,18 @@ class IntegrationTest:
         try:
             # Create events with explicit timing
             events_to_create = [
-                ('UserPromptSubmit', 'prompt_submitted', 1),
-                ('PreToolUse', 'tool_invocation', 2),
-                ('PostToolUse', 'tool_completed', 3),
-                ('Stop', 'response_completed', 4)
+                ("UserPromptSubmit", "prompt_submitted", 1),
+                ("PreToolUse", "tool_invocation", 2),
+                ("PostToolUse", "tool_completed", 3),
+                ("Stop", "response_completed", 4),
             ]
 
             for source, action, order in events_to_create:
                 time.sleep(0.01)  # Ensure ordering
 
                 with self.conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata, created_at)
                         VALUES (
                             gen_random_uuid(),
@@ -307,27 +326,27 @@ class IntegrationTest:
                             %s,
                             NOW()
                         )
-                    """, (
-                        source,
-                        action,
-                        Json({"order": order}),
-                        Json({"correlation_id": correlation_id})
-                    ))
+                    """,
+                        (source, action, Json({"order": order}), Json({"correlation_id": correlation_id})),
+                    )
                     self.conn.commit()
 
             # Verify timeline order
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT source, payload->>'order', created_at
                     FROM hook_events
                     WHERE metadata->>'correlation_id' = %s
                     ORDER BY created_at ASC
-                """, (correlation_id,))
+                """,
+                    (correlation_id,),
+                )
 
                 results = cur.fetchall()
 
             # Check if order matches expected sequence
-            expected_order = [('UserPromptSubmit', '1'), ('PreToolUse', '2'), ('PostToolUse', '3'), ('Stop', '4')]
+            expected_order = [("UserPromptSubmit", "1"), ("PreToolUse", "2"), ("PostToolUse", "3"), ("Stop", "4")]
             actual_order = [(r[0], r[1]) for r in results]
 
             if actual_order == expected_order:
@@ -350,7 +369,8 @@ class IntegrationTest:
         try:
             # Create session
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO service_sessions (id, service_name, instance_id, status, metadata, session_start)
                     VALUES (
                         %s::uuid,
@@ -361,16 +381,19 @@ class IntegrationTest:
                         NOW()
                     )
                     RETURNING session_start
-                """, (session_id, Json({"correlation_id": correlation_id})))
+                """,
+                    (session_id, Json({"correlation_id": correlation_id})),
+                )
 
-                session_start = cur.fetchone()[0]
+                cur.fetchone()[0]
                 self.conn.commit()
 
             # Create hook events
             time.sleep(0.05)
 
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                     VALUES (
                         gen_random_uuid(),
@@ -381,43 +404,55 @@ class IntegrationTest:
                         '{"test": true}'::jsonb,
                         %s
                     )
-                """, (Json({"correlation_id": correlation_id, "session_id": session_id}),))
+                """,
+                    (Json({"correlation_id": correlation_id, "session_id": session_id}),),
+                )
                 self.conn.commit()
 
             time.sleep(0.05)
 
             # End session
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE service_sessions
                     SET status = 'ended',
                         session_end = NOW(),
                         updated_at = NOW()
                     WHERE id = %s::uuid
                     RETURNING session_end
-                """, (session_id,))
+                """,
+                    (session_id,),
+                )
 
-                session_end = cur.fetchone()[0]
+                cur.fetchone()[0]
                 self.conn.commit()
 
             # Verify session lifecycle
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT session_start, session_end, status,
                            (SELECT COUNT(*) FROM hook_events WHERE metadata->>'session_id' = %s) as event_count
                     FROM service_sessions
                     WHERE id = %s::uuid
-                """, (session_id, session_id))
+                """,
+                    (session_id, session_id),
+                )
 
                 result = cur.fetchone()
 
             if result:
                 start, end, status, event_count = result
 
-                if status == 'ended' and event_count > 0 and end > start:
-                    self.log_success(f"Session lifecycle integration: Session ended correctly with {event_count} event(s)")
+                if status == "ended" and event_count > 0 and end > start:
+                    self.log_success(
+                        f"Session lifecycle integration: Session ended correctly with {event_count} event(s)"
+                    )
                 else:
-                    self.log_error(f"Session lifecycle integration: Invalid state - status={status}, events={event_count}")
+                    self.log_error(
+                        f"Session lifecycle integration: Invalid state - status={status}, events={event_count}"
+                    )
             else:
                 self.log_error("Session lifecycle integration: Session not found")
 
@@ -438,7 +473,8 @@ class IntegrationTest:
 
             # For testing purposes, we'll verify that partial data doesn't break the system
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO hook_events (id, source, action, resource, resource_id, payload, metadata)
                     VALUES (
                         gen_random_uuid(),
@@ -449,16 +485,21 @@ class IntegrationTest:
                         '{}'::jsonb,
                         %s
                     )
-                """, (Json({"correlation_id": correlation_id, "incomplete": True}),))
+                """,
+                    (Json({"correlation_id": correlation_id, "incomplete": True}),),
+                )
                 self.conn.commit()
 
             # Verify event was created despite minimal data
             with self.conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id
                     FROM hook_events
                     WHERE metadata->>'correlation_id' = %s
-                """, (correlation_id,))
+                """,
+                    (correlation_id,),
+                )
 
                 result = cur.fetchone()
 
@@ -517,6 +558,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Test suite failed with error: {e}")
         import traceback
+
         traceback.print_exc()
         exit_code = 1
     finally:

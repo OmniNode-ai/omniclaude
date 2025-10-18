@@ -22,14 +22,14 @@ from lib.memory import (
     Violation,
     Correction,
     AIQuorumScore,
-    IntentContextData
+    IntentContextData,
 )
 
 
 @pytest.fixture
 def temp_db():
     """Create temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
     yield db_path
     # Cleanup
@@ -44,7 +44,7 @@ def event_store(temp_db):
         storage_path=temp_db,
         qdrant_url="http://localhost:6333",
         ollama_url="http://192.168.86.200:11434",
-        retention_days=90
+        retention_days=90,
     )
     return store
 
@@ -58,7 +58,7 @@ def sample_intent():
         suggested_agents=["agent-code-quality-analyzer"],
         validators=["naming_validator"],
         onex_rules=["naming_conventions"],
-        secondary_intents=[]
+        secondary_intents=[],
     )
 
 
@@ -71,14 +71,9 @@ def sample_violations():
             severity="error",
             message="Function name should be snake_case",
             line_number=10,
-            suggested_fix="Rename myFunction to my_function"
+            suggested_fix="Rename myFunction to my_function",
         ),
-        Violation(
-            rule="missing_docstring",
-            severity="warning",
-            message="Function missing docstring",
-            line_number=10
-        )
+        Violation(rule="missing_docstring", severity="warning", message="Function missing docstring", line_number=10),
     ]
 
 
@@ -92,7 +87,7 @@ def sample_corrections():
             original_content="def myFunction():",
             corrected_content="def my_function():",
             reasoning="Convert to snake_case naming",
-            applied=True
+            applied=True,
         ),
         Correction(
             source="quorum",
@@ -100,8 +95,8 @@ def sample_corrections():
             original_content="def my_function():",
             corrected_content='def my_function():\n    """Function description."""',
             reasoning="Add missing docstring",
-            applied=True
-        )
+            applied=True,
+        ),
     ]
 
 
@@ -110,13 +105,9 @@ def sample_quorum_score():
     """Create sample AI quorum score."""
     return AIQuorumScore(
         consensus_score=0.85,
-        model_votes={
-            "flash": 0.80,
-            "codestral": 0.90,
-            "pro": 0.85
-        },
+        model_votes={"flash": 0.80, "codestral": 0.90, "pro": 0.85},
         decision="auto_apply",
-        reasoning="High confidence consensus to apply correction"
+        reasoning="High confidence consensus to apply correction",
     )
 
 
@@ -133,7 +124,7 @@ class TestEventModels:
             tool_name="Write",
             file_path="/test/file.py",
             content="test content",
-            intent=sample_intent
+            intent=sample_intent,
         )
 
         assert event.correlation_id == correlation_id
@@ -152,7 +143,7 @@ class TestEventModels:
             content="content",
             intent=sample_intent,
             violations=sample_violations,
-            success=False
+            success=False,
         )
 
         # Serialize
@@ -176,8 +167,8 @@ class TestEventStore:
 
         # Check stats on empty store
         stats = event_store.get_stats()
-        assert stats['total_events'] == 0
-        assert stats['unique_workflows'] == 0
+        assert stats["total_events"] == 0
+        assert stats["unique_workflows"] == 0
 
     def test_record_single_event(self, event_store, sample_intent):
         """Test recording a single event."""
@@ -187,7 +178,7 @@ class TestEventStore:
             tool_name="Write",
             file_path="/test/file.py",
             content="test content",
-            intent=sample_intent
+            intent=sample_intent,
         )
 
         # Record event
@@ -196,15 +187,10 @@ class TestEventStore:
 
         # Verify stored
         stats = event_store.get_stats()
-        assert stats['total_events'] == 1
+        assert stats["total_events"] == 1
 
     def test_complete_workflow_tracking(
-        self,
-        event_store,
-        sample_intent,
-        sample_violations,
-        sample_corrections,
-        sample_quorum_score
+        self, event_store, sample_intent, sample_violations, sample_corrections, sample_quorum_score
     ):
         """Test tracking a complete workflow from start to finish."""
         correlation_id = str(uuid.uuid4())
@@ -219,7 +205,7 @@ class TestEventStore:
             file_path=file_path,
             content=content,
             intent=sample_intent,
-            iteration_number=1
+            iteration_number=1,
         )
         event_store.record_event(event1)
 
@@ -233,7 +219,7 @@ class TestEventStore:
             violations=sample_violations,
             success=False,
             iteration_number=1,
-            parent_event_id=event1.event_id
+            parent_event_id=event1.event_id,
         )
         event_store.record_event(event2)
 
@@ -247,7 +233,7 @@ class TestEventStore:
             corrections=sample_corrections,
             scores=sample_quorum_score,
             iteration_number=1,
-            parent_event_id=event2.event_id
+            parent_event_id=event2.event_id,
         )
         event_store.record_event(event3)
 
@@ -261,7 +247,7 @@ class TestEventStore:
             content=corrected_content,
             success=True,
             iteration_number=2,
-            parent_event_id=event3.event_id
+            parent_event_id=event3.event_id,
         )
         event_store.record_event(event4)
 
@@ -274,7 +260,7 @@ class TestEventStore:
             content=corrected_content,
             success=True,
             iteration_number=2,
-            parent_event_id=event4.event_id
+            parent_event_id=event4.event_id,
         )
         event_store.record_event(event5)
 
@@ -287,7 +273,7 @@ class TestEventStore:
             content=corrected_content,
             success=True,
             iteration_number=2,
-            parent_event_id=event5.event_id
+            parent_event_id=event5.event_id,
         )
         event_store.record_event(event6)
 
@@ -326,7 +312,7 @@ class TestEventStore:
                 tool_name="Write",
                 file_path=f"/test/file{i}.py",
                 content=f"content {i}",
-                intent=sample_intent
+                intent=sample_intent,
             )
             event_store.record_event(event)
 
@@ -350,7 +336,7 @@ class TestEventStore:
                 file_path=f"/test/file{i}.py",
                 content=f"content {i}",
                 intent=sample_intent,
-                success=True
+                success=True,
             )
             event_store.record_event(event)
 
@@ -371,7 +357,7 @@ class TestEventStore:
             tool_name="Write",
             file_path="/test/old.py",
             content="old content",
-            intent=sample_intent
+            intent=sample_intent,
         )
         # Manually set old timestamp
         old_event.timestamp = datetime.utcnow() - timedelta(days=91)
@@ -384,20 +370,20 @@ class TestEventStore:
             tool_name="Write",
             file_path="/test/recent.py",
             content="recent content",
-            intent=sample_intent
+            intent=sample_intent,
         )
         event_store.record_event(recent_event)
 
         # Should have 2 events
         stats_before = event_store.get_stats()
-        assert stats_before['total_events'] == 2
+        assert stats_before["total_events"] == 2
 
         # Cleanup old events
-        deleted = event_store.cleanup_old_events()
+        event_store.cleanup_old_events()
 
         # Should have 1 event remaining
         stats_after = event_store.get_stats()
-        assert stats_after['total_events'] == 1
+        assert stats_after["total_events"] == 1
 
 
 class TestEventAnalytics:
@@ -416,13 +402,7 @@ class TestEventAnalytics:
         assert metrics.total_workflows == 0
         assert metrics.success_rate == 0.0
 
-    def test_workflow_metrics_with_data(
-        self,
-        event_store,
-        sample_intent,
-        sample_violations,
-        sample_corrections
-    ):
+    def test_workflow_metrics_with_data(self, event_store, sample_intent, sample_violations, sample_corrections):
         """Test workflow metrics calculation with real data."""
         # Create successful workflow
         correlation_id = str(uuid.uuid4())
@@ -446,7 +426,7 @@ class TestEventAnalytics:
                 violations=violations,
                 corrections=corrections,
                 success=success,
-                iteration_number=1 if i < 3 else 2
+                iteration_number=1 if i < 3 else 2,
             )
             event_store.record_event(event)
 
@@ -459,12 +439,7 @@ class TestEventAnalytics:
         assert metrics.avg_violations >= 2  # We had 2 violations
         assert metrics.most_common_intent == "file_modification"
 
-    def test_correction_effectiveness(
-        self,
-        event_store,
-        sample_corrections,
-        sample_quorum_score
-    ):
+    def test_correction_effectiveness(self, event_store, sample_corrections, sample_quorum_score):
         """Test correction effectiveness analysis."""
         # Create workflow with corrections
         correlation_id = str(uuid.uuid4())
@@ -476,7 +451,7 @@ class TestEventAnalytics:
             file_path="/test/correction.py",
             content="content",
             corrections=sample_corrections,
-            scores=sample_quorum_score
+            scores=sample_quorum_score,
         )
         event_store.record_event(event)
 
@@ -487,7 +462,7 @@ class TestEventAnalytics:
             tool_name="Write",
             file_path="/test/correction.py",
             content="corrected content",
-            success=True
+            success=True,
         )
         event_store.record_event(success_event)
 
@@ -496,10 +471,10 @@ class TestEventAnalytics:
         stats = analytics.get_correction_stats(days=7)
 
         # Should have stats for both correction sources
-        assert 'rag' in stats or 'quorum' in stats
-        if 'rag' in stats:
-            assert stats['rag'].total_attempts >= 1
-            assert stats['rag'].success_rate > 0
+        assert "rag" in stats or "quorum" in stats
+        if "rag" in stats:
+            assert stats["rag"].total_attempts >= 1
+            assert stats["rag"].success_rate > 0
 
     def test_violation_patterns(self, event_store, sample_violations):
         """Test violation pattern detection."""
@@ -513,7 +488,7 @@ class TestEventAnalytics:
                 file_path=f"/test/file{i}.py",
                 content=f"content {i}",
                 violations=sample_violations,
-                success=False
+                success=False,
             )
             event_store.record_event(event)
 
@@ -523,10 +498,10 @@ class TestEventAnalytics:
 
         # Should find the naming_convention pattern
         pattern_rules = [p.rule for p in patterns]
-        assert 'naming_convention' in pattern_rules
+        assert "naming_convention" in pattern_rules
 
         # Check pattern details
-        naming_pattern = next(p for p in patterns if p.rule == 'naming_convention')
+        naming_pattern = next(p for p in patterns if p.rule == "naming_convention")
         assert naming_pattern.occurrences >= 3
 
     def test_workflow_summary(self, event_store, sample_intent):
@@ -534,11 +509,7 @@ class TestEventAnalytics:
         correlation_id = str(uuid.uuid4())
 
         # Create simple workflow
-        events = [
-            EventType.INTENT_DETECTED,
-            EventType.VALIDATION_PASSED,
-            EventType.WRITE_SUCCESS
-        ]
+        events = [EventType.INTENT_DETECTED, EventType.VALIDATION_PASSED, EventType.WRITE_SUCCESS]
 
         for event_type in events:
             event = WorkflowEvent.create(
@@ -548,7 +519,7 @@ class TestEventAnalytics:
                 file_path="/test/summary.py",
                 content="content",
                 intent=sample_intent if event_type == EventType.INTENT_DETECTED else None,
-                success=event_type == EventType.WRITE_SUCCESS
+                success=event_type == EventType.WRITE_SUCCESS,
             )
             event_store.record_event(event)
 
@@ -580,7 +551,7 @@ class TestEventAnalytics:
             file_path="/test/report.py",
             content="content",
             intent=sample_intent,
-            success=True
+            success=True,
         )
         event_store.record_event(event)
 
@@ -599,12 +570,7 @@ class TestEventAnalytics:
 class TestIntegrationScenarios:
     """Test complete integration scenarios."""
 
-    def test_multiple_correction_iterations(
-        self,
-        event_store,
-        sample_intent,
-        sample_violations
-    ):
+    def test_multiple_correction_iterations(self, event_store, sample_intent, sample_violations):
         """Test workflow with multiple correction attempts."""
         correlation_id = str(uuid.uuid4())
         file_path = "/test/iterations.py"
@@ -615,7 +581,7 @@ class TestIntegrationScenarios:
             EventType.VALIDATION_FAILED,
             EventType.CORRECTION_GENERATED,
             EventType.CORRECTION_ATTEMPTED,
-            EventType.VALIDATION_FAILED  # Still failing
+            EventType.VALIDATION_FAILED,  # Still failing
         ]:
             event = WorkflowEvent.create(
                 correlation_id=correlation_id,
@@ -625,7 +591,7 @@ class TestIntegrationScenarios:
                 content="iteration 1 content",
                 intent=sample_intent if event_type == EventType.INTENT_DETECTED else None,
                 violations=sample_violations if event_type == EventType.VALIDATION_FAILED else None,
-                iteration_number=1
+                iteration_number=1,
             )
             event_store.record_event(event)
 
@@ -634,7 +600,7 @@ class TestIntegrationScenarios:
             EventType.CORRECTION_GENERATED,
             EventType.CORRECTION_APPLIED,
             EventType.VALIDATION_PASSED,
-            EventType.WRITE_SUCCESS
+            EventType.WRITE_SUCCESS,
         ]:
             event = WorkflowEvent.create(
                 correlation_id=correlation_id,
@@ -643,7 +609,7 @@ class TestIntegrationScenarios:
                 file_path=file_path,
                 content="iteration 2 content",
                 success=event_type == EventType.WRITE_SUCCESS,
-                iteration_number=2
+                iteration_number=2,
             )
             event_store.record_event(event)
 
@@ -674,7 +640,7 @@ class TestIntegrationScenarios:
             tool_name="Write",
             file_path="/test/perf.py",
             content="performance test content",
-            intent=sample_intent
+            intent=sample_intent,
         )
 
         start = time.time()

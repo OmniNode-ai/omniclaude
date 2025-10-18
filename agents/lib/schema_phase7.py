@@ -20,15 +20,17 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # =============================================================================
 # Enums
 # =============================================================================
 
+
 class NodeType(str, Enum):
     """ONEX node types"""
+
     EFFECT = "EFFECT"
     COMPUTE = "COMPUTE"
     REDUCER = "REDUCER"
@@ -37,6 +39,7 @@ class NodeType(str, Enum):
 
 class FeedbackType(str, Enum):
     """Pattern feedback types"""
+
     CORRECT = "correct"
     INCORRECT = "incorrect"
     PARTIAL = "partial"
@@ -45,6 +48,7 @@ class FeedbackType(str, Enum):
 
 class GenerationPhase(str, Enum):
     """Code generation phases"""
+
     PRD_ANALYSIS = "prd_analysis"
     TEMPLATE_LOAD = "template_load"
     CODE_GEN = "code_gen"
@@ -55,6 +59,7 @@ class GenerationPhase(str, Enum):
 
 class TemplateType(str, Enum):
     """Template types for caching"""
+
     NODE = "node"
     CONTRACT = "contract"
     SUBCONTRACT = "subcontract"
@@ -65,6 +70,7 @@ class TemplateType(str, Enum):
 # =============================================================================
 # Mixin Compatibility Matrix
 # =============================================================================
+
 
 class MixinCompatibilityMatrix(BaseModel):
     """
@@ -91,9 +97,7 @@ class MixinCompatibilityMatrix(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
     @property
     def total_tests(self) -> int:
@@ -123,6 +127,7 @@ class MixinCompatibilityCreate(BaseModel):
 # Pattern Feedback Log
 # =============================================================================
 
+
 class PatternFeedbackLog(BaseModel):
     """
     Stores pattern matching feedback for continuous learning.
@@ -151,9 +156,7 @@ class PatternFeedbackLog(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class PatternFeedbackCreate(BaseModel):
@@ -174,6 +177,7 @@ class PatternFeedbackCreate(BaseModel):
 # =============================================================================
 # Generation Performance Metrics
 # =============================================================================
+
 
 class GenerationPerformanceMetrics(BaseModel):
     """
@@ -201,9 +205,7 @@ class GenerationPerformanceMetrics(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class GenerationPerformanceCreate(BaseModel):
@@ -224,6 +226,7 @@ class GenerationPerformanceCreate(BaseModel):
 # =============================================================================
 # Template Cache Metadata
 # =============================================================================
+
 
 class TemplateCacheMetadata(BaseModel):
     """
@@ -289,6 +292,7 @@ class TemplateCacheUpdate(BaseModel):
 # Event Processing Metrics
 # =============================================================================
 
+
 class EventProcessingMetrics(BaseModel):
     """
     Tracks event processing performance for optimization.
@@ -334,6 +338,7 @@ class EventProcessingCreate(BaseModel):
 # View Models (Read-Only Analytics)
 # =============================================================================
 
+
 class MixinCompatibilitySummary(BaseModel):
     """Aggregated mixin compatibility statistics by node type"""
 
@@ -346,9 +351,7 @@ class MixinCompatibilitySummary(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class PatternFeedbackAnalysis(BaseModel):
@@ -363,9 +366,7 @@ class PatternFeedbackAnalysis(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class PerformanceMetricsSummary(BaseModel):
@@ -382,9 +383,7 @@ class PerformanceMetricsSummary(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class TemplateCacheEfficiency(BaseModel):
@@ -400,9 +399,7 @@ class TemplateCacheEfficiency(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
 
 
 class EventProcessingHealth(BaseModel):
@@ -420,6 +417,4 @@ class EventProcessingHealth(BaseModel):
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v) if v is not None else None
-        }
+        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}

@@ -56,9 +56,9 @@ class CapabilityIndex:
         with open(self.registry_path) as f:
             registry = yaml.safe_load(f)
 
-        for agent_name, agent_data in registry['agents'].items():
+        for agent_name, agent_data in registry["agents"].items():
             # Index capabilities
-            capabilities = agent_data.get('capabilities', [])
+            capabilities = agent_data.get("capabilities", [])
             self.agent_to_capabilities[agent_name] = capabilities
 
             for capability in capabilities:
@@ -67,7 +67,7 @@ class CapabilityIndex:
                 self.capability_to_agents[capability].add(agent_name)
 
             # Index domain
-            domain = agent_data.get('domain_context', 'general')
+            domain = agent_data.get("domain_context", "general")
             self.agent_to_domain[agent_name] = domain
 
             if domain not in self.domain_to_agents:
@@ -120,12 +120,9 @@ class CapabilityIndex:
         Returns:
             Agent's domain context
         """
-        return self.agent_to_domain.get(agent_name, 'general')
+        return self.agent_to_domain.get(agent_name, "general")
 
-    def find_agents_with_multiple_capabilities(
-        self,
-        capabilities: List[str]
-    ) -> List[Tuple[str, int]]:
+    def find_agents_with_multiple_capabilities(self, capabilities: List[str]) -> List[Tuple[str, int]]:
         """
         Find agents with multiple capabilities.
 
@@ -148,10 +145,7 @@ class CapabilityIndex:
         # Sort by count (descending)
         return sorted(agent_counts.items(), key=lambda x: x[1], reverse=True)
 
-    def find_agents_with_all_capabilities(
-        self,
-        capabilities: List[str]
-    ) -> List[str]:
+    def find_agents_with_all_capabilities(self, capabilities: List[str]) -> List[str]:
         """
         Find agents that have ALL specified capabilities.
 
@@ -199,14 +193,14 @@ class CapabilityIndex:
             Dictionary with index statistics
         """
         return {
-            'total_agents': len(self.agent_to_capabilities),
-            'total_capabilities': len(self.capability_to_agents),
-            'total_domains': len(self.domain_to_agents),
-            'avg_capabilities_per_agent': (
-                sum(len(caps) for caps in self.agent_to_capabilities.values()) /
-                len(self.agent_to_capabilities)
-                if self.agent_to_capabilities else 0
-            )
+            "total_agents": len(self.agent_to_capabilities),
+            "total_capabilities": len(self.capability_to_agents),
+            "total_domains": len(self.domain_to_agents),
+            "avg_capabilities_per_agent": (
+                sum(len(caps) for caps in self.agent_to_capabilities.values()) / len(self.agent_to_capabilities)
+                if self.agent_to_capabilities
+                else 0
+            ),
         }
 
 
@@ -240,9 +234,9 @@ if __name__ == "__main__":
 
         print("\n=== Multi-Capability Search ===")
         # Find agents with multiple debugging-related capabilities
-        debug_caps = ['debugging', 'error_analysis', 'root_cause']
+        debug_caps = ["debugging", "error_analysis", "root_cause"]
         results = index.find_agents_with_multiple_capabilities(debug_caps)
-        print(f"Agents with debugging capabilities:")
+        print("Agents with debugging capabilities:")
         for agent, count in results[:5]:
             print(f"  {agent}: {count}/{len(debug_caps)} capabilities")
 

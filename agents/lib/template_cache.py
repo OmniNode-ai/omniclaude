@@ -38,8 +38,8 @@ Target Performance:
 
 from typing import Dict, Any, Optional, Tuple, Callable, Set
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from dataclasses import dataclass
 from threading import RLock
 import hashlib
 import time
@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CachedTemplate:
     """Cached template with metadata"""
+
     template_name: str
     template_type: str
     content: str
@@ -66,7 +67,7 @@ class CachedTemplate:
     def __post_init__(self):
         """Calculate size if not provided"""
         if self.size_bytes == 0:
-            self.size_bytes = len(self.content.encode('utf-8'))
+            self.size_bytes = len(self.content.encode("utf-8"))
 
 
 class TemplateCache:
@@ -83,11 +84,7 @@ class TemplateCache:
     """
 
     def __init__(
-        self,
-        max_templates: int = 100,
-        max_size_mb: int = 50,
-        ttl_seconds: int = 3600,
-        enable_persistence: bool = True
+        self, max_templates: int = 100, max_size_mb: int = 50, ttl_seconds: int = 3600, enable_persistence: bool = True
     ):
         """
         Initialize template cache.
@@ -126,11 +123,7 @@ class TemplateCache:
         )
 
     def get(
-        self,
-        template_name: str,
-        template_type: str,
-        file_path: Path,
-        loader_func: Callable[[Path], str]
+        self, template_name: str, template_type: str, file_path: Path, loader_func: Callable[[Path], str]
     ) -> Tuple[str, bool]:
         """
         Get template from cache or load from filesystem.
@@ -183,14 +176,14 @@ class TemplateCache:
                         # Update metrics in background (non-blocking)
                         if self.enable_persistence:
                             try:
-                                loop = asyncio.get_running_loop()
+                                asyncio.get_running_loop()
                                 task = asyncio.create_task(
                                     self._update_cache_metrics_async(
                                         template_name=template_name,
                                         template_type=template_type,
                                         file_path=str(file_path),
                                         cache_hit=True,
-                                        load_time_ms=cached_time_ms
+                                        load_time_ms=cached_time_ms,
                                     )
                                 )
                                 # Track task and remove when done
@@ -211,10 +204,7 @@ class TemplateCache:
                 load_time_ms = (time.perf_counter() - start_time) * 1000
                 self.total_load_time_ms += load_time_ms
 
-                logger.debug(
-                    f"Cache MISS for {template_name} "
-                    f"(load time: {load_time_ms:.2f}ms)"
-                )
+                logger.debug(f"Cache MISS for {template_name} " f"(load time: {load_time_ms:.2f}ms)")
 
                 # Compute file hash for content-based invalidation
                 file_hash = self._compute_file_hash(file_path)
@@ -228,7 +218,7 @@ class TemplateCache:
                     file_hash=file_hash,
                     loaded_at=datetime.now(timezone.utc),
                     last_accessed_at=datetime.now(timezone.utc),
-                    access_count=1
+                    access_count=1,
                 )
 
                 # Ensure capacity before adding
@@ -240,7 +230,7 @@ class TemplateCache:
                 # Update metrics in background (non-blocking)
                 if self.enable_persistence:
                     try:
-                        loop = asyncio.get_running_loop()
+                        asyncio.get_running_loop()
                         task = asyncio.create_task(
                             self._update_cache_metrics_async(
                                 template_name=template_name,
@@ -249,7 +239,7 @@ class TemplateCache:
                                 cache_hit=False,
                                 load_time_ms=load_time_ms,
                                 file_hash=file_hash,
-                                size_bytes=cached.size_bytes
+                                size_bytes=cached.size_bytes,
                             )
                         )
                         # Track task and remove when done
@@ -356,15 +346,12 @@ class TemplateCache:
                     template_name=f"{template_type}_template",
                     template_type=template_type,
                     file_path=template_path,
-                    loader_func=lambda p: p.read_text()
+                    loader_func=lambda p: p.read_text(),
                 )
                 loaded_count += 1
 
         warmup_time_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(
-            f"Cache warmup complete: {loaded_count} templates loaded "
-            f"in {warmup_time_ms:.2f}ms"
-        )
+        logger.info(f"Cache warmup complete: {loaded_count} templates loaded " f"in {warmup_time_ms:.2f}ms")
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """
@@ -377,7 +364,7 @@ class TemplateCache:
             Hex digest of SHA-256 hash
         """
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 return hashlib.sha256(f.read()).hexdigest()
         except Exception as e:
             logger.error(f"Failed to compute hash for {file_path}: {e}")
@@ -391,7 +378,7 @@ class TemplateCache:
         cache_hit: bool,
         load_time_ms: float,
         file_hash: Optional[str] = None,
-        size_bytes: Optional[int] = None
+        size_bytes: Optional[int] = None,
     ):
         """
         Update cache metrics in database (async).
@@ -423,14 +410,14 @@ class TemplateCache:
                         file_path=file_path,
                         file_hash=file_hash or "",
                         size_bytes=size_bytes,
-                        load_time_ms=int(load_time_ms)
+                        load_time_ms=int(load_time_ms),
                     )
 
                 # Update hit/miss counters
                 await persistence.update_cache_metrics(
                     template_name=template_name,
                     cache_hit=cache_hit,
-                    load_time_ms=int(load_time_ms) if not cache_hit else None
+                    load_time_ms=int(load_time_ms) if not cache_hit else None,
                 )
             finally:
                 await persistence.close()
@@ -452,10 +439,7 @@ class TemplateCache:
 
         # Wait for all tasks to complete with timeout
         try:
-            await asyncio.wait_for(
-                asyncio.gather(*self._background_tasks, return_exceptions=True),
-                timeout=timeout
-            )
+            await asyncio.wait_for(asyncio.gather(*self._background_tasks, return_exceptions=True), timeout=timeout)
             logger.debug("All background tasks completed successfully")
         except asyncio.TimeoutError:
             # Cancel remaining tasks
@@ -480,7 +464,7 @@ class TemplateCache:
             return
 
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # If we have a running loop, schedule cleanup
             asyncio.create_task(self.cleanup_async(timeout))
         except RuntimeError:
@@ -524,19 +508,13 @@ class TemplateCache:
             hit_rate = self.hits / total_requests if total_requests > 0 else 0.0
 
             # Calculate average load times
-            avg_uncached_load_ms = (
-                self.total_load_time_ms / self.misses if self.misses > 0 else 0.0
-            )
-            avg_cached_load_ms = (
-                self.cached_load_time_ms / self.hits if self.hits > 0 else 0.0
-            )
+            avg_uncached_load_ms = self.total_load_time_ms / self.misses if self.misses > 0 else 0.0
+            avg_cached_load_ms = self.cached_load_time_ms / self.hits if self.hits > 0 else 0.0
 
             # Calculate time savings
             if self.hits > 0 and avg_uncached_load_ms > 0:
                 time_saved_ms = self.hits * (avg_uncached_load_ms - avg_cached_load_ms)
-                improvement_pct = (
-                    ((avg_uncached_load_ms - avg_cached_load_ms) / avg_uncached_load_ms) * 100
-                )
+                improvement_pct = ((avg_uncached_load_ms - avg_cached_load_ms) / avg_uncached_load_ms) * 100
             else:
                 time_saved_ms = 0.0
                 improvement_pct = 0.0
@@ -558,12 +536,8 @@ class TemplateCache:
                 "avg_cached_load_ms": round(avg_cached_load_ms, 2),
                 "time_saved_ms": round(time_saved_ms, 2),
                 "improvement_percent": round(improvement_pct, 1),
-                "capacity_usage_percent": round(
-                    (len(self._cache) / self.max_templates) * 100, 1
-                ),
-                "memory_usage_percent": round(
-                    (total_size_mb / self.max_size_mb) * 100, 1
-                )
+                "capacity_usage_percent": round((len(self._cache) / self.max_templates) * 100, 1),
+                "memory_usage_percent": round((total_size_mb / self.max_size_mb) * 100, 1),
             }
 
     def get_detailed_stats(self) -> Dict[str, Any]:
@@ -579,18 +553,18 @@ class TemplateCache:
             # Add per-template breakdown
             template_stats = []
             for name, cached in self._cache.items():
-                age_seconds = (
-                    datetime.now(timezone.utc) - cached.loaded_at
-                ).total_seconds()
+                age_seconds = (datetime.now(timezone.utc) - cached.loaded_at).total_seconds()
 
-                template_stats.append({
-                    "name": name,
-                    "type": cached.template_type,
-                    "size_bytes": cached.size_bytes,
-                    "access_count": cached.access_count,
-                    "age_seconds": round(age_seconds, 1),
-                    "file_hash": cached.file_hash[:8] + "...",  # Truncated for readability
-                })
+                template_stats.append(
+                    {
+                        "name": name,
+                        "type": cached.template_type,
+                        "size_bytes": cached.size_bytes,
+                        "access_count": cached.access_count,
+                        "age_seconds": round(age_seconds, 1),
+                        "file_hash": cached.file_hash[:8] + "...",  # Truncated for readability
+                    }
+                )
 
             # Sort by access count (most accessed first)
             template_stats.sort(key=lambda x: x["access_count"], reverse=True)
@@ -601,7 +575,6 @@ class TemplateCache:
 
 # Standalone test
 if __name__ == "__main__":
-    import sys
     import tempfile
 
     print("=== Testing Template Cache ===\n")
@@ -619,10 +592,7 @@ if __name__ == "__main__":
 
         # Initialize cache
         cache = TemplateCache(
-            max_templates=10,
-            max_size_mb=1,
-            ttl_seconds=5,  # Short TTL for testing
-            enable_persistence=False
+            max_templates=10, max_size_mb=1, ttl_seconds=5, enable_persistence=False  # Short TTL for testing
         )
 
         # Test 1: Cache miss
@@ -631,7 +601,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
         assert not hit, "First access should be cache miss"
@@ -642,7 +612,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
         assert hit, "Second access should be cache hit"
@@ -654,7 +624,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
         print(f"   Hit after modification: {hit}")
         assert not hit, "Modified template should invalidate cache"
@@ -665,7 +635,7 @@ if __name__ == "__main__":
             template_name="COMPUTE_template",
             template_type="COMPUTE",
             file_path=compute_template,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
         print("   Sleeping 6 seconds to exceed TTL...")
         time.sleep(6)
@@ -673,7 +643,7 @@ if __name__ == "__main__":
             template_name="COMPUTE_template",
             template_type="COMPUTE",
             file_path=compute_template,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
         print(f"   Hit after TTL expiration: {hit}")
         assert not hit, "Expired template should not be cache hit"
@@ -704,13 +674,13 @@ if __name__ == "__main__":
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template,
-                loader_func=lambda p: p.read_text()
+                loader_func=lambda p: p.read_text(),
             )
 
         stats = small_cache.get_stats()
         print(f"   Templates in cache: {stats['cached_templates']}")
         print(f"   Evictions: {stats['evictions']}")
-        assert stats['cached_templates'] == 2, "Should have evicted oldest template"
-        assert stats['evictions'] == 1, "Should have 1 eviction"
+        assert stats["cached_templates"] == 2, "Should have evicted oldest template"
+        assert stats["evictions"] == 1, "Should have 1 eviction"
 
         print("\n✅ All tests passed!")

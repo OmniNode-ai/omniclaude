@@ -15,7 +15,7 @@ Target: <10ms collection overhead per operation
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Deque
@@ -26,6 +26,7 @@ import asyncio
 
 class MetricType(str, Enum):
     """Types of metrics collected."""
+
     ROUTING_LATENCY = "routing_latency"
     CONFIDENCE_SCORE = "confidence_score"
     CACHE_HIT_RATE = "cache_hit_rate"
@@ -44,6 +45,7 @@ class MetricType(str, Enum):
 
 class ThresholdStatus(str, Enum):
     """Threshold compliance status."""
+
     NORMAL = "normal"  # Within threshold
     WARNING = "warning"  # 80-95% of threshold
     CRITICAL = "critical"  # 95-105% of threshold
@@ -53,6 +55,7 @@ class ThresholdStatus(str, Enum):
 @dataclass
 class MetricDataPoint:
     """Single metric data point."""
+
     timestamp: float
     value: float
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -62,6 +65,7 @@ class MetricDataPoint:
 @dataclass
 class ThresholdViolation:
     """Record of threshold violation."""
+
     threshold_id: str
     threshold_name: str
     measured_value: float
@@ -75,6 +79,7 @@ class ThresholdViolation:
 @dataclass
 class PerformanceBaseline:
     """Performance baseline for comparison."""
+
     metric_type: MetricType
     baseline_mean: float
     baseline_median: float
@@ -88,6 +93,7 @@ class PerformanceBaseline:
 @dataclass
 class TrendAnalysis:
     """Performance trend analysis result."""
+
     metric_type: MetricType
     current_mean: float
     baseline_mean: float
@@ -122,7 +128,7 @@ class RouterMetricsCollector:
         self,
         window_size: int = 1000,  # Number of samples to keep
         window_minutes: int = 10,  # Time window for baseline
-        metrics_dir: str = "traces/metrics"
+        metrics_dir: str = "traces/metrics",
     ):
         self.window_size = window_size
         self.window_minutes = window_minutes
@@ -130,9 +136,7 @@ class RouterMetricsCollector:
         self.metrics_dir.mkdir(parents=True, exist_ok=True)
 
         # Sliding windows for different metric types
-        self._metrics: Dict[MetricType, Deque[MetricDataPoint]] = defaultdict(
-            lambda: deque(maxlen=window_size)
-        )
+        self._metrics: Dict[MetricType, Deque[MetricDataPoint]] = defaultdict(lambda: deque(maxlen=window_size))
 
         # Threshold violations history
         self._violations: Deque[ThresholdViolation] = deque(maxlen=1000)
@@ -172,51 +176,210 @@ class RouterMetricsCollector:
         # Simplified inline version for demonstration
         self._thresholds = {
             # Intelligence thresholds (INT-001 to INT-006)
-            "INT-001": {"name": "RAG Query Response Time", "threshold_ms": 1500, "alert_threshold_ms": 1200, "category": "intelligence"},
-            "INT-002": {"name": "Intelligence Gathering Overhead", "threshold_ms": 100, "alert_threshold_ms": 80, "category": "intelligence"},
-            "INT-003": {"name": "Pattern Recognition Performance", "threshold_ms": 500, "alert_threshold_ms": 400, "category": "intelligence"},
-            "INT-004": {"name": "Knowledge Capture Latency", "threshold_ms": 300, "alert_threshold_ms": 250, "category": "intelligence"},
-            "INT-005": {"name": "Cross-Domain Synthesis", "threshold_ms": 800, "alert_threshold_ms": 650, "category": "intelligence"},
-            "INT-006": {"name": "Intelligence Application Time", "threshold_ms": 200, "alert_threshold_ms": 150, "category": "intelligence"},
-
+            "INT-001": {
+                "name": "RAG Query Response Time",
+                "threshold_ms": 1500,
+                "alert_threshold_ms": 1200,
+                "category": "intelligence",
+            },
+            "INT-002": {
+                "name": "Intelligence Gathering Overhead",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 80,
+                "category": "intelligence",
+            },
+            "INT-003": {
+                "name": "Pattern Recognition Performance",
+                "threshold_ms": 500,
+                "alert_threshold_ms": 400,
+                "category": "intelligence",
+            },
+            "INT-004": {
+                "name": "Knowledge Capture Latency",
+                "threshold_ms": 300,
+                "alert_threshold_ms": 250,
+                "category": "intelligence",
+            },
+            "INT-005": {
+                "name": "Cross-Domain Synthesis",
+                "threshold_ms": 800,
+                "alert_threshold_ms": 650,
+                "category": "intelligence",
+            },
+            "INT-006": {
+                "name": "Intelligence Application Time",
+                "threshold_ms": 200,
+                "alert_threshold_ms": 150,
+                "category": "intelligence",
+            },
             # Parallel execution thresholds (PAR-001 to PAR-005)
-            "PAR-001": {"name": "Parallel Coordination Setup", "threshold_ms": 500, "alert_threshold_ms": 400, "category": "parallel_execution"},
-            "PAR-002": {"name": "Context Distribution Time", "threshold_ms": 200, "alert_threshold_ms": 150, "category": "parallel_execution"},
-            "PAR-003": {"name": "Synchronization Point Latency", "threshold_ms": 1000, "alert_threshold_ms": 800, "category": "parallel_execution"},
-            "PAR-004": {"name": "Result Aggregation Performance", "threshold_ms": 300, "alert_threshold_ms": 225, "category": "parallel_execution"},
-            "PAR-005": {"name": "Parallel Efficiency Ratio", "threshold_ratio": 0.6, "alert_threshold_ratio": 0.7, "category": "parallel_execution"},
-
+            "PAR-001": {
+                "name": "Parallel Coordination Setup",
+                "threshold_ms": 500,
+                "alert_threshold_ms": 400,
+                "category": "parallel_execution",
+            },
+            "PAR-002": {
+                "name": "Context Distribution Time",
+                "threshold_ms": 200,
+                "alert_threshold_ms": 150,
+                "category": "parallel_execution",
+            },
+            "PAR-003": {
+                "name": "Synchronization Point Latency",
+                "threshold_ms": 1000,
+                "alert_threshold_ms": 800,
+                "category": "parallel_execution",
+            },
+            "PAR-004": {
+                "name": "Result Aggregation Performance",
+                "threshold_ms": 300,
+                "alert_threshold_ms": 225,
+                "category": "parallel_execution",
+            },
+            "PAR-005": {
+                "name": "Parallel Efficiency Ratio",
+                "threshold_ratio": 0.6,
+                "alert_threshold_ratio": 0.7,
+                "category": "parallel_execution",
+            },
             # Coordination thresholds (COORD-001 to COORD-004)
-            "COORD-001": {"name": "Agent Delegation Handoff", "threshold_ms": 150, "alert_threshold_ms": 120, "category": "coordination"},
-            "COORD-002": {"name": "Context Inheritance Latency", "threshold_ms": 50, "alert_threshold_ms": 35, "category": "coordination"},
-            "COORD-003": {"name": "Multi-Agent Communication", "threshold_ms": 100, "alert_threshold_ms": 75, "category": "coordination"},
-            "COORD-004": {"name": "Coordination Overhead", "threshold_ms": 300, "alert_threshold_ms": 225, "category": "coordination"},
-
+            "COORD-001": {
+                "name": "Agent Delegation Handoff",
+                "threshold_ms": 150,
+                "alert_threshold_ms": 120,
+                "category": "coordination",
+            },
+            "COORD-002": {
+                "name": "Context Inheritance Latency",
+                "threshold_ms": 50,
+                "alert_threshold_ms": 35,
+                "category": "coordination",
+            },
+            "COORD-003": {
+                "name": "Multi-Agent Communication",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 75,
+                "category": "coordination",
+            },
+            "COORD-004": {
+                "name": "Coordination Overhead",
+                "threshold_ms": 300,
+                "alert_threshold_ms": 225,
+                "category": "coordination",
+            },
             # Context management thresholds (CTX-001 to CTX-006)
-            "CTX-001": {"name": "Context Initialization Time", "threshold_ms": 50, "alert_threshold_ms": 35, "category": "context_management"},
-            "CTX-002": {"name": "Context Preservation Latency", "threshold_ms": 25, "alert_threshold_ms": 15, "category": "context_management"},
-            "CTX-003": {"name": "Context Refresh Performance", "threshold_ms": 75, "alert_threshold_ms": 55, "category": "context_management"},
-            "CTX-004": {"name": "Context Memory Footprint", "threshold_mb": 10, "alert_threshold_mb": 8, "category": "context_management"},
-            "CTX-005": {"name": "Context Lifecycle Management", "threshold_ms": 200, "alert_threshold_ms": 150, "category": "context_management"},
-            "CTX-006": {"name": "Context Cleanup Performance", "threshold_ms": 100, "alert_threshold_ms": 75, "category": "context_management"},
-
+            "CTX-001": {
+                "name": "Context Initialization Time",
+                "threshold_ms": 50,
+                "alert_threshold_ms": 35,
+                "category": "context_management",
+            },
+            "CTX-002": {
+                "name": "Context Preservation Latency",
+                "threshold_ms": 25,
+                "alert_threshold_ms": 15,
+                "category": "context_management",
+            },
+            "CTX-003": {
+                "name": "Context Refresh Performance",
+                "threshold_ms": 75,
+                "alert_threshold_ms": 55,
+                "category": "context_management",
+            },
+            "CTX-004": {
+                "name": "Context Memory Footprint",
+                "threshold_mb": 10,
+                "alert_threshold_mb": 8,
+                "category": "context_management",
+            },
+            "CTX-005": {
+                "name": "Context Lifecycle Management",
+                "threshold_ms": 200,
+                "alert_threshold_ms": 150,
+                "category": "context_management",
+            },
+            "CTX-006": {
+                "name": "Context Cleanup Performance",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 75,
+                "category": "context_management",
+            },
             # Template system thresholds (TPL-001 to TPL-004)
-            "TPL-001": {"name": "Template Instantiation Time", "threshold_ms": 100, "alert_threshold_ms": 75, "category": "template_system"},
-            "TPL-002": {"name": "Template Parameter Resolution", "threshold_ms": 50, "alert_threshold_ms": 35, "category": "template_system"},
-            "TPL-003": {"name": "Configuration Overlay Performance", "threshold_ms": 30, "alert_threshold_ms": 20, "category": "template_system"},
-            "TPL-004": {"name": "Template Cache Hit Ratio", "threshold_ratio": 0.85, "alert_threshold_ratio": 0.9, "category": "template_system"},
-
+            "TPL-001": {
+                "name": "Template Instantiation Time",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 75,
+                "category": "template_system",
+            },
+            "TPL-002": {
+                "name": "Template Parameter Resolution",
+                "threshold_ms": 50,
+                "alert_threshold_ms": 35,
+                "category": "template_system",
+            },
+            "TPL-003": {
+                "name": "Configuration Overlay Performance",
+                "threshold_ms": 30,
+                "alert_threshold_ms": 20,
+                "category": "template_system",
+            },
+            "TPL-004": {
+                "name": "Template Cache Hit Ratio",
+                "threshold_ratio": 0.85,
+                "alert_threshold_ratio": 0.9,
+                "category": "template_system",
+            },
             # Lifecycle thresholds (LCL-001 to LCL-004)
-            "LCL-001": {"name": "Agent Initialization Performance", "threshold_ms": 300, "alert_threshold_ms": 225, "category": "lifecycle"},
-            "LCL-002": {"name": "Framework Integration Time", "threshold_ms": 100, "alert_threshold_ms": 75, "category": "lifecycle"},
-            "LCL-003": {"name": "Quality Gate Execution", "threshold_ms": 200, "alert_threshold_ms": 150, "category": "lifecycle"},
-            "LCL-004": {"name": "Agent Cleanup Performance", "threshold_ms": 150, "alert_threshold_ms": 110, "category": "lifecycle"},
-
+            "LCL-001": {
+                "name": "Agent Initialization Performance",
+                "threshold_ms": 300,
+                "alert_threshold_ms": 225,
+                "category": "lifecycle",
+            },
+            "LCL-002": {
+                "name": "Framework Integration Time",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 75,
+                "category": "lifecycle",
+            },
+            "LCL-003": {
+                "name": "Quality Gate Execution",
+                "threshold_ms": 200,
+                "alert_threshold_ms": 150,
+                "category": "lifecycle",
+            },
+            "LCL-004": {
+                "name": "Agent Cleanup Performance",
+                "threshold_ms": 150,
+                "alert_threshold_ms": 110,
+                "category": "lifecycle",
+            },
             # Dashboard thresholds (DASH-001 to DASH-004)
-            "DASH-001": {"name": "Performance Data Collection", "threshold_ms": 50, "alert_threshold_ms": 35, "category": "dashboard"},
-            "DASH-002": {"name": "Dashboard Update Latency", "threshold_ms": 100, "alert_threshold_ms": 75, "category": "dashboard"},
-            "DASH-003": {"name": "Trend Analysis Performance", "threshold_ms": 500, "alert_threshold_ms": 400, "category": "dashboard"},
-            "DASH-004": {"name": "Optimization Recommendation Time", "threshold_ms": 300, "alert_threshold_ms": 225, "category": "dashboard"},
+            "DASH-001": {
+                "name": "Performance Data Collection",
+                "threshold_ms": 50,
+                "alert_threshold_ms": 35,
+                "category": "dashboard",
+            },
+            "DASH-002": {
+                "name": "Dashboard Update Latency",
+                "threshold_ms": 100,
+                "alert_threshold_ms": 75,
+                "category": "dashboard",
+            },
+            "DASH-003": {
+                "name": "Trend Analysis Performance",
+                "threshold_ms": 500,
+                "alert_threshold_ms": 400,
+                "category": "dashboard",
+            },
+            "DASH-004": {
+                "name": "Optimization Recommendation Time",
+                "threshold_ms": 300,
+                "alert_threshold_ms": 225,
+                "category": "dashboard",
+            },
         }
 
     async def record_routing_decision(
@@ -226,7 +389,7 @@ class RouterMetricsCollector:
         agent_selected: str,
         alternatives: Optional[List[Dict[str, Any]]] = None,
         cache_hit: bool = False,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """
         Record a routing decision with comprehensive metrics.
@@ -249,12 +412,8 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=latency_ms,
-                    metadata={
-                        "agent_selected": agent_selected,
-                        "cache_hit": cache_hit,
-                        **(metadata or {})
-                    },
-                    metric_type=MetricType.ROUTING_LATENCY
+                    metadata={"agent_selected": agent_selected, "cache_hit": cache_hit, **(metadata or {})},
+                    metric_type=MetricType.ROUTING_LATENCY,
                 )
             )
 
@@ -266,9 +425,9 @@ class RouterMetricsCollector:
                     metadata={
                         "agent_selected": agent_selected,
                         "alternatives_count": len(alternatives) if alternatives else 0,
-                        **(metadata or {})
+                        **(metadata or {}),
                     },
-                    metric_type=MetricType.CONFIDENCE_SCORE
+                    metric_type=MetricType.CONFIDENCE_SCORE,
                 )
             )
 
@@ -296,11 +455,7 @@ class RouterMetricsCollector:
             print(f"⚠️ Metrics collection overhead: {overhead_ms:.2f}ms (target: <10ms)")
 
     async def record_agent_loading(
-        self,
-        agent_name: str,
-        loading_time_ms: float,
-        success: bool,
-        metadata: Optional[Dict[str, Any]] = None
+        self, agent_name: str, loading_time_ms: float, success: bool, metadata: Optional[Dict[str, Any]] = None
     ):
         """
         Record agent loading performance.
@@ -316,12 +471,8 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=loading_time_ms,
-                    metadata={
-                        "agent_name": agent_name,
-                        "success": success,
-                        **(metadata or {})
-                    },
-                    metric_type=MetricType.AGENT_LOADING
+                    metadata={"agent_name": agent_name, "success": success, **(metadata or {})},
+                    metric_type=MetricType.AGENT_LOADING,
                 )
             )
 
@@ -334,7 +485,7 @@ class RouterMetricsCollector:
         to_agent: str,
         transformation_time_ms: float,
         success: bool,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """
         Record agent transformation performance.
@@ -351,13 +502,8 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=transformation_time_ms,
-                    metadata={
-                        "from_agent": from_agent,
-                        "to_agent": to_agent,
-                        "success": success,
-                        **(metadata or {})
-                    },
-                    metric_type=MetricType.AGENT_TRANSFORMATION
+                    metadata={"from_agent": from_agent, "to_agent": to_agent, "success": success, **(metadata or {})},
+                    metric_type=MetricType.AGENT_TRANSFORMATION,
                 )
             )
 
@@ -373,14 +519,11 @@ class RouterMetricsCollector:
                     threshold_name="Agent Transformation Time",
                     measured_value=transformation_time_ms,
                     threshold_value=50,
-                    metadata=metadata
+                    metadata=metadata,
                 )
 
     async def record_threshold_metric(
-        self,
-        threshold_id: str,
-        measured_value: float,
-        metadata: Optional[Dict[str, Any]] = None
+        self, threshold_id: str, measured_value: float, metadata: Optional[Dict[str, Any]] = None
     ):
         """
         Record a measurement against a specific performance threshold.
@@ -419,9 +562,9 @@ class RouterMetricsCollector:
                     metadata={
                         "threshold_id": threshold_id,
                         "threshold_name": threshold_config["name"],
-                        **(metadata or {})
+                        **(metadata or {}),
                     },
-                    metric_type=metric_type
+                    metric_type=metric_type,
                 )
             )
 
@@ -429,28 +572,28 @@ class RouterMetricsCollector:
             await self._check_threshold_violation(threshold_id, measured_value, metadata)
 
     async def _check_threshold_violation(
-        self,
-        threshold_id: str,
-        measured_value: float,
-        metadata: Optional[Dict[str, Any]] = None
+        self, threshold_id: str, measured_value: float, metadata: Optional[Dict[str, Any]] = None
     ):
         """Check if measurement violates threshold and record if so."""
         # Handle special case for routing latency
         if threshold_id == "ROUTING_LATENCY":
             # Routing should be <100ms per specs
             threshold_value = 100
-            alert_threshold = 80
         elif threshold_id not in self._thresholds:
             return
         else:
             threshold_config = self._thresholds[threshold_id]
             # Get threshold value (could be ms, mb, or ratio)
-            threshold_value = threshold_config.get("threshold_ms") or \
-                             threshold_config.get("threshold_mb") or \
-                             threshold_config.get("threshold_ratio", 0)
-            alert_threshold = threshold_config.get("alert_threshold_ms") or \
-                             threshold_config.get("alert_threshold_mb") or \
-                             threshold_config.get("alert_threshold_ratio", 0)
+            threshold_value = (
+                threshold_config.get("threshold_ms")
+                or threshold_config.get("threshold_mb")
+                or threshold_config.get("threshold_ratio", 0)
+            )
+            (
+                threshold_config.get("alert_threshold_ms")
+                or threshold_config.get("alert_threshold_mb")
+                or threshold_config.get("alert_threshold_ratio", 0)
+            )
 
         # Calculate violation percentage
         if threshold_value > 0:
@@ -475,7 +618,7 @@ class RouterMetricsCollector:
                     threshold_value=threshold_value,
                     metadata=metadata,
                     violation_percent=violation_percent,
-                    status=status
+                    status=status,
                 )
 
     async def _record_violation(
@@ -486,7 +629,7 @@ class RouterMetricsCollector:
         threshold_value: float,
         metadata: Optional[Dict[str, Any]] = None,
         violation_percent: Optional[float] = None,
-        status: Optional[ThresholdStatus] = None
+        status: Optional[ThresholdStatus] = None,
     ):
         """Record a threshold violation."""
         if violation_percent is None:
@@ -510,7 +653,7 @@ class RouterMetricsCollector:
             violation_percent=violation_percent,
             status=status,
             timestamp=time.time(),
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         self._violations.append(violation)
@@ -520,9 +663,7 @@ class RouterMetricsCollector:
             print(f"🚨 {status.value.upper()}: {threshold_name} = {measured_value:.2f} (threshold: {threshold_value})")
 
     async def establish_baseline(
-        self,
-        metric_type: MetricType,
-        force_refresh: bool = False
+        self, metric_type: MetricType, force_refresh: bool = False
     ) -> Optional[PerformanceBaseline]:
         """
         Establish performance baseline for a metric type.
@@ -564,17 +705,13 @@ class RouterMetricsCollector:
                 baseline_p99=values[int(len(values) * 0.99)],
                 sample_count=len(values),
                 established_at=time.time(),
-                window_minutes=self.window_minutes
+                window_minutes=self.window_minutes,
             )
 
             self._baselines[metric_type] = baseline
             return baseline
 
-    async def analyze_trends(
-        self,
-        metric_type: MetricType,
-        window_minutes: int = 5
-    ) -> Optional[TrendAnalysis]:
+    async def analyze_trends(self, metric_type: MetricType, window_minutes: int = 5) -> Optional[TrendAnalysis]:
         """
         Analyze performance trends for a metric type.
 
@@ -645,7 +782,7 @@ class RouterMetricsCollector:
                 trend_direction=trend_direction,
                 confidence=confidence,
                 recommendations=recommendations,
-                timestamp=time.time()
+                timestamp=time.time(),
             )
 
     def get_cache_statistics(self) -> Dict[str, Any]:
@@ -658,7 +795,7 @@ class RouterMetricsCollector:
             "total_queries": self._cache_queries,
             "hit_rate_percent": hit_rate,
             "target_hit_rate_percent": 60,
-            "meets_target": hit_rate >= 60
+            "meets_target": hit_rate >= 60,
         }
 
     def get_routing_statistics(self) -> Dict[str, Any]:
@@ -669,25 +806,26 @@ class RouterMetricsCollector:
             "total_decisions": self._routing_decisions,
             "successful_routings": self._successful_routings,
             "fallback_routings": self._fallback_routings,
-            "success_rate_percent": success_rate
+            "success_rate_percent": success_rate,
         }
 
     def get_transformation_statistics(self) -> Dict[str, Any]:
         """Get agent transformation statistics."""
-        success_rate = ((self._transformations - self._transformation_failures) / self._transformations * 100) \
-            if self._transformations > 0 else 0
+        success_rate = (
+            ((self._transformations - self._transformation_failures) / self._transformations * 100)
+            if self._transformations > 0
+            else 0
+        )
 
         return {
             "total_transformations": self._transformations,
             "successful_transformations": self._transformations - self._transformation_failures,
             "failed_transformations": self._transformation_failures,
-            "success_rate_percent": success_rate
+            "success_rate_percent": success_rate,
         }
 
     async def get_recent_violations(
-        self,
-        count: int = 10,
-        min_status: ThresholdStatus = ThresholdStatus.WARNING
+        self, count: int = 10, min_status: ThresholdStatus = ThresholdStatus.WARNING
     ) -> List[ThresholdViolation]:
         """
         Get recent threshold violations.
@@ -705,14 +843,11 @@ class RouterMetricsCollector:
                 ThresholdStatus.EMERGENCY: 4,
                 ThresholdStatus.CRITICAL: 3,
                 ThresholdStatus.WARNING: 2,
-                ThresholdStatus.NORMAL: 1
+                ThresholdStatus.NORMAL: 1,
             }
             min_priority = status_priority[min_status]
 
-            filtered = [
-                v for v in self._violations
-                if status_priority[v.status] >= min_priority
-            ]
+            filtered = [v for v in self._violations if status_priority[v.status] >= min_priority]
 
             # Sort by timestamp descending
             filtered.sort(key=lambda v: v.timestamp, reverse=True)
@@ -736,7 +871,7 @@ class RouterMetricsCollector:
             "performance_trends": {},
             "recent_violations": [],
             "optimization_recommendations": [],
-            "generation_time_ms": 0
+            "generation_time_ms": 0,
         }
 
         # Analyze trends for each metric type
@@ -744,7 +879,7 @@ class RouterMetricsCollector:
             MetricType.ROUTING_LATENCY,
             MetricType.CONFIDENCE_SCORE,
             MetricType.AGENT_LOADING,
-            MetricType.AGENT_TRANSFORMATION
+            MetricType.AGENT_TRANSFORMATION,
         ]:
             trend = await self.analyze_trends(metric_type)
             if trend:
@@ -754,7 +889,7 @@ class RouterMetricsCollector:
                     "degradation_percent": trend.degradation_percent,
                     "trend_direction": trend.trend_direction,
                     "confidence": trend.confidence,
-                    "recommendations": trend.recommendations
+                    "recommendations": trend.recommendations,
                 }
 
                 # Add to overall recommendations if degrading
@@ -771,7 +906,7 @@ class RouterMetricsCollector:
                 "threshold_value": v.threshold_value,
                 "violation_percent": v.violation_percent,
                 "status": v.status.value,
-                "timestamp": datetime.fromtimestamp(v.timestamp).isoformat()
+                "timestamp": datetime.fromtimestamp(v.timestamp).isoformat(),
             }
             for v in violations
         ]
@@ -803,9 +938,8 @@ class RouterMetricsCollector:
                     metric_type.value: {
                         "count": len(self._metrics[metric_type]),
                         "latest_values": [
-                            {"timestamp": m.timestamp, "value": m.value}
-                            for m in list(self._metrics[metric_type])[-10:]
-                        ]
+                            {"timestamp": m.timestamp, "value": m.value} for m in list(self._metrics[metric_type])[-10:]
+                        ],
                     }
                     for metric_type in self._metrics.keys()
                 },
@@ -816,13 +950,13 @@ class RouterMetricsCollector:
                         "measured_value": v.measured_value,
                         "threshold_value": v.threshold_value,
                         "status": v.status.value,
-                        "timestamp": v.timestamp
+                        "timestamp": v.timestamp,
                     }
                     for v in list(self._violations)[-20:]
-                ]
+                ],
             }
 
-            with open(metrics_file, 'w') as f:
+            with open(metrics_file, "w") as f:
                 json.dump(data, f, indent=2)
 
             self._last_flush = time.time()

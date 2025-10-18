@@ -9,12 +9,11 @@ Legacy scanning functionality is still available but deprecated.
 """
 
 import logging
-import os
 import importlib.util
 import inspect
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Callable, Any, TypeVar
-from functools import lru_cache, wraps
+from typing import Dict, List, Optional, Callable, Any, TypeVar
+from functools import lru_cache
 
 # Configure logging for agent registry
 logger = logging.getLogger(__name__)
@@ -23,14 +22,11 @@ logger = logging.getLogger(__name__)
 _AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 # Type variable for decorator
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def register_agent(
-    agent_name: str,
-    agent_type: str,
-    capabilities: List[str],
-    description: str = ""
+    agent_name: str, agent_type: str, capabilities: List[str], description: str = ""
 ) -> Callable[[T], T]:
     """
     Decorator for agent self-registration.
@@ -70,6 +66,7 @@ def register_agent(
         ... def execute(task):
         ...     pass
     """
+
     def decorator(cls_or_func: T) -> T:
         """Inner decorator that performs the registration."""
         # Log registration start

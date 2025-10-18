@@ -22,7 +22,7 @@ get_trace_logger = trace_logger.get_trace_logger
 
 
 # Sample Python code with bugs for debugging
-BUGGY_CODE = '''
+BUGGY_CODE = """
 def calculate_total(items):
     total = 0
     for item in items:
@@ -43,36 +43,21 @@ class UserManager:
             if user["id"] == user_id:
                 return user
         return None
-'''
+"""
 
 # Contract for code generation
 SAMPLE_CONTRACT = {
     "name": "UserAuthentication",
     "description": "Contract for user authentication operations",
     "input_model": {
-        "username": {
-            "type": "str",
-            "description": "User's username"
-        },
-        "password": {
-            "type": "str",
-            "description": "User's password"
-        }
+        "username": {"type": "str", "description": "User's username"},
+        "password": {"type": "str", "description": "User's password"},
     },
     "output_model": {
-        "success": {
-            "type": "bool",
-            "description": "Authentication success status"
-        },
-        "token": {
-            "type": "str | None",
-            "description": "JWT token if successful"
-        },
-        "error_message": {
-            "type": "str | None",
-            "description": "Error message if failed"
-        }
-    }
+        "success": {"type": "bool", "description": "Authentication success status"},
+        "token": {"type": "str | None", "description": "JWT token if successful"},
+        "error_message": {"type": "str | None", "description": "Error message if failed"},
+    },
 }
 
 
@@ -94,12 +79,8 @@ async def run_demo():
             AgentTask(
                 task_id="task1",
                 description="Generate code from contract",
-                input_data={
-                    "contract": SAMPLE_CONTRACT,
-                    "node_type": "Effect",
-                    "language": "python"
-                },
-                dependencies=[]  # No dependencies, can run immediately
+                input_data={"contract": SAMPLE_CONTRACT, "node_type": "Effect", "language": "python"},
+                dependencies=[],  # No dependencies, can run immediately
             ),
             AgentTask(
                 task_id="task2",
@@ -108,10 +89,10 @@ async def run_demo():
                     "code": BUGGY_CODE,
                     "file_path": "user_manager.py",
                     "language": "python",
-                    "error": "AttributeError: 'NoneType' object has no attribute 'id'"
+                    "error": "AttributeError: 'NoneType' object has no attribute 'id'",
                 },
-                dependencies=[]  # No dependencies, runs in parallel with task1
-            )
+                dependencies=[],  # No dependencies, runs in parallel with task1
+            ),
         ]
 
         print(f"Created {len(tasks)} tasks:")
@@ -141,7 +122,7 @@ async def run_demo():
             print(f"  Trace ID: {result.trace_id}")
 
             if result.success:
-                print(f"  Output Summary:")
+                print("  Output Summary:")
 
                 # Contract-driven generator results
                 if "generated_code" in result.output_data:
@@ -161,7 +142,7 @@ async def run_demo():
                     print(f"    - Root Cause Confidence: {confidence:.2%}")
                     print(f"    - Quality Improvement: {improvement.get('delta', 0):.2f}")
                     print(f"    - Intelligence Sources: {sources}")
-                    print(f"    - Solution Generated: ✅")
+                    print("    - Solution Generated: ✅")
             else:
                 print(f"  Error: {result.error}")
 
@@ -178,7 +159,7 @@ async def run_demo():
             await trace_logger.print_trace_summary(coordinator._coordinator_trace_id)
 
         # Show trace file location
-        print(f"\n📁 Trace files saved in: agents/parallel_execution/traces/")
+        print("\n📁 Trace files saved in: agents/parallel_execution/traces/")
         print(f"   Coordinator trace: {coordinator._coordinator_trace_id}.json")
         print()
 
@@ -196,12 +177,15 @@ async def run_demo():
         print(f"Parallel Time (actual): {actual_time:.2f}ms")
         print(f"Speedup: {speedup:.2f}x")
         print(f"Efficiency: {efficiency:.1f}%")
-        print(f"Time Saved: {total_sequential_time - actual_time:.2f}ms ({((total_sequential_time - actual_time) / total_sequential_time * 100):.1f}%)")
+        print(
+            f"Time Saved: {total_sequential_time - actual_time:.2f}ms ({((total_sequential_time - actual_time) / total_sequential_time * 100):.1f}%)"
+        )
         print()
 
     except Exception as e:
         print(f"❌ Demo failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
     finally:

@@ -17,8 +17,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from uuid import UUID
-from functools import lru_cache
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -45,6 +43,7 @@ class MixinPrediction:
         learned_from_samples: Number of training samples used
         explanation: Human-readable explanation
     """
+
     mixin_a: str
     mixin_b: str
     node_type: str
@@ -69,6 +68,7 @@ class ModelMetrics:
         test_samples: Number of test samples
         trained_at: Training timestamp
     """
+
     accuracy: float
     precision: float
     recall: float
@@ -99,7 +99,7 @@ class MixinLearner:
         model_path: Optional[Path] = None,
         auto_train: bool = False,
         min_confidence_threshold: float = 0.7,
-        persistence: Optional[CodegenPersistence] = None
+        persistence: Optional[CodegenPersistence] = None,
     ):
         """
         Initialize mixin learner.
@@ -146,11 +146,11 @@ class MixinLearner:
     def _load_model(self):
         """Load trained model and metrics from disk"""
         try:
-            with open(self.model_path, 'rb') as f:
+            with open(self.model_path, "rb") as f:
                 self.model = pickle.load(f)
 
             if self.metrics_path.exists():
-                with open(self.metrics_path, 'rb') as f:
+                with open(self.metrics_path, "rb") as f:
                     self.metrics = pickle.load(f)
 
             self.logger.info("Successfully loaded model and metrics")
@@ -163,10 +163,10 @@ class MixinLearner:
     def _save_model(self):
         """Save trained model and metrics to disk"""
         try:
-            with open(self.model_path, 'wb') as f:
+            with open(self.model_path, "wb") as f:
                 pickle.dump(self.model, f)
 
-            with open(self.metrics_path, 'wb') as f:
+            with open(self.metrics_path, "wb") as f:
                 pickle.dump(self.metrics, f)
 
             self.logger.info(f"Saved model to {self.model_path}")
@@ -175,10 +175,7 @@ class MixinLearner:
             self.logger.error(f"Failed to save model: {e}")
 
     async def train_model(
-        self,
-        min_samples: int = 50,
-        test_size: float = 0.2,
-        cross_val_folds: int = 5
+        self, min_samples: int = 50, test_size: float = 0.2, cross_val_folds: int = 5
     ) -> ModelMetrics:
         """
         Train compatibility prediction model from historical data.
@@ -201,8 +198,7 @@ class MixinLearner:
 
         if len(training_data) < min_samples:
             raise ValueError(
-                f"Insufficient training data: {len(training_data)} samples "
-                f"(minimum {min_samples} required)"
+                f"Insufficient training data: {len(training_data)} samples " f"(minimum {min_samples} required)"
             )
 
         self.logger.info(f"Fetched {len(training_data)} training samples")
@@ -211,9 +207,7 @@ class MixinLearner:
         X, y, historical_map = self._prepare_training_data(training_data)
 
         # Split train/test
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=y
-        )
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
 
         # Train ensemble of Random Forest and Gradient Boosting for better accuracy
         rf_model = RandomForestClassifier(
@@ -221,12 +215,12 @@ class MixinLearner:
             max_depth=20,  # Allow deeper trees for complex patterns
             min_samples_split=3,  # More flexible splitting
             min_samples_leaf=1,  # Allow finer granularity
-            max_features='sqrt',  # Use sqrt of features for each split
+            max_features="sqrt",  # Use sqrt of features for each split
             random_state=42,
             n_jobs=-1,
-            class_weight='balanced',  # Handle imbalanced data
+            class_weight="balanced",  # Handle imbalanced data
             bootstrap=True,
-            oob_score=True  # Out-of-bag score for validation
+            oob_score=True,  # Out-of-bag score for validation
         )
 
         gb_model = GradientBoostingClassifier(
@@ -236,7 +230,7 @@ class MixinLearner:
             min_samples_split=3,
             min_samples_leaf=1,
             random_state=42,
-            subsample=0.9
+            subsample=0.9,
         )
 
         self.logger.info("Training ensemble models (RF + GB)...")
@@ -258,22 +252,20 @@ class MixinLearner:
                 y_pred.append(rf_pred[i])
             else:
                 # When models disagree, use RF probability
-                rf_proba = rf_model.predict_proba(X_test[i:i+1])[0]
+                rf_proba = rf_model.predict_proba(X_test[i : i + 1])[0]
                 y_pred.append(1 if rf_proba[1] > 0.6 else 0)
         y_pred = np.array(y_pred)
 
-        y_pred_proba = rf_model.predict_proba(X_test)
+        rf_model.predict_proba(X_test)
 
         # Calculate metrics
         accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='binary', zero_division=0)
-        recall = recall_score(y_test, y_pred, average='binary', zero_division=0)
-        f1 = f1_score(y_test, y_pred, average='binary', zero_division=0)
+        precision = precision_score(y_test, y_pred, average="binary", zero_division=0)
+        recall = recall_score(y_test, y_pred, average="binary", zero_division=0)
+        f1 = f1_score(y_test, y_pred, average="binary", zero_division=0)
 
         # Cross-validation
-        cv_scores = cross_val_score(
-            self.model, X_train, y_train, cv=cross_val_folds, scoring='accuracy'
-        )
+        cv_scores = cross_val_score(self.model, X_train, y_train, cv=cross_val_folds, scoring="accuracy")
 
         self.metrics = ModelMetrics(
             accuracy=accuracy,
@@ -282,7 +274,7 @@ class MixinLearner:
             f1_score=f1,
             cross_val_scores=cv_scores.tolist(),
             training_samples=len(X_train),
-            test_samples=len(X_test)
+            test_samples=len(X_test),
         )
 
         self.logger.info(
@@ -317,7 +309,8 @@ class MixinLearner:
         """
         pool = await self.persistence._ensure_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT
                     mixin_a,
                     mixin_b,
@@ -330,13 +323,13 @@ class MixinLearner:
                 FROM mixin_compatibility_matrix
                 WHERE success_count + failure_count >= 3  -- Minimum tests for reliability
                 ORDER BY created_at DESC
-            """)
+            """
+            )
 
             return [dict(row) for row in rows]
 
     def _prepare_training_data(
-        self,
-        training_data: List[Dict[str, Any]]
+        self, training_data: List[Dict[str, Any]]
     ) -> Tuple[np.ndarray, np.ndarray, Dict[Tuple[str, str, str], Dict[str, Any]]]:
         """
         Prepare feature matrix and labels from raw training data.
@@ -352,13 +345,13 @@ class MixinLearner:
         historical_map = {}
 
         for record in training_data:
-            mixin_a = record['mixin_a']
-            mixin_b = record['mixin_b']
-            node_type = record['node_type']
+            mixin_a = record["mixin_a"]
+            mixin_b = record["mixin_b"]
+            node_type = record["node_type"]
 
             # Calculate label (compatible if success_rate > 0.5)
-            success_count = record['success_count']
-            failure_count = record['failure_count']
+            success_count = record["success_count"]
+            failure_count = record["failure_count"]
             total_tests = success_count + failure_count
 
             if total_tests == 0:
@@ -373,24 +366,17 @@ class MixinLearner:
             # Store historical data for feature extraction
             key = (mixin_a, mixin_b, node_type)
             historical_map[key] = {
-                'success_rate': success_rate,
-                'total_tests': total_tests,
-                'avg_compatibility': float(record['compatibility_score'] or 0.5)
+                "success_rate": success_rate,
+                "total_tests": total_tests,
+                "avg_compatibility": float(record["compatibility_score"] or 0.5),
             }
 
         # Extract features
-        feature_matrix = self.feature_extractor.batch_extract_features(
-            mixin_pairs, historical_map
-        )
+        feature_matrix = self.feature_extractor.batch_extract_features(mixin_pairs, historical_map)
 
         return feature_matrix, np.array(labels), historical_map
 
-    async def _fetch_historical_data(
-        self,
-        mixin_a: str,
-        mixin_b: str,
-        node_type: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _fetch_historical_data(self, mixin_a: str, mixin_b: str, node_type: str) -> Optional[Dict[str, Any]]:
         """
         Fetch historical data for mixin pair from database.
 
@@ -406,7 +392,8 @@ class MixinLearner:
             pool = await self.persistence._ensure_pool()
             async with pool.acquire() as conn:
                 # Try both orderings
-                row = await conn.fetchrow("""
+                row = await conn.fetchrow(
+                    """
                     SELECT
                         success_count,
                         failure_count,
@@ -416,15 +403,19 @@ class MixinLearner:
                         AND node_type = $3
                     ORDER BY last_tested DESC
                     LIMIT 1
-                """, mixin_a, mixin_b, node_type)
+                """,
+                    mixin_a,
+                    mixin_b,
+                    node_type,
+                )
 
                 if row:
-                    total_tests = row['success_count'] + row['failure_count']
+                    total_tests = row["success_count"] + row["failure_count"]
                     if total_tests > 0:
                         return {
-                            'success_rate': row['success_count'] / total_tests,
-                            'total_tests': total_tests,
-                            'avg_compatibility': float(row['compatibility_score'] or 0.5)
+                            "success_rate": row["success_count"] / total_tests,
+                            "total_tests": total_tests,
+                            "avg_compatibility": float(row["compatibility_score"] or 0.5),
                         }
         except Exception as e:
             self.logger.debug(f"Could not fetch historical data: {e}")
@@ -432,11 +423,7 @@ class MixinLearner:
         return None
 
     def predict_compatibility(
-        self,
-        mixin_a: str,
-        mixin_b: str,
-        node_type: str,
-        historical_data: Optional[Dict[str, Any]] = None
+        self, mixin_a: str, mixin_b: str, node_type: str, historical_data: Optional[Dict[str, Any]] = None
     ) -> MixinPrediction:
         """
         Predict compatibility for mixin pair.
@@ -465,18 +452,14 @@ class MixinLearner:
             confidence = float(probabilities[int(cached_prediction)])
 
             # Apply structural adjustments even for cached predictions
-            prediction, confidence = self._adjust_confidence(
-                mixin_a, mixin_b, node_type, cached_prediction, confidence
-            )
+            prediction, confidence = self._adjust_confidence(mixin_a, mixin_b, node_type, cached_prediction, confidence)
         else:
             # Check feature cache
             if cache_key in self._feature_cache:
                 feature_vector = self._feature_cache[cache_key]
             else:
                 # Extract features
-                features = self.feature_extractor.extract_features(
-                    mixin_a, mixin_b, node_type, historical_data
-                )
+                features = self.feature_extractor.extract_features(mixin_a, mixin_b, node_type, historical_data)
                 feature_vector = features.combined_vector
 
                 # Cache features for future use
@@ -508,14 +491,10 @@ class MixinLearner:
             confidence = float(probabilities[int(prediction)])
 
             # Apply confidence adjustment and possible prediction override
-            prediction, confidence = self._adjust_confidence(
-                mixin_a, mixin_b, node_type, prediction, confidence
-            )
+            prediction, confidence = self._adjust_confidence(mixin_a, mixin_b, node_type, prediction, confidence)
 
         # Generate explanation (pass None for features as it's only used for metadata)
-        explanation = self._generate_explanation(
-            mixin_a, mixin_b, node_type, prediction, confidence, None
-        )
+        explanation = self._generate_explanation(mixin_a, mixin_b, node_type, prediction, confidence, None)
 
         return MixinPrediction(
             mixin_a=mixin_a,
@@ -524,16 +503,11 @@ class MixinLearner:
             compatible=bool(prediction),
             confidence=confidence,
             learned_from_samples=self.metrics.training_samples if self.metrics else 0,
-            explanation=explanation
+            explanation=explanation,
         )
 
     def _adjust_confidence(
-        self,
-        mixin_a: str,
-        mixin_b: str,
-        node_type: str,
-        prediction: int,
-        base_confidence: float
+        self, mixin_a: str, mixin_b: str, node_type: str, prediction: int, base_confidence: float
     ) -> Tuple[int, float]:
         """
         Adjust prediction and confidence based on strong structural indicators.
@@ -576,15 +550,15 @@ class MixinLearner:
 
         # Check for complementary infrastructure mixins
         infra_pairs = [
-            ('MixinLogging', 'MixinMetrics'),
-            ('MixinLogging', 'MixinHealthCheck'),
-            ('MixinMetrics', 'MixinHealthCheck'),
-            ('MixinRetry', 'MixinCircuitBreaker'),
-            ('MixinRetry', 'MixinTimeout'),
-            ('MixinCircuitBreaker', 'MixinTimeout'),
-            ('MixinTransaction', 'MixinConnection'),
-            ('MixinConnection', 'MixinRepository'),
-            ('MixinTransaction', 'MixinRepository'),
+            ("MixinLogging", "MixinMetrics"),
+            ("MixinLogging", "MixinHealthCheck"),
+            ("MixinMetrics", "MixinHealthCheck"),
+            ("MixinRetry", "MixinCircuitBreaker"),
+            ("MixinRetry", "MixinTimeout"),
+            ("MixinCircuitBreaker", "MixinTimeout"),
+            ("MixinTransaction", "MixinConnection"),
+            ("MixinConnection", "MixinRepository"),
+            ("MixinTransaction", "MixinRepository"),
         ]
         if (mixin_a, mixin_b) in infra_pairs or (mixin_b, mixin_a) in infra_pairs:
             compat_score += 0.25  # Known complementary pairs
@@ -613,8 +587,7 @@ class MixinLearner:
             # Override to compatible if model predicted incompatible
             if prediction == 0:
                 self.logger.debug(
-                    f"Overriding incompatible prediction for {mixin_a}+{mixin_b}: "
-                    f"structural score {net_score:.2f}"
+                    f"Overriding incompatible prediction for {mixin_a}+{mixin_b}: " f"structural score {net_score:.2f}"
                 )
                 prediction = 1
             # Boost confidence
@@ -623,8 +596,7 @@ class MixinLearner:
             # Override to incompatible if model predicted compatible
             if prediction == 1:
                 self.logger.debug(
-                    f"Overriding compatible prediction for {mixin_a}+{mixin_b}: "
-                    f"structural score {net_score:.2f}"
+                    f"Overriding compatible prediction for {mixin_a}+{mixin_b}: " f"structural score {net_score:.2f}"
                 )
                 prediction = 0
             # Boost confidence
@@ -636,13 +608,7 @@ class MixinLearner:
         return prediction, adjusted_confidence
 
     def _generate_explanation(
-        self,
-        mixin_a: str,
-        mixin_b: str,
-        node_type: str,
-        prediction: int,
-        confidence: float,
-        features: Any
+        self, mixin_a: str, mixin_b: str, node_type: str, prediction: int, confidence: float, features: Any
     ) -> str:
         """Generate human-readable explanation for prediction"""
         char_a = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_a)
@@ -691,7 +657,7 @@ class MixinLearner:
         node_type: str,
         required_capabilities: List[str],
         existing_mixins: Optional[List[str]] = None,
-        max_recommendations: int = 5
+        max_recommendations: int = 5,
     ) -> List[Tuple[str, float, str]]:
         """
         Recommend mixins for a node type based on required capabilities.
@@ -737,8 +703,7 @@ class MixinLearner:
             # Check if mixin provides required capabilities
             char = MixinFeatureExtractor.MIXIN_CHARACTERISTICS[mixin]
             capability_match = sum(
-                1 for cap in required_capabilities
-                if cap.lower() in {tag.lower() for tag in char.compatibility_tags}
+                1 for cap in required_capabilities if cap.lower() in {tag.lower() for tag in char.compatibility_tags}
             )
 
             if capability_match > 0:
@@ -752,32 +717,30 @@ class MixinLearner:
         return recommendations[:max_recommendations]
 
     def _fallback_recommendations(
-        self,
-        node_type: str,
-        required_capabilities: List[str]
+        self, node_type: str, required_capabilities: List[str]
     ) -> List[Tuple[str, float, str]]:
         """Fallback rule-based recommendations when model not available"""
         recommendations = []
 
         capability_map = {
-            'cache': 'MixinCaching',
-            'caching': 'MixinCaching',
-            'logging': 'MixinLogging',
-            'metrics': 'MixinMetrics',
-            'health': 'MixinHealthCheck',
-            'monitoring': 'MixinHealthCheck',
-            'events': 'MixinEventBus',
-            'messaging': 'MixinEventBus',
-            'retry': 'MixinRetry',
-            'resilience': 'MixinRetry',
-            'circuit': 'MixinCircuitBreaker',
-            'timeout': 'MixinTimeout',
-            'validation': 'MixinValidation',
-            'security': 'MixinSecurity',
-            'auth': 'MixinAuthorization',
-            'audit': 'MixinAudit',
-            'transaction': 'MixinTransaction',
-            'database': 'MixinConnection',
+            "cache": "MixinCaching",
+            "caching": "MixinCaching",
+            "logging": "MixinLogging",
+            "metrics": "MixinMetrics",
+            "health": "MixinHealthCheck",
+            "monitoring": "MixinHealthCheck",
+            "events": "MixinEventBus",
+            "messaging": "MixinEventBus",
+            "retry": "MixinRetry",
+            "resilience": "MixinRetry",
+            "circuit": "MixinCircuitBreaker",
+            "timeout": "MixinTimeout",
+            "validation": "MixinValidation",
+            "security": "MixinSecurity",
+            "auth": "MixinAuthorization",
+            "audit": "MixinAudit",
+            "transaction": "MixinTransaction",
+            "database": "MixinConnection",
         }
 
         seen_mixins = set()
@@ -791,12 +754,7 @@ class MixinLearner:
         return recommendations
 
     async def update_from_feedback(
-        self,
-        mixin_a: str,
-        mixin_b: str,
-        node_type: str,
-        success: bool,
-        retrain_threshold: int = 100
+        self, mixin_a: str, mixin_b: str, node_type: str, success: bool, retrain_threshold: int = 100
     ):
         """
         Update model with new feedback and optionally retrain.
@@ -810,10 +768,7 @@ class MixinLearner:
         """
         # Update database
         await self.persistence.update_mixin_compatibility(
-            mixin_a=mixin_a,
-            mixin_b=mixin_b,
-            node_type=node_type,
-            success=success
+            mixin_a=mixin_a, mixin_b=mixin_b, node_type=node_type, success=success
         )
 
         # Check if retraining needed
@@ -831,8 +786,4 @@ class MixinLearner:
         return self.model is not None
 
 
-__all__ = [
-    'MixinLearner',
-    'MixinPrediction',
-    'ModelMetrics'
-]
+__all__ = ["MixinLearner", "MixinPrediction", "ModelMetrics"]

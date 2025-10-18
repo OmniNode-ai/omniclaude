@@ -13,14 +13,11 @@ Tests cover:
 """
 
 import pytest
-import tempfile
 import time
-import asyncio
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
 
-from agents.lib.template_cache import TemplateCache, CachedTemplate
+from agents.lib.template_cache import TemplateCache
 
 
 class TestCacheBasics:
@@ -28,12 +25,7 @@ class TestCacheBasics:
 
     def test_cache_initialization(self):
         """Test cache initialization with different configurations"""
-        cache = TemplateCache(
-            max_templates=50,
-            max_size_mb=25,
-            ttl_seconds=1800,
-            enable_persistence=False
-        )
+        cache = TemplateCache(max_templates=50, max_size_mb=25, ttl_seconds=1800, enable_persistence=False)
 
         assert cache.max_templates == 50
         assert cache.max_size_mb == 25
@@ -55,7 +47,7 @@ class TestCacheBasics:
             template_name="test_template",
             template_type="TEST",
             file_path=template_file,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
 
         assert not hit1, "First access should be cache miss"
@@ -68,7 +60,7 @@ class TestCacheBasics:
             template_name="test_template",
             template_type="TEST",
             file_path=template_file,
-            loader_func=lambda p: p.read_text()
+            loader_func=lambda p: p.read_text(),
         )
 
         assert hit2, "Second access should be cache hit"
@@ -92,7 +84,7 @@ class TestCacheBasics:
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template_file,
-                loader_func=lambda p: p.read_text()
+                loader_func=lambda p: p.read_text(),
             )
             assert not hit
 
@@ -105,7 +97,7 @@ class TestCacheBasics:
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template_file,
-                loader_func=lambda p: p.read_text()
+                loader_func=lambda p: p.read_text(),
             )
             assert hit
 
@@ -147,14 +139,14 @@ class TestCacheBasics:
             cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 3
+        assert stats["cached_templates"] == 3
 
         # Invalidate all
         cache.invalidate_all()
         assert cache.invalidations == 3
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 0
+        assert stats["cached_templates"] == 0
 
 
 class TestContentBasedInvalidation:
@@ -221,7 +213,7 @@ class TestLRUEviction:
             cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 3, "Should have evicted 1 template"
+        assert stats["cached_templates"] == 3, "Should have evicted 1 template"
         assert cache.evictions == 1
 
         # template_0 should be evicted (least recently used)
@@ -247,7 +239,7 @@ class TestLRUEviction:
         # Should have evicted some templates due to size limit
         stats = cache.get_stats()
         assert cache.evictions > 0, "Should have evicted templates due to size limit"
-        assert stats['total_size_mb'] <= cache.max_size_mb
+        assert stats["total_size_mb"] <= cache.max_size_mb
 
     def test_lru_ordering(self, tmp_path):
         """Test that least recently used template is evicted first"""
@@ -341,8 +333,8 @@ class TestCacheWarmup:
         cache.warmup(tmp_path, ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"])
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 4, "Warmup should load all 4 templates"
-        assert stats['hit_rate'] == 0.0, "Initial load should all be misses"
+        assert stats["cached_templates"] == 4, "Warmup should load all 4 templates"
+        assert stats["hit_rate"] == 0.0, "Initial load should all be misses"
 
         # Subsequent accesses should be cache hits
         template_file = tmp_path / "effect_node_template.py"
@@ -361,7 +353,7 @@ class TestCacheWarmup:
         cache.warmup(tmp_path, ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"])
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 1, "Should only cache existing templates"
+        assert stats["cached_templates"] == 1, "Should only cache existing templates"
 
 
 class TestStatistics:
@@ -379,11 +371,11 @@ class TestStatistics:
             cache.get("template", "TEST", template_file, lambda p: p.read_text())
 
         stats = cache.get_stats()
-        assert stats['hits'] == 2
-        assert stats['misses'] == 1
-        assert stats['hit_rate'] == pytest.approx(0.6667, rel=0.01)
-        assert stats['cached_templates'] == 1
-        assert stats['total_size_bytes'] > 0
+        assert stats["hits"] == 2
+        assert stats["misses"] == 1
+        assert stats["hit_rate"] == pytest.approx(0.6667, rel=0.01)
+        assert stats["cached_templates"] == 1
+        assert stats["total_size_bytes"] > 0
 
     def test_performance_metrics(self, tmp_path):
         """Test performance metrics calculation"""
@@ -400,10 +392,10 @@ class TestStatistics:
             cache.get("template", "TEST", template_file, lambda p: p.read_text())
 
         stats = cache.get_stats()
-        assert stats['avg_uncached_load_ms'] > 0
-        assert stats['avg_cached_load_ms'] >= 0
-        assert stats['time_saved_ms'] >= 0
-        assert stats['improvement_percent'] >= 0
+        assert stats["avg_uncached_load_ms"] > 0
+        assert stats["avg_cached_load_ms"] >= 0
+        assert stats["time_saved_ms"] >= 0
+        assert stats["improvement_percent"] >= 0
 
     def test_detailed_statistics(self, tmp_path):
         """Test detailed statistics with per-template breakdown"""
@@ -418,13 +410,13 @@ class TestStatistics:
                 cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
 
         detailed_stats = cache.get_detailed_stats()
-        assert 'templates' in detailed_stats
-        assert len(detailed_stats['templates']) == 3
+        assert "templates" in detailed_stats
+        assert len(detailed_stats["templates"]) == 3
 
         # Templates should be sorted by access count
-        templates = detailed_stats['templates']
-        assert templates[0]['access_count'] >= templates[1]['access_count']
-        assert templates[1]['access_count'] >= templates[2]['access_count']
+        templates = detailed_stats["templates"]
+        assert templates[0]["access_count"] >= templates[1]["access_count"]
+        assert templates[1]["access_count"] >= templates[2]["access_count"]
 
     def test_capacity_usage_metrics(self, tmp_path):
         """Test capacity usage percentage calculations"""
@@ -437,8 +429,8 @@ class TestStatistics:
             cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
 
         stats = cache.get_stats()
-        assert stats['capacity_usage_percent'] == 30.0  # 3/10 * 100
-        assert stats['memory_usage_percent'] < 10.0  # Should be very small
+        assert stats["capacity_usage_percent"] == 30.0  # 3/10 * 100
+        assert stats["memory_usage_percent"] < 10.0  # Should be very small
 
 
 class TestThreadSafety:
@@ -463,8 +455,8 @@ class TestThreadSafety:
 
         # All operations should complete successfully
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 1
-        assert stats['hits'] + stats['misses'] == 50  # 10 threads * 5 accesses
+        assert stats["cached_templates"] == 1
+        assert stats["hits"] + stats["misses"] == 50  # 10 threads * 5 accesses
 
     def test_concurrent_access_different_templates(self, tmp_path):
         """Test concurrent access to different templates"""
@@ -483,16 +475,13 @@ class TestThreadSafety:
 
         # Load templates concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [
-                executor.submit(load_template, tid, tfile)
-                for tid, tfile in templates
-            ]
+            futures = [executor.submit(load_template, tid, tfile) for tid, tfile in templates]
             for future in futures:
                 future.result()
 
         stats = cache.get_stats()
-        assert stats['cached_templates'] == 10
-        assert stats['hits'] + stats['misses'] == 30  # 10 templates * 3 accesses
+        assert stats["cached_templates"] == 10
+        assert stats["hits"] + stats["misses"] == 30  # 10 templates * 3 accesses
 
 
 class TestPerformanceBenchmark:
@@ -509,8 +498,8 @@ class TestPerformanceBenchmark:
         def process_template(content: str) -> int:
             """Simulate template processing overhead"""
             # Count lines and classes to simulate parsing
-            lines = content.count('\n')
-            classes = content.count('class ')
+            lines = content.count("\n")
+            classes = content.count("class ")
             return lines + classes
 
         def uncached_load(path: Path) -> str:
@@ -565,15 +554,14 @@ class TestPerformanceBenchmark:
         # Cache should show measurable improvement
         # Note: Even with OS caching, avoiding file I/O should provide some benefit
         assert avg_cached_ms < avg_uncached_ms, (
-            f"Cache should improve performance. "
-            f"Uncached: {avg_uncached_ms:.3f}ms, Cached: {avg_cached_ms:.3f}ms"
+            f"Cache should improve performance. " f"Uncached: {avg_uncached_ms:.3f}ms, Cached: {avg_cached_ms:.3f}ms"
         )
 
         # Verify cache is actually being used
         stats = cache_enabled.get_stats()
-        assert stats['hits'] == 10, "Should have 10 cache hits"
-        assert stats['misses'] == 1, "Should have 1 cache miss (initial load)"
-        assert stats['hit_rate'] >= 0.90, "Hit rate should be ≥90%"
+        assert stats["hits"] == 10, "Should have 10 cache hits"
+        assert stats["misses"] == 1, "Should have 1 cache miss (initial load)"
+        assert stats["hit_rate"] >= 0.90, "Hit rate should be ≥90%"
 
     def test_hit_rate_after_warmup(self, tmp_path):
         """Test that hit rate reaches target after warmup"""
@@ -598,7 +586,7 @@ class TestPerformanceBenchmark:
         print(f"\n  Hit rate after warmup: {stats['hit_rate']:.1%}")
 
         # After warmup, hit rate should be very high
-        assert stats['hit_rate'] >= 0.80, "Hit rate should be ≥80% after warmup"
+        assert stats["hit_rate"] >= 0.80, "Hit rate should be ≥80% after warmup"
 
 
 # Fixtures

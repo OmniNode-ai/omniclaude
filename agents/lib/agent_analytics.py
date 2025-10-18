@@ -9,19 +9,19 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .db import get_pg_pool
 
 
 class AgentAnalytics:
     """Analytics system for tracking and optimizing agent performance."""
-    
+
     def __init__(self):
         self._performance_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_ttl = 300  # 5 minutes
         self._last_cache_update: Optional[datetime] = None
-    
+
     async def track_agent_performance(
         self,
         agent_id: str,
@@ -34,7 +34,7 @@ class AgentAnalytics:
     ) -> str:
         """
         Tracks agent performance for a specific task.
-        
+
         Args:
             agent_id: Identifier for the agent
             task_type: Type of task performed
@@ -43,16 +43,16 @@ class AgentAnalytics:
             run_id: Workflow run identifier
             metadata: Additional performance metadata
             correlation_id: Correlation identifier
-            
+
         Returns:
             Performance tracking ID
         """
         pool = await get_pg_pool()
         if pool is None:
             return "no-tracking-id"
-        
+
         performance_id = str(uuid.uuid4())
-        
+
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -72,11 +72,11 @@ class AgentAnalytics:
                 correlation_id,
                 json.dumps(metadata or {}, default=str),
             )
-        
+
         # Invalidate cache
         self._invalidate_cache()
         return performance_id
-    
+
     async def get_agent_performance_summary(
         self,
         agent_id: Optional[str] = None,
@@ -85,12 +85,12 @@ class AgentAnalytics:
     ) -> Dict[str, Any]:
         """
         Gets performance summary for agents.
-        
+
         Args:
             agent_id: Specific agent to analyze (None for all)
             task_type: Specific task type to analyze (None for all)
             days: Number of days to look back
-            
+
         Returns:
             Performance summary data
         """
@@ -98,29 +98,29 @@ class AgentAnalytics:
         cache_key = f"{agent_id or 'all'}_{task_type or 'all'}_{days}"
         if self._is_cache_valid() and cache_key in self._performance_cache:
             return self._performance_cache[cache_key]
-        
+
         pool = await get_pg_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Build query conditions
             where_conditions = ["created_at >= $1"]
             params = [since_date]
             param_count = 1
-            
+
             if agent_id:
                 param_count += 1
                 where_conditions.append(f"agent_id = ${param_count}")
                 params.append(agent_id)
-            
+
             if task_type:
                 param_count += 1
                 where_conditions.append(f"task_type = ${param_count}")
                 params.append(task_type)
-            
+
             # Get overall performance metrics
             overall_metrics = await conn.fetchrow(
                 f"""
@@ -134,9 +134,9 @@ class AgentAnalytics:
                 FROM agent_performance
                 WHERE {' AND '.join(where_conditions)}
                 """,
-                *params
+                *params,
             )
-            
+
             # Get performance by agent
             agent_metrics = await conn.fetch(
                 f"""
@@ -151,9 +151,9 @@ class AgentAnalytics:
                 GROUP BY agent_id
                 ORDER BY success_rate_percent DESC, avg_duration_ms ASC
                 """,
-                *params
+                *params,
             )
-            
+
             # Get performance by task type
             task_metrics = await conn.fetch(
                 f"""
@@ -168,9 +168,9 @@ class AgentAnalytics:
                 GROUP BY task_type
                 ORDER BY success_rate_percent DESC, avg_duration_ms ASC
                 """,
-                *params
+                *params,
             )
-            
+
             # Get top performing agents for each task type
             top_agents_by_task = await conn.fetch(
                 f"""
@@ -209,9 +209,9 @@ class AgentAnalytics:
                 WHERE rank <= 3
                 ORDER BY task_type, rank
                 """,
-                *params
+                *params,
             )
-            
+
             result = {
                 "period_days": days,
                 "since_date": since_date.isoformat(),
@@ -220,13 +220,13 @@ class AgentAnalytics:
                 "task_metrics": [dict(row) for row in task_metrics],
                 "top_agents_by_task": [dict(row) for row in top_agents_by_task],
             }
-            
+
             # Cache the result
             self._performance_cache[cache_key] = result
             self._last_cache_update = datetime.now()
-            
+
             return result
-    
+
     async def get_agent_recommendations(
         self,
         task_type: str,
@@ -236,22 +236,22 @@ class AgentAnalytics:
     ) -> List[Dict[str, Any]]:
         """
         Gets agent recommendations for a specific task type.
-        
+
         Args:
             task_type: Type of task to get recommendations for
             context: Optional context for more specific recommendations
             limit: Maximum number of recommendations
             days: Number of days to look back for performance data
-            
+
         Returns:
             List of recommended agents with performance metrics
         """
         pool = await get_pg_pool()
         if pool is None:
             return []
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Get agent performance for this task type
             agent_performance = await conn.fetch(
@@ -272,30 +272,32 @@ class AgentAnalytics:
                 """,
                 task_type,
                 since_date,
-                limit
+                limit,
             )
-            
+
             recommendations = []
             for row in agent_performance:
                 # Calculate confidence score based on success rate and consistency
-                success_rate = row['success_rate_percent'] or 0
-                duration_consistency = 1.0 - (row['duration_stddev'] or 0) / max(row['avg_duration_ms'] or 1, 1)
+                success_rate = row["success_rate_percent"] or 0
+                duration_consistency = 1.0 - (row["duration_stddev"] or 0) / max(row["avg_duration_ms"] or 1, 1)
                 confidence_score = (success_rate / 100.0) * 0.7 + duration_consistency * 0.3
-                
-                recommendations.append({
-                    "agent_id": row['agent_id'],
-                    "task_type": task_type,
-                    "total_tasks": row['total_tasks'],
-                    "successful_tasks": row['successful_tasks'],
-                    "success_rate_percent": success_rate,
-                    "avg_duration_ms": row['avg_duration_ms'],
-                    "duration_stddev": row['duration_stddev'],
-                    "confidence_score": confidence_score,
-                    "recommendation_reason": self._get_recommendation_reason(success_rate, row['avg_duration_ms']),
-                })
-            
+
+                recommendations.append(
+                    {
+                        "agent_id": row["agent_id"],
+                        "task_type": task_type,
+                        "total_tasks": row["total_tasks"],
+                        "successful_tasks": row["successful_tasks"],
+                        "success_rate_percent": success_rate,
+                        "avg_duration_ms": row["avg_duration_ms"],
+                        "duration_stddev": row["duration_stddev"],
+                        "confidence_score": confidence_score,
+                        "recommendation_reason": self._get_recommendation_reason(success_rate, row["avg_duration_ms"]),
+                    }
+                )
+
             return recommendations
-    
+
     def _get_recommendation_reason(self, success_rate: float, avg_duration: float) -> str:
         """Generates a human-readable reason for the recommendation."""
         if success_rate >= 90:
@@ -307,7 +309,7 @@ class AgentAnalytics:
             return "Good success rate with acceptable performance"
         else:
             return "Moderate success rate, consider alternatives"
-    
+
     async def get_performance_trends(
         self,
         agent_id: Optional[str] = None,
@@ -317,38 +319,38 @@ class AgentAnalytics:
     ) -> Dict[str, Any]:
         """
         Gets performance trends over time.
-        
+
         Args:
             agent_id: Specific agent to analyze (None for all)
             task_type: Specific task type to analyze (None for all)
             days: Number of days to look back
             interval_hours: Time interval for trend analysis
-            
+
         Returns:
             Performance trends data
         """
         pool = await get_pg_pool()
         if pool is None:
             return {}
-        
+
         since_date = datetime.now() - timedelta(days=days)
-        
+
         async with pool.acquire() as conn:
             # Build query conditions
             where_conditions = ["created_at >= $1"]
             params = [since_date]
             param_count = 1
-            
+
             if agent_id:
                 param_count += 1
                 where_conditions.append(f"agent_id = ${param_count}")
                 params.append(agent_id)
-            
+
             if task_type:
                 param_count += 1
                 where_conditions.append(f"task_type = ${param_count}")
                 params.append(task_type)
-            
+
             # Get performance trends by time interval
             trends = await conn.fetch(
                 f"""
@@ -363,26 +365,44 @@ class AgentAnalytics:
                 GROUP BY DATE_TRUNC('hour', created_at)
                 ORDER BY time_bucket
                 """,
-                *params
+                *params,
             )
-            
+
             # Calculate trend metrics
             if trends:
-                first_half = trends[:len(trends)//2]
-                second_half = trends[len(trends)//2:]
-                
-                first_avg_success = sum(row['success_rate_percent'] or 0 for row in first_half) / len(first_half) if first_half else 0
-                second_avg_success = sum(row['success_rate_percent'] or 0 for row in second_half) / len(second_half) if second_half else 0
-                
-                first_avg_duration = sum(row['avg_duration_ms'] or 0 for row in first_half) / len(first_half) if first_half else 0
-                second_avg_duration = sum(row['avg_duration_ms'] or 0 for row in second_half) / len(second_half) if second_half else 0
-                
-                success_trend = "improving" if second_avg_success > first_avg_success else "declining" if second_avg_success < first_avg_success else "stable"
-                duration_trend = "improving" if second_avg_duration < first_avg_duration else "declining" if second_avg_duration > first_avg_duration else "stable"
+                first_half = trends[: len(trends) // 2]
+                second_half = trends[len(trends) // 2 :]
+
+                first_avg_success = (
+                    sum(row["success_rate_percent"] or 0 for row in first_half) / len(first_half) if first_half else 0
+                )
+                second_avg_success = (
+                    sum(row["success_rate_percent"] or 0 for row in second_half) / len(second_half)
+                    if second_half
+                    else 0
+                )
+
+                first_avg_duration = (
+                    sum(row["avg_duration_ms"] or 0 for row in first_half) / len(first_half) if first_half else 0
+                )
+                second_avg_duration = (
+                    sum(row["avg_duration_ms"] or 0 for row in second_half) / len(second_half) if second_half else 0
+                )
+
+                success_trend = (
+                    "improving"
+                    if second_avg_success > first_avg_success
+                    else "declining" if second_avg_success < first_avg_success else "stable"
+                )
+                duration_trend = (
+                    "improving"
+                    if second_avg_duration < first_avg_duration
+                    else "declining" if second_avg_duration > first_avg_duration else "stable"
+                )
             else:
                 success_trend = "stable"
                 duration_trend = "stable"
-            
+
             return {
                 "period_days": days,
                 "interval_hours": interval_hours,
@@ -393,15 +413,15 @@ class AgentAnalytics:
                 "trend_summary": {
                     "success_rate_change": second_avg_success - first_avg_success if trends else 0,
                     "duration_change": second_avg_duration - first_avg_duration if trends else 0,
-                }
+                },
             }
-    
+
     def _is_cache_valid(self) -> bool:
         """Checks if the performance cache is still valid."""
         if self._last_cache_update is None:
             return False
         return (datetime.now() - self._last_cache_update).total_seconds() < self._cache_ttl
-    
+
     def _invalidate_cache(self):
         """Invalidates the performance cache."""
         self._performance_cache.clear()
@@ -455,11 +475,11 @@ async def get_agent_recommendations(
 async def test_agent_analytics():
     """Test the agent analytics system."""
     print("Testing agent analytics system...")
-    
+
     # Test tracking performance
     test_run_id = str(uuid.uuid4())
     test_correlation_id = str(uuid.uuid4())
-    
+
     # Track some sample performance data
     await track_agent_performance(
         agent_id="test-agent-1",
@@ -470,7 +490,7 @@ async def test_agent_analytics():
         metadata={"complexity": "high", "language": "python"},
         correlation_id=test_correlation_id,
     )
-    
+
     await track_agent_performance(
         agent_id="test-agent-2",
         task_type="code_generation",
@@ -480,7 +500,7 @@ async def test_agent_analytics():
         metadata={"complexity": "medium", "language": "python"},
         correlation_id=test_correlation_id,
     )
-    
+
     await track_agent_performance(
         agent_id="test-agent-1",
         task_type="code_review",
@@ -490,25 +510,27 @@ async def test_agent_analytics():
         metadata={"complexity": "high", "language": "python"},
         correlation_id=test_correlation_id,
     )
-    
+
     # Test getting recommendations
     recommendations = await get_agent_recommendations(
         task_type="code_generation",
         context={"complexity": "high"},
         limit=2,
     )
-    
+
     print(f"✓ Found {len(recommendations)} agent recommendations")
     for rec in recommendations:
         print(f"  - {rec['agent_id']}: {rec['success_rate_percent']:.1f}% success, {rec['avg_duration_ms']:.0f}ms avg")
-    
+
     # Test performance summary
     summary = await agent_analytics.get_agent_performance_summary(days=1)
     print(f"✓ Performance summary: {summary.get('overall_metrics', {})}")
-    
+
     # Test trends
     trends = await agent_analytics.get_performance_trends(days=1)
-    print(f"✓ Performance trends: {trends.get('success_trend', 'unknown')} success, {trends.get('duration_trend', 'unknown')} duration")
+    print(
+        f"✓ Performance trends: {trends.get('success_trend', 'unknown')} success, {trends.get('duration_trend', 'unknown')} duration"
+    )
 
 
 if __name__ == "__main__":

@@ -16,12 +16,12 @@ import asyncio
 import json
 import logging
 import time
-from collections import defaultdict, deque
-from dataclasses import dataclass, field, asdict
+from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from .db import get_pg_pool
 
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 class AlertSeverity(Enum):
     """Alert severity levels."""
+
     CRITICAL = "critical"
     WARNING = "warning"
     INFO = "info"
@@ -37,6 +38,7 @@ class AlertSeverity(Enum):
 
 class MetricType(Enum):
     """Metric types for classification."""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
@@ -46,6 +48,7 @@ class MetricType(Enum):
 @dataclass
 class Metric:
     """Single metric data point."""
+
     name: str
     value: float
     metric_type: MetricType
@@ -57,6 +60,7 @@ class Metric:
 @dataclass
 class MonitoringAlert:
     """Monitoring alert with full context."""
+
     alert_id: str
     severity: AlertSeverity
     metric_name: str
@@ -73,6 +77,7 @@ class MonitoringAlert:
 @dataclass
 class HealthStatus:
     """Component health status."""
+
     component: str
     healthy: bool
     status: str
@@ -84,6 +89,7 @@ class HealthStatus:
 @dataclass
 class MonitoringThresholds:
     """Monitoring thresholds configuration."""
+
     # Template caching thresholds
     template_load_ms_warning: float = 50.0
     template_load_ms_critical: float = 100.0
@@ -167,7 +173,7 @@ class MonitoringSystem:
         value: float,
         metric_type: MetricType,
         labels: Optional[Dict[str, str]] = None,
-        help_text: str = ""
+        help_text: str = "",
     ) -> None:
         """Record a metric data point.
 
@@ -178,20 +184,14 @@ class MonitoringSystem:
             labels: Optional labels for metric dimensions
             help_text: Human-readable description
         """
-        metric = Metric(
-            name=name,
-            value=value,
-            metric_type=metric_type,
-            labels=labels or {},
-            help_text=help_text
-        )
+        metric = Metric(name=name, value=value, metric_type=metric_type, labels=labels or {}, help_text=help_text)
 
         async with self._lock:
             self.metrics[name].append(metric)
 
             # Trim metric history
             if len(self.metrics[name]) > self._max_metric_history:
-                self.metrics[name] = self.metrics[name][-self._max_metric_history:]
+                self.metrics[name] = self.metrics[name][-self._max_metric_history :]
 
         # Check thresholds and generate alerts
         await self._check_thresholds(metric)
@@ -233,16 +233,13 @@ class MonitoringSystem:
                 severity=severity,
                 actual_value=metric.value,
                 threshold=critical_threshold if severity == AlertSeverity.CRITICAL else warning_threshold,
-                labels=metric.labels
+                labels=metric.labels,
             )
         else:
             # Resolve any existing alerts for this metric
             await self._auto_resolve_alerts(metric.name, metric.labels)
 
-    def _get_threshold_config(
-        self,
-        metric_name: str
-    ) -> Optional[Tuple[float, float, str]]:
+    def _get_threshold_config(self, metric_name: str) -> Optional[Tuple[float, float, str]]:
         """Get threshold configuration for a metric.
 
         Args:
@@ -256,74 +253,69 @@ class MonitoringSystem:
             "template_load_duration_ms": (
                 self.thresholds.template_load_ms_warning,
                 self.thresholds.template_load_ms_critical,
-                "greater_than"
+                "greater_than",
             ),
             "cache_hit_rate": (
                 self.thresholds.cache_hit_rate_warning,
                 self.thresholds.cache_hit_rate_critical,
-                "less_than"
+                "less_than",
             ),
             "parallel_speedup": (
                 self.thresholds.parallel_speedup_warning,
                 self.thresholds.parallel_speedup_critical,
-                "less_than"
+                "less_than",
             ),
             "generation_duration_ms": (
                 self.thresholds.generation_time_ms_warning,
                 self.thresholds.generation_time_ms_critical,
-                "greater_than"
+                "greater_than",
             ),
             "mixin_accuracy": (
                 self.thresholds.mixin_accuracy_warning,
                 self.thresholds.mixin_accuracy_critical,
-                "less_than"
+                "less_than",
             ),
             "compatibility_score": (
                 self.thresholds.compatibility_score_warning,
                 self.thresholds.compatibility_score_critical,
-                "less_than"
+                "less_than",
             ),
             "pattern_precision": (
                 self.thresholds.pattern_precision_warning,
                 self.thresholds.pattern_precision_critical,
-                "less_than"
+                "less_than",
             ),
             "false_positive_rate": (
                 self.thresholds.false_positive_rate_warning,
                 self.thresholds.false_positive_rate_critical,
-                "greater_than"
+                "greater_than",
             ),
             "event_latency_p95_ms": (
                 self.thresholds.event_latency_p95_warning,
                 self.thresholds.event_latency_p95_critical,
-                "greater_than"
+                "greater_than",
             ),
             "event_success_rate": (
                 self.thresholds.event_success_rate_warning,
                 self.thresholds.event_success_rate_critical,
-                "less_than"
+                "less_than",
             ),
             "quality_score": (
                 self.thresholds.quality_score_warning,
                 self.thresholds.quality_score_critical,
-                "less_than"
+                "less_than",
             ),
             "validation_pass_rate": (
                 self.thresholds.validation_pass_rate_warning,
                 self.thresholds.validation_pass_rate_critical,
-                "less_than"
-            )
+                "less_than",
+            ),
         }
 
         return thresholds_map.get(metric_name)
 
     async def _create_alert(
-        self,
-        metric_name: str,
-        severity: AlertSeverity,
-        actual_value: float,
-        threshold: float,
-        labels: Dict[str, str]
+        self, metric_name: str, severity: AlertSeverity, actual_value: float, threshold: float, labels: Dict[str, str]
     ) -> None:
         """Create a new alert if not duplicate.
 
@@ -355,21 +347,17 @@ class MonitoringSystem:
                 actual_value=actual_value,
                 message=self._format_alert_message(metric_name, severity, actual_value, threshold),
                 component=self._get_component_from_metric(metric_name),
-                labels=labels
+                labels=labels,
             )
 
             self.active_alerts[alert_key] = alert
 
             logger.warning(
                 f"[MONITORING] {severity.value.upper()} ALERT: {alert.message}",
-                extra={"alert_id": alert.alert_id, "component": alert.component}
+                extra={"alert_id": alert.alert_id, "component": alert.component},
             )
 
-    async def _auto_resolve_alerts(
-        self,
-        metric_name: str,
-        labels: Dict[str, str]
-    ) -> None:
+    async def _auto_resolve_alerts(self, metric_name: str, labels: Dict[str, str]) -> None:
         """Auto-resolve alerts when metric returns to normal.
 
         Args:
@@ -390,11 +378,7 @@ class MonitoringSystem:
                 del self.active_alerts[key]
 
     def _format_alert_message(
-        self,
-        metric_name: str,
-        severity: AlertSeverity,
-        actual_value: float,
-        threshold: float
+        self, metric_name: str, severity: AlertSeverity, actual_value: float, threshold: float
     ) -> str:
         """Format alert message.
 
@@ -409,7 +393,12 @@ class MonitoringSystem:
         """
         if metric_name.endswith("_ms"):
             return f"{metric_name}: {actual_value:.1f}ms exceeds {severity.value} threshold of {threshold:.1f}ms"
-        elif "_rate" in metric_name or "_accuracy" in metric_name or "_precision" in metric_name or "score" in metric_name:
+        elif (
+            "_rate" in metric_name
+            or "_accuracy" in metric_name
+            or "_precision" in metric_name
+            or "score" in metric_name
+        ):
             return f"{metric_name}: {actual_value:.2%} below {severity.value} threshold of {threshold:.2%}"
         else:
             return f"{metric_name}: {actual_value:.2f} breaches {severity.value} threshold of {threshold:.2f}"
@@ -438,10 +427,7 @@ class MonitoringSystem:
         else:
             return "unknown"
 
-    async def collect_all_metrics(
-        self,
-        time_window_minutes: int = 60
-    ) -> Dict[str, Any]:
+    async def collect_all_metrics(self, time_window_minutes: int = 60) -> Dict[str, Any]:
         """Collect metrics from all subsystems.
 
         Args:
@@ -487,17 +473,13 @@ class MonitoringSystem:
                     "pattern_matching": pattern_metrics,
                     "event_processing": event_metrics,
                     "active_alerts_count": len(self.active_alerts),
-                    "health_status": self._get_overall_health_status()
+                    "health_status": self._get_overall_health_status(),
                 }
         except Exception as e:
             logger.error(f"Error collecting metrics: {e}", exc_info=True)
             return {"error": str(e)}
 
-    async def _collect_template_cache_metrics(
-        self,
-        conn: Any,
-        cutoff_time: datetime
-    ) -> Dict[str, Any]:
+    async def _collect_template_cache_metrics(self, conn: Any, cutoff_time: datetime) -> Dict[str, Any]:
         """Collect template cache metrics from database.
 
         Args:
@@ -509,7 +491,8 @@ class MonitoringSystem:
         """
         try:
             # Query template_cache_efficiency view
-            result = await conn.fetch("""
+            result = await conn.fetch(
+                """
                 SELECT
                     template_type,
                     template_count,
@@ -519,36 +502,33 @@ class MonitoringSystem:
                     avg_load_time_ms,
                     total_size_mb
                 FROM template_cache_efficiency
-            """)
+            """
+            )
 
             metrics = {
                 "by_type": [dict(row) for row in result],
                 "overall_hit_rate": 0.0,
                 "avg_load_time_ms": 0.0,
-                "total_templates": 0
+                "total_templates": 0,
             }
 
             if result:
-                total_hits = sum(r['avg_cache_hits'] * r['template_count'] for r in result)
-                total_misses = sum(r['avg_cache_misses'] * r['template_count'] for r in result)
+                total_hits = sum(r["avg_cache_hits"] * r["template_count"] for r in result)
+                total_misses = sum(r["avg_cache_misses"] * r["template_count"] for r in result)
                 total = total_hits + total_misses
 
                 if total > 0:
                     metrics["overall_hit_rate"] = total_hits / total
 
-                metrics["avg_load_time_ms"] = sum(r['avg_load_time_ms'] for r in result) / len(result)
-                metrics["total_templates"] = sum(r['template_count'] for r in result)
+                metrics["avg_load_time_ms"] = sum(r["avg_load_time_ms"] for r in result) / len(result)
+                metrics["total_templates"] = sum(r["template_count"] for r in result)
 
             return metrics
         except Exception as e:
             logger.error(f"Error collecting template cache metrics: {e}")
             return {"error": str(e)}
 
-    async def _collect_parallel_generation_metrics(
-        self,
-        conn: Any,
-        cutoff_time: datetime
-    ) -> Dict[str, Any]:
+    async def _collect_parallel_generation_metrics(self, conn: Any, cutoff_time: datetime) -> Dict[str, Any]:
         """Collect parallel generation metrics from database.
 
         Args:
@@ -560,7 +540,8 @@ class MonitoringSystem:
         """
         try:
             # Query performance_metrics_summary view
-            result = await conn.fetch("""
+            result = await conn.fetch(
+                """
                 SELECT
                     phase,
                     execution_count,
@@ -572,17 +553,14 @@ class MonitoringSystem:
                     avg_workers
                 FROM performance_metrics_summary
                 WHERE phase IN ('code_gen', 'total')
-            """)
+            """
+            )
 
-            metrics = {
-                "by_phase": [dict(row) for row in result],
-                "parallel_usage_rate": 0.0,
-                "avg_speedup": 0.0
-            }
+            metrics = {"by_phase": [dict(row) for row in result], "parallel_usage_rate": 0.0, "avg_speedup": 0.0}
 
             # Calculate parallel usage rate
-            total_execs = sum(r['execution_count'] for r in result)
-            parallel_execs = sum(r['parallel_executions'] for r in result)
+            total_execs = sum(r["execution_count"] for r in result)
+            parallel_execs = sum(r["parallel_executions"] for r in result)
 
             if total_execs > 0:
                 metrics["parallel_usage_rate"] = parallel_execs / total_execs
@@ -592,11 +570,7 @@ class MonitoringSystem:
             logger.error(f"Error collecting parallel generation metrics: {e}")
             return {"error": str(e)}
 
-    async def _collect_mixin_learning_metrics(
-        self,
-        conn: Any,
-        cutoff_time: datetime
-    ) -> Dict[str, Any]:
+    async def _collect_mixin_learning_metrics(self, conn: Any, cutoff_time: datetime) -> Dict[str, Any]:
         """Collect mixin learning metrics from database.
 
         Args:
@@ -608,7 +582,8 @@ class MonitoringSystem:
         """
         try:
             # Query mixin_compatibility_summary view
-            result = await conn.fetch("""
+            result = await conn.fetch(
+                """
                 SELECT
                     node_type,
                     total_combinations,
@@ -617,33 +592,30 @@ class MonitoringSystem:
                     total_failures,
                     success_rate
                 FROM mixin_compatibility_summary
-            """)
+            """
+            )
 
             metrics = {
                 "by_node_type": [dict(row) for row in result],
                 "overall_success_rate": 0.0,
-                "avg_compatibility_score": 0.0
+                "avg_compatibility_score": 0.0,
             }
 
             if result:
-                total_tests = sum(r['total_successes'] + r['total_failures'] for r in result)
-                total_successes = sum(r['total_successes'] for r in result)
+                total_tests = sum(r["total_successes"] + r["total_failures"] for r in result)
+                total_successes = sum(r["total_successes"] for r in result)
 
                 if total_tests > 0:
                     metrics["overall_success_rate"] = total_successes / total_tests
 
-                metrics["avg_compatibility_score"] = sum(r['avg_compatibility'] for r in result) / len(result)
+                metrics["avg_compatibility_score"] = sum(r["avg_compatibility"] for r in result) / len(result)
 
             return metrics
         except Exception as e:
             logger.error(f"Error collecting mixin learning metrics: {e}")
             return {"error": str(e)}
 
-    async def _collect_pattern_feedback_metrics(
-        self,
-        conn: Any,
-        cutoff_time: datetime
-    ) -> Dict[str, Any]:
+    async def _collect_pattern_feedback_metrics(self, conn: Any, cutoff_time: datetime) -> Dict[str, Any]:
         """Collect pattern feedback metrics from database.
 
         Args:
@@ -655,7 +627,8 @@ class MonitoringSystem:
         """
         try:
             # Query pattern_feedback_analysis view
-            result = await conn.fetch("""
+            result = await conn.fetch(
+                """
                 SELECT
                     pattern_name,
                     feedback_type,
@@ -664,28 +637,29 @@ class MonitoringSystem:
                     user_provided_count,
                     avg_learning_weight
                 FROM pattern_feedback_analysis
-            """)
+            """
+            )
 
             metrics = {
                 "by_pattern": [dict(row) for row in result],
                 "total_feedback_count": 0,
                 "avg_confidence": 0.0,
-                "precision": 0.0
+                "precision": 0.0,
             }
 
             if result:
-                metrics["total_feedback_count"] = sum(r['feedback_count'] for r in result)
+                metrics["total_feedback_count"] = sum(r["feedback_count"] for r in result)
 
                 # Calculate weighted average confidence
-                total_weighted = sum(r['avg_confidence'] * r['feedback_count'] for r in result if r['avg_confidence'])
-                total_count = sum(r['feedback_count'] for r in result if r['avg_confidence'])
+                total_weighted = sum(r["avg_confidence"] * r["feedback_count"] for r in result if r["avg_confidence"])
+                total_count = sum(r["feedback_count"] for r in result if r["avg_confidence"])
 
                 if total_count > 0:
                     metrics["avg_confidence"] = total_weighted / total_count
 
                 # Calculate precision (correct / (correct + incorrect))
-                correct = sum(r['feedback_count'] for r in result if r['feedback_type'] == 'correct')
-                incorrect = sum(r['feedback_count'] for r in result if r['feedback_type'] == 'incorrect')
+                correct = sum(r["feedback_count"] for r in result if r["feedback_type"] == "correct")
+                incorrect = sum(r["feedback_count"] for r in result if r["feedback_type"] == "incorrect")
 
                 if correct + incorrect > 0:
                     metrics["precision"] = correct / (correct + incorrect)
@@ -695,11 +669,7 @@ class MonitoringSystem:
             logger.error(f"Error collecting pattern feedback metrics: {e}")
             return {"error": str(e)}
 
-    async def _collect_event_processing_metrics(
-        self,
-        conn: Any,
-        cutoff_time: datetime
-    ) -> Dict[str, Any]:
+    async def _collect_event_processing_metrics(self, conn: Any, cutoff_time: datetime) -> Dict[str, Any]:
         """Collect event processing metrics from database.
 
         Args:
@@ -711,7 +681,8 @@ class MonitoringSystem:
         """
         try:
             # Query event_processing_health view
-            result = await conn.fetch("""
+            result = await conn.fetch(
+                """
                 SELECT
                     event_type,
                     event_source,
@@ -723,33 +694,37 @@ class MonitoringSystem:
                     avg_wait_ms,
                     avg_retries
                 FROM event_processing_health
-            """)
+            """
+            )
 
             metrics = {
                 "by_event_type": [dict(row) for row in result],
                 "overall_success_rate": 0.0,
                 "avg_latency_ms": 0.0,
-                "p95_latency_ms": 0.0
+                "p95_latency_ms": 0.0,
             }
 
             if result:
-                total_events = sum(r['total_events'] for r in result)
-                total_successes = sum(r['success_count'] for r in result)
+                total_events = sum(r["total_events"] for r in result)
+                total_successes = sum(r["success_count"] for r in result)
 
                 if total_events > 0:
                     metrics["overall_success_rate"] = total_successes / total_events
 
                 # Weighted average latency
-                total_weighted = sum(r['avg_duration_ms'] * r['total_events'] for r in result)
+                total_weighted = sum(r["avg_duration_ms"] * r["total_events"] for r in result)
                 if total_events > 0:
                     metrics["avg_latency_ms"] = total_weighted / total_events
 
                 # Get p95 from raw metrics table
-                p95_result = await conn.fetchval("""
+                p95_result = await conn.fetchval(
+                    """
                     SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY processing_duration_ms)
                     FROM event_processing_metrics
                     WHERE created_at >= $1
-                """, cutoff_time)
+                """,
+                    cutoff_time,
+                )
 
                 if p95_result:
                     metrics["p95_latency_ms"] = float(p95_result)
@@ -785,7 +760,7 @@ class MonitoringSystem:
         healthy: bool,
         status: str,
         error_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Update health status for a component.
 
@@ -802,7 +777,7 @@ class MonitoringSystem:
             status=status,
             last_check=datetime.now(timezone.utc),
             error_message=error_message,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         async with self._lock:
@@ -811,13 +786,11 @@ class MonitoringSystem:
         if not healthy:
             logger.warning(
                 f"[MONITORING] Component {component} is {status}: {error_message}",
-                extra={"component": component, "status": status}
+                extra={"component": component, "status": status},
             )
 
     def get_active_alerts(
-        self,
-        severity: Optional[AlertSeverity] = None,
-        component: Optional[str] = None
+        self, severity: Optional[AlertSeverity] = None, component: Optional[str] = None
     ) -> List[MonitoringAlert]:
         """Get active alerts with optional filtering.
 
@@ -838,10 +811,7 @@ class MonitoringSystem:
 
         return sorted(alerts, key=lambda a: a.created_at, reverse=True)
 
-    def get_resolved_alerts(
-        self,
-        hours: int = 24
-    ) -> List[MonitoringAlert]:
+    def get_resolved_alerts(self, hours: int = 24) -> List[MonitoringAlert]:
         """Get recently resolved alerts.
 
         Args:
@@ -851,10 +821,7 @@ class MonitoringSystem:
             List of resolved alerts
         """
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-        return [
-            alert for alert in self.resolved_alerts
-            if alert.resolved_at and alert.resolved_at >= cutoff
-        ]
+        return [alert for alert in self.resolved_alerts if alert.resolved_at and alert.resolved_at >= cutoff]
 
     async def export_prometheus_metrics(self) -> str:
         """Export metrics in Prometheus text format.
@@ -894,13 +861,13 @@ class MonitoringSystem:
                         value = values[min(idx, len(values) - 1)]
                         q_labels = {**latest_metric.labels, "quantile": str(quantile)}
                         q_labels_str = self._format_labels(q_labels)
-                        lines.append(f'{metric_name}{q_labels_str} {value}')
+                        lines.append(f"{metric_name}{q_labels_str} {value}")
                 else:
                     # For counters and gauges, export latest value
                     labels_str = self._format_labels(latest_metric.labels)
-                    lines.append(f'{metric_name}{labels_str} {latest_metric.value}')
+                    lines.append(f"{metric_name}{labels_str} {latest_metric.value}")
 
-        return '\n'.join(lines) + '\n'
+        return "\n".join(lines) + "\n"
 
     def _format_labels(self, labels: Dict[str, str]) -> str:
         """Format labels for Prometheus export.
@@ -915,7 +882,7 @@ class MonitoringSystem:
             return ""
 
         label_strs = [f'{k}="{v}"' for k, v in sorted(labels.items())]
-        return '{' + ','.join(label_strs) + '}'
+        return "{" + ",".join(label_strs) + "}"
 
     def get_monitoring_summary(self) -> Dict[str, Any]:
         """Get comprehensive monitoring summary.
@@ -932,22 +899,22 @@ class MonitoringSystem:
                         "healthy": status.healthy,
                         "status": status.status,
                         "last_check": status.last_check.isoformat(),
-                        "error": status.error_message
+                        "error": status.error_message,
                     }
                     for name, status in self.health_statuses.items()
-                }
+                },
             },
             "alerts": {
                 "active_count": len(self.active_alerts),
                 "critical_count": len(self.get_active_alerts(severity=AlertSeverity.CRITICAL)),
                 "warning_count": len(self.get_active_alerts(severity=AlertSeverity.WARNING)),
                 "info_count": len(self.get_active_alerts(severity=AlertSeverity.INFO)),
-                "resolved_24h": len(self.get_resolved_alerts(hours=24))
+                "resolved_24h": len(self.get_resolved_alerts(hours=24)),
             },
             "metrics": {
                 "total_metric_types": len(self.metrics),
-                "total_data_points": sum(len(m) for m in self.metrics.values())
-            }
+                "total_data_points": sum(len(m) for m in self.metrics.values()),
+            },
         }
 
     async def clear_metrics(self) -> None:
@@ -965,9 +932,7 @@ class MonitoringSystem:
 _monitoring_system: Optional[MonitoringSystem] = None
 
 
-def get_monitoring_system(
-    thresholds: Optional[MonitoringThresholds] = None
-) -> MonitoringSystem:
+def get_monitoring_system(thresholds: Optional[MonitoringThresholds] = None) -> MonitoringSystem:
     """Get or create global monitoring system instance.
 
     Args:
@@ -986,11 +951,7 @@ def get_monitoring_system(
 
 # Convenience functions
 async def record_metric(
-    name: str,
-    value: float,
-    metric_type: MetricType,
-    labels: Optional[Dict[str, str]] = None,
-    help_text: str = ""
+    name: str, value: float, metric_type: MetricType, labels: Optional[Dict[str, str]] = None, help_text: str = ""
 ) -> None:
     """Record a metric data point.
 
@@ -1023,7 +984,7 @@ async def update_health_status(
     healthy: bool,
     status: str,
     error_message: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Update health status for a component.
 
@@ -1035,14 +996,11 @@ async def update_health_status(
         metadata: Optional metadata
     """
     monitoring = get_monitoring_system()
-    await monitoring.update_health_status(
-        component, healthy, status, error_message, metadata
-    )
+    await monitoring.update_health_status(component, healthy, status, error_message, metadata)
 
 
 def get_active_alerts(
-    severity: Optional[AlertSeverity] = None,
-    component: Optional[str] = None
+    severity: Optional[AlertSeverity] = None, component: Optional[str] = None
 ) -> List[MonitoringAlert]:
     """Get active alerts with optional filtering.
 

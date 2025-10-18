@@ -9,10 +9,8 @@ docstrings, type hints, error handling, and ONEX compliance.
 import ast
 import re
 import logging
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, List, Optional
 from pathlib import Path
-from datetime import datetime, timezone
-from uuid import UUID
 
 # Import from omnibase_core
 from omnibase_core.errors import OnexError, EnumCoreErrorCode
@@ -52,7 +50,7 @@ class BusinessLogicGenerator:
             "EFFECT": "NodeEffect",
             "COMPUTE": "NodeCompute",
             "REDUCER": "NodeReducer",
-            "ORCHESTRATOR": "NodeOrchestrator"
+            "ORCHESTRATOR": "NodeOrchestrator",
         }
 
         # Node type to primary method mapping
@@ -60,7 +58,7 @@ class BusinessLogicGenerator:
             "EFFECT": "execute_effect",
             "COMPUTE": "execute_compute",
             "REDUCER": "execute_reduction",
-            "ORCHESTRATOR": "execute_orchestration"
+            "ORCHESTRATOR": "execute_orchestration",
         }
 
         # Mixin method templates
@@ -73,7 +71,7 @@ class BusinessLogicGenerator:
             "MixinLogging": ["log_debug", "log_info", "log_warning", "log_error"],
             "MixinMetrics": ["record_metric", "increment_counter", "record_histogram"],
             "MixinSecurity": ["authenticate", "authorize", "validate_token"],
-            "MixinValidation": ["validate_input", "validate_output", "validate_schema"]
+            "MixinValidation": ["validate_input", "validate_output", "validate_schema"],
         }
 
     async def generate_node_implementation(
@@ -82,7 +80,7 @@ class BusinessLogicGenerator:
         analysis_result: SimplePRDAnalysisResult,
         node_type: str,
         microservice_name: str,
-        domain: str
+        domain: str,
     ) -> str:
         """
         Generate complete node implementation from contract.
@@ -108,38 +106,26 @@ class BusinessLogicGenerator:
                 raise OnexError(
                     code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Invalid node type: {node_type}",
-                    details={"valid_types": list(self.node_base_classes.keys())}
+                    details={"valid_types": list(self.node_base_classes.keys())},
                 )
 
             # Generate class definition
-            class_def = self._generate_class_definition(
-                contract, analysis_result, node_type, microservice_name, domain
-            )
+            class_def = self._generate_class_definition(contract, analysis_result, node_type, microservice_name, domain)
 
             # Generate __init__ method
-            init_method = self._generate_init_method(
-                contract, analysis_result, node_type, microservice_name
-            )
+            init_method = self._generate_init_method(contract, analysis_result, node_type, microservice_name)
 
             # Generate primary processing method
-            primary_method = self._generate_primary_method(
-                contract, analysis_result, node_type, microservice_name
-            )
+            primary_method = self._generate_primary_method(contract, analysis_result, node_type, microservice_name)
 
             # Generate validation method
-            validation_method = self._generate_validation_method(
-                contract, node_type, microservice_name
-            )
+            validation_method = self._generate_validation_method(contract, node_type, microservice_name)
 
             # Generate health check
-            health_check = self._generate_health_check(
-                microservice_name, node_type
-            )
+            health_check = self._generate_health_check(microservice_name, node_type)
 
             # Generate mixin methods
-            mixin_methods = self._generate_mixin_methods(
-                contract, microservice_name
-            )
+            mixin_methods = self._generate_mixin_methods(contract, microservice_name)
 
             # Generate capability methods
             capability_methods = self._generate_capability_methods(
@@ -159,7 +145,7 @@ class BusinessLogicGenerator:
                 analysis_result,
                 node_type,
                 microservice_name,
-                domain
+                domain,
             )
 
             self.logger.info(f"Business logic generation completed for {microservice_name}")
@@ -170,11 +156,7 @@ class BusinessLogicGenerator:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Business logic generation failed: {str(e)}",
-                details={
-                    "node_type": node_type,
-                    "microservice_name": microservice_name,
-                    "domain": domain
-                }
+                details={"node_type": node_type, "microservice_name": microservice_name, "domain": domain},
             )
 
     def _generate_class_definition(
@@ -183,7 +165,7 @@ class BusinessLogicGenerator:
         analysis_result: SimplePRDAnalysisResult,
         node_type: str,
         microservice_name: str,
-        domain: str
+        domain: str,
     ) -> str:
         """Generate class definition with imports and inheritance"""
 
@@ -247,11 +229,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
 
         return class_def
 
-    def _generate_imports(
-        self,
-        contract: Dict[str, Any],
-        node_type: str
-    ) -> str:
+    def _generate_imports(self, contract: Dict[str, Any], node_type: str) -> str:
         """Generate import statements"""
 
         imports = [
@@ -264,7 +242,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             "# Core imports",
             f"from omnibase_core.core.node_{node_type.lower()} import {self.node_base_classes[node_type]}",
             "from omnibase_core.errors import OnexError, EnumCoreErrorCode",
-            ""
+            "",
         ]
 
         # Add mixin imports
@@ -276,23 +254,21 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             imports.append("")
 
         # Add local imports (these will be generated separately)
-        imports.extend([
-            "# Local imports (to be generated)",
-            "# from .models.model_<name>_input import Model<Name>Input",
-            "# from .models.model_<name>_output import Model<Name>Output",
-            "# from .models.model_<name>_config import Model<Name>Config",
-            "# from .enums.enum_<name>_operation_type import Enum<Name>OperationType",
-            ""
-        ])
+        imports.extend(
+            [
+                "# Local imports (to be generated)",
+                "# from .models.model_<name>_input import Model<Name>Input",
+                "# from .models.model_<name>_output import Model<Name>Output",
+                "# from .models.model_<name>_config import Model<Name>Config",
+                "# from .enums.enum_<name>_operation_type import Enum<Name>OperationType",
+                "",
+            ]
+        )
 
         return "\n".join(imports)
 
     def _generate_init_method(
-        self,
-        contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
-        node_type: str,
-        microservice_name: str
+        self, contract: Dict[str, Any], analysis_result: SimplePRDAnalysisResult, node_type: str, microservice_name: str
     ) -> str:
         """Generate __init__ method with mixin initialization"""
 
@@ -330,7 +306,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             for mixin in mixins:
                 init_method += f"            self._init_{mixin.lower()}()\n"
 
-        init_method += '''
+        init_method += """
             self.logger.info(f"Initialized {node_type} service: {microservice_name}")
 
         except Exception as e:
@@ -340,16 +316,12 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
                 message=f"Failed to initialize {microservice_name}: {{str(e)}}",
                 details={{"config": self.config}}
             )
-'''
+"""
 
         return init_method
 
     def _generate_primary_method(
-        self,
-        contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
-        node_type: str,
-        microservice_name: str
+        self, contract: Dict[str, Any], analysis_result: SimplePRDAnalysisResult, node_type: str, microservice_name: str
     ) -> str:
         """Generate primary processing method for node type"""
 
@@ -498,12 +470,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
 
         return method
 
-    def _generate_validation_method(
-        self,
-        contract: Dict[str, Any],
-        node_type: str,
-        microservice_name: str
-    ) -> str:
+    def _generate_validation_method(self, contract: Dict[str, Any], node_type: str, microservice_name: str) -> str:
         """Generate input validation method"""
 
         capabilities = contract.get("capabilities", [])
@@ -513,9 +480,11 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             if isinstance(capability, dict):
                 cap_name = capability.get("name", "")
                 if capability.get("required", False):
-                    validation_checks.append(f'            # Validate {cap_name}')
+                    validation_checks.append(f"            # Validate {cap_name}")
 
-        validation_code = "\n".join(validation_checks) if validation_checks else "            # Add validation logic here"
+        validation_code = (
+            "\n".join(validation_checks) if validation_checks else "            # Add validation logic here"
+        )
 
         method = f'''
     async def _validate_input(
@@ -550,11 +519,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
 
         return method
 
-    def _generate_health_check(
-        self,
-        microservice_name: str,
-        node_type: str
-    ) -> str:
+    def _generate_health_check(self, microservice_name: str, node_type: str) -> str:
         """Generate health check method"""
 
         method = f'''
@@ -585,11 +550,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
 
         return method
 
-    def _generate_mixin_methods(
-        self,
-        contract: Dict[str, Any],
-        microservice_name: str
-    ) -> List[str]:
+    def _generate_mixin_methods(self, contract: Dict[str, Any], microservice_name: str) -> List[str]:
         """Generate mixin-specific method stubs"""
 
         mixins = self._extract_mixins_from_contract(contract)
@@ -603,12 +564,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
 
         return methods
 
-    def _generate_mixin_method_stub(
-        self,
-        mixin: str,
-        method_name: str,
-        microservice_name: str
-    ) -> str:
+    def _generate_mixin_method_stub(self, mixin: str, method_name: str, microservice_name: str) -> str:
         """Generate stub for a specific mixin method"""
 
         stub = f'''
@@ -638,11 +594,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         return stub
 
     def _generate_capability_methods(
-        self,
-        contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
-        node_type: str,
-        microservice_name: str
+        self, contract: Dict[str, Any], analysis_result: SimplePRDAnalysisResult, node_type: str, microservice_name: str
     ) -> List[str]:
         """Generate methods for each capability in contract"""
 
@@ -665,12 +617,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             pattern_type = self._detect_pattern_type(cap_name, cap_type)
 
             method = self._generate_capability_method(
-                cap_name,
-                cap_desc,
-                cap_type,
-                pattern_type,
-                microservice_name,
-                node_type
+                cap_name, cap_desc, cap_type, pattern_type, microservice_name, node_type
             )
             methods.append(method)
 
@@ -683,7 +630,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         capability_type: str,
         pattern_type: Optional[str],
         microservice_name: str,
-        node_type: str
+        node_type: str,
     ) -> str:
         """Generate a single capability method"""
 
@@ -692,7 +639,9 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         # Add pattern hook comment if applicable
         pattern_hook = ""
         if pattern_type and self.config.generate_pattern_hooks:
-            pattern_hook = f"\n        # PATTERN_HOOK: {pattern_type} - This method is eligible for pattern-based generation\n"
+            pattern_hook = (
+                f"\n        # PATTERN_HOOK: {pattern_type} - This method is eligible for pattern-based generation\n"
+            )
 
         method = f'''
     async def {method_name}(
@@ -764,7 +713,10 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         # CRUD pattern detection
         if any(keyword in name_lower for keyword in ["create", "insert", "add"]) or type_lower == "create":
             return "CRUD_CREATE"
-        elif any(keyword in name_lower for keyword in ["read", "get", "fetch", "retrieve", "list"]) or type_lower == "read":
+        elif (
+            any(keyword in name_lower for keyword in ["read", "get", "fetch", "retrieve", "list"])
+            or type_lower == "read"
+        ):
             return "CRUD_READ"
         elif any(keyword in name_lower for keyword in ["update", "modify", "edit", "change"]) or type_lower == "update":
             return "CRUD_UPDATE"
@@ -788,7 +740,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         detected_pattern: str,
         confidence: float,
         actual_pattern: Optional[str] = None,
-        feedback_type: str = "automated"
+        feedback_type: str = "automated",
     ) -> None:
         """
         Record pattern detection for feedback learning.
@@ -815,10 +767,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         )
 
     def _infer_method_logic_hints(
-        self,
-        contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
-        node_type: str
+        self, contract: Dict[str, Any], analysis_result: SimplePRDAnalysisResult, node_type: str
     ) -> str:
         """Generate TODO comments with implementation guidance"""
 
@@ -874,17 +823,11 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         analysis_result: SimplePRDAnalysisResult,
         node_type: str,
         microservice_name: str,
-        domain: str
+        domain: str,
     ) -> str:
         """Combine all implementation parts into complete file"""
 
-        parts = [
-            class_def,
-            init_method,
-            primary_method,
-            validation_method,
-            health_check
-        ]
+        parts = [class_def, init_method, primary_method, validation_method, health_check]
 
         # Add mixin methods
         if mixin_methods:
@@ -1002,13 +945,13 @@ if __name__ == "__main__":
 
     def _to_pascal_case(self, text: str) -> str:
         """Convert text to PascalCase"""
-        return ''.join(word.capitalize() for word in text.replace('_', ' ').replace('-', ' ').split())
+        return "".join(word.capitalize() for word in text.replace("_", " ").replace("-", " ").split())
 
     def _sanitize_method_name(self, text: str) -> str:
         """Convert text to valid Python method name"""
         # Remove special characters and convert to snake_case
-        name = re.sub(r'[^\w\s-]', '', text.lower())
-        name = re.sub(r'[-\s]+', '_', name)
+        name = re.sub(r"[^\w\s-]", "", text.lower())
+        name = re.sub(r"[-\s]+", "_", name)
         # Ensure it doesn't start with a number
         if name and name[0].isdigit():
             name = f"_{name}"
@@ -1027,7 +970,7 @@ if __name__ == "__main__":
         analysis_result: SimplePRDAnalysisResult,
         pattern_hint: Optional[str] = None,
         include_error_handling: bool = True,
-        validation_feedback: Optional[List[str]] = None
+        validation_feedback: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Generate node stub (wrapper for test compatibility).
@@ -1054,7 +997,7 @@ if __name__ == "__main__":
             analysis_result=analysis_result,
             node_type=node_type,
             microservice_name=microservice_name,
-            domain=domain
+            domain=domain,
         )
 
         # Parse code to extract class name and methods
@@ -1067,7 +1010,7 @@ if __name__ == "__main__":
             "methods": methods,
             "node_type": node_type,
             "microservice_name": microservice_name,
-            "domain": domain
+            "domain": domain,
         }
 
     async def generate_node_file(
@@ -1077,7 +1020,7 @@ if __name__ == "__main__":
         domain: str,
         contract: Dict[str, Any],
         analysis_result: SimplePRDAnalysisResult,
-        output_directory: str
+        output_directory: str,
     ) -> Dict[str, Any]:
         """
         Generate node file and write to disk.
@@ -1099,11 +1042,11 @@ if __name__ == "__main__":
             microservice_name=microservice_name,
             domain=domain,
             contract=contract,
-            analysis_result=analysis_result
+            analysis_result=analysis_result,
         )
 
         # Generate file name
-        pascal_name = self._to_pascal_case(microservice_name)
+        self._to_pascal_case(microservice_name)
         file_name = f"node_{microservice_name}_{node_type.lower()}.py"
         file_path = Path(output_directory) / file_name
 
@@ -1111,24 +1054,15 @@ if __name__ == "__main__":
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(result["code"])
 
-        return {
-            **result,
-            "file_path": str(file_path),
-            "file_name": file_name
-        }
+        return {**result, "file_path": str(file_path), "file_name": file_name}
 
-    def _extract_class_name(
-        self,
-        code: str,
-        node_type: str,
-        microservice_name: str
-    ) -> str:
+    def _extract_class_name(self, code: str, node_type: str, microservice_name: str) -> str:
         """Extract class name from generated code"""
         try:
             tree = ast.parse(code)
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef):
-                    if node.name.startswith('Node'):
+                    if node.name.startswith("Node"):
                         return node.name
         except Exception:
             pass
@@ -1144,7 +1078,7 @@ if __name__ == "__main__":
             tree = ast.parse(code)
             # Find the main class definition
             for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and node.name.startswith('Node'):
+                if isinstance(node, ast.ClassDef) and node.name.startswith("Node"):
                     # Extract methods from this class only
                     for item in node.body:
                         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):

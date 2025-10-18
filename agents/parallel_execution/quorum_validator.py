@@ -8,7 +8,7 @@ Uses Gemini (direct API) and local Ollama models for voting.
 import asyncio
 import json
 import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -17,6 +17,7 @@ import httpx
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     # Load .env from the same directory as this script
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
@@ -145,19 +146,14 @@ Task breakdown generated:
 CRITICAL: Do NOT repeat the task breakdown or user request in your response. Only return the validation JSON."""
 
         # Query models in parallel
-        tasks = [
-            self._query_model(model_name, config, prompt)
-            for model_name, config in self.models.items()
-        ]
+        tasks = [self._query_model(model_name, config, prompt) for model_name, config in self.models.items()]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Calculate consensus
         return self._calculate_consensus(results)
 
-    async def _query_model(
-        self, model_name: str, config: Dict[str, Any], prompt: str
-    ) -> Dict[str, Any]:
+    async def _query_model(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         """Query a model via API"""
 
         try:
@@ -176,21 +172,17 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 "recommendation": "FAIL",
             }
 
-    async def _query_gemini(
-        self, model_name: str, config: Dict[str, Any], prompt: str
-    ) -> Dict[str, Any]:
+    async def _query_gemini(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         """Query Gemini API directly"""
 
         url = f"{config['endpoint']}?key={self.gemini_api_key}"
 
         payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
                 "maxOutputTokens": 2048,
-            }
+            },
         }
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -217,24 +209,16 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
             # Extract JSON from response
             return self._parse_model_response(model_name, text)
 
-    async def _query_zai(
-        self, model_name: str, config: Dict[str, Any], prompt: str
-    ) -> Dict[str, Any]:
+    async def _query_zai(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
         """Query Z.ai API using Anthropic Messages API format"""
 
-        headers = {
-            "x-api-key": self.zai_api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
+        headers = {"x-api-key": self.zai_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
 
         payload = {
             "model": config["model"],
             "max_tokens": 2048,
             "temperature": 0.1,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
+            "messages": [{"role": "user", "content": prompt}],
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -261,9 +245,7 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
             # Extract JSON from response
             return self._parse_model_response(model_name, text)
 
-    def _parse_model_response(
-        self, model_name: str, text: str
-    ) -> Dict[str, Any]:
+    def _parse_model_response(self, model_name: str, text: str) -> Dict[str, Any]:
         """Parse JSON response from model"""
 
         try:
@@ -299,16 +281,11 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 "recommendation": "RETRY",
             }
 
-    def _calculate_consensus(
-        self, results: List[Dict[str, Any]]
-    ) -> QuorumResult:
+    def _calculate_consensus(self, results: List[Dict[str, Any]]) -> QuorumResult:
         """Calculate weighted consensus"""
 
         # Filter valid results
-        valid_results = [
-            r for r in results
-            if isinstance(r, dict) and "recommendation" in r
-        ]
+        valid_results = [r for r in results if isinstance(r, dict) and "recommendation" in r]
 
         if not valid_results:
             return QuorumResult(
@@ -411,27 +388,27 @@ async def main():
         },
     )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("QUORUM VALIDATION RESULT")
-    print("="*60)
+    print("=" * 60)
     print(f"Decision: {result.decision.value}")
     print(f"Confidence: {result.confidence:.1%}")
     print(f"Deficiencies: {result.deficiencies}")
-    print(f"\nScores:")
+    print("\nScores:")
     for key, value in result.scores.items():
         if isinstance(value, float):
             print(f"  {key}: {value:.1f}")
         else:
             print(f"  {key}: {value}")
 
-    print(f"\nModel Responses:")
+    print("\nModel Responses:")
     for response in result.model_responses:
         model = response.get("model", "unknown")
         recommendation = response.get("recommendation", "unknown")
         score = response.get("alignment_score", 0)
         print(f"  {model}: {recommendation} (score: {score})")
 
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

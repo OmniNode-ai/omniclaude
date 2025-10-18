@@ -26,19 +26,20 @@ import sys
 from typing import Any, Dict, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from contextvars import ContextVar
 from enum import Enum
 
 
 # Context variables for thread-safe correlation tracking
-_correlation_id: ContextVar[Optional[str]] = ContextVar('correlation_id', default=None)
-_session_id: ContextVar[Optional[str]] = ContextVar('session_id', default=None)
-_component: ContextVar[Optional[str]] = ContextVar('component', default=None)
+_correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+_session_id: ContextVar[Optional[str]] = ContextVar("session_id", default=None)
+_component: ContextVar[Optional[str]] = ContextVar("component", default=None)
 
 
 class LogLevel(str, Enum):
     """Standard logging levels"""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -49,6 +50,7 @@ class LogLevel(str, Enum):
 @dataclass
 class LogRecord:
     """Structured log record for JSON serialization"""
+
     timestamp: str
     level: str
     logger_name: str
@@ -78,18 +80,18 @@ class JSONFormatter(logging.Formatter):
         }
 
         # Add correlation IDs if available
-        if hasattr(record, 'correlation_id') and record.correlation_id:
-            log_data['correlation_id'] = record.correlation_id
-        if hasattr(record, 'session_id') and record.session_id:
-            log_data['session_id'] = record.session_id
-        if hasattr(record, 'component') and record.component:
-            log_data['component'] = record.component
-        if hasattr(record, 'metadata') and record.metadata:
-            log_data['metadata'] = record.metadata
+        if hasattr(record, "correlation_id") and record.correlation_id:
+            log_data["correlation_id"] = record.correlation_id
+        if hasattr(record, "session_id") and record.session_id:
+            log_data["session_id"] = record.session_id
+        if hasattr(record, "component") and record.component:
+            log_data["component"] = record.component
+        if hasattr(record, "metadata") and record.metadata:
+            log_data["metadata"] = record.metadata
 
         # Add exception info if present
         if record.exc_info:
-            log_data['exception'] = self.formatException(record.exc_info)
+            log_data["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(log_data)
 
@@ -113,12 +115,7 @@ class StructuredLogger:
         logger.info("Research started", metadata={"query": query})
     """
 
-    def __init__(
-        self,
-        name: str,
-        component: Optional[str] = None,
-        level: LogLevel = LogLevel.INFO
-    ):
+    def __init__(self, name: str, component: Optional[str] = None, level: LogLevel = LogLevel.INFO):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(getattr(logging, level.value))
 
@@ -152,7 +149,7 @@ class StructuredLogger:
         level: LogLevel,
         message: str,
         metadata: Optional[Dict[str, Any]] = None,
-        exc_info: Optional[Exception] = None
+        exc_info: Optional[Exception] = None,
     ):
         """
         Internal logging method with performance optimization.
@@ -170,10 +167,10 @@ class StructuredLogger:
 
         # Create log record with extra fields
         extra = {
-            'correlation_id': correlation_id,
-            'session_id': session_id,
-            'component': component,
-            'metadata': metadata
+            "correlation_id": correlation_id,
+            "session_id": session_id,
+            "component": component,
+            "metadata": metadata,
         }
 
         # Map log level to logger method
@@ -192,21 +189,11 @@ class StructuredLogger:
         """Log warning message"""
         self._log(LogLevel.WARNING, message, metadata)
 
-    def error(
-        self,
-        message: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        exc_info: Optional[Exception] = None
-    ):
+    def error(self, message: str, metadata: Optional[Dict[str, Any]] = None, exc_info: Optional[Exception] = None):
         """Log error message with optional exception info"""
         self._log(LogLevel.ERROR, message, metadata, exc_info)
 
-    def critical(
-        self,
-        message: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        exc_info: Optional[Exception] = None
-    ):
+    def critical(self, message: str, metadata: Optional[Dict[str, Any]] = None, exc_info: Optional[Exception] = None):
         """Log critical message with optional exception info"""
         self._log(LogLevel.CRITICAL, message, metadata, exc_info)
 

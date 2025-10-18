@@ -28,7 +28,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from enum import Enum
@@ -46,14 +45,17 @@ logger = logging.getLogger(__name__)
 # ENUMS AND CONSTANTS
 # =============================================================================
 
+
 class VerboseMode(str, Enum):
     """Verbose mode for state manager operations."""
+
     VERBOSE = "VERBOSE"  # Full logging and details
-    SILENT = "SILENT"    # Minimal logging, optimized for tokens
+    SILENT = "SILENT"  # Minimal logging, optimized for tokens
 
 
 class SnapshotType(str, Enum):
     """Types of state snapshots."""
+
     ERROR = "error"
     SUCCESS = "success"
     CHECKPOINT = "checkpoint"
@@ -63,6 +65,7 @@ class SnapshotType(str, Enum):
 
 class ErrorCategory(str, Enum):
     """Error categories for classification."""
+
     AGENT = "agent"
     FRAMEWORK = "framework"
     EXTERNAL = "external"
@@ -71,6 +74,7 @@ class ErrorCategory(str, Enum):
 
 class ErrorSeverity(str, Enum):
     """Error severity levels."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -81,8 +85,10 @@ class ErrorSeverity(str, Enum):
 # PYDANTIC MODELS (CONTRACTS)
 # =============================================================================
 
+
 class ModelCodePointer(BaseModel):
     """Code pointer for STF (State Transformation Function) location."""
+
     file_path: str = Field(..., description="Absolute path to source file")
     function_name: str = Field(..., description="Function name")
     line_number: Optional[int] = Field(None, description="Starting line number")
@@ -92,6 +98,7 @@ class ModelCodePointer(BaseModel):
 
 class ModelStateSnapshot(BaseModel):
     """State snapshot contract for agent state capture."""
+
     snapshot_id: UUID = Field(default_factory=uuid4)
     snapshot_type: SnapshotType
     correlation_id: UUID
@@ -114,6 +121,7 @@ class ModelStateSnapshot(BaseModel):
 
 class ModelErrorEvent(BaseModel):
     """Error event contract for error tracking."""
+
     error_id: UUID = Field(default_factory=uuid4)
     correlation_id: UUID
     session_id: Optional[UUID] = None
@@ -138,6 +146,7 @@ class ModelErrorEvent(BaseModel):
 
 class ModelSuccessEvent(BaseModel):
     """Success event contract for successful operation tracking."""
+
     success_id: UUID = Field(default_factory=uuid4)
     correlation_id: UUID
     session_id: Optional[UUID] = None
@@ -158,6 +167,7 @@ class ModelSuccessEvent(BaseModel):
 
 class ModelErrorSuccessLink(BaseModel):
     """Link between error and eventual success for pattern learning."""
+
     link_id: UUID = Field(default_factory=uuid4)
     error_event_id: UUID
     success_event_id: UUID
@@ -175,6 +185,7 @@ class ModelErrorSuccessLink(BaseModel):
 # =============================================================================
 # ONEX NODE IMPLEMENTATIONS
 # =============================================================================
+
 
 class NodeStateSnapshotEffect:
     """
@@ -230,7 +241,7 @@ class NodeStateSnapshotEffect:
             snapshot.cpu_time_ms,
             snapshot.wall_time_ms,
             snapshot.parent_snapshot_id,
-            snapshot.captured_at
+            snapshot.captured_at,
         ]
 
         try:
@@ -276,7 +287,7 @@ class NodeStateSnapshotEffect:
             error.recovery_strategy,
             json.dumps(error.metadata),
             error.occurred_at,
-            error.resolved_at
+            error.resolved_at,
         ]
 
         try:
@@ -317,7 +328,7 @@ class NodeStateSnapshotEffect:
             success.retry_count,
             json.dumps(success.success_factors),
             json.dumps(success.metadata),
-            success.occurred_at
+            success.occurred_at,
         ]
 
         try:
@@ -351,7 +362,7 @@ class NodeStateSnapshotEffect:
             link.intermediate_steps,
             link.recovery_strategy,
             link.confidence_score,
-            link.correlated_at
+            link.correlated_at,
         ]
 
         try:
@@ -361,11 +372,7 @@ class NodeStateSnapshotEffect:
             logger.error(f"Failed to link error to success: {e}")
             raise
 
-    async def query_similar_snapshots(
-        self,
-        task_signature: str,
-        limit: int = 5
-    ) -> List[ModelStateSnapshot]:
+    async def query_similar_snapshots(self, task_signature: str, limit: int = 5) -> List[ModelStateSnapshot]:
         """Query snapshots with similar task signatures."""
         query = """
             SELECT
@@ -382,18 +389,13 @@ class NodeStateSnapshotEffect:
         """
 
         try:
-            rows = await self.db.execute_query(
-                query,
-                f"%{task_signature}%",
-                limit,
-                fetch="all"
-            )
+            rows = await self.db.execute_query(query, f"%{task_signature}%", limit, fetch="all")
 
             snapshots = []
             for row in rows:
                 row_dict = dict(row)
                 # Parse JSON fields
-                row_dict['agent_state'] = json.loads(row_dict['agent_state'])
+                row_dict["agent_state"] = json.loads(row_dict["agent_state"])
                 snapshots.append(ModelStateSnapshot(**row_dict))
 
             return snapshots
@@ -410,10 +412,7 @@ class NodeStateDiffCompute:
     """
 
     @staticmethod
-    def compute_diff(
-        before_state: Dict[str, Any],
-        after_state: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def compute_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Compute difference between two states.
 
@@ -424,21 +423,14 @@ class NodeStateDiffCompute:
         Returns:
             Dictionary with added, removed, modified keys
         """
-        diff = {
-            "added": {},
-            "removed": {},
-            "modified": {}
-        }
+        diff = {"added": {}, "removed": {}, "modified": {}}
 
         # Find added and modified keys
         for key, after_value in after_state.items():
             if key not in before_state:
                 diff["added"][key] = after_value
             elif before_state[key] != after_value:
-                diff["modified"][key] = {
-                    "before": before_state[key],
-                    "after": after_value
-                }
+                diff["modified"][key] = {"before": before_state[key], "after": after_value}
 
         # Find removed keys
         for key in before_state:
@@ -479,10 +471,7 @@ class NodeSimilarityMatchCompute:
         return " ".join(signature_parts)
 
     @staticmethod
-    def compute_similarity_score(
-        signature1: str,
-        signature2: str
-    ) -> float:
+    def compute_similarity_score(signature1: str, signature2: str) -> float:
         """
         Compute similarity score between two task signatures.
 
@@ -510,6 +499,7 @@ class NodeSimilarityMatchCompute:
 # =============================================================================
 # STATE MANAGER ORCHESTRATOR
 # =============================================================================
+
 
 class StateManager:
     """
@@ -553,9 +543,7 @@ class StateManager:
     """
 
     def __init__(
-        self,
-        db_layer: Optional[DatabaseIntegrationLayer] = None,
-        verbose_mode: VerboseMode = VerboseMode.VERBOSE
+        self, db_layer: Optional[DatabaseIntegrationLayer] = None, verbose_mode: VerboseMode = VerboseMode.VERBOSE
     ):
         """
         Initialize state manager.
@@ -611,7 +599,7 @@ class StateManager:
         session_id: Optional[UUID] = None,
         task_description: Optional[str] = None,
         execution_step: Optional[int] = None,
-        parent_snapshot_id: Optional[UUID] = None
+        parent_snapshot_id: Optional[UUID] = None,
     ) -> UUID:
         """
         Capture state snapshot at critical point.
@@ -645,7 +633,7 @@ class StateManager:
             task_description=task_description,
             state_size_bytes=len(state_json),
             variables_count=len(agent_state),
-            parent_snapshot_id=parent_snapshot_id
+            parent_snapshot_id=parent_snapshot_id,
         )
 
         # Persist snapshot
@@ -669,7 +657,7 @@ class StateManager:
         error_category: ErrorCategory = ErrorCategory.AGENT,
         error_severity: ErrorSeverity = ErrorSeverity.MEDIUM,
         is_recoverable: bool = True,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Record error event with context.
@@ -704,7 +692,7 @@ class StateManager:
             agent_name=agent_name,
             state_snapshot_id=snapshot_id,
             is_recoverable=is_recoverable,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Persist error
@@ -712,8 +700,7 @@ class StateManager:
 
         if self.verbose_mode == VerboseMode.VERBOSE:
             logger.error(
-                f"Recorded {error_severity.value} error: {error_id} "
-                f"({error.error_type}: {error.error_message})"
+                f"Recorded {error_severity.value} error: {error_id} " f"({error.error_type}: {error.error_message})"
             )
 
         return error_id
@@ -727,7 +714,7 @@ class StateManager:
         success_type: str = "task_completion",
         quality_score: Optional[float] = None,
         execution_time_ms: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """
         Record successful operation.
@@ -758,7 +745,7 @@ class StateManager:
             state_snapshot_id=snapshot_id,
             quality_score=quality_score,
             execution_time_ms=execution_time_ms,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Persist success
@@ -782,7 +769,7 @@ class StateManager:
         recovery_strategy: Optional[str] = None,
         recovery_duration_ms: Optional[int] = None,
         intermediate_steps: Optional[int] = None,
-        confidence_score: float = 1.0
+        confidence_score: float = 1.0,
     ) -> UUID:
         """
         Link error event to eventual success for pattern learning.
@@ -813,7 +800,7 @@ class StateManager:
             stf_pointer=stf_pointer,
             recovery_duration_ms=recovery_duration_ms,
             intermediate_steps=intermediate_steps,
-            confidence_score=confidence_score
+            confidence_score=confidence_score,
         )
 
         # Persist link
@@ -828,11 +815,7 @@ class StateManager:
 
         return link_id
 
-    async def recall_similar_states(
-        self,
-        task_signature: str,
-        limit: int = 5
-    ) -> List[ModelStateSnapshot]:
+    async def recall_similar_states(self, task_signature: str, limit: int = 5) -> List[ModelStateSnapshot]:
         """
         Recall states similar to given task signature.
 
@@ -844,16 +827,10 @@ class StateManager:
             List of similar state snapshots
         """
         # Query similar snapshots
-        snapshots = await self.snapshot_effect.query_similar_snapshots(
-            task_signature=task_signature,
-            limit=limit
-        )
+        snapshots = await self.snapshot_effect.query_similar_snapshots(task_signature=task_signature, limit=limit)
 
         if self.verbose_mode == VerboseMode.VERBOSE:
-            logger.info(
-                f"Recalled {len(snapshots)} similar states "
-                f"for signature: '{task_signature[:50]}...'"
-            )
+            logger.info(f"Recalled {len(snapshots)} similar states " f"for signature: '{task_signature[:50]}...'")
 
         return snapshots
 

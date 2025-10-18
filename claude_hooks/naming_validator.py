@@ -163,19 +163,11 @@ class NamingValidator:
     CAMEL_CASE_PATTERN = re.compile(r"^[a-z][a-zA-Z0-9]*$")
 
     # TypeScript/JavaScript regex patterns for parsing
-    TS_CLASS_PATTERN = re.compile(
-        r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)"
-    )
-    TS_INTERFACE_PATTERN = re.compile(
-        r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)"
-    )
-    TS_FUNCTION_PATTERN = re.compile(
-        r"^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)"
-    )
+    TS_CLASS_PATTERN = re.compile(r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)")
+    TS_INTERFACE_PATTERN = re.compile(r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)")
+    TS_FUNCTION_PATTERN = re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)")
     TS_CONST_PATTERN = re.compile(r"^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*[=:]")
-    TS_VARIABLE_PATTERN = re.compile(
-        r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*[=:]"
-    )
+    TS_VARIABLE_PATTERN = re.compile(r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*[=:]")
 
     def __init__(self, language: str = None, validation_mode: str = "auto"):
         """
@@ -216,20 +208,20 @@ class NamingValidator:
         path_lower = file_path.lower()
 
         # Check for Archon repo (explicit exclusion)
-        if 'archon' in path_lower:
+        if "archon" in path_lower:
             return False
 
         # Check for omninode_bridge repo (explicit exclusion - uses standard PEP 8)
-        if 'omninode_bridge' in path_lower:
+        if "omninode_bridge" in path_lower:
             return False
 
         # Check for omnibase_ pattern
-        if 'omnibase_' in path_lower:
+        if "omnibase_" in path_lower:
             return True
 
         # Check for /omni followed by lowercase letter (omniauth, omnitools, etc.)
         # This pattern avoids false positives like "omni" in the middle of words
-        if re.search(r'/omni[a-z]', file_path):
+        if re.search(r"/omni[a-z]", file_path):
             return True
 
         return False
@@ -279,7 +271,7 @@ class NamingValidator:
                     self._validate_python_pep8(file_path, content)
             elif lang in ["typescript", "javascript"]:
                 self._validate_typescript_javascript(file_path, content)
-        except Exception as e:
+        except Exception:
             # Gracefully handle syntax errors and other issues
             pass
 
@@ -311,7 +303,7 @@ class NamingValidator:
             elif suffix in [".ts", ".tsx", ".js", ".jsx"]:
                 self._validate_typescript_javascript(file_path, content)
 
-        except Exception as e:
+        except Exception:
             # Gracefully handle syntax errors and other issues
             # Invalid code should pass through without failing the validator
             pass
@@ -391,9 +383,7 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case (100% in Omninode)
-                            if not self._is_snake_case(name) and not name.startswith(
-                                "_"
-                            ):
+                            if not self._is_snake_case(name) and not name.startswith("_"):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -486,9 +476,7 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case
-                            if not self._is_snake_case(name) and not name.startswith(
-                                "_"
-                            ):
+                            if not self._is_snake_case(name) and not name.startswith("_"):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -631,11 +619,7 @@ class NamingValidator:
             if isinstance(node, ast.ClassDef):
                 # Check base classes
                 base_names = [
-                    base.id
-                    if isinstance(base, ast.Name)
-                    else base.attr
-                    if isinstance(base, ast.Attribute)
-                    else None
+                    base.id if isinstance(base, ast.Name) else base.attr if isinstance(base, ast.Attribute) else None
                     for base in node.bases
                 ]
 
@@ -661,9 +645,7 @@ class NamingValidator:
         # Only check the highest priority type present
         if has_model_class:
             # Model class takes priority - only check model_*.py naming
-            if not self.MODEL_FILE_PATTERN.match(
-                filename
-            ) and not self.SUBCONTRACT_FILE_PATTERN.match(filename):
+            if not self.MODEL_FILE_PATTERN.match(filename) and not self.SUBCONTRACT_FILE_PATTERN.match(filename):
                 self.violations.append(
                     Violation(
                         file=file_path,
@@ -672,7 +654,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="model_*.py or model_*_subcontract.py",
-                        message=f"Omninode files with Model classes should use 'model_*.py' naming (93% adherence in codebase)",
+                        message="Omninode files with Model classes should use 'model_*.py' naming (93% adherence in codebase)",
                     )
                 )
         elif has_typeddict_class:
@@ -686,7 +668,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="typed_dict_*.py",
-                        message=f"Omninode files with TypedDict classes should use 'typed_dict_*.py' naming (100% adherence in codebase)",
+                        message="Omninode files with TypedDict classes should use 'typed_dict_*.py' naming (100% adherence in codebase)",
                     )
                 )
         elif has_node_service_class:
@@ -700,7 +682,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="node_<type>_service.py",
-                        message=f"Omninode files with Node service classes should use 'node_<type>_service.py' naming",
+                        message="Omninode files with Node service classes should use 'node_<type>_service.py' naming",
                     )
                 )
         elif has_protocol_class:
@@ -718,13 +700,11 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="enum_*.py",
-                        message=f"Omninode files with Enum classes should use 'enum_*.py' naming (99% adherence in codebase)",
+                        message="Omninode files with Enum classes should use 'enum_*.py' naming (99% adherence in codebase)",
                     )
                 )
 
-    def _validate_omninode_class_name(
-        self, file_path: str, node: ast.ClassDef, tree: ast.Module
-    ) -> None:
+    def _validate_omninode_class_name(self, file_path: str, node: ast.ClassDef, tree: ast.Module) -> None:
         """
         Validate Omninode-specific class naming conventions.
 
@@ -750,11 +730,7 @@ class NamingValidator:
         # Pydantic BaseModel subclasses must have "Model" prefix (100% adherence)
         if "BaseModel" in base_names:
             if not self.MODEL_PREFIX_PATTERN.match(class_name):
-                suggestion = (
-                    f"Model{class_name}"
-                    if not class_name.startswith("Model")
-                    else class_name
-                )
+                suggestion = f"Model{class_name}" if not class_name.startswith("Model") else class_name
                 self.violations.append(
                     Violation(
                         file=file_path,
@@ -771,11 +747,7 @@ class NamingValidator:
         # Enum subclasses must have "Enum" prefix (100% adherence)
         if "Enum" in base_names or "str, Enum" in str(base_names):
             if not self.ENUM_PREFIX_PATTERN.match(class_name):
-                suggestion = (
-                    f"Enum{class_name}"
-                    if not class_name.startswith("Enum")
-                    else class_name
-                )
+                suggestion = f"Enum{class_name}" if not class_name.startswith("Enum") else class_name
                 self.violations.append(
                     Violation(
                         file=file_path,
@@ -792,11 +764,7 @@ class NamingValidator:
         # TypedDict subclasses should have "TypedDict" prefix
         if "TypedDict" in base_names:
             if not self.TYPED_DICT_PREFIX_PATTERN.match(class_name):
-                suggestion = (
-                    f"TypedDict{class_name}"
-                    if not class_name.startswith("TypedDict")
-                    else class_name
-                )
+                suggestion = f"TypedDict{class_name}" if not class_name.startswith("TypedDict") else class_name
                 self.violations.append(
                     Violation(
                         file=file_path,
@@ -821,7 +789,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="Node<Type>Service (PascalCase)",
-                        message=f"Omninode Node service classes should match 'Node<Type>Service' pattern",
+                        message="Omninode Node service classes should match 'Node<Type>Service' pattern",
                     )
                 )
 
@@ -833,11 +801,7 @@ class NamingValidator:
 
             # Only warn if it's neither a simple protocol name nor has Protocol prefix
             # This is a soft check - protocols have flexible naming
-            if (
-                not is_simple_protocol
-                and not has_protocol_prefix
-                and not self._is_pascal_case(class_name)
-            ):
+            if not is_simple_protocol and not has_protocol_prefix and not self._is_pascal_case(class_name):
                 # Only enforce PascalCase, not the prefix
                 self.violations.append(
                     Violation(
@@ -847,7 +811,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="PascalCase (optionally with Protocol prefix for complex protocols)",
-                        message=f"Omninode Protocol classes should use PascalCase. Simple capability names (Serializable, Configurable) or Protocol prefix for complex protocols",
+                        message="Omninode Protocol classes should use PascalCase. Simple capability names (Serializable, Configurable) or Protocol prefix for complex protocols",
                     )
                 )
 
@@ -862,7 +826,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="Model<Type>Subcontract (PascalCase with Model prefix)",
-                        message=f"Omninode Subcontract classes should match 'Model<Type>Subcontract' pattern",
+                        message="Omninode Subcontract classes should match 'Model<Type>Subcontract' pattern",
                     )
                 )
 
@@ -883,15 +847,9 @@ class NamingValidator:
             )
 
         # Exception classes should end with "Error"
-        if any(
-            base in ["Exception", "BaseException", "OnexError"] for base in base_names
-        ):
+        if any(base in ["Exception", "BaseException", "OnexError"] for base in base_names):
             if not self.ERROR_SUFFIX_PATTERN.match(class_name):
-                suggestion = (
-                    f"{class_name}Error"
-                    if not class_name.endswith("Error")
-                    else class_name
-                )
+                suggestion = f"{class_name}Error" if not class_name.endswith("Error") else class_name
                 self.violations.append(
                     Violation(
                         file=file_path,

@@ -4,9 +4,6 @@ Validates all quality gates from quality-gates-spec.yaml
 """
 
 import pytest
-import asyncio
-from datetime import datetime
-from typing import Dict, List, Optional
 
 
 class TestSequentialValidationGates:

@@ -9,13 +9,13 @@ import ast
 import re
 import yaml
 from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
 from difflib import unified_diff
 
 
 # ============================================================================
 # YAML PARSING AND VALIDATION
 # ============================================================================
+
 
 def parse_generated_yaml(yaml_content: str) -> Dict[str, Any]:
     """
@@ -59,7 +59,7 @@ def validate_contract_schema(contract: Dict[str, Any]) -> Tuple[bool, List[str]]
 
     # Validate version format
     if "version" in contract:
-        if not re.match(r'^\d+\.\d+\.\d+$', contract["version"]):
+        if not re.match(r"^\d+\.\d+\.\d+$", contract["version"]):
             errors.append(f"Invalid version format: {contract['version']}")
 
     # Validate node_type
@@ -97,6 +97,7 @@ def validate_contract_schema(contract: Dict[str, Any]) -> Tuple[bool, List[str]]
 # ============================================================================
 # PYTHON CODE PARSING AND VALIDATION
 # ============================================================================
+
 
 def parse_generated_python(python_code: str) -> Tuple[ast.Module, List[str]]:
     """
@@ -138,9 +139,7 @@ def check_type_annotations(tree: ast.Module) -> Tuple[bool, List[str]]:
             # Check parameter annotations
             for arg in node.args.args:
                 if arg.annotation is None and arg.arg != "self" and arg.arg != "cls":
-                    violations.append(
-                        f"Function '{node.name}' parameter '{arg.arg}' missing type annotation"
-                    )
+                    violations.append(f"Function '{node.name}' parameter '{arg.arg}' missing type annotation")
 
     return len(violations) == 0, violations
 
@@ -166,22 +165,22 @@ def check_for_any_types(python_code: str) -> Tuple[bool, List[str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id == "Any":
             # Check if it's used in type annotation context
-            parent = getattr(node, 'parent', None)
+            parent = getattr(node, "parent", None)
             if isinstance(parent, (ast.arg, ast.AnnAssign, ast.FunctionDef)):
-                violations.append(f"Usage of 'Any' type detected (ONEX violation)")
+                violations.append("Usage of 'Any' type detected (ONEX violation)")
 
     # Also check with regex for Dict[str, Any] patterns
     any_patterns = [
-        r'\bAny\b(?!\w)',  # Standalone Any
-        r'Dict\[.*,\s*Any\]',  # Dict with Any value
-        r'List\[Any\]',  # List of Any
-        r'Optional\[Any\]',  # Optional Any
+        r"\bAny\b(?!\w)",  # Standalone Any
+        r"Dict\[.*,\s*Any\]",  # Dict with Any value
+        r"List\[Any\]",  # List of Any
+        r"Optional\[Any\]",  # Optional Any
     ]
 
     for pattern in any_patterns:
         matches = re.finditer(pattern, python_code)
         for match in matches:
-            line_num = python_code[:match.start()].count('\n') + 1
+            line_num = python_code[: match.start()].count("\n") + 1
             violations.append(f"Any type usage at line {line_num}: {match.group()}")
 
     return len(violations) == 0, violations
@@ -205,7 +204,7 @@ def extract_class_definitions(tree: ast.Module) -> List[Dict[str, Any]]:
                 "name": node.name,
                 "bases": [base.id if isinstance(base, ast.Name) else str(base) for base in node.bases],
                 "methods": [],
-                "attributes": []
+                "attributes": [],
             }
 
             # Extract methods
@@ -249,6 +248,7 @@ def extract_imports(tree: ast.Module) -> List[str]:
 # ONEX NAMING VALIDATION
 # ============================================================================
 
+
 def validate_onex_naming(filename: str) -> Tuple[bool, Optional[str]]:
     """
     Validate filename against ONEX naming conventions.
@@ -260,31 +260,31 @@ def validate_onex_naming(filename: str) -> Tuple[bool, Optional[str]]:
         Tuple of (is_valid, error_message)
     """
     # Node files: node_<name>_<type>.py
-    node_pattern = r'^node_[a-z][a-z0-9_]*_(effect|compute|reducer|orchestrator)\.py$'
+    node_pattern = r"^node_[a-z][a-z0-9_]*_(effect|compute|reducer|orchestrator)\.py$"
     if filename.startswith("node_"):
         if not re.match(node_pattern, filename):
-            return False, f"Node file must match pattern: node_<name>_<type>.py (lowercase, underscores)"
+            return False, "Node file must match pattern: node_<name>_<type>.py (lowercase, underscores)"
         return True, None
 
     # Model files: model_<name>.py
-    model_pattern = r'^model_[a-z][a-z0-9_]*\.py$'
+    model_pattern = r"^model_[a-z][a-z0-9_]*\.py$"
     if filename.startswith("model_"):
         if not re.match(model_pattern, filename):
-            return False, f"Model file must match pattern: model_<name>.py (lowercase, underscores)"
+            return False, "Model file must match pattern: model_<name>.py (lowercase, underscores)"
         return True, None
 
     # Enum files: enum_<name>.py
-    enum_pattern = r'^enum_[a-z][a-z0-9_]*\.py$'
+    enum_pattern = r"^enum_[a-z][a-z0-9_]*\.py$"
     if filename.startswith("enum_"):
         if not re.match(enum_pattern, filename):
-            return False, f"Enum file must match pattern: enum_<name>.py (lowercase, underscores)"
+            return False, "Enum file must match pattern: enum_<name>.py (lowercase, underscores)"
         return True, None
 
     # Contract files: contract_<name>.yaml
-    contract_pattern = r'^contract_[a-z][a-z0-9_]*\.yaml$'
+    contract_pattern = r"^contract_[a-z][a-z0-9_]*\.yaml$"
     if filename.startswith("contract_"):
         if not re.match(contract_pattern, filename):
-            return False, f"Contract file must match pattern: contract_<name>.yaml (lowercase, underscores)"
+            return False, "Contract file must match pattern: contract_<name>.yaml (lowercase, underscores)"
         return True, None
 
     return False, f"Unknown file type: {filename}"
@@ -303,19 +303,19 @@ def validate_class_naming(class_name: str, file_type: str) -> Tuple[bool, Option
     """
     if file_type == "node":
         # Node classes: Node<Domain><Name><Type>
-        if not re.match(r'^Node[A-Z][a-zA-Z]*(Effect|Compute|Reducer|Orchestrator)$', class_name):
+        if not re.match(r"^Node[A-Z][a-zA-Z]*(Effect|Compute|Reducer|Orchestrator)$", class_name):
             return False, "Node class must match: Node<Domain><Name><Type> (PascalCase)"
         return True, None
 
     elif file_type == "model":
         # Model classes: Model<Name>
-        if not re.match(r'^Model[A-Z][a-zA-Z]*$', class_name):
+        if not re.match(r"^Model[A-Z][a-zA-Z]*$", class_name):
             return False, "Model class must match: Model<Name> (PascalCase)"
         return True, None
 
     elif file_type == "enum":
         # Enum classes: Enum<Name>
-        if not re.match(r'^Enum[A-Z][a-zA-Z]*$', class_name):
+        if not re.match(r"^Enum[A-Z][a-zA-Z]*$", class_name):
             return False, "Enum class must match: Enum<Name> (PascalCase)"
         return True, None
 
@@ -325,6 +325,7 @@ def validate_class_naming(class_name: str, file_type: str) -> Tuple[bool, Option
 # ============================================================================
 # CODE COMPARISON
 # ============================================================================
+
 
 def compare_generated_code(expected: str, actual: str, context_lines: int = 3) -> Optional[str]:
     """
@@ -341,19 +342,14 @@ def compare_generated_code(expected: str, actual: str, context_lines: int = 3) -
     expected_lines = expected.splitlines(keepends=True)
     actual_lines = actual.splitlines(keepends=True)
 
-    diff = list(unified_diff(
-        expected_lines,
-        actual_lines,
-        fromfile='expected',
-        tofile='actual',
-        lineterm='',
-        n=context_lines
-    ))
+    diff = list(
+        unified_diff(expected_lines, actual_lines, fromfile="expected", tofile="actual", lineterm="", n=context_lines)
+    )
 
     if not diff:
         return None
 
-    return ''.join(diff)
+    return "".join(diff)
 
 
 def normalize_whitespace(code: str) -> str:
@@ -376,12 +372,13 @@ def normalize_whitespace(code: str) -> str:
         if not (is_blank and prev_blank):
             normalized.append(line)
         prev_blank = is_blank
-    return '\n'.join(normalized)
+    return "\n".join(normalized)
 
 
 # ============================================================================
 # ENUM VALIDATION
 # ============================================================================
+
 
 def validate_enum_serialization(tree: ast.Module) -> Tuple[bool, List[str]]:
     """
@@ -399,33 +396,23 @@ def validate_enum_serialization(tree: ast.Module) -> Tuple[bool, List[str]]:
         if isinstance(node, ast.ClassDef):
             # Check if it's an Enum class
             is_enum = any(
-                (isinstance(base, ast.Name) and base.id == "Enum") or
-                (isinstance(base, ast.Attribute) and base.attr == "Enum")
+                (isinstance(base, ast.Name) and base.id == "Enum")
+                or (isinstance(base, ast.Attribute) and base.attr == "Enum")
                 for base in node.bases
             )
 
             if is_enum:
                 # Check if it inherits from str for JSON serialization
-                has_str_base = any(
-                    isinstance(base, ast.Name) and base.id == "str"
-                    for base in node.bases
-                )
+                has_str_base = any(isinstance(base, ast.Name) and base.id == "str" for base in node.bases)
 
                 if not has_str_base:
-                    violations.append(
-                        f"Enum class '{node.name}' should inherit from str for JSON serialization"
-                    )
+                    violations.append(f"Enum class '{node.name}' should inherit from str for JSON serialization")
 
                 # Check for __str__ method
-                has_str_method = any(
-                    isinstance(item, ast.FunctionDef) and item.name == "__str__"
-                    for item in node.body
-                )
+                has_str_method = any(isinstance(item, ast.FunctionDef) and item.name == "__str__" for item in node.body)
 
                 if not has_str_method:
-                    violations.append(
-                        f"Enum class '{node.name}' should implement __str__ method"
-                    )
+                    violations.append(f"Enum class '{node.name}' should implement __str__ method")
 
     return len(violations) == 0, violations
 
@@ -433,6 +420,7 @@ def validate_enum_serialization(tree: ast.Module) -> Tuple[bool, List[str]]:
 # ============================================================================
 # CONTRACT VALIDATION HELPERS
 # ============================================================================
+
 
 def validate_mixin_compatibility(mixins: List[str]) -> Tuple[bool, List[str]]:
     """
@@ -464,6 +452,7 @@ def validate_mixin_compatibility(mixins: List[str]) -> Tuple[bool, List[str]]:
 # PERFORMANCE HELPERS
 # ============================================================================
 
+
 def estimate_code_complexity(tree: ast.Module) -> Dict[str, int]:
     """
     Estimate code complexity metrics.
@@ -474,13 +463,7 @@ def estimate_code_complexity(tree: ast.Module) -> Dict[str, int]:
     Returns:
         Dictionary of complexity metrics
     """
-    metrics = {
-        "num_classes": 0,
-        "num_functions": 0,
-        "num_lines": 0,
-        "max_nesting_depth": 0,
-        "num_imports": 0
-    }
+    metrics = {"num_classes": 0, "num_functions": 0, "num_lines": 0, "max_nesting_depth": 0, "num_imports": 0}
 
     def get_nesting_depth(node, depth=0):
         max_depth = depth
@@ -511,28 +494,22 @@ __all__ = [
     # YAML utilities
     "parse_generated_yaml",
     "validate_contract_schema",
-
     # Python utilities
     "parse_generated_python",
     "check_type_annotations",
     "check_for_any_types",
     "extract_class_definitions",
     "extract_imports",
-
     # ONEX validation
     "validate_onex_naming",
     "validate_class_naming",
-
     # Code comparison
     "compare_generated_code",
     "normalize_whitespace",
-
     # Enum validation
     "validate_enum_serialization",
-
     # Contract validation
     "validate_mixin_compatibility",
-
     # Performance
     "estimate_code_complexity",
 ]

@@ -17,21 +17,15 @@ Enhanced features:
 - Detailed reporting with recommendations
 """
 
-import asyncio
-import json
 import sys
-import time
-import subprocess
-import traceback
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, Any, List, Optional
+from datetime import datetime
 
 import requests
 
 # Import httpx for async requests
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
@@ -39,6 +33,7 @@ except ImportError:
 # Test configuration
 PHASE4_BASE_URL = "http://localhost:8053"
 TIMEOUT_SECONDS = 5
+
 
 def test_health_endpoint():
     """Test /health endpoint."""
@@ -51,6 +46,7 @@ def test_health_endpoint():
     except Exception as e:
         print(f"  ❌ Failed: {e}")
         return False
+
 
 def test_pattern_tracking():
     """Test pattern tracking endpoint."""
@@ -67,13 +63,11 @@ def test_pattern_tracking():
                 "language": "python",
             },
             "triggered_by": "connectivity_test",
-            "reason": "Testing Phase 4 API connectivity"
+            "reason": "Testing Phase 4 API connectivity",
         }
 
         response = requests.post(
-            f"{PHASE4_BASE_URL}/api/pattern-traceability/lineage/track",
-            json=payload,
-            timeout=TIMEOUT_SECONDS
+            f"{PHASE4_BASE_URL}/api/pattern-traceability/lineage/track", json=payload, timeout=TIMEOUT_SECONDS
         )
         print(f"  ✅ Status: {response.status_code}")
         print(f"  ✅ Response: {response.json()}")
@@ -81,25 +75,39 @@ def test_pattern_tracking():
     except Exception as e:
         print(f"  ❌ Failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
+
 
 def test_database_query():
     """Test if database has patterns."""
     print("\nChecking database for patterns...")
     try:
         import subprocess
+
         result = subprocess.run(
-            ["docker", "exec", "omninode-bridge-postgres", "psql", "-U", "postgres", "-d", "omninode_bridge",
-             "-c", "SELECT COUNT(*) FROM pattern_lineage_nodes;"],
+            [
+                "docker",
+                "exec",
+                "omninode-bridge-postgres",
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "omninode_bridge",
+                "-c",
+                "SELECT COUNT(*) FROM pattern_lineage_nodes;",
+            ],
             capture_output=True,
-            text=True
+            text=True,
         )
         print(f"  ✅ Database query result:\n{result.stdout}")
         return True
     except Exception as e:
         print(f"  ❌ Failed: {e}")
         return False
+
 
 if __name__ == "__main__":
     print("=" * 60)

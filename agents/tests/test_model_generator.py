@@ -6,22 +6,16 @@ Comprehensive tests for Pydantic model generation from PRD analysis.
 """
 
 import pytest
-import asyncio
 from uuid import uuid4, UUID
 from datetime import datetime
 
 # Import the classes we need
-from agents.lib.model_generator import (
-    ModelGenerator,
-    ModelField,
-    GeneratedModel,
-    ModelGenerationResult
-)
+from agents.lib.model_generator import ModelGenerator
 from agents.lib.simple_prd_analyzer import (
     SimplePRDAnalyzer,
     SimpleParsedPRD,
     SimpleDecompositionResult,
-    SimplePRDAnalysisResult
+    SimplePRDAnalysisResult,
 )
 
 
@@ -147,10 +141,7 @@ class TestInputModelGeneration:
     @pytest.mark.asyncio
     async def test_generate_basic_input_model(self, model_generator, prd_analysis):
         """Test basic input model generation"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
 
         assert model is not None
         assert model.model_name == "ModelUserAuthenticationInput"
@@ -168,10 +159,7 @@ class TestInputModelGeneration:
     @pytest.mark.asyncio
     async def test_input_model_field_types(self, model_generator, prd_analysis):
         """Test input model has correct field types"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
 
         # Find specific fields and check types
         field_map = {f.name: f.type_hint for f in model.fields}
@@ -183,10 +171,7 @@ class TestInputModelGeneration:
     @pytest.mark.asyncio
     async def test_input_model_has_imports(self, model_generator, prd_analysis):
         """Test input model includes necessary imports"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
 
         import_str = " ".join(model.imports)
         assert "from pydantic import BaseModel" in import_str
@@ -196,10 +181,7 @@ class TestInputModelGeneration:
     @pytest.mark.asyncio
     async def test_input_model_has_config(self, model_generator, prd_analysis):
         """Test input model includes class config"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
 
         assert model.class_config is not None
         assert "json_schema_extra" in model.class_config
@@ -212,10 +194,7 @@ class TestOutputModelGeneration:
     @pytest.mark.asyncio
     async def test_generate_basic_output_model(self, model_generator, prd_analysis):
         """Test basic output model generation"""
-        model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_output_model("UserAuthentication", prd_analysis)
 
         assert model is not None
         assert model.model_name == "ModelUserAuthenticationOutput"
@@ -232,10 +211,7 @@ class TestOutputModelGeneration:
     @pytest.mark.asyncio
     async def test_output_model_field_types(self, model_generator, prd_analysis):
         """Test output model has correct field types"""
-        model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_output_model("UserAuthentication", prd_analysis)
 
         field_map = {f.name: f.type_hint for f in model.fields}
 
@@ -247,10 +223,7 @@ class TestOutputModelGeneration:
     @pytest.mark.asyncio
     async def test_output_model_has_optional_error(self, model_generator, prd_analysis):
         """Test output model error field is optional"""
-        model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_output_model("UserAuthentication", prd_analysis)
 
         error_field = next(f for f in model.fields if f.name == "error")
         assert "Optional" in error_field.type_hint
@@ -263,10 +236,7 @@ class TestConfigModelGeneration:
     @pytest.mark.asyncio
     async def test_generate_basic_config_model(self, model_generator, prd_analysis):
         """Test basic config model generation"""
-        model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_config_model("UserAuthentication", prd_analysis)
 
         assert model is not None
         assert model.model_name == "ModelUserAuthenticationConfig"
@@ -282,10 +252,7 @@ class TestConfigModelGeneration:
     @pytest.mark.asyncio
     async def test_config_model_has_defaults(self, model_generator, prd_analysis):
         """Test config model fields have default values"""
-        model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_config_model("UserAuthentication", prd_analysis)
 
         # All config fields should have defaults
         for field in model.fields:
@@ -294,10 +261,7 @@ class TestConfigModelGeneration:
     @pytest.mark.asyncio
     async def test_config_model_field_types(self, model_generator, prd_analysis):
         """Test config model has correct field types"""
-        model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_config_model("UserAuthentication", prd_analysis)
 
         field_map = {f.name: f.type_hint for f in model.fields}
 
@@ -313,10 +277,7 @@ class TestModelCodeGeneration:
     @pytest.mark.asyncio
     async def test_generate_input_model_code(self, model_generator, prd_analysis):
         """Test input model code generation"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
         code = model_generator._generate_model_code(model)
 
         # Verify code structure
@@ -333,10 +294,7 @@ class TestModelCodeGeneration:
     @pytest.mark.asyncio
     async def test_generate_output_model_code(self, model_generator, prd_analysis):
         """Test output model code generation"""
-        model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_output_model("UserAuthentication", prd_analysis)
         code = model_generator._generate_model_code(model)
 
         # Verify code structure
@@ -348,10 +306,7 @@ class TestModelCodeGeneration:
     @pytest.mark.asyncio
     async def test_generate_config_model_code(self, model_generator, prd_analysis):
         """Test config model code generation"""
-        model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_config_model("UserAuthentication", prd_analysis)
         code = model_generator._generate_model_code(model)
 
         # Verify code structure
@@ -363,10 +318,7 @@ class TestModelCodeGeneration:
     @pytest.mark.asyncio
     async def test_generated_code_is_valid_python(self, model_generator, prd_analysis):
         """Test that generated code is syntactically valid Python"""
-        model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
-        )
+        model = await model_generator.generate_input_model("UserAuthentication", prd_analysis)
         code = model_generator._generate_model_code(model)
 
         # Try to compile the code (will raise SyntaxError if invalid)
@@ -470,10 +422,7 @@ class TestParallelGeneration:
         import time
 
         start_time = time.time()
-        result = await model_generator.generate_all_models(
-            "UserAuthentication",
-            prd_analysis
-        )
+        result = await model_generator.generate_all_models("UserAuthentication", prd_analysis)
         end_time = time.time()
 
         # Verify all models were generated
@@ -498,10 +447,7 @@ class TestParallelGeneration:
     @pytest.mark.asyncio
     async def test_generation_result_completeness(self, model_generator, prd_analysis):
         """Test that generation result contains all expected data"""
-        result = await model_generator.generate_all_models(
-            "UserAuthentication",
-            prd_analysis
-        )
+        result = await model_generator.generate_all_models("UserAuthentication", prd_analysis)
 
         # Check all required fields are present
         assert isinstance(result.session_id, UUID)
@@ -523,12 +469,12 @@ class TestFieldInference:
         requirements = [
             "User authentication with email and password",
             "Support for user_id and session_id",
-            "Return error messages on failure"
+            "Return error messages on failure",
         ]
 
         fields = model_generator.infer_model_fields(requirements, [], "input")
 
-        field_names = [f.name for f in fields]
+        [f.name for f in fields]
 
         # Should extract common field names
         assert len(fields) > 0
@@ -538,11 +484,7 @@ class TestFieldInference:
     def test_infer_fields_with_context(self, model_generator):
         """Test field inference with additional context"""
         requirements = ["Process user data"]
-        context = [
-            "Store results in result_data field",
-            "Include status flag",
-            "Add error message if needed"
-        ]
+        context = ["Store results in result_data field", "Include status flag", "Add error message if needed"]
 
         fields = model_generator.infer_model_fields(requirements, context, "output")
 
@@ -566,7 +508,7 @@ class TestErrorHandling:
             dependencies=[],
             extracted_keywords=[],
             sections=[],
-            word_count=0
+            word_count=0,
         )
 
         empty_analysis = SimplePRDAnalysisResult(
@@ -574,23 +516,16 @@ class TestErrorHandling:
             correlation_id=uuid4(),
             prd_content="",
             parsed_prd=empty_prd,
-            decomposition_result=SimpleDecompositionResult(
-                tasks=[],
-                total_tasks=0,
-                verification_successful=True
-            ),
+            decomposition_result=SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True),
             node_type_hints={},
             recommended_mixins=[],
             external_systems=[],
             quality_baseline=0.5,
-            confidence_score=0.0
+            confidence_score=0.0,
         )
 
         # Should still generate models (with minimal fields)
-        result = await model_generator.generate_all_models(
-            "EmptyService",
-            empty_analysis
-        )
+        result = await model_generator.generate_all_models("EmptyService", empty_analysis)
 
         assert result is not None
         assert result.input_model is not None

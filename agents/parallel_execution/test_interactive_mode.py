@@ -10,9 +10,7 @@ Tests the interactive validation system components:
 - QuietValidator fallback
 """
 
-import asyncio
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
@@ -25,7 +23,7 @@ from interactive_validator import (
     CheckpointResult,
     SessionState,
     create_validator,
-    Colors
+    Colors,
 )
 
 
@@ -34,10 +32,7 @@ class TestSessionState:
 
     def test_session_state_creation(self):
         """Test creating session state"""
-        state = SessionState(
-            session_id="test_123",
-            workflow_name="test_workflow"
-        )
+        state = SessionState(session_id="test_123", workflow_name="test_workflow")
 
         assert state.session_id == "test_123"
         assert state.workflow_name == "test_workflow"
@@ -46,10 +41,7 @@ class TestSessionState:
 
     def test_session_state_serialization(self):
         """Test session state to/from dict conversion"""
-        state = SessionState(
-            session_id="test_123",
-            workflow_name="test_workflow"
-        )
+        state = SessionState(session_id="test_123", workflow_name="test_workflow")
 
         # Add a checkpoint result
         result = CheckpointResult(choice=UserChoice.APPROVE)
@@ -68,10 +60,7 @@ class TestSessionState:
     def test_checkpoint_result_enum_conversion(self):
         """Test enum values are properly converted in serialization"""
         state = SessionState(session_id="test", workflow_name="test")
-        result = CheckpointResult(
-            choice=UserChoice.EDIT,
-            modified_output={"test": "data"}
-        )
+        result = CheckpointResult(choice=UserChoice.EDIT, modified_output={"test": "data"})
         state.checkpoint_results["edit_test"] = result
 
         # Serialize
@@ -96,7 +85,7 @@ class TestQuietValidator:
             step_number=1,
             total_steps=3,
             step_name="Test Checkpoint",
-            output_data={"test": "data"}
+            output_data={"test": "data"},
         )
 
         assert result.choice == UserChoice.APPROVE
@@ -127,10 +116,7 @@ class TestCreateValidator:
             json.dump(state.to_dict(), f)
 
         # Load validator with session
-        validator = create_validator(
-            interactive=True,
-            session_file=session_file
-        )
+        validator = create_validator(interactive=True, session_file=session_file)
 
         assert isinstance(validator, InteractiveValidator)
         assert validator.session_state.session_id == "test"
@@ -150,7 +136,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Approval",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         assert result.choice == UserChoice.APPROVE
@@ -167,7 +153,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Skip",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         assert result.choice == UserChoice.SKIP
@@ -183,7 +169,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Batch 1",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         assert result1.choice == UserChoice.APPROVE
@@ -196,7 +182,7 @@ class TestInteractiveValidator:
             step_number=2,
             total_steps=3,
             step_name="Test Batch 2",
-            output_data={"test": "data"}
+            output_data={"test": "data"},
         )
 
         assert result2.choice == UserChoice.APPROVE
@@ -207,13 +193,15 @@ class TestInteractiveValidator:
         validator = InteractiveValidator()
 
         # Mock input sequence: 'r' for retry, then feedback lines, then empty lines
-        input_sequence = iter([
-            "r",  # Choose retry
-            "This is feedback line 1",
-            "This is feedback line 2",
-            "",  # First empty line
-            ""   # Second empty line to finish
-        ])
+        input_sequence = iter(
+            [
+                "r",  # Choose retry
+                "This is feedback line 1",
+                "This is feedback line 2",
+                "",  # First empty line
+                "",  # Second empty line to finish
+            ]
+        )
 
         with patch("builtins.input", lambda *args, **kwargs: next(input_sequence)):
             result = validator.checkpoint(
@@ -222,7 +210,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Retry",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         assert result.choice == UserChoice.RETRY
@@ -234,11 +222,7 @@ class TestInteractiveValidator:
         """Test checkpoint with quorum validation result"""
         validator = InteractiveValidator()
 
-        quorum_result = {
-            "decision": "PASS",
-            "confidence": 0.87,
-            "deficiencies": []
-        }
+        quorum_result = {"decision": "PASS", "confidence": 0.87, "deficiencies": []}
 
         with patch("builtins.input", return_value="a"):
             result = validator.checkpoint(
@@ -248,7 +232,7 @@ class TestInteractiveValidator:
                 total_steps=3,
                 step_name="Test with Quorum",
                 output_data={"test": "data"},
-                quorum_result=quorum_result
+                quorum_result=quorum_result,
             )
 
         assert result.choice == UserChoice.APPROVE
@@ -257,10 +241,7 @@ class TestInteractiveValidator:
         """Test checkpoint with deficiencies list"""
         validator = InteractiveValidator()
 
-        deficiencies = [
-            "Wrong node type",
-            "Missing requirement: database pooling"
-        ]
+        deficiencies = ["Wrong node type", "Missing requirement: database pooling"]
 
         with patch("builtins.input", return_value="a"):
             result = validator.checkpoint(
@@ -270,7 +251,7 @@ class TestInteractiveValidator:
                 total_steps=3,
                 step_name="Test with Deficiencies",
                 output_data={"test": "data"},
-                deficiencies=deficiencies
+                deficiencies=deficiencies,
             )
 
         assert result.choice == UserChoice.APPROVE
@@ -287,7 +268,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Persistence",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         # Check session file was created
@@ -304,10 +285,7 @@ class TestInteractiveValidator:
         validator = InteractiveValidator()
 
         # Mock input sequence: invalid input, then valid approval
-        input_sequence = iter([
-            "x",  # Invalid choice
-            "a"   # Valid approval
-        ])
+        input_sequence = iter(["x", "a"])  # Invalid choice  # Valid approval
 
         with patch("builtins.input", lambda *args, **kwargs: next(input_sequence)):
             result = validator.checkpoint(
@@ -316,7 +294,7 @@ class TestInteractiveValidator:
                 step_number=1,
                 total_steps=3,
                 step_name="Test Invalid Input",
-                output_data={"test": "data"}
+                output_data={"test": "data"},
             )
 
         assert result.choice == UserChoice.APPROVE

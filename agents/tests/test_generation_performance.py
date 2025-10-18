@@ -9,8 +9,7 @@ import pytest
 import asyncio
 import time
 import tempfile
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
@@ -18,7 +17,6 @@ from agents.tests.fixtures.phase4_fixtures import (
     EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
     REDUCER_NODE_PRD,
-    ORCHESTRATOR_NODE_PRD,
     LARGE_PRD_CONTENT,
     PERFORMANCE_EXPECTATIONS,
     NODE_TYPE_FIXTURES,
@@ -61,7 +59,7 @@ class TestGenerationLatency:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
             end_time = time.time()
 
@@ -91,7 +89,7 @@ class TestGenerationLatency:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
         end_time = time.time()
@@ -130,23 +128,20 @@ class TestParallelGenerationSpeedup:
     async def test_parallel_vs_sequential_generation(self):
         """Test that parallel generation is faster than sequential"""
         analyzer = SimplePRDAnalyzer()
-        engine = OmniNodeTemplateEngine()
+        OmniNodeTemplateEngine()
 
         prds = [EFFECT_NODE_PRD, COMPUTE_NODE_PRD, REDUCER_NODE_PRD]
 
         # Sequential generation
         sequential_start = time.time()
         for prd_content in prds:
-            analysis = await analyzer.analyze_prd(prd_content)
+            await analyzer.analyze_prd(prd_content)
         sequential_end = time.time()
         sequential_time = sequential_end - sequential_start
 
         # Parallel generation
         parallel_start = time.time()
-        analyses = await asyncio.gather(*[
-            analyzer.analyze_prd(prd_content)
-            for prd_content in prds
-        ])
+        await asyncio.gather(*[analyzer.analyze_prd(prd_content) for prd_content in prds])
         parallel_end = time.time()
         parallel_time = parallel_end - parallel_start
 
@@ -173,16 +168,15 @@ class TestParallelGenerationSpeedup:
                     node_type=node_type,
                     microservice_name=fixture["microservice_name"],
                     domain=fixture["domain"],
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
 
         start_time = time.time()
 
         # Generate all node types concurrently
-        results = await asyncio.gather(*[
-            generate_single_node(node_type, fixture)
-            for node_type, fixture in NODE_TYPE_FIXTURES.items()
-        ])
+        results = await asyncio.gather(
+            *[generate_single_node(node_type, fixture) for node_type, fixture in NODE_TYPE_FIXTURES.items()]
+        )
 
         end_time = time.time()
         total_time_ms = (end_time - start_time) * 1000
@@ -212,12 +206,12 @@ class TestMemoryUsage:
         analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = await engine.generate_node(
+            await engine.generate_node(
                 analysis_result=analysis,
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -238,7 +232,7 @@ class TestMemoryUsage:
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
 
         analyzer = SimplePRDAnalyzer()
-        analysis = await analyzer.analyze_prd(LARGE_PRD_CONTENT)
+        await analyzer.analyze_prd(LARGE_PRD_CONTENT)
 
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
         memory_increase = final_memory - initial_memory
@@ -264,12 +258,12 @@ class TestScalability:
         with tempfile.TemporaryDirectory() as temp_dir:
             for i in range(num_iterations):
                 start_time = time.time()
-                result = await engine.generate_node(
+                await engine.generate_node(
                     analysis_result=EFFECT_ANALYSIS_RESULT,
                     node_type="EFFECT",
                     microservice_name=f"service_{i}",
                     domain="test",
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
                 end_time = time.time()
 
@@ -302,13 +296,11 @@ class TestScalability:
                     node_type="EFFECT",
                     microservice_name=f"service_{index}",
                     domain="test",
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
 
         start_time = time.time()
-        results = await asyncio.gather(*[
-            generate_one(i) for i in range(num_concurrent)
-        ])
+        results = await asyncio.gather(*[generate_one(i) for i in range(num_concurrent)])
         end_time = time.time()
 
         total_time_ms = (end_time - start_time) * 1000
@@ -344,24 +336,24 @@ class TestCachingOptimizations:
         # First generation
         with tempfile.TemporaryDirectory() as temp_dir:
             start_time = time.time()
-            result1 = await engine.generate_node(
+            await engine.generate_node(
                 analysis_result=EFFECT_ANALYSIS_RESULT,
                 node_type="EFFECT",
                 microservice_name="service_1",
                 domain="test",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
             first_latency = (time.time() - start_time) * 1000
 
         # Second generation (should benefit from template caching)
         with tempfile.TemporaryDirectory() as temp_dir:
             start_time = time.time()
-            result2 = await engine.generate_node(
+            await engine.generate_node(
                 analysis_result=EFFECT_ANALYSIS_RESULT,
                 node_type="EFFECT",
                 microservice_name="service_2",
                 domain="test",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
             second_latency = (time.time() - start_time) * 1000
 
@@ -384,12 +376,12 @@ class TestBenchmarks:
         for node_type, fixture in NODE_TYPE_FIXTURES.items():
             with tempfile.TemporaryDirectory() as temp_dir:
                 start_time = time.time()
-                result = await engine.generate_node(
+                await engine.generate_node(
                     analysis_result=fixture["analysis"],
                     node_type=node_type,
                     microservice_name=fixture["microservice_name"],
                     domain=fixture["domain"],
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
                 end_time = time.time()
 
@@ -427,7 +419,7 @@ class TestBenchmarks:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
             phases["generation"] = (time.time() - start) * 1000
 

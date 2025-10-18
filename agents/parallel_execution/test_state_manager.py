@@ -7,6 +7,7 @@ Quick validation script for state_manager.py
 import asyncio
 from uuid import uuid4
 
+
 # Mock database layer for testing without actual DB
 class MockDatabaseLayer:
     def __init__(self):
@@ -26,14 +27,7 @@ class MockDatabaseLayer:
 
 async def test_state_manager():
     """Test state manager basic functionality."""
-    from state_manager import (
-        StateManager,
-        SnapshotType,
-        ErrorCategory,
-        ErrorSeverity,
-        VerboseMode,
-        ModelCodePointer
-    )
+    from state_manager import StateManager, SnapshotType, ErrorCategory, ErrorSeverity, VerboseMode, ModelCodePointer
 
     # Create manager with mock database
     mock_db = MockDatabaseLayer()
@@ -46,18 +40,14 @@ async def test_state_manager():
 
     # Test 1: Capture snapshot
     correlation_id = uuid4()
-    agent_state = {
-        "context": "test_context",
-        "variables": {"x": 1, "y": 2},
-        "execution_step": 1
-    }
+    agent_state = {"context": "test_context", "variables": {"x": 1, "y": 2}, "execution_step": 1}
 
     snapshot_id = await manager.capture_snapshot(
         agent_state=agent_state,
         correlation_id=correlation_id,
         snapshot_type=SnapshotType.CHECKPOINT,
         agent_name="test-agent",
-        task_description="Test task"
+        task_description="Test task",
     )
 
     assert snapshot_id is not None
@@ -73,7 +63,7 @@ async def test_state_manager():
             correlation_id=correlation_id,
             agent_name="test-agent",
             error_category=ErrorCategory.AGENT,
-            error_severity=ErrorSeverity.MEDIUM
+            error_severity=ErrorSeverity.MEDIUM,
         )
 
     assert error_id is not None
@@ -86,7 +76,7 @@ async def test_state_manager():
         agent_name="test-agent",
         operation_name="test_operation",
         quality_score=0.85,
-        execution_time_ms=150
+        execution_time_ms=150,
     )
 
     assert success_id is not None
@@ -94,10 +84,7 @@ async def test_state_manager():
 
     # Test 4: Link error to success
     code_pointer = ModelCodePointer(
-        file_path="/path/to/stf.py",
-        function_name="fix_validation_error",
-        line_number=42,
-        module_path="agents.stf"
+        file_path="/path/to/stf.py", function_name="fix_validation_error", line_number=42, module_path="agents.stf"
     )
 
     link_id = await manager.link_error_to_success(
@@ -108,7 +95,7 @@ async def test_state_manager():
         recovery_strategy="retry_with_validation",
         recovery_duration_ms=150,
         intermediate_steps=3,
-        confidence_score=0.95
+        confidence_score=0.95,
     )
 
     assert link_id is not None

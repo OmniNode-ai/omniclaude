@@ -13,21 +13,16 @@ Example workflow:
 """
 
 import asyncio
-import time
-from typing import Optional
 
-from transformation_tracker import (
-    AgentTransformationTracker,
-    get_transformation_tracker
-)
+from transformation_tracker import get_transformation_tracker
 from trace_logger import get_trace_logger
 
 
 async def demo_basic_transformation():
     """Demonstrate basic transformation tracking."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 1: Basic Transformation Tracking")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     tracker = get_transformation_tracker()
 
@@ -41,16 +36,16 @@ async def demo_basic_transformation():
             "systematic_debugging",
             "performance_profiling",
             "root_cause_analysis",
-            "hypothesis_testing"
+            "hypothesis_testing",
         ],
         context_preserved={
             "domain": "api_development",
             "previous_findings": ["slow database queries", "N+1 problem"],
-            "project_context": "REST API performance optimization"
+            "project_context": "REST API performance optimization",
         },
         routing_confidence=0.92,
         task_id="task-123",
-        agent_definition_path="/Users/jonah/.claude/agents/configs/agent-debug-intelligence.yaml"
+        agent_definition_path="/Users/jonah/.claude/agents/configs/agent-debug-intelligence.yaml",
     )
 
     print(f"✅ Transformation tracked: {event.transformation_id}")
@@ -63,26 +58,20 @@ async def demo_basic_transformation():
 
 async def demo_multiple_transformations():
     """Demonstrate tracking multiple transformations to build patterns."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 2: Multiple Transformations & Pattern Recognition")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     tracker = get_transformation_tracker()
 
     # Simulate multiple transformation scenarios
     transformations = [
-        ("agent-workflow-coordinator", "agent-debug-intelligence",
-         "Debug memory leak", 0.89, 15.3),
-        ("agent-workflow-coordinator", "agent-api-architect",
-         "Design REST API endpoints", 0.95, 12.7),
-        ("agent-workflow-coordinator", "agent-debug-intelligence",
-         "Analyze race condition", 0.87, 14.9),
-        ("agent-workflow-coordinator", "agent-api-architect",
-         "Review API security", 0.91, 13.2),
-        ("agent-workflow-coordinator", "agent-debug-intelligence",
-         "Investigate performance issue", 0.93, 16.1),
-        ("agent-api-architect", "agent-security-analyzer",
-         "Security audit", 0.88, 18.5),
+        ("agent-workflow-coordinator", "agent-debug-intelligence", "Debug memory leak", 0.89, 15.3),
+        ("agent-workflow-coordinator", "agent-api-architect", "Design REST API endpoints", 0.95, 12.7),
+        ("agent-workflow-coordinator", "agent-debug-intelligence", "Analyze race condition", 0.87, 14.9),
+        ("agent-workflow-coordinator", "agent-api-architect", "Review API security", 0.91, 13.2),
+        ("agent-workflow-coordinator", "agent-debug-intelligence", "Investigate performance issue", 0.93, 16.1),
+        ("agent-api-architect", "agent-security-analyzer", "Security audit", 0.88, 18.5),
     ]
 
     for source, target, request, confidence, load_time in transformations:
@@ -93,10 +82,7 @@ async def demo_multiple_transformations():
             transformation_reason=f"Specialized {target.split('-')[-1]} required",
             agent_load_time_ms=load_time,
             routing_confidence=confidence,
-            capabilities_inherited=[
-                f"{target}_capability_1",
-                f"{target}_capability_2"
-            ]
+            capabilities_inherited=[f"{target}_capability_1", f"{target}_capability_2"],
         )
         await asyncio.sleep(0.1)  # Simulate time between transformations
 
@@ -115,25 +101,33 @@ async def demo_multiple_transformations():
 
 async def demo_performance_monitoring():
     """Demonstrate performance threshold monitoring."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 3: Performance Threshold Monitoring")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     tracker = get_transformation_tracker()
 
     # Create some transformations with varying performance
     fast_transformations = [
-        ("agent-workflow-coordinator", "agent-coder",
-         "Implement function", 0.94, 8.5),
-        ("agent-workflow-coordinator", "agent-coder",
-         "Fix bug", 0.91, 9.2),
+        ("agent-workflow-coordinator", "agent-coder", "Implement function", 0.94, 8.5),
+        ("agent-workflow-coordinator", "agent-coder", "Fix bug", 0.91, 9.2),
     ]
 
     slow_transformations = [
-        ("agent-workflow-coordinator", "agent-onex-generator",
-         "Generate ONEX architecture", 0.87, 65.3),  # Over 50ms threshold
-        ("agent-workflow-coordinator", "agent-onex-generator",
-         "Create node structure", 0.89, 72.1),  # Over 50ms threshold
+        (
+            "agent-workflow-coordinator",
+            "agent-onex-generator",
+            "Generate ONEX architecture",
+            0.87,
+            65.3,
+        ),  # Over 50ms threshold
+        (
+            "agent-workflow-coordinator",
+            "agent-onex-generator",
+            "Create node structure",
+            0.89,
+            72.1,
+        ),  # Over 50ms threshold
     ]
 
     print("Tracking fast transformations (under threshold)...")
@@ -144,7 +138,7 @@ async def demo_performance_monitoring():
             user_request=request,
             transformation_reason=f"Quick {target} operation",
             agent_load_time_ms=load_time,
-            routing_confidence=confidence
+            routing_confidence=confidence,
         )
 
     print("Tracking slow transformations (over threshold)...")
@@ -155,28 +149,30 @@ async def demo_performance_monitoring():
             user_request=request,
             transformation_reason=f"Complex {target} operation",
             agent_load_time_ms=load_time,
-            routing_confidence=confidence
+            routing_confidence=confidence,
         )
 
     # Get metrics
     metrics = await tracker.get_metrics()
-    print(f"\n📈 Performance Analysis:")
+    print("\n📈 Performance Analysis:")
     print(f"   Total Transformations: {metrics.total_transformations}")
     print(f"   Under Threshold (<50ms): {metrics.transformations_under_threshold}")
     print(f"   Over Threshold (≥50ms): {metrics.transformations_over_threshold}")
     print(f"   Threshold Compliance: {metrics.threshold_compliance_rate:.2%}")
 
     if metrics.transformations_over_threshold > 0:
-        print(f"\n   ⚠️  Warning: {metrics.transformations_over_threshold} transformations "
-              f"exceeded the 50ms threshold!")
+        print(
+            f"\n   ⚠️  Warning: {metrics.transformations_over_threshold} transformations "
+            f"exceeded the 50ms threshold!"
+        )
         print(f"   Consider optimizing agent loading for: {metrics.most_common_target}")
 
 
 async def demo_metrics_dashboard():
     """Demonstrate comprehensive metrics for dashboard."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 4: Dashboard Metrics Generation")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     tracker = get_transformation_tracker()
 
@@ -194,24 +190,20 @@ async def demo_metrics_dashboard():
         print(f"   Request: {event.user_request[:60]}...")
         print(f"   Time: {event.datetime_str}")
         print(f"   Overhead: {event.transformation_overhead_ms:.2f}ms")
-        print(f"   Confidence: {event.routing_confidence:.2%}" if event.routing_confidence
-              else "   Confidence: N/A")
+        print(f"   Confidence: {event.routing_confidence:.2%}" if event.routing_confidence else "   Confidence: N/A")
 
 
 async def demo_integration_with_trace_logger():
     """Demonstrate integration with TraceLogger."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 5: TraceLogger Integration")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     trace_logger = get_trace_logger()
     tracker = get_transformation_tracker()
 
     # Start a coordinator trace
-    trace_id = await trace_logger.start_coordinator_trace(
-        coordinator_type="hybrid",
-        total_agents=3
-    )
+    trace_id = await trace_logger.start_coordinator_trace(coordinator_type="hybrid", total_agents=3)
     print(f"Started coordinator trace: {trace_id}")
 
     # Track transformation (will automatically log to TraceLogger)
@@ -222,14 +214,14 @@ async def demo_integration_with_trace_logger():
         transformation_reason="Test generation specialist required",
         capabilities_inherited=["test_generation", "coverage_analysis"],
         routing_confidence=0.91,
-        task_id="task-456"
+        task_id="task-456",
     )
 
-    print(f"\n✅ Transformation logged to both systems:")
+    print("\n✅ Transformation logged to both systems:")
     print(f"   Transformation ID: {event.transformation_id}")
     print(f"   Coordinator Trace ID: {trace_id}")
-    print(f"   Event written to: traces/transformations/")
-    print(f"   Also logged to: TraceLogger AGENT_TRANSFORM event")
+    print("   Event written to: traces/transformations/")
+    print("   Also logged to: TraceLogger AGENT_TRANSFORM event")
 
     # End coordinator trace
     await trace_logger.end_coordinator_trace(trace_id)
@@ -237,9 +229,9 @@ async def demo_integration_with_trace_logger():
 
 async def demo_transformation_stats():
     """Show tracker statistics."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("DEMO 6: Tracker Statistics")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     tracker = get_transformation_tracker()
     stats = tracker.get_stats()
@@ -251,9 +243,9 @@ async def demo_transformation_stats():
 
 async def main():
     """Run all demos."""
-    print("\n" + "🔄"*40)
+    print("\n" + "🔄" * 40)
     print("Agent Transformation Tracking - Comprehensive Demo")
-    print("🔄"*40)
+    print("🔄" * 40)
 
     try:
         await demo_basic_transformation()
@@ -273,9 +265,9 @@ async def main():
 
         await demo_transformation_stats()
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("✅ All demos completed successfully!")
-        print("="*80 + "\n")
+        print("=" * 80 + "\n")
 
         print("Next steps:")
         print("  1. Check traces/transformations/ directory for event files")
@@ -287,6 +279,7 @@ async def main():
     except Exception as e:
         print(f"\n❌ Demo failed: {e}")
         import traceback
+
         traceback.print_exc()
 
 

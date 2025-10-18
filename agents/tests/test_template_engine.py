@@ -5,35 +5,35 @@ Test OmniNode Template Engine
 
 import pytest
 import tempfile
-import shutil
 from pathlib import Path
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
 
+
 class TestOmniNodeTemplateEngine:
     """Test the OmniNode template engine"""
-    
+
     def test_template_loading(self):
         """Test that templates are loaded correctly"""
         engine = OmniNodeTemplateEngine()
-        
+
         # Check that all node types are loaded
         assert "EFFECT" in engine.templates
         assert "COMPUTE" in engine.templates
         assert "REDUCER" in engine.templates
         assert "ORCHESTRATOR" in engine.templates
-        
+
         # Check template content
         effect_template = engine.templates["EFFECT"]
         assert "MICROSERVICE_NAME" in effect_template.placeholders
         assert "MICROSERVICE_NAME_PASCAL" in effect_template.placeholders
         assert "BUSINESS_DESCRIPTION" in effect_template.placeholders
-    
+
     def test_template_rendering(self):
         """Test template rendering with context"""
         engine = OmniNodeTemplateEngine()
         effect_template = engine.templates["EFFECT"]
-        
+
         context = {
             "MICROSERVICE_NAME": "user_management",
             "MICROSERVICE_NAME_PASCAL": "UserManagement",
@@ -45,11 +45,11 @@ class TestOmniNodeTemplateEngine:
             "MIXIN_INITIALIZATION": "",
             "BUSINESS_LOGIC_STUB": "        # TODO: Implement user management logic",
             "OPERATIONS": ["create_user", "update_user", "delete_user"],
-            "FEATURES": ["authentication", "authorization", "profile_management"]
+            "FEATURES": ["authentication", "authorization", "profile_management"],
         }
-        
+
         rendered = effect_template.render(context)
-        
+
         # Check that placeholders are replaced
         assert "user_management" in rendered
         assert "UserManagement" in rendered
@@ -57,15 +57,15 @@ class TestOmniNodeTemplateEngine:
         assert "User management service for identity operations" in rendered
         assert "create_user" in rendered
         assert "authentication" in rendered
-        
+
         # Check that no placeholders remain
         assert "{MICROSERVICE_NAME}" not in rendered
         assert "{DOMAIN}" not in rendered
-    
+
     def test_context_preparation(self):
         """Test context preparation from analysis result"""
         engine = OmniNodeTemplateEngine()
-        
+
         # Create mock analysis result
         parsed_prd = SimpleParsedPRD(
             title="User Management Service",
@@ -77,9 +77,9 @@ class TestOmniNodeTemplateEngine:
             dependencies=["database", "auth_service"],
             extracted_keywords=["user", "management", "authentication"],
             sections=["overview", "requirements", "features"],
-            word_count=150
+            word_count=150,
         )
-        
+
         decomposition_result = SimpleDecompositionResult(
             tasks=[
                 {
@@ -88,7 +88,7 @@ class TestOmniNodeTemplateEngine:
                     "priority": "high",
                     "complexity": "medium",
                     "dependencies": [],
-                    "estimated_effort": 8
+                    "estimated_effort": 8,
                 },
                 {
                     "title": "Update User",
@@ -96,16 +96,16 @@ class TestOmniNodeTemplateEngine:
                     "priority": "medium",
                     "complexity": "low",
                     "dependencies": ["Create User"],
-                    "estimated_effort": 4
-                }
+                    "estimated_effort": 4,
+                },
             ],
             total_tasks=2,
-            verification_successful=True
+            verification_successful=True,
         )
-        
+
         from uuid import uuid4
         from datetime import datetime
-        
+
         analysis_result = SimplePRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
@@ -117,13 +117,11 @@ class TestOmniNodeTemplateEngine:
             external_systems=["database", "auth_service"],
             quality_baseline=0.8,
             confidence_score=0.85,
-            analysis_timestamp=datetime.utcnow()
+            analysis_timestamp=datetime.utcnow(),
         )
-        
-        context = engine._prepare_template_context(
-            analysis_result, "EFFECT", "user_management", "identity"
-        )
-        
+
+        context = engine._prepare_template_context(analysis_result, "EFFECT", "user_management", "identity")
+
         # Check basic context
         assert context["DOMAIN"] == "identity"
         assert context["MICROSERVICE_NAME"] == "user_management"
@@ -131,26 +129,26 @@ class TestOmniNodeTemplateEngine:
         assert context["DOMAIN_PASCAL"] == "Identity"
         assert context["NODE_TYPE"] == "EFFECT"
         assert context["BUSINESS_DESCRIPTION"] == "Test service for user operations"
-        
+
         # Check mixin context
         assert "MixinEventBus" in context["MIXIN_IMPORTS"]
         assert "MixinCaching" in context["MIXIN_IMPORTS"]
         assert "MixinEventBus" in context["MIXIN_INHERITANCE"]
         assert "MixinCaching" in context["MIXIN_INHERITANCE"]
-        
+
         # Check operations
         assert "Create User" in context["OPERATIONS"]
         assert "Update User" in context["OPERATIONS"]
-        
+
         # Check features
         assert "authentication" in context["FEATURES"]
         assert "authorization" in context["FEATURES"]
-    
+
     @pytest.mark.asyncio
     async def test_node_generation(self):
         """Test complete node generation"""
         engine = OmniNodeTemplateEngine()
-        
+
         # Create mock analysis result
         parsed_prd = SimpleParsedPRD(
             title="User Management Service",
@@ -162,9 +160,9 @@ class TestOmniNodeTemplateEngine:
             dependencies=["database"],
             extracted_keywords=["user", "management"],
             sections=["overview", "requirements"],
-            word_count=100
+            word_count=100,
         )
-        
+
         decomposition_result = SimpleDecompositionResult(
             tasks=[
                 {
@@ -173,16 +171,16 @@ class TestOmniNodeTemplateEngine:
                     "priority": "high",
                     "complexity": "medium",
                     "dependencies": [],
-                    "estimated_effort": 8
+                    "estimated_effort": 8,
                 }
             ],
             total_tasks=1,
-            verification_successful=True
+            verification_successful=True,
         )
-        
+
         from uuid import uuid4
         from datetime import datetime
-        
+
         analysis_result = SimplePRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
@@ -194,9 +192,9 @@ class TestOmniNodeTemplateEngine:
             external_systems=["database"],
             quality_baseline=0.8,
             confidence_score=0.85,
-            analysis_timestamp=datetime.utcnow()
+            analysis_timestamp=datetime.utcnow(),
         )
-        
+
         # Create temporary directory for output
         with tempfile.TemporaryDirectory() as temp_dir:
             result = await engine.generate_node(
@@ -204,9 +202,9 @@ class TestOmniNodeTemplateEngine:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
-            
+
             # Check result structure
             assert result["node_type"] == "EFFECT"
             assert result["microservice_name"] == "user_management"
@@ -215,31 +213,31 @@ class TestOmniNodeTemplateEngine:
             assert "main_file" in result
             assert "generated_files" in result
             assert "metadata" in result
-            
+
             # Check that files were created
             output_path = Path(result["output_path"])
             assert output_path.exists()
-            
+
             main_file = Path(result["main_file"])
             assert main_file.exists()
-            
+
             # Check main file content
-            with open(main_file, 'r') as f:
+            with open(main_file, "r") as f:
                 content = f.read()
                 assert "user_management" in content
                 assert "UserManagement" in content
                 assert "Test service for user operations" in content
                 assert "MixinEventBus" in content
-    
+
     def test_pascal_case_conversion(self):
         """Test PascalCase conversion"""
         engine = OmniNodeTemplateEngine()
-        
+
         assert engine._to_pascal_case("user_management") == "UserManagement"
         assert engine._to_pascal_case("user-management") == "UserManagement"
         assert engine._to_pascal_case("user management") == "UserManagement"
         assert engine._to_pascal_case("user") == "User"
-    
+
     def test_mixin_generation(self):
         """Test mixin-related code generation"""
         engine = OmniNodeTemplateEngine()

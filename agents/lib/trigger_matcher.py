@@ -41,8 +41,8 @@ class EnhancedTriggerMatcher:
             Dictionary mapping lowercase triggers to list of agent names
         """
         index = {}
-        for agent_name, agent_data in self.registry['agents'].items():
-            triggers = agent_data.get('activation_triggers', [])
+        for agent_name, agent_data in self.registry["agents"].items():
+            triggers = agent_data.get("activation_triggers", [])
             for trigger in triggers:
                 trigger_lower = trigger.lower()
                 if trigger_lower not in index:
@@ -73,8 +73,8 @@ class EnhancedTriggerMatcher:
         # Extract keywords from request
         keywords = self._extract_keywords(user_request)
 
-        for agent_name, agent_data in self.registry['agents'].items():
-            triggers = agent_data.get('activation_triggers', [])
+        for agent_name, agent_data in self.registry["agents"].items():
+            triggers = agent_data.get("activation_triggers", [])
 
             # Calculate match scores
             scores = []
@@ -96,7 +96,7 @@ class EnhancedTriggerMatcher:
                 scores.append((keyword_score * 0.8, f"Keyword overlap ({keyword_score:.0%})"))
 
             # 4. Capability match
-            capabilities = agent_data.get('capabilities', [])
+            capabilities = agent_data.get("capabilities", [])
             cap_score = self._capability_match_score(keywords, capabilities)
             if cap_score > 0.5:
                 scores.append((cap_score * 0.7, f"Capability match ({cap_score:.0%})"))
@@ -125,16 +125,68 @@ class EnhancedTriggerMatcher:
         """
         # Common stopwords to filter
         stopwords = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-            'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-            'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
-            'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that',
-            'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me',
-            'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their'
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "was",
+            "are",
+            "were",
+            "been",
+            "be",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "should",
+            "could",
+            "may",
+            "might",
+            "must",
+            "can",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "me",
+            "him",
+            "her",
+            "us",
+            "them",
+            "my",
+            "your",
+            "his",
+            "its",
+            "our",
+            "their",
         }
 
         # Split on whitespace and punctuation
-        words = re.findall(r'\b\w+\b', text.lower())
+        words = re.findall(r"\b\w+\b", text.lower())
 
         # Filter stopwords and short words
         keywords = [w for w in words if w not in stopwords and len(w) > 2]
@@ -178,7 +230,7 @@ class EnhancedTriggerMatcher:
         # Flatten triggers into words
         trigger_words = set()
         for trigger in triggers:
-            trigger_words.update(re.findall(r'\b\w+\b', trigger.lower()))
+            trigger_words.update(re.findall(r"\b\w+\b", trigger.lower()))
 
         # Calculate overlap
         keyword_set = set(keywords)
@@ -205,7 +257,7 @@ class EnhancedTriggerMatcher:
         # Flatten capabilities into words
         capability_words = set()
         for cap in capabilities:
-            capability_words.update(re.findall(r'\b\w+\b', cap.lower()))
+            capability_words.update(re.findall(r"\b\w+\b", cap.lower()))
 
         # Calculate overlap
         keyword_set = set(keywords)
@@ -232,7 +284,7 @@ if __name__ == "__main__":
             "debug this error",
             "optimize my database queries",
             "review API security",
-            "create CI/CD pipeline"
+            "create CI/CD pipeline",
         ]
 
         for query in test_queries:

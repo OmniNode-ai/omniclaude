@@ -21,7 +21,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from aiokafka import AIOKafkaProducer
 
@@ -34,14 +34,16 @@ logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):
     """Circuit breaker states"""
+
     CLOSED = "closed"  # Normal operation
-    OPEN = "open"      # Failing, reject requests
+    OPEN = "open"  # Failing, reject requests
     HALF_OPEN = "half_open"  # Testing recovery
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Circuit breaker configuration"""
+
     failure_threshold: int = 5  # Failures before opening
     recovery_timeout_ms: int = 10000  # Time before testing recovery
     success_threshold: int = 2  # Successes to close circuit
@@ -50,6 +52,7 @@ class CircuitBreakerConfig:
 @dataclass
 class OptimizerConfig:
     """Event optimizer configuration"""
+
     enable_compression: bool = True
     compression_threshold_bytes: int = 1024  # Compress payloads > 1KB
     max_producer_pool_size: int = 3
@@ -100,7 +103,7 @@ class CircuitBreaker:
 
             return result
 
-        except Exception as e:
+        except Exception:
             # Record failure
             async with self.lock:
                 await self._record_failure()
@@ -142,9 +145,7 @@ class CircuitBreaker:
             self.state = CircuitState.OPEN
         elif self.state == CircuitState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:
-                self.logger.error(
-                    f"Circuit breaker OPENING after {self.failure_count} failures"
-                )
+                self.logger.error(f"Circuit breaker OPENING after {self.failure_count} failures")
                 self.state = CircuitState.OPEN
 
 
@@ -176,17 +177,13 @@ class EventOptimizer:
         self.config = config or OptimizerConfig()
 
         # Initialize circuit breaker
-        self.circuit_breaker = CircuitBreaker(
-            circuit_config or self.config.get_circuit_config()
-        )
+        self.circuit_breaker = CircuitBreaker(circuit_config or self.config.get_circuit_config())
 
         # Store batch config
         self._batch_config = batch_config or self.config.get_batch_config()
 
         # Initialize persistence
-        self.persistence = persistence or (
-            CodegenPersistence() if self.config.enable_metrics else None
-        )
+        self.persistence = persistence or (CodegenPersistence() if self.config.enable_metrics else None)
 
         # Producer pool for connection reuse
         self._producer_pool: List[AIOKafkaProducer] = []
@@ -236,10 +233,7 @@ class EventOptimizer:
 
         try:
             # Publish through circuit breaker
-            await self.circuit_breaker.call(
-                self._publish_event_internal,
-                event
-            )
+            await self.circuit_breaker.call(self._publish_event_internal, event)
 
             duration_ms = (time.time() - start_time) * 1000
 
@@ -249,7 +243,7 @@ class EventOptimizer:
                     event_type=event.event,
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
-                    success=True
+                    success=True,
                 )
 
         except Exception as e:
@@ -263,7 +257,7 @@ class EventOptimizer:
                     processing_duration_ms=int(duration_ms),
                     success=False,
                     error_type=type(e).__name__,
-                    error_message=str(e)
+                    error_message=str(e),
                 )
 
             raise
@@ -274,14 +268,16 @@ class EventOptimizer:
 
         try:
             topic = event.to_kafka_topic()
-            payload = json.dumps({
-                "id": str(event.id),
-                "service": event.service,
-                "timestamp": event.timestamp,
-                "correlation_id": str(event.correlation_id),
-                "metadata": event.metadata,
-                "payload": event.payload,
-            }).encode("utf-8")
+            payload = json.dumps(
+                {
+                    "id": str(event.id),
+                    "service": event.service,
+                    "timestamp": event.timestamp,
+                    "correlation_id": str(event.correlation_id),
+                    "metadata": event.metadata,
+                    "payload": event.payload,
+                }
+            ).encode("utf-8")
 
             await producer.send_and_wait(topic, payload)
 
@@ -302,10 +298,7 @@ class EventOptimizer:
 
         try:
             # Process batch through circuit breaker
-            await self.circuit_breaker.call(
-                self._publish_batch_internal,
-                events
-            )
+            await self.circuit_breaker.call(self._publish_batch_internal, events)
 
             duration_ms = (time.time() - start_time) * 1000
 
@@ -316,12 +309,10 @@ class EventOptimizer:
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
                     success=True,
-                    batch_size=len(events)
+                    batch_size=len(events),
                 )
 
-            self.logger.debug(
-                f"Published batch of {len(events)} events in {duration_ms:.0f}ms"
-            )
+            self.logger.debug(f"Published batch of {len(events)} events in {duration_ms:.0f}ms")
 
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
@@ -335,7 +326,7 @@ class EventOptimizer:
                     success=False,
                     error_type=type(e).__name__,
                     error_message=str(e),
-                    batch_size=len(events)
+                    batch_size=len(events),
                 )
 
             raise
@@ -349,14 +340,16 @@ class EventOptimizer:
             futures = []
             for event in events:
                 topic = event.to_kafka_topic()
-                payload = json.dumps({
-                    "id": str(event.id),
-                    "service": event.service,
-                    "timestamp": event.timestamp,
-                    "correlation_id": str(event.correlation_id),
-                    "metadata": event.metadata,
-                    "payload": event.payload,
-                }).encode("utf-8")
+                payload = json.dumps(
+                    {
+                        "id": str(event.id),
+                        "service": event.service,
+                        "timestamp": event.timestamp,
+                        "correlation_id": str(event.correlation_id),
+                        "metadata": event.metadata,
+                        "payload": event.payload,
+                    }
+                ).encode("utf-8")
 
                 future = producer.send(topic, payload)
                 futures.append(future)
@@ -376,9 +369,7 @@ class EventOptimizer:
         """
         if self.batch_processor is None:
             self.batch_processor = BatchProcessor(
-                processor_func=self._publish_batch_internal,
-                config=self._batch_config,
-                persistence=self.persistence
+                processor_func=self._publish_batch_internal, config=self._batch_config, persistence=self.persistence
             )
 
         return self.batch_processor

@@ -81,25 +81,25 @@ OPERATION_ENUM_DEFINITION_TEMPLATE = '''    {operation_name} = "{operation_value
 
 SEVERITY_ENUM_DEFINITION_TEMPLATE = '''    {severity_name} = "{severity_value}"'''
 
-INPUT_FIELD_TEMPLATE = '''    {field_name}: {field_type} = {default_value}'''
+INPUT_FIELD_TEMPLATE = """    {field_name}: {field_type} = {default_value}"""
 
-OUTPUT_FIELD_TEMPLATE = '''    {field_name}: {field_type} = {default_value}'''
+OUTPUT_FIELD_TEMPLATE = """    {field_name}: {field_type} = {default_value}"""
 
-INPUT_VALIDATION_TEMPLATE = '''        errors = []
+INPUT_VALIDATION_TEMPLATE = """        errors = []
         warnings = []
 
         # Required field validation
         {input_validation_rules}
 
-        return ValidationResult(len(errors) == 0, errors, warnings)'''
+        return ValidationResult(len(errors) == 0, errors, warnings)"""
 
-OUTPUT_VALIDATION_TEMPLATE = '''        errors = []
+OUTPUT_VALIDATION_TEMPLATE = """        errors = []
         warnings = []
 
         # Required field validation
         {output_validation_rules}
 
-        return ValidationResult(len(errors) == 0, errors, warnings)'''
+        return ValidationResult(len(errors) == 0, errors, warnings)"""
 
 
 # Template configurations
@@ -113,105 +113,33 @@ TEMPLATES = {
         "output_contract_class_name": "ModelContractConsulOutput",
         "validator_class_name": "ConsulContractValidator",
         "operations": [
-            {
-                "name": "REGISTER",
-                "value": "register"
-            },
-            {
-                "name": "DEREGISTER",
-                "value": "deregister"
-            },
-            {
-                "name": "HEALTH_CHECK",
-                "value": "health_check"
-            },
-            {
-                "name": "KV_GET",
-                "value": "kv_get"
-            },
-            {
-                "name": "KV_SET",
-                "value": "kv_set"
-            }
+            {"name": "REGISTER", "value": "register"},
+            {"name": "DEREGISTER", "value": "deregister"},
+            {"name": "HEALTH_CHECK", "value": "health_check"},
+            {"name": "KV_GET", "value": "kv_get"},
+            {"name": "KV_SET", "value": "kv_set"},
         ],
         "severities": [
-            {
-                "name": "INFO",
-                "value": "info"
-            },
-            {
-                "name": "WARNING",
-                "value": "warning"
-            },
-            {
-                "name": "ERROR",
-                "value": "error"
-            },
-            {
-                "name": "CRITICAL",
-                "value": "critical"
-            }
+            {"name": "INFO", "value": "info"},
+            {"name": "WARNING", "value": "warning"},
+            {"name": "ERROR", "value": "error"},
+            {"name": "CRITICAL", "value": "critical"},
         ],
         "input_fields": [
-            {
-                "name": "operation",
-                "type": "ConsulOperationType",
-                "default": "ConsulOperationType.REGISTER"
-            },
-            {
-                "name": "service_id",
-                "type": "str"
-            },
-            {
-                "name": "service_name",
-                "type": "Optional[str]",
-                "default": "None"
-            },
-            {
-                "name": "address",
-                "type": "Optional[str]",
-                "default": "None"
-            },
-            {
-                "name": "port",
-                "type": "Optional[int]",
-                "default": "None"
-            },
-            {
-                "name": "health_check_url",
-                "type": "Optional[str]",
-                "default": "None"
-            },
-            {
-                "name": "tags",
-                "type": "Optional[List[str]]",
-                "default": "field(default_factory=list)"
-            }
+            {"name": "operation", "type": "ConsulOperationType", "default": "ConsulOperationType.REGISTER"},
+            {"name": "service_id", "type": "str"},
+            {"name": "service_name", "type": "Optional[str]", "default": "None"},
+            {"name": "address", "type": "Optional[str]", "default": "None"},
+            {"name": "port", "type": "Optional[int]", "default": "None"},
+            {"name": "health_check_url", "type": "Optional[str]", "default": "None"},
+            {"name": "tags", "type": "Optional[List[str]]", "default": "field(default_factory=list)"},
         ],
         "output_fields": [
-            {
-                "name": "success",
-                "type": "bool"
-            },
-            {
-                "name": "operation",
-                "type": "ConsulOperationType"
-            },
-            {
-                "name": "data",
-                "type": "Dict[str, Any]",
-                "default": "field(default_factory=dict)"
-            },
-            {
-                "name": "error",
-                "type": "Optional[str]",
-                "default": "None"
-            },
-            {
-                "name": "timestamp",
-                "type": "Optional[str]",
-                "default": "None"
-            }
+            {"name": "success", "type": "bool"},
+            {"name": "operation", "type": "ConsulOperationType"},
+            {"name": "data", "type": "Dict[str, Any]", "default": "field(default_factory=dict)"},
+            {"name": "error", "type": "Optional[str]", "default": "None"},
+            {"name": "timestamp", "type": "Optional[str]", "default": "None"},
         ],
         "input_validation_rules": [
             "if not self.service_id or not self.service_id.strip():",
@@ -238,7 +166,7 @@ TEMPLATES = {
             "    if self.port is None:",
             "        errors.append('port is required for registration')",
             "    elif not (1 <= self.port <= 65535):",
-            "        errors.append('port must be between 1 and 65535')"
+            "        errors.append('port must be between 1 and 65535')",
         ],
         "output_validation_rules": [
             "if not isinstance(self.success, bool):",
@@ -254,8 +182,8 @@ TEMPLATES = {
             "    warnings.append('error should not be set when success is true')",
             "",
             "if not self.success and not self.error:",
-            "    warnings.append('error should be provided when success is false')"
-        ]
+            "    warnings.append('error should be provided when success is false')",
+        ],
     },
     "validation": {
         "docstring": "Validation system contracts with configurable rules",
@@ -265,65 +193,23 @@ TEMPLATES = {
         "input_contract_class_name": "ModelContractValidationInput",
         "output_contract_class_name": "ModelContractValidationOutput",
         "validator_class_name": "ValidationContractValidator",
-        "operations": [
-            {
-                "name": "VALIDATE",
-                "value": "validate"
-            }
-        ],
+        "operations": [{"name": "VALIDATE", "value": "validate"}],
         "severities": [
-            {
-                "name": "INFO",
-                "value": "info"
-            },
-            {
-                "name": "WARNING",
-                "value": "warning"
-            },
-            {
-                "name": "ERROR",
-                "value": "error"
-            },
-            {
-                "name": "CRITICAL",
-                "value": "critical"
-            }
+            {"name": "INFO", "value": "info"},
+            {"name": "WARNING", "value": "warning"},
+            {"name": "ERROR", "value": "error"},
+            {"name": "CRITICAL", "value": "critical"},
         ],
         "input_fields": [
-            {
-                "name": "operation",
-                "type": "ValidationOperation",
-                "default": "ValidationOperation.VALIDATE"
-            },
-            {
-                "name": "data",
-                "type": "Dict[str, Any]"
-            },
-            {
-                "name": "rules",
-                "type": "List[Dict[str, Any]]",
-                "default": "field(default_factory=list)"
-            }
+            {"name": "operation", "type": "ValidationOperation", "default": "ValidationOperation.VALIDATE"},
+            {"name": "data", "type": "Dict[str, Any]"},
+            {"name": "rules", "type": "List[Dict[str, Any]]", "default": "field(default_factory=list)"},
         ],
         "output_fields": [
-            {
-                "name": "is_valid",
-                "type": "bool"
-            },
-            {
-                "name": "violations",
-                "type": "List[Dict[str, Any]]",
-                "default": "field(default_factory=list)"
-            },
-            {
-                "name": "summary",
-                "type": "str"
-            },
-            {
-                "name": "timestamp",
-                "type": "Optional[str]",
-                "default": "None"
-            }
+            {"name": "is_valid", "type": "bool"},
+            {"name": "violations", "type": "List[Dict[str, Any]]", "default": "field(default_factory=list)"},
+            {"name": "summary", "type": "str"},
+            {"name": "timestamp", "type": "Optional[str]", "default": "None"},
         ],
         "input_validation_rules": [
             "if not isinstance(self.data, dict):",
@@ -341,7 +227,7 @@ TEMPLATES = {
             "    required_fields = ['rule_id', 'rule_type', 'field_path']",
             "    for field in required_fields:",
             "        if field not in rule_data:",
-            "            errors.append(f'Rule missing required field: {{field}}')"
+            "            errors.append(f'Rule missing required field: {{field}}')",
         ],
         "output_validation_rules": [
             "if not isinstance(self.is_valid, bool):",
@@ -351,9 +237,9 @@ TEMPLATES = {
             "    errors.append('violations must be a list')",
             "",
             "if not isinstance(self.summary, str):",
-            "    errors.append('summary must be a string')"
-        ]
-    }
+            "    errors.append('summary must be a string')",
+        ],
+    },
 }
 
 
@@ -373,42 +259,42 @@ def generate_model_contract_code(template_name: str, agent_name: str, task_id: s
     # Generate operation enum definitions
     operation_definitions = []
     for op in template_config["operations"]:
-        operation_definitions.append(f'{OPERATION_ENUM_DEFINITION_TEMPLATE.format(**op)}')
+        operation_definitions.append(f"{OPERATION_ENUM_DEFINITION_TEMPLATE.format(**op)}")
 
     # Generate severity enum definitions
     severity_definitions = []
     for sev in template_config["severities"]:
-        severity_definitions.append(f'{SEVERITY_ENUM_DEFINITION_TEMPLATE.format(**sev)}')
+        severity_definitions.append(f"{SEVERITY_ENUM_DEFINITION_TEMPLATE.format(**sev)}")
 
     # Generate input contract fields
     input_contract_fields = []
     for field in template_config["input_fields"]:
-        input_contract_fields.append(f'{INPUT_FIELD_TEMPLATE.format(**field)}')
+        input_contract_fields.append(f"{INPUT_FIELD_TEMPLATE.format(**field)}")
 
     # Generate output contract fields
     output_contract_fields = []
     for field in template_config["output_fields"]:
-        output_contract_fields.append(f'{OUTPUT_FIELD_TEMPLATE.format(**field)}')
+        output_contract_fields.append(f"{OUTPUT_FIELD_TEMPLATE.format(**field)}")
 
     # Generate validation rules
-    input_validation = '\n        '.join(template_config["input_validation_rules"])
-    output_validation = '\n        '.join(template_config["output_validation_rules"])
+    input_validation = "\n        ".join(template_config["input_validation_rules"])
+    output_validation = "\n        ".join(template_config["output_validation_rules"])
 
     # Build final code
     code = MODEL_CONTRACT_TEMPLATE.format(
         docstring=docstring,
         contract_name=contract_name,
         operation_enum_name=operation_enum_name,
-        operation_definitions='\n    '.join(operation_definitions),
+        operation_definitions="\n    ".join(operation_definitions),
         severity_enum_name=severity_enum_name,
-        severity_definitions='\n    '.join(severity_definitions),
+        severity_definitions="\n    ".join(severity_definitions),
         input_contract_class_name=input_contract_class_name,
-        input_contract_fields='\n    '.join(input_contract_fields),
+        input_contract_fields="\n    ".join(input_contract_fields),
         input_validation=input_validation,
         output_contract_class_name=output_contract_class_name,
-        output_contract_fields='\n    '.join(output_contract_fields),
+        output_contract_fields="\n    ".join(output_contract_fields),
         output_validation=output_validation,
-        validator_class_name=validator_class_name
+        validator_class_name=validator_class_name,
     )
 
     return code

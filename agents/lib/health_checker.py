@@ -18,20 +18,19 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable, Awaitable
-from uuid import uuid4
+from typing import Any, Dict, Optional
 
 from .db import get_pg_pool
-from .monitoring import update_health_status, AlertSeverity
+from .monitoring import update_health_status
 
 logger = logging.getLogger(__name__)
 
 
 class HealthCheckStatus(Enum):
     """Health check status levels."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     CRITICAL = "critical"
@@ -41,6 +40,7 @@ class HealthCheckStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """Result of a health check."""
+
     component: str
     status: HealthCheckStatus
     healthy: bool
@@ -54,6 +54,7 @@ class HealthCheckResult:
 @dataclass
 class HealthCheckConfig:
     """Configuration for health checks."""
+
     # Timeout for individual health checks (ms)
     check_timeout_ms: int = 5000
 
@@ -126,7 +127,7 @@ class HealthChecker:
                     healthy=False,
                     message="Database pool not available",
                     check_duration_ms=0.0,
-                    error="Pool initialization failed"
+                    error="Pool initialization failed",
                 )
 
             # Test connection with simple query
@@ -156,8 +157,8 @@ class HealthChecker:
                     metadata={
                         "query_latency_ms": query_duration_ms,
                         "pool_size": pool.get_size(),
-                        "pool_idle": pool.get_idle_size()
-                    }
+                        "pool_idle": pool.get_idle_size(),
+                    },
                 )
 
                 # Update monitoring system
@@ -166,7 +167,7 @@ class HealthChecker:
                     healthy=healthy,
                     status=status.value,
                     error_message=None if healthy else message,
-                    metadata=result.metadata
+                    metadata=result.metadata,
                 )
 
                 return result
@@ -179,7 +180,7 @@ class HealthChecker:
                 healthy=False,
                 message="Database health check timed out",
                 check_duration_ms=check_duration_ms,
-                error="Timeout"
+                error="Timeout",
             )
             await update_health_status(component, False, "critical", "Timeout")
             return result
@@ -194,7 +195,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Database health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -217,22 +218,24 @@ class HealthChecker:
                     healthy=False,
                     message="Database unavailable for cache check",
                     check_duration_ms=0.0,
-                    error="Database unavailable"
+                    error="Database unavailable",
                 )
 
             async with pool.acquire() as conn:
                 # Check cache hit rate
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT
                         COALESCE(SUM(cache_hits), 0) as total_hits,
                         COALESCE(SUM(cache_misses), 0) as total_misses,
                         COALESCE(AVG(load_time_ms), 0) as avg_load_time
                     FROM template_cache_metadata
-                """)
+                """
+                )
 
-                total_hits = result['total_hits'] or 0
-                total_misses = result['total_misses'] or 0
-                avg_load_time = result['avg_load_time'] or 0
+                total_hits = result["total_hits"] or 0
+                total_misses = result["total_misses"] or 0
+                avg_load_time = result["avg_load_time"] or 0
 
                 total_accesses = total_hits + total_misses
                 hit_rate = total_hits / total_accesses if total_accesses > 0 else 0.0
@@ -259,15 +262,12 @@ class HealthChecker:
                         "hit_rate": hit_rate,
                         "total_hits": total_hits,
                         "total_misses": total_misses,
-                        "avg_load_time_ms": avg_load_time
-                    }
+                        "avg_load_time_ms": avg_load_time,
+                    },
                 )
 
                 await update_health_status(
-                    component=component,
-                    healthy=healthy,
-                    status=status.value,
-                    metadata=check_result.metadata
+                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
                 )
 
                 return check_result
@@ -282,7 +282,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Cache health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -305,12 +305,13 @@ class HealthChecker:
                     healthy=False,
                     message="Database unavailable for generation check",
                     check_duration_ms=0.0,
-                    error="Database unavailable"
+                    error="Database unavailable",
                 )
 
             async with pool.acquire() as conn:
                 # Check recent generation metrics
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT
                         COUNT(*) as total_generations,
                         AVG(duration_ms) as avg_duration_ms,
@@ -318,11 +319,12 @@ class HealthChecker:
                     FROM generation_performance_metrics
                     WHERE created_at >= NOW() - INTERVAL '1 hour'
                         AND phase = 'total'
-                """)
+                """
+                )
 
-                total = result['total_generations'] or 0
-                avg_duration = result['avg_duration_ms'] or 0
-                successes = result['success_count'] or 0
+                total = result["total_generations"] or 0
+                avg_duration = result["avg_duration_ms"] or 0
+                successes = result["success_count"] or 0
 
                 if total == 0:
                     status = HealthCheckStatus.UNKNOWN
@@ -352,15 +354,12 @@ class HealthChecker:
                     metadata={
                         "total_generations": total,
                         "avg_duration_ms": avg_duration,
-                        "failure_rate": failure_rate
-                    }
+                        "failure_rate": failure_rate,
+                    },
                 )
 
                 await update_health_status(
-                    component=component,
-                    healthy=healthy,
-                    status=status.value,
-                    metadata=check_result.metadata
+                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
                 )
 
                 return check_result
@@ -375,7 +374,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Generation health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -398,24 +397,26 @@ class HealthChecker:
                     healthy=False,
                     message="Database unavailable for mixin check",
                     check_duration_ms=0.0,
-                    error="Database unavailable"
+                    error="Database unavailable",
                 )
 
             async with pool.acquire() as conn:
                 # Check mixin compatibility data
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT
                         COUNT(*) as total_combinations,
                         AVG(compatibility_score) as avg_score,
                         SUM(success_count) as total_successes,
                         SUM(failure_count) as total_failures
                     FROM mixin_compatibility_matrix
-                """)
+                """
+                )
 
-                total_combinations = result['total_combinations'] or 0
-                avg_score = result['avg_score'] or 0
-                total_successes = result['total_successes'] or 0
-                total_failures = result['total_failures'] or 0
+                total_combinations = result["total_combinations"] or 0
+                avg_score = result["avg_score"] or 0
+                total_successes = result["total_successes"] or 0
+                total_failures = result["total_failures"] or 0
 
                 total_tests = total_successes + total_failures
 
@@ -447,15 +448,12 @@ class HealthChecker:
                     metadata={
                         "total_combinations": total_combinations,
                         "avg_compatibility_score": float(avg_score),
-                        "success_rate": success_rate
-                    }
+                        "success_rate": success_rate,
+                    },
                 )
 
                 await update_health_status(
-                    component=component,
-                    healthy=healthy,
-                    status=status.value,
-                    metadata=check_result.metadata
+                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
                 )
 
                 return check_result
@@ -470,7 +468,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Mixin health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -493,12 +491,13 @@ class HealthChecker:
                     healthy=False,
                     message="Database unavailable for pattern check",
                     check_duration_ms=0.0,
-                    error="Database unavailable"
+                    error="Database unavailable",
                 )
 
             async with pool.acquire() as conn:
                 # Check pattern feedback data
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT
                         COUNT(*) as total_feedback,
                         SUM(CASE WHEN feedback_type = 'correct' THEN 1 ELSE 0 END) as correct_count,
@@ -506,12 +505,13 @@ class HealthChecker:
                         AVG(detected_confidence) as avg_confidence
                     FROM pattern_feedback_log
                     WHERE created_at >= NOW() - INTERVAL '7 days'
-                """)
+                """
+                )
 
-                total_feedback = result['total_feedback'] or 0
-                correct = result['correct_count'] or 0
-                incorrect = result['incorrect_count'] or 0
-                avg_confidence = result['avg_confidence'] or 0
+                total_feedback = result["total_feedback"] or 0
+                correct = result["correct_count"] or 0
+                incorrect = result["incorrect_count"] or 0
+                avg_confidence = result["avg_confidence"] or 0
 
                 if total_feedback == 0:
                     status = HealthCheckStatus.UNKNOWN
@@ -541,15 +541,12 @@ class HealthChecker:
                     metadata={
                         "total_feedback": total_feedback,
                         "precision": precision,
-                        "avg_confidence": float(avg_confidence)
-                    }
+                        "avg_confidence": float(avg_confidence),
+                    },
                 )
 
                 await update_health_status(
-                    component=component,
-                    healthy=healthy,
-                    status=status.value,
-                    metadata=check_result.metadata
+                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
                 )
 
                 return check_result
@@ -564,7 +561,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Pattern health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -587,23 +584,25 @@ class HealthChecker:
                     healthy=False,
                     message="Database unavailable for event check",
                     check_duration_ms=0.0,
-                    error="Database unavailable"
+                    error="Database unavailable",
                 )
 
             async with pool.acquire() as conn:
                 # Check event processing metrics
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT
                         COUNT(*) as total_events,
                         SUM(CASE WHEN success THEN 1 ELSE 0 END) as success_count,
                         percentile_cont(0.95) WITHIN GROUP (ORDER BY processing_duration_ms) as p95_latency
                     FROM event_processing_metrics
                     WHERE created_at >= NOW() - INTERVAL '1 hour'
-                """)
+                """
+                )
 
-                total_events = result['total_events'] or 0
-                success_count = result['success_count'] or 0
-                p95_latency = result['p95_latency'] or 0
+                total_events = result["total_events"] or 0
+                success_count = result["success_count"] or 0
+                p95_latency = result["p95_latency"] or 0
 
                 if total_events == 0:
                     status = HealthCheckStatus.UNKNOWN
@@ -632,15 +631,12 @@ class HealthChecker:
                     metadata={
                         "total_events": total_events,
                         "success_rate": success_rate if total_events > 0 else 0.0,
-                        "p95_latency_ms": float(p95_latency)
-                    }
+                        "p95_latency_ms": float(p95_latency),
+                    },
                 )
 
                 await update_health_status(
-                    component=component,
-                    healthy=healthy,
-                    status=status.value,
-                    metadata=check_result.metadata
+                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
                 )
 
                 return check_result
@@ -655,7 +651,7 @@ class HealthChecker:
                 healthy=False,
                 message=f"Event health check failed: {str(e)}",
                 check_duration_ms=check_duration_ms,
-                error=str(e)
+                error=str(e),
             )
             await update_health_status(component, False, "critical", str(e))
             return result
@@ -678,9 +674,9 @@ class HealthChecker:
                     self.check_mixin_learning_health(),
                     self.check_pattern_matching_health(),
                     self.check_event_processing_health(),
-                    return_exceptions=True
+                    return_exceptions=True,
                 ),
-                timeout=self.config.system_check_timeout_ms / 1000.0
+                timeout=self.config.system_check_timeout_ms / 1000.0,
             )
 
             # Build results dictionary
@@ -691,7 +687,7 @@ class HealthChecker:
                 "parallel_generation",
                 "mixin_learning",
                 "pattern_matching",
-                "event_processing"
+                "event_processing",
             ]
 
             for component, check in zip(component_names, checks):
@@ -703,7 +699,7 @@ class HealthChecker:
                         healthy=False,
                         message=f"Health check exception: {str(check)}",
                         check_duration_ms=0.0,
-                        error=str(check)
+                        error=str(check),
                     )
                 else:
                     results[component] = check
@@ -723,7 +719,7 @@ class HealthChecker:
                     healthy=False,
                     message="System health check timed out",
                     check_duration_ms=self.config.system_check_timeout_ms,
-                    error="Timeout"
+                    error="Timeout",
                 )
             }
         except Exception as e:
@@ -735,7 +731,7 @@ class HealthChecker:
                     healthy=False,
                     message=f"System health check failed: {str(e)}",
                     check_duration_ms=0.0,
-                    error=str(e)
+                    error=str(e),
                 )
             }
 
@@ -852,7 +848,7 @@ async def check_component_health(component: str) -> Optional[HealthCheckResult]:
         "parallel_generation": checker.check_parallel_generation_health,
         "mixin_learning": checker.check_mixin_learning_health,
         "pattern_matching": checker.check_pattern_matching_health,
-        "event_processing": checker.check_event_processing_health
+        "event_processing": checker.check_event_processing_health,
     }
 
     check_func = component_checks.get(component)

@@ -8,8 +8,6 @@ Tests the complete Phase 5 pipeline: PRD → Contract → Business Logic → Val
 import pytest
 import asyncio
 import tempfile
-from pathlib import Path
-from typing import Dict, Any
 import time
 
 from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
@@ -20,22 +18,15 @@ from agents.lib.pattern_library import PatternLibrary
 from agents.tests.fixtures.phase4_fixtures import (
     EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
-    REDUCER_NODE_PRD,
-    ORCHESTRATOR_NODE_PRD,
-    NODE_TYPE_FIXTURES,
     EFFECT_ANALYSIS_RESULT,
     SAMPLE_CONTRACT_WITH_CRUD,
-)
-from agents.tests.utils.generation_test_helpers import (
-    parse_generated_python,
-    check_type_annotations,
-    validate_onex_naming,
 )
 
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def prd_analyzer():
@@ -78,16 +69,13 @@ def temp_output_dir():
 # END-TO-END PIPELINE TESTS
 # ============================================================================
 
+
 class TestFullPipeline:
     """Tests for complete PRD → Contract → Business Logic → Validation pipeline"""
 
     @pytest.mark.asyncio
     async def test_full_pipeline_effect_node(
-        self,
-        prd_analyzer,
-        contract_generator,
-        business_logic_generator,
-        quality_validator
+        self, prd_analyzer, contract_generator, business_logic_generator, quality_validator
     ):
         """Test complete pipeline for EFFECT node"""
         # Step 1: Analyze PRD
@@ -97,10 +85,7 @@ class TestFullPipeline:
 
         # Step 2: Generate contract
         contract_result = await contract_generator.generate_contract_yaml(
-            analysis_result=analysis_result,
-            node_type="EFFECT",
-            microservice_name="user_management",
-            domain="identity"
+            analysis_result=analysis_result, node_type="EFFECT", microservice_name="user_management", domain="identity"
         )
         assert contract_result["validation_result"]["valid"] is True
 
@@ -110,26 +95,20 @@ class TestFullPipeline:
             microservice_name="user_management",
             domain="identity",
             contract=contract_result["contract"],
-            analysis_result=analysis_result
+            analysis_result=analysis_result,
         )
         assert business_logic_result["code"] is not None
 
         # Step 4: Validate quality
         validation_result = await quality_validator.validate_code(
-            code=business_logic_result["code"],
-            contract=contract_result["contract"],
-            quality_threshold=0.8
+            code=business_logic_result["code"], contract=contract_result["contract"], quality_threshold=0.8
         )
         assert validation_result["quality_score"] >= 0.8
         assert validation_result["valid"] is True
 
     @pytest.mark.asyncio
     async def test_full_pipeline_compute_node(
-        self,
-        prd_analyzer,
-        contract_generator,
-        business_logic_generator,
-        quality_validator
+        self, prd_analyzer, contract_generator, business_logic_generator, quality_validator
     ):
         """Test complete pipeline for COMPUTE node"""
         # Step 1: Analyze PRD
@@ -140,7 +119,7 @@ class TestFullPipeline:
             analysis_result=analysis_result,
             node_type="COMPUTE",
             microservice_name="data_transformer",
-            domain="data_processing"
+            domain="data_processing",
         )
 
         # Step 3: Generate business logic
@@ -149,24 +128,17 @@ class TestFullPipeline:
             microservice_name="data_transformer",
             domain="data_processing",
             contract=contract_result["contract"],
-            analysis_result=analysis_result
+            analysis_result=analysis_result,
         )
 
         # Step 4: Validate quality
         validation_result = await quality_validator.validate_code(
-            code=business_logic_result["code"],
-            contract=contract_result["contract"],
-            quality_threshold=0.8
+            code=business_logic_result["code"], contract=contract_result["contract"], quality_threshold=0.8
         )
         assert validation_result["quality_score"] >= 0.8
 
     @pytest.mark.asyncio
-    async def test_pipeline_preserves_metadata(
-        self,
-        prd_analyzer,
-        contract_generator,
-        business_logic_generator
-    ):
+    async def test_pipeline_preserves_metadata(self, prd_analyzer, contract_generator, business_logic_generator):
         """Test that metadata is preserved throughout pipeline"""
         # Analyze PRD
         analysis_result = await prd_analyzer.analyze_prd(EFFECT_NODE_PRD)
@@ -174,10 +146,7 @@ class TestFullPipeline:
 
         # Generate contract
         contract_result = await contract_generator.generate_contract_yaml(
-            analysis_result=analysis_result,
-            node_type="EFFECT",
-            microservice_name="user_management",
-            domain="identity"
+            analysis_result=analysis_result, node_type="EFFECT", microservice_name="user_management", domain="identity"
         )
 
         # Verify session ID is preserved in contract metadata
@@ -189,7 +158,7 @@ class TestFullPipeline:
             microservice_name="user_management",
             domain="identity",
             contract=contract_result["contract"],
-            analysis_result=analysis_result
+            analysis_result=analysis_result,
         )
 
         # Verify metadata is available
@@ -200,15 +169,13 @@ class TestFullPipeline:
 # PATTERN-ENHANCED GENERATION TESTS
 # ============================================================================
 
+
 class TestPatternEnhancedGeneration:
     """Tests for pattern-enhanced business logic generation"""
 
     @pytest.mark.asyncio
     async def test_pattern_detection_and_generation(
-        self,
-        contract_generator,
-        business_logic_generator,
-        pattern_library
+        self, contract_generator, business_logic_generator, pattern_library
     ):
         """Test pattern detection enhances code generation"""
         # Generate contract
@@ -216,7 +183,7 @@ class TestPatternEnhancedGeneration:
             analysis_result=EFFECT_ANALYSIS_RESULT,
             node_type="EFFECT",
             microservice_name="user_management",
-            domain="identity"
+            domain="identity",
         )
 
         # Detect pattern
@@ -229,20 +196,18 @@ class TestPatternEnhancedGeneration:
             domain="identity",
             contract=contract_result["contract"],
             analysis_result=EFFECT_ANALYSIS_RESULT,
-            pattern_hint=pattern_result["pattern_name"] if pattern_result["matched"] else None
+            pattern_hint=pattern_result["pattern_name"] if pattern_result["matched"] else None,
         )
 
         # Verify pattern was applied
         if pattern_result["matched"]:
-            assert pattern_result["pattern_name"].lower() in business_logic_result["code"].lower() or \
-                   len(business_logic_result["methods"]) > 0
+            assert (
+                pattern_result["pattern_name"].lower() in business_logic_result["code"].lower()
+                or len(business_logic_result["methods"]) > 0
+            )
 
     @pytest.mark.asyncio
-    async def test_multi_pattern_generation(
-        self,
-        business_logic_generator,
-        pattern_library
-    ):
+    async def test_multi_pattern_generation(self, business_logic_generator, pattern_library):
         """Test generation with multiple patterns"""
         mixed_contract = {
             "version": "1.0.0",
@@ -251,11 +216,11 @@ class TestPatternEnhancedGeneration:
                 {"name": "create_user", "type": "create", "required": True},
                 {"name": "transform_data", "type": "transform", "required": True},
             ],
-            "subcontracts": []
+            "subcontracts": [],
         }
 
         # Detect all patterns
-        patterns_result = pattern_library.detect_all_patterns(mixed_contract)
+        pattern_library.detect_all_patterns(mixed_contract)
 
         # Generate with multiple patterns
         business_logic_result = await business_logic_generator.generate_node_stub(
@@ -263,7 +228,7 @@ class TestPatternEnhancedGeneration:
             microservice_name="multi_pattern_service",
             domain="mixed",
             contract=mixed_contract,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Verify methods from both patterns exist
@@ -276,15 +241,12 @@ class TestPatternEnhancedGeneration:
 # QUALITY VALIDATION PIPELINE TESTS
 # ============================================================================
 
+
 class TestQualityValidationPipeline:
     """Tests for quality validation pipeline"""
 
     @pytest.mark.asyncio
-    async def test_validation_failure_detection(
-        self,
-        business_logic_generator,
-        quality_validator
-    ):
+    async def test_validation_failure_detection(self, business_logic_generator, quality_validator):
         """Test validation detects quality issues"""
         # Generate minimal business logic
         business_logic_result = await business_logic_generator.generate_node_stub(
@@ -293,14 +255,12 @@ class TestQualityValidationPipeline:
             domain="test",
             contract={"capabilities": [], "subcontracts": []},
             analysis_result=EFFECT_ANALYSIS_RESULT,
-            include_error_handling=False  # Intentionally omit error handling
+            include_error_handling=False,  # Intentionally omit error handling
         )
 
         # Validate with strict threshold
         validation_result = await quality_validator.validate_code(
-            code=business_logic_result["code"],
-            contract={},
-            quality_threshold=0.9
+            code=business_logic_result["code"], contract={}, quality_threshold=0.9
         )
 
         # Should detect missing error handling
@@ -308,11 +268,7 @@ class TestQualityValidationPipeline:
             assert len(validation_result["violations"]) > 0
 
     @pytest.mark.asyncio
-    async def test_validation_regeneration_workflow(
-        self,
-        business_logic_generator,
-        quality_validator
-    ):
+    async def test_validation_regeneration_workflow(self, business_logic_generator, quality_validator):
         """Test regeneration after validation failure"""
         # First generation
         initial_result = await business_logic_generator.generate_node_stub(
@@ -320,14 +276,12 @@ class TestQualityValidationPipeline:
             microservice_name="test_service",
             domain="test",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Validate
         validation_result = await quality_validator.validate_code(
-            code=initial_result["code"],
-            contract=SAMPLE_CONTRACT_WITH_CRUD,
-            quality_threshold=0.8
+            code=initial_result["code"], contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
         )
 
         # If validation fails, regenerate with feedback
@@ -338,14 +292,12 @@ class TestQualityValidationPipeline:
                 domain="test",
                 contract=SAMPLE_CONTRACT_WITH_CRUD,
                 analysis_result=EFFECT_ANALYSIS_RESULT,
-                validation_feedback=validation_result["violations"]
+                validation_feedback=validation_result["violations"],
             )
 
             # Re-validate
             revalidation_result = await quality_validator.validate_code(
-                code=improved_result["code"],
-                contract=SAMPLE_CONTRACT_WITH_CRUD,
-                quality_threshold=0.8
+                code=improved_result["code"], contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
             )
 
             # Should improve
@@ -356,16 +308,12 @@ class TestQualityValidationPipeline:
 # CONCURRENT GENERATION TESTS
 # ============================================================================
 
+
 class TestConcurrentGeneration:
     """Tests for concurrent generation with validation"""
 
     @pytest.mark.asyncio
-    async def test_concurrent_node_generation(
-        self,
-        prd_analyzer,
-        contract_generator,
-        business_logic_generator
-    ):
+    async def test_concurrent_node_generation(self, prd_analyzer, contract_generator, business_logic_generator):
         """Test generating multiple nodes concurrently"""
         node_configs = [
             ("EFFECT", "user_management", "identity", EFFECT_NODE_PRD),
@@ -375,17 +323,14 @@ class TestConcurrentGeneration:
         async def generate_node(node_type, name, domain, prd):
             analysis = await prd_analyzer.analyze_prd(prd)
             contract_result = await contract_generator.generate_contract_yaml(
-                analysis_result=analysis,
-                node_type=node_type,
-                microservice_name=name,
-                domain=domain
+                analysis_result=analysis, node_type=node_type, microservice_name=name, domain=domain
             )
             business_logic = await business_logic_generator.generate_node_stub(
                 node_type=node_type,
                 microservice_name=name,
                 domain=domain,
                 contract=contract_result["contract"],
-                analysis_result=analysis
+                analysis_result=analysis,
             )
             return business_logic
 
@@ -400,11 +345,7 @@ class TestConcurrentGeneration:
             assert result["code"] is not None
 
     @pytest.mark.asyncio
-    async def test_concurrent_validation(
-        self,
-        business_logic_generator,
-        quality_validator
-    ):
+    async def test_concurrent_validation(self, business_logic_generator, quality_validator):
         """Test validating multiple nodes concurrently"""
         # Generate multiple nodes
         nodes = []
@@ -414,16 +355,14 @@ class TestConcurrentGeneration:
                 microservice_name=f"service_{i}",
                 domain="test",
                 contract=SAMPLE_CONTRACT_WITH_CRUD,
-                analysis_result=EFFECT_ANALYSIS_RESULT
+                analysis_result=EFFECT_ANALYSIS_RESULT,
             )
             nodes.append(result)
 
         # Validate concurrently
         async def validate_node(node):
             return await quality_validator.validate_code(
-                code=node["code"],
-                contract=SAMPLE_CONTRACT_WITH_CRUD,
-                quality_threshold=0.8
+                code=node["code"], contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
             )
 
         tasks = [validate_node(node) for node in nodes]
@@ -438,14 +377,12 @@ class TestConcurrentGeneration:
 # PERFORMANCE BENCHMARK TESTS
 # ============================================================================
 
+
 class TestPerformanceBenchmarks:
     """Tests for performance benchmarks"""
 
     @pytest.mark.asyncio
-    async def test_business_logic_generation_performance(
-        self,
-        business_logic_generator
-    ):
+    async def test_business_logic_generation_performance(self, business_logic_generator):
         """Test business logic generation meets performance target"""
         start = time.time()
 
@@ -454,7 +391,7 @@ class TestPerformanceBenchmarks:
             microservice_name="user_management",
             domain="identity",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         duration_ms = (time.time() - start) * 1000
@@ -463,19 +400,14 @@ class TestPerformanceBenchmarks:
         assert duration_ms < 2000, f"Generation took {duration_ms}ms, expected < 2000ms"
 
     @pytest.mark.asyncio
-    async def test_quality_validation_performance(
-        self,
-        quality_validator
-    ):
+    async def test_quality_validation_performance(self, quality_validator):
         """Test quality validation meets performance target"""
         from agents.tests.fixtures.phase4_fixtures import VALID_EFFECT_NODE_CODE
 
         start = time.time()
 
         await quality_validator.validate_code(
-            code=VALID_EFFECT_NODE_CODE,
-            contract=SAMPLE_CONTRACT_WITH_CRUD,
-            quality_threshold=0.8
+            code=VALID_EFFECT_NODE_CODE, contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
         )
 
         duration_ms = (time.time() - start) * 1000
@@ -485,11 +417,7 @@ class TestPerformanceBenchmarks:
 
     @pytest.mark.asyncio
     async def test_full_pipeline_performance(
-        self,
-        prd_analyzer,
-        contract_generator,
-        business_logic_generator,
-        quality_validator
+        self, prd_analyzer, contract_generator, business_logic_generator, quality_validator
     ):
         """Test full pipeline (Phase 4 + Phase 5) meets performance target"""
         start = time.time()
@@ -497,22 +425,17 @@ class TestPerformanceBenchmarks:
         # Full pipeline
         analysis = await prd_analyzer.analyze_prd(EFFECT_NODE_PRD)
         contract_result = await contract_generator.generate_contract_yaml(
-            analysis_result=analysis,
-            node_type="EFFECT",
-            microservice_name="user_management",
-            domain="identity"
+            analysis_result=analysis, node_type="EFFECT", microservice_name="user_management", domain="identity"
         )
         business_logic = await business_logic_generator.generate_node_stub(
             node_type="EFFECT",
             microservice_name="user_management",
             domain="identity",
             contract=contract_result["contract"],
-            analysis_result=analysis
+            analysis_result=analysis,
         )
-        validation = await quality_validator.validate_code(
-            code=business_logic["code"],
-            contract=contract_result["contract"],
-            quality_threshold=0.8
+        await quality_validator.validate_code(
+            code=business_logic["code"], contract=contract_result["contract"], quality_threshold=0.8
         )
 
         duration_ms = (time.time() - start) * 1000
@@ -525,15 +448,12 @@ class TestPerformanceBenchmarks:
 # ERROR SCENARIO TESTS
 # ============================================================================
 
+
 class TestErrorScenarios:
     """Tests for error handling and recovery"""
 
     @pytest.mark.asyncio
-    async def test_invalid_contract_handling(
-        self,
-        business_logic_generator,
-        quality_validator
-    ):
+    async def test_invalid_contract_handling(self, business_logic_generator, quality_validator):
         """Test handling of invalid contract"""
         from omnibase_core.errors import OnexError
 
@@ -549,7 +469,7 @@ class TestErrorScenarios:
                 microservice_name="test",
                 domain="test",
                 contract=invalid_contract,
-                analysis_result=EFFECT_ANALYSIS_RESULT
+                analysis_result=EFFECT_ANALYSIS_RESULT,
             )
             # If it succeeds, verify it generated something valid
             assert result is not None
@@ -558,11 +478,7 @@ class TestErrorScenarios:
             pass
 
     @pytest.mark.asyncio
-    async def test_validation_failure_recovery(
-        self,
-        business_logic_generator,
-        quality_validator
-    ):
+    async def test_validation_failure_recovery(self, business_logic_generator, quality_validator):
         """Test recovery from validation failures"""
         # Generate code
         result = await business_logic_generator.generate_node_stub(
@@ -570,14 +486,12 @@ class TestErrorScenarios:
             microservice_name="test",
             domain="test",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
-            analysis_result=EFFECT_ANALYSIS_RESULT
+            analysis_result=EFFECT_ANALYSIS_RESULT,
         )
 
         # Validate
         validation = await quality_validator.validate_code(
-            code=result["code"],
-            contract=SAMPLE_CONTRACT_WITH_CRUD,
-            quality_threshold=0.8
+            code=result["code"], contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
         )
 
         # If validation fails, should provide actionable feedback
