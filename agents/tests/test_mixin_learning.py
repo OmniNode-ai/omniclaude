@@ -21,10 +21,17 @@ from agents.lib.persistence import CodegenPersistence
 
 
 # Test configuration
-# Note: Set TEST_PG_DSN environment variable with database password
-TEST_DSN = os.getenv(
-    "TEST_PG_DSN", "postgresql://postgres:YOUR_PASSWORD@localhost:5436/omninode_bridge"  # Replace YOUR_PASSWORD
-)
+# Support both CI environment (TEST_PG_DSN) and local environment (individual vars)
+TEST_DSN = os.getenv("TEST_PG_DSN")
+
+# If TEST_PG_DSN not set, build from individual environment variables
+if not TEST_DSN:
+    pg_host = os.getenv("POSTGRES_HOST", "localhost")
+    pg_port = os.getenv("POSTGRES_PORT", "5436")  # Default to local port
+    pg_user = os.getenv("POSTGRES_USER", "postgres")
+    pg_password = os.getenv("POSTGRES_PASSWORD", "")
+    pg_database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+    TEST_DSN = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
 
 
 @pytest.fixture

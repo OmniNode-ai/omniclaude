@@ -96,8 +96,8 @@ class TestEffectNodeGeneration:
             with open(result["main_file"], "r") as f:
                 content = f.read()
 
-            # Check for NodeEffectService import
-            assert "NodeEffectService" in content or "node_effect_service" in content
+            # Check for NodeEffect import (ONEX architecture pattern)
+            assert "NodeEffect" in content or "node_effect" in content
 
     @pytest.mark.asyncio
     async def test_effect_node_external_system_integration(self):
