@@ -278,3 +278,16 @@ coverage.json
 *.pkl
 agents/models/
 test_results.txt
+
+# Temporary Documentation Files (auto-generated guides, reports, and cheatsheets)
+*_IMPROVEMENTS.md
+*_RECOMMENDATIONS.md
+*_QUICKSTART.md
+*_EXAMPLE.md
+*_TEST_RESULTS.md
+*_CHEATSHEET.md
+*_CHECKLIST.md
+*_REPORT.md
+CLEANUP_*.md
+**/traces/
+*observability_report.txt
