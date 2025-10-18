@@ -41,44 +41,26 @@ class ModelParsedPRD(BaseModel):
     description: str = Field(..., description="Main description or overview")
 
     # Requirements and features
-    functional_requirements: List[str] = Field(
-        default_factory=list, description="Functional requirements list"
-    )
-    non_functional_requirements: List[str] = Field(
-        default_factory=list, description="Non-functional requirements"
-    )
+    functional_requirements: List[str] = Field(default_factory=list, description="Functional requirements list")
+    non_functional_requirements: List[str] = Field(default_factory=list, description="Non-functional requirements")
     features: List[str] = Field(default_factory=list, description="Feature list")
 
     # Technical details
-    technical_details: List[str] = Field(
-        default_factory=list, description="Technical implementation details"
-    )
-    dependencies: List[str] = Field(
-        default_factory=list, description="External dependencies"
-    )
-    assumptions: List[str] = Field(
-        default_factory=list, description="Design assumptions"
-    )
+    technical_details: List[str] = Field(default_factory=list, description="Technical implementation details")
+    dependencies: List[str] = Field(default_factory=list, description="External dependencies")
+    assumptions: List[str] = Field(default_factory=list, description="Design assumptions")
 
     # Business context
     business_value: str = Field(default="", description="Business value statement")
-    success_criteria: List[str] = Field(
-        default_factory=list, description="Success criteria and metrics"
-    )
+    success_criteria: List[str] = Field(default_factory=list, description="Success criteria and metrics")
 
     # Keywords for classification
-    extracted_keywords: Set[str] = Field(
-        default_factory=set, description="Keywords extracted for classification"
-    )
+    extracted_keywords: Set[str] = Field(default_factory=set, description="Keywords extracted for classification")
 
     # Metadata
-    sections: List[PRDSection] = Field(
-        default_factory=list, description="All parsed sections"
-    )
+    sections: List[PRDSection] = Field(default_factory=list, description="All parsed sections")
     word_count: int = Field(default=0, description="Total word count")
-    parsing_timestamp: datetime = Field(
-        default_factory=datetime.now, description="When document was parsed"
-    )
+    parsing_timestamp: datetime = Field(default_factory=datetime.now, description="When document was parsed")
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -221,9 +203,7 @@ class PRDParser:
         }
 
         # Business context patterns
-        self.business_value_pattern = re.compile(
-            r"(?:business|value|benefit|impact|roi|return)", re.IGNORECASE
-        )
+        self.business_value_pattern = re.compile(r"(?:business|value|benefit|impact|roi|return)", re.IGNORECASE)
         self.success_criteria_pattern = re.compile(
             r"(?:success|criteria|metric|kpi|goal|objective|measure)", re.IGNORECASE
         )
@@ -234,9 +214,7 @@ class PRDParser:
             re.IGNORECASE,
         )
 
-    def parse(
-        self, prd_content: str, title_override: Optional[str] = None
-    ) -> ModelParsedPRD:
+    def parse(self, prd_content: str, title_override: Optional[str] = None) -> ModelParsedPRD:
         """
         Parse PRD content into structured format.
 
@@ -304,9 +282,7 @@ class PRDParser:
         # Extract structured content
         description = self._extract_description(sections)
         functional_requirements = self._extract_functional_requirements(sections)
-        non_functional_requirements = self._extract_non_functional_requirements(
-            sections
-        )
+        non_functional_requirements = self._extract_non_functional_requirements(sections)
         features = self._extract_features(sections)
         technical_details = self._extract_technical_details(sections)
         dependencies = self._extract_dependencies(sections)
@@ -355,9 +331,7 @@ class PRDParser:
                 level = len(header_match.group(1))
                 title = header_match.group(2).strip()
 
-                current_section = PRDSection(
-                    title=title, content="", level=level, line_start=i, line_end=i
-                )
+                current_section = PRDSection(title=title, content="", level=level, line_start=i, line_end=i)
 
             elif current_section:
                 # Add line to current section content
@@ -396,22 +370,16 @@ class PRDParser:
 
         # Look for sections with description-like titles
         for section in sections:
-            if any(
-                keyword in section.title.lower() for keyword in description_keywords
-            ):
+            if any(keyword in section.title.lower() for keyword in description_keywords):
                 # Extract first paragraph as description
-                paragraphs = [
-                    p.strip() for p in section.content.split("\n\n") if p.strip()
-                ]
+                paragraphs = [p.strip() for p in section.content.split("\n\n") if p.strip()]
                 if paragraphs:
                     return paragraphs[0]
 
         # If no description section, use first non-header content
         for section in sections:
             if section.content.strip():
-                paragraphs = [
-                    p.strip() for p in section.content.split("\n\n") if p.strip()
-                ]
+                paragraphs = [p.strip() for p in section.content.split("\n\n") if p.strip()]
                 if paragraphs:
                     return paragraphs[0]
 
@@ -431,9 +399,7 @@ class PRDParser:
 
         return requirements
 
-    def _extract_non_functional_requirements(
-        self, sections: List[PRDSection]
-    ) -> List[str]:
+    def _extract_non_functional_requirements(self, sections: List[PRDSection]) -> List[str]:
         """Extract non-functional requirements."""
         requirements = []
 
@@ -512,9 +478,7 @@ class PRDParser:
 
         for section in sections:
             if any(keyword in section.title.lower() for keyword in business_keywords):
-                paragraphs = [
-                    p.strip() for p in section.content.split("\n\n") if p.strip()
-                ]
+                paragraphs = [p.strip() for p in section.content.split("\n\n") if p.strip()]
                 if paragraphs:
                     return paragraphs[0]
 
@@ -552,12 +516,7 @@ class PRDParser:
         extracted = set()
 
         # Check for all keyword categories
-        all_keywords = (
-            self.compute_keywords
-            | self.effect_keywords
-            | self.reducer_keywords
-            | self.orchestrator_keywords
-        )
+        all_keywords = self.compute_keywords | self.effect_keywords | self.reducer_keywords | self.orchestrator_keywords
 
         for keyword in all_keywords:
             if keyword in content_lower:
@@ -586,12 +545,7 @@ class PRDParser:
             reducer_matches = len(keywords & self.reducer_keywords)
             orchestrator_matches = len(keywords & self.orchestrator_keywords)
 
-            total_matches = (
-                compute_matches
-                + effect_matches
-                + reducer_matches
-                + orchestrator_matches
-            )
+            total_matches = compute_matches + effect_matches + reducer_matches + orchestrator_matches
 
             if total_matches > 0:
                 hints["COMPUTE"] = compute_matches / total_matches

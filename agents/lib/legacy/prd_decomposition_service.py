@@ -112,24 +112,16 @@ class PRDDecompositionService:
             self.logger.info(f"🔧 Project context: {project_context}")
 
             # Construct analysis prompt
-            analysis_prompt = self._build_decomposition_prompt(
-                prd_content, project_context
-            )
+            analysis_prompt = self._build_decomposition_prompt(prd_content, project_context)
             self.logger.info(f"📝 Built analysis prompt: {len(analysis_prompt)} chars")
 
             # Multi-tier Smart Responder Chain for comprehensive decomposition
             self.logger.info("🎯 Starting 3-tier Smart Responder Chain decomposition")
 
             # Pass 1: Feature extraction with mid-tier model
-            self.logger.info(
-                "📋 Pass 1: Feature extraction (TIER_3_LOCAL_MEDIUM → TIER_5_LOCAL_CODE)"
-            )
-            feature_prompt = self._build_feature_extraction_prompt(
-                prd_content, project_context
-            )
-            self.logger.info(
-                f"   Feature extraction prompt: {len(feature_prompt)} chars"
-            )
+            self.logger.info("📋 Pass 1: Feature extraction (TIER_3_LOCAL_MEDIUM → TIER_5_LOCAL_CODE)")
+            feature_prompt = self._build_feature_extraction_prompt(prd_content, project_context)
+            self.logger.info(f"   Feature extraction prompt: {len(feature_prompt)} chars")
 
             (
                 feature_extraction_response,
@@ -141,9 +133,7 @@ class PRDDecompositionService:
                 max_tier=ModelTier.TIER_5_LOCAL_CODE,
                 enable_consensus=False,  # Fast initial extraction
             )
-            self.logger.info(
-                f"✅ Pass 1 completed - Response: {len(feature_extraction_response.content)} chars"
-            )
+            self.logger.info(f"✅ Pass 1 completed - Response: {len(feature_extraction_response.content)} chars")
             self.logger.info(
                 f"   Model used: {feature_extraction_response.model_id}, Tier: {feature_extraction_response.tier.value}"
             )
@@ -152,9 +142,7 @@ class PRDDecompositionService:
             )
 
             # Pass 2: Detailed task breakdown with code-specialized model
-            self.logger.info(
-                "📋 Pass 2: Detailed task breakdown (TIER_5_LOCAL_CODE → TIER_6_LOCAL_HUGE)"
-            )
+            self.logger.info("📋 Pass 2: Detailed task breakdown (TIER_5_LOCAL_CODE → TIER_6_LOCAL_HUGE)")
             breakdown_prompt = self._build_detailed_breakdown_prompt(
                 prd_content, feature_extraction_response.content, project_context
             )
@@ -170,9 +158,7 @@ class PRDDecompositionService:
                 max_tier=ModelTier.TIER_6_LOCAL_HUGE,
                 enable_consensus=True,  # Critical for comprehensive coverage
             )
-            self.logger.info(
-                f"✅ Pass 2 completed - Response: {len(detailed_breakdown_response.content)} chars"
-            )
+            self.logger.info(f"✅ Pass 2 completed - Response: {len(detailed_breakdown_response.content)} chars")
             self.logger.info(
                 f"   Model used: {detailed_breakdown_response.model_id}, Tier: {detailed_breakdown_response.tier.value}"
             )
@@ -197,9 +183,7 @@ class PRDDecompositionService:
                 max_tier=ModelTier.TIER_6_LOCAL_HUGE,
                 enable_consensus=True,  # Ensure nothing is missing
             )
-            self.logger.info(
-                f"✅ Pass 3 completed - Response: {len(completeness_response.content)} chars"
-            )
+            self.logger.info(f"✅ Pass 3 completed - Response: {len(completeness_response.content)} chars")
             self.logger.info(
                 f"   Model used: {completeness_response.model_id}, Tier: {completeness_response.tier.value}"
             )
@@ -209,48 +193,30 @@ class PRDDecompositionService:
 
             # Use the final validated response for parsing
             response = completeness_response
-            self.logger.info(
-                f"🔧 Using final response for parsing: {len(response.content)} chars"
-            )
+            self.logger.info(f"🔧 Using final response for parsing: {len(response.content)} chars")
 
             # Parse and structure the response
             self.logger.info("🔍 Starting response parsing...")
-            decomposition_result = await self._parse_decomposition_response(
-                response.content, prd_content
-            )
-            self.logger.info(
-                f"✅ Response parsing completed - Generated {decomposition_result.total_tasks} tasks"
-            )
+            decomposition_result = await self._parse_decomposition_response(response.content, prd_content)
+            self.logger.info(f"✅ Response parsing completed - Generated {decomposition_result.total_tasks} tasks")
 
             # Log detailed task information
             if decomposition_result.tasks:
                 self.logger.info("📋 Generated tasks details:")
                 for i, task in enumerate(decomposition_result.tasks, 1):
                     self.logger.info(f"   {i}. {task.task_id}: {task.title}")
-                    self.logger.info(
-                        f"      Priority: {task.priority}, Complexity: {task.complexity}"
-                    )
+                    self.logger.info(f"      Priority: {task.priority}, Complexity: {task.complexity}")
                     self.logger.info(f"      Effort: {task.estimated_effort_hours}h")
-                    self.logger.info(
-                        f"      Acceptance criteria: {len(task.acceptance_criteria)} items"
-                    )
-                    self.logger.info(
-                        f"      Required skills: {len(task.required_skills)} skills"
-                    )
-                    self.logger.info(
-                        f"      Dependencies: {len(task.dependencies)} deps"
-                    )
+                    self.logger.info(f"      Acceptance criteria: {len(task.acceptance_criteria)} items")
+                    self.logger.info(f"      Required skills: {len(task.required_skills)} skills")
+                    self.logger.info(f"      Dependencies: {len(task.dependencies)} deps")
             else:
                 self.logger.warning("⚠️ No tasks were generated during parsing!")
 
             # Verify decomposition quality
             self.logger.info("🔍 Starting decomposition verification...")
-            verification_result = await self._verify_decomposition(
-                decomposition_result, prd_content
-            )
-            self.logger.info(
-                f"✅ Verification completed - Valid: {verification_result['valid']}"
-            )
+            verification_result = await self._verify_decomposition(decomposition_result, prd_content)
+            self.logger.info(f"✅ Verification completed - Valid: {verification_result['valid']}")
 
             decomposition_result.verification_successful = verification_result["valid"]
             decomposition_result.verification_details = verification_result
@@ -271,9 +237,7 @@ class PRDDecompositionService:
             self.logger.error(f"   Stack trace: {traceback.format_exc()}")
             raise
 
-    def _build_decomposition_prompt(
-        self, prd_content: str, project_context: Optional[Dict[str, Any]] = None
-    ) -> str:
+    def _build_decomposition_prompt(self, prd_content: str, project_context: Optional[Dict[str, Any]] = None) -> str:
         """Build the analysis prompt for PRD decomposition."""
 
         context_section = ""
@@ -525,9 +489,7 @@ For EACH feature identified, create specific implementation tasks. Break complex
 Target 20+ tasks for a comprehensive authentication system. Include ALL infrastructure, testing, and deployment tasks.
 """
 
-    def _build_completeness_validation_prompt(
-        self, prd_content: str, task_breakdown_content: str
-    ) -> str:
+    def _build_completeness_validation_prompt(self, prd_content: str, task_breakdown_content: str) -> str:
         """Build Pass 3 prompt for completeness validation."""
 
         return f"""
@@ -576,9 +538,7 @@ Ensure the final output has 20+ tasks covering every aspect mentioned in the PRD
 ```
 """
 
-    async def _parse_decomposition_response(
-        self, response_content: str, original_prd: str
-    ) -> PRDDecompositionResult:
+    async def _parse_decomposition_response(self, response_content: str, original_prd: str) -> PRDDecompositionResult:
         """Parse the AI response into structured decomposition result."""
 
         self.logger.info("🔍 Parsing AI response into structured format")
@@ -602,9 +562,7 @@ Parse the following PRD decomposition analysis and convert it into a structured 
 Provide a clean, structured JSON response that can be directly processed.
 """
 
-        self.logger.info(
-            f"📋 Calling Smart Responder Chain for parsing (prompt: {len(parsing_prompt)} chars)"
-        )
+        self.logger.info(f"📋 Calling Smart Responder Chain for parsing (prompt: {len(parsing_prompt)} chars)")
         (
             parse_response,
             parse_metrics,
@@ -612,12 +570,8 @@ Provide a clean, structured JSON response that can be directly processed.
             task_prompt=parsing_prompt,
             context={"purpose": "PRD Decomposition Response Parsing"},
         )
-        self.logger.info(
-            f"✅ Parsing response received: {len(parse_response.content)} chars"
-        )
-        self.logger.info(
-            f"   Parse model: {parse_response.model_id}, Tier: {parse_response.tier.value}"
-        )
+        self.logger.info(f"✅ Parsing response received: {len(parse_response.content)} chars")
+        self.logger.info(f"   Parse model: {parse_response.model_id}, Tier: {parse_response.tier.value}")
         self.logger.info(
             f"   Parse confidence: {parse_response.confidence}, Time: {parse_response.processing_time:.2f}s"
         )
@@ -636,9 +590,7 @@ Provide a clean, structured JSON response that can be directly processed.
             import re
 
             # Try multiple regex patterns for JSON extraction
-            json_match = re.search(
-                r"```json\s*(.*?)\s*```", parse_response.content, re.DOTALL
-            )
+            json_match = re.search(r"```json\s*(.*?)\s*```", parse_response.content, re.DOTALL)
             if not json_match:
                 # Fallback: look for any JSON-like structure
                 json_match = re.search(r"\{.*\}", parse_response.content, re.DOTALL)
@@ -689,18 +641,14 @@ Provide a clean, structured JSON response that can be directly processed.
         )
 
         if not isinstance(tasks_data, list):
-            self.logger.error(
-                f"Expected tasks to be a list, got {type(tasks_data)}: {tasks_data}"
-            )
+            self.logger.error(f"Expected tasks to be a list, got {type(tasks_data)}: {tasks_data}")
             # Fallback: create empty tasks list
             tasks_data = []
 
         for i, task_data in enumerate(tasks_data):
             try:
                 if not isinstance(task_data, dict):
-                    self.logger.error(
-                        f"Task {i} is not a dict: {type(task_data)} - {task_data}"
-                    )
+                    self.logger.error(f"Task {i} is not a dict: {type(task_data)} - {task_data}")
                     continue
 
                 # Create task with safe key access and enum validation
@@ -729,9 +677,7 @@ Provide a clean, structured JSON response that can be directly processed.
                     acceptance_criteria=task_data.get("acceptance_criteria", []),
                     priority=TaskPriority(priority_str),
                     complexity=TaskComplexity(complexity_str),
-                    estimated_effort_hours=float(
-                        task_data.get("estimated_effort_hours", 8.0)
-                    ),
+                    estimated_effort_hours=float(task_data.get("estimated_effort_hours", 8.0)),
                     dependencies=task_data.get("dependencies", []),
                     required_skills=task_data.get("required_skills", []),
                     deliverables=task_data.get("deliverables", []),
@@ -747,20 +693,14 @@ Provide a clean, structured JSON response that can be directly processed.
         total_effort = sum(task.estimated_effort_hours for task in tasks)
 
         result = PRDDecompositionResult(
-            project_name=parsed_data.get("project_overview", {}).get(
-                "name", "Unknown Project"
-            ),
-            project_description=parsed_data.get("project_overview", {}).get(
-                "description", ""
-            ),
+            project_name=parsed_data.get("project_overview", {}).get("name", "Unknown Project"),
+            project_description=parsed_data.get("project_overview", {}).get("description", ""),
             total_tasks=len(tasks),
             tasks=tasks,
             task_dependencies=parsed_data.get("dependencies", {}),
             critical_path=parsed_data.get("critical_path", []),
             estimated_total_effort=total_effort,
-            technology_stack=parsed_data.get("project_overview", {}).get(
-                "technology_stack", []
-            ),
+            technology_stack=parsed_data.get("project_overview", {}).get("technology_stack", []),
             architecture_requirements=parsed_data.get("architecture_requirements", []),
             quality_requirements=parsed_data.get("quality_requirements", []),
             success_metrics=parsed_data.get("success_metrics", []),
@@ -772,9 +712,7 @@ Provide a clean, structured JSON response that can be directly processed.
 
         return result
 
-    async def _verify_decomposition(
-        self, decomposition: PRDDecompositionResult, original_prd: str
-    ) -> Dict[str, Any]:
+    async def _verify_decomposition(self, decomposition: PRDDecompositionResult, original_prd: str) -> Dict[str, Any]:
         """Verify the quality and completeness of the decomposition."""
 
         verification_prompt = f"""
@@ -836,14 +774,11 @@ Provide detailed verification results with specific recommendations for improvem
         summary = []
         for task in tasks:
             summary.append(
-                f"- **{task.task_id}**: {task.title} "
-                f"({task.priority.value}, {task.estimated_effort_hours}h)"
+                f"- **{task.task_id}**: {task.title} " f"({task.priority.value}, {task.estimated_effort_hours}h)"
             )
         return "\n".join(summary)
 
-    async def get_task_by_id(
-        self, task_id: str, decomposition: PRDDecompositionResult
-    ) -> Optional[DecomposedTask]:
+    async def get_task_by_id(self, task_id: str, decomposition: PRDDecompositionResult) -> Optional[DecomposedTask]:
         """Get a specific task by ID."""
         for task in decomposition.tasks:
             if task.task_id == task_id:
@@ -856,9 +791,7 @@ Provide detailed verification results with specific recommendations for improvem
         """Get all tasks with specific priority."""
         return [task for task in decomposition.tasks if task.priority == priority]
 
-    async def calculate_dependency_chain(
-        self, task_id: str, decomposition: PRDDecompositionResult
-    ) -> List[str]:
+    async def calculate_dependency_chain(self, task_id: str, decomposition: PRDDecompositionResult) -> List[str]:
         """Calculate the full dependency chain for a task."""
         visited = set()
         chain = []
@@ -880,9 +813,7 @@ Provide detailed verification results with specific recommendations for improvem
         _build_chain(task_id)
         return chain
 
-    def to_yaml_serializable_dict(
-        self, decomposition: PRDDecompositionResult
-    ) -> Dict[str, Any]:
+    def to_yaml_serializable_dict(self, decomposition: PRDDecompositionResult) -> Dict[str, Any]:
         """Convert decomposition result to YAML-serializable dictionary.
 
         Converts enums to their string values to avoid YAML serialization issues.
