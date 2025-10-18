@@ -26,6 +26,7 @@ from .trace_logger import TraceLogger, TraceEventType, TraceLevel, get_trace_log
 
 class TransformationEvent(BaseModel):
     """Single agent transformation event."""
+
     transformation_id: str
     timestamp: float = Field(default_factory=time.time)
     datetime_str: str = Field(default_factory=lambda: datetime.now().isoformat())
@@ -56,6 +57,7 @@ class TransformationEvent(BaseModel):
 
 class TransformationPattern(BaseModel):
     """Identified transformation pattern."""
+
     pattern_id: str
     source_target_pair: Tuple[str, str]  # (source, target)
     occurrence_count: int
@@ -68,6 +70,7 @@ class TransformationPattern(BaseModel):
 
 class TransformationMetrics(BaseModel):
     """Dashboard-ready transformation metrics."""
+
     total_transformations: int
     unique_source_identities: int
     unique_target_identities: int
@@ -107,11 +110,7 @@ class AgentTransformationTracker:
     # Performance threshold from performance-thresholds.yaml (CTX-002)
     TRANSFORMATION_THRESHOLD_MS = 50.0
 
-    def __init__(
-        self,
-        storage_dir: str = "traces/transformations",
-        trace_logger: Optional[TraceLogger] = None
-    ):
+    def __init__(self, storage_dir: str = "traces/transformations", trace_logger: Optional[TraceLogger] = None):
         """
         Initialize transformation tracker.
 
@@ -131,13 +130,7 @@ class AgentTransformationTracker:
         self._cache_max_size = 1000  # Keep last 1000 transformations in memory
 
         # Statistics
-        self._stats = {
-            'total_tracked': 0,
-            'successful': 0,
-            'failed': 0,
-            'cache_hits': 0,
-            'pattern_recognitions': 0
-        }
+        self._stats = {"total_tracked": 0, "successful": 0, "failed": 0, "cache_hits": 0, "pattern_recognitions": 0}
 
     async def track_transformation(
         self,
@@ -150,7 +143,7 @@ class AgentTransformationTracker:
         routing_confidence: Optional[float] = None,
         task_id: Optional[str] = None,
         agent_definition_path: Optional[str] = None,
-        measure_performance: bool = True
+        measure_performance: bool = True,
     ) -> TransformationEvent:
         """
         Track a single agent transformation event.
@@ -196,15 +189,15 @@ class AgentTransformationTracker:
                 task_id=task_id,
                 agent_definition_path=agent_definition_path,
                 transformation_overhead_ms=overhead_ms,
-                total_time_ms=(time.time() - start_time) * 1000
+                total_time_ms=(time.time() - start_time) * 1000,
             )
 
             # Update statistics
-            self._stats['total_tracked'] += 1
+            self._stats["total_tracked"] += 1
             if event.success:
-                self._stats['successful'] += 1
+                self._stats["successful"] += 1
             else:
-                self._stats['failed'] += 1
+                self._stats["failed"] += 1
 
             # Add to cache
             self._transformation_cache.append(event)
@@ -233,7 +226,7 @@ class AgentTransformationTracker:
         context_preserved: Optional[Dict[str, Any]] = None,
         routing_confidence: Optional[float] = None,
         task_id: Optional[str] = None,
-        agent_definition_path: Optional[str] = None
+        agent_definition_path: Optional[str] = None,
     ) -> TransformationEvent:
         """
         Track transformation with pre-measured timing data.
@@ -270,14 +263,14 @@ class AgentTransformationTracker:
                 agent_definition_path=agent_definition_path,
                 transformation_overhead_ms=overhead_ms,
                 agent_load_time_ms=agent_load_time_ms,
-                total_time_ms=total_time_ms
+                total_time_ms=total_time_ms,
             )
 
-            self._stats['total_tracked'] += 1
+            self._stats["total_tracked"] += 1
             if event.success:
-                self._stats['successful'] += 1
+                self._stats["successful"] += 1
             else:
-                self._stats['failed'] += 1
+                self._stats["failed"] += 1
 
             self._transformation_cache.append(event)
             if len(self._transformation_cache) > self._cache_max_size:
@@ -290,10 +283,7 @@ class AgentTransformationTracker:
             return event
 
     async def get_transformation_history(
-        self,
-        source_identity: Optional[str] = None,
-        target_identity: Optional[str] = None,
-        limit: int = 100
+        self, source_identity: Optional[str] = None, target_identity: Optional[str] = None, limit: int = 100
     ) -> List[TransformationEvent]:
         """
         Get transformation history with optional filtering.
@@ -321,10 +311,7 @@ class AgentTransformationTracker:
 
             return events[:limit]
 
-    async def analyze_patterns(
-        self,
-        min_occurrences: int = 3
-    ) -> List[TransformationPattern]:
+    async def analyze_patterns(self, min_occurrences: int = 3) -> List[TransformationPattern]:
         """
         Analyze transformation patterns from historical data.
 
@@ -371,13 +358,13 @@ class AgentTransformationTracker:
                     avg_confidence_score=avg_confidence,
                     success_rate=success_rate,
                     common_reasons=common_reasons,
-                    last_occurrence=events[-1].timestamp
+                    last_occurrence=events[-1].timestamp,
                 )
 
                 patterns.append(pattern)
                 self._pattern_cache[pattern.pattern_id] = pattern
 
-            self._stats['pattern_recognitions'] = len(patterns)
+            self._stats["pattern_recognitions"] = len(patterns)
 
             # Sort by occurrence count
             patterns.sort(key=lambda p: p.occurrence_count, reverse=True)
@@ -410,7 +397,7 @@ class AgentTransformationTracker:
                     most_common_transformation=("N/A", "N/A"),
                     transformations_last_hour=0,
                     transformations_last_day=0,
-                    avg_transformations_per_hour=0.0
+                    avg_transformations_per_hour=0.0,
                 )
 
             # Basic counts
@@ -422,8 +409,11 @@ class AgentTransformationTracker:
             targets = set(e.target_identity for e in self._transformation_cache)
 
             # Performance metrics
-            overhead_times = [e.transformation_overhead_ms for e in self._transformation_cache
-                            if e.transformation_overhead_ms is not None]
+            overhead_times = [
+                e.transformation_overhead_ms
+                for e in self._transformation_cache
+                if e.transformation_overhead_ms is not None
+            ]
 
             avg_overhead = sum(overhead_times) / len(overhead_times) if overhead_times else 0.0
             sorted_times = sorted(overhead_times)
@@ -438,8 +428,7 @@ class AgentTransformationTracker:
             # Common patterns
             source_counter = Counter(e.source_identity for e in self._transformation_cache)
             target_counter = Counter(e.target_identity for e in self._transformation_cache)
-            pair_counter = Counter((e.source_identity, e.target_identity)
-                                  for e in self._transformation_cache)
+            pair_counter = Counter((e.source_identity, e.target_identity) for e in self._transformation_cache)
 
             most_common_source = source_counter.most_common(1)[0][0] if source_counter else "N/A"
             most_common_target = target_counter.most_common(1)[0][0] if target_counter else "N/A"
@@ -474,7 +463,7 @@ class AgentTransformationTracker:
                 most_common_transformation=most_common_pair,
                 transformations_last_hour=last_hour,
                 transformations_last_day=last_day,
-                avg_transformations_per_hour=avg_per_hour
+                avg_transformations_per_hour=avg_per_hour,
             )
 
     async def print_metrics_summary(self):
@@ -482,34 +471,38 @@ class AgentTransformationTracker:
         metrics = await self.get_metrics()
 
         print(f"\n{'='*80}")
-        print(f"🔄 Agent Transformation Metrics Summary")
+        print("🔄 Agent Transformation Metrics Summary")
         print(f"{'='*80}")
         print(f"Total Transformations: {metrics.total_transformations}")
         print(f"Success Rate: {metrics.success_rate:.2%}")
         print(f"Unique Source Identities: {metrics.unique_source_identities}")
         print(f"Unique Target Identities: {metrics.unique_target_identities}")
         print(f"\n{'='*80}")
-        print(f"Performance Metrics:")
+        print("Performance Metrics:")
         print(f"{'='*80}")
         print(f"Average Overhead: {metrics.avg_transformation_overhead_ms:.2f}ms")
         print(f"Median Overhead: {metrics.median_transformation_overhead_ms:.2f}ms")
         print(f"Max Overhead: {metrics.max_transformation_overhead_ms:.2f}ms")
-        print(f"Threshold Compliance: {metrics.threshold_compliance_rate:.2%} "
-              f"({metrics.transformations_under_threshold} under {self.TRANSFORMATION_THRESHOLD_MS}ms)")
+        print(
+            f"Threshold Compliance: {metrics.threshold_compliance_rate:.2%} "
+            f"({metrics.transformations_under_threshold} under {self.TRANSFORMATION_THRESHOLD_MS}ms)"
+        )
 
         if metrics.transformations_over_threshold > 0:
             print(f"⚠️  {metrics.transformations_over_threshold} transformations exceeded threshold!")
 
         print(f"\n{'='*80}")
-        print(f"Common Patterns:")
+        print("Common Patterns:")
         print(f"{'='*80}")
         print(f"Most Common Source: {metrics.most_common_source}")
         print(f"Most Common Target: {metrics.most_common_target}")
-        print(f"Most Common Transformation: {metrics.most_common_transformation[0]} → "
-              f"{metrics.most_common_transformation[1]}")
+        print(
+            f"Most Common Transformation: {metrics.most_common_transformation[0]} → "
+            f"{metrics.most_common_transformation[1]}"
+        )
 
         print(f"\n{'='*80}")
-        print(f"Activity:")
+        print("Activity:")
         print(f"{'='*80}")
         print(f"Last Hour: {metrics.transformations_last_hour}")
         print(f"Last Day: {metrics.transformations_last_day}")
@@ -543,8 +536,8 @@ class AgentTransformationTracker:
         transform_data = event.model_dump()
 
         # Write atomically
-        temp_file = transform_file.with_suffix('.tmp')
-        with open(temp_file, 'w') as f:
+        temp_file = transform_file.with_suffix(".tmp")
+        with open(temp_file, "w") as f:
             json.dump(transform_data, f, indent=2)
         temp_file.replace(transform_file)
 
@@ -559,9 +552,10 @@ class AgentTransformationTracker:
         message = (
             f"Agent transformation: {event.source_identity} → {event.target_identity} "
             f"(overhead: {event.transformation_overhead_ms:.2f}ms, "
-            f"confidence: {event.routing_confidence:.2%})" if event.routing_confidence
+            f"confidence: {event.routing_confidence:.2%})"
+            if event.routing_confidence
             else f"Agent transformation: {event.source_identity} → {event.target_identity} "
-                 f"(overhead: {event.transformation_overhead_ms:.2f}ms)"
+            f"(overhead: {event.transformation_overhead_ms:.2f}ms)"
         )
 
         # Build metadata
@@ -574,7 +568,9 @@ class AgentTransformationTracker:
             "routing_confidence": event.routing_confidence,
             "transformation_overhead_ms": event.transformation_overhead_ms,
             "agent_definition_path": event.agent_definition_path,
-            "user_request_preview": event.user_request[:100] + "..." if len(event.user_request) > 100 else event.user_request
+            "user_request_preview": (
+                event.user_request[:100] + "..." if len(event.user_request) > 100 else event.user_request
+            ),
         }
 
         # Log event
@@ -584,13 +580,13 @@ class AgentTransformationTracker:
             level=level,
             agent_name=event.target_identity,
             task_id=event.task_id,
-            metadata=metadata
+            metadata=metadata,
         )
 
     async def _update_patterns(self, event: TransformationEvent):
         """Update pattern cache with new event (background task)."""
         # Run pattern analysis periodically (every 10 transformations)
-        if self._stats['total_tracked'] % 10 == 0:
+        if self._stats["total_tracked"] % 10 == 0:
             await self.analyze_patterns(min_occurrences=3)
 
 

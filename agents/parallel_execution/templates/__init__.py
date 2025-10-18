@@ -8,7 +8,4 @@ including nodes, contracts, and interfaces.
 from .node_effect_template import generate_node_effect_code
 from .model_contract_template import generate_model_contract_code
 
-__all__ = [
-    'generate_node_effect_code',
-    'generate_model_contract_code'
-]
+__all__ = ["generate_node_effect_code", "generate_model_contract_code"]

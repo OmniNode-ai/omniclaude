@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Callable, Optional, Dict, List
+from typing import AsyncIterator, Optional, Dict, List
 
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 
@@ -115,10 +115,7 @@ class KafkaCodegenClient:
         """Ensure event optimizer is initialized"""
         if self._optimizer is None:
             bs = self._rewrite_bootstrap(self.bootstrap_servers)
-            self._optimizer = EventOptimizer(
-                bootstrap_servers=bs,
-                config=self._optimizer_config
-            )
+            self._optimizer = EventOptimizer(bootstrap_servers=bs, config=self._optimizer_config)
         return self._optimizer
 
     async def publish(self, event: BaseEvent) -> None:
@@ -142,14 +139,16 @@ class KafkaCodegenClient:
             await self.start_producer()
             assert self._producer is not None
             topic = event.to_kafka_topic()
-            payload = json.dumps({
-                "id": str(event.id),
-                "service": event.service,
-                "timestamp": event.timestamp,
-                "correlation_id": str(event.correlation_id),
-                "metadata": event.metadata,
-                "payload": event.payload,
-            }).encode("utf-8")
+            payload = json.dumps(
+                {
+                    "id": str(event.id),
+                    "service": event.service,
+                    "timestamp": event.timestamp,
+                    "correlation_id": str(event.correlation_id),
+                    "metadata": event.metadata,
+                    "payload": event.payload,
+                }
+            ).encode("utf-8")
             await self._producer.send_and_wait(topic, payload)
         except Exception as e:
             # Fallback to confluent client if available
@@ -157,14 +156,17 @@ class KafkaCodegenClient:
             if ConfluentKafkaClient is None:
                 raise
             client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers))
-            client.publish(event.to_kafka_topic(), {
-                "id": str(event.id),
-                "service": event.service,
-                "timestamp": event.timestamp,
-                "correlation_id": str(event.correlation_id),
-                "metadata": event.metadata,
-                "payload": event.payload,
-            })
+            client.publish(
+                event.to_kafka_topic(),
+                {
+                    "id": str(event.id),
+                    "service": event.service,
+                    "timestamp": event.timestamp,
+                    "correlation_id": str(event.correlation_id),
+                    "metadata": event.metadata,
+                    "payload": event.payload,
+                },
+            )
 
     async def publish_batch(self, events: List[BaseEvent]) -> None:
         """
@@ -217,6 +219,7 @@ class KafkaCodegenClient:
         try:
             await self.start_consumer(topic)
             assert self._consumer is not None
+
             async def _wait():
                 async for msg in self._consumer:
                     try:
@@ -226,6 +229,7 @@ class KafkaCodegenClient:
                     if predicate(payload):
                         return payload
                 return None
+
             return await asyncio.wait_for(_wait(), timeout=timeout_seconds)
         except Exception as e:
             self.logger.warning(f"aiokafka consume_until failed, attempting confluent fallback: {e}")
@@ -239,5 +243,3 @@ class KafkaCodegenClient:
                 if payload and predicate(payload):
                     return payload
             return None
-
-

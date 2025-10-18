@@ -16,7 +16,6 @@ Test Coverage:
 """
 
 import json
-import asyncio
 import pytest
 import logging
 import time
@@ -26,7 +25,6 @@ from io import StringIO
 
 from lib.structured_logger import (
     StructuredLogger,
-    LogLevel,
     get_logger,
     set_global_correlation_id,
     set_global_session_id,
@@ -42,8 +40,6 @@ from lib.log_context import (
 from lib.log_rotation import (
     LogRotationConfig,
     configure_file_rotation,
-    configure_global_rotation,
-    cleanup_old_logs,
     get_log_stats,
 )
 
@@ -102,6 +98,7 @@ class TestJSONOutput:
         self.log_output = StringIO()
         handler = logging.StreamHandler(self.log_output)
         from lib.structured_logger import JSONFormatter
+
         handler.setFormatter(JSONFormatter())
         self.logger.logger.addHandler(handler)
         self.logger.logger.setLevel(logging.DEBUG)
@@ -148,6 +145,7 @@ class TestJSONOutput:
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
         from lib.structured_logger import JSONFormatter
+
         handler.setFormatter(JSONFormatter())
         logger.logger.addHandler(handler)
         logger.logger.setLevel(logging.DEBUG)
@@ -191,11 +189,7 @@ class TestContextPropagation:
         correlation_id = uuid4()
         session_id = uuid4()
 
-        async with async_log_context(
-            correlation_id=correlation_id,
-            session_id=session_id,
-            component="test-component"
-        ):
+        async with async_log_context(correlation_id=correlation_id, session_id=session_id, component="test-component"):
             assert get_correlation_id() == str(correlation_id)
             assert get_session_id() == str(session_id)
 
@@ -222,6 +216,7 @@ class TestDecorators:
     @pytest.mark.asyncio
     async def test_async_decorator(self):
         """Test with_log_context decorator on async function"""
+
         @with_log_context(component="test-component")
         async def test_func(correlation_id: str, task_id: str):
             assert get_correlation_id() == correlation_id
@@ -233,6 +228,7 @@ class TestDecorators:
 
     def test_sync_decorator(self):
         """Test with_log_context decorator on sync function"""
+
         @with_log_context(component="test-component")
         def test_func(correlation_id: str, task_id: str):
             assert get_correlation_id() == correlation_id
@@ -254,16 +250,13 @@ class TestLogRotation:
     def teardown_method(self):
         """Clean up test log directory"""
         import shutil
+
         if self.test_log_dir.exists():
             shutil.rmtree(self.test_log_dir)
 
     def test_rotation_config_creation(self):
         """Test LogRotationConfig creation"""
-        config = LogRotationConfig(
-            log_dir=str(self.test_log_dir),
-            max_bytes=1024 * 1024,
-            backup_count=5
-        )
+        config = LogRotationConfig(log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
         assert config.log_dir == str(self.test_log_dir)
         assert config.max_bytes == 1024 * 1024
         assert config.backup_count == 5
@@ -293,12 +286,7 @@ class TestLogRotation:
     def test_configure_file_rotation(self):
         """Test file rotation configuration"""
         logger = get_logger("test_rotation", component="test")
-        configure_file_rotation(
-            logger,
-            log_dir=str(self.test_log_dir),
-            max_bytes=1024 * 1024,
-            backup_count=5
-        )
+        configure_file_rotation(logger, log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
 
         # Should have file handler added
         assert len(logger.logger.handlers) > 0
@@ -370,6 +358,7 @@ class TestIntegration:
     def teardown_method(self):
         """Clean up test environment"""
         import shutil
+
         if self.test_log_dir.exists():
             shutil.rmtree(self.test_log_dir)
 
@@ -380,21 +369,14 @@ class TestIntegration:
         logger = get_logger("test_integration", component="agent-researcher")
 
         # Configure rotation
-        configure_file_rotation(
-            logger,
-            log_dir=str(self.test_log_dir),
-            max_bytes=1024 * 1024,
-            backup_count=5
-        )
+        configure_file_rotation(logger, log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
 
         # Set up context
         correlation_id = uuid4()
         session_id = uuid4()
 
         async with async_log_context(
-            correlation_id=correlation_id,
-            session_id=session_id,
-            component="agent-researcher"
+            correlation_id=correlation_id, session_id=session_id, component="agent-researcher"
         ):
             # Log various events
             logger.info("Research task started", metadata={"query": "test query"})

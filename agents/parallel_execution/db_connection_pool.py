@@ -100,9 +100,7 @@ class NodeDatabasePoolEffect:
             return
 
         try:
-            logger.info(
-                f"Initializing database pool: {self.config.host}:{self.config.port}/{self.config.database}"
-            )
+            logger.info(f"Initializing database pool: {self.config.host}:{self.config.port}/{self.config.database}")
 
             self._pool = await asyncpg.create_pool(
                 host=self.config.host,
@@ -119,9 +117,7 @@ class NodeDatabasePoolEffect:
             )
 
             self._initialized = True
-            logger.info(
-                f"Database pool initialized: min={self.config.min_size}, max={self.config.max_size}"
-            )
+            logger.info(f"Database pool initialized: min={self.config.min_size}, max={self.config.max_size}")
 
             # Verify connection
             await self.health_check()

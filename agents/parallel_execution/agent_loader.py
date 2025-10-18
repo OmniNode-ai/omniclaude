@@ -21,6 +21,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
 class AgentCapabilities(BaseModel):
     """Agent capability flags."""
+
     mandatory_functions: bool = False
     template_system: bool = False
     enhanced_patterns: bool = False
@@ -44,6 +45,7 @@ class AgentCapabilities(BaseModel):
 
 class IntelligenceConfig(BaseModel):
     """Intelligence integration configuration."""
+
     enabled: bool = False
     patterns: List[str] = Field(default_factory=list)
     quality_analysis: bool = False
@@ -65,6 +67,7 @@ class IntelligenceConfig(BaseModel):
 
 class QualityGates(BaseModel):
     """Quality gate thresholds."""
+
     minimum_quality_score: float = 0.7
     minimum_onex_compliance: int = 70
     zero_critical_antipatterns: bool = True
@@ -75,6 +78,7 @@ class QualityGates(BaseModel):
 
 class IntelligenceIntegration(BaseModel):
     """Extended intelligence integration with quality gates."""
+
     enabled: bool = True
     pre_generation_validation: bool = False
     post_generation_validation: bool = False
@@ -91,6 +95,7 @@ class IntelligenceIntegration(BaseModel):
 
 class AgentConfig(BaseModel):
     """Complete agent configuration from YAML."""
+
     agent_domain: str
     agent_purpose: str
     agent_title: str
@@ -136,6 +141,7 @@ class AgentConfig(BaseModel):
 
 class AgentLoadStatus(str, Enum):
     """Agent load status."""
+
     LOADED = "loaded"
     FAILED = "failed"
     RELOADING = "reloading"
@@ -144,6 +150,7 @@ class AgentLoadStatus(str, Enum):
 
 class LoadedAgent(BaseModel):
     """Metadata for a loaded agent."""
+
     agent_name: str
     config: Optional[AgentConfig] = None
     status: AgentLoadStatus
@@ -163,12 +170,12 @@ class AgentConfigChangeHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         """Handle file modification events."""
-        if isinstance(event, FileModifiedEvent) and event.src_path.endswith(('.yaml', '.yml')):
+        if isinstance(event, FileModifiedEvent) and event.src_path.endswith((".yaml", ".yml")):
             asyncio.create_task(self._handle_config_change(event.src_path))
 
     def on_created(self, event):
         """Handle file creation events."""
-        if isinstance(event, FileCreatedEvent) and event.src_path.endswith(('.yaml', '.yml')):
+        if isinstance(event, FileCreatedEvent) and event.src_path.endswith((".yaml", ".yml")):
             asyncio.create_task(self._handle_config_change(event.src_path))
 
     async def _handle_config_change(self, file_path: str):
@@ -179,7 +186,7 @@ class AgentConfigChangeHandler(FileSystemEventHandler):
             event_type=TraceEventType.COORDINATOR_START,
             message=f"Detected config change for {agent_name}",
             level=TraceLevel.INFO,
-            metadata={"file_path": file_path}
+            metadata={"file_path": file_path},
         )
 
         # Reload the specific agent
@@ -231,16 +238,14 @@ class AgentLoader:
         await self.trace_logger.log_event(
             event_type=TraceEventType.COORDINATOR_START,
             message=f"Initializing agent loader from {self.config_dir}",
-            level=TraceLevel.INFO
+            level=TraceLevel.INFO,
         )
 
         # Ensure config directory exists
         if not self.config_dir.exists():
             error_msg = f"Agent config directory not found: {self.config_dir}"
             await self.trace_logger.log_event(
-                event_type=TraceEventType.AGENT_ERROR,
-                message=error_msg,
-                level=TraceLevel.ERROR
+                event_type=TraceEventType.AGENT_ERROR, message=error_msg, level=TraceLevel.ERROR
             )
             raise FileNotFoundError(error_msg)
 
@@ -264,8 +269,8 @@ class AgentLoader:
             metadata={
                 "agent_count": len(self.agents),
                 "load_time_ms": load_time_ms,
-                "capability_count": len(self.capability_index)
-            }
+                "capability_count": len(self.capability_index),
+            },
         )
 
         return self.agents
@@ -277,7 +282,7 @@ class AgentLoader:
         await self.trace_logger.log_event(
             event_type=TraceEventType.PARALLEL_BATCH_START,
             message=f"Loading {len(config_files)} agent configurations",
-            level=TraceLevel.INFO
+            level=TraceLevel.INFO,
         )
 
         loaded_count = 0
@@ -295,7 +300,7 @@ class AgentLoader:
                     message=f"Loaded agent: {agent_name}",
                     level=TraceLevel.INFO,
                     agent_name=agent_name,
-                    metadata={"load_time_ms": loaded_agent.load_time_ms}
+                    metadata={"load_time_ms": loaded_agent.load_time_ms},
                 )
 
             except Exception as e:
@@ -303,25 +308,21 @@ class AgentLoader:
                 error_msg = f"Failed to load {agent_name}: {str(e)}"
 
                 self.agents[agent_name] = LoadedAgent(
-                    agent_name=agent_name,
-                    config=None,
-                    status=AgentLoadStatus.FAILED,
-                    load_time_ms=0.0,
-                    error=error_msg
+                    agent_name=agent_name, config=None, status=AgentLoadStatus.FAILED, load_time_ms=0.0, error=error_msg
                 )
 
                 await self.trace_logger.log_event(
                     event_type=TraceEventType.TASK_FAILED,
                     message=error_msg,
                     level=TraceLevel.ERROR,
-                    agent_name=agent_name
+                    agent_name=agent_name,
                 )
 
         await self.trace_logger.log_event(
             event_type=TraceEventType.PARALLEL_BATCH_END,
             message=f"Batch load complete: {loaded_count} loaded, {failed_count} failed",
             level=TraceLevel.INFO,
-            metadata={"loaded": loaded_count, "failed": failed_count}
+            metadata={"loaded": loaded_count, "failed": failed_count},
         )
 
     async def _load_agent_config(self, config_file: Path) -> LoadedAgent:
@@ -337,7 +338,7 @@ class AgentLoader:
         start_time = time.time()
 
         # Read YAML file
-        with open(config_file, 'r') as f:
+        with open(config_file, "r") as f:
             raw_config = yaml.safe_load(f)
 
         # Validate with Pydantic
@@ -348,10 +349,7 @@ class AgentLoader:
         load_time_ms = (time.time() - start_time) * 1000
 
         return LoadedAgent(
-            agent_name=config_file.stem,
-            config=config,
-            status=AgentLoadStatus.LOADED,
-            load_time_ms=load_time_ms
+            agent_name=config_file.stem, config=config, status=AgentLoadStatus.LOADED, load_time_ms=load_time_ms
         )
 
     def _build_capability_index(self):
@@ -388,14 +386,14 @@ class AgentLoader:
             await self.trace_logger.log_event(
                 event_type=TraceEventType.COORDINATOR_START,
                 message=f"Hot-reload enabled for {self.config_dir}",
-                level=TraceLevel.INFO
+                level=TraceLevel.INFO,
             )
 
         except Exception as e:
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=f"Failed to setup hot-reload: {str(e)}",
-                level=TraceLevel.WARNING
+                level=TraceLevel.WARNING,
             )
 
     async def reload_agent(self, agent_name: str) -> Optional[LoadedAgent]:
@@ -412,7 +410,7 @@ class AgentLoader:
             event_type=TraceEventType.COORDINATOR_START,
             message=f"Reloading agent: {agent_name}",
             level=TraceLevel.INFO,
-            agent_name=agent_name
+            agent_name=agent_name,
         )
 
         # Mark as reloading
@@ -427,10 +425,7 @@ class AgentLoader:
         if not config_file.exists():
             error_msg = f"Config file not found for {agent_name}"
             await self.trace_logger.log_event(
-                event_type=TraceEventType.AGENT_ERROR,
-                message=error_msg,
-                level=TraceLevel.ERROR,
-                agent_name=agent_name
+                event_type=TraceEventType.AGENT_ERROR, message=error_msg, level=TraceLevel.ERROR, agent_name=agent_name
             )
             return None
 
@@ -447,7 +442,7 @@ class AgentLoader:
                 message=f"Agent reloaded successfully: {agent_name}",
                 level=TraceLevel.INFO,
                 agent_name=agent_name,
-                metadata={"load_time_ms": loaded_agent.load_time_ms}
+                metadata={"load_time_ms": loaded_agent.load_time_ms},
             )
 
             return loaded_agent
@@ -456,18 +451,11 @@ class AgentLoader:
             error_msg = f"Failed to reload {agent_name}: {str(e)}"
 
             self.agents[agent_name] = LoadedAgent(
-                agent_name=agent_name,
-                config=None,
-                status=AgentLoadStatus.FAILED,
-                load_time_ms=0.0,
-                error=error_msg
+                agent_name=agent_name, config=None, status=AgentLoadStatus.FAILED, load_time_ms=0.0, error=error_msg
             )
 
             await self.trace_logger.log_event(
-                event_type=TraceEventType.TASK_FAILED,
-                message=error_msg,
-                level=TraceLevel.ERROR,
-                agent_name=agent_name
+                event_type=TraceEventType.TASK_FAILED, message=error_msg, level=TraceLevel.ERROR, agent_name=agent_name
             )
 
             return None
@@ -491,7 +479,7 @@ class AgentLoader:
             event_type=TraceEventType.COORDINATOR_END,
             message=f"Agent unloaded: {agent_name}",
             level=TraceLevel.INFO,
-            agent_name=agent_name
+            agent_name=agent_name,
         )
 
         # Rebuild capability index
@@ -546,11 +534,7 @@ class AgentLoader:
         Returns:
             Dictionary of agent_name to LoadedAgent
         """
-        return {
-            name: agent
-            for name, agent in self.agents.items()
-            if agent.status == AgentLoadStatus.LOADED
-        }
+        return {name: agent for name, agent in self.agents.items() if agent.status == AgentLoadStatus.LOADED}
 
     def get_agent_stats(self) -> Dict[str, Any]:
         """
@@ -569,7 +553,7 @@ class AgentLoader:
             "failed_agents": failed,
             "capabilities_indexed": len(self.capability_index),
             "hot_reload_enabled": self.enable_hot_reload,
-            "is_initialized": self._is_initialized
+            "is_initialized": self._is_initialized,
         }
 
     async def cleanup(self):
@@ -582,5 +566,5 @@ class AgentLoader:
             event_type=TraceEventType.COORDINATOR_END,
             message="Agent loader cleanup complete",
             level=TraceLevel.INFO,
-            metadata=self.get_agent_stats()
+            metadata=self.get_agent_stats(),
         )

@@ -12,7 +12,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Any
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -59,15 +58,8 @@ class QuorumIntegrationTest:
         print("=" * 70)
 
         input_data = {
-            "tasks": [
-                {
-                    "task_id": "task1",
-                    "agent": "coder",
-                    "description": "Simple test task",
-                    "dependencies": []
-                }
-            ],
-            "user_prompt": "Create a simple function"
+            "tasks": [{"task_id": "task1", "agent": "coder", "description": "Simple test task", "dependencies": []}],
+            "user_prompt": "Create a simple function",
         }
 
         try:
@@ -77,7 +69,7 @@ class QuorumIntegrationTest:
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             # Check that it didn't try to use quorum
@@ -107,10 +99,10 @@ class QuorumIntegrationTest:
                     "task_id": "task1",
                     "agent": "coder",
                     "description": "Build PostgreSQL adapter effect node",
-                    "dependencies": []
+                    "dependencies": [],
                 }
             ],
-            "user_prompt": "Build a postgres adapter effect node"
+            "user_prompt": "Build a postgres adapter effect node",
         }
 
         try:
@@ -120,7 +112,7 @@ class QuorumIntegrationTest:
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=15,
             )
 
             # Check stderr for quorum activation
@@ -178,13 +170,12 @@ class QuorumIntegrationTest:
             # Verify that quorum caught the issues
             if result.decision in [ValidationDecision.RETRY, ValidationDecision.FAIL]:
                 self.record_pass(
-                    "PostgreSQL failure detection",
-                    f"Quorum correctly detected issues ({result.decision.value})"
+                    "PostgreSQL failure detection", f"Quorum correctly detected issues ({result.decision.value})"
                 )
             else:
                 self.record_fail(
                     "PostgreSQL failure detection",
-                    f"Quorum failed to catch obvious issues (decision: {result.decision.value})"
+                    f"Quorum failed to catch obvious issues (decision: {result.decision.value})",
                 )
 
             # Check for specific deficiency detection
@@ -233,13 +224,12 @@ class QuorumIntegrationTest:
 
             if result.decision == ValidationDecision.PASS:
                 self.record_pass(
-                    "Valid breakdown passes",
-                    f"Correctly validated with {result.confidence:.1%} confidence"
+                    "Valid breakdown passes", f"Correctly validated with {result.confidence:.1%} confidence"
                 )
             else:
                 self.record_fail(
                     "Valid breakdown passes",
-                    f"Incorrectly rejected valid breakdown (decision: {result.decision.value})"
+                    f"Incorrectly rejected valid breakdown (decision: {result.decision.value})",
                 )
 
         except Exception as e:
@@ -254,17 +244,6 @@ class QuorumIntegrationTest:
         # This test would require temporarily breaking quorum access
         # For now, we just verify the code path exists
 
-        input_data = {
-            "tasks": [
-                {
-                    "task_id": "task1",
-                    "agent": "coder",
-                    "description": "Test task",
-                    "dependencies": []
-                }
-            ],
-            "user_prompt": "Test"
-        }
 
         try:
             # Check that the code has graceful degradation logic
@@ -285,29 +264,17 @@ class QuorumIntegrationTest:
 
     def record_pass(self, test_name: str, message: str):
         """Record a passing test"""
-        self.test_results.append({
-            "test": test_name,
-            "status": "PASS",
-            "message": message
-        })
+        self.test_results.append({"test": test_name, "status": "PASS", "message": message})
         print(f"✓ PASS: {test_name} - {message}")
 
     def record_fail(self, test_name: str, message: str):
         """Record a failing test"""
-        self.test_results.append({
-            "test": test_name,
-            "status": "FAIL",
-            "message": message
-        })
+        self.test_results.append({"test": test_name, "status": "FAIL", "message": message})
         print(f"✗ FAIL: {test_name} - {message}")
 
     def record_warning(self, test_name: str, message: str):
         """Record a warning"""
-        self.test_results.append({
-            "test": test_name,
-            "status": "WARN",
-            "message": message
-        })
+        self.test_results.append({"test": test_name, "status": "WARN", "message": message})
         print(f"⚠ WARN: {test_name} - {message}")
 
     def print_summary(self):

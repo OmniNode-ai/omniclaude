@@ -88,10 +88,7 @@ async def main():
     print("Step 2: Generating All Models (Parallel)...")
     print("-" * 80)
     generation_start = time.time()
-    result = await generator.generate_all_models(
-        "PaymentProcessing",
-        prd_analysis
-    )
+    result = await generator.generate_all_models("PaymentProcessing", prd_analysis)
     generation_time = time.time() - generation_start
 
     print(f"Generation Time: {generation_time * 1000:.2f}ms")
@@ -152,19 +149,27 @@ async def main():
     print(f"  - PRD Analysis: {analysis_time * 1000:.2f}ms ({analysis_time/total_time*100:.1f}%)")
     print(f"  - Model Generation: {generation_time * 1000:.2f}ms ({generation_time/total_time*100:.1f}%)")
     print()
-    print(f"Generated Code Statistics:")
+    print("Generated Code Statistics:")
     print(f"  - Input Model: {len(result.input_model_code)} characters")
     print(f"  - Output Model: {len(result.output_model_code)} characters")
     print(f"  - Config Model: {len(result.config_model_code)} characters")
-    print(f"  - Total: {len(result.input_model_code) + len(result.output_model_code) + len(result.config_model_code)} characters")
+    print(
+        f"  - Total: {len(result.input_model_code) + len(result.output_model_code) + len(result.config_model_code)} characters"
+    )
     print()
 
     # Type Inference Demonstration
     print("Step 8: Type Inference Examples")
     print("=" * 80)
     test_fields = [
-        "user_id", "created_at", "is_active", "retry_count",
-        "confidence_score", "tags", "metadata", "result_data"
+        "user_id",
+        "created_at",
+        "is_active",
+        "retry_count",
+        "confidence_score",
+        "tags",
+        "metadata",
+        "result_data",
     ]
     print("Field Name → Inferred Type:")
     for field_name in test_fields:

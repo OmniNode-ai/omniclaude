@@ -27,9 +27,7 @@ async def test_router_integration():
     # Initialize coordinator with enhanced router
     print("\n1. Initializing ParallelCoordinator with enhanced router...")
     coordinator = ParallelCoordinator(
-        use_dynamic_loading=True,
-        use_enhanced_router=True,
-        router_confidence_threshold=0.6
+        use_dynamic_loading=True, use_enhanced_router=True, router_confidence_threshold=0.6
     )
 
     await coordinator.initialize()
@@ -40,28 +38,28 @@ async def test_router_integration():
         {
             "task_id": "test-1",
             "description": "Debug this performance issue in the API endpoint",
-            "expected_agent_type": "debug"
+            "expected_agent_type": "debug",
         },
         {
             "task_id": "test-2",
             "description": "Generate contract-driven code for user registration",
-            "expected_agent_type": "generator"
+            "expected_agent_type": "generator",
         },
         {
             "task_id": "test-3",
             "description": "Analyze error logs and find root cause of failure",
-            "expected_agent_type": "debug"
+            "expected_agent_type": "debug",
         },
         {
             "task_id": "test-4",
             "description": "Create new API endpoints with ONEX compliance",
-            "expected_agent_type": "generator"
+            "expected_agent_type": "generator",
         },
         {
             "task_id": "test-5",
             "description": "Review code quality and suggest improvements",
-            "expected_agent_type": "quality"
-        }
+            "expected_agent_type": "quality",
+        },
     ]
 
     print("\n2. Testing agent selection with various task descriptions...")
@@ -70,9 +68,7 @@ async def test_router_integration():
     results = []
     for test_case in test_cases:
         task = AgentTask(
-            task_id=test_case["task_id"],
-            description=test_case["description"],
-            input_data={"domain": "api_development"}
+            task_id=test_case["task_id"], description=test_case["description"], input_data={"domain": "api_development"}
         )
 
         print(f"\nTask {test_case['task_id']}: {test_case['description']}")
@@ -82,12 +78,14 @@ async def test_router_integration():
 
         print(f"Selected: {selected_agent}")
 
-        results.append({
-            "task_id": test_case["task_id"],
-            "description": test_case["description"],
-            "selected_agent": selected_agent,
-            "expected_type": test_case["expected_agent_type"]
-        })
+        results.append(
+            {
+                "task_id": test_case["task_id"],
+                "description": test_case["description"],
+                "selected_agent": selected_agent,
+                "expected_type": test_case["expected_agent_type"],
+            }
+        )
 
     # Print router statistics
     print("\n" + "=" * 70)
@@ -96,32 +94,32 @@ async def test_router_integration():
 
     router_stats = coordinator.get_router_stats()
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Enabled: {router_stats['enabled']}")
     print(f"  Available: {router_stats['available']}")
     print(f"  Confidence Threshold: {router_stats['confidence_threshold']:.2%}")
 
-    print(f"\nRouting Performance:")
+    print("\nRouting Performance:")
     print(f"  Total Routes: {router_stats['total_routes']}")
     print(f"  Router Used: {router_stats['router_used']}")
     print(f"  Fallback Used: {router_stats['fallback_used']}")
     print(f"  Below Threshold: {router_stats['below_threshold']}")
     print(f"  Router Errors: {router_stats['router_errors']}")
 
-    if router_stats['total_routes'] > 0:
-        print(f"\nRates:")
+    if router_stats["total_routes"] > 0:
+        print("\nRates:")
         print(f"  Router Usage: {router_stats.get('router_usage_rate', 0):.2%}")
         print(f"  Fallback Rate: {router_stats.get('fallback_rate', 0):.2%}")
         print(f"  Below Threshold: {router_stats.get('below_threshold_rate', 0):.2%}")
         print(f"  Error Rate: {router_stats.get('error_rate', 0):.2%}")
 
-        if router_stats['router_used'] > 0:
+        if router_stats["router_used"] > 0:
             print(f"  Average Confidence: {router_stats['average_confidence']:.2%}")
 
     # Print cache statistics if available
-    if 'cache' in router_stats:
-        cache_stats = router_stats['cache']
-        print(f"\nCache Performance:")
+    if "cache" in router_stats:
+        cache_stats = router_stats["cache"]
+        print("\nCache Performance:")
         print(f"  Total Entries: {cache_stats.get('total_entries', 0)}")
         print(f"  Hit Rate: {cache_stats.get('cache_hit_rate', 0):.2%}")
 
@@ -133,14 +131,14 @@ async def test_router_integration():
     print(f"\nTested {len(results)} task scenarios")
     print(f"Router was {'successfully integrated' if router_stats['enabled'] else 'not available'}")
 
-    if router_stats['router_used'] > 0:
+    if router_stats["router_used"] > 0:
         print(f"✓ Router successfully routed {router_stats['router_used']} tasks")
         print(f"✓ Average confidence score: {router_stats['average_confidence']:.2%}")
 
-    if router_stats['fallback_used'] > 0:
+    if router_stats["fallback_used"] > 0:
         print(f"⚠ {router_stats['fallback_used']} tasks used fallback routing")
 
-    if router_stats['router_errors'] > 0:
+    if router_stats["router_errors"] > 0:
         print(f"⚠ {router_stats['router_errors']} router errors occurred")
 
     print("\nIntegration test complete!")
@@ -160,9 +158,7 @@ async def test_parallel_execution_with_router():
 
     # Initialize coordinator
     coordinator = ParallelCoordinator(
-        use_dynamic_loading=True,
-        use_enhanced_router=True,
-        router_confidence_threshold=0.6
+        use_dynamic_loading=True, use_enhanced_router=True, router_confidence_threshold=0.6
     )
 
     await coordinator.initialize()
@@ -172,20 +168,20 @@ async def test_parallel_execution_with_router():
         AgentTask(
             task_id="parallel-1",
             description="Debug authentication error in login flow",
-            input_data={"domain": "security"}
+            input_data={"domain": "security"},
         ),
         AgentTask(
             task_id="parallel-2",
             description="Generate user profile API endpoints",
             input_data={"domain": "api_development"},
-            dependencies=[]
+            dependencies=[],
         ),
         AgentTask(
             task_id="parallel-3",
             description="Analyze database performance bottleneck",
             input_data={"domain": "performance"},
-            dependencies=[]
-        )
+            dependencies=[],
+        ),
     ]
 
     print(f"\nExecuting {len(tasks)} tasks in parallel...")
@@ -202,6 +198,7 @@ async def test_parallel_execution_with_router():
     except Exception as e:
         print(f"\n✗ Parallel execution failed: {e}")
         import traceback
+
         traceback.print_exc()
 
     # Print final stats
@@ -210,15 +207,15 @@ async def test_parallel_execution_with_router():
     print("=" * 70)
 
     final_stats = coordinator.get_agent_registry_stats()
-    print(f"\nAgent Registry:")
+    print("\nAgent Registry:")
     for key, value in final_stats.items():
-        if key != 'router':
+        if key != "router":
             print(f"  {key}: {value}")
 
-    print(f"\nRouter Statistics:")
-    router_stats = final_stats.get('router', {})
+    print("\nRouter Statistics:")
+    router_stats = final_stats.get("router", {})
     for key, value in router_stats.items():
-        if key not in ['router_internal', 'cache']:
+        if key not in ["router_internal", "cache"]:
             if isinstance(value, float):
                 print(f"  {key}: {value:.2%}")
             else:
@@ -253,6 +250,7 @@ async def main():
         print("=" * 70)
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

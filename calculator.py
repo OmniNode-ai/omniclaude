@@ -9,6 +9,7 @@ from typing import Union
 
 class CalculatorError(Exception):
     """Custom exception for calculator-related errors."""
+
     pass
 
 

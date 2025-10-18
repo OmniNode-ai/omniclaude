@@ -4,8 +4,6 @@ Pydantic AI-based Contract-Driven Code Generator Agent
 Generates ONEX-compliant code using LLM intelligence with structured outputs.
 """
 
-import asyncio
-import os
 import time
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
@@ -21,6 +19,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -30,6 +29,7 @@ except ImportError:
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================
+
 
 class ONEXNodeCode(BaseModel):
     """Structured output for ONEX node generation following canonical patterns."""
@@ -45,7 +45,9 @@ class ONEXNodeCode(BaseModel):
     subcontracts_code: list[str] = Field(default_factory=list, description="Additional subcontract models if needed")
 
     # Node implementation
-    node_class_code: str = Field(description="Complete node class implementation inheriting from NodeEffect/NodeCompute/etc")
+    node_class_code: str = Field(
+        description="Complete node class implementation inheriting from NodeEffect/NodeCompute/etc"
+    )
 
     # Dependencies and metadata
     imports: list[str] = Field(description="Required import statements from omnibase_core")
@@ -67,6 +69,7 @@ class CodeGenerationContext(BaseModel):
 # ============================================================================
 # Dependencies for Pydantic AI Agent
 # ============================================================================
+
 
 @dataclass
 class AgentDeps:
@@ -139,16 +142,17 @@ Generate code that matches the EXACT node name and follows canonical patterns.""
 
 # Create the Pydantic AI agent
 code_generator_agent = Agent[AgentDeps, ONEXNodeCode](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=ONEXNodeCode,
-    system_prompt=ONEX_SYSTEM_PROMPT
+    system_prompt=ONEX_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @code_generator_agent.tool
 async def get_intelligence_context(ctx: RunContext[AgentDeps]) -> str:
@@ -245,6 +249,7 @@ async def validate_node_name(ctx: RunContext[AgentDeps], node_name: str) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+
 class CoderAgent:
     """
     Pydantic AI-based contract-driven code generation agent.
@@ -272,9 +277,7 @@ class CoderAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name,
-            task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
         )
 
         try:
@@ -288,7 +291,7 @@ class CoderAgent:
                 message=f"Generating {node_type} node: {node_name}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Gather intelligence
@@ -301,7 +304,7 @@ class CoderAgent:
                 mcp_client=self.mcp_client,
                 trace_logger=self.trace_logger,
                 trace_id=self._current_trace_id,
-                intelligence=intelligence
+                intelligence=intelligence,
             )
 
             # Build generation prompt
@@ -313,7 +316,7 @@ class CoderAgent:
                 message="Invoking Pydantic AI code generator",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await code_generator_agent.run(prompt, deps=deps)
@@ -337,14 +340,14 @@ class CoderAgent:
                 "intelligence_gathered": intelligence,
                 "quality_metrics": quality_metrics,
                 "quality_score": quality_metrics.get("quality_score", 0.0),
-                "lines_generated": len(final_code.split('\n')),
+                "lines_generated": len(final_code.split("\n")),
                 "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7,
                 "onex_compliance_notes": generated_output.onex_compliance_notes,
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-1.5-flash",
                     "structured_output": True,
-                    "tools_available": 3
-                }
+                    "tools_available": 3,
+                },
             }
 
             # Create result
@@ -354,13 +357,11 @@ class CoderAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
@@ -368,7 +369,7 @@ class CoderAgent:
                 message=f"Code generation complete: {len(final_code)} chars, quality={quality_metrics.get('quality_score', 0):.2f}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -377,18 +378,14 @@ class CoderAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Code generation failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -397,12 +394,10 @@ class CoderAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(
-        self, task: AgentTask, pre_gathered_context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _gather_intelligence(self, task: AgentTask, pre_gathered_context: Dict[str, Any]) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
 
@@ -422,7 +417,7 @@ class CoderAgent:
                 domain_intel = await self.mcp_client.perform_rag_query(
                     query=self.config.domain_query or "ONEX architecture patterns",
                     context="architecture",
-                    match_count=3
+                    match_count=3,
                 )
                 intelligence["domain_patterns"] = domain_intel
             except Exception as e:
@@ -431,7 +426,7 @@ class CoderAgent:
                     message=f"Intelligence gathering failed (continuing): {str(e)}",
                     level=TraceLevel.WARNING,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
         return intelligence
@@ -468,7 +463,9 @@ Generate complete, high-quality code that solves the specific problem described.
         code_parts = []
 
         # Header with ONEX compliance notes
-        code_parts.append(f'"""\n{output.node_name} - ONEX {output.node_type} Node\n\n{output.onex_compliance_notes}\n"""')
+        code_parts.append(
+            f'"""\n{output.node_name} - ONEX {output.node_type} Node\n\n{output.onex_compliance_notes}\n"""'
+        )
         code_parts.append("")
 
         # Imports from omnibase_core
@@ -506,19 +503,13 @@ Generate complete, high-quality code that solves the specific problem described.
         """Validate code quality via Archon MCP."""
         try:
             quality_result = await self.mcp_client.assess_code_quality(
-                content=code,
-                source_path=f"{node_name}.py",
-                language="python"
+                content=code, source_path=f"{node_name}.py", language="python"
             )
             return quality_result
         except Exception as e:
-            return {
-                "success": False,
-                "quality_score": 0.0,
-                "error": str(e)
-            }
+            return {"success": False, "quality_score": 0.0, "error": str(e)}
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()

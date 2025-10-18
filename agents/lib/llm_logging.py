@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from typing import Optional, Dict, Any
 
 from .db import get_pg_pool
@@ -55,7 +54,9 @@ async def log_llm_call(
     price_row = await _get_active_price_row(model, provider)
     # Values may come back as Decimal; convert to float for computation
     eff_in = float(price_row.get("input_per_1k")) if price_row and price_row.get("input_per_1k") is not None else None
-    eff_out = float(price_row.get("output_per_1k")) if price_row and price_row.get("output_per_1k") is not None else None
+    eff_out = (
+        float(price_row.get("output_per_1k")) if price_row and price_row.get("output_per_1k") is not None else None
+    )
     price_id = price_row.get("id") if price_row else None
 
     # Compute cost
@@ -95,5 +96,3 @@ async def log_llm_call(
             json.dumps(request or {}),
             json.dumps(response or {}),
         )
-
-

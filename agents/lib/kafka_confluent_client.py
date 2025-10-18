@@ -19,21 +19,25 @@ class ConfluentKafkaClient:
         self.group_id = group_id
 
     def publish(self, topic: str, payload: Dict[str, Any]) -> None:
-        p = Producer({
-            "bootstrap.servers": self.bootstrap_servers,
-            "socket.keepalive.enable": True,
-            "enable.idempotence": True,
-        })
+        p = Producer(
+            {
+                "bootstrap.servers": self.bootstrap_servers,
+                "socket.keepalive.enable": True,
+                "enable.idempotence": True,
+            }
+        )
         data = json.dumps(payload).encode("utf-8")
         p.produce(topic, data)
         p.flush(10)
 
     def consume_one(self, topic: str, timeout_sec: float = 10.0) -> Optional[Dict[str, Any]]:
-        c = Consumer({
-            "bootstrap.servers": self.bootstrap_servers,
-            "group.id": self.group_id,
-            "auto.offset.reset": "latest",
-        })
+        c = Consumer(
+            {
+                "bootstrap.servers": self.bootstrap_servers,
+                "group.id": self.group_id,
+                "auto.offset.reset": "latest",
+            }
+        )
         c.subscribe([topic])
         try:
             msg = c.poll(timeout_sec)
@@ -46,5 +50,3 @@ class ConfluentKafkaClient:
             return json.loads(msg.value().decode("utf-8"))
         finally:
             c.close()
-
-

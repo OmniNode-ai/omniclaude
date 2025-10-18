@@ -8,7 +8,7 @@ password hashing, input validation, and rate limiting.
 import re
 import hashlib
 import secrets
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 
@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class UserRegistrationResult:
     """Result of user registration attempt."""
+
     success: bool
     user_id: Optional[str] = None
     error_message: Optional[str] = None
@@ -61,7 +62,7 @@ class UserRegistrationService:
             return "Email address is required and must be under 254 characters"
 
         # RFC 5322 compliant email regex
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         if not re.match(email_pattern, email):
             return "Invalid email format"
 
@@ -93,13 +94,13 @@ class UserRegistrationService:
         if len(password) > self.MAX_PASSWORD_LENGTH:
             return f"Password must be under {self.MAX_PASSWORD_LENGTH} characters"
 
-        if not re.search(r'[A-Z]', password):
+        if not re.search(r"[A-Z]", password):
             return "Password must contain at least one uppercase letter"
 
-        if not re.search(r'[a-z]', password):
+        if not re.search(r"[a-z]", password):
             return "Password must contain at least one lowercase letter"
 
-        if not re.search(r'\d', password):
+        if not re.search(r"\d", password):
             return "Password must contain at least one number"
 
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
@@ -122,7 +123,8 @@ class UserRegistrationService:
         # Clean up old attempts
         if ip_address in self._rate_limit_cache:
             self._rate_limit_cache[ip_address] = [
-                timestamp for timestamp in self._rate_limit_cache[ip_address]
+                timestamp
+                for timestamp in self._rate_limit_cache[ip_address]
                 if now - timestamp < self.RATE_LIMIT_WINDOW
             ]
 
@@ -160,22 +162,11 @@ class UserRegistrationService:
             salt = secrets.token_bytes(32)
 
         # PBKDF2 with 390,000 iterations (OWASP recommendation for 2023)
-        hash_obj = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt,
-            390000
-        )
+        hash_obj = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 390000)
 
         return hash_obj.hex(), salt.hex()
 
-    def register_user(
-        self,
-        email: str,
-        password: str,
-        username: str,
-        ip_address: str
-    ) -> UserRegistrationResult:
+    def register_user(self, email: str, password: str, username: str, ip_address: str) -> UserRegistrationResult:
         """
         Register a new user with secure password hashing.
 
@@ -199,34 +190,31 @@ class UserRegistrationService:
         # Rate limiting check
         if not self._check_rate_limit(ip_address):
             return UserRegistrationResult(
-                success=False,
-                error_message="Too many registration attempts. Please try again later."
+                success=False, error_message="Too many registration attempts. Please try again later."
             )
 
         # Validate email
         email_error = self._validate_email(email)
         if email_error:
-            validation_errors['email'] = email_error
+            validation_errors["email"] = email_error
 
         # Validate password strength
         password_error = self._validate_password_strength(password)
         if password_error:
-            validation_errors['password'] = password_error
+            validation_errors["password"] = password_error
 
         # Validate username
         if not username or len(username) < 3:
-            validation_errors['username'] = "Username must be at least 3 characters"
+            validation_errors["username"] = "Username must be at least 3 characters"
         elif len(username) > 50:
-            validation_errors['username'] = "Username must be under 50 characters"
-        elif not re.match(r'^[a-zA-Z0-9_-]+$', username):
-            validation_errors['username'] = "Username can only contain letters, numbers, hyphens, and underscores"
+            validation_errors["username"] = "Username must be under 50 characters"
+        elif not re.match(r"^[a-zA-Z0-9_-]+$", username):
+            validation_errors["username"] = "Username can only contain letters, numbers, hyphens, and underscores"
 
         # Return validation errors if any
         if validation_errors:
             return UserRegistrationResult(
-                success=False,
-                error_message="Validation failed",
-                validation_errors=validation_errors
+                success=False, error_message="Validation failed", validation_errors=validation_errors
             )
 
         # Hash password with secure salt
@@ -242,10 +230,7 @@ class UserRegistrationService:
         #     (user_id, email, hashed_password, salt, username, datetime.now())
         # )
 
-        return UserRegistrationResult(
-            success=True,
-            user_id=user_id
-        )
+        return UserRegistrationResult(success=True, user_id=user_id)
 
     def verify_password(self, password: str, stored_hash: str, salt_hex: str) -> bool:
         """
@@ -274,10 +259,7 @@ if __name__ == "__main__":
 
     # Test registration
     result = service.register_user(
-        email="user@example.com",
-        password="SecureP@ssw0rd123!",
-        username="john_doe",
-        ip_address="192.168.1.1"
+        email="user@example.com", password="SecureP@ssw0rd123!", username="john_doe", ip_address="192.168.1.1"
     )
 
     if result.success:

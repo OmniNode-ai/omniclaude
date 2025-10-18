@@ -5,7 +5,6 @@ Multi-dimensional debugging with LLM-powered analysis, quality correlation,
 pattern recognition, and root cause identification.
 """
 
-import asyncio
 import time
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -31,6 +31,7 @@ except ImportError:
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================
+
 
 class BFROSAnalysis(BaseModel):
     """BFROS Framework Analysis."""
@@ -83,6 +84,7 @@ class DebugAnalysis(BaseModel):
 # Dependencies for Pydantic AI Agent
 # ============================================================================
 
+
 @dataclass
 class AgentDeps:
     """Dependencies passed to agent tools."""
@@ -134,16 +136,17 @@ Analyze thoroughly using available tools and generate complete debug analysis.""
 
 # Create the Pydantic AI agent
 debug_intelligence_agent = Agent[AgentDeps, DebugAnalysis](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=DebugAnalysis,
-    system_prompt=DEBUG_SYSTEM_PROMPT
+    system_prompt=DEBUG_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @debug_intelligence_agent.tool
 async def get_code_quality_intelligence(ctx: RunContext[AgentDeps]) -> str:
@@ -275,11 +278,12 @@ async def get_debug_patterns(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+
 @register_agent(
     agent_name="debug",
     agent_type="debug",
     capabilities=["debug_analysis", "root_cause_analysis", "bfros_analysis", "solution_generation"],
-    description="Multi-dimensional debug intelligence agent"
+    description="Multi-dimensional debug intelligence agent",
 )
 class DebugIntelligenceAgent:
     """
@@ -308,9 +312,7 @@ class DebugIntelligenceAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name,
-            task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
         )
 
         try:
@@ -326,7 +328,7 @@ class DebugIntelligenceAgent:
                 message=f"Debugging: {error_message[:100]}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Gather intelligence
@@ -343,7 +345,7 @@ class DebugIntelligenceAgent:
                 trace_id=self._current_trace_id,
                 intelligence=intelligence,
                 problematic_code=problematic_code,
-                error_message=error_message
+                error_message=error_message,
             )
 
             # Build analysis prompt
@@ -355,7 +357,7 @@ class DebugIntelligenceAgent:
                 message="Invoking Pydantic AI debug analyzer",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await debug_intelligence_agent.run(prompt, deps=deps)
@@ -374,8 +376,9 @@ class DebugIntelligenceAgent:
                 "intelligence_analysis": intelligence,
                 "quality_improvement": {
                     "before": intelligence.get("code_quality", {}).get("quality_score", 0.0),
-                    "after": intelligence.get("code_quality", {}).get("quality_score", 0.0) + debug_output.solution.estimated_quality_improvement,
-                    "delta": debug_output.solution.estimated_quality_improvement
+                    "after": intelligence.get("code_quality", {}).get("quality_score", 0.0)
+                    + debug_output.solution.estimated_quality_improvement,
+                    "delta": debug_output.solution.estimated_quality_improvement,
                 },
                 "root_cause_confidence": debug_output.root_cause.confidence_score,
                 "intelligence_sources": debug_output.intelligence_sources_used,
@@ -383,8 +386,8 @@ class DebugIntelligenceAgent:
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 3
-                }
+                    "tools_available": 3,
+                },
             }
 
             # Create result
@@ -394,13 +397,11 @@ class DebugIntelligenceAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
@@ -408,7 +409,7 @@ class DebugIntelligenceAgent:
                 message=f"Debug analysis complete: confidence={debug_output.root_cause.confidence_score:.2f}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -417,18 +418,14 @@ class DebugIntelligenceAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Debug analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -437,7 +434,7 @@ class DebugIntelligenceAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     async def _gather_intelligence(
@@ -447,7 +444,7 @@ class DebugIntelligenceAgent:
         file_path: str,
         language: str,
         error: str,
-        pre_gathered_context: Dict[str, Any]
+        pre_gathered_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
@@ -468,34 +465,26 @@ class DebugIntelligenceAgent:
             try:
                 # Code quality assessment
                 quality_result = await self.mcp_client.assess_code_quality(
-                    content=code,
-                    source_path=file_path,
-                    language=language
+                    content=code, source_path=file_path, language=language
                 )
                 intelligence["code_quality"] = quality_result
 
                 # Architectural compliance check
                 compliance_result = await self.mcp_client.call_tool(
-                    "check_architectural_compliance",
-                    content=code,
-                    architecture_type="onex"
+                    "check_architectural_compliance", content=code, architecture_type="onex"
                 )
                 intelligence["architectural_compliance"] = compliance_result
 
                 # Anti-patterns detection
                 patterns_result = await self.mcp_client.call_tool(
-                    "get_quality_patterns",
-                    content=code,
-                    pattern_type="anti_patterns"
+                    "get_quality_patterns", content=code, pattern_type="anti_patterns"
                 )
                 intelligence["anti_patterns"] = patterns_result
 
                 # Historical patterns if not pre-gathered
                 if not pre_gathered_context:
                     domain_intel = await self.mcp_client.perform_rag_query(
-                        query=f"debugging {error} systematic root cause analysis",
-                        context="debugging",
-                        match_count=3
+                        query=f"debugging {error} systematic root cause analysis", context="debugging", match_count=3
                     )
                     intelligence["domain_patterns"] = domain_intel
 
@@ -505,7 +494,7 @@ class DebugIntelligenceAgent:
                     message=f"Intelligence gathering failed (continuing): {str(e)}",
                     level=TraceLevel.WARNING,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
         return intelligence
@@ -554,5 +543,5 @@ Provide complete, actionable debug analysis with high confidence scoring."""
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class CalculatorOperation(str, Enum):
     """Supported calculator operations"""
+
     ADD = "add"
     SUBTRACT = "subtract"
 
@@ -38,26 +39,15 @@ class ModelCalculatorInput(BaseModel):
         ValueError: If operation is not supported
         ValidationError: If numeric values are invalid
     """
-    operation: CalculatorOperation = Field(
-        ...,
-        description="Arithmetic operation to perform"
-    )
-    value_a: Union[int, float] = Field(
-        ...,
-        description="First operand for the operation"
-    )
-    value_b: Union[int, float] = Field(
-        ...,
-        description="Second operand for the operation"
-    )
+
+    operation: CalculatorOperation = Field(..., description="Arithmetic operation to perform")
+    value_a: Union[int, float] = Field(..., description="First operand for the operation")
+    value_b: Union[int, float] = Field(..., description="Second operand for the operation")
     precision: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=15,
-        description="Optional decimal precision for result (0-15 decimal places)"
+        default=None, ge=0, le=15, description="Optional decimal precision for result (0-15 decimal places)"
     )
 
-    @field_validator('value_a', 'value_b')
+    @field_validator("value_a", "value_b")
     @classmethod
     def validate_numeric_values(cls, value: Union[int, float]) -> Union[int, float]:
         """
@@ -84,21 +74,12 @@ class ModelCalculatorInput(BaseModel):
 
     class Config:
         """Pydantic model configuration"""
+
         use_enum_values = True
         json_schema_extra = {
             "examples": [
-                {
-                    "operation": "add",
-                    "value_a": 10.5,
-                    "value_b": 5.3,
-                    "precision": 2
-                },
-                {
-                    "operation": "subtract",
-                    "value_a": 100,
-                    "value_b": 25,
-                    "precision": None
-                }
+                {"operation": "add", "value_a": 10.5, "value_b": 5.3, "precision": 2},
+                {"operation": "subtract", "value_a": 100, "value_b": 25, "precision": None},
             ]
         }
 
@@ -116,34 +97,19 @@ class ModelCalculatorOutput(BaseModel):
         operands: Tuple of (value_a, value_b) for audit trail
         precision_applied: Whether result was rounded to specified precision
     """
-    result: Union[int, float] = Field(
-        ...,
-        description="Computed arithmetic result"
-    )
-    operation: str = Field(
-        ...,
-        description="Operation that was performed"
-    )
+
+    result: Union[int, float] = Field(..., description="Computed arithmetic result")
+    operation: str = Field(..., description="Operation that was performed")
     operands: tuple[Union[int, float], Union[int, float]] = Field(
-        ...,
-        description="Input operands (value_a, value_b) for audit trail"
+        ..., description="Input operands (value_a, value_b) for audit trail"
     )
-    precision_applied: bool = Field(
-        default=False,
-        description="Whether result was rounded to specified precision"
-    )
+    precision_applied: bool = Field(default=False, description="Whether result was rounded to specified precision")
 
     class Config:
         """Pydantic model configuration"""
+
         json_schema_extra = {
-            "examples": [
-                {
-                    "result": 15.8,
-                    "operation": "add",
-                    "operands": (10.5, 5.3),
-                    "precision_applied": True
-                }
-            ]
+            "examples": [{"result": 15.8, "operation": "add", "operands": (10.5, 5.3), "precision_applied": True}]
         }
 
 
@@ -206,10 +172,7 @@ class NodeCalculatorCompute:
             CalculatorOperation.SUBTRACT: self._subtract,
         }
 
-    async def process(
-        self,
-        input_data: ModelCalculatorInput
-    ) -> ModelCalculatorOutput:
+    async def process(self, input_data: ModelCalculatorInput) -> ModelCalculatorOutput:
         """
         Process arithmetic operation with input validation and error handling.
 
@@ -236,26 +199,20 @@ class NodeCalculatorCompute:
             handler = self._operation_handlers.get(operation_enum)
 
             if handler is None:
-                raise CalculatorError(
-                    f"Unsupported operation: {input_data.operation}",
-                    operation=input_data.operation
-                )
+                raise CalculatorError(f"Unsupported operation: {input_data.operation}", operation=input_data.operation)
 
             # Execute operation
             raw_result = handler(input_data.value_a, input_data.value_b)
 
             # Apply precision if specified
-            result, precision_applied = self._apply_precision(
-                raw_result,
-                input_data.precision
-            )
+            result, precision_applied = self._apply_precision(raw_result, input_data.precision)
 
             # Return structured output
             return ModelCalculatorOutput(
                 result=result,
                 operation=input_data.operation,
                 operands=(input_data.value_a, input_data.value_b),
-                precision_applied=precision_applied
+                precision_applied=precision_applied,
             )
 
         except CalculatorError:
@@ -265,8 +222,7 @@ class NodeCalculatorCompute:
         except Exception as e:
             # Wrap unexpected errors with context
             raise CalculatorError(
-                f"Unexpected error during calculation: {str(e)}",
-                operation=getattr(input_data, 'operation', 'unknown')
+                f"Unexpected error during calculation: {str(e)}", operation=getattr(input_data, "operation", "unknown")
             ) from e
 
     def _add(self, value_a: Union[int, float], value_b: Union[int, float]) -> Union[int, float]:
@@ -295,11 +251,7 @@ class NodeCalculatorCompute:
         """
         return value_a - value_b
 
-    def _apply_precision(
-        self,
-        value: Union[int, float],
-        precision: Optional[int]
-    ) -> tuple[Union[int, float], bool]:
+    def _apply_precision(self, value: Union[int, float], precision: Optional[int]) -> tuple[Union[int, float], bool]:
         """
         Apply precision rounding to result if specified.
 
@@ -340,10 +292,7 @@ class NodeCalculatorCompute:
 
 # Module-level convenience functions for direct usage
 async def calculate(
-    operation: str,
-    value_a: Union[int, float],
-    value_b: Union[int, float],
-    precision: Optional[int] = None
+    operation: str, value_a: Union[int, float], value_b: Union[int, float], precision: Optional[int] = None
 ) -> Union[int, float]:
     """
     Convenience function for direct calculator usage.
@@ -363,21 +312,13 @@ async def calculate(
         15
     """
     calculator = NodeCalculatorCompute()
-    input_data = ModelCalculatorInput(
-        operation=operation,
-        value_a=value_a,
-        value_b=value_b,
-        precision=precision
-    )
+    input_data = ModelCalculatorInput(operation=operation, value_a=value_a, value_b=value_b, precision=precision)
     output = await calculator.process(input_data)
     return output.result
 
 
 def calculate_sync(
-    operation: str,
-    value_a: Union[int, float],
-    value_b: Union[int, float],
-    precision: Optional[int] = None
+    operation: str, value_a: Union[int, float], value_b: Union[int, float], precision: Optional[int] = None
 ) -> Union[int, float]:
     """
     Synchronous convenience function for direct calculator usage.
@@ -397,12 +338,7 @@ def calculate_sync(
         15
     """
     calculator = NodeCalculatorCompute()
-    input_data = ModelCalculatorInput(
-        operation=operation,
-        value_a=value_a,
-        value_b=value_b,
-        precision=precision
-    )
+    input_data = ModelCalculatorInput(operation=operation, value_a=value_a, value_b=value_b, precision=precision)
     output = calculator.process_sync(input_data)
     return output.result
 
@@ -419,12 +355,7 @@ if __name__ == "__main__":
 
         # Example 1: Addition with precision
         print("Example 1: Addition with precision")
-        input1 = ModelCalculatorInput(
-            operation="add",
-            value_a=10.567,
-            value_b=5.321,
-            precision=2
-        )
+        input1 = ModelCalculatorInput(operation="add", value_a=10.567, value_b=5.321, precision=2)
         result1 = await calculator.process(input1)
         print(f"  {input1.value_a} + {input1.value_b} = {result1.result}")
         print(f"  Precision applied: {result1.precision_applied}")
@@ -432,11 +363,7 @@ if __name__ == "__main__":
 
         # Example 2: Subtraction without precision
         print("Example 2: Subtraction without precision")
-        input2 = ModelCalculatorInput(
-            operation="subtract",
-            value_a=100,
-            value_b=25
-        )
+        input2 = ModelCalculatorInput(operation="subtract", value_a=100, value_b=25)
         result2 = await calculator.process(input2)
         print(f"  {input2.value_a} - {input2.value_b} = {result2.result}")
         print(f"  Operands: {result2.operands}")

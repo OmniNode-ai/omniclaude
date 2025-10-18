@@ -9,19 +9,13 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.tests.fixtures.phase4_fixtures import (
     NODE_TYPE_FIXTURES,
-    EFFECT_ANALYSIS_RESULT,
-    COMPUTE_ANALYSIS_RESULT,
-    REDUCER_ANALYSIS_RESULT,
-    ORCHESTRATOR_ANALYSIS_RESULT,
 )
 from agents.tests.utils.generation_test_helpers import (
     parse_generated_python,
     extract_class_definitions,
-    extract_imports,
 )
 
 
@@ -41,7 +35,7 @@ class TestEffectNodeGeneration:
                 node_type="EFFECT",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             assert result["node_type"] == "EFFECT"
@@ -60,11 +54,11 @@ class TestEffectNodeGeneration:
                 node_type="EFFECT",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Parse generated code
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)
@@ -96,10 +90,10 @@ class TestEffectNodeGeneration:
                 node_type="EFFECT",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # Check for NodeEffectService import
@@ -118,10 +112,10 @@ class TestEffectNodeGeneration:
                 node_type="EFFECT",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # EFFECT nodes typically interact with external systems
@@ -145,7 +139,7 @@ class TestComputeNodeGeneration:
                 node_type="COMPUTE",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             assert result["node_type"] == "COMPUTE"
@@ -164,10 +158,10 @@ class TestComputeNodeGeneration:
                 node_type="COMPUTE",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)
@@ -191,10 +185,10 @@ class TestComputeNodeGeneration:
                 node_type="COMPUTE",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # Check for NodeComputeService import
@@ -217,7 +211,7 @@ class TestReducerNodeGeneration:
                 node_type="REDUCER",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             assert result["node_type"] == "REDUCER"
@@ -236,10 +230,10 @@ class TestReducerNodeGeneration:
                 node_type="REDUCER",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)
@@ -263,10 +257,10 @@ class TestReducerNodeGeneration:
                 node_type="REDUCER",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # REDUCER nodes typically manage state
@@ -290,7 +284,7 @@ class TestOrchestratorNodeGeneration:
                 node_type="ORCHESTRATOR",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             assert result["node_type"] == "ORCHESTRATOR"
@@ -309,10 +303,10 @@ class TestOrchestratorNodeGeneration:
                 node_type="ORCHESTRATOR",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)
@@ -320,9 +314,7 @@ class TestOrchestratorNodeGeneration:
 
             # ORCHESTRATOR nodes should have orchestrator methods
             classes = extract_class_definitions(tree)
-            orchestrator_class = next(
-                (c for c in classes if "Orchestrator" in c["name"]), None
-            )
+            orchestrator_class = next((c for c in classes if "Orchestrator" in c["name"]), None)
             assert orchestrator_class is not None, "No Orchestrator class found"
 
     @pytest.mark.asyncio
@@ -338,18 +330,14 @@ class TestOrchestratorNodeGeneration:
                 node_type="ORCHESTRATOR",
                 microservice_name=fixture["microservice_name"],
                 domain=fixture["domain"],
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # ORCHESTRATOR nodes coordinate workflows
-            assert (
-                "orchestrate" in content.lower()
-                or "coordinate" in content.lower()
-                or "workflow" in content.lower()
-            )
+            assert "orchestrate" in content.lower() or "coordinate" in content.lower() or "workflow" in content.lower()
 
 
 class TestNodeTypeComparison:
@@ -368,10 +356,10 @@ class TestNodeTypeComparison:
                     node_type=node_type,
                     microservice_name=fixture["microservice_name"],
                     domain=fixture["domain"],
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
 
-                with open(result["main_file"], 'r') as f:
+                with open(result["main_file"], "r") as f:
                     generated_content[node_type] = f.read()
 
         # Verify each has unique base class

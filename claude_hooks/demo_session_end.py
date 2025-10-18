@@ -11,13 +11,13 @@ Demonstrates:
 
 import sys
 import os
-import json
 from datetime import datetime
 
 # Add hooks lib to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'lib'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 from session_intelligence import query_session_statistics, classify_workflow_pattern, log_session_end
+
 
 def demo_statistics():
     """Demonstrate session statistics aggregation."""
@@ -34,16 +34,16 @@ def demo_statistics():
     print(f"Total Tools: {stats['total_tools']}")
     print()
 
-    if stats['agents_invoked']:
+    if stats["agents_invoked"]:
         print(f"Agents Invoked: {', '.join(stats['agents_invoked'])}")
         print("\nAgent Usage Breakdown:")
-        for agent, count in stats['agent_usage'].items():
+        for agent, count in stats["agent_usage"].items():
             print(f"  - {agent}: {count} invocations")
         print()
 
-    if stats['tool_breakdown']:
+    if stats["tool_breakdown"]:
         print("Tool Usage Breakdown:")
-        for tool, count in sorted(stats['tool_breakdown'].items(), key=lambda x: x[1], reverse=True):
+        for tool, count in sorted(stats["tool_breakdown"].items(), key=lambda x: x[1], reverse=True):
             print(f"  - {tool}: {count} uses")
         print()
 
@@ -70,7 +70,7 @@ def demo_workflow_classification(stats):
         "specialized_task": "Single-agent specialized workflow",
         "exploratory": "Multi-agent exploratory session",
         "exploration": "Code browsing and exploration (read-heavy)",
-        "direct_interaction": "Direct code editing (write-heavy)"
+        "direct_interaction": "Direct code editing (write-heavy)",
     }
 
     print(f"Explanation: {explanations.get(pattern, 'Unknown pattern')}")
@@ -136,8 +136,7 @@ def demo_full_session_end():
 
     print("Logging session end to database...")
     event_id = log_session_end(
-        session_id="demo-session-001",
-        additional_metadata={"demo_mode": True, "timestamp": datetime.now().isoformat()}
+        session_id="demo-session-001", additional_metadata={"demo_mode": True, "timestamp": datetime.now().isoformat()}
     )
 
     if event_id:
@@ -188,6 +187,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Demo failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

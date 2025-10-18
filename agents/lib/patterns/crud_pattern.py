@@ -40,8 +40,18 @@ class CRUDPattern:
             Confidence score (0.0 to 1.0)
         """
         crud_keywords = {
-            'create', 'insert', 'add', 'read', 'get', 'fetch',
-            'update', 'modify', 'delete', 'remove', 'save', 'store'
+            "create",
+            "insert",
+            "add",
+            "read",
+            "get",
+            "fetch",
+            "update",
+            "modify",
+            "delete",
+            "remove",
+            "save",
+            "store",
         }
 
         text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
@@ -97,11 +107,7 @@ class CRUDPattern:
         ]
 
     def _generate_create_method(
-        self,
-        method_name: str,
-        description: str,
-        entity_name: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, entity_name: str, context: Dict[str, Any]
     ) -> str:
         """Generate CREATE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -185,11 +191,7 @@ class CRUDPattern:
 '''
 
     def _generate_read_method(
-        self,
-        method_name: str,
-        description: str,
-        entity_name: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, entity_name: str, context: Dict[str, Any]
     ) -> str:
         """Generate READ operation method"""
         return f'''
@@ -244,11 +246,7 @@ class CRUDPattern:
 '''
 
     def _generate_update_method(
-        self,
-        method_name: str,
-        description: str,
-        entity_name: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, entity_name: str, context: Dict[str, Any]
     ) -> str:
         """Generate UPDATE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -329,11 +327,7 @@ class CRUDPattern:
 '''
 
     def _generate_delete_method(
-        self,
-        method_name: str,
-        description: str,
-        entity_name: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, entity_name: str, context: Dict[str, Any]
     ) -> str:
         """Generate DELETE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -404,11 +398,7 @@ class CRUDPattern:
 '''
 
     def _generate_generic_crud_method(
-        self,
-        method_name: str,
-        description: str,
-        entity_name: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, entity_name: str, context: Dict[str, Any]
     ) -> str:
         """Generate generic CRUD method stub"""
         return f'''
@@ -451,21 +441,18 @@ class CRUDPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "execute_operation"
 
-    def _extract_entity_name(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
-    ) -> str:
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "execute_operation"
+
+    def _extract_entity_name(self, capability: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Extract entity name from capability or context"""
         # Try to extract from capability name
         name = capability.get("name", "")
 
         # Remove operation verbs
-        for verb in ['create', 'read', 'update', 'delete', 'get', 'fetch', 'save']:
-            name = name.replace(verb, '').strip('_')
+        for verb in ["create", "read", "update", "delete", "get", "fetch", "save"]:
+            name = name.replace(verb, "").strip("_")
 
         return name.capitalize() or "Entity"

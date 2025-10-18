@@ -37,5 +37,3 @@ def test_summary_trailing_newline_if_present() -> None:
 
     content = _read_text(SUMMARY_PATH)
     assert content.endswith("\n"), "violations_summary.json must end with a newline"
-
-

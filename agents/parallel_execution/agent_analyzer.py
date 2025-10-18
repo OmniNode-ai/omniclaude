@@ -22,6 +22,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -31,6 +32,7 @@ except ImportError:
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================
+
 
 class CodeQualityMetrics(BaseModel):
     """Code quality assessment metrics."""
@@ -103,6 +105,7 @@ class AnalysisReport(BaseModel):
 # Dependencies for Pydantic AI Agent
 # ============================================================================
 
+
 @dataclass
 class AgentDeps:
     """Dependencies passed to agent tools."""
@@ -160,9 +163,9 @@ Analyze thoroughly using available tools and generate comprehensive analysis rep
 
 # Model fallback configuration
 FALLBACK_MODELS = [
-    'google-gla:gemini-2.5-flash',  # Primary model
-    'glm-4.6',                      # Fallback 1: Zai GLM-4.6
-    'google-gla:gemini-1.5-flash'   # Fallback 2
+    "google-gla:gemini-2.5-flash",  # Primary model
+    "glm-4.6",  # Fallback 1: Zai GLM-4.6
+    "google-gla:gemini-1.5-flash",  # Fallback 2
 ]
 
 # Create the Pydantic AI agent
@@ -170,13 +173,14 @@ architectural_analyzer_agent = Agent[AgentDeps, AnalysisReport](
     FALLBACK_MODELS[0],  # Start with primary model
     deps_type=AgentDeps,
     output_type=AnalysisReport,
-    system_prompt=ANALYZER_SYSTEM_PROMPT
+    system_prompt=ANALYZER_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @architectural_analyzer_agent.tool
 async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
@@ -191,9 +195,7 @@ async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
         pattern_query = f"{deps.language} design patterns best practices SOLID principles"
 
         pattern_intel = await deps.mcp_client.perform_rag_query(
-            query=pattern_query,
-            context="architecture",
-            match_count=5
+            query=pattern_query, context="architecture", match_count=5
         )
 
         if pattern_intel and isinstance(pattern_intel, dict):
@@ -228,7 +230,7 @@ async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
             message=f"Pattern intelligence gathering failed: {str(e)}",
             level=TraceLevel.WARNING,
             agent_name=deps.config.agent_name,
-            task_id=deps.task.task_id
+            task_id=deps.task.task_id,
         )
         return "Design pattern intelligence unavailable (continuing with analysis)"
 
@@ -362,7 +364,9 @@ async def get_anti_pattern_detection(ctx: RunContext[AgentDeps]) -> str:
             if isinstance(patterns_list, list):
                 for pattern in patterns_list[:5]:
                     if isinstance(pattern, dict):
-                        anti_patterns_summary.append(f"- {pattern.get('name', 'Unknown')}: {pattern.get('description', '')}")
+                        anti_patterns_summary.append(
+                            f"- {pattern.get('name', 'Unknown')}: {pattern.get('description', '')}"
+                        )
                     else:
                         anti_patterns_summary.append(f"- {pattern}")
             elif patterns_list:
@@ -392,11 +396,12 @@ async def get_anti_pattern_detection(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+
 @register_agent(
     agent_name="analyzer",
     agent_type="analyzer",
     capabilities=["architecture_analysis", "design_patterns", "quality_metrics", "anti_patterns"],
-    description="Architectural and code quality analysis agent"
+    description="Architectural and code quality analysis agent",
 )
 class ArchitecturalAnalyzerAgent:
     """
@@ -415,7 +420,7 @@ class ArchitecturalAnalyzerAgent:
             self.config = AgentConfig(
                 agent_name="agent-analyzer",
                 agent_domain="architectural_analysis",
-                agent_purpose="Analyze architecture, design patterns, and quality metrics"
+                agent_purpose="Analyze architecture, design patterns, and quality metrics",
             )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
@@ -437,7 +442,7 @@ class ArchitecturalAnalyzerAgent:
         self._current_trace_id = await self.trace_logger.start_agent_trace(
             agent_name=self.config.agent_name,
             task_id=task.task_id,
-            metadata={"using_pydantic_ai": True, "analysis_type": "architectural"}
+            metadata={"using_pydantic_ai": True, "analysis_type": "architectural"},
         )
 
         try:
@@ -453,7 +458,7 @@ class ArchitecturalAnalyzerAgent:
                 message=f"Analyzing: {file_path} ({analysis_focus} analysis)",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Gather intelligence
@@ -471,7 +476,7 @@ class ArchitecturalAnalyzerAgent:
                 intelligence=intelligence,
                 code_to_analyze=code_to_analyze,
                 file_path=file_path,
-                language=language
+                language=language,
             )
 
             # Build analysis prompt
@@ -483,7 +488,7 @@ class ArchitecturalAnalyzerAgent:
                 message="Invoking Pydantic AI architectural analyzer",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Try each model in fallback chain on 503 errors
@@ -497,7 +502,7 @@ class ArchitecturalAnalyzerAgent:
                             message=f"Retrying with fallback model: {model_name}",
                             level=TraceLevel.INFO,
                             agent_name=self.config.agent_name,
-                            task_id=task.task_id
+                            task_id=task.task_id,
                         )
                     architectural_analyzer_agent.model = model_name
                     result = await architectural_analyzer_agent.run(prompt, deps=deps)
@@ -512,7 +517,7 @@ class ArchitecturalAnalyzerAgent:
                             message=f"Model {model_name} unavailable (503), trying fallback",
                             level=TraceLevel.WARNING,
                             agent_name=self.config.agent_name,
-                            task_id=task.task_id
+                            task_id=task.task_id,
                         )
                         continue  # Try next fallback
                     else:
@@ -543,14 +548,18 @@ class ArchitecturalAnalyzerAgent:
                     "patterns_detected": len(analysis_report.design_patterns),
                     "anti_patterns_detected": len(analysis_report.anti_patterns),
                     "recommendations_count": len(analysis_report.recommendations),
-                    "critical_recommendations": len([r for r in analysis_report.recommendations if r.priority == "Critical"]),
-                    "high_priority_recommendations": len([r for r in analysis_report.recommendations if r.priority == "High"])
+                    "critical_recommendations": len(
+                        [r for r in analysis_report.recommendations if r.priority == "Critical"]
+                    ),
+                    "high_priority_recommendations": len(
+                        [r for r in analysis_report.recommendations if r.priority == "High"]
+                    ),
                 },
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 4
-                }
+                    "tools_available": 4,
+                },
             }
 
             # Create result
@@ -560,22 +569,20 @@ class ArchitecturalAnalyzerAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.TASK_COMPLETED,
                 message=f"Analysis complete: {len(analysis_report.design_patterns)} patterns, "
-                        f"{len(analysis_report.recommendations)} recommendations",
+                f"{len(analysis_report.recommendations)} recommendations",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -584,18 +591,14 @@ class ArchitecturalAnalyzerAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Architectural analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -604,7 +607,7 @@ class ArchitecturalAnalyzerAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     async def _gather_intelligence(
@@ -614,7 +617,7 @@ class ArchitecturalAnalyzerAgent:
         file_path: str,
         language: str,
         analysis_focus: str,
-        pre_gathered_context: Dict[str, Any]
+        pre_gathered_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
@@ -635,33 +638,25 @@ class ArchitecturalAnalyzerAgent:
             try:
                 # Code quality assessment
                 quality_result = await self.mcp_client.assess_code_quality(
-                    content=code,
-                    source_path=file_path,
-                    language=language
+                    content=code, source_path=file_path, language=language
                 )
                 intelligence["code_quality"] = quality_result
 
                 # Architectural compliance check
                 compliance_result = await self.mcp_client.call_tool(
-                    "check_architectural_compliance",
-                    content=code,
-                    architecture_type="onex"
+                    "check_architectural_compliance", content=code, architecture_type="onex"
                 )
                 intelligence["architectural_compliance"] = compliance_result
 
                 # Quality patterns (best practices)
                 patterns_result = await self.mcp_client.call_tool(
-                    "get_quality_patterns",
-                    content=code,
-                    pattern_type="best_practices"
+                    "get_quality_patterns", content=code, pattern_type="best_practices"
                 )
                 intelligence["quality_patterns"] = patterns_result
 
                 # Anti-patterns detection
                 anti_patterns_result = await self.mcp_client.call_tool(
-                    "get_quality_patterns",
-                    content=code,
-                    pattern_type="anti_patterns"
+                    "get_quality_patterns", content=code, pattern_type="anti_patterns"
                 )
                 intelligence["anti_patterns"] = anti_patterns_result
 
@@ -670,7 +665,7 @@ class ArchitecturalAnalyzerAgent:
                     pattern_intel = await self.mcp_client.perform_rag_query(
                         query=f"{language} design patterns architectural best practices {analysis_focus}",
                         context="architecture",
-                        match_count=5
+                        match_count=5,
                     )
                     intelligence["design_patterns"] = pattern_intel
 
@@ -680,18 +675,13 @@ class ArchitecturalAnalyzerAgent:
                     message=f"Intelligence gathering failed (continuing): {str(e)}",
                     level=TraceLevel.WARNING,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
         return intelligence
 
     def _build_analysis_prompt(
-        self,
-        task: AgentTask,
-        code: str,
-        file_path: str,
-        language: str,
-        analysis_focus: str
+        self, task: AgentTask, code: str, file_path: str, language: str, analysis_focus: str
     ) -> str:
         """Build detailed analysis prompt for LLM."""
         return f"""Perform comprehensive architectural and code quality analysis:
@@ -755,7 +745,7 @@ Provide comprehensive, actionable analysis with evidence-based metrics and clear
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()
 
 
@@ -763,12 +753,13 @@ Provide comprehensive, actionable analysis with evidence-based metrics and clear
 # Example Usage
 # ============================================================================
 
+
 async def main():
     """Example usage of the architectural analyzer agent."""
     agent = ArchitecturalAnalyzerAgent()
 
     # Example code to analyze
-    example_code = '''
+    example_code = """
 class UserManager:
     def __init__(self):
         self.users = []
@@ -788,7 +779,7 @@ class UserManager:
             if user["email"] == email:
                 return user
         return None
-'''
+"""
 
     task = AgentTask(
         task_id="example-analysis-001",
@@ -798,15 +789,15 @@ class UserManager:
             "code": example_code,
             "file_path": "user_manager.py",
             "language": "python",
-            "analysis_focus": "comprehensive"
-        }
+            "analysis_focus": "comprehensive",
+        },
     )
 
     result = await agent.execute(task)
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("ARCHITECTURAL ANALYSIS REPORT")
-    print("="*80)
+    print("=" * 80)
 
     if result.success:
         output = result.output_data
@@ -815,37 +806,37 @@ class UserManager:
         print(f"\n{output['analysis_summary']}\n")
 
         print("\n--- Quality Metrics ---")
-        metrics = output['quality_metrics']
+        metrics = output["quality_metrics"]
         print(f"Overall Quality: {metrics['overall_quality_score']:.2f}")
         print(f"Maintainability: {metrics['maintainability_index']:.2f}")
         print(f"ONEX Compliance: {metrics['architectural_compliance']:.2f}")
         print(f"Technical Debt: {metrics['technical_debt_level']}")
 
         print(f"\n--- Design Patterns ({len(output['design_patterns'])}) ---")
-        for pattern in output['design_patterns'][:3]:
+        for pattern in output["design_patterns"][:3]:
             print(f"- {pattern['pattern_name']} ({pattern['pattern_type']})")
             print(f"  Confidence: {pattern['confidence_score']:.2f}")
             print(f"  Quality: {pattern['implementation_quality']}")
 
         print(f"\n--- Anti-Patterns ({len(output['anti_patterns'])}) ---")
-        for anti in output['anti_patterns'][:3]:
+        for anti in output["anti_patterns"][:3]:
             print(f"- {anti['anti_pattern_name']} [{anti['severity']}]")
             print(f"  Location: {anti['location']}")
 
         print(f"\n--- Top Recommendations ({output['statistics']['critical_recommendations']} critical) ---")
-        for rec in output['recommendations'][:5]:
+        for rec in output["recommendations"][:5]:
             print(f"- [{rec['priority']}] {rec['title']}")
             print(f"  Category: {rec['category']}")
             print(f"  Effort: {rec['estimated_effort']}")
 
-        print(f"\n--- Architecture Assessment ---")
-        print(output['architecture_assessment'])
+        print("\n--- Architecture Assessment ---")
+        print(output["architecture_assessment"])
 
-        print(f"\n--- ONEX Compliance ---")
-        print(output['onex_compliance_notes'])
+        print("\n--- ONEX Compliance ---")
+        print(output["onex_compliance_notes"])
 
-        print(f"\n--- Statistics ---")
-        stats = output['statistics']
+        print("\n--- Statistics ---")
+        stats = output["statistics"]
         print(f"Patterns Detected: {stats['patterns_detected']}")
         print(f"Anti-Patterns: {stats['anti_patterns_detected']}")
         print(f"Total Recommendations: {stats['recommendations_count']}")

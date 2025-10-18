@@ -130,7 +130,7 @@ def demonstrate_usage():
     print()
 
     print("4. Upstream Validation (Recommended for complex tasks):")
-    print("   python validated_task_architect.py \"<user_prompt>\"")
+    print('   python validated_task_architect.py "<user_prompt>"')
     print("   → Validates AND retries automatically")
     print("   → Max 3 attempts with feedback")
     print("   → Returns validated breakdown")

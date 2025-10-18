@@ -14,7 +14,6 @@ Date: 2025-09-30
 
 import sys
 from pathlib import Path
-import time
 
 # Add hooks lib to path
 HOOKS_DIR = Path(__file__).parent.parent
@@ -22,7 +21,7 @@ sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
 import pytest
 
-from correction.ast_corrector import apply_corrections_with_ast, apply_single_correction
+from correction.ast_corrector import apply_corrections_with_ast
 from correction.framework_detector import FrameworkMethodDetector
 
 
@@ -393,11 +392,14 @@ class TestPerformance:
 
     def test_small_file_performance(self):
         """Small files should be processed quickly."""
-        code = """
+        code = (
+            """
 def my_function():
     x = 1
     return x
-""" * 10  # ~40 lines
+"""
+            * 10
+        )  # ~40 lines
 
         correction = {
             "old_name": "my_function",
@@ -414,13 +416,16 @@ def my_function():
 
     def test_medium_file_performance(self):
         """Medium files should meet performance budget."""
-        code = """
+        code = (
+            """
 def function_{i}():
     x = {i}
     return x
 """.replace(
-            "{i}", "0"
-        ) * 100  # ~400 lines
+                "{i}", "0"
+            )
+            * 100
+        )  # ~400 lines
 
         correction = {"old_name": "function_0", "new_name": "func_0", "line": 1, "column": 4}
 

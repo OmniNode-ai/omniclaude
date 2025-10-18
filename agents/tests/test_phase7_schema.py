@@ -11,11 +11,9 @@ Comprehensive tests for Phase 7 database schema enhancements:
 ONEX Compliance: Quality gate validation for database operations
 """
 
-import asyncio
 import os
 import time
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 import pytest
@@ -47,8 +45,7 @@ except ImportError:
 # Test configuration
 # Note: Set TEST_PG_DSN environment variable with database password
 TEST_DSN = os.getenv(
-    "TEST_PG_DSN",
-    "postgresql://postgres:YOUR_PASSWORD@localhost:5436/omninode_bridge"  # Replace YOUR_PASSWORD
+    "TEST_PG_DSN", "postgresql://postgres:YOUR_PASSWORD@localhost:5436/omninode_bridge"  # Replace YOUR_PASSWORD
 )
 
 # Performance target (ms)
@@ -82,6 +79,7 @@ def sample_session_id():
 # Migration Tests
 # =============================================================================
 
+
 class TestMigration:
     """Test migration up and rollback"""
 
@@ -90,7 +88,8 @@ class TestMigration:
         """Verify all Phase 7 tables exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
-            tables = await conn.fetch("""
+            tables = await conn.fetch(
+                """
                 SELECT table_name
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
@@ -102,22 +101,24 @@ class TestMigration:
                     'event_processing_metrics'
                   )
                 ORDER BY table_name
-            """)
+            """
+            )
 
-            table_names = [row['table_name'] for row in tables]
+            table_names = [row["table_name"] for row in tables]
             assert len(table_names) == 5, f"Expected 5 tables, found {len(table_names)}"
-            assert 'mixin_compatibility_matrix' in table_names
-            assert 'pattern_feedback_log' in table_names
-            assert 'generation_performance_metrics' in table_names
-            assert 'template_cache_metadata' in table_names
-            assert 'event_processing_metrics' in table_names
+            assert "mixin_compatibility_matrix" in table_names
+            assert "pattern_feedback_log" in table_names
+            assert "generation_performance_metrics" in table_names
+            assert "template_cache_metadata" in table_names
+            assert "event_processing_metrics" in table_names
 
     @pytest.mark.asyncio
     async def test_migration_views_exist(self, persistence):
         """Verify all Phase 7 views exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
-            views = await conn.fetch("""
+            views = await conn.fetch(
+                """
                 SELECT table_name
                 FROM information_schema.views
                 WHERE table_schema = 'public'
@@ -129,9 +130,10 @@ class TestMigration:
                     'event_processing_health'
                   )
                 ORDER BY table_name
-            """)
+            """
+            )
 
-            view_names = [row['table_name'] for row in views]
+            view_names = [row["table_name"] for row in views]
             assert len(view_names) == 5, f"Expected 5 views, found {len(view_names)}"
 
     @pytest.mark.asyncio
@@ -139,7 +141,8 @@ class TestMigration:
         """Verify all Phase 7 functions exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
-            functions = await conn.fetch("""
+            functions = await conn.fetch(
+                """
                 SELECT routine_name
                 FROM information_schema.routines
                 WHERE routine_schema = 'public'
@@ -148,15 +151,17 @@ class TestMigration:
                     'record_pattern_feedback'
                   )
                 ORDER BY routine_name
-            """)
+            """
+            )
 
-            function_names = [row['routine_name'] for row in functions]
+            function_names = [row["routine_name"] for row in functions]
             assert len(function_names) == 2, f"Expected 2 functions, found {len(function_names)}"
 
 
 # =============================================================================
 # Mixin Compatibility Matrix Tests
 # =============================================================================
+
 
 class TestMixinCompatibility:
     """Test mixin compatibility matrix operations"""
@@ -171,14 +176,15 @@ class TestMixinCompatibility:
             mixin_b="ValidationMixin",
             node_type="EFFECT",
             success=True,
-            resolution_pattern="Apply transaction wrapper before validation"
+            resolution_pattern="Apply transaction wrapper before validation",
         )
 
         duration_ms = (time.time() - start_time) * 1000
 
         assert result_id is not None
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_update_mixin_compatibility_failure(self, persistence):
@@ -188,7 +194,7 @@ class TestMixinCompatibility:
             mixin_b="SyncMixin",
             node_type="COMPUTE",
             success=False,
-            conflict_reason="Async/sync mismatch in execution context"
+            conflict_reason="Async/sync mismatch in execution context",
         )
 
         assert result_id is not None
@@ -198,24 +204,19 @@ class TestMixinCompatibility:
         """Test retrieving mixin compatibility record"""
         # First create a record
         await persistence.update_mixin_compatibility(
-            mixin_a="CacheMixin",
-            mixin_b="LoggingMixin",
-            node_type="REDUCER",
-            success=True
+            mixin_a="CacheMixin", mixin_b="LoggingMixin", node_type="REDUCER", success=True
         )
 
         # Retrieve it
         record = await persistence.get_mixin_compatibility(
-            mixin_a="CacheMixin",
-            mixin_b="LoggingMixin",
-            node_type="REDUCER"
+            mixin_a="CacheMixin", mixin_b="LoggingMixin", node_type="REDUCER"
         )
 
         assert record is not None
-        assert record['mixin_a'] == "CacheMixin"
-        assert record['mixin_b'] == "LoggingMixin"
-        assert record['node_type'] == "REDUCER"
-        assert record['success_count'] >= 1
+        assert record["mixin_a"] == "CacheMixin"
+        assert record["mixin_b"] == "LoggingMixin"
+        assert record["node_type"] == "REDUCER"
+        assert record["success_count"] >= 1
 
     @pytest.mark.asyncio
     async def test_get_mixin_compatibility_summary(self, persistence):
@@ -225,13 +226,14 @@ class TestMixinCompatibility:
         assert isinstance(summary, list)
         # Summary may be empty if no data, but should return list
         for record in summary:
-            assert 'node_type' in record
-            assert 'total_combinations' in record
+            assert "node_type" in record
+            assert "total_combinations" in record
 
 
 # =============================================================================
 # Pattern Feedback Log Tests
 # =============================================================================
+
 
 class TestPatternFeedback:
     """Test pattern feedback logging operations"""
@@ -247,14 +249,15 @@ class TestPatternFeedback:
             detected_confidence=0.95,
             actual_pattern="StateManagementPattern",
             feedback_type="correct",
-            user_provided=False
+            user_provided=False,
         )
 
         duration_ms = (time.time() - start_time) * 1000
 
         assert result_id is not None
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_record_pattern_feedback_incorrect(self, persistence, sample_session_id):
@@ -266,7 +269,7 @@ class TestPatternFeedback:
             actual_pattern="CQRSPattern",
             feedback_type="incorrect",
             user_provided=True,
-            contract_json={"expected": "CQRS", "detected": "EventSourcing"}
+            contract_json={"expected": "CQRS", "detected": "EventSourcing"},
         )
 
         assert result_id is not None
@@ -278,13 +281,14 @@ class TestPatternFeedback:
 
         assert isinstance(analysis, list)
         for record in analysis:
-            assert 'pattern_name' in record
-            assert 'feedback_type' in record
+            assert "pattern_name" in record
+            assert "feedback_type" in record
 
 
 # =============================================================================
 # Generation Performance Metrics Tests
 # =============================================================================
+
 
 class TestPerformanceMetrics:
     """Test generation performance metrics operations"""
@@ -304,22 +308,20 @@ class TestPerformanceMetrics:
             cache_hit=False,
             parallel_execution=True,
             worker_count=4,
-            metadata={"complexity": "medium"}
+            metadata={"complexity": "medium"},
         )
 
         duration_ms = (time.time() - start_time) * 1000
 
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_insert_performance_metric_minimal(self, persistence, sample_session_id):
         """Test inserting minimal performance metric"""
         await persistence.insert_performance_metric(
-            session_id=sample_session_id,
-            node_type="COMPUTE",
-            phase="template_load",
-            duration_ms=50
+            session_id=sample_session_id, node_type="COMPUTE", phase="template_load", duration_ms=50
         )
 
         # Should succeed with minimal required fields
@@ -331,13 +333,14 @@ class TestPerformanceMetrics:
 
         assert isinstance(summary, list)
         for record in summary:
-            assert 'phase' in record
-            assert 'execution_count' in record
+            assert "phase" in record
+            assert "execution_count" in record
 
 
 # =============================================================================
 # Template Cache Metadata Tests
 # =============================================================================
+
 
 class TestTemplateCacheMetadata:
     """Test template cache metadata operations"""
@@ -354,13 +357,14 @@ class TestTemplateCacheMetadata:
             file_path="/templates/effect_node_template.py",
             file_hash="abc123def456",
             size_bytes=2048,
-            load_time_ms=45
+            load_time_ms=45,
         )
 
         duration_ms = (time.time() - start_time) * 1000
 
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_update_cache_metrics_hit(self, persistence):
@@ -371,21 +375,19 @@ class TestTemplateCacheMetadata:
             template_type="node",
             cache_key="node:compute:v1.0",
             file_path="/templates/compute_node_template.py",
-            file_hash="xyz789"
+            file_hash="xyz789",
         )
 
         start_time = time.time()
 
         # Record cache hit
-        await persistence.update_cache_metrics(
-            template_name="compute_node_template",
-            cache_hit=True
-        )
+        await persistence.update_cache_metrics(template_name="compute_node_template", cache_hit=True)
 
         duration_ms = (time.time() - start_time) * 1000
 
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_update_cache_metrics_miss(self, persistence):
@@ -396,15 +398,11 @@ class TestTemplateCacheMetadata:
             template_type="node",
             cache_key="node:reducer:v1.0",
             file_path="/templates/reducer_node_template.py",
-            file_hash="lmn456"
+            file_hash="lmn456",
         )
 
         # Record cache miss
-        await persistence.update_cache_metrics(
-            template_name="reducer_node_template",
-            cache_hit=False,
-            load_time_ms=120
-        )
+        await persistence.update_cache_metrics(template_name="reducer_node_template", cache_hit=False, load_time_ms=120)
 
         # Should succeed
 
@@ -415,13 +413,14 @@ class TestTemplateCacheMetadata:
 
         assert isinstance(efficiency, list)
         for record in efficiency:
-            assert 'template_type' in record
-            assert 'template_count' in record
+            assert "template_type" in record
+            assert "template_count" in record
 
 
 # =============================================================================
 # Event Processing Metrics Tests
 # =============================================================================
+
 
 class TestEventProcessingMetrics:
     """Test event processing metrics operations"""
@@ -437,13 +436,14 @@ class TestEventProcessingMetrics:
             processing_duration_ms=250,
             success=True,
             queue_wait_time_ms=10,
-            batch_size=1
+            batch_size=1,
         )
 
         duration_ms = (time.time() - start_time) * 1000
 
-        assert duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS, \
-            f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
+        assert (
+            duration_ms < ADJUSTED_PERFORMANCE_TARGET_MS
+        ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
     async def test_insert_event_processing_metric_failure(self, persistence):
@@ -455,7 +455,7 @@ class TestEventProcessingMetrics:
             success=False,
             error_type="ValidationError",
             error_message="Type mismatch in contract",
-            retry_count=2
+            retry_count=2,
         )
 
         # Should succeed
@@ -467,13 +467,14 @@ class TestEventProcessingMetrics:
 
         assert isinstance(health, list)
         for record in health:
-            assert 'event_type' in record
-            assert 'total_events' in record
+            assert "event_type" in record
+            assert "total_events" in record
 
 
 # =============================================================================
 # Python Model Validation Tests
 # =============================================================================
+
 
 class TestPythonModels:
     """Test Pydantic model validation"""
@@ -489,7 +490,7 @@ class TestPythonModels:
             success_count=10,
             failure_count=2,
             created_at="2025-10-15T10:00:00Z",
-            updated_at="2025-10-15T10:00:00Z"
+            updated_at="2025-10-15T10:00:00Z",
         )
 
         assert model.total_tests == 12
@@ -506,7 +507,7 @@ class TestPythonModels:
             feedback_type=FeedbackType.CORRECT,
             user_provided=True,
             learning_weight=Decimal("1.0"),
-            created_at="2025-10-15T10:00:00Z"
+            created_at="2025-10-15T10:00:00Z",
         )
 
         assert model.feedback_type == FeedbackType.CORRECT
@@ -524,7 +525,7 @@ class TestPythonModels:
             cache_hit=True,
             parallel_execution=True,
             worker_count=4,
-            created_at="2025-10-15T10:00:00Z"
+            created_at="2025-10-15T10:00:00Z",
         )
 
         assert model.phase == GenerationPhase.CODE_GEN
@@ -544,7 +545,7 @@ class TestPythonModels:
             cache_hits=80,
             cache_misses=20,
             created_at="2025-10-15T10:00:00Z",
-            updated_at="2025-10-15T10:00:00Z"
+            updated_at="2025-10-15T10:00:00Z",
         )
 
         assert model.total_accesses == 100
@@ -559,7 +560,7 @@ class TestPythonModels:
             processing_duration_ms=100,
             success=True,
             batch_size=5,
-            created_at="2025-10-15T10:00:00Z"
+            created_at="2025-10-15T10:00:00Z",
         )
 
         assert model.success is True
@@ -568,6 +569,7 @@ class TestPythonModels:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestIntegration:
     """Test integrated workflows"""
@@ -584,15 +586,12 @@ class TestIntegration:
                 node_type="EFFECT",
                 phase=phase,
                 duration_ms=100 + (phases.index(phase) * 50),
-                cache_hit=(phase == "template_load")
+                cache_hit=(phase == "template_load"),
             )
 
         # 2. Update mixin compatibility
         await persistence.update_mixin_compatibility(
-            mixin_a="TransactionMixin",
-            mixin_b="ErrorHandlingMixin",
-            node_type="EFFECT",
-            success=True
+            mixin_a="TransactionMixin", mixin_b="ErrorHandlingMixin", node_type="EFFECT", success=True
         )
 
         # 3. Record pattern feedback
@@ -601,7 +600,7 @@ class TestIntegration:
             pattern_name="TransactionPattern",
             detected_confidence=0.92,
             actual_pattern="TransactionPattern",
-            feedback_type="correct"
+            feedback_type="correct",
         )
 
         # 4. Update template cache
@@ -610,19 +609,13 @@ class TestIntegration:
             template_type="node",
             cache_key="node:effect:v1",
             file_path="/templates/effect.py",
-            file_hash="hash123"
+            file_hash="hash123",
         )
-        await persistence.update_cache_metrics(
-            template_name="effect_template",
-            cache_hit=True
-        )
+        await persistence.update_cache_metrics(template_name="effect_template", cache_hit=True)
 
         # 5. Record event processing
         await persistence.insert_event_processing_metric(
-            event_type="generation_complete",
-            event_source="CodegenWorkflow",
-            processing_duration_ms=500,
-            success=True
+            event_type="generation_complete", event_source="CodegenWorkflow", processing_duration_ms=500, success=True
         )
 
         # Verify all data persisted

@@ -83,21 +83,21 @@ and session management.
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory="/tmp/contract_examples"
+        output_directory="/tmp/contract_examples",
     )
 
-    print(f"  ✓ Contract generated successfully")
+    print("  ✓ Contract generated successfully")
     print(f"  ✓ Validation: {'PASSED' if result['validation_result']['valid'] else 'FAILED'}")
     print(f"  ✓ Subcontracts: {result['subcontract_count']}")
     print(f"  ✓ Capabilities: {len(result['contract']['capabilities'])}")
-    if result['contract_file_path']:
+    if result["contract_file_path"]:
         print(f"  ✓ Contract file: {result['contract_file_path']}")
     print()
 
     # Step 3: Display contract summary
     print("Step 3: Contract Summary")
     print("-" * 80)
-    contract = result['contract']
+    contract = result["contract"]
     print(f"Node Type:       {contract['node_type']}")
     print(f"Domain:          {contract['domain']}")
     print(f"Service Name:    {contract['service_name']}")
@@ -107,22 +107,22 @@ and session management.
     print()
 
     print("Capabilities:")
-    for i, cap in enumerate(contract['capabilities'][:5], 1):
-        required_flag = "✓" if cap.get('required', False) else " "
+    for i, cap in enumerate(contract["capabilities"][:5], 1):
+        required_flag = "✓" if cap.get("required", False) else " "
         print(f"  [{required_flag}] {cap['name']} ({cap['type']})")
-    if len(contract['capabilities']) > 5:
+    if len(contract["capabilities"]) > 5:
         print(f"  ... and {len(contract['capabilities']) - 5} more capabilities")
     print()
 
     print("Subcontracts:")
-    for subcontract in contract['subcontracts']:
+    for subcontract in contract["subcontracts"]:
         print(f"  • {subcontract['mixin']} v{subcontract['version']}")
     print()
 
     # Step 4: Display YAML excerpt
     print("Step 4: Generated YAML (excerpt)")
     print("-" * 80)
-    yaml_lines = result['contract_yaml'].split('\n')
+    yaml_lines = result["contract_yaml"].split("\n")
     for line in yaml_lines[:25]:
         print(line)
     if len(yaml_lines) > 25:
@@ -137,7 +137,7 @@ and session management.
             analysis_result=analysis_result,
             node_type=node_type,
             microservice_name=f"test_{node_type.lower()}",
-            domain="test"
+            domain="test",
         )
         print(f"  ✓ {node_type} contract generated with {len(result['contract']['capabilities'])} capabilities")
 

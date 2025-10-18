@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-import asyncio
 import json
-import types
 from uuid import uuid4
 
 import pytest
@@ -80,6 +78,7 @@ async def test_publish_confluent_fallback(monkeypatch):
             published["payload"] = payload
 
     import agents.lib.kafka_codegen_client as mod
+
     monkeypatch.setattr(mod, "ConfluentKafkaClient", DummyConfluent)
 
     evt = CodegenAnalysisRequest()
@@ -90,5 +89,3 @@ async def test_publish_confluent_fallback(monkeypatch):
 
     assert published["topic"] == evt.to_kafka_topic()
     assert published["payload"]["correlation_id"] == str(evt.correlation_id)
-
-

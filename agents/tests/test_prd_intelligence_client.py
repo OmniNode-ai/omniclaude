@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
-from uuid import uuid4
 
 import pytest
 
@@ -59,5 +57,3 @@ async def test_analyze_roundtrip_success(monkeypatch):
     resp = await client.analyze("# PRD", workspace_context={"k": "v"}, timeout_seconds=0.1)
     assert resp is not None
     assert resp.get("analysis") is not None
-
-

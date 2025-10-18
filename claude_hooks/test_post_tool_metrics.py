@@ -11,7 +11,6 @@ Tests:
 """
 
 import sys
-import json
 import time
 from pathlib import Path
 
@@ -73,22 +72,22 @@ def test_quality_scoring_python():
         # Poor code (no types, no docs, bare except)
         {
             "name": "Poor Python",
-            "content": '''def calculate_sum(a, b):
+            "content": """def calculate_sum(a, b):
     try:
         return a + b
     except:
         pass
-''',
+""",
             "expected_min_score": 0.0,
             "expected_max_score": 0.7,
         },
         # Camel case violations
         {
             "name": "Naming Violations",
-            "content": '''def myFunction():
+            "content": """def myFunction():
     myVariable = 10
     return myVariable
-''',
+""",
             "expected_max_score": 0.8,
         },
     ]
@@ -98,10 +97,7 @@ def test_quality_scoring_python():
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics(
-            "/test/example.py",
-            test_case["content"]
-        )
+        metrics = collector._calculate_quality_metrics("/test/example.py", test_case["content"])
 
         score = metrics.quality_score
         expected_min = test_case.get("expected_min_score", 0.0)
@@ -111,8 +107,10 @@ def test_quality_scoring_python():
         status = "✓" if is_valid else "✗"
 
         print(f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})")
-        print(f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, " +
-              f"Docs: {metrics.documentation}, Error: {metrics.error_handling}")
+        print(
+            f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, "
+            + f"Docs: {metrics.documentation}, Error: {metrics.error_handling}"
+        )
 
         if is_valid:
             passed += 1
@@ -131,7 +129,7 @@ def test_quality_scoring_typescript():
         # Good TypeScript
         {
             "name": "Good TypeScript",
-            "content": '''/**
+            "content": """/**
  * Calculate sum of two numbers
  */
 function calculateSum(a: number, b: number): number {
@@ -141,18 +139,18 @@ function calculateSum(a: number, b: number): number {
         throw new Error(`Invalid input: ${error}`);
     }
 }
-''',
+""",
             "expected_min_score": 0.8,
         },
         # Poor TypeScript (any types, empty catch)
         {
             "name": "Poor TypeScript",
-            "content": '''function calculateSum(a: any, b: any): any {
+            "content": """function calculateSum(a: any, b: any): any {
     try {
         return a + b;
     } catch (error) {}
 }
-''',
+""",
             "expected_max_score": 0.7,
         },
     ]
@@ -162,10 +160,7 @@ function calculateSum(a: number, b: number): number {
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics(
-            "/test/example.ts",
-            test_case["content"]
-        )
+        metrics = collector._calculate_quality_metrics("/test/example.ts", test_case["content"])
 
         score = metrics.quality_score
         expected_min = test_case.get("expected_min_score", 0.0)
@@ -175,8 +170,10 @@ function calculateSum(a: number, b: number): number {
         status = "✓" if is_valid else "✗"
 
         print(f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})")
-        print(f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, " +
-              f"Docs: {metrics.documentation}, Error: {metrics.error_handling}")
+        print(
+            f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, "
+            + f"Docs: {metrics.documentation}, Error: {metrics.error_handling}"
+        )
 
         if is_valid:
             passed += 1
@@ -193,11 +190,8 @@ def test_performance_metrics():
 
     tool_info = {
         "tool_name": "Write",
-        "tool_input": {
-            "file_path": "/test/example.py",
-            "content": "def test():\n    pass\n"
-        },
-        "tool_response": {"success": True}
+        "tool_input": {"file_path": "/test/example.py", "content": "def test():\n    pass\n"},
+        "tool_response": {"success": True},
     }
 
     collector = PostToolMetricsCollector()
@@ -206,7 +200,7 @@ def test_performance_metrics():
         tool_input=tool_info["tool_input"],
         tool_output=tool_info["tool_response"],
         file_path="/test/example.py",
-        content=tool_info["tool_input"]["content"]
+        content=tool_info["tool_input"]["content"],
     )
 
     perf = metadata.performance_metrics
@@ -218,7 +212,7 @@ def test_performance_metrics():
 
     # Validate
     passed = True
-    if perf.bytes_written != len("def test():\n    pass\n".encode('utf-8')):
+    if perf.bytes_written != len("def test():\n    pass\n".encode("utf-8")):
         print("  ✗ Bytes written calculation incorrect")
         passed = False
     if perf.lines_changed != 2:
@@ -254,9 +248,10 @@ def function2():
 def function3():
     '''Docstring'''
     pass
-""" * 10  # Make it larger
+"""
+            * 10,  # Make it larger
         },
-        "tool_response": {"success": True}
+        "tool_response": {"success": True},
     }
 
     # Run multiple iterations to get average
@@ -279,10 +274,10 @@ def function3():
     print(f"  Max time: {max_time:.2f}ms")
 
     if avg_time < 12.0:
-        print(f"  ✓ Performance requirement met (<12ms)")
+        print("  ✓ Performance requirement met (<12ms)")
         return True
     else:
-        print(f"  ✗ Performance requirement NOT met (>12ms)")
+        print("  ✗ Performance requirement NOT met (>12ms)")
         return False
 
 
@@ -308,8 +303,10 @@ def test_execution_analysis():
         is_correct = analysis.deviation_from_expected == expected_deviation
         status = "✓" if is_correct else "✗"
 
-        print(f"  {status} Output: {tool_output} → {analysis.deviation_from_expected} " +
-              f"(expected: {expected_deviation})")
+        print(
+            f"  {status} Output: {tool_output} → {analysis.deviation_from_expected} "
+            + f"(expected: {expected_deviation})"
+        )
 
         if is_correct:
             passed += 1

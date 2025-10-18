@@ -188,11 +188,7 @@ async def test_circuit_breaker_rejects_when_open():
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_recovery():
     """Test circuit breaker transitions to half-open and recovers"""
-    config = CircuitBreakerConfig(
-        failure_threshold=2,
-        recovery_timeout_ms=100,
-        success_threshold=2
-    )
+    config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout_ms=100, success_threshold=2)
     cb = CircuitBreaker(config)
 
     async def failing_func():
@@ -225,11 +221,7 @@ async def test_circuit_breaker_half_open_recovery():
 @pytest.mark.asyncio
 async def test_circuit_breaker_reopens_on_half_open_failure():
     """Test circuit breaker reopens on failure in half-open state"""
-    config = CircuitBreakerConfig(
-        failure_threshold=2,
-        recovery_timeout_ms=100,
-        success_threshold=2
-    )
+    config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout_ms=100, success_threshold=2)
     cb = CircuitBreaker(config)
 
     async def failing_func():
@@ -582,7 +574,7 @@ async def test_latency_percentiles():
     p95 = latencies[int(len(latencies) * 0.95)]
     p99 = latencies[int(len(latencies) * 0.99)]
 
-    print(f"\nLatency percentiles:")
+    print("\nLatency percentiles:")
     print(f"  p50: {p50:.2f}ms")
     print(f"  p95: {p95:.2f}ms")
     print(f"  p99: {p99:.2f}ms")

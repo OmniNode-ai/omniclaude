@@ -24,7 +24,7 @@ async def main():
     # Get stats
     stats = loader.get_agent_stats()
 
-    print(f"📊 Agent Loading Statistics:")
+    print("📊 Agent Loading Statistics:")
     print(f"   Total Agents: {stats['total_agents']}")
     print(f"   Successfully Loaded: {stats['loaded_agents']}")
     print(f"   Failed: {stats['failed_agents']}")

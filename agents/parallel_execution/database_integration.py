@@ -19,17 +19,17 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import asyncpg
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseHealthStatus(str, Enum):
     """Database health status states."""
+
     HEALTHY = "HEALTHY"
     DEGRADED = "DEGRADED"
     UNHEALTHY = "UNHEALTHY"
@@ -38,6 +38,7 @@ class DatabaseHealthStatus(str, Enum):
 
 class CircuitState(str, Enum):
     """Circuit breaker states."""
+
     CLOSED = "CLOSED"  # Normal operation
     OPEN = "OPEN"  # Failing, reject requests
     HALF_OPEN = "HALF_OPEN"  # Testing recovery
@@ -45,6 +46,7 @@ class CircuitState(str, Enum):
 
 class DatabaseConfig(BaseModel):
     """Database configuration from environment."""
+
     host: str = "localhost"
     port: int = 5436
     database: str = "omninode_bridge"
@@ -99,6 +101,7 @@ class DatabaseConfig(BaseModel):
 
 class DatabaseHealthMetrics(BaseModel):
     """Database health and performance metrics."""
+
     status: DatabaseHealthStatus
     pool_size: int
     pool_free: int
@@ -131,8 +134,7 @@ class BatchWriteBuffer:
 
             # Check if we should flush
             should_flush = (
-                len(self.buffer) >= self.max_size or
-                (time.time() - self.last_flush) * 1000 >= self.timeout_ms
+                len(self.buffer) >= self.max_size or (time.time() - self.last_flush) * 1000 >= self.timeout_ms
             )
 
             if should_flush:
@@ -153,12 +155,7 @@ class BatchWriteBuffer:
 class CircuitBreaker:
     """Circuit breaker for database failure handling."""
 
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        recovery_timeout: int = 60,
-        half_open_attempts: int = 3
-    ):
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60, half_open_attempts: int = 3):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.half_open_attempts = half_open_attempts
@@ -175,10 +172,7 @@ class CircuitBreaker:
             # Check if circuit is open
             if self.state == CircuitState.OPEN:
                 # Check if recovery timeout has elapsed
-                if (
-                    self.last_failure_time and
-                    time.time() - self.last_failure_time >= self.recovery_timeout
-                ):
+                if self.last_failure_time and time.time() - self.last_failure_time >= self.recovery_timeout:
                     logger.info("Circuit breaker entering HALF_OPEN state for recovery test")
                     self.state = CircuitState.HALF_OPEN
                     self.half_open_successes = 0
@@ -204,7 +198,7 @@ class CircuitBreaker:
 
             return result
 
-        except Exception as e:
+        except Exception:
             # Handle failure
             async with self.lock:
                 self.failure_count += 1
@@ -213,10 +207,7 @@ class CircuitBreaker:
                 if self.state == CircuitState.HALF_OPEN:
                     logger.warning("Circuit breaker re-opening - recovery failed")
                     self.state = CircuitState.OPEN
-                elif (
-                    self.state == CircuitState.CLOSED and
-                    self.failure_count >= self.failure_threshold
-                ):
+                elif self.state == CircuitState.CLOSED and self.failure_count >= self.failure_threshold:
                     logger.error(f"Circuit breaker opening - failure threshold reached ({self.failure_count} failures)")
                     self.state = CircuitState.OPEN
 
@@ -256,25 +247,21 @@ class DatabaseIntegrationLayer:
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=self.config.failure_threshold,
             recovery_timeout=self.config.recovery_timeout,
-            half_open_attempts=self.config.half_open_attempts
+            half_open_attempts=self.config.half_open_attempts,
         )
 
         # Batch write buffers
         self.trace_event_buffer = BatchWriteBuffer(
-            max_size=self.config.batch_size,
-            timeout_ms=self.config.batch_timeout_ms
+            max_size=self.config.batch_size, timeout_ms=self.config.batch_timeout_ms
         )
         self.routing_decision_buffer = BatchWriteBuffer(
-            max_size=self.config.batch_size,
-            timeout_ms=self.config.batch_timeout_ms
+            max_size=self.config.batch_size, timeout_ms=self.config.batch_timeout_ms
         )
         self.performance_metrics_buffer = BatchWriteBuffer(
-            max_size=self.config.batch_size,
-            timeout_ms=self.config.batch_timeout_ms
+            max_size=self.config.batch_size, timeout_ms=self.config.batch_timeout_ms
         )
         self.transformation_event_buffer = BatchWriteBuffer(
-            max_size=self.config.batch_size,
-            timeout_ms=self.config.batch_timeout_ms
+            max_size=self.config.batch_size, timeout_ms=self.config.batch_timeout_ms
         )
 
         # Health monitoring
@@ -314,7 +301,7 @@ class DatabaseIntegrationLayer:
                 max_size=self.config.pool_max_size,
                 command_timeout=self.config.query_timeout,
                 max_queries=self.config.max_queries_per_connection,
-                max_inactive_connection_lifetime=self.config.connection_max_age
+                max_inactive_connection_lifetime=self.config.connection_max_age,
             )
 
             # Test connection
@@ -374,12 +361,7 @@ class DatabaseIntegrationLayer:
         finally:
             await self.pool.release(conn)
 
-    async def execute_query(
-        self,
-        query: str,
-        *params,
-        fetch: str = "none"
-    ) -> Any:
+    async def execute_query(self, query: str, *params, fetch: str = "none") -> Any:
         """
         Execute query with circuit breaker and performance tracking.
 
@@ -394,6 +376,7 @@ class DatabaseIntegrationLayer:
         start_time = time.time()
 
         try:
+
             async def _execute():
                 async with self.acquire() as conn:
                     if fetch == "all":
@@ -438,7 +421,7 @@ class DatabaseIntegrationLayer:
         metadata: Optional[Dict[str, Any]] = None,
         agent_name: Optional[str] = None,
         task_id: Optional[str] = None,
-        duration_ms: Optional[float] = None
+        duration_ms: Optional[float] = None,
     ):
         """
         Write trace event to buffer for batch insertion.
@@ -453,16 +436,8 @@ class DatabaseIntegrationLayer:
         """
 
         import json
-        params = [
-            trace_id,
-            event_type,
-            level,
-            message,
-            json.dumps(metadata or {}),
-            agent_name,
-            task_id,
-            duration_ms
-        ]
+
+        params = [trace_id, event_type, level, message, json.dumps(metadata or {}), agent_name, task_id, duration_ms]
 
         await self.trace_event_buffer.add(query, params)
 
@@ -475,7 +450,7 @@ class DatabaseIntegrationLayer:
         reasoning: str,
         routing_strategy: str = "enhanced",
         context: Optional[Dict[str, Any]] = None,
-        routing_time_ms: Optional[float] = None
+        routing_time_ms: Optional[float] = None,
     ):
         """Write routing decision to buffer for batch insertion."""
         query = """
@@ -486,6 +461,7 @@ class DatabaseIntegrationLayer:
         """
 
         import json
+
         params = [
             user_request,
             selected_agent,
@@ -494,7 +470,7 @@ class DatabaseIntegrationLayer:
             reasoning,
             routing_strategy,
             json.dumps(context or {}),
-            routing_time_ms
+            routing_time_ms,
         ]
 
         await self.routing_decision_buffer.add(query, params)
@@ -505,7 +481,7 @@ class DatabaseIntegrationLayer:
         metric_value: float,
         metric_type: str,
         component: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Write performance metric to buffer for batch insertion."""
         query = """
@@ -515,13 +491,8 @@ class DatabaseIntegrationLayer:
         """
 
         import json
-        params = [
-            metric_name,
-            metric_value,
-            metric_type,
-            component,
-            json.dumps(metadata or {})
-        ]
+
+        params = [metric_name, metric_value, metric_type, component, json.dumps(metadata or {})]
 
         await self.performance_metrics_buffer.add(query, params)
 
@@ -532,7 +503,7 @@ class DatabaseIntegrationLayer:
         transformation_reason: str,
         capabilities_inherited: List[str],
         transformation_context: Optional[Dict[str, Any]] = None,
-        transformation_time_ms: Optional[float] = None
+        transformation_time_ms: Optional[float] = None,
     ):
         """Write agent transformation event to buffer for batch insertion."""
         query = """
@@ -543,13 +514,14 @@ class DatabaseIntegrationLayer:
         """
 
         import json
+
         params = [
             source_agent,
             target_agent,
             transformation_reason,
             json.dumps(capabilities_inherited),
             json.dumps(transformation_context or {}),
-            transformation_time_ms
+            transformation_time_ms,
         ]
 
         await self.transformation_event_buffer.add(query, params)
@@ -580,7 +552,7 @@ class DatabaseIntegrationLayer:
             self._flush_buffer(self.routing_decision_buffer, "routing_decision"),
             self._flush_buffer(self.performance_metrics_buffer, "performance_metrics"),
             self._flush_buffer(self.transformation_event_buffer, "transformation_event"),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
     async def _flush_loop(self):
@@ -597,7 +569,7 @@ class DatabaseIntegrationLayer:
                         self.performance_metrics_buffer.flush_event.wait(),
                         self.transformation_event_buffer.flush_event.wait(),
                     ),
-                    timeout=self.config.batch_timeout_ms / 1000
+                    timeout=self.config.batch_timeout_ms / 1000,
                 )
             except asyncio.TimeoutError:
                 pass
@@ -618,7 +590,7 @@ class DatabaseIntegrationLayer:
         event_type: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Query trace events with filters."""
         conditions = []
@@ -674,7 +646,7 @@ class DatabaseIntegrationLayer:
         routing_strategy: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Query routing decisions with filters."""
         conditions = []
@@ -738,7 +710,7 @@ class DatabaseIntegrationLayer:
                 circuit_state=self.circuit_breaker.state,
                 last_error=self.last_error,
                 last_error_time=self.last_error_time,
-                uptime_seconds=time.time() - self.start_time
+                uptime_seconds=time.time() - self.start_time,
             )
 
         pool_size = self.pool.get_size()
@@ -769,7 +741,7 @@ class DatabaseIntegrationLayer:
             last_error=self.last_error,
             last_error_time=self.last_error_time,
             recovery_attempts=self.circuit_breaker.half_open_successes,
-            uptime_seconds=time.time() - self.start_time
+            uptime_seconds=time.time() - self.start_time,
         )
 
     async def _health_check_loop(self):
@@ -824,7 +796,7 @@ class DatabaseIntegrationLayer:
                 WHERE created_at < $1
                 """,
                 cutoff_date,
-                fetch="val"
+                fetch="val",
             )
             logger.info(f"Deleted {deleted} trace events older than {self.config.trace_events_retention_days} days")
 
@@ -836,9 +808,11 @@ class DatabaseIntegrationLayer:
                 WHERE created_at < $1
                 """,
                 cutoff_date,
-                fetch="val"
+                fetch="val",
             )
-            logger.info(f"Deleted {deleted} routing decisions older than {self.config.routing_decisions_retention_days} days")
+            logger.info(
+                f"Deleted {deleted} routing decisions older than {self.config.routing_decisions_retention_days} days"
+            )
 
             # Archive and delete old performance metrics
             cutoff_date = datetime.now() - timedelta(days=self.config.performance_metrics_retention_days)
@@ -848,9 +822,11 @@ class DatabaseIntegrationLayer:
                 WHERE created_at < $1
                 """,
                 cutoff_date,
-                fetch="val"
+                fetch="val",
             )
-            logger.info(f"Deleted {deleted} performance metrics older than {self.config.performance_metrics_retention_days} days")
+            logger.info(
+                f"Deleted {deleted} performance metrics older than {self.config.performance_metrics_retention_days} days"
+            )
 
             # Archive and delete old transformation events
             cutoff_date = datetime.now() - timedelta(days=self.config.transformation_events_retention_days)
@@ -860,9 +836,11 @@ class DatabaseIntegrationLayer:
                 WHERE created_at < $1
                 """,
                 cutoff_date,
-                fetch="val"
+                fetch="val",
             )
-            logger.info(f"Deleted {deleted} transformation events older than {self.config.transformation_events_retention_days} days")
+            logger.info(
+                f"Deleted {deleted} transformation events older than {self.config.transformation_events_retention_days} days"
+            )
 
             logger.info("Retention policy applied successfully")
 

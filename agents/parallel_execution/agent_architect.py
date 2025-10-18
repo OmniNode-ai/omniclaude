@@ -5,8 +5,6 @@ Breaks down user prompts into parallel subtasks for distributed execution.
 Architecture-independent - works for any project type.
 """
 
-import asyncio
-import os
 import time
 from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
@@ -21,6 +19,7 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -31,13 +30,16 @@ except ImportError:
 # Pydantic Models for Structured Outputs
 # ============================================================================
 
+
 class SubTask(BaseModel):
     """A single subtask in the breakdown."""
 
     task_id: str = Field(description="Unique identifier for this subtask (e.g., 'task_1', 'task_2')")
     description: str = Field(description="Clear description of what this subtask should accomplish")
     agent: str = Field(description="Which agent handles this task (e.g., 'coder', 'analyzer', 'validator')")
-    depends_on: List[str] = Field(default_factory=list, description="List of task_ids this task depends on (empty if no dependencies)")
+    depends_on: List[str] = Field(
+        default_factory=list, description="List of task_ids this task depends on (empty if no dependencies)"
+    )
     input_data: Dict[str, Any] = Field(default_factory=dict, description="Input data/context for this subtask")
 
 
@@ -45,13 +47,16 @@ class TaskBreakdown(BaseModel):
     """Structured output for task breakdown and execution planning."""
 
     subtasks: List[SubTask] = Field(description="List of subtasks to execute")
-    execution_order: str = Field(description="Execution strategy: 'parallel' if tasks can run concurrently, 'sequential' if they must run in order")
+    execution_order: str = Field(
+        description="Execution strategy: 'parallel' if tasks can run concurrently, 'sequential' if they must run in order"
+    )
     reasoning: str = Field(description="Explanation of how tasks were broken down and why")
 
 
 # ============================================================================
 # Dependencies for Pydantic AI Agent
 # ============================================================================
+
 
 @dataclass
 class AgentDeps:
@@ -112,16 +117,17 @@ Break down the user's request into optimal subtasks with clear responsibilities.
 
 # Create the Pydantic AI agent
 task_architect_agent = Agent[AgentDeps, TaskBreakdown](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=TaskBreakdown,
-    system_prompt=ARCHITECT_SYSTEM_PROMPT
+    system_prompt=ARCHITECT_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @task_architect_agent.tool
 async def analyze_task_complexity(ctx: RunContext[AgentDeps], task_description: str) -> str:
@@ -136,7 +142,7 @@ async def analyze_task_complexity(ctx: RunContext[AgentDeps], task_description: 
     indicators = {
         "simple": ["create", "add", "simple", "basic", "single"],
         "moderate": ["integrate", "implement", "refactor", "multiple", "several"],
-        "complex": ["architecture", "system", "distributed", "parallel", "many", "complex"]
+        "complex": ["architecture", "system", "distributed", "parallel", "many", "complex"],
     }
 
     task_lower = task_description.lower()
@@ -181,7 +187,7 @@ async def suggest_agent_for_task(ctx: RunContext[AgentDeps], task_type: str) -> 
         "research": "researcher - Gathers documentation and examples",
         "document": "researcher - Finds and organizes documentation",
         "debug": "debugger - Diagnoses and fixes issues",
-        "fix": "debugger - Identifies and resolves problems"
+        "fix": "debugger - Identifies and resolves problems",
     }
 
     task_lower = task_type.lower()
@@ -202,15 +208,26 @@ async def check_task_dependencies(ctx: RunContext[AgentDeps], task_list: str) ->
     Returns: Dependency analysis and execution recommendation
     """
     dependency_keywords = [
-        "then", "after", "before", "depends", "requires", "needs",
-        "first", "second", "next", "following", "previous"
+        "then",
+        "after",
+        "before",
+        "depends",
+        "requires",
+        "needs",
+        "first",
+        "second",
+        "next",
+        "following",
+        "previous",
     ]
 
     tasks_lower = task_list.lower()
     has_dependencies = any(keyword in tasks_lower for keyword in dependency_keywords)
 
     if has_dependencies:
-        return "🔗 Dependencies detected - Recommend sequential or mixed execution with explicit depends_on relationships"
+        return (
+            "🔗 Dependencies detected - Recommend sequential or mixed execution with explicit depends_on relationships"
+        )
     else:
         return "✅ No obvious dependencies - Tasks can likely run in parallel"
 
@@ -218,6 +235,7 @@ async def check_task_dependencies(ctx: RunContext[AgentDeps], task_list: str) ->
 # ============================================================================
 # Wrapper Class for Compatibility
 # ============================================================================
+
 
 class ArchitectAgent:
     """
@@ -245,9 +263,7 @@ class ArchitectAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name,
-            task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
         )
 
         try:
@@ -256,15 +272,12 @@ class ArchitectAgent:
                 message=f"Breaking down task: {task.description[:100]}...",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Create agent dependencies
             deps = AgentDeps(
-                task=task,
-                config=self.config,
-                trace_logger=self.trace_logger,
-                trace_id=self._current_trace_id
+                task=task, config=self.config, trace_logger=self.trace_logger, trace_id=self._current_trace_id
             )
 
             # Build breakdown prompt
@@ -276,7 +289,7 @@ class ArchitectAgent:
                 message="Invoking Pydantic AI task architect",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await task_architect_agent.run(prompt, deps=deps)
@@ -295,8 +308,8 @@ class ArchitectAgent:
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 3
-                }
+                    "tools_available": 3,
+                },
             }
 
             # Create result
@@ -306,13 +319,11 @@ class ArchitectAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=agent_result.model_dump()
+                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
             )
 
             await self.trace_logger.log_event(
@@ -320,7 +331,7 @@ class ArchitectAgent:
                 message=f"Task breakdown complete: {len(breakdown.subtasks)} subtasks ({breakdown.execution_order})",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -329,18 +340,14 @@ class ArchitectAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Task breakdown failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
-            )
+            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -349,7 +356,7 @@ class ArchitectAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     def _build_breakdown_prompt(self, task: AgentTask) -> str:
@@ -366,31 +373,29 @@ class ArchitectAgent:
             "3. Identify dependencies between tasks",
             "4. Assign appropriate agents to each subtask",
             "5. Determine optimal execution strategy",
-            ""
+            "",
         ]
 
         if additional_context:
-            prompt_parts.extend([
-                "**Additional Context:**",
-                additional_context,
-                ""
-            ])
+            prompt_parts.extend(["**Additional Context:**", additional_context, ""])
 
-        prompt_parts.extend([
-            "**Requirements:**",
-            "- Create clear, single-purpose subtasks",
-            "- Maximize parallelization when possible",
-            "- Use explicit depends_on relationships",
-            "- Provide necessary context in input_data",
-            "- Keep subtasks atomic and testable",
-            "",
-            "Use the available tools to:",
-            "1. Analyze task complexity",
-            "2. Suggest appropriate agents",
-            "3. Check for dependencies",
-            "",
-            "Generate a complete task breakdown plan."
-        ])
+        prompt_parts.extend(
+            [
+                "**Requirements:**",
+                "- Create clear, single-purpose subtasks",
+                "- Maximize parallelization when possible",
+                "- Use explicit depends_on relationships",
+                "- Provide necessary context in input_data",
+                "- Keep subtasks atomic and testable",
+                "",
+                "Use the available tools to:",
+                "1. Analyze task complexity",
+                "2. Suggest appropriate agents",
+                "3. Check for dependencies",
+                "",
+                "Generate a complete task breakdown plan.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 

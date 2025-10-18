@@ -1,5 +1,4 @@
 import os
-import asyncio
 from typing import Any, Optional
 
 import asyncpg
@@ -90,5 +89,3 @@ async def execute_command(query: str, *args) -> str:
 
     async with pool.acquire() as conn:
         return await conn.execute(query, *args)
-
-

@@ -15,7 +15,7 @@ Author: OmniClaude Autonomous Code Generation System
 import ast
 import re
 import logging
-from typing import Dict, Any, List, Optional, Tuple, Set
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -29,6 +29,7 @@ from .codegen_events import CodegenValidationRequest, CodegenValidationResponse
 # Phase 7: ML-powered mixin compatibility (optional import)
 try:
     from .mixin_compatibility import MixinCompatibilityManager, CompatibilityLevel
+
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
@@ -48,6 +49,7 @@ class ValidationResult:
         suggestions: List of improvement suggestions
         compliance_details: Detailed compliance breakdown by category
     """
+
     is_valid: bool
     quality_score: float
     violations: List[str]
@@ -60,6 +62,7 @@ class ValidationResult:
 @dataclass
 class ONEXComplianceCheck:
     """ONEX compliance check result"""
+
     category: str
     passed: bool
     score: float
@@ -100,22 +103,33 @@ class QualityValidator:
             self.mixin_manager = None
 
         # ONEX naming patterns
-        self.node_class_pattern = re.compile(r'^Node[A-Z][a-zA-Z0-9]+(Effect|Compute|Reducer|Orchestrator)$')
-        self.model_class_pattern = re.compile(r'^Model[A-Z][a-zA-Z0-9]+$')
-        self.enum_class_pattern = re.compile(r'^Enum[A-Z][a-zA-Z0-9]+$')
+        self.node_class_pattern = re.compile(r"^Node[A-Z][a-zA-Z0-9]+(Effect|Compute|Reducer|Orchestrator)$")
+        self.model_class_pattern = re.compile(r"^Model[A-Z][a-zA-Z0-9]+$")
+        self.enum_class_pattern = re.compile(r"^Enum[A-Z][a-zA-Z0-9]+$")
 
         # Required node methods
         self.required_node_methods = {
             "Effect": ["process_effect", "validate_input", "get_health_status"],
             "Compute": ["process_compute", "validate_input", "get_health_status"],
             "Reducer": ["process_reduction", "validate_input", "get_health_status"],
-            "Orchestrator": ["process_orchestration", "validate_input", "get_health_status"]
+            "Orchestrator": ["process_orchestration", "validate_input", "get_health_status"],
         }
 
         # Standard library imports (for import organization check)
         self.stdlib_modules = {
-            'asyncio', 'logging', 'typing', 'uuid', 'datetime', 'dataclasses',
-            'enum', 're', 'json', 'os', 'sys', 'pathlib', 'collections'
+            "asyncio",
+            "logging",
+            "typing",
+            "uuid",
+            "datetime",
+            "dataclasses",
+            "enum",
+            "re",
+            "json",
+            "os",
+            "sys",
+            "pathlib",
+            "collections",
         }
 
     async def validate_generated_code(
@@ -124,7 +138,7 @@ class QualityValidator:
         contract: Dict[str, Any],
         node_type: str,
         microservice_name: str,
-        correlation_id: Optional[UUID] = None
+        correlation_id: Optional[UUID] = None,
     ) -> ValidationResult:
         """
         Validate generated code comprehensively.
@@ -144,9 +158,7 @@ class QualityValidator:
         """
         try:
             validation_id = uuid4()
-            self.logger.info(
-                f"Starting validation {validation_id} for {node_type} node: {microservice_name}"
-            )
+            self.logger.info(f"Starting validation {validation_id} for {node_type} node: {microservice_name}")
 
             # Initialize results
             all_violations = []
@@ -155,11 +167,7 @@ class QualityValidator:
 
             # 1. Syntax validation (30% weight)
             syntax_valid, syntax_violations = self._check_syntax(code)
-            check_results['syntax'] = {
-                'valid': syntax_valid,
-                'violations': syntax_violations,
-                'weight': 0.30
-            }
+            check_results["syntax"] = {"valid": syntax_valid, "violations": syntax_violations, "weight": 0.30}
             all_violations.extend(syntax_violations)
 
             if not syntax_valid:
@@ -170,18 +178,16 @@ class QualityValidator:
                     violations=all_violations,
                     suggestions=["Fix syntax errors before proceeding"],
                     compliance_details=check_results,
-                    validation_id=validation_id
+                    validation_id=validation_id,
                 )
 
             # 2. ONEX compliance validation (40% weight)
-            onex_score, onex_violations, onex_suggestions = self._check_onex_compliance(
-                code, node_type
-            )
-            check_results['onex_compliance'] = {
-                'score': onex_score,
-                'violations': onex_violations,
-                'suggestions': onex_suggestions,
-                'weight': 0.40
+            onex_score, onex_violations, onex_suggestions = self._check_onex_compliance(code, node_type)
+            check_results["onex_compliance"] = {
+                "score": onex_score,
+                "violations": onex_violations,
+                "suggestions": onex_suggestions,
+                "weight": 0.40,
             }
             all_violations.extend(onex_violations)
             all_suggestions.extend(onex_suggestions)
@@ -190,22 +196,22 @@ class QualityValidator:
             contract_score, contract_violations, contract_suggestions = self._check_contract_conformance(
                 code, contract, node_type
             )
-            check_results['contract_conformance'] = {
-                'score': contract_score,
-                'violations': contract_violations,
-                'suggestions': contract_suggestions,
-                'weight': 0.20
+            check_results["contract_conformance"] = {
+                "score": contract_score,
+                "violations": contract_violations,
+                "suggestions": contract_suggestions,
+                "weight": 0.20,
             }
             all_violations.extend(contract_violations)
             all_suggestions.extend(contract_suggestions)
 
             # 4. Code quality checks (10% weight)
             quality_score, quality_violations, quality_suggestions = self._check_code_quality(code)
-            check_results['code_quality'] = {
-                'score': quality_score,
-                'violations': quality_violations,
-                'suggestions': quality_suggestions,
-                'weight': 0.10
+            check_results["code_quality"] = {
+                "score": quality_score,
+                "violations": quality_violations,
+                "suggestions": quality_suggestions,
+                "weight": 0.10,
             }
             all_violations.extend(quality_violations)
             all_suggestions.extend(quality_suggestions)
@@ -215,9 +221,9 @@ class QualityValidator:
 
             # Determine if validation passes
             is_valid = (
-                syntax_valid and
-                overall_score >= self.config.quality_threshold and
-                onex_score >= self.config.onex_compliance_threshold
+                syntax_valid
+                and overall_score >= self.config.quality_threshold
+                and onex_score >= self.config.onex_compliance_threshold
             )
 
             result = ValidationResult(
@@ -226,7 +232,7 @@ class QualityValidator:
                 violations=all_violations,
                 suggestions=all_suggestions,
                 compliance_details=check_results,
-                validation_id=validation_id
+                validation_id=validation_id,
             )
 
             self.logger.info(
@@ -242,11 +248,7 @@ class QualityValidator:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Quality validation failed: {str(e)}",
-                details={
-                    "node_type": node_type,
-                    "microservice_name": microservice_name,
-                    "code_length": len(code)
-                }
+                details={"node_type": node_type, "microservice_name": microservice_name, "code_length": len(code)},
             )
 
     def _check_syntax(self, code: str) -> Tuple[bool, List[str]]:
@@ -274,11 +276,7 @@ class QualityValidator:
             violations.append(f"Code parsing error: {str(e)}")
             return False, violations
 
-    def _check_onex_compliance(
-        self,
-        code: str,
-        node_type: str
-    ) -> Tuple[float, List[str], List[str]]:
+    def _check_onex_compliance(self, code: str, node_type: str) -> Tuple[float, List[str], List[str]]:
         """
         Check ONEX architecture compliance.
 
@@ -324,12 +322,12 @@ class QualityValidator:
             # Calculate weighted compliance score
             # Give higher weight to critical type safety (any_type_score)
             compliance_score = (
-                naming_score * 0.20 +
-                type_hint_score * 0.15 +
-                any_type_score * 0.18 +  # Increased from 0.15 for stricter checking
-                error_handling_score * 0.15 +
-                async_score * 0.22 +
-                import_score * 0.10
+                naming_score * 0.20
+                + type_hint_score * 0.15
+                + any_type_score * 0.18  # Increased from 0.15 for stricter checking
+                + error_handling_score * 0.15
+                + async_score * 0.22
+                + import_score * 0.10
             )
 
             # Critical check: if type safety is severely violated, cap the compliance score
@@ -347,11 +345,7 @@ class QualityValidator:
             return 0.0, violations, suggestions
 
     def _check_naming_conventions(
-        self,
-        tree: ast.AST,
-        node_type: str,
-        violations: List[str],
-        suggestions: List[str]
+        self, tree: ast.AST, node_type: str, violations: List[str], suggestions: List[str]
     ) -> float:
         """Check ONEX naming conventions"""
         score = 1.0
@@ -361,7 +355,7 @@ class QualityValidator:
                 class_name = node.name
 
                 # Check Node class naming
-                if class_name.startswith('Node'):
+                if class_name.startswith("Node"):
                     if not self.node_class_pattern.match(class_name):
                         violations.append(
                             f"Invalid node class name '{class_name}'. "
@@ -372,37 +366,28 @@ class QualityValidator:
                     # Check if suffix matches node_type
                     expected_suffix = node_type.capitalize()
                     if not class_name.endswith(expected_suffix):
-                        violations.append(
-                            f"Node class '{class_name}' should end with '{expected_suffix}'"
-                        )
+                        violations.append(f"Node class '{class_name}' should end with '{expected_suffix}'")
                         score *= 0.8
 
                 # Check Model class naming
-                elif class_name.startswith('Model'):
+                elif class_name.startswith("Model"):
                     if not self.model_class_pattern.match(class_name):
                         violations.append(
-                            f"Invalid model class name '{class_name}'. "
-                            f"Must follow pattern: Model<Name>"
+                            f"Invalid model class name '{class_name}'. " f"Must follow pattern: Model<Name>"
                         )
                         score *= 0.8
 
                 # Check Enum class naming
-                elif class_name.startswith('Enum'):
+                elif class_name.startswith("Enum"):
                     if not self.enum_class_pattern.match(class_name):
                         violations.append(
-                            f"Invalid enum class name '{class_name}'. "
-                            f"Must follow pattern: Enum<Name>"
+                            f"Invalid enum class name '{class_name}'. " f"Must follow pattern: Enum<Name>"
                         )
                         score *= 0.8
 
         return max(score, 0.0)
 
-    def _check_type_hints(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_type_hints(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check that all methods have type hints"""
         total_methods = 0
         methods_with_hints = 0
@@ -416,10 +401,9 @@ class QualityValidator:
 
                 # Check argument type hints (skip self/cls)
                 args_with_hints = sum(
-                    1 for arg in node.args.args
-                    if arg.arg not in ('self', 'cls') and arg.annotation is not None
+                    1 for arg in node.args.args if arg.arg not in ("self", "cls") and arg.annotation is not None
                 )
-                total_args = len([arg for arg in node.args.args if arg.arg not in ('self', 'cls')])
+                total_args = len([arg for arg in node.args.args if arg.arg not in ("self", "cls")])
 
                 if has_return_hint and (total_args == 0 or args_with_hints == total_args):
                     methods_with_hints += 1
@@ -439,18 +423,13 @@ class QualityValidator:
 
         return score
 
-    def _check_any_types(
-        self,
-        code: str,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_any_types(self, code: str, violations: List[str], suggestions: List[str]) -> float:
         """Check for bare Any types (must be Dict[str, Any] or specific types)"""
         score = 1.0
 
         # Pattern to find bare Any usage (not Dict[str, Any], List[Any], etc.)
         # Match both parameter types (: Any) and return types (-> Any)
-        bare_any_pattern = re.compile(r'(?::\s*|->\s*)Any(?!\[)')
+        bare_any_pattern = re.compile(r"(?::\s*|->\s*)Any(?!\[)")
         any_matches = bare_any_pattern.findall(code)
 
         if any_matches:
@@ -463,7 +442,7 @@ class QualityValidator:
             score -= len(any_matches) * 0.25
 
         # Also check for incomplete generic types (Dict, List, Set without type parameters)
-        incomplete_generic_pattern = re.compile(r'(?::\s*|->\s*)(Dict|List|Set|Tuple)(?!\[)')
+        incomplete_generic_pattern = re.compile(r"(?::\s*|->\s*)(Dict|List|Set|Tuple)(?!\[)")
         incomplete_matches = incomplete_generic_pattern.findall(code)
 
         if incomplete_matches:
@@ -477,12 +456,7 @@ class QualityValidator:
 
         return max(0.0, score)
 
-    def _check_error_handling(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_error_handling(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check OnexError usage for exception handling"""
         score = 1.0
         has_onex_error_import = False
@@ -492,18 +466,18 @@ class QualityValidator:
         for node in ast.walk(tree):
             # Check for OnexError import
             if isinstance(node, ast.ImportFrom):
-                if node.module and 'omnibase_core' in node.module:
+                if node.module and "omnibase_core" in node.module:
                     for alias in node.names:
-                        if alias.name == 'OnexError':
+                        if alias.name == "OnexError":
                             has_onex_error_import = True
 
             # Check for OnexError raises
             if isinstance(node, ast.Raise):
                 if node.exc and isinstance(node.exc, ast.Call):
                     if isinstance(node.exc.func, ast.Name):
-                        if node.exc.func.id == 'OnexError':
+                        if node.exc.func.id == "OnexError":
                             uses_onex_error = True
-                        elif node.exc.func.id == 'Exception':
+                        elif node.exc.func.id == "Exception":
                             has_generic_exceptions = True
 
         if not has_onex_error_import:
@@ -519,11 +493,7 @@ class QualityValidator:
         return score
 
     def _check_async_patterns(
-        self,
-        tree: ast.AST,
-        node_type: str,
-        violations: List[str],
-        suggestions: List[str]
+        self, tree: ast.AST, node_type: str, violations: List[str], suggestions: List[str]
     ) -> float:
         """Check proper async/await patterns"""
         score = 1.0
@@ -536,25 +506,18 @@ class QualityValidator:
             if isinstance(node, ast.AsyncFunctionDef):
                 async_methods.add(node.name)
             elif isinstance(node, ast.FunctionDef):
-                if node.name not in ('__init__', '__post_init__'):
+                if node.name not in ("__init__", "__post_init__"):
                     sync_methods.add(node.name)
 
         # Check if required methods are async
         for required_method in required_async_methods:
             if required_method in sync_methods:
-                violations.append(
-                    f"Required method '{required_method}' should be async"
-                )
+                violations.append(f"Required method '{required_method}' should be async")
                 score *= 0.8
 
         return score
 
-    def _check_import_organization(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_import_organization(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check import organization (stdlib, third-party, local)"""
         score = 1.0
         imports = []
@@ -570,9 +533,7 @@ class QualityValidator:
         import_sections = self._categorize_imports(imports)
 
         if not self._is_import_order_correct(import_sections):
-            violations.append(
-                "Imports not organized correctly (should be: stdlib, third-party, local)"
-            )
+            violations.append("Imports not organized correctly (should be: stdlib, third-party, local)")
             suggestions.append("Organize imports: standard library, third-party, local")
             score = 0.7
 
@@ -580,27 +541,23 @@ class QualityValidator:
 
     def _categorize_imports(self, imports: List[ast.AST]) -> Dict[str, List[ast.AST]]:
         """Categorize imports into stdlib, third-party, local"""
-        categorized = {
-            'stdlib': [],
-            'third_party': [],
-            'local': []
-        }
+        categorized = {"stdlib": [], "third_party": [], "local": []}
 
         for imp in imports:
             if isinstance(imp, ast.ImportFrom):
-                module = imp.module or ''
-                if module.startswith('.'):
-                    categorized['local'].append(imp)
-                elif module.split('.')[0] in self.stdlib_modules:
-                    categorized['stdlib'].append(imp)
+                module = imp.module or ""
+                if module.startswith("."):
+                    categorized["local"].append(imp)
+                elif module.split(".")[0] in self.stdlib_modules:
+                    categorized["stdlib"].append(imp)
                 else:
-                    categorized['third_party'].append(imp)
+                    categorized["third_party"].append(imp)
             elif isinstance(imp, ast.Import):
                 for alias in imp.names:
-                    if alias.name.split('.')[0] in self.stdlib_modules:
-                        categorized['stdlib'].append(imp)
+                    if alias.name.split(".")[0] in self.stdlib_modules:
+                        categorized["stdlib"].append(imp)
                     else:
-                        categorized['third_party'].append(imp)
+                        categorized["third_party"].append(imp)
 
         return categorized
 
@@ -611,10 +568,7 @@ class QualityValidator:
         return True  # TODO: Implement line number checking
 
     def _check_contract_conformance(
-        self,
-        code: str,
-        contract: Dict[str, Any],
-        node_type: str
+        self, code: str, contract: Dict[str, Any], node_type: str
     ) -> Tuple[float, List[str], List[str]]:
         """
         Check contract conformance.
@@ -649,16 +603,11 @@ class QualityValidator:
             missing_methods = set(required_methods) - implemented_methods
 
             if missing_methods:
-                violations.append(
-                    f"Missing required methods for {node_type} node: {', '.join(missing_methods)}"
-                )
+                violations.append(f"Missing required methods for {node_type} node: {', '.join(missing_methods)}")
 
             # Check contract capabilities are implemented
-            capabilities = contract.get('capabilities', [])
-            capability_methods = [
-                cap['name'] for cap in capabilities
-                if isinstance(cap, dict) and 'name' in cap
-            ]
+            capabilities = contract.get("capabilities", [])
+            capability_methods = [cap["name"] for cap in capabilities if isinstance(cap, dict) and "name" in cap]
 
             missing_capabilities = []
             for cap_method in capability_methods:
@@ -668,31 +617,25 @@ class QualityValidator:
                     f"_{cap_method}",  # Private method variant
                     f"process_{cap_method}",
                     f"handle_{cap_method}",
-                    cap_method.replace('_', '')
+                    cap_method.replace("_", ""),
                 ]
 
                 if not any(variant in implemented_methods for variant in method_variants):
                     missing_capabilities.append(cap_method)
 
             if missing_capabilities:
-                violations.append(
-                    f"Contract capabilities not implemented: {', '.join(missing_capabilities[:5])}"
-                )
+                violations.append(f"Contract capabilities not implemented: {', '.join(missing_capabilities[:5])}")
                 suggestions.append("Implement methods for all contract capabilities")
 
             # Check mixin inheritance
-            required_mixins = contract.get('dependencies', {}).get('required_mixins', [])
+            required_mixins = contract.get("dependencies", {}).get("required_mixins", [])
             mixin_conformance = self._check_mixin_inheritance(tree, required_mixins, violations)
 
             # Calculate conformance score
             required_method_score = 1.0 - (len(missing_methods) / max(len(required_methods), 1))
             capability_score = 1.0 - (len(missing_capabilities) / max(len(capability_methods), 1))
 
-            conformance_score = (
-                required_method_score * 0.5 +
-                capability_score * 0.3 +
-                mixin_conformance * 0.2
-            )
+            conformance_score = required_method_score * 0.5 + capability_score * 0.3 + mixin_conformance * 0.2
 
             return conformance_score, violations, suggestions
 
@@ -700,12 +643,7 @@ class QualityValidator:
             violations.append(f"Contract conformance check failed: {str(e)}")
             return 0.0, violations, suggestions
 
-    def _check_mixin_inheritance(
-        self,
-        tree: ast.AST,
-        required_mixins: List[str],
-        violations: List[str]
-    ) -> float:
+    def _check_mixin_inheritance(self, tree: ast.AST, required_mixins: List[str], violations: List[str]) -> float:
         """Check mixin inheritance matches contract"""
         if not required_mixins:
             return 1.0
@@ -713,7 +651,7 @@ class QualityValidator:
         # Find class definitions and their bases
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
-                if node.name.startswith('Node'):
+                if node.name.startswith("Node"):
                     # Extract base classes
                     base_names = []
                     for base in node.bases:
@@ -721,26 +659,17 @@ class QualityValidator:
                             base_names.append(base.id)
 
                     # Check if required mixins are present
-                    missing_mixins = [
-                        mixin for mixin in required_mixins
-                        if mixin not in base_names
-                    ]
+                    missing_mixins = [mixin for mixin in required_mixins if mixin not in base_names]
 
                     if missing_mixins:
-                        violations.append(
-                            f"Missing mixin inheritance: {', '.join(missing_mixins)}"
-                        )
+                        violations.append(f"Missing mixin inheritance: {', '.join(missing_mixins)}")
                         return 1.0 - (len(missing_mixins) / len(required_mixins))
 
                     return 1.0
 
         return 0.5  # Node class not found
 
-    async def validate_mixin_compatibility(
-        self,
-        code: str,
-        node_type: str
-    ) -> Tuple[float, List[str], List[str]]:
+    async def validate_mixin_compatibility(self, code: str, node_type: str) -> Tuple[float, List[str], List[str]]:
         """
         Validate mixin compatibility using ML-powered compatibility manager.
 
@@ -761,10 +690,10 @@ class QualityValidator:
             mixins = []
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef):
-                    if node.name.startswith('Node'):
+                    if node.name.startswith("Node"):
                         for base in node.bases:
                             if isinstance(base, ast.Name):
-                                if base.id.startswith('Mixin'):
+                                if base.id.startswith("Mixin"):
                                     mixins.append(base.id)
 
             if not mixins:
@@ -786,9 +715,7 @@ class QualityValidator:
                         violations.append(
                             f"Overall mixin compatibility score is low: {mixin_set.overall_compatibility:.2f}"
                         )
-                        suggestions.append(
-                            "Consider reviewing mixin selection or resolving compatibility conflicts"
-                        )
+                        suggestions.append("Consider reviewing mixin selection or resolving compatibility conflicts")
 
                     return mixin_set.overall_compatibility, violations, suggestions
 
@@ -808,10 +735,7 @@ class QualityValidator:
             violations.append(f"Mixin compatibility validation failed: {str(e)}")
             return 0.5, violations, suggestions
 
-    def _check_code_quality(
-        self,
-        code: str
-    ) -> Tuple[float, List[str], List[str]]:
+    def _check_code_quality(self, code: str) -> Tuple[float, List[str], List[str]]:
         """
         Check general code quality.
 
@@ -842,11 +766,7 @@ class QualityValidator:
             # Check error handling patterns
             error_handling_score = self._check_try_except_usage(tree, violations, suggestions)
 
-            quality_score = (
-                docstring_score * 0.4 +
-                logging_score * 0.3 +
-                error_handling_score * 0.3
-            )
+            quality_score = docstring_score * 0.4 + logging_score * 0.3 + error_handling_score * 0.3
 
             return quality_score, violations, suggestions
 
@@ -854,12 +774,7 @@ class QualityValidator:
             violations.append(f"Code quality check failed: {str(e)}")
             return 0.5, violations, suggestions
 
-    def _check_docstrings(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_docstrings(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check docstring presence"""
         total_items = 0
         items_with_docstrings = 0
@@ -880,12 +795,7 @@ class QualityValidator:
 
         return score
 
-    def _check_logging(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_logging(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check logging usage"""
         has_logger = False
         uses_logging = False
@@ -894,13 +804,13 @@ class QualityValidator:
             # Check for logger initialization
             if isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if isinstance(target, ast.Attribute) and target.attr == 'logger':
+                    if isinstance(target, ast.Attribute) and target.attr == "logger":
                         has_logger = True
 
             # Check for logging calls
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Attribute):
-                    if node.func.attr in ('debug', 'info', 'warning', 'error', 'critical'):
+                    if node.func.attr in ("debug", "info", "warning", "error", "critical"):
                         uses_logging = True
 
         if not has_logger:
@@ -913,12 +823,7 @@ class QualityValidator:
 
         return 1.0
 
-    def _check_try_except_usage(
-        self,
-        tree: ast.AST,
-        violations: List[str],
-        suggestions: List[str]
-    ) -> float:
+    def _check_try_except_usage(self, tree: ast.AST, violations: List[str], suggestions: List[str]) -> float:
         """Check try/except usage"""
         has_try_except = False
 
@@ -952,13 +857,13 @@ class QualityValidator:
         total_score = 0.0
 
         for check_name, result in check_results.items():
-            if check_name == 'syntax':
+            if check_name == "syntax":
                 # Syntax is binary - either valid or not
-                score = 1.0 if result['valid'] else 0.0
+                score = 1.0 if result["valid"] else 0.0
             else:
-                score = result.get('score', 0.0)
+                score = result.get("score", 0.0)
 
-            weight = result.get('weight', 0.0)
+            weight = result.get("weight", 0.0)
             total_score += score * weight
 
         return min(max(total_score, 0.0), 1.0)
@@ -966,12 +871,7 @@ class QualityValidator:
     # Event-driven integration methods (future phase)
 
     async def publish_validation_request(
-        self,
-        code: str,
-        contract: Dict[str, Any],
-        node_type: str,
-        microservice_name: str,
-        correlation_id: UUID
+        self, code: str, contract: Dict[str, Any], node_type: str, microservice_name: str, correlation_id: UUID
     ) -> CodegenValidationRequest:
         """
         Publish validation request to Kafka (future implementation).
@@ -990,24 +890,19 @@ class QualityValidator:
         request = CodegenValidationRequest(
             correlation_id=correlation_id,
             payload={
-                'code': code,
-                'contract': contract,
-                'node_type': node_type,
-                'microservice_name': microservice_name
-            }
+                "code": code,
+                "contract": contract,
+                "node_type": node_type,
+                "microservice_name": microservice_name,
+            },
         )
 
-        self.logger.info(
-            f"Validation request prepared for {microservice_name} "
-            f"(correlation_id: {correlation_id})"
-        )
+        self.logger.info(f"Validation request prepared for {microservice_name} " f"(correlation_id: {correlation_id})")
 
         return request
 
     async def wait_for_validation_response(
-        self,
-        correlation_id: UUID,
-        timeout_seconds: int = 20
+        self, correlation_id: UUID, timeout_seconds: int = 20
     ) -> CodegenValidationResponse:
         """
         Wait for validation response from Kafka (future implementation).
@@ -1024,14 +919,13 @@ class QualityValidator:
         """
         # TODO: Implement Kafka subscription and response matching
         self.logger.info(
-            f"Waiting for validation response (correlation_id: {correlation_id}, "
-            f"timeout: {timeout_seconds}s)"
+            f"Waiting for validation response (correlation_id: {correlation_id}, " f"timeout: {timeout_seconds}s)"
         )
 
         raise OnexError(
             code=EnumCoreErrorCode.NOT_IMPLEMENTED,
             message="Kafka integration not yet implemented",
-            details={"correlation_id": str(correlation_id)}
+            details={"correlation_id": str(correlation_id)},
         )
 
     # ========================================================================
@@ -1055,17 +949,10 @@ class QualityValidator:
         except Exception:
             tree = None
 
-        return {
-            "valid": is_valid,
-            "errors": violations,
-            "ast_tree": tree
-        }
+        return {"valid": is_valid, "errors": violations, "ast_tree": tree}
 
     async def validate_onex_naming(
-        self,
-        code: str,
-        expected_class_prefix: str,
-        expected_class_suffix: str
+        self, code: str, expected_class_prefix: str, expected_class_suffix: str
     ) -> Dict[str, Any]:
         """
         Validate ONEX naming conventions (test API).
@@ -1079,16 +966,13 @@ class QualityValidator:
             Dict with valid, violations
         """
         violations = []
-        suggestions = []
 
         try:
             tree = ast.parse(code)
 
             # Check that ALL classes follow the expected naming pattern
-            has_class = False
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef):
-                    has_class = True
                     class_name = node.name
 
                     # Check if class follows expected pattern
@@ -1108,10 +992,7 @@ class QualityValidator:
             violations.append(f"Naming validation failed: {str(e)}")
             is_valid = False
 
-        return {
-            "valid": is_valid,
-            "violations": violations
-        }
+        return {"valid": is_valid, "violations": violations}
 
     async def validate_type_safety(self, code: str) -> Dict[str, Any]:
         """
@@ -1150,7 +1031,7 @@ class QualityValidator:
             "valid": is_valid,
             "has_type_annotations": has_type_annotations,
             "uses_bare_any": uses_bare_any,
-            "violations": violations
+            "violations": violations,
         }
 
     async def validate_error_handling(self, code: str) -> Dict[str, Any]:
@@ -1190,14 +1071,10 @@ class QualityValidator:
             "valid": is_valid,
             "has_try_except": has_try_except,
             "uses_onex_error": uses_onex_error,
-            "violations": violations
+            "violations": violations,
         }
 
-    async def validate_contract_conformance(
-        self,
-        code: str,
-        contract: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def validate_contract_conformance(self, code: str, contract: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate contract conformance (test API).
 
@@ -1209,7 +1086,6 @@ class QualityValidator:
             Dict with valid, all_methods_present, missing_methods
         """
         violations = []
-        suggestions = []
 
         try:
             tree = ast.parse(code)
@@ -1221,11 +1097,8 @@ class QualityValidator:
                     implemented_methods.add(node.name)
 
             # Get expected methods from capabilities
-            capabilities = contract.get('capabilities', [])
-            expected_methods = [
-                cap['name'] for cap in capabilities
-                if isinstance(cap, dict) and 'name' in cap
-            ]
+            capabilities = contract.get("capabilities", [])
+            expected_methods = [cap["name"] for cap in capabilities if isinstance(cap, dict) and "name" in cap]
 
             # Check missing methods with variant matching
             missing_methods = []
@@ -1236,7 +1109,7 @@ class QualityValidator:
                     f"_{method}",  # Private method variant
                     f"process_{method}",
                     f"handle_{method}",
-                    method.replace('_', '')
+                    method.replace("_", ""),
                 ]
 
                 if not any(variant in implemented_methods for variant in method_variants):
@@ -1251,17 +1124,9 @@ class QualityValidator:
             all_methods_present = False
             is_valid = False
 
-        return {
-            "valid": is_valid,
-            "all_methods_present": all_methods_present,
-            "missing_methods": missing_methods
-        }
+        return {"valid": is_valid, "all_methods_present": all_methods_present, "missing_methods": missing_methods}
 
-    async def validate_method_signatures(
-        self,
-        code: str,
-        contract: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def validate_method_signatures(self, code: str, contract: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate method signatures (test API).
 
@@ -1275,7 +1140,7 @@ class QualityValidator:
         signature_mismatches = []
 
         try:
-            tree = ast.parse(code)
+            ast.parse(code)
 
             # For now, just check if methods exist
             # Full implementation would check parameter names and types
@@ -1285,16 +1150,9 @@ class QualityValidator:
             signature_mismatches.append(f"Signature validation failed: {str(e)}")
             is_valid = False
 
-        return {
-            "valid": is_valid,
-            "signature_mismatches": signature_mismatches
-        }
+        return {"valid": is_valid, "signature_mismatches": signature_mismatches}
 
-    async def validate_return_types(
-        self,
-        code: str,
-        contract: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def validate_return_types(self, code: str, contract: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate return types (test API).
 
@@ -1314,25 +1172,14 @@ class QualityValidator:
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     has_return_type = node.returns is not None
-                    validation_results.append({
-                        "method": node.name,
-                        "has_return_type": has_return_type
-                    })
+                    validation_results.append({"method": node.name, "has_return_type": has_return_type})
 
         except Exception as e:
-            validation_results.append({
-                "error": f"Return type validation failed: {str(e)}"
-            })
+            validation_results.append({"error": f"Return type validation failed: {str(e)}"})
 
-        return {
-            "validation_results": validation_results
-        }
+        return {"validation_results": validation_results}
 
-    async def calculate_quality_score(
-        self,
-        code: str,
-        contract: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def calculate_quality_score(self, code: str, contract: Dict[str, Any]) -> Dict[str, Any]:
         """
         Calculate quality score (test API).
 
@@ -1349,43 +1196,32 @@ class QualityValidator:
                 code=code,
                 contract=contract,
                 node_type="EFFECT",  # Default, doesn't affect scoring much
-                microservice_name="test"
+                microservice_name="test",
             )
 
             # Extract component scores from compliance_details
             components = {}
             for check_name, check_result in result.compliance_details.items():
-                if check_name == 'syntax':
-                    components['syntax_score'] = 1.0 if check_result['valid'] else 0.0
+                if check_name == "syntax":
+                    components["syntax_score"] = 1.0 if check_result["valid"] else 0.0
                 else:
-                    components[f'{check_name}_score'] = check_result.get('score', 0.0)
+                    components[f"{check_name}_score"] = check_result.get("score", 0.0)
 
             # Add specific component names expected by tests
-            if 'onex_compliance' in result.compliance_details:
-                components['type_safety_score'] = components.get('onex_compliance_score', 0.0)
-                components['naming_compliance_score'] = components.get('onex_compliance_score', 0.0)
+            if "onex_compliance" in result.compliance_details:
+                components["type_safety_score"] = components.get("onex_compliance_score", 0.0)
+                components["naming_compliance_score"] = components.get("onex_compliance_score", 0.0)
 
-            if 'code_quality' in result.compliance_details:
-                components['error_handling_score'] = components.get('code_quality_score', 0.0)
+            if "code_quality" in result.compliance_details:
+                components["error_handling_score"] = components.get("code_quality_score", 0.0)
 
-            return {
-                "quality_score": result.quality_score,
-                "components": components
-            }
+            return {"quality_score": result.quality_score, "components": components}
 
         except Exception as e:
             self.logger.error(f"Quality score calculation failed: {str(e)}")
-            return {
-                "quality_score": 0.0,
-                "components": {}
-            }
+            return {"quality_score": 0.0, "components": {}}
 
-    async def validate_quality_threshold(
-        self,
-        code: str,
-        contract: Dict[str, Any],
-        threshold: float
-    ) -> Dict[str, Any]:
+    async def validate_quality_threshold(self, code: str, contract: Dict[str, Any], threshold: float) -> Dict[str, Any]:
         """
         Validate against quality threshold (test API).
 
@@ -1405,35 +1241,27 @@ class QualityValidator:
 
             failure_reasons = []
             if not meets_threshold:
-                failure_reasons.append(
-                    f"Quality score {quality_score:.2f} below threshold {threshold:.2f}"
-                )
+                failure_reasons.append(f"Quality score {quality_score:.2f} below threshold {threshold:.2f}")
 
                 # Add component-specific failures
                 for component, score in score_result["components"].items():
                     if score < 0.8:
-                        failure_reasons.append(
-                            f"{component}: {score:.2f} below 0.8"
-                        )
+                        failure_reasons.append(f"{component}: {score:.2f} below 0.8")
 
             return {
                 "meets_threshold": meets_threshold,
                 "quality_score": quality_score,
-                "failure_reasons": failure_reasons
+                "failure_reasons": failure_reasons,
             }
 
         except Exception as e:
             return {
                 "meets_threshold": False,
                 "quality_score": 0.0,
-                "failure_reasons": [f"Threshold validation failed: {str(e)}"]
+                "failure_reasons": [f"Threshold validation failed: {str(e)}"],
             }
 
-    async def detect_all_violations(
-        self,
-        code: str,
-        contract: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def detect_all_violations(self, code: str, contract: Dict[str, Any]) -> Dict[str, Any]:
         """
         Detect all violations (test API).
 
@@ -1446,41 +1274,36 @@ class QualityValidator:
         """
         try:
             result = await self.validate_generated_code(
-                code=code,
-                contract=contract,
-                node_type="EFFECT",
-                microservice_name="test"
+                code=code, contract=contract, node_type="EFFECT", microservice_name="test"
             )
 
             # Convert violations to structured format
             violations = []
             for violation_text in result.violations:
-                violations.append({
-                    "type": self._categorize_violation(violation_text),
-                    "severity": "error" if "error" in violation_text.lower() else "warning",
-                    "message": violation_text,
-                    "line": None  # Line number extraction would require more parsing
-                })
+                violations.append(
+                    {
+                        "type": self._categorize_violation(violation_text),
+                        "severity": "error" if "error" in violation_text.lower() else "warning",
+                        "message": violation_text,
+                        "line": None,  # Line number extraction would require more parsing
+                    }
+                )
 
-            return {
-                "violations": violations
-            }
+            return {"violations": violations}
 
         except Exception as e:
             return {
-                "violations": [{
-                    "type": "validation_error",
-                    "severity": "error",
-                    "message": f"Violation detection failed: {str(e)}",
-                    "line": None
-                }]
+                "violations": [
+                    {
+                        "type": "validation_error",
+                        "severity": "error",
+                        "message": f"Violation detection failed: {str(e)}",
+                        "line": None,
+                    }
+                ]
             }
 
-    async def validate_imports(
-        self,
-        code: str,
-        required_imports: List[str]
-    ) -> Dict[str, Any]:
+    async def validate_imports(self, code: str, required_imports: List[str]) -> Dict[str, Any]:
         """
         Validate required imports (test API).
 
@@ -1517,17 +1340,9 @@ class QualityValidator:
             missing_imports.append(f"Import validation failed: {str(e)}")
             is_valid = False
 
-        return {
-            "valid": is_valid,
-            "missing_imports": missing_imports
-        }
+        return {"valid": is_valid, "missing_imports": missing_imports}
 
-    async def validate_code(
-        self,
-        code: str,
-        contract: Dict[str, Any],
-        quality_threshold: float
-    ) -> Dict[str, Any]:
+    async def validate_code(self, code: str, contract: Dict[str, Any], quality_threshold: float) -> Dict[str, Any]:
         """
         Comprehensive code validation (test API).
 
@@ -1541,10 +1356,7 @@ class QualityValidator:
         """
         try:
             result = await self.validate_generated_code(
-                code=code,
-                contract=contract,
-                node_type="EFFECT",
-                microservice_name="test"
+                code=code, contract=contract, node_type="EFFECT", microservice_name="test"
             )
 
             meets_threshold = result.quality_score >= quality_threshold
@@ -1553,7 +1365,7 @@ class QualityValidator:
                 "valid": result.is_valid,
                 "quality_score": result.quality_score,
                 "violations": result.violations,
-                "meets_threshold": meets_threshold
+                "meets_threshold": meets_threshold,
             }
 
         except Exception as e:
@@ -1561,7 +1373,7 @@ class QualityValidator:
                 "valid": False,
                 "quality_score": 0.0,
                 "violations": [f"Validation failed: {str(e)}"],
-                "meets_threshold": False
+                "meets_threshold": False,
             }
 
     # Helper methods
@@ -1579,7 +1391,7 @@ class QualityValidator:
             if isinstance(node, ast.Raise):
                 if node.exc and isinstance(node.exc, ast.Call):
                     if isinstance(node.exc.func, ast.Name):
-                        if node.exc.func.id == 'OnexError':
+                        if node.exc.func.id == "OnexError":
                             return True
         return False
 
@@ -1587,27 +1399,23 @@ class QualityValidator:
         """Categorize violation by text"""
         text_lower = violation_text.lower()
 
-        if 'type' in text_lower or 'any' in text_lower:
-            return 'type_safety'
-        elif 'naming' in text_lower:
-            return 'naming_convention'
-        elif 'error' in text_lower or 'exception' in text_lower:
-            return 'error_handling'
-        elif 'import' in text_lower:
-            return 'imports'
-        elif 'docstring' in text_lower:
-            return 'documentation'
+        if "type" in text_lower or "any" in text_lower:
+            return "type_safety"
+        elif "naming" in text_lower:
+            return "naming_convention"
+        elif "error" in text_lower or "exception" in text_lower:
+            return "error_handling"
+        elif "import" in text_lower:
+            return "imports"
+        elif "docstring" in text_lower:
+            return "documentation"
         else:
-            return 'general'
+            return "general"
 
 
 # Convenience function for quick validation
 async def validate_code(
-    code: str,
-    contract: Dict[str, Any],
-    node_type: str,
-    microservice_name: str,
-    config: Optional[CodegenConfig] = None
+    code: str, contract: Dict[str, Any], node_type: str, microservice_name: str, config: Optional[CodegenConfig] = None
 ) -> ValidationResult:
     """
     Convenience function for validating generated code.
@@ -1623,14 +1431,7 @@ async def validate_code(
         ValidationResult with quality score and feedback
     """
     validator = QualityValidator(config)
-    return await validator.validate_generated_code(
-        code, contract, node_type, microservice_name
-    )
+    return await validator.validate_generated_code(code, contract, node_type, microservice_name)
 
 
-__all__ = [
-    'QualityValidator',
-    'ValidationResult',
-    'ONEXComplianceCheck',
-    'validate_code'
-]
+__all__ = ["QualityValidator", "ValidationResult", "ONEXComplianceCheck", "validate_code"]

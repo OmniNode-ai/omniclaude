@@ -10,10 +10,10 @@ Run: python examples/event_memory_demo.py
 
 import uuid
 from pathlib import Path
-from datetime import datetime
 
 # Add parent directory to path for imports
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.memory import (
@@ -24,7 +24,7 @@ from lib.memory import (
     Violation,
     Correction,
     AIQuorumScore,
-    IntentContextData
+    IntentContextData,
 )
 
 
@@ -42,9 +42,7 @@ def demo_complete_workflow():
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     store = EventStore(
-        storage_path=db_path,
-        qdrant_url="http://localhost:6333",
-        ollama_url="http://192.168.86.200:11434"
+        storage_path=db_path, qdrant_url="http://localhost:6333", ollama_url="http://192.168.86.200:11434"
     )
 
     print(f"✅ Event Store initialized: {db_path}")
@@ -65,7 +63,7 @@ def demo_complete_workflow():
         suggested_agents=["agent-api-architect", "agent-python-fastapi-expert"],
         validators=["api_compliance_validator", "parameter_validator"],
         onex_rules=["api_naming", "response_structure"],
-        secondary_intents=["file_modification"]
+        secondary_intents=["file_modification"],
     )
 
     event1 = WorkflowEvent.create(
@@ -75,7 +73,7 @@ def demo_complete_workflow():
         file_path=file_path,
         content="def GetUser(): pass",
         intent=intent,
-        iteration_number=1
+        iteration_number=1,
     )
     store.record_event(event1)
     print(f"   Intent: {intent.primary_intent} (confidence: {intent.confidence})")
@@ -91,15 +89,15 @@ def demo_complete_workflow():
             severity="error",
             message="API endpoint function should use snake_case",
             line_number=1,
-            suggested_fix="Rename GetUser to get_user"
+            suggested_fix="Rename GetUser to get_user",
         ),
         Violation(
             rule="missing_docstring",
             severity="warning",
             message="API function missing docstring",
             line_number=1,
-            suggested_fix="Add docstring describing endpoint"
-        )
+            suggested_fix="Add docstring describing endpoint",
+        ),
     ]
 
     event2 = WorkflowEvent.create(
@@ -111,7 +109,7 @@ def demo_complete_workflow():
         violations=violations,
         success=False,
         iteration_number=1,
-        parent_event_id=event1.event_id
+        parent_event_id=event1.event_id,
     )
     store.record_event(event2)
     print(f"   Violations Found: {len(violations)}")
@@ -128,7 +126,7 @@ def demo_complete_workflow():
             original_content="def GetUser():",
             corrected_content="def get_user():",
             reasoning="Convert function name to snake_case per ONEX naming conventions",
-            applied=True
+            applied=True,
         ),
         Correction(
             source="quorum",
@@ -136,19 +134,15 @@ def demo_complete_workflow():
             original_content="def get_user():",
             corrected_content='def get_user():\n    """Get user by ID from database."""',
             reasoning="Add descriptive docstring for API endpoint documentation",
-            applied=True
-        )
+            applied=True,
+        ),
     ]
 
     quorum_score = AIQuorumScore(
         consensus_score=0.86,
-        model_votes={
-            "flash": 0.82,
-            "codestral": 0.90,
-            "pro": 0.86
-        },
+        model_votes={"flash": 0.82, "codestral": 0.90, "pro": 0.86},
         decision="auto_apply",
-        reasoning="High confidence consensus across all models - safe to auto-apply"
+        reasoning="High confidence consensus across all models - safe to auto-apply",
     )
 
     event3 = WorkflowEvent.create(
@@ -160,7 +154,7 @@ def demo_complete_workflow():
         corrections=corrections,
         scores=quorum_score,
         iteration_number=1,
-        parent_event_id=event2.event_id
+        parent_event_id=event2.event_id,
     )
     store.record_event(event3)
     print(f"   Corrections Generated: {len(corrections)}")
@@ -182,11 +176,11 @@ def demo_complete_workflow():
         content=corrected_content,
         success=True,
         iteration_number=2,
-        parent_event_id=event3.event_id
+        parent_event_id=event3.event_id,
     )
     store.record_event(event4)
-    print(f"   Both corrections successfully applied")
-    print(f"   Iteration: 2")
+    print("   Both corrections successfully applied")
+    print("   Iteration: 2")
     print()
 
     # Event 5: Validation Passed
@@ -199,10 +193,10 @@ def demo_complete_workflow():
         content=corrected_content,
         success=True,
         iteration_number=2,
-        parent_event_id=event4.event_id
+        parent_event_id=event4.event_id,
     )
     store.record_event(event5)
-    print(f"   All validation rules passed ✓")
+    print("   All validation rules passed ✓")
     print()
 
     # Event 6: Write Success
@@ -215,10 +209,10 @@ def demo_complete_workflow():
         content=corrected_content,
         success=True,
         iteration_number=2,
-        parent_event_id=event5.event_id
+        parent_event_id=event5.event_id,
     )
     store.record_event(event6)
-    print(f"   File written successfully ✓")
+    print("   File written successfully ✓")
     print()
 
     # Demonstrate workflow retrieval
@@ -245,7 +239,7 @@ def demo_complete_workflow():
 
     # Workflow summary
     summary = analytics.create_workflow_summary(correlation_id)
-    print(f"📊 Workflow Summary:")
+    print("📊 Workflow Summary:")
     print(f"   Duration: {summary.duration_ms:.0f}ms")
     print(f"   Total Events: {summary.total_events}")
     print(f"   Iterations: {summary.iterations}")
@@ -257,7 +251,7 @@ def demo_complete_workflow():
 
     # Overall metrics
     metrics = analytics.get_workflow_metrics(days=7)
-    print(f"📈 Overall Metrics (Last 7 Days):")
+    print("📈 Overall Metrics (Last 7 Days):")
     print(f"   Total Workflows: {metrics.total_workflows}")
     print(f"   Success Rate: {metrics.success_rate:.1%}")
     print(f"   Avg Duration: {metrics.avg_duration_ms:.0f}ms")
@@ -268,7 +262,7 @@ def demo_complete_workflow():
     # Correction effectiveness
     correction_stats = analytics.get_correction_stats(days=7)
     if correction_stats:
-        print(f"🔧 Correction Effectiveness:")
+        print("🔧 Correction Effectiveness:")
         for source, stats in correction_stats.items():
             print(f"   {source.upper()}:")
             print(f"     Success Rate: {stats.success_rate:.1%}")
@@ -278,7 +272,7 @@ def demo_complete_workflow():
 
     # Store stats
     stats = store.get_stats()
-    print(f"💾 Storage Statistics:")
+    print("💾 Storage Statistics:")
     print(f"   Total Events: {stats['total_events']}")
     print(f"   Successful Events: {stats['success_count']}")
     print(f"   Success Rate: {stats['success_rate']:.1%}")

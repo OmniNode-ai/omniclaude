@@ -26,13 +26,11 @@ Usage:
 
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 from uuid import UUID
 import asyncio
 
 from .structured_logger import (
-    set_global_correlation_id,
-    set_global_session_id,
     _correlation_id,
     _session_id,
     _component,
@@ -43,7 +41,7 @@ from .structured_logger import (
 def log_context(
     correlation_id: Optional[UUID | str] = None,
     session_id: Optional[UUID | str] = None,
-    component: Optional[str] = None
+    component: Optional[str] = None,
 ):
     """
     Context manager for log context propagation (synchronous).
@@ -87,7 +85,7 @@ def log_context(
 async def async_log_context(
     correlation_id: Optional[UUID | str] = None,
     session_id: Optional[UUID | str] = None,
-    component: Optional[str] = None
+    component: Optional[str] = None,
 ):
     """
     Async context manager for log context propagation.
@@ -128,9 +126,7 @@ async def async_log_context(
 
 
 def with_log_context(
-    component: Optional[str] = None,
-    correlation_id_param: str = "correlation_id",
-    session_id_param: str = "session_id"
+    component: Optional[str] = None, correlation_id_param: str = "correlation_id", session_id_param: str = "session_id"
 ):
     """
     Decorator for automatic log context propagation.
@@ -148,6 +144,7 @@ def with_log_context(
         async def research_task(correlation_id: UUID, query: str):
             logger.info("Research started", metadata={"query": query})
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
@@ -156,11 +153,7 @@ def with_log_context(
             session_id = kwargs.get(session_id_param)
 
             # Set up context
-            async with async_log_context(
-                correlation_id=correlation_id,
-                session_id=session_id,
-                component=component
-            ):
+            async with async_log_context(correlation_id=correlation_id, session_id=session_id, component=component):
                 return await func(*args, **kwargs)
 
         @wraps(func)
@@ -170,11 +163,7 @@ def with_log_context(
             session_id = kwargs.get(session_id_param)
 
             # Set up context
-            with log_context(
-                correlation_id=correlation_id,
-                session_id=session_id,
-                component=component
-            ):
+            with log_context(correlation_id=correlation_id, session_id=session_id, component=component):
                 return func(*args, **kwargs)
 
         # Return appropriate wrapper based on function type
@@ -206,7 +195,7 @@ class LogContext:
         self,
         correlation_id: Optional[UUID | str] = None,
         session_id: Optional[UUID | str] = None,
-        component: Optional[str] = None
+        component: Optional[str] = None,
     ):
         self.correlation_id = str(correlation_id) if correlation_id else None
         self.session_id = str(session_id) if session_id else None

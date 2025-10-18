@@ -7,47 +7,28 @@ Shows how to track all 33 performance thresholds with <10ms overhead.
 
 import asyncio
 import time
-from metrics_collector import (
-    get_metrics_collector,
-    MetricType,
-    ThresholdStatus
-)
+from metrics_collector import get_metrics_collector, MetricType, ThresholdStatus
 
 
 async def demo_routing_metrics():
     """Demonstrate routing decision metrics collection."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("📊 Demo: Routing Decision Metrics Collection")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
 
     # Simulate routing decisions
     test_cases = [
-        {
-            "latency_ms": 45,
-            "confidence": 0.95,
-            "agent": "agent-contract-driven-generator",
-            "cache_hit": True
-        },
-        {
-            "latency_ms": 78,
-            "confidence": 0.87,
-            "agent": "agent-debug-intelligence",
-            "cache_hit": False
-        },
+        {"latency_ms": 45, "confidence": 0.95, "agent": "agent-contract-driven-generator", "cache_hit": True},
+        {"latency_ms": 78, "confidence": 0.87, "agent": "agent-debug-intelligence", "cache_hit": False},
         {
             "latency_ms": 110,  # Exceeds 100ms threshold
             "confidence": 0.65,
             "agent": "agent-api-architect",
-            "cache_hit": False
+            "cache_hit": False,
         },
-        {
-            "latency_ms": 32,
-            "confidence": 0.92,
-            "agent": "agent-contract-driven-generator",
-            "cache_hit": True
-        }
+        {"latency_ms": 32, "confidence": 0.92, "agent": "agent-contract-driven-generator", "cache_hit": True},
     ]
 
     print("Recording routing decisions...\n")
@@ -61,10 +42,10 @@ async def demo_routing_metrics():
             agent_selected=case["agent"],
             alternatives=[
                 {"agent": "agent-debug-intelligence", "confidence": 0.45},
-                {"agent": "agent-api-architect", "confidence": 0.35}
+                {"agent": "agent-api-architect", "confidence": 0.35},
             ],
             cache_hit=case["cache_hit"],
-            metadata={"test_case": i}
+            metadata={"test_case": i},
         )
 
         overhead_ms = (time.time() - start) * 1000
@@ -75,9 +56,9 @@ async def demo_routing_metrics():
         print()
 
     # Show statistics
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("📈 Routing Statistics")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     routing_stats = collector.get_routing_statistics()
     print(f"Total decisions: {routing_stats['total_decisions']}")
@@ -94,9 +75,9 @@ async def demo_routing_metrics():
 
 async def demo_threshold_monitoring():
     """Demonstrate threshold monitoring for all 33 thresholds."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("🎯 Demo: Performance Threshold Monitoring")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
 
@@ -106,17 +87,14 @@ async def demo_threshold_monitoring():
         ("INT-001", "RAG Query", 1450, "ms"),
         ("INT-002", "Intelligence Gathering", 85, "ms"),
         ("INT-003", "Pattern Recognition", 450, "ms"),
-
         # Parallel execution thresholds
         ("PAR-001", "Parallel Coordination Setup", 480, "ms"),
         ("PAR-002", "Context Distribution", 175, "ms"),
         ("PAR-004", "Result Aggregation", 280, "ms"),
-
         # Context management thresholds
         ("CTX-001", "Context Initialization", 45, "ms"),
         ("CTX-002", "Context Preservation", 22, "ms"),
         ("CTX-003", "Context Refresh", 68, "ms"),
-
         # Lifecycle thresholds
         ("LCL-001", "Agent Initialization", 285, "ms"),
         ("LCL-003", "Quality Gate Execution", 185, "ms"),
@@ -126,28 +104,23 @@ async def demo_threshold_monitoring():
 
     for threshold_id, name, value, unit in threshold_tests:
         await collector.record_threshold_metric(
-            threshold_id=threshold_id,
-            measured_value=value,
-            metadata={"test": "demo", "name": name}
+            threshold_id=threshold_id, measured_value=value, metadata={"test": "demo", "name": name}
         )
         print(f"✓ {threshold_id}: {name} = {value}{unit}")
 
     # Show violations
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("⚠️  Threshold Violations")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
-    violations = await collector.get_recent_violations(
-        count=10,
-        min_status=ThresholdStatus.WARNING
-    )
+    violations = await collector.get_recent_violations(count=10, min_status=ThresholdStatus.WARNING)
 
     if violations:
         for v in violations:
             status_emoji = {
                 ThresholdStatus.WARNING: "⚠️",
                 ThresholdStatus.CRITICAL: "🔴",
-                ThresholdStatus.EMERGENCY: "🚨"
+                ThresholdStatus.EMERGENCY: "🚨",
             }.get(v.status, "ℹ️")
 
             print(f"{status_emoji} {v.threshold_id}: {v.threshold_name}")
@@ -160,9 +133,9 @@ async def demo_threshold_monitoring():
 
 async def demo_trend_analysis():
     """Demonstrate performance trend analysis."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("📊 Demo: Performance Trend Analysis")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
 
@@ -175,7 +148,7 @@ async def demo_trend_analysis():
             latency_ms=base_latency,
             confidence_score=0.85,
             agent_selected="agent-contract-driven-generator",
-            cache_hit=True
+            cache_hit=True,
         )
 
     # Establish baseline
@@ -197,7 +170,7 @@ async def demo_trend_analysis():
             latency_ms=degraded_latency,
             confidence_score=0.80,
             agent_selected="agent-contract-driven-generator",
-            cache_hit=False
+            cache_hit=False,
         )
 
     # Analyze trends
@@ -219,9 +192,9 @@ async def demo_trend_analysis():
 
 async def demo_agent_transformation():
     """Demonstrate agent transformation metrics."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("🔄 Demo: Agent Transformation Tracking")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
 
@@ -241,16 +214,16 @@ async def demo_agent_transformation():
             to_agent=to_agent,
             transformation_time_ms=time_ms,
             success=success,
-            metadata={"test": "demo"}
+            metadata={"test": "demo"},
         )
 
         status = "✓" if success else "❌"
         target = "✓" if time_ms < 50 else "⚠️"
         print(f"{status} {from_agent} → {to_agent}: {time_ms}ms {target}")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("Transformation Statistics")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     stats = collector.get_transformation_statistics()
     print(f"Total transformations: {stats['total_transformations']}")
@@ -261,9 +234,9 @@ async def demo_agent_transformation():
 
 async def demo_optimization_report():
     """Generate comprehensive optimization report."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("📋 Demo: Optimization Report Generation")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
 
@@ -275,32 +248,32 @@ async def demo_optimization_report():
 
     print(f"✓ Report generated in {generation_time:.2f}ms\n")
 
-    print("="*80)
+    print("=" * 80)
     print("Cache Performance")
-    print("="*80)
+    print("=" * 80)
     cache = report["cache_statistics"]
     print(f"Hit rate: {cache['hit_rate_percent']:.1f}% (target: {cache['target_hit_rate_percent']}%)")
     print(f"Queries: {cache['total_queries']}, Hits: {cache['cache_hits']}, Misses: {cache['cache_misses']}\n")
 
-    print("="*80)
+    print("=" * 80)
     print("Routing Performance")
-    print("="*80)
+    print("=" * 80)
     routing = report["routing_statistics"]
     print(f"Total decisions: {routing['total_decisions']}")
     print(f"Success rate: {routing['success_rate_percent']:.1f}%\n")
 
     if report["recent_violations"]:
-        print("="*80)
+        print("=" * 80)
         print("Recent Violations")
-        print("="*80)
+        print("=" * 80)
         for v in report["recent_violations"][:5]:
             print(f"• {v['threshold_name']}: {v['measured_value']:.2f} ({v['violation_percent']:.1f}%)")
         print()
 
     if report["optimization_recommendations"]:
-        print("="*80)
+        print("=" * 80)
         print("Optimization Recommendations")
-        print("="*80)
+        print("=" * 80)
         for i, rec in enumerate(report["optimization_recommendations"][:5], 1):
             print(f"{i}. {rec}")
         print()
@@ -308,9 +281,9 @@ async def demo_optimization_report():
 
 async def main():
     """Run all demos."""
-    print("\n" + "🚀 " + "="*78)
+    print("\n" + "🚀 " + "=" * 78)
     print("RouterMetricsCollector Demo Suite")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     # Run demos
     await demo_routing_metrics()
@@ -320,17 +293,17 @@ async def main():
     await demo_optimization_report()
 
     # Flush to file
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("💾 Flushing Metrics to File")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     collector = get_metrics_collector()
     await collector.flush_to_file()
     print(f"✓ Metrics flushed to {collector.metrics_dir}\n")
 
-    print("="*80)
+    print("=" * 80)
     print("✓ Demo Complete")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":

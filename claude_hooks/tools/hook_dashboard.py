@@ -5,18 +5,15 @@ Real-time view of Claude Code hook system activity
 """
 
 import psycopg2
-from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import json
+
 
 class HookDashboard:
     """Simple dashboard for hook intelligence data"""
 
     def __init__(self, db_password: str = "omninode-bridge-postgres-dev-2024"):
-        self.conn_string = (
-            f"host=localhost port=5436 dbname=omninode_bridge "
-            f"user=postgres password={db_password}"
-        )
+        self.conn_string = f"host=localhost port=5436 dbname=omninode_bridge " f"user=postgres password={db_password}"
 
     def get_connection(self):
         """Get database connection"""
@@ -50,7 +47,7 @@ class HookDashboard:
                         "domain": row[2],
                         "prompt": row[3][:80] + "..." if row[3] else None,
                         "method": row[4],
-                        "confidence": row[5]
+                        "confidence": row[5],
                     }
                     for row in rows
                 ]
@@ -87,7 +84,7 @@ class HookDashboard:
                         "agent": row[0] or "no_agent",
                         "tool": row[1],
                         "count": row[2],
-                        "avg_ms": round(float(row[3]), 2) if row[3] else 0
+                        "avg_ms": round(float(row[3]), 2) if row[3] else 0,
                     }
                     for row in rows
                 ]
@@ -110,14 +107,7 @@ class HookDashboard:
             with conn.cursor() as cur:
                 cur.execute(query, (hours,))
                 rows = cur.fetchall()
-                return {
-                    row[0]: {
-                        "events": row[1],
-                        "first": row[2],
-                        "last": row[3]
-                    }
-                    for row in rows
-                }
+                return {row[0]: {"events": row[1], "first": row[2], "last": row[3]} for row in rows}
 
     def correlation_trace(self, correlation_id: str) -> Dict[str, Any]:
         """Get full correlation trace for a request"""
@@ -147,10 +137,10 @@ class HookDashboard:
                             "resource_id": row[2],
                             "payload": row[3],
                             "metadata": row[4],
-                            "time": row[5]
+                            "time": row[5],
                         }
                         for row in rows
-                    ]
+                    ],
                 }
 
     def print_dashboard(self):
@@ -165,9 +155,11 @@ class HookDashboard:
         stats = self.hook_performance_stats()
         if stats:
             for source, data in stats.items():
-                print(f"{source:20} {data['events']:5} events  "
-                      f"(First: {data['first'].strftime('%H:%M:%S')}  "
-                      f"Last: {data['last'].strftime('%H:%M:%S')})")
+                print(
+                    f"{source:20} {data['events']:5} events  "
+                    f"(First: {data['first'].strftime('%H:%M:%S')}  "
+                    f"Last: {data['last'].strftime('%H:%M:%S')})"
+                )
         else:
             print("No events found")
 
@@ -177,12 +169,12 @@ class HookDashboard:
         detections = self.recent_agent_detections()
         if detections:
             for d in detections:
-                time_str = d['time'].strftime("%H:%M:%S")
-                agent = d['agent'] or "no_agent"
-                method = d['method'] or "unknown"
-                conf = d['confidence'] or "N/A"
+                time_str = d["time"].strftime("%H:%M:%S")
+                agent = d["agent"] or "no_agent"
+                method = d["method"] or "unknown"
+                conf = d["confidence"] or "N/A"
                 print(f"{time_str}  {agent:30}  {method:12}  conf:{conf}")
-                if d['prompt']:
+                if d["prompt"]:
                     print(f"         Prompt: {d['prompt']}")
         else:
             print("No agent detections found")
