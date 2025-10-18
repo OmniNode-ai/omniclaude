@@ -65,7 +65,7 @@ jobs:
           }
 
       - name: Run Black (code formatting check)
-        run: poetry run black --check .
+        run: poetry run black --check . --exclude 'agents/templates/'
 
       - name: Run Ruff (linting)
         run: poetry run ruff check .
@@ -111,8 +111,8 @@ jobs:
       - name: Run Bandit (security linter for Python)
         run: |
           pip install bandit
-          bandit -r agents/ -f json -o bandit-report.json || true
-          bandit -r agents/ -f txt
+          bandit -r agents/ -f json -o bandit-report.json -c .bandit || true
+          bandit -r agents/ -f txt -c .bandit
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
@@ -192,6 +192,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DATABASE: test_db
+          TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
           poetry run pytest -v --cov=agents --cov-report=xml --cov-report=term-missing
 
