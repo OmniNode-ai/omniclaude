@@ -1,5 +1,6 @@
-[bandit]
-# Exclude test assertions (B101) in test files
-exclude = */tests/*,*/test_*.py,*_test.py
-skips = B101
-exclude_dirs = /agents/tests/,/agents/templates/,/claude_hooks/tests/
+exclude_dirs:
+  - /agents/tests/
+  - /agents/templates/
+  - /claude_hooks/tests/
+skips:
+  - B101
