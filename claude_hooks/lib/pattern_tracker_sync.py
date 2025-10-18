@@ -49,7 +49,7 @@ class PatternTrackerSync:
     def _check_api_health(self) -> bool:
         """Check if Phase 4 API is reachable."""
         try:
-            response = requests.get(f"{self.base_url}/health", timeout=2)
+            response = requests.get(f"{self.base_url}/health", timeout=5)
             if response.status_code == 200:
                 print(f"✅ [PatternTrackerSync] Phase 4 API reachable", file=sys.stderr)
                 self._api_healthy = True

@@ -81,6 +81,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --ho
     CREATE INDEX IF NOT EXISTS idx_router_metrics_created ON router_performance_metrics(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_router_metrics_strategy ON router_performance_metrics(trigger_match_strategy);
 
-    EOSQL
+EOSQL
 
 echo "Database initialization completed successfully!"

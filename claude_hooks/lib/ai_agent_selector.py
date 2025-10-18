@@ -68,7 +68,15 @@ class AIAgentSelector:
         for yaml_file in self.config_dir.glob("agent-*.yaml"):
             try:
                 with open(yaml_file, 'r') as f:
-                    config = yaml.safe_load(f)
+                    # Use safe_load_all to handle files with multiple YAML documents
+                    # Take the first document (agent config)
+                    docs = list(yaml.safe_load_all(f))
+                    if not docs:
+                        continue
+                    config = docs[0]
+
+                    if not isinstance(config, dict):
+                        continue
 
                     # Extract key metadata for AI selection
                     # Handle capabilities as either dict or list
