@@ -8,6 +8,12 @@ packages = [{include = "parallel_execution", from = "agents"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+
+# ONEX dependencies - Using main branch
+omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main"}
+omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch = "main"}
+
+# Core dependencies
 pydantic = "^2.0.0"
 pyyaml = "^6.0"
 httpx = "^0.28.1"
@@ -20,9 +26,7 @@ python-dotenv = "^1.1.1"
 asyncpg = "^0.29.0"
 watchdog = "^6.0.0"
 numpy = "^2.3.3"
-omnibase-core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "main"}
 aiokafka = "^0.10.0"
-omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", rev = "main"}
 scikit-learn = "^1.7.2"
 
 [tool.poetry.group.kafka.dependencies]
