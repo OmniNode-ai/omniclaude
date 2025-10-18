@@ -1,4 +1,4 @@
-# Phase 7 Integration Guide
+# Agent Framework Integration Guide
 
 **Version**: 1.0
 **Status**: Complete
@@ -12,7 +12,7 @@
 2. [Component Integration](#component-integration)
 3. [Workflow Integration](#workflow-integration)
 4. [Database Integration](#database-integration)
-5. [Migration from Phase 6](#migration-from-phase-6)
+5. [Migration Guide](#migration-guide)
 6. [Testing Integration](#testing-integration)
 7. [External Systems](#external-systems)
 
@@ -20,11 +20,11 @@
 
 ## Overview
 
-This guide explains how Phase 7 components integrate with each other and with existing OmniNode systems. Phase 7 introduces 8 new streams that enhance the code generation pipeline with intelligence, performance, and observability.
+This guide explains how agent framework components integrate with each other and with existing OmniNode systems. The framework introduces 8 parallel streams that enhance the code generation pipeline with intelligence, performance, and observability.
 
 ### Integration Philosophy
 
-Phase 7 follows a **layered integration approach**:
+The agent framework follows a **layered integration approach**:
 
 1. **Foundation Layer (Stream 1)**: Database schema provides persistent storage
 2. **Service Layer (Streams 2, 3, 6)**: Core services build on database foundation
@@ -81,7 +81,7 @@ Phase 7 follows a **layered integration approach**:
 
 ### Stream 1: Database Integration
 
-All Phase 7 components integrate with the database layer for persistence and analytics.
+All framework components integrate with the database layer for persistence and analytics.
 
 #### Integration Pattern
 
@@ -484,7 +484,7 @@ print(f"Success rate: {health['success_rate']:.1%}")
 
 ### Stream 7: Monitoring Integration
 
-Monitoring integrates with all Phase 7 components for comprehensive observability.
+Monitoring integrates with all framework components for comprehensive observability.
 
 #### Component Metrics Integration
 
@@ -687,7 +687,7 @@ async def operation():
 
 ### Complete Code Generation Workflow
 
-This example shows how all Phase 7 components integrate in a complete workflow:
+This example shows how all framework components integrate in a complete workflow:
 
 ```python
 from uuid import uuid4
@@ -702,7 +702,7 @@ persistence = OmniNodePersistence()
 
 async def complete_workflow(prd_content: str, output_dir: str):
     """
-    Complete code generation workflow with all Phase 7 integrations.
+    Complete code generation workflow with all framework integrations.
     """
     # Create correlation ID for tracing
     correlation_id = uuid4()
@@ -876,7 +876,7 @@ psql -h localhost -p 5432 -U postgres -d omninode_bridge \
 pg_dump -h localhost -p 5432 -U postgres omninode_bridge \
   -f backup_before_phase7.sql
 
-# Apply Phase 7 migration
+# Apply framework migration
 psql -h localhost -p 5432 -U postgres -d omninode_bridge \
   -f agents/parallel_execution/migrations/006_phase7_schema_enhancements.sql
 
@@ -896,7 +896,7 @@ workflow = CodegenWorkflow()
 result = await workflow.generate_from_prd(prd_content, output_dir)
 ```
 
-**After (Phase 7)**:
+**After (with framework enhancements)**:
 ```python
 from agents.lib.codegen_workflow import CodegenWorkflow
 from agents.lib.structured_logger import get_logger
@@ -965,7 +965,7 @@ load_alert_config('agents/configs/alert_config.yaml')
 #### 5. Testing Migration
 
 ```bash
-# Run all Phase 7 tests
+# Run all framework tests
 python -m pytest agents/tests/test_phase7_schema.py -v
 python -m pytest agents/tests/test_template_cache.py -v
 python -m pytest agents/tests/test_monitoring.py -v
@@ -1002,7 +1002,7 @@ python -m pytest agents/tests/test_structured_logging.py -v
 - Don't block on low scores yet
 
 **Phase 6: Full Integration** (High Confidence)
-- All Phase 7 features enabled
+- All framework features enabled
 - Alerts enabled
 - ML recommendations enforced
 
@@ -1021,7 +1021,7 @@ from agents.lib.monitoring import get_monitoring_system, collect_all_metrics
 
 @pytest.mark.asyncio
 async def test_complete_integration():
-    """Test complete Phase 7 integration."""
+    """Test complete framework integration."""
     # Setup
     workflow = CodegenWorkflow()
     persistence = OmniNodePersistence()
@@ -1189,7 +1189,7 @@ scrape_configs:
 ```json
 {
   "dashboard": {
-    "title": "OmniClaude Phase 7 Metrics",
+    "title": "OmniClaude Agent Framework Metrics",
     "panels": [
       {
         "title": "Template Cache Hit Rate",

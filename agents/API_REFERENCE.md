@@ -1,10 +1,10 @@
-# Phase 7 API Reference
+# Agent Framework API Reference
 
 **Version**: 1.0
 **Last Updated**: 2025-10-15
 **Coverage**: 100% of public APIs across 8 streams
 
-This document provides comprehensive API documentation for all Phase 7 components including template caching, parallel generation, mixin learning, pattern feedback, event optimization, monitoring, and structured logging.
+This document provides comprehensive API documentation for all agent framework components including template caching, parallel generation, mixin learning, pattern feedback, event optimization, monitoring, and structured logging.
 
 ---
 
@@ -25,7 +25,7 @@ This document provides comprehensive API documentation for all Phase 7 component
 
 ### Overview
 
-Phase 7 database schema enhancements provide 5 new tables, 30 indexes, 5 views, and 2 helper functions for machine learning, performance metrics, and pattern feedback tracking.
+The framework database schema provides 5 tables, 30 indexes, 5 views, and 2 helper functions for machine learning, performance metrics, and pattern feedback tracking.
 
 ### Tables
 
@@ -1550,7 +1550,7 @@ Comprehensive monitoring infrastructure with 100% critical path coverage. Provid
 
 #### `MonitoringSystem`
 
-Main monitoring system for Phase 7 components.
+Main monitoring system for framework components.
 
 **Location**: `agents/lib/monitoring.py`
 
@@ -2434,7 +2434,7 @@ await monitoring.record_metric(
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2025-10-15 | Initial Phase 7 API documentation |
+| 1.0 | 2025-10-15 | Initial agent framework API documentation |
 
 ---
 
