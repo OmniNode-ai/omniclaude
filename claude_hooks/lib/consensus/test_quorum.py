@@ -235,10 +235,7 @@ def test_min_model_participation():
     print("Test: MIN_MODEL_PARTICIPATION Enforcement")
 
     # Create quorum with 5 models
-    models = [
-        ModelConfig(name=f"model-{i}", provider=ModelProvider.OLLAMA, weight=1.0)
-        for i in range(5)
-    ]
+    models = [ModelConfig(name=f"model-{i}", provider=ModelProvider.OLLAMA, weight=1.0) for i in range(5)]
 
     quorum = AIQuorum(models=models, stub_mode=False, enable_ai_scoring=True)
 

@@ -172,11 +172,7 @@ class CacheManager:
             except (json.JSONDecodeError, KeyError, OSError):
                 expired_entries += 1
 
-        oldest_age_hours = (
-            (current_time - oldest_timestamp) / 3600
-            if oldest_timestamp is not None
-            else 0
-        )
+        oldest_age_hours = (current_time - oldest_timestamp) / 3600 if oldest_timestamp is not None else 0
 
         return {
             "total_entries": total_entries,

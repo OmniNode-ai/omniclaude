@@ -27,6 +27,7 @@ from ai_agent_selector import AIAgentSelector
 
 class SelectionMethod(Enum):
     """Agent selection method."""
+
     PATTERN = "pattern"
     TRIGGER = "trigger"
     AI = "ai"
@@ -36,6 +37,7 @@ class SelectionMethod(Enum):
 @dataclass
 class AgentSelection:
     """Result of agent selection."""
+
     found: bool
     agent_name: Optional[str] = None
     confidence: float = 0.0
@@ -51,7 +53,7 @@ class AgentSelection:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = asdict(self)
-        result['method'] = self.method.value
+        result["method"] = self.method.value
         return result
 
 
@@ -76,7 +78,7 @@ class HybridAgentSelector:
         confidence_threshold: float = 0.8,
         model_preference: str = "auto",
         timeout_ms: int = 500,
-        config: Optional[Dict] = None
+        config: Optional[Dict] = None,
     ):
         """
         Initialize hybrid agent selector.
@@ -93,7 +95,9 @@ class HybridAgentSelector:
 
         # Apply overrides from constructor
         self.enable_ai = enable_ai if enable_ai is not None else self.config.get("enable_ai", True)
-        self.confidence_threshold = confidence_threshold if confidence_threshold else self.config.get("confidence_threshold", 0.8)
+        self.confidence_threshold = (
+            confidence_threshold if confidence_threshold else self.config.get("confidence_threshold", 0.8)
+        )
         self.model_preference = model_preference or self.config.get("model_preference", "auto")
         self.timeout_ms = timeout_ms if timeout_ms else self.config.get("timeout_ms", 500)
 
@@ -104,10 +108,7 @@ class HybridAgentSelector:
         # Initialize AI selector if enabled
         if self.enable_ai:
             try:
-                self.ai_selector = AIAgentSelector(
-                    model_preference=self.model_preference,
-                    zen_mcp_available=True
-                )
+                self.ai_selector = AIAgentSelector(model_preference=self.model_preference, zen_mcp_available=True)
             except Exception as e:
                 print(f"Warning: AI selector initialization failed: {e}", file=sys.stderr)
                 self.ai_selector = None
@@ -121,7 +122,7 @@ class HybridAgentSelector:
             "ai_selections": 0,
             "no_agent_selections": 0,
             "total_latency_ms": 0.0,
-            "avg_latency_ms": 0.0
+            "avg_latency_ms": 0.0,
         }
 
     def _load_config(self) -> Dict[str, Any]:
@@ -130,7 +131,7 @@ class HybridAgentSelector:
             "enable_ai": os.getenv("ENABLE_AI_AGENT_SELECTION", "true").lower() == "true",
             "confidence_threshold": float(os.getenv("AI_AGENT_CONFIDENCE_THRESHOLD", "0.8")),
             "model_preference": os.getenv("AI_MODEL_PREFERENCE", "auto"),
-            "timeout_ms": int(os.getenv("AI_SELECTION_TIMEOUT_MS", "500"))
+            "timeout_ms": int(os.getenv("AI_SELECTION_TIMEOUT_MS", "500")),
         }
 
         # Try to load from config file
@@ -138,7 +139,8 @@ class HybridAgentSelector:
         if config_path.exists():
             try:
                 import yaml
-                with open(config_path, 'r') as f:
+
+                with open(config_path, "r") as f:
                     file_config = yaml.safe_load(f)
                     if file_config and "agent_selection" in file_config:
                         config.update(file_config["agent_selection"])
@@ -147,11 +149,7 @@ class HybridAgentSelector:
 
         return config
 
-    def select_agent(
-        self,
-        prompt: str,
-        context: Optional[Dict] = None
-    ) -> AgentSelection:
+    def select_agent(self, prompt: str, context: Optional[Dict] = None) -> AgentSelection:
         """
         Select best agent using 3-stage pipeline.
 
@@ -193,7 +191,7 @@ class HybridAgentSelector:
             confidence=0.0,
             method=SelectionMethod.NONE,
             reasoning="No agent matched in any detection stage",
-            latency_ms=(time.time() - start_time) * 1000
+            latency_ms=(time.time() - start_time) * 1000,
         )
         self.stats["no_agent_selections"] += 1
         self._update_stats(result)
@@ -223,7 +221,7 @@ class HybridAgentSelector:
                     agent_name=agent_name,
                     confidence=1.0,
                     method=SelectionMethod.PATTERN,
-                    reasoning="Explicit agent invocation pattern detected in prompt"
+                    reasoning="Explicit agent invocation pattern detected in prompt",
                 )
 
         return AgentSelection(found=False)
@@ -257,16 +255,12 @@ class HybridAgentSelector:
                     agent_name=agent_name,
                     confidence=confidence,
                     method=SelectionMethod.TRIGGER,
-                    reasoning=f"Matched {matches} activation trigger(s) for {agent_name}"
+                    reasoning=f"Matched {matches} activation trigger(s) for {agent_name}",
                 )
 
         return AgentSelection(found=False)
 
-    def _stage_3_ai(
-        self,
-        prompt: str,
-        context: Optional[Dict]
-    ) -> AgentSelection:
+    def _stage_3_ai(self, prompt: str, context: Optional[Dict]) -> AgentSelection:
         """
         Stage 3: AI Selection
 
@@ -285,9 +279,7 @@ class HybridAgentSelector:
         try:
             # Call AI selector
             selections = self.ai_selector.select_agent(
-                prompt=prompt,
-                context=context,
-                top_n=3  # Get top 3 for alternatives
+                prompt=prompt, context=context, top_n=3  # Get top 3 for alternatives
             )
 
             if selections and len(selections) > 0:
@@ -303,7 +295,7 @@ class HybridAgentSelector:
                     confidence=confidence,
                     method=SelectionMethod.AI,
                     reasoning=reasoning,
-                    alternatives=alternatives
+                    alternatives=alternatives,
                 )
 
         except Exception as e:
@@ -322,9 +314,7 @@ class HybridAgentSelector:
 
         self.stats["total_latency_ms"] += result.latency_ms
         if self.stats["total_selections"] > 0:
-            self.stats["avg_latency_ms"] = (
-                self.stats["total_latency_ms"] / self.stats["total_selections"]
-            )
+            self.stats["avg_latency_ms"] = self.stats["total_latency_ms"] / self.stats["total_selections"]
 
     def get_stats(self) -> Dict[str, Any]:
         """Get selection statistics."""
@@ -349,26 +339,26 @@ class HybridAgentSelector:
 # CLI Interface
 # ============================================================================
 
+
 def main():
     """CLI interface for hybrid agent selector."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Hybrid agent selector with AI fallback")
     parser.add_argument("prompt", nargs="+", help="User prompt to analyze")
-    parser.add_argument("--enable-ai", type=str, default="true",
-                       choices=["true", "false"],
-                       help="Enable AI-powered selection")
-    parser.add_argument("--confidence-threshold", type=float, default=0.8,
-                       help="Minimum confidence for AI selection")
-    parser.add_argument("--model-preference", default="auto",
-                       choices=["auto", "local", "gemini", "glm", "5090"],
-                       help="AI model preference")
-    parser.add_argument("--timeout", type=int, default=500,
-                       help="AI selection timeout (ms)")
-    parser.add_argument("--stats", action="store_true",
-                       help="Show selection statistics")
-    parser.add_argument("--json", action="store_true",
-                       help="Output as JSON")
+    parser.add_argument(
+        "--enable-ai", type=str, default="true", choices=["true", "false"], help="Enable AI-powered selection"
+    )
+    parser.add_argument("--confidence-threshold", type=float, default=0.8, help="Minimum confidence for AI selection")
+    parser.add_argument(
+        "--model-preference",
+        default="auto",
+        choices=["auto", "local", "gemini", "glm", "5090"],
+        help="AI model preference",
+    )
+    parser.add_argument("--timeout", type=int, default=500, help="AI selection timeout (ms)")
+    parser.add_argument("--stats", action="store_true", help="Show selection statistics")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -384,7 +374,7 @@ def main():
         enable_ai=args.enable_ai.lower() == "true",
         confidence_threshold=args.confidence_threshold,
         model_preference=args.model_preference,
-        timeout_ms=args.timeout
+        timeout_ms=args.timeout,
     )
 
     # Select agent

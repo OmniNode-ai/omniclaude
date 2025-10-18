@@ -72,11 +72,7 @@ class ExecutionTracer:
         ```
     """
 
-    def __init__(
-        self,
-        postgres_client: Optional[PostgresTracingClient] = None,
-        auto_initialize: bool = True
-    ):
+    def __init__(self, postgres_client: Optional[PostgresTracingClient] = None, auto_initialize: bool = True):
         """
         Initialize the execution tracer.
 
@@ -86,7 +82,7 @@ class ExecutionTracer:
         """
         self.client = postgres_client or PostgresTracingClient()
         self._auto_initialize = auto_initialize
-        self._trace_contexts: Dict[UUID, 'TraceContext'] = {}
+        self._trace_contexts: Dict[UUID, "TraceContext"] = {}
 
     async def _ensure_initialized(self) -> bool:
         """Ensure database client is initialized."""
@@ -106,6 +102,7 @@ class ExecutionTracer:
         Returns:
             Dict with correlation_id, root_id, parent_id (None if not set)
         """
+
         def parse_uuid(value: Optional[str]) -> Optional[UUID]:
             if not value:
                 return None
@@ -116,9 +113,9 @@ class ExecutionTracer:
                 return None
 
         return {
-            'correlation_id': parse_uuid(os.getenv('CORRELATION_ID')),
-            'root_id': parse_uuid(os.getenv('ROOT_ID')),
-            'parent_id': parse_uuid(os.getenv('PARENT_ID'))
+            "correlation_id": parse_uuid(os.getenv("CORRELATION_ID")),
+            "root_id": parse_uuid(os.getenv("ROOT_ID")),
+            "parent_id": parse_uuid(os.getenv("PARENT_ID")),
         }
 
     async def start_trace(
@@ -131,7 +128,7 @@ class ExecutionTracer:
         parent_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> str:
         """
         Start a new execution trace.
@@ -165,8 +162,8 @@ class ExecutionTracer:
             except ValueError:
                 logger.warning(f"Invalid correlation_id: {correlation_id}, generating new one")
                 corr_uuid = uuid4()
-        elif env_ids['correlation_id']:
-            corr_uuid = env_ids['correlation_id']
+        elif env_ids["correlation_id"]:
+            corr_uuid = env_ids["correlation_id"]
         else:
             corr_uuid = uuid4()
 
@@ -176,8 +173,8 @@ class ExecutionTracer:
                 root_uuid = UUID(root_id)
             except ValueError:
                 root_uuid = corr_uuid
-        elif env_ids['root_id']:
-            root_uuid = env_ids['root_id']
+        elif env_ids["root_id"]:
+            root_uuid = env_ids["root_id"]
         else:
             root_uuid = corr_uuid  # This is a root trace
 
@@ -187,8 +184,8 @@ class ExecutionTracer:
                 parent_uuid = UUID(parent_id)
             except ValueError:
                 parent_uuid = None
-        elif env_ids['parent_id']:
-            parent_uuid = env_ids['parent_id']
+        elif env_ids["parent_id"]:
+            parent_uuid = env_ids["parent_id"]
         else:
             parent_uuid = None
 
@@ -210,16 +207,13 @@ class ExecutionTracer:
                 prompt_text=prompt_text,
                 user_id=user_id,
                 context=context,
-                tags=tags
+                tags=tags,
             )
 
             if trace_id:
                 # Store trace context for hook tracking
                 self._trace_contexts[corr_uuid] = TraceContext(
-                    correlation_id=corr_uuid,
-                    trace_id=trace_id,
-                    started_at=time.time(),
-                    execution_order=0
+                    correlation_id=corr_uuid, trace_id=trace_id, started_at=time.time(), execution_order=0
                 )
                 logger.debug(f"Started trace: {corr_uuid} (trace_id: {trace_id})")
             else:
@@ -249,7 +243,7 @@ class ExecutionTracer:
         quality_check_performed: bool = False,
         quality_results: Optional[Dict[str, Any]] = None,
         error: Optional[Exception] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Track a hook execution within a trace.
@@ -291,10 +285,7 @@ class ExecutionTracer:
             trace_data = await self.client.get_trace_by_correlation_id(corr_uuid)
             if trace_data:
                 trace_ctx = TraceContext(
-                    correlation_id=corr_uuid,
-                    trace_id=trace_data['id'],
-                    started_at=time.time(),
-                    execution_order=0
+                    correlation_id=corr_uuid, trace_id=trace_data["id"], started_at=time.time(), execution_order=0
                 )
                 self._trace_contexts[corr_uuid] = trace_ctx
             else:
@@ -312,6 +303,7 @@ class ExecutionTracer:
             error_message = str(error)
             error_type = type(error).__name__
             import traceback
+
             error_stack = traceback.format_exc()
 
         # Determine hook type if not provided
@@ -339,7 +331,7 @@ class ExecutionTracer:
                 error_message=error_message,
                 error_type=error_type,
                 error_stack=error_stack,
-                metadata=metadata
+                metadata=metadata,
             )
             logger.debug(f"Tracked hook: {hook_name} for {correlation_id}")
 
@@ -347,12 +339,7 @@ class ExecutionTracer:
             # Silent failure
             logger.error(f"Error tracking hook execution: {e}", exc_info=True)
 
-    async def complete_trace(
-        self,
-        correlation_id: str,
-        success: bool,
-        error: Optional[Exception] = None
-    ) -> None:
+    async def complete_trace(self, correlation_id: str, success: bool, error: Optional[Exception] = None) -> None:
         """
         Mark a trace as completed.
 
@@ -382,10 +369,7 @@ class ExecutionTracer:
         try:
             # Complete trace in database
             await self.client.complete_execution_trace(
-                correlation_id=corr_uuid,
-                success=success,
-                error_message=error_message,
-                error_type=error_type
+                correlation_id=corr_uuid, success=success, error_message=error_message, error_type=error_type
             )
 
             # Clean up trace context
@@ -410,17 +394,17 @@ class ExecutionTracer:
         """
         hook_name_lower = hook_name.lower()
 
-        if 'pre-tool-use' in hook_name_lower or 'pretooluse' in hook_name_lower:
+        if "pre-tool-use" in hook_name_lower or "pretooluse" in hook_name_lower:
             return "PreToolUse"
-        elif 'post-tool-use' in hook_name_lower or 'posttooluse' in hook_name_lower:
+        elif "post-tool-use" in hook_name_lower or "posttooluse" in hook_name_lower:
             return "PostToolUse"
-        elif 'user-prompt' in hook_name_lower or 'userprompt' in hook_name_lower:
+        elif "user-prompt" in hook_name_lower or "userprompt" in hook_name_lower:
             return "UserPromptSubmit"
-        elif 'session-start' in hook_name_lower:
+        elif "session-start" in hook_name_lower:
             return "SessionStart"
-        elif 'session-end' in hook_name_lower:
+        elif "session-end" in hook_name_lower:
             return "SessionEnd"
-        elif 'stop' in hook_name_lower:
+        elif "stop" in hook_name_lower:
             return "Stop"
         else:
             return "Unknown"
@@ -434,7 +418,7 @@ class ExecutionTracer:
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ):
         """
         Context manager for automatic trace lifecycle management.
@@ -475,7 +459,7 @@ class ExecutionTracer:
             correlation_id=correlation_id,
             context=context,
             user_id=user_id,
-            tags=tags
+            tags=tags,
         )
 
         success = True
@@ -514,13 +498,7 @@ class TraceContext:
     Provides helper methods for tracking hooks within a trace.
     """
 
-    def __init__(
-        self,
-        correlation_id: UUID,
-        trace_id: UUID,
-        started_at: float,
-        execution_order: int
-    ):
+    def __init__(self, correlation_id: UUID, trace_id: UUID, started_at: float, execution_order: int):
         """
         Initialize trace context.
 
@@ -538,12 +516,7 @@ class TraceContext:
         self.tracer: Optional[ExecutionTracer] = None
 
     async def track_hook(
-        self,
-        hook_name: str,
-        tool_name: str,
-        duration_ms: float,
-        success: bool = True,
-        **kwargs
+        self, hook_name: str, tool_name: str, duration_ms: float, success: bool = True, **kwargs
     ) -> None:
         """
         Convenience method to track a hook execution.
@@ -565,7 +538,7 @@ class TraceContext:
             tool_name=tool_name,
             duration_ms=duration_ms,
             success=success,
-            **kwargs
+            **kwargs,
         )
 
     def get_elapsed_ms(self) -> float:

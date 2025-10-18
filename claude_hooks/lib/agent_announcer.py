@@ -21,13 +21,13 @@ AGENT_EMOJIS = {
 
 # ANSI color codes for different agents
 AGENT_COLORS = {
-    "agent-testing": "\033[96m",                    # Cyan
-    "agent-debug": "\033[91m",                       # Light red
-    "agent-debug-intelligence": "\033[94m",          # Light blue
-    "agent-code-generator": "\033[93m",              # Yellow
-    "agent-workflow-coordinator": "\033[95m",        # Magenta
-    "agent-parallel-dispatcher": "\033[92m",         # Light green
-    "agent-repository-crawler-claude-code": "\033[97m", # White
+    "agent-testing": "\033[96m",  # Cyan
+    "agent-debug": "\033[91m",  # Light red
+    "agent-debug-intelligence": "\033[94m",  # Light blue
+    "agent-code-generator": "\033[93m",  # Yellow
+    "agent-workflow-coordinator": "\033[95m",  # Magenta
+    "agent-parallel-dispatcher": "\033[92m",  # Light green
+    "agent-repository-crawler-claude-code": "\033[97m",  # White
 }
 
 # ANSI formatting codes
@@ -52,7 +52,7 @@ def announce_agent(
     method: str,
     agent_domain: Optional[str] = None,
     agent_purpose: Optional[str] = None,
-    file=sys.stderr
+    file=sys.stderr,
 ) -> None:
     """
     Print colored agent announcement with emoji.
@@ -95,10 +95,7 @@ def announce_agent(
     print(announcement, file=file, flush=True)
 
 
-def announce_meta_trigger(
-    original_prompt: str,
-    file=sys.stderr
-) -> None:
+def announce_meta_trigger(original_prompt: str, file=sys.stderr) -> None:
     """
     Announce that a meta-trigger was detected and coordinator is being invoked.
 
@@ -127,7 +124,7 @@ def announce_intelligence_gathering(
     status: str = "starting",
     execution_time_ms: Optional[float] = None,
     sources_count: Optional[int] = None,
-    file=sys.stderr
+    file=sys.stderr,
 ) -> None:
     """
     Announce intelligence gathering progress.
@@ -176,7 +173,7 @@ if __name__ == "__main__":
         confidence=args.confidence,
         method=args.method,
         agent_domain=args.domain,
-        agent_purpose=args.purpose
+        agent_purpose=args.purpose,
     )
 
     # Test meta-trigger

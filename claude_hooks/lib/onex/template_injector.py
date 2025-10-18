@@ -17,6 +17,7 @@ from enum import Enum
 
 class ONEXNodeType(Enum):
     """ONEX node types."""
+
     EFFECT = "effect"
     COMPUTE = "compute"
     REDUCER = "reducer"
@@ -32,34 +33,37 @@ class ONEXTemplateInjector:
     # Intent patterns for node type detection
     NODE_INTENT_PATTERNS = {
         ONEXNodeType.EFFECT: [
-            r'\b(database|file|api|side[\s-]?effect|i/o|transaction|event\s+emis)',
-            r'\b(write|save|persist|store|publish|send)',
+            r"\b(database|file|api|side[\s-]?effect|i/o|transaction|event\s+emis)",
+            r"\b(write|save|persist|store|publish|send)",
         ],
         ONEXNodeType.COMPUTE: [
-            r'\b(transform|calculate|compute|process|filter|map)',
-            r'\b(pure\s+function|computation|algorithm)',
+            r"\b(transform|calculate|compute|process|filter|map)",
+            r"\b(pure\s+function|computation|algorithm)",
         ],
         ONEXNodeType.REDUCER: [
-            r'\b(aggregat|reduc|combin|merg|sum|count|group)',
-            r'\b(collect|accumulate|consolidate)',
+            r"\b(aggregat|reduc|combin|merg|sum|count|group)",
+            r"\b(collect|accumulate|consolidate)",
         ],
         ONEXNodeType.ORCHESTRATOR: [
-            r'\b(orchestrat|coordinat|workflow|pipeline|sequence)',
-            r'\b(multi[\s-]?step|dependency|thunk)',
+            r"\b(orchestrat|coordinat|workflow|pipeline|sequence)",
+            r"\b(multi[\s-]?step|dependency|thunk)",
         ],
     }
 
     # Contract/subcontract keywords
     CONTRACT_KEYWORDS = [
-        "contract", "subcontract", "fsm", "event type",
-        "aggregation", "state management", "routing", "caching"
+        "contract",
+        "subcontract",
+        "fsm",
+        "event type",
+        "aggregation",
+        "state management",
+        "routing",
+        "caching",
     ]
 
     # Naming convention keywords
-    NAMING_KEYWORDS = [
-        "model", "enum", "typed dict", "protocol",
-        "node", "naming convention", "file name"
-    ]
+    NAMING_KEYWORDS = ["model", "enum", "typed dict", "protocol", "node", "naming convention", "file name"]
 
     def __init__(self):
         """Initialize template injector with ONEX patterns."""
@@ -78,30 +82,22 @@ class ONEXTemplateInjector:
 
         # Extract Effect template
         effect_match = re.search(
-            r'### Creating an Effect Node\n```python\n(.*?)\n```',
-            self.patterns_content,
-            re.DOTALL
+            r"### Creating an Effect Node\n```python\n(.*?)\n```", self.patterns_content, re.DOTALL
         )
         if effect_match:
             templates[ONEXNodeType.EFFECT] = effect_match.group(1)
 
         # Extract Compute template
         compute_match = re.search(
-            r'### Creating a Compute Node\n```python\n(.*?)\n```',
-            self.patterns_content,
-            re.DOTALL
+            r"### Creating a Compute Node\n```python\n(.*?)\n```", self.patterns_content, re.DOTALL
         )
         if compute_match:
             templates[ONEXNodeType.COMPUTE] = compute_match.group(1)
 
         # Contract YAML template
-        contract_match = re.search(
-            r'### Contract YAML Template\n```yaml\n(.*?)\n```',
-            self.patterns_content,
-            re.DOTALL
-        )
+        contract_match = re.search(r"### Contract YAML Template\n```yaml\n(.*?)\n```", self.patterns_content, re.DOTALL)
         if contract_match:
-            templates['contract'] = contract_match.group(1)
+            templates["contract"] = contract_match.group(1)
 
         return templates
 
@@ -178,10 +174,10 @@ class ONEXTemplateInjector:
             injection_parts.append("")
 
         # Add contract template if relevant
-        if "contract_usage" in reasons and 'contract' in self.node_templates:
+        if "contract_usage" in reasons and "contract" in self.node_templates:
             injection_parts.append("### Contract YAML Template")
             injection_parts.append("```yaml")
-            injection_parts.append(self.node_templates['contract'])
+            injection_parts.append(self.node_templates["contract"])
             injection_parts.append("```")
             injection_parts.append("")
 
@@ -209,11 +205,7 @@ class ONEXTemplateInjector:
 
     def _extract_naming_section(self) -> str:
         """Extract naming conventions section from patterns doc."""
-        match = re.search(
-            r'## 4\. Naming Conventions\n\n(.*?)\n\n##',
-            self.patterns_content,
-            re.DOTALL
-        )
+        match = re.search(r"## 4\. Naming Conventions\n\n(.*?)\n\n##", self.patterns_content, re.DOTALL)
         if match:
             # Get first 500 chars of naming section
             section = match.group(1)

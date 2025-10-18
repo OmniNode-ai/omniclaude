@@ -26,15 +26,17 @@ from enum import Enum
 
 class ModificationType(Enum):
     """Types of pattern modifications based on similarity"""
-    PATCH = "patch"      # >90% similar - minor tweaks
-    MINOR = "minor"      # 70-90% similar - moderate changes
-    MAJOR = "major"      # <70% similar - significant refactor
+
+    PATCH = "patch"  # >90% similar - minor tweaks
+    MINOR = "minor"  # 70-90% similar - moderate changes
+    MAJOR = "major"  # <70% similar - significant refactor
     UNRELATED = "unrelated"  # <50% similar - different pattern
 
 
 @dataclass
 class PatternVersion:
     """Semantic version for pattern tracking"""
+
     major: int = 1
     minor: int = 0
     patch: int = 0
@@ -43,46 +45,42 @@ class PatternVersion:
         return f"{self.major}.{self.minor}.{self.patch}"
 
     @classmethod
-    def from_string(cls, version_str: str) -> 'PatternVersion':
+    def from_string(cls, version_str: str) -> "PatternVersion":
         """Parse version from string like '1.2.3'"""
-        parts = version_str.split('.')
+        parts = version_str.split(".")
         if len(parts) != 3:
             raise ValueError(f"Invalid version format: {version_str}")
 
         try:
-            return cls(
-                major=int(parts[0]),
-                minor=int(parts[1]),
-                patch=int(parts[2])
-            )
+            return cls(major=int(parts[0]), minor=int(parts[1]), patch=int(parts[2]))
         except ValueError as e:
             raise ValueError(f"Invalid version numbers in {version_str}: {e}")
 
-    def increment_patch(self) -> 'PatternVersion':
+    def increment_patch(self) -> "PatternVersion":
         """Increment patch version (1.0.0 → 1.0.1)"""
         return PatternVersion(self.major, self.minor, self.patch + 1)
 
-    def increment_minor(self) -> 'PatternVersion':
+    def increment_minor(self) -> "PatternVersion":
         """Increment minor version (1.0.0 → 1.1.0)"""
         return PatternVersion(self.major, self.minor + 1, 0)
 
-    def increment_major(self) -> 'PatternVersion':
+    def increment_major(self) -> "PatternVersion":
         """Increment major version (1.0.0 → 2.0.0)"""
         return PatternVersion(self.major + 1, 0, 0)
 
-    def __lt__(self, other: 'PatternVersion') -> bool:
+    def __lt__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting"""
         return (self.major, self.minor, self.patch) < (other.major, other.minor, other.patch)
 
-    def __le__(self, other: 'PatternVersion') -> bool:
+    def __le__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (less than or equal)"""
         return (self.major, self.minor, self.patch) <= (other.major, other.minor, other.patch)
 
-    def __gt__(self, other: 'PatternVersion') -> bool:
+    def __gt__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (greater than)"""
         return (self.major, self.minor, self.patch) > (other.major, other.minor, other.patch)
 
-    def __ge__(self, other: 'PatternVersion') -> bool:
+    def __ge__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (greater than or equal)"""
         return (self.major, self.minor, self.patch) >= (other.major, other.minor, other.patch)
 
@@ -100,6 +98,7 @@ class PatternVersion:
 @dataclass
 class PatternMetadata:
     """Complete pattern metadata including ID, version, and lineage"""
+
     pattern_id: str
     version: PatternVersion
     parent_id: Optional[str] = None
@@ -117,7 +116,7 @@ class PatternMetadata:
             "similarity_score": self.similarity_score,
             "modification_type": self.modification_type.value if self.modification_type else None,
             "created_at": self.created_at,
-            "tags": list(self.tags)
+            "tags": list(self.tags),
         }
 
 
@@ -131,27 +130,27 @@ class PatternIDSystem:
 
     # Regex patterns for code normalization
     COMMENT_PATTERNS = {
-        'python': [
-            (re.compile(r'#.*$', re.MULTILINE), ''),  # Line comments
-            (re.compile(r'""".*?"""', re.DOTALL), ''),  # Docstrings
-            (re.compile(r"'''.*?'''", re.DOTALL), ''),  # Docstrings
+        "python": [
+            (re.compile(r"#.*$", re.MULTILINE), ""),  # Line comments
+            (re.compile(r'""".*?"""', re.DOTALL), ""),  # Docstrings
+            (re.compile(r"'''.*?'''", re.DOTALL), ""),  # Docstrings
         ],
-        'javascript': [
-            (re.compile(r'//.*$', re.MULTILINE), ''),  # Line comments
-            (re.compile(r'/\*.*?\*/', re.DOTALL), ''),  # Block comments
+        "javascript": [
+            (re.compile(r"//.*$", re.MULTILINE), ""),  # Line comments
+            (re.compile(r"/\*.*?\*/", re.DOTALL), ""),  # Block comments
         ],
-        'java': [
-            (re.compile(r'//.*$', re.MULTILINE), ''),  # Line comments
-            (re.compile(r'/\*.*?\*/', re.DOTALL), ''),  # Block comments
+        "java": [
+            (re.compile(r"//.*$", re.MULTILINE), ""),  # Line comments
+            (re.compile(r"/\*.*?\*/", re.DOTALL), ""),  # Block comments
         ],
-        'typescript': [
-            (re.compile(r'//.*$', re.MULTILINE), ''),  # Line comments
-            (re.compile(r'/\*.*?\*/', re.DOTALL), ''),  # Block comments
+        "typescript": [
+            (re.compile(r"//.*$", re.MULTILINE), ""),  # Line comments
+            (re.compile(r"/\*.*?\*/", re.DOTALL), ""),  # Block comments
         ],
     }
 
     @staticmethod
-    def generate_id(code: str, normalize: bool = True, language: str = 'python') -> str:
+    def generate_id(code: str, normalize: bool = True, language: str = "python") -> str:
         """
         Generate deterministic pattern ID from code.
 
@@ -170,11 +169,11 @@ class PatternIDSystem:
             code = PatternIDSystem._normalize_code(code, language)
 
         # Generate SHA256 hash and return first 16 characters
-        hash_obj = hashlib.sha256(code.encode('utf-8'))
+        hash_obj = hashlib.sha256(code.encode("utf-8"))
         return hash_obj.hexdigest()[:16]
 
     @staticmethod
-    def _normalize_code(code: str, language: str = 'python') -> str:
+    def _normalize_code(code: str, language: str = "python") -> str:
         """
         Normalize code for consistent hashing.
 
@@ -192,8 +191,7 @@ class PatternIDSystem:
         """
         # Remove comments based on language
         comment_patterns = PatternIDSystem.COMMENT_PATTERNS.get(
-            language.lower(),
-            PatternIDSystem.COMMENT_PATTERNS['python']  # Default to Python
+            language.lower(), PatternIDSystem.COMMENT_PATTERNS["python"]  # Default to Python
         )
 
         normalized = code
@@ -201,7 +199,7 @@ class PatternIDSystem:
             normalized = pattern.sub(replacement, normalized)
 
         # Split into lines and process
-        lines = normalized.split('\n')
+        lines = normalized.split("\n")
         processed_lines = []
 
         for line in lines:
@@ -213,12 +211,12 @@ class PatternIDSystem:
                 continue
 
             # Normalize internal whitespace (multiple spaces → single space)
-            line = re.sub(r'\s+', ' ', line)
+            line = re.sub(r"\s+", " ", line)
 
             processed_lines.append(line)
 
         # Join with newlines for consistent structure
-        return '\n'.join(processed_lines)
+        return "\n".join(processed_lines)
 
     @staticmethod
     def validate_id(pattern_id: str) -> bool:
@@ -227,7 +225,7 @@ class PatternIDSystem:
             return False
 
         # Must be exactly 16 hex characters
-        return bool(re.match(r'^[0-9a-f]{16}$', pattern_id))
+        return bool(re.match(r"^[0-9a-f]{16}$", pattern_id))
 
 
 class PatternLineageDetector:
@@ -240,18 +238,15 @@ class PatternLineageDetector:
 
     # Similarity thresholds for classification
     SIMILARITY_THRESHOLDS = {
-        'patch': 0.90,   # >90% similar = patch version
-        'minor': 0.70,   # 70-90% similar = minor version
-        'major': 0.50,   # 50-70% similar = major version
+        "patch": 0.90,  # >90% similar = patch version
+        "minor": 0.70,  # 70-90% similar = minor version
+        "major": 0.50,  # 50-70% similar = major version
         # <50% = unrelated pattern
     }
 
     @staticmethod
     def detect_derivation(
-        original_code: str,
-        modified_code: str,
-        original_id: Optional[str] = None,
-        language: str = 'python'
+        original_code: str, modified_code: str, original_id: Optional[str] = None, language: str = "python"
     ) -> Dict:
         """
         Detect if modified code is derived from original.
@@ -284,7 +279,7 @@ class PatternLineageDetector:
                 "child_id": child_id,
                 "similarity_score": 1.0,
                 "modification_type": None,
-                "suggested_version": None
+                "suggested_version": None,
             }
 
         # Calculate similarity
@@ -297,13 +292,13 @@ class PatternLineageDetector:
         suggested_version = PatternLineageDetector._suggest_version(mod_type)
 
         return {
-            "is_derived": similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS['major'],
+            "is_derived": similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS["major"],
             "is_identical": False,
             "parent_id": parent_id,
             "child_id": child_id,
             "similarity_score": similarity,
             "modification_type": mod_type,
-            "suggested_version": suggested_version
+            "suggested_version": suggested_version,
         }
 
     @staticmethod
@@ -319,17 +314,19 @@ class PatternLineageDetector:
     @staticmethod
     def _classify_modification(similarity: float) -> ModificationType:
         """Classify modification type based on similarity score"""
-        if similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS['patch']:
+        if similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS["patch"]:
             return ModificationType.PATCH
-        elif similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS['minor']:
+        elif similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS["minor"]:
             return ModificationType.MINOR
-        elif similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS['major']:
+        elif similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS["major"]:
             return ModificationType.MAJOR
         else:
             return ModificationType.UNRELATED
 
     @staticmethod
-    def _suggest_version(mod_type: ModificationType, current_version: Optional[PatternVersion] = None) -> PatternVersion:
+    def _suggest_version(
+        mod_type: ModificationType, current_version: Optional[PatternVersion] = None
+    ) -> PatternVersion:
         """Suggest next version based on modification type"""
         base_version = current_version or PatternVersion()
 
@@ -359,9 +356,9 @@ class PatternLineageDetector:
         for original, modified in patterns:
             result = PatternLineageDetector.detect_derivation(original, modified)
 
-            if result['is_derived']:
-                parent_id = result['parent_id']
-                child_id = result['child_id']
+            if result["is_derived"]:
+                parent_id = result["parent_id"]
+                child_id = result["child_id"]
 
                 if parent_id not in lineage:
                     lineage[parent_id] = []
@@ -385,7 +382,7 @@ class PatternDeduplicator:
         self._lock = threading.RLock()  # Reentrant lock for nested calls
         self._pattern_count = 0
 
-    def check_duplicate(self, code: str, language: str = 'python') -> Optional[PatternMetadata]:
+    def check_duplicate(self, code: str, language: str = "python") -> Optional[PatternMetadata]:
         """
         Check if pattern already exists in cache.
 
@@ -406,8 +403,8 @@ class PatternDeduplicator:
         code: str,
         version: Optional[PatternVersion] = None,
         parent_id: Optional[str] = None,
-        language: str = 'python',
-        tags: Optional[Set[str]] = None
+        language: str = "python",
+        tags: Optional[Set[str]] = None,
     ) -> PatternMetadata:
         """
         Register new pattern in cache.
@@ -431,10 +428,7 @@ class PatternDeduplicator:
 
             # Create metadata
             metadata = PatternMetadata(
-                pattern_id=pattern_id,
-                version=version or PatternVersion(),
-                parent_id=parent_id,
-                tags=tags or set()
+                pattern_id=pattern_id, version=version or PatternVersion(), parent_id=parent_id, tags=tags or set()
             )
 
             self._seen_patterns[pattern_id] = metadata
@@ -443,11 +437,7 @@ class PatternDeduplicator:
             return metadata
 
     def register_with_lineage(
-        self,
-        original_code: str,
-        modified_code: str,
-        language: str = 'python',
-        tags: Optional[Set[str]] = None
+        self, original_code: str, modified_code: str, language: str = "python", tags: Optional[Set[str]] = None
     ) -> Tuple[PatternMetadata, PatternMetadata]:
         """
         Register both original and modified patterns with lineage tracking.
@@ -469,38 +459,31 @@ class PatternDeduplicator:
 
             # Detect derivation
             derivation = PatternLineageDetector.detect_derivation(
-                original_code,
-                modified_code,
-                original_id=original_meta.pattern_id,
-                language=language
+                original_code, modified_code, original_id=original_meta.pattern_id, language=language
             )
 
             # Register modified with lineage
-            if derivation['is_identical']:
+            if derivation["is_identical"]:
                 # Same pattern, return original twice
                 return original_meta, original_meta
 
             modified_meta = self.check_duplicate(modified_code, language)
             if not modified_meta:
                 # Calculate next version
-                if derivation['is_derived']:
-                    next_version = derivation['suggested_version']
+                if derivation["is_derived"]:
+                    next_version = derivation["suggested_version"]
                     parent_id = original_meta.pattern_id
                 else:
                     next_version = PatternVersion()
                     parent_id = None
 
                 modified_meta = self.register_pattern(
-                    modified_code,
-                    version=next_version,
-                    parent_id=parent_id,
-                    language=language,
-                    tags=tags
+                    modified_code, version=next_version, parent_id=parent_id, language=language, tags=tags
                 )
 
                 # Update with similarity info
-                modified_meta.similarity_score = derivation['similarity_score']
-                modified_meta.modification_type = derivation['modification_type']
+                modified_meta.similarity_score = derivation["similarity_score"]
+                modified_meta.modification_type = derivation["modification_type"]
 
             return original_meta, modified_meta
 
@@ -560,7 +543,7 @@ class PatternDeduplicator:
                 "unique_patterns": len(self._seen_patterns),
                 "root_patterns": root_count,
                 "derived_patterns": derived_count,
-                "deduplication_rate": 1 - (len(self._seen_patterns) / max(self._pattern_count, 1))
+                "deduplication_rate": 1 - (len(self._seen_patterns) / max(self._pattern_count, 1)),
             }
 
     def clear(self) -> None:
@@ -588,23 +571,23 @@ def get_global_deduplicator() -> PatternDeduplicator:
 
 
 # Convenience functions for common operations
-def generate_pattern_id(code: str, normalize: bool = True, language: str = 'python') -> str:
+def generate_pattern_id(code: str, normalize: bool = True, language: str = "python") -> str:
     """Convenience function for ID generation"""
     return PatternIDSystem.generate_id(code, normalize, language)
 
 
-def detect_pattern_derivation(original: str, modified: str, language: str = 'python') -> Dict:
+def detect_pattern_derivation(original: str, modified: str, language: str = "python") -> Dict:
     """Convenience function for derivation detection"""
     return PatternLineageDetector.detect_derivation(original, modified, language=language)
 
 
-def register_pattern(code: str, language: str = 'python', tags: Optional[Set[str]] = None) -> PatternMetadata:
+def register_pattern(code: str, language: str = "python", tags: Optional[Set[str]] = None) -> PatternMetadata:
     """Convenience function for pattern registration"""
     dedup = get_global_deduplicator()
     return dedup.register_pattern(code, language=language, tags=tags)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Example usage and testing
     print("Pattern ID System - Example Usage")
     print("=" * 50)
@@ -644,7 +627,7 @@ if __name__ == '__main__':
     print("\n3. Pattern Registration:")
     dedup = get_global_deduplicator()
 
-    meta1 = register_pattern(code1, tags={'utility', 'math'})
+    meta1 = register_pattern(code1, tags={"utility", "math"})
     print(f"Registered: {meta1.pattern_id} v{meta1.version}")
 
     # Try to register same pattern

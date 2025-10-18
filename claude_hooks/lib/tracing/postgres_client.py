@@ -20,6 +20,7 @@ import json
 
 try:
     import asyncpg
+
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
@@ -63,7 +64,7 @@ class PostgresTracingClient:
             retry_base_delay: Base delay in seconds for exponential backoff (default: 0.5)
         """
         self.connection_url = connection_url or self._get_connection_url()
-        self.pool: Optional['asyncpg.Pool'] = None
+        self.pool: Optional["asyncpg.Pool"] = None
         self._pool_lock = asyncio.Lock()
         self._initialized = False
         self._connection_failed = False
@@ -80,19 +81,20 @@ class PostgresTracingClient:
     def _get_connection_url(self) -> str:
         """Construct connection URL from environment variables."""
         # Prioritize TRACEABILITY_DB_URL_EXTERNAL for Intelligence Hook System
-        traceability_url = os.getenv('TRACEABILITY_DB_URL_EXTERNAL')
+        traceability_url = os.getenv("TRACEABILITY_DB_URL_EXTERNAL")
         if traceability_url:
             return traceability_url
 
         # Fallback to Supabase connection format
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_SERVICE_KEY')
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
 
         if supabase_url and supabase_key:
             # Extract host from Supabase URL
             # Format: https://PROJECT.supabase.co
             import re
-            match = re.search(r'https://([^.]+)\.supabase\.co', supabase_url)
+
+            match = re.search(r"https://([^.]+)\.supabase\.co", supabase_url)
             if match:
                 project_id = match.group(1)
                 # Supabase PostgreSQL connection
@@ -100,11 +102,11 @@ class PostgresTracingClient:
                 return f"postgresql://postgres.{project_id}:{supabase_key}@{host}:5432/postgres"
 
         # Fallback to direct PostgreSQL connection
-        host = os.getenv('POSTGRES_HOST', 'localhost')
-        port = os.getenv('POSTGRES_PORT', '5436')
-        db = os.getenv('POSTGRES_DB', 'archon')
-        user = os.getenv('POSTGRES_USER', 'postgres')
-        password = os.getenv('POSTGRES_PASSWORD', '')
+        host = os.getenv("POSTGRES_HOST", "localhost")
+        port = os.getenv("POSTGRES_PORT", "5436")
+        db = os.getenv("POSTGRES_DB", "archon")
+        user = os.getenv("POSTGRES_USER", "postgres")
+        password = os.getenv("POSTGRES_PASSWORD", "")
 
         return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
@@ -130,9 +132,7 @@ class PostgresTracingClient:
 
             while attempt < self.max_retry_attempts:
                 try:
-                    logger.info(
-                        f"Initializing connection pool (attempt {attempt + 1}/{self.max_retry_attempts})"
-                    )
+                    logger.info(f"Initializing connection pool (attempt {attempt + 1}/{self.max_retry_attempts})")
 
                     self.pool = await asyncpg.create_pool(
                         self.connection_url,
@@ -140,9 +140,9 @@ class PostgresTracingClient:
                         max_size=self.max_pool_size,
                         command_timeout=self.command_timeout,
                         server_settings={
-                            'application_name': 'archon_intelligence_tracing',
-                            'jit': 'off',  # Disable JIT for short queries
-                        }
+                            "application_name": "archon_intelligence_tracing",
+                            "jit": "off",  # Disable JIT for short queries
+                        },
                     )
 
                     # Verify connection with simple query
@@ -177,7 +177,11 @@ class PostgresTracingClient:
             # Silent failure - don't break hook execution
             self._connection_failed = True
             import sys
-            print(f"[Tracing] Failed to initialize database pool after {self.max_retry_attempts} attempts: {last_error}", file=sys.stderr)
+
+            print(
+                f"[Tracing] Failed to initialize database pool after {self.max_retry_attempts} attempts: {last_error}",
+                file=sys.stderr,
+            )
             return False
 
     async def close(self):
@@ -202,6 +206,7 @@ class PostgresTracingClient:
                 yield conn
         except Exception as e:
             import sys
+
             print(f"[Tracing] Connection error: {e}", file=sys.stderr)
             yield None
 
@@ -212,7 +217,7 @@ class PostgresTracingClient:
         tool_name: str,
         duration_ms: int,
         success: bool,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Log hook execution to database (non-blocking).
@@ -237,7 +242,8 @@ class PostgresTracingClient:
                     return False
 
                 # Insert into hook_executions table
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO hook_executions (
                         execution_id,
                         correlation_id,
@@ -269,14 +275,15 @@ class PostgresTracingClient:
                     tool_name,
                     hook_name,  # hook_script same as hook_name for now
                     duration_ms,
-                    'success' if success else 'error',
+                    "success" if success else "error",
                     success,
-                    json.dumps(metadata or {})
+                    json.dumps(metadata or {}),
                 )
                 return True
         except Exception as e:
             # Silent failure - never break hook execution
             import sys
+
             print(f"[Tracing] Failed to log hook execution: {e}", file=sys.stderr)
             return False
 
@@ -288,7 +295,7 @@ class PostgresTracingClient:
         violations_found: int,
         corrections_applied: int,
         quality_score: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Log quality metrics to database.
@@ -316,15 +323,18 @@ class PostgresTracingClient:
                 # Log to quality_metrics table (create if doesn't exist)
                 # For now, store in hook_executions context
                 extended_metadata = metadata or {}
-                extended_metadata.update({
-                    'file_path': file_path,
-                    'language': language,
-                    'violations_found': violations_found,
-                    'corrections_applied': corrections_applied,
-                    'quality_score': quality_score
-                })
+                extended_metadata.update(
+                    {
+                        "file_path": file_path,
+                        "language": language,
+                        "violations_found": violations_found,
+                        "corrections_applied": corrections_applied,
+                        "quality_score": quality_score,
+                    }
+                )
 
-                await conn.execute("""
+                await conn.execute(
+                    """
                     UPDATE hook_executions
                     SET context = context || $2::jsonb
                     WHERE correlation_id = $1::uuid
@@ -332,11 +342,12 @@ class PostgresTracingClient:
                     LIMIT 1
                 """,
                     correlation_id,
-                    json.dumps(extended_metadata)
+                    json.dumps(extended_metadata),
                 )
                 return True
         except Exception as e:
             import sys
+
             print(f"[Tracing] Failed to log quality metrics: {e}", file=sys.stderr)
             return False
 
@@ -352,7 +363,7 @@ class PostgresTracingClient:
         prompt_text: Optional[str] = None,
         user_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> Optional[UUID]:
         """
         Create a new execution trace record.
@@ -398,23 +409,20 @@ class PostgresTracingClient:
                     source,
                     prompt_text,
                     json.dumps(context) if context else None,
-                    tags
+                    tags,
                 )
-                trace_id = row['id']
+                trace_id = row["id"]
                 logger.debug(f"Created execution trace: {trace_id} (correlation: {correlation_id})")
                 return trace_id
         except Exception as e:
             logger.error(f"Failed to create execution trace: {e}")
             import sys
+
             print(f"[Tracing] Failed to create execution trace: {e}", file=sys.stderr)
             return None
 
     async def complete_execution_trace(
-        self,
-        correlation_id: UUID,
-        success: bool,
-        error_message: Optional[str] = None,
-        error_type: Optional[str] = None
+        self, correlation_id: UUID, success: bool, error_message: Optional[str] = None, error_type: Optional[str] = None
     ) -> bool:
         """
         Mark an execution trace as completed.
@@ -449,18 +457,13 @@ class PostgresTracingClient:
                 if not conn:
                     return False
 
-                await conn.execute(
-                    query,
-                    correlation_id,
-                    success,
-                    error_message,
-                    error_type
-                )
+                await conn.execute(query, correlation_id, success, error_message, error_type)
                 logger.debug(f"Completed execution trace: {correlation_id} (success: {success})")
                 return True
         except Exception as e:
             logger.error(f"Failed to complete execution trace: {e}")
             import sys
+
             print(f"[Tracing] Failed to complete execution trace: {e}", file=sys.stderr)
             return False
 
@@ -484,7 +487,7 @@ class PostgresTracingClient:
         error_message: Optional[str] = None,
         error_type: Optional[str] = None,
         error_stack: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[UUID]:
         """
         Record a hook execution.
@@ -560,14 +563,15 @@ class PostgresTracingClient:
                     error_message,
                     error_type,
                     error_stack,
-                    json.dumps(metadata) if metadata else None
+                    json.dumps(metadata) if metadata else None,
                 )
-                hook_id = row['id']
+                hook_id = row["id"]
                 logger.debug(f"Recorded hook execution: {hook_id} ({hook_name})")
                 return hook_id
         except Exception as e:
             logger.error(f"Failed to record hook execution: {e}")
             import sys
+
             print(f"[Tracing] Failed to record hook execution: {e}", file=sys.stderr)
             return None
 
@@ -634,7 +638,7 @@ class PostgresTracingClient:
 
     # ===== Pydantic Model Integration Methods =====
 
-    async def insert_trace(self, trace: 'ExecutionTrace') -> Optional[UUID]:
+    async def insert_trace(self, trace: "ExecutionTrace") -> Optional[UUID]:
         """
         Insert an ExecutionTrace Pydantic model into the database.
 
@@ -658,10 +662,10 @@ class PostgresTracingClient:
             prompt_text=trace.prompt_text,
             user_id=trace.user_id,
             context=trace.context,
-            tags=trace.tags
+            tags=trace.tags,
         )
 
-    async def update_trace(self, trace: 'ExecutionTrace') -> bool:
+    async def update_trace(self, trace: "ExecutionTrace") -> bool:
         """
         Update an ExecutionTrace in the database.
 
@@ -683,10 +687,10 @@ class PostgresTracingClient:
             correlation_id=trace.correlation_id,
             success=trace.success or False,
             error_message=trace.error_message,
-            error_type=trace.error_type
+            error_type=trace.error_type,
         )
 
-    async def insert_hook(self, hook: 'HookExecution') -> Optional[UUID]:
+    async def insert_hook(self, hook: "HookExecution") -> Optional[UUID]:
         """
         Insert a HookExecution Pydantic model into the database.
 
@@ -725,10 +729,10 @@ class PostgresTracingClient:
             error_message=hook.error_message,
             error_type=hook.error_type,
             error_stack=hook.error_stack,
-            metadata=hook.metadata
+            metadata=hook.metadata,
         )
 
-    async def get_trace_model(self, correlation_id: UUID) -> Optional['ExecutionTrace']:
+    async def get_trace_model(self, correlation_id: UUID) -> Optional["ExecutionTrace"]:
         """
         Get an ExecutionTrace as a Pydantic model.
 
@@ -750,7 +754,7 @@ class PostgresTracingClient:
             return parse_trace_from_row(row)
         return None
 
-    async def get_hook_models(self, trace_id: UUID) -> List['HookExecution']:
+    async def get_hook_models(self, trace_id: UUID) -> List["HookExecution"]:
         """
         Get all hook executions for a trace as Pydantic models.
 
@@ -850,10 +854,16 @@ class PostgresTracingClient:
             raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
         # Convert string UUIDs to UUID objects if necessary
-        correlation_id = UUID(data["correlation_id"]) if isinstance(data["correlation_id"], str) else data["correlation_id"]
+        correlation_id = (
+            UUID(data["correlation_id"]) if isinstance(data["correlation_id"], str) else data["correlation_id"]
+        )
         root_id = UUID(data["root_id"]) if isinstance(data["root_id"], str) else data["root_id"]
         session_id = UUID(data["session_id"]) if isinstance(data["session_id"], str) else data["session_id"]
-        parent_id = UUID(data["parent_id"]) if data.get("parent_id") and isinstance(data["parent_id"], str) else data.get("parent_id")
+        parent_id = (
+            UUID(data["parent_id"])
+            if data.get("parent_id") and isinstance(data["parent_id"], str)
+            else data.get("parent_id")
+        )
 
         # Call underlying method
         trace_id = await self.create_execution_trace(
@@ -957,9 +967,7 @@ class PostgresTracingClient:
 
         return str(hook_id)
 
-    async def update_execution_trace(
-        self, correlation_id: str, updates: Dict[str, Any]
-    ) -> None:
+    async def update_execution_trace(self, correlation_id: str, updates: Dict[str, Any]) -> None:
         """
         Update existing execution trace with completion data (spec-compliant API).
 

@@ -252,9 +252,7 @@ async def test_confidence_calculation():
 
         confidence = corrections[0]["confidence"]
         status = "✓" if confidence >= expected_min else "✗"
-        print(
-            f"{status} Suggestion={has_suggestion:5} | Confidence={confidence:.2f} (expected >= {expected_min:.2f})"
-        )
+        print(f"{status} Suggestion={has_suggestion:5} | Confidence={confidence:.2f} (expected >= {expected_min:.2f})")
 
     print("✓ Confidence calculation works correctly\n")
 

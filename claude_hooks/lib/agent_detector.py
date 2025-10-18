@@ -28,10 +28,10 @@ class AgentDetector:
 
     # Automated workflow trigger patterns - launch dispatch_runner.py
     AUTOMATED_WORKFLOW_PATTERNS = [
-        r"coordinate\s+(?:a\s+)?workflow",          # "coordinate a workflow", "coordinate workflow"
-        r"orchestrate\s+(?:a\s+)?workflow",         # "orchestrate a workflow"
-        r"execute\s+workflow",                      # "execute workflow"
-        r"run\s+(?:automated\s+)?workflow",         # "run workflow", "run automated workflow"
+        r"coordinate\s+(?:a\s+)?workflow",  # "coordinate a workflow", "coordinate workflow"
+        r"orchestrate\s+(?:a\s+)?workflow",  # "orchestrate a workflow"
+        r"execute\s+workflow",  # "execute workflow"
+        r"run\s+(?:automated\s+)?workflow",  # "run workflow", "run automated workflow"
     ]
 
     AGENT_CONFIG_DIR = Path.home() / ".claude" / "agents" / "configs"
@@ -81,7 +81,7 @@ class AgentDetector:
                 trigger_lower = trigger.lower()
                 # Use flexible matching that handles plurals and variations
                 # Match "test" in "tests", "testing", etc.
-                pattern = r'\b' + re.escape(trigger_lower) + r'(?:s|ing|ed)?\b'
+                pattern = r"\b" + re.escape(trigger_lower) + r"(?:s|ing|ed)?\b"
                 if re.search(pattern, prompt_lower):
                     matches += 1
 
@@ -174,9 +174,7 @@ class AgentDetector:
             print(f"Error loading agent config: {e}", file=sys.stderr)
             return None
 
-    def extract_intelligence_queries(
-        self, agent_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def extract_intelligence_queries(self, agent_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Extract domain and implementation queries from agent config.
 

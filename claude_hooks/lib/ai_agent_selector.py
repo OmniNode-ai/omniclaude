@@ -33,7 +33,7 @@ class AIAgentSelector:
         self,
         config_dir: Optional[Path] = None,
         model_preference: str = "auto",  # "auto", "local", "cloud", "gemini", "glm", "5090"
-        zen_mcp_available: bool = True
+        zen_mcp_available: bool = True,
     ):
         """
         Initialize AI agent selector.
@@ -51,12 +51,7 @@ class AIAgentSelector:
         self.agents = self._load_agent_metadata()
 
         # Selection stats
-        self.stats = {
-            "total_selections": 0,
-            "ai_selections": 0,
-            "fallback_selections": 0,
-            "model_used": {}
-        }
+        self.stats = {"total_selections": 0, "ai_selections": 0, "fallback_selections": 0, "model_used": {}}
 
     def _load_agent_metadata(self) -> List[Dict]:
         """Load metadata from all agent YAML files."""
@@ -67,7 +62,7 @@ class AIAgentSelector:
 
         for yaml_file in self.config_dir.glob("agent-*.yaml"):
             try:
-                with open(yaml_file, 'r') as f:
+                with open(yaml_file, "r") as f:
                     # Use safe_load_all to handle files with multiple YAML documents
                     # Take the first document (agent config)
                     docs = list(yaml.safe_load_all(f))
@@ -94,7 +89,7 @@ class AIAgentSelector:
                         "purpose": config.get("agent_purpose", ""),
                         "description": config.get("agent_description", ""),
                         "triggers": config.get("triggers", []),
-                        "capabilities": capabilities_list
+                        "capabilities": capabilities_list,
                     }
                     agents.append(agent_meta)
 
@@ -103,12 +98,7 @@ class AIAgentSelector:
 
         return agents
 
-    def select_agent(
-        self,
-        prompt: str,
-        context: Optional[Dict] = None,
-        top_n: int = 1
-    ) -> List[Tuple[str, float, str]]:
+    def select_agent(self, prompt: str, context: Optional[Dict] = None, top_n: int = 1) -> List[Tuple[str, float, str]]:
         """
         Select best agent(s) for the prompt using AI analysis.
 
@@ -135,12 +125,7 @@ class AIAgentSelector:
         self.stats["fallback_selections"] += 1
         return self._fallback_select(prompt, top_n)
 
-    def _ai_select(
-        self,
-        prompt: str,
-        context: Optional[Dict],
-        top_n: int
-    ) -> Optional[List[Tuple[str, float, str]]]:
+    def _ai_select(self, prompt: str, context: Optional[Dict], top_n: int) -> Optional[List[Tuple[str, float, str]]]:
         """Use AI model to select agent."""
 
         # Build agent catalog for AI
@@ -174,19 +159,11 @@ class AIAgentSelector:
         for agent in self.agents:
             # Ultra-compact format: name|domain|top-3-triggers
             triggers_str = ",".join(agent["triggers"][:3])
-            lines.append(
-                f"{agent['name']}|{agent['domain']}|{triggers_str}"
-            )
+            lines.append(f"{agent['name']}|{agent['domain']}|{triggers_str}")
 
         return "\n".join(lines)
 
-    def _build_selection_prompt(
-        self,
-        user_prompt: str,
-        agent_catalog: str,
-        context: Optional[Dict],
-        top_n: int
-    ) -> str:
+    def _build_selection_prompt(self, user_prompt: str, agent_catalog: str, context: Optional[Dict], top_n: int) -> str:
         """Build prompt for AI model to select agent."""
 
         context_str = ""
@@ -225,48 +202,34 @@ Be concise. Match user intent to agent domain and triggers."""
                 "name": "llama3.1-5090",
                 "type": "local",
                 "endpoint": "http://192.168.86.201:8001",  # vLLM on RTX 5090
-                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"  # Fast local model
+                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",  # Fast local model
             }
 
         elif self.model_preference == "gemini":
-            return {
-                "name": "gemini-2.5-pro",
-                "type": "cloud",
-                "provider": "google"
-            }
+            return {"name": "gemini-2.5-pro", "type": "cloud", "provider": "google"}
 
         elif self.model_preference == "glm":
-            return {
-                "name": "glm-4.6",
-                "type": "cloud",
-                "provider": "zhipu"
-            }
+            return {"name": "glm-4.6", "type": "cloud", "provider": "zhipu"}
 
         else:  # auto
             # Try local 5090 first (fastest), fall back to cloud
             # Check if vLLM is running on 5090
             try:
                 result = subprocess.run(
-                    ["curl", "-s", "http://192.168.86.201:8001/v1/models"],
-                    capture_output=True,
-                    timeout=1
+                    ["curl", "-s", "http://192.168.86.201:8001/v1/models"], capture_output=True, timeout=1
                 )
                 if result.returncode == 0:
                     return {
                         "name": "llama3.1-5090",
                         "type": "local",
                         "endpoint": "http://192.168.86.201:8001",
-                        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+                        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
                     }
             except:
                 pass
 
             # Fall back to Gemini (fast and reliable)
-            return {
-                "name": "gemini-2.5-flash",
-                "type": "cloud",
-                "provider": "google"
-            }
+            return {"name": "gemini-2.5-flash", "type": "cloud", "provider": "google"}
 
     def _call_ai_model(self, model: Dict, prompt: str) -> Optional[str]:
         """Call AI model to get agent selection."""
@@ -287,13 +250,11 @@ Be concise. Match user intent to agent domain and triggers."""
                 f"{model['endpoint']}/v1/chat/completions",
                 json={
                     "model": model["model"],
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 300,  # Reduce token count for faster response
-                    "temperature": 0.3  # Lower temperature for consistent selection
+                    "temperature": 0.3,  # Lower temperature for consistent selection
                 },
-                timeout=10  # Fast local inference should be <10s
+                timeout=10,  # Fast local inference should be <10s
             )
 
             if response.status_code == 200:
@@ -322,7 +283,10 @@ Be concise. Match user intent to agent domain and triggers."""
 
             result = subprocess.run(
                 [
-                    "poetry", "run", "python3", "-c",
+                    "poetry",
+                    "run",
+                    "python3",
+                    "-c",
                     f"""
 import sys
 from pathlib import Path
@@ -331,12 +295,12 @@ sys.path.insert(0, str(Path.home() / '.claude' / 'hooks' / 'lib'))
 # Would call Zen MCP here if available
 # For now, return None to use fallback
 print("CLOUD_MODEL_PLACEHOLDER")
-"""
+""",
                 ],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=15,
             )
 
             if "CLOUD_MODEL_PLACEHOLDER" in result.stdout:
@@ -361,11 +325,7 @@ print("CLOUD_MODEL_PLACEHOLDER")
 
                 selections = []
                 for item in data.get("selections", []):
-                    selections.append((
-                        item["agent"],
-                        float(item["confidence"]),
-                        item["reasoning"]
-                    ))
+                    selections.append((item["agent"], float(item["confidence"]), item["reasoning"]))
 
                 return selections
 
@@ -427,15 +387,11 @@ print("CLOUD_MODEL_PLACEHOLDER")
                 self.stats["ai_selections"] / self.stats["total_selections"]
                 if self.stats["total_selections"] > 0
                 else 0.0
-            )
+            ),
         }
 
 
-def select_agent_for_prompt(
-    prompt: str,
-    model_preference: str = "auto",
-    context: Optional[Dict] = None
-) -> Dict:
+def select_agent_for_prompt(prompt: str, model_preference: str = "auto", context: Optional[Dict] = None) -> Dict:
     """
     Convenience function for single agent selection.
 
@@ -457,12 +413,7 @@ def select_agent_for_prompt(
     selections = selector.select_agent(prompt, context, top_n=1)
 
     if not selections:
-        return {
-            "agent": None,
-            "confidence": 0.0,
-            "reasoning": "No suitable agent found",
-            "model_used": "none"
-        }
+        return {"agent": None, "confidence": 0.0, "reasoning": "No suitable agent found", "model_used": "none"}
 
     agent_name, confidence, reasoning = selections[0]
 
@@ -470,7 +421,7 @@ def select_agent_for_prompt(
         "agent": agent_name,
         "confidence": confidence,
         "reasoning": reasoning,
-        "model_used": selector.stats.get("model_used", {})
+        "model_used": selector.stats.get("model_used", {}),
     }
 
 
@@ -483,13 +434,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="AI-powered agent selector")
     parser.add_argument("prompt", help="User prompt to analyze")
-    parser.add_argument("--model", default="auto",
-                       choices=["auto", "5090", "local", "gemini", "glm", "cloud"],
-                       help="AI model preference")
-    parser.add_argument("--top-n", type=int, default=1,
-                       help="Number of agents to return")
-    parser.add_argument("--stats", action="store_true",
-                       help="Show selection statistics")
+    parser.add_argument(
+        "--model",
+        default="auto",
+        choices=["auto", "5090", "local", "gemini", "glm", "cloud"],
+        help="AI model preference",
+    )
+    parser.add_argument("--top-n", type=int, default=1, help="Number of agents to return")
+    parser.add_argument("--stats", action="store_true", help="Show selection statistics")
 
     args = parser.parse_args()
 
@@ -500,14 +452,7 @@ if __name__ == "__main__":
     # Output results
     result = {
         "prompt": args.prompt,
-        "selections": [
-            {
-                "agent": agent,
-                "confidence": conf,
-                "reasoning": reason
-            }
-            for agent, conf, reason in selections
-        ]
+        "selections": [{"agent": agent, "confidence": conf, "reasoning": reason} for agent, conf, reason in selections],
     }
 
     if args.stats:

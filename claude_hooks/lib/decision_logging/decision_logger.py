@@ -192,13 +192,9 @@ class DecisionLogger:
                 except json.JSONDecodeError:
                     continue
 
-        avg_consensus = (
-            sum(consensus_scores) / len(consensus_scores) if consensus_scores else 0.0
-        )
+        avg_consensus = sum(consensus_scores) / len(consensus_scores) if consensus_scores else 0.0
 
-        acceptance_rate = (
-            user_responses["accepted"] / total_responses if total_responses > 0 else 0.0
-        )
+        acceptance_rate = user_responses["accepted"] / total_responses if total_responses > 0 else 0.0
 
         return {
             "total_decisions": total,

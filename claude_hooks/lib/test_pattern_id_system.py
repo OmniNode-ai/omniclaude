@@ -30,7 +30,7 @@ from pattern_id_system import (
     generate_pattern_id,
     detect_pattern_derivation,
     register_pattern,
-    get_global_deduplicator
+    get_global_deduplicator,
 )
 
 
@@ -159,9 +159,9 @@ class TestPatternIDSystem:
         }
         """
 
-        id1 = PatternIDSystem.generate_id(code1, language='javascript')
-        id2 = PatternIDSystem.generate_id(code2, language='javascript')
-        id3 = PatternIDSystem.generate_id(code3, language='javascript')
+        id1 = PatternIDSystem.generate_id(code1, language="javascript")
+        id2 = PatternIDSystem.generate_id(code2, language="javascript")
+        id3 = PatternIDSystem.generate_id(code3, language="javascript")
 
         assert id1 == id2 == id3, "JavaScript comments should not affect ID"
 
@@ -250,9 +250,9 @@ class TestPatternLineageDetector:
 
         result = PatternLineageDetector.detect_derivation(code, code)
 
-        assert result['is_identical'], "Should detect identical code"
-        assert result['similarity_score'] == 1.0, "Similarity should be 100%"
-        assert result['parent_id'] == result['child_id'], "IDs should match"
+        assert result["is_identical"], "Should detect identical code"
+        assert result["similarity_score"] == 1.0, "Similarity should be 100%"
+        assert result["parent_id"] == result["child_id"], "IDs should match"
 
     def test_patch_level_modification(self):
         """Minor tweaks should be classified as patch"""
@@ -270,9 +270,9 @@ class TestPatternLineageDetector:
 
         result = PatternLineageDetector.detect_derivation(code1, code2)
 
-        assert result['is_derived'], "Should be detected as derived"
-        assert result['similarity_score'] >= 0.90, "Should be >=90% similar"
-        assert result['modification_type'] == ModificationType.PATCH, "Should be patch level"
+        assert result["is_derived"], "Should be detected as derived"
+        assert result["similarity_score"] >= 0.90, "Should be >=90% similar"
+        assert result["modification_type"] == ModificationType.PATCH, "Should be patch level"
 
     def test_minor_level_modification(self):
         """Moderate changes should be classified as minor or major based on actual similarity"""
@@ -293,9 +293,11 @@ class TestPatternLineageDetector:
 
         # This change might be major due to structural difference (comprehension vs loop)
         # but should still be detected as derived if >50% similar
-        assert result['similarity_score'] >= 0.50, "Should be at least 50% similar"
-        assert result['modification_type'] in [ModificationType.MINOR, ModificationType.MAJOR], \
-            "Should be minor or major level based on actual similarity"
+        assert result["similarity_score"] >= 0.50, "Should be at least 50% similar"
+        assert result["modification_type"] in [
+            ModificationType.MINOR,
+            ModificationType.MAJOR,
+        ], "Should be minor or major level based on actual similarity"
 
     def test_major_level_modification(self):
         """Significant refactor should be classified as major"""
@@ -318,7 +320,7 @@ class TestPatternLineageDetector:
         result = PatternLineageDetector.detect_derivation(code1, code2)
 
         # This might be major or unrelated depending on similarity
-        assert result['similarity_score'] < 0.90, "Should be <90% similar"
+        assert result["similarity_score"] < 0.90, "Should be <90% similar"
 
     def test_unrelated_code(self):
         """Completely different code should be unrelated"""
@@ -327,29 +329,23 @@ class TestPatternLineageDetector:
 
         result = PatternLineageDetector.detect_derivation(code1, code2)
 
-        assert not result['is_derived'] or result['modification_type'] == ModificationType.UNRELATED
-        assert result['similarity_score'] < 0.70, "Should be <70% similar"
+        assert not result["is_derived"] or result["modification_type"] == ModificationType.UNRELATED
+        assert result["similarity_score"] < 0.70, "Should be <70% similar"
 
     def test_suggested_version(self):
         """Version suggestions should follow semver"""
         base_version = PatternVersion(1, 2, 3)
 
         # Patch suggestion
-        patch_suggestion = PatternLineageDetector._suggest_version(
-            ModificationType.PATCH, base_version
-        )
+        patch_suggestion = PatternLineageDetector._suggest_version(ModificationType.PATCH, base_version)
         assert str(patch_suggestion) == "1.2.4"
 
         # Minor suggestion
-        minor_suggestion = PatternLineageDetector._suggest_version(
-            ModificationType.MINOR, base_version
-        )
+        minor_suggestion = PatternLineageDetector._suggest_version(ModificationType.MINOR, base_version)
         assert str(minor_suggestion) == "1.3.0"
 
         # Major suggestion
-        major_suggestion = PatternLineageDetector._suggest_version(
-            ModificationType.MAJOR, base_version
-        )
+        major_suggestion = PatternLineageDetector._suggest_version(ModificationType.MAJOR, base_version)
         assert str(major_suggestion) == "2.0.0"
 
     def test_lineage_chain_building(self):
@@ -358,10 +354,7 @@ class TestPatternLineageDetector:
         code_v2 = "def foo(): return 2"
         code_v3 = "def foo(): return 3"
 
-        patterns = [
-            (code_v1, code_v2),
-            (code_v2, code_v3)
-        ]
+        patterns = [(code_v1, code_v2), (code_v2, code_v3)]
 
         lineage = PatternLineageDetector.build_lineage_chain(patterns)
 
@@ -390,12 +383,12 @@ class TestPatternDeduplicator:
         dedup = PatternDeduplicator()
         code = "def bar(): return 43"
 
-        meta = dedup.register_pattern(code, tags={'test', 'example'})
+        meta = dedup.register_pattern(code, tags={"test", "example"})
 
         assert meta.pattern_id is not None
         assert str(meta.version) == "1.0.0"
-        assert 'test' in meta.tags
-        assert 'example' in meta.tags
+        assert "test" in meta.tags
+        assert "example" in meta.tags
 
     def test_registration_with_lineage(self):
         """Lineage tracking should work during registration"""
@@ -468,10 +461,10 @@ class TestPatternDeduplicator:
 
         stats = dedup.get_stats()
 
-        assert stats['total_patterns'] >= 2
-        assert stats['unique_patterns'] >= 2
-        assert stats['root_patterns'] >= 1
-        assert 'deduplication_rate' in stats
+        assert stats["total_patterns"] >= 2
+        assert stats["unique_patterns"] >= 2
+        assert stats["root_patterns"] >= 1
+        assert "deduplication_rate" in stats
 
     def test_thread_safety(self):
         """Deduplicator should be thread-safe"""
@@ -503,13 +496,13 @@ class TestPatternDeduplicator:
         dedup = PatternDeduplicator()
 
         dedup.register_pattern("def test(): pass")
-        assert dedup.get_stats()['total_patterns'] > 0
+        assert dedup.get_stats()["total_patterns"] > 0
 
         dedup.clear()
         stats = dedup.get_stats()
 
-        assert stats['total_patterns'] == 0
-        assert stats['unique_patterns'] == 0
+        assert stats["total_patterns"] == 0
+        assert stats["unique_patterns"] == 0
 
 
 class TestConvenienceFunctions:
@@ -530,16 +523,16 @@ class TestConvenienceFunctions:
 
         result = detect_pattern_derivation(code1, code2)
 
-        assert 'is_derived' in result
-        assert 'similarity_score' in result
+        assert "is_derived" in result
+        assert "similarity_score" in result
 
     def test_register_pattern_convenience(self):
         """Convenience registration should work"""
         code = "def convenient(): pass"
-        meta = register_pattern(code, tags={'convenience'})
+        meta = register_pattern(code, tags={"convenience"})
 
         assert meta is not None
-        assert 'convenience' in meta.tags
+        assert "convenience" in meta.tags
 
     def test_global_deduplicator_singleton(self):
         """Global deduplicator should be singleton"""
@@ -598,6 +591,6 @@ class TestEdgeCases:
         assert id1 == id2
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Run tests with pytest
-    pytest.main([__file__, '-v', '--tb=short'])
+    pytest.main([__file__, "-v", "--tb=short"])

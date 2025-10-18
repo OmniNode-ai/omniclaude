@@ -238,17 +238,13 @@ class AIQuorum:
             QuorumScore with consensus evaluation
         """
         if self.stub_mode:
-            return self._stub_score_correction(
-                original_prompt, corrected_prompt, correction_type, correction_metadata
-            )
+            return self._stub_score_correction(original_prompt, corrected_prompt, correction_type, correction_metadata)
 
         if not self.enable_ai_scoring:
             return self._default_approval_score()
 
         # Phase 3-4: Full AI scoring
-        return await self._ai_score_correction(
-            original_prompt, corrected_prompt, correction_type, correction_metadata
-        )
+        return await self._ai_score_correction(original_prompt, corrected_prompt, correction_type, correction_metadata)
 
     def _stub_score_correction(
         self,
@@ -274,8 +270,7 @@ class AIQuorum:
         model_scores = {model.name: 0.85 for model in self.models}
 
         model_reasoning = {
-            model.name: f"[STUB] Auto-approved for Phase 1 testing - {correction_type}"
-            for model in self.models
+            model.name: f"[STUB] Auto-approved for Phase 1 testing - {correction_type}" for model in self.models
         }
 
         return QuorumScore(
@@ -325,17 +320,12 @@ class AIQuorum:
         metadata = correction_metadata or {}
 
         # Generate scoring prompt for models
-        scoring_prompt = self._generate_scoring_prompt(
-            original_prompt, corrected_prompt, correction_type, metadata
-        )
+        scoring_prompt = self._generate_scoring_prompt(original_prompt, corrected_prompt, correction_type, metadata)
 
         # Score with all models in parallel or sequential
         if self.parallel_execution:
             scores = await asyncio.gather(
-                *[
-                    self._score_with_model(model, scoring_prompt)
-                    for model in self.models
-                ],
+                *[self._score_with_model(model, scoring_prompt) for model in self.models],
                 return_exceptions=True,
             )
         else:
@@ -415,9 +405,7 @@ Respond with ONLY a JSON object:
 
 Provide your evaluation:"""
 
-    async def _score_with_model(
-        self, model: ModelConfig, scoring_prompt: str
-    ) -> Tuple[ModelConfig, Dict[str, Any]]:
+    async def _score_with_model(self, model: ModelConfig, scoring_prompt: str) -> Tuple[ModelConfig, Dict[str, Any]]:
         """
         Score correction with a single AI model.
 
@@ -437,9 +425,7 @@ Provide your evaluation:"""
         else:
             raise ValueError(f"Unsupported model provider: {model.provider}")
 
-    async def _score_with_ollama(
-        self, model: ModelConfig, scoring_prompt: str
-    ) -> Tuple[ModelConfig, Dict[str, Any]]:
+    async def _score_with_ollama(self, model: ModelConfig, scoring_prompt: str) -> Tuple[ModelConfig, Dict[str, Any]]:
         """
         Score using Ollama model.
 
@@ -490,9 +476,7 @@ Provide your evaluation:"""
                 },
             )
 
-    async def _score_with_gemini(
-        self, model: ModelConfig, scoring_prompt: str
-    ) -> Tuple[ModelConfig, Dict[str, Any]]:
+    async def _score_with_gemini(self, model: ModelConfig, scoring_prompt: str) -> Tuple[ModelConfig, Dict[str, Any]]:
         """
         Score using Gemini model.
 
@@ -522,10 +506,7 @@ Provide your evaluation:"""
 
                 result = response.json()
                 response_text = (
-                    result.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "{}")
+                    result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
                 )
 
                 # Parse JSON response
@@ -551,9 +532,7 @@ Provide your evaluation:"""
                 },
             )
 
-    async def _score_with_openai(
-        self, model: ModelConfig, scoring_prompt: str
-    ) -> Tuple[ModelConfig, Dict[str, Any]]:
+    async def _score_with_openai(self, model: ModelConfig, scoring_prompt: str) -> Tuple[ModelConfig, Dict[str, Any]]:
         """
         Score using OpenAI-compatible API (including vLLM).
 
@@ -573,12 +552,9 @@ Provide your evaluation:"""
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert code reviewer evaluating naming convention corrections. Respond in JSON format."
+                    "content": "You are an expert code reviewer evaluating naming convention corrections. Respond in JSON format.",
                 },
-                {
-                    "role": "user",
-                    "content": scoring_prompt
-                }
+                {"role": "user", "content": scoring_prompt},
             ],
             "temperature": 0.3,
             "max_tokens": 500,
@@ -602,10 +578,10 @@ Provide your evaluation:"""
                     cleaned_text = response_text.strip()
                     if cleaned_text.startswith("```"):
                         # Extract JSON from markdown code block
-                        lines = cleaned_text.split('\n')
+                        lines = cleaned_text.split("\n")
                         # Remove first line (```json) and last line (```)
                         json_lines = [l for l in lines[1:-1] if l.strip()]
-                        cleaned_text = '\n'.join(json_lines)
+                        cleaned_text = "\n".join(json_lines)
 
                     score_data = json.loads(cleaned_text)
                 except json.JSONDecodeError as e:
@@ -629,9 +605,7 @@ Provide your evaluation:"""
                 },
             )
 
-    def _calculate_consensus(
-        self, scores: List[Tuple[ModelConfig, Dict[str, Any]]]
-    ) -> QuorumScore:
+    def _calculate_consensus(self, scores: List[Tuple[ModelConfig, Dict[str, Any]]]) -> QuorumScore:
         """
         Calculate weighted consensus from model scores.
 
@@ -680,7 +654,7 @@ Provide your evaluation:"""
                 model_reasoning={
                     **model_reasoning,
                     "quorum_error": f"Insufficient model participation: {participating_models}/{total_models} "
-                                   f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required"
+                    f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required",
                 },
                 recommendation="FAIL_PARTICIPATION",
                 requires_human_review=True,
@@ -694,9 +668,7 @@ Provide your evaluation:"""
 
         # Calculate confidence based on score variance
         if len(valid_scores) > 1:
-            score_variance = sum(
-                (s - consensus_score) ** 2 for s in valid_scores
-            ) / len(valid_scores)
+            score_variance = sum((s - consensus_score) ** 2 for s in valid_scores) / len(valid_scores)
             confidence = max(0.0, 1.0 - score_variance)
         else:
             confidence = 0.5
@@ -754,9 +726,7 @@ async def main():
     print(f"Correction Type: {correction_type}")
     print()
 
-    score = await quorum.score_correction(
-        original_prompt, corrected_prompt, correction_type, {"test_mode": True}
-    )
+    score = await quorum.score_correction(original_prompt, corrected_prompt, correction_type, {"test_mode": True})
 
     print(json.dumps(score.to_dict(), indent=2))
     print()

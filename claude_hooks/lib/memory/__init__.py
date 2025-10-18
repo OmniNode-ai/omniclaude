@@ -40,38 +40,30 @@ from .event_models import (
     Correction,
     AIQuorumScore,
     IntentContextData,
-    WorkflowSummary
+    WorkflowSummary,
 )
 
 from .event_store import EventStore
 
-from .event_analytics import (
-    EventAnalytics,
-    CorrectionEffectiveness,
-    ViolationPattern,
-    WorkflowMetrics
-)
+from .event_analytics import EventAnalytics, CorrectionEffectiveness, ViolationPattern, WorkflowMetrics
 
 __all__ = [
     # Enums
-    'EventType',
-
+    "EventType",
     # Models
-    'WorkflowEvent',
-    'Violation',
-    'Correction',
-    'AIQuorumScore',
-    'IntentContextData',
-    'WorkflowSummary',
-
+    "WorkflowEvent",
+    "Violation",
+    "Correction",
+    "AIQuorumScore",
+    "IntentContextData",
+    "WorkflowSummary",
     # Storage
-    'EventStore',
-
+    "EventStore",
     # Analytics
-    'EventAnalytics',
-    'CorrectionEffectiveness',
-    'ViolationPattern',
-    'WorkflowMetrics',
+    "EventAnalytics",
+    "CorrectionEffectiveness",
+    "ViolationPattern",
+    "WorkflowMetrics",
 ]
 
-__version__ = '1.2.0'
+__version__ = "1.2.0"

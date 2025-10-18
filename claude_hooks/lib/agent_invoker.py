@@ -62,7 +62,7 @@ class AgentInvoker:
         correlation_id: Optional[str] = None,
         use_enhanced_router: bool = True,
         router_confidence_threshold: float = 0.6,
-        enable_database_logging: bool = True
+        enable_database_logging: bool = True,
     ):
         """
         Initialize agent invoker.
@@ -90,14 +90,11 @@ class AgentInvoker:
             "coordinator_invocations": 0,
             "direct_single_invocations": 0,
             "direct_parallel_invocations": 0,
-            "failed_invocations": 0
+            "failed_invocations": 0,
         }
 
     async def invoke(
-        self,
-        prompt: str,
-        context: Optional[Dict[str, Any]] = None,
-        force_pathway: Optional[str] = None
+        self, prompt: str, context: Optional[Dict[str, Any]] = None, force_pathway: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Invoke agent(s) based on prompt analysis.
@@ -139,10 +136,7 @@ class AgentInvoker:
                     "success": True,
                     "pathway": None,
                     "message": "No agent invocation required",
-                    "detection": {
-                        "confidence": detection.confidence,
-                        "task": detection.task
-                    }
+                    "detection": {"confidence": detection.confidence, "task": detection.task},
                 }
 
             # Add execution metadata
@@ -150,7 +144,7 @@ class AgentInvoker:
                 "correlation_id": self.correlation_id,
                 "total_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
                 "detection_confidence": detection.confidence,
-                "trigger_pattern": detection.trigger_pattern
+                "trigger_pattern": detection.trigger_pattern,
             }
 
             return result
@@ -160,14 +154,12 @@ class AgentInvoker:
             return {
                 "success": False,
                 "error": f"Agent invocation failed: {str(e)}",
-                "pathway": detection.pathway if 'detection' in locals() else None,
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000
+                "pathway": detection.pathway if "detection" in locals() else None,
+                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
             }
 
     async def _invoke_coordinator(
-        self,
-        detection: PathwayDetection,
-        context: Optional[Dict[str, Any]]
+        self, detection: PathwayDetection, context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Invoke agent-workflow-coordinator for complex orchestration.
@@ -182,7 +174,7 @@ class AgentInvoker:
             self._coordinator = ParallelCoordinator(
                 use_dynamic_loading=True,
                 use_enhanced_router=self.use_enhanced_router,
-                router_confidence_threshold=self.router_confidence_threshold
+                router_confidence_threshold=self.router_confidence_threshold,
             )
             await self._coordinator.initialize()
 
@@ -192,7 +184,7 @@ class AgentInvoker:
             description=detection.task,
             agent_name="agent-workflow-coordinator",
             dependencies=[],
-            input_data=context or {}
+            input_data=context or {},
         )
 
         # Execute via coordinator
@@ -204,28 +196,26 @@ class AgentInvoker:
                 "success": False,
                 "pathway": "coordinator",
                 "error": "Coordinator did not return result",
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000
+                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
             }
 
         # Get router stats
-        router_stats = self._coordinator.get_router_stats() if hasattr(self._coordinator, 'get_router_stats') else {}
+        router_stats = self._coordinator.get_router_stats() if hasattr(self._coordinator, "get_router_stats") else {}
 
         return {
             "success": result.success,
             "pathway": "coordinator",
             "agent_name": result.agent_name,
             "execution_time_ms": result.execution_time_ms,
-            "result_data": getattr(result, 'result_data', None),
+            "result_data": getattr(result, "result_data", None),
             "error": result.error if not result.success else None,
             "router_stats": router_stats,
             "agents_invoked": [detection.agents[0]],
-            "total_time_ms": (datetime.now() - start_time).total_seconds() * 1000
+            "total_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
         }
 
     async def _invoke_direct_single(
-        self,
-        detection: PathwayDetection,
-        context: Optional[Dict[str, Any]]
+        self, detection: PathwayDetection, context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Invoke single agent directly with context injection.
@@ -244,7 +234,7 @@ class AgentInvoker:
                 "success": False,
                 "pathway": "direct_single",
                 "error": f"Agent config not found: {agent_name}",
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000
+                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
             }
 
         # For direct single mode, we return the config for hook to inject
@@ -257,13 +247,11 @@ class AgentInvoker:
             "task": detection.task,
             "context_injection_required": True,
             "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
-            "message": f"Agent config loaded for context injection: {agent_name}"
+            "message": f"Agent config loaded for context injection: {agent_name}",
         }
 
     async def _invoke_direct_parallel(
-        self,
-        detection: PathwayDetection,
-        context: Optional[Dict[str, Any]]
+        self, detection: PathwayDetection, context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Invoke multiple agents in parallel with coordination.
@@ -278,7 +266,7 @@ class AgentInvoker:
             self._coordinator = ParallelCoordinator(
                 use_dynamic_loading=True,
                 use_enhanced_router=False,  # Direct mode, no routing needed
-                router_confidence_threshold=self.router_confidence_threshold
+                router_confidence_threshold=self.router_confidence_threshold,
             )
             await self._coordinator.initialize()
 
@@ -290,7 +278,7 @@ class AgentInvoker:
                 description=detection.task,
                 agent_name=agent_name,
                 dependencies=[],
-                input_data=context or {}
+                input_data=context or {},
             )
             tasks.append(task)
 
@@ -309,13 +297,13 @@ class AgentInvoker:
                 agent_outputs[result.agent_name] = {
                     "success": True,
                     "execution_time_ms": result.execution_time_ms,
-                    "result_data": getattr(result, 'result_data', None)
+                    "result_data": getattr(result, "result_data", None),
                 }
             else:
                 failed_agents.append(task.agent_name)
                 agent_outputs[task.agent_name] = {
                     "success": False,
-                    "error": result.error if result else "No result returned"
+                    "error": result.error if result else "No result returned",
                 }
 
         return {
@@ -326,7 +314,7 @@ class AgentInvoker:
             "failed_agents": failed_agents,
             "agent_outputs": agent_outputs,
             "total_agents": len(detection.agents),
-            "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000
+            "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
         }
 
     async def _load_agent_config(self, agent_name: str) -> Optional[Dict[str, Any]]:
@@ -344,24 +332,20 @@ class AgentInvoker:
         config_paths = [
             Path.home() / ".claude" / "agents" / "configs" / f"{agent_name}.yaml",
             Path.home() / ".claude" / "agent-definitions" / f"{agent_name}.yaml",
-            Path.home() / ".claude" / "agent-definitions" / f"{agent_name.replace('agent-', '')}.yaml"
+            Path.home() / ".claude" / "agent-definitions" / f"{agent_name.replace('agent-', '')}.yaml",
         ]
 
         for config_path in config_paths:
             if config_path.exists():
                 try:
-                    with open(config_path, 'r') as f:
+                    with open(config_path, "r") as f:
                         return yaml.safe_load(f)
                 except Exception as e:
                     print(f"ERROR: Failed to load {config_path}: {e}", file=sys.stderr)
 
         return None
 
-    def _create_forced_detection(
-        self,
-        prompt: str,
-        pathway: str
-    ) -> PathwayDetection:
+    def _create_forced_detection(self, prompt: str, pathway: str) -> PathwayDetection:
         """Create PathwayDetection for forced pathway."""
         if pathway == "coordinator":
             return PathwayDetection(
@@ -369,7 +353,7 @@ class AgentInvoker:
                 agents=["agent-workflow-coordinator"],
                 task=prompt,
                 confidence=1.0,
-                trigger_pattern="forced"
+                trigger_pattern="forced",
             )
         elif pathway == "direct_single":
             # Extract agent name from prompt
@@ -379,26 +363,16 @@ class AgentInvoker:
                 agents=agents[:1] if agents else ["unknown"],
                 task=prompt,
                 confidence=1.0,
-                trigger_pattern="forced"
+                trigger_pattern="forced",
             )
         elif pathway == "direct_parallel":
             # Extract all agent names from prompt
             agents = self.detector._extract_agent_names(prompt)
             return PathwayDetection(
-                pathway="direct_parallel",
-                agents=agents,
-                task=prompt,
-                confidence=1.0,
-                trigger_pattern="forced"
+                pathway="direct_parallel", agents=agents, task=prompt, confidence=1.0, trigger_pattern="forced"
             )
         else:
-            return PathwayDetection(
-                pathway=None,
-                agents=[],
-                task=prompt,
-                confidence=1.0,
-                trigger_pattern="forced"
-            )
+            return PathwayDetection(pathway=None, agents=[], task=prompt, confidence=1.0, trigger_pattern="forced")
 
     async def cleanup(self):
         """Cleanup resources."""
@@ -407,16 +381,10 @@ class AgentInvoker:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get invocation statistics."""
-        return {
-            **self.stats,
-            "detection_stats": self.detector.get_stats()
-        }
+        return {**self.stats, "detection_stats": self.detector.get_stats()}
 
     def invoke_sync(
-        self,
-        prompt: str,
-        context: Optional[Dict[str, Any]] = None,
-        force_pathway: Optional[str] = None
+        self, prompt: str, context: Optional[Dict[str, Any]] = None, force_pathway: Optional[str] = None
     ) -> Dict[str, Any]:
         """Synchronous wrapper for async invoke."""
         return asyncio.run(self.invoke(prompt, context, force_pathway))
@@ -426,14 +394,19 @@ class AgentInvoker:
 # CLI Interface
 # ============================================================================
 
+
 async def main():
     """CLI entry point for agent invocation."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Agent Invocation System")
     parser.add_argument("prompt", help="User prompt to process")
-    parser.add_argument("--mode", choices=["coordinator", "direct_single", "direct_parallel", "auto"],
-                       default="auto", help="Invocation mode")
+    parser.add_argument(
+        "--mode",
+        choices=["coordinator", "direct_single", "direct_parallel", "auto"],
+        default="auto",
+        help="Invocation mode",
+    )
     parser.add_argument("--correlation-id", help="Correlation ID for tracking")
     parser.add_argument("--context", help="JSON context for agent execution")
     parser.add_argument("--stats", action="store_true", help="Show statistics after execution")
@@ -471,6 +444,7 @@ async def main():
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 

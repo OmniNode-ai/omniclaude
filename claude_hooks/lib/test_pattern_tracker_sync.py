@@ -30,7 +30,7 @@ def calculate_fibonacci(n: int) -> int:
         "language": "python",
         "reason": "Code generation via Claude Code hook",
         "quality_score": 0.85,
-        "violations_found": 2  # Example: No memoization, recursive complexity
+        "violations_found": 2,  # Example: No memoization, recursive complexity
     }
 
     print(f"\n📝 Tracking pattern...", file=sys.stderr)

@@ -61,11 +61,11 @@ class Violation:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'rule': self.rule,
-            'severity': self.severity,
-            'message': self.message,
-            'line_number': self.line_number,
-            'suggested_fix': self.suggested_fix
+            "rule": self.rule,
+            "severity": self.severity,
+            "message": self.message,
+            "line_number": self.line_number,
+            "suggested_fix": self.suggested_fix,
         }
 
 
@@ -93,12 +93,12 @@ class Correction:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'source': self.source,
-            'confidence': self.confidence,
-            'original_content': self.original_content,
-            'corrected_content': self.corrected_content,
-            'reasoning': self.reasoning,
-            'applied': self.applied
+            "source": self.source,
+            "confidence": self.confidence,
+            "original_content": self.original_content,
+            "corrected_content": self.corrected_content,
+            "reasoning": self.reasoning,
+            "applied": self.applied,
         }
 
 
@@ -122,10 +122,10 @@ class AIQuorumScore:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'consensus_score': self.consensus_score,
-            'model_votes': self.model_votes,
-            'decision': self.decision,
-            'reasoning': self.reasoning
+            "consensus_score": self.consensus_score,
+            "model_votes": self.model_votes,
+            "decision": self.decision,
+            "reasoning": self.reasoning,
         }
 
 
@@ -147,16 +147,16 @@ class IntentContextData:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'primary_intent': self.primary_intent,
-            'confidence': self.confidence,
-            'suggested_agents': self.suggested_agents,
-            'validators': self.validators,
-            'onex_rules': self.onex_rules,
-            'secondary_intents': self.secondary_intents
+            "primary_intent": self.primary_intent,
+            "confidence": self.confidence,
+            "suggested_agents": self.suggested_agents,
+            "validators": self.validators,
+            "onex_rules": self.onex_rules,
+            "secondary_intents": self.secondary_intents,
         }
 
     @classmethod
-    def from_intent_context(cls, intent_context) -> 'IntentContextData':
+    def from_intent_context(cls, intent_context) -> "IntentContextData":
         """Create from IntentContext object."""
         return cls(
             primary_intent=intent_context.primary_intent,
@@ -164,7 +164,7 @@ class IntentContextData:
             suggested_agents=intent_context.suggested_agents,
             validators=intent_context.validators,
             onex_rules=intent_context.onex_rules,
-            secondary_intents=intent_context.secondary_intents
+            secondary_intents=intent_context.secondary_intents,
         )
 
 
@@ -220,14 +220,8 @@ class WorkflowEvent:
 
     @classmethod
     def create(
-        cls,
-        correlation_id: str,
-        event_type: EventType,
-        tool_name: str,
-        file_path: str,
-        content: str,
-        **kwargs
-    ) -> 'WorkflowEvent':
+        cls, correlation_id: str, event_type: EventType, tool_name: str, file_path: str, content: str, **kwargs
+    ) -> "WorkflowEvent":
         """
         Factory method to create a new event.
 
@@ -250,13 +244,13 @@ class WorkflowEvent:
             tool_name=tool_name,
             file_path=file_path,
             content_hash=cls._hash_content(content),
-            **kwargs
+            **kwargs,
         )
 
     @staticmethod
     def _hash_content(content: str) -> str:
         """Generate SHA-256 hash of content."""
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
     def to_dict(self) -> dict:
         """
@@ -266,36 +260,36 @@ class WorkflowEvent:
             Dict representation suitable for JSON/storage
         """
         data = {
-            'event_id': self.event_id,
-            'correlation_id': self.correlation_id,
-            'timestamp': self.timestamp.isoformat(),
-            'event_type': self.event_type.value,
-            'tool_name': self.tool_name,
-            'file_path': self.file_path,
-            'content_hash': self.content_hash,
-            'success': self.success,
-            'iteration_number': self.iteration_number,
-            'parent_event_id': self.parent_event_id,
-            'metadata': self.metadata
+            "event_id": self.event_id,
+            "correlation_id": self.correlation_id,
+            "timestamp": self.timestamp.isoformat(),
+            "event_type": self.event_type.value,
+            "tool_name": self.tool_name,
+            "file_path": self.file_path,
+            "content_hash": self.content_hash,
+            "success": self.success,
+            "iteration_number": self.iteration_number,
+            "parent_event_id": self.parent_event_id,
+            "metadata": self.metadata,
         }
 
         # Add optional fields if present
         if self.intent:
-            data['intent'] = self.intent.to_dict()
+            data["intent"] = self.intent.to_dict()
 
         if self.violations:
-            data['violations'] = [v.to_dict() for v in self.violations]
+            data["violations"] = [v.to_dict() for v in self.violations]
 
         if self.corrections:
-            data['corrections'] = [c.to_dict() for c in self.corrections]
+            data["corrections"] = [c.to_dict() for c in self.corrections]
 
         if self.scores:
-            data['scores'] = self.scores.to_dict()
+            data["scores"] = self.scores.to_dict()
 
         return data
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'WorkflowEvent':
+    def from_dict(cls, data: dict) -> "WorkflowEvent":
         """
         Create event from dictionary.
 
@@ -306,44 +300,44 @@ class WorkflowEvent:
             WorkflowEvent instance
         """
         # Convert timestamp string back to datetime
-        timestamp = datetime.fromisoformat(data['timestamp'])
+        timestamp = datetime.fromisoformat(data["timestamp"])
 
         # Convert event_type string back to enum
-        event_type = EventType(data['event_type'])
+        event_type = EventType(data["event_type"])
 
         # Reconstruct optional complex objects
         intent = None
-        if 'intent' in data and data['intent']:
-            intent = IntentContextData(**data['intent'])
+        if "intent" in data and data["intent"]:
+            intent = IntentContextData(**data["intent"])
 
         violations = None
-        if 'violations' in data and data['violations']:
-            violations = [Violation(**v) for v in data['violations']]
+        if "violations" in data and data["violations"]:
+            violations = [Violation(**v) for v in data["violations"]]
 
         corrections = None
-        if 'corrections' in data and data['corrections']:
-            corrections = [Correction(**c) for c in data['corrections']]
+        if "corrections" in data and data["corrections"]:
+            corrections = [Correction(**c) for c in data["corrections"]]
 
         scores = None
-        if 'scores' in data and data['scores']:
-            scores = AIQuorumScore(**data['scores'])
+        if "scores" in data and data["scores"]:
+            scores = AIQuorumScore(**data["scores"])
 
         return cls(
-            event_id=data['event_id'],
-            correlation_id=data['correlation_id'],
+            event_id=data["event_id"],
+            correlation_id=data["correlation_id"],
             timestamp=timestamp,
             event_type=event_type,
-            tool_name=data['tool_name'],
-            file_path=data['file_path'],
-            content_hash=data['content_hash'],
+            tool_name=data["tool_name"],
+            file_path=data["file_path"],
+            content_hash=data["content_hash"],
             intent=intent,
             violations=violations,
             corrections=corrections,
             scores=scores,
-            success=data.get('success'),
-            iteration_number=data.get('iteration_number', 1),
-            parent_event_id=data.get('parent_event_id'),
-            metadata=data.get('metadata', {})
+            success=data.get("success"),
+            iteration_number=data.get("iteration_number", 1),
+            parent_event_id=data.get("parent_event_id"),
+            metadata=data.get("metadata", {}),
         )
 
 
@@ -389,18 +383,18 @@ class WorkflowSummary:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'correlation_id': self.correlation_id,
-            'start_time': self.start_time.isoformat(),
-            'end_time': self.end_time.isoformat(),
-            'duration_ms': self.duration_ms,
-            'tool_name': self.tool_name,
-            'file_path': self.file_path,
-            'intent_category': self.intent_category,
-            'total_events': self.total_events,
-            'success': self.success,
-            'iterations': self.iterations,
-            'violations_count': self.violations_count,
-            'corrections_applied': self.corrections_applied,
-            'final_outcome': self.final_outcome,
-            'metadata': self.metadata
+            "correlation_id": self.correlation_id,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat(),
+            "duration_ms": self.duration_ms,
+            "tool_name": self.tool_name,
+            "file_path": self.file_path,
+            "intent_category": self.intent_category,
+            "total_events": self.total_events,
+            "success": self.success,
+            "iterations": self.iterations,
+            "violations_count": self.violations_count,
+            "corrections_applied": self.corrections_applied,
+            "final_outcome": self.final_outcome,
+            "metadata": self.metadata,
         }
