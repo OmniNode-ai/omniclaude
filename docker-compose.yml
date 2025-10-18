@@ -32,8 +32,8 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
       - POSTGRES_DATABASE=omniclaude
 
-      # Redis configuration
-      - REDIS_URL=redis://redis:6379/0
+      # Valkey configuration (Redis-compatible)
+      - REDIS_URL=redis://valkey:6379/0
 
       # Application configuration
       - APP_ENV=production
@@ -58,7 +58,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_healthy
       otel-collector:
         condition: service_started
@@ -113,26 +113,26 @@ services:
           memory: 256M
 
   # ============================================================================
-  # Redis Cache Service
+  # Valkey Cache Service (Redis-compatible)
   # ============================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: omniclaude_redis
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: omniclaude_valkey
     restart: unless-stopped
     ports:
       - "6379:6379"
     command: >
-      redis-server
+      valkey-server
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
       --appendfsync everysec
     volumes:
-      - redis_data:/data
+      - valkey_data:/data
     networks:
       - app_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -302,7 +302,7 @@ volumes:
     driver: local
   postgres_data:
     driver: local
-  redis_data:
+  valkey_data:
     driver: local
   prometheus_data:
     driver: local
