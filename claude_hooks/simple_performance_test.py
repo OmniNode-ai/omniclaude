@@ -63,7 +63,7 @@ def test_basic_performance():
     for i in range(5):
         try:
             requests.get(f"{base_url}/health", timeout=2)
-        except:
+        except Exception:
             pass
     no_pool_time = time.time() - start_time
 
@@ -73,7 +73,7 @@ def test_basic_performance():
     for i in range(5):
         try:
             session.get(f"{base_url}/health", timeout=2)
-        except:
+        except Exception:
             pass
     with_pool_time = time.time() - start_time
 
@@ -137,7 +137,7 @@ def test_basic_performance():
 
                 if response.status_code == 200:
                     return pattern_id, response_time
-            except:
+            except Exception:
                 pass
 
             return pattern_id, 0

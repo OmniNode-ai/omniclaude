@@ -5,6 +5,8 @@ This template defines the structure and patterns for Effect nodes
 that handle external I/O operations.
 """
 
+from typing import Dict, List
+
 # NodeEffect Template
 NODE_EFFECT_TEMPLATE = '''
 """

@@ -23,11 +23,7 @@ from mcp_client import ArchonMCPClient
 
 # Import context optimizer for intelligent context selection
 try:
-    from agents.lib.context_optimizer import (
-        learn_from_execution,
-        optimize_context_for_task,
-        predict_context_needs,
-    )
+    from agents.lib.context_optimizer import predict_context_needs
 
     CONTEXT_OPTIMIZER_AVAILABLE = True
 except ImportError:
@@ -397,7 +393,7 @@ class ContextManager:
             try:
                 json_str = json.dumps(data)
                 return len(json_str) // 4
-            except:
+            except Exception:
                 return 100  # Fallback
         elif isinstance(data, list):
             return sum(self._estimate_tokens(item) for item in data)

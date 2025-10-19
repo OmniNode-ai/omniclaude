@@ -6,22 +6,22 @@ Tests the pattern feedback collection, analysis, and tuning system
 to ensure ≥90% precision target is achievable.
 """
 
-import pytest
-
-# Mark all tests in this module as integration tests (require database)
-pytestmark = pytest.mark.integration
-# Import the modules we're testing
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.pattern_feedback import PatternFeedback, PatternFeedbackCollector
 from lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
 from lib.patterns.pattern_matcher import PatternMatcher, PatternType
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture

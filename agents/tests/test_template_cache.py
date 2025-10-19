@@ -12,15 +12,16 @@ Tests cover:
 - Statistics tracking
 """
 
-import pytest
-
-# Mark all tests in this module as integration tests (require database)
-pytestmark = pytest.mark.integration
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
+
 from agents.lib.template_cache import TemplateCache
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 
 
 class TestCacheBasics:

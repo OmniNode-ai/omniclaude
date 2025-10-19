@@ -65,8 +65,14 @@ except ImportError:
     BaseModel = None
     PYDANTIC_AVAILABLE = False
 
-# Add current directory to path
+# Add current directory to path before importing local modules
 sys.path.insert(0, str(Path(__file__).parent))
+
+from agent_architect import ArchitectAgent
+from agent_dispatcher import ParallelCoordinator
+from agent_model import AgentTask
+from agent_registry import agent_exists, list_registered_agents
+from context_manager import ContextManager
 
 # Configure logging to write to both stderr and file
 log_file = Path("/tmp/logging_implementation_coord.log")
@@ -81,18 +87,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_file)
 
-from agent_architect import ArchitectAgent
-from agent_dispatcher import ParallelCoordinator
-from agent_model import AgentTask
-from agent_registry import agent_exists
-from context_manager import ContextManager
-
 # Import all agents to trigger self-registration via decorators
 # This ensures agents register themselves when dispatch_runner loads
 logger.info("[AgentImport] Starting agent module imports...")
 try:
     logger.info("[AgentImport] Importing agent_analyzer...")
-    import agent_analyzer
+    import agent_analyzer  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_analyzer")
 except ImportError as e:
@@ -100,7 +100,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_researcher...")
-    import agent_researcher
+    import agent_researcher  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_researcher")
 except ImportError as e:
@@ -108,7 +108,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_validator...")
-    import agent_validator
+    import agent_validator  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_validator")
 except ImportError as e:
@@ -116,7 +116,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_debug_intelligence...")
-    import agent_debug_intelligence
+    import agent_debug_intelligence  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_debug_intelligence")
 except ImportError as e:
@@ -124,7 +124,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_code_generator...")
-    import agent_code_generator
+    import agent_code_generator  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_code_generator")
 except ImportError as e:
@@ -148,8 +148,6 @@ except ImportError:
 try:
     from interactive_validator import (
         CheckpointType,
-        InteractiveValidator,
-        QuietValidator,
         UserChoice,
         create_validator,
     )

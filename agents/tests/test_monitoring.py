@@ -329,7 +329,6 @@ class TestHealthChecker:
                     "incorrect_count": 10,
                     "avg_confidence": 0.88,
                     "total_events": 1000,
-                    "success_count": 980,
                     "p95_latency": 150.0,
                 }
             )

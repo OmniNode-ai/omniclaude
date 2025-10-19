@@ -618,7 +618,7 @@ Provide your evaluation:"""
                         # Extract JSON from markdown code block
                         lines = cleaned_text.split("\n")
                         # Remove first line (```json) and last line (```)
-                        json_lines = [l for l in lines[1:-1] if l.strip()]
+                        json_lines = [line for line in lines[1:-1] if line.strip()]
                         cleaned_text = "\n".join(json_lines)
 
                     score_data = json.loads(cleaned_text)

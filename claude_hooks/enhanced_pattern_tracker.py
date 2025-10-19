@@ -282,7 +282,7 @@ class PerformanceMonitor:
             try:
                 process = psutil.Process()
                 self.metrics.memory_usage_mb = process.memory_info().rss / 1024 / 1024
-            except:
+            except Exception:
                 pass
 
     def record_cache_hit(self):
@@ -865,7 +865,7 @@ class EnhancedPatternTracker:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 loop.create_task(self.close())
-        except:
+        except Exception:
             pass
 
 

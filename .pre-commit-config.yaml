@@ -32,14 +32,13 @@ repos:
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
         stages: [pre-commit]
 
-      # Temporarily disabled - will fix ruff errors in follow-up commit
-      # - id: ruff-fix
-      #   name: ruff (auto-fix linting issues)
-      #   entry: poetry run ruff check --fix
-      #   language: system
-      #   types: [python]
-      #   exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
-      #   stages: [pre-commit]
+      - id: ruff-fix
+        name: ruff (auto-fix linting issues)
+        entry: poetry run ruff check --fix
+        language: system
+        types: [python]
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        stages: [pre-commit]
 
 # Configuration
 ci:

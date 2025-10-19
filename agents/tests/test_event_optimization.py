@@ -19,9 +19,6 @@ from uuid import uuid4
 
 import pytest
 
-# Mark all tests in this module as integration tests (require database)
-pytestmark = pytest.mark.integration
-
 from agents.lib.batch_processor import BatchConfig, BatchProcessor
 from agents.lib.codegen_events import BaseEvent, CodegenAnalysisRequest
 from agents.lib.event_optimizer import (
@@ -31,6 +28,9 @@ from agents.lib.event_optimizer import (
     EventOptimizer,
     OptimizerConfig,
 )
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 
 # ============================================================================
 # Batch Processor Tests

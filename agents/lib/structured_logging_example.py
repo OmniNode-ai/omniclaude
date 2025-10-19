@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 from uuid import UUID, uuid4
 
 from .log_context import async_log_context, with_log_context
-from .log_rotation import LogRotationConfig
+from .log_rotation import LogRotationConfig, configure_global_rotation
 from .structured_logger import get_logger
 
 # Initialize loggers for different components

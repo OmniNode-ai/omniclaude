@@ -28,7 +28,7 @@ from .codegen_events import CodegenValidationRequest, CodegenValidationResponse
 
 # Framework: ML-powered mixin compatibility (optional import)
 try:
-    from .mixin_compatibility import CompatibilityLevel, MixinCompatibilityManager
+    from .mixin_compatibility import MixinCompatibilityManager
 
     ML_AVAILABLE = True
 except ImportError:

@@ -259,7 +259,7 @@ class Phase4HealthChecker:
                     result["details"] = response.json()
                 else:
                     result["details"] = response.text[:500]  # Limit text length
-            except:
+            except Exception:
                 result["details"] = "Could not parse response"
 
             return result
@@ -300,7 +300,7 @@ class Phase4HealthChecker:
                         "response_time_ms": round(response_time_ms, 2),
                         "details": details,
                     }
-                except:
+                except Exception:
                     return {
                         "status": "connected",
                         "response_time_ms": round(response_time_ms, 2),
@@ -358,7 +358,7 @@ class Phase4HealthChecker:
                         "response_code": response.status_code,
                         "details": response_data,
                     }
-                except:
+                except Exception:
                     return {
                         "status": "working",
                         "response_time_ms": round(response_time_ms, 2),

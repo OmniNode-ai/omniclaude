@@ -18,6 +18,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+from .models import ExecutionTrace, HookExecution
+
 try:
     import asyncpg
 
