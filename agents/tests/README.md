@@ -136,7 +136,7 @@ python monitor_dependencies.py
 - **Quality Gates**: `~/.claude/agents/quality-gates-spec.yaml`
 - **Performance Thresholds**: `~/.claude/agents/performance-thresholds.yaml`
 - **Mandatory Functions**: `~/.claude/agents/MANDATORY_FUNCTIONS.md`
-- **Agent Framework**: `~/.claude/agents/AGENT_FRAMEWORK.md`
+- **Agent Framework**: `~/.claude/agents/ARCHITECTURE.md`
 
 ---
 

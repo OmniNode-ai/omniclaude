@@ -17,9 +17,9 @@ Target Performance:
 - Hit rate: >60% after warmup
 """
 
-from typing import Optional, Any, Dict
-import time
 import hashlib
+import time
+from typing import Any, Dict, Optional
 
 
 class ResultCache:
@@ -93,7 +93,13 @@ class ResultCache:
 
         return entry["value"]
 
-    def set(self, query: str, value: Any, context: Optional[Dict] = None, ttl_seconds: Optional[int] = None):
+    def set(
+        self,
+        query: str,
+        value: Any,
+        context: Optional[Dict] = None,
+        ttl_seconds: Optional[int] = None,
+    ):
         """
         Cache result with TTL.
 
@@ -141,7 +147,11 @@ class ResultCache:
             Number of entries removed
         """
         current_time = time.time()
-        expired_keys = [key for key, entry in self.cache.items() if current_time > entry["expires_at"]]
+        expired_keys = [
+            key
+            for key, entry in self.cache.items()
+            if current_time > entry["expires_at"]
+        ]
 
         for key in expired_keys:
             del self.cache[key]

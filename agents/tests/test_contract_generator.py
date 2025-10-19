@@ -6,16 +6,21 @@ Tests YAML contract generation for all 4 node types, subcontract generation,
 and validation logic.
 """
 
+import shutil
+import tempfile
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 import yaml
-from uuid import uuid4
-from pathlib import Path
-import tempfile
-import shutil
+from omnibase_core.errors import OnexError
 
 from agents.lib.contract_generator import ContractGenerator
-from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
-from omnibase_core.errors import OnexError
+from agents.lib.simple_prd_analyzer import (
+    SimpleDecompositionResult,
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+)
 
 
 # Test fixtures
@@ -36,13 +41,21 @@ def sample_prd_analysis():
             "Session management and timeout",
             "OAuth integration for social login",
         ],
-        success_criteria=["Authentication response time < 200ms", "Support 1000 concurrent users", "99.9% uptime"],
+        success_criteria=[
+            "Authentication response time < 200ms",
+            "Support 1000 concurrent users",
+            "99.9% uptime",
+        ],
         technical_details=[
             "Use PostgreSQL for user data storage",
             "Use Redis for session caching",
             "JWT tokens with HS256 algorithm",
         ],
-        dependencies=["PostgreSQL database", "Redis cache", "Email service for password reset"],
+        dependencies=[
+            "PostgreSQL database",
+            "Redis cache",
+            "Email service for password reset",
+        ],
         extracted_keywords=["Authentication", "Security", "Session", "Token"],
         sections=["Overview", "Requirements", "Features"],
         word_count=250,
@@ -82,8 +95,19 @@ def sample_prd_analysis():
         prd_content="Sample PRD content",
         parsed_prd=parsed_prd,
         decomposition_result=decomposition_result,
-        node_type_hints={"EFFECT": 0.8, "COMPUTE": 0.3, "REDUCER": 0.1, "ORCHESTRATOR": 0.2},
-        recommended_mixins=["MixinEventBus", "MixinCaching", "MixinHealthCheck", "MixinSecurity", "MixinValidation"],
+        node_type_hints={
+            "EFFECT": 0.8,
+            "COMPUTE": 0.3,
+            "REDUCER": 0.1,
+            "ORCHESTRATOR": 0.2,
+        },
+        recommended_mixins=[
+            "MixinEventBus",
+            "MixinCaching",
+            "MixinHealthCheck",
+            "MixinSecurity",
+            "MixinValidation",
+        ],
         external_systems=["PostgreSQL", "Redis", "Email Service"],
         quality_baseline=0.85,
         confidence_score=0.78,
@@ -106,7 +130,9 @@ def temp_output_dir():
 
 # Test YAML generation for all node types
 @pytest.mark.asyncio
-async def test_generate_effect_contract(contract_generator, sample_prd_analysis, temp_output_dir):
+async def test_generate_effect_contract(
+    contract_generator, sample_prd_analysis, temp_output_dir
+):
     """Test EFFECT node contract generation"""
     result = await contract_generator.generate_contract_yaml(
         analysis_result=sample_prd_analysis,
@@ -220,14 +246,18 @@ async def test_generate_subcontracts(contract_generator):
     assert len(subcontracts) == 3
 
     # Verify EventBus subcontract
-    event_bus_subcontract = next((sc for sc in subcontracts if sc["mixin"] == "MixinEventBus"), None)
+    event_bus_subcontract = next(
+        (sc for sc in subcontracts if sc["mixin"] == "MixinEventBus"), None
+    )
     assert event_bus_subcontract is not None
     assert "config" in event_bus_subcontract
     assert "bootstrap_servers" in event_bus_subcontract["config"]
     assert event_bus_subcontract["required"] is True
 
     # Verify Caching subcontract
-    caching_subcontract = next((sc for sc in subcontracts if sc["mixin"] == "MixinCaching"), None)
+    caching_subcontract = next(
+        (sc for sc in subcontracts if sc["mixin"] == "MixinCaching"), None
+    )
     assert caching_subcontract is not None
     assert "config" in caching_subcontract
     assert "ttl_seconds" in caching_subcontract["config"]
@@ -269,30 +299,44 @@ async def test_infer_contract_fields(contract_generator, sample_prd_analysis):
     assert len(required_caps) > 0
 
     # Verify external systems
-    assert contract_fields["external_systems"] == ["PostgreSQL", "Redis", "Email Service"]
+    assert contract_fields["external_systems"] == [
+        "PostgreSQL",
+        "Redis",
+        "Email Service",
+    ]
 
 
 @pytest.mark.asyncio
 async def test_capability_type_inference(contract_generator):
     """Test capability type inference from requirement text"""
     # Test create operation
-    create_type = contract_generator._infer_capability_type("Create new user account", "EFFECT")
+    create_type = contract_generator._infer_capability_type(
+        "Create new user account", "EFFECT"
+    )
     assert create_type == "create"
 
     # Test read operation
-    read_type = contract_generator._infer_capability_type("Fetch user profile data", "EFFECT")
+    read_type = contract_generator._infer_capability_type(
+        "Fetch user profile data", "EFFECT"
+    )
     assert read_type == "read"
 
     # Test update operation
-    update_type = contract_generator._infer_capability_type("Update user settings", "EFFECT")
+    update_type = contract_generator._infer_capability_type(
+        "Update user settings", "EFFECT"
+    )
     assert update_type == "update"
 
     # Test delete operation
-    delete_type = contract_generator._infer_capability_type("Delete inactive accounts", "EFFECT")
+    delete_type = contract_generator._infer_capability_type(
+        "Delete inactive accounts", "EFFECT"
+    )
     assert delete_type == "delete"
 
     # Test compute operation
-    compute_type = contract_generator._infer_capability_type("Process payment transactions", "COMPUTE")
+    compute_type = contract_generator._infer_capability_type(
+        "Process payment transactions", "COMPUTE"
+    )
     assert compute_type == "compute"
 
 
@@ -305,7 +349,9 @@ async def test_validate_valid_contract(contract_generator):
         "node_type": "EFFECT",
         "domain": "test",
         "service_name": "test_service",
-        "capabilities": [{"name": "test_capability", "type": "operation", "required": True}],
+        "capabilities": [
+            {"name": "test_capability", "type": "operation", "required": True}
+        ],
         "subcontracts": [{"mixin": "MixinEventBus", "config": {}}],
         "dependencies": {"external_systems": [], "required_mixins": ["MixinEventBus"]},
     }
@@ -387,7 +433,9 @@ async def test_invalid_node_type_raises_error(contract_generator, sample_prd_ana
 
 # Test integration with PRD analysis
 @pytest.mark.asyncio
-async def test_full_contract_generation_workflow(contract_generator, sample_prd_analysis, temp_output_dir):
+async def test_full_contract_generation_workflow(
+    contract_generator, sample_prd_analysis, temp_output_dir
+):
     """Test complete contract generation workflow"""
     result = await contract_generator.generate_contract_yaml(
         analysis_result=sample_prd_analysis,
@@ -413,14 +461,20 @@ async def test_full_contract_generation_workflow(contract_generator, sample_prd_
         assert mixin in subcontract_mixins
 
     # Verify external systems are in dependencies
-    assert contract["dependencies"]["external_systems"] == sample_prd_analysis.external_systems
+    assert (
+        contract["dependencies"]["external_systems"]
+        == sample_prd_analysis.external_systems
+    )
 
 
 @pytest.mark.asyncio
 async def test_contract_yaml_format(contract_generator, sample_prd_analysis):
     """Test that generated YAML is properly formatted"""
     result = await contract_generator.generate_contract_yaml(
-        analysis_result=sample_prd_analysis, node_type="EFFECT", microservice_name="test_service", domain="test"
+        analysis_result=sample_prd_analysis,
+        node_type="EFFECT",
+        microservice_name="test_service",
+        domain="test",
     )
 
     yaml_content = result["contract_yaml"]
@@ -442,12 +496,16 @@ async def test_mixin_integration_points(contract_generator):
     contract_fields = {"capabilities": [], "operations": [], "external_systems": []}
 
     # Test EventBus integration points
-    event_bus_points = contract_generator._extract_mixin_integration_points("MixinEventBus", contract_fields)
+    event_bus_points = contract_generator._extract_mixin_integration_points(
+        "MixinEventBus", contract_fields
+    )
     assert "on_event_received" in event_bus_points
     assert "publish_event" in event_bus_points
 
     # Test Caching integration points
-    caching_points = contract_generator._extract_mixin_integration_points("MixinCaching", contract_fields)
+    caching_points = contract_generator._extract_mixin_integration_points(
+        "MixinCaching", contract_fields
+    )
     assert "cache_get" in caching_points
     assert "cache_set" in caching_points
     assert "cache_invalidate" in caching_points
@@ -457,7 +515,9 @@ async def test_mixin_integration_points(contract_generator):
 async def test_capability_name_sanitization(contract_generator):
     """Test capability name sanitization"""
     # Test with special characters
-    sanitized = contract_generator._sanitize_capability_name("Create User Account (with validation!)")
+    sanitized = contract_generator._sanitize_capability_name(
+        "Create User Account (with validation!)"
+    )
     assert sanitized == "create_user_account_with_validation"
 
     # Test with spaces and hyphens
@@ -480,7 +540,9 @@ async def test_required_capability_detection(contract_generator):
     assert contract_generator._is_capability_required("Critical security feature")
 
     # Test without required keywords
-    assert not contract_generator._is_capability_required("Can support multi-factor auth")
+    assert not contract_generator._is_capability_required(
+        "Can support multi-factor auth"
+    )
     assert not contract_generator._is_capability_required("May include social login")
 
 

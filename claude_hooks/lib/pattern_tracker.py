@@ -35,21 +35,19 @@ Usage in Claude Code Hooks:
     )
 """
 
-import os
-import sys
 import asyncio
 import hashlib
 import logging
+import os
+import sys
 import traceback
-import requests
-from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import httpx
-
-from lib.resilience import ResilientAPIClient, ResilientExecutor, graceful_tracking
-
+import requests
+from lib.resilience import ResilientAPIClient, graceful_tracking
 
 logger = logging.getLogger(__name__)
 
@@ -87,18 +85,23 @@ class PatternTracker:
             enable_tracking: Enable/disable tracking (useful for testing)
         """
         # Get base URL from environment or use default
-        self.base_url = base_url or os.getenv("INTELLIGENCE_SERVICE_URL", "http://localhost:8053")
+        self.base_url = base_url or os.getenv(
+            "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
+        )
 
         self.enable_tracking = enable_tracking
 
         # Initialize resilient API client
-        self.api_client = ResilientAPIClient(base_url=self.base_url, enable_caching=True, enable_circuit_breaker=True)
+        self.api_client = ResilientAPIClient(
+            base_url=self.base_url, enable_caching=True, enable_circuit_breaker=True
+        )
 
         # Pattern ID cache for deduplication
         self._pattern_cache: Dict[str, str] = {}
 
         logger.info(
-            f"[PatternTracker] Initialized with base_url={self.base_url}, " f"tracking_enabled={enable_tracking}"
+            f"[PatternTracker] Initialized with base_url={self.base_url}, "
+            f"tracking_enabled={enable_tracking}"
         )
 
         # Health check: Verify Phase 4 API is reachable
@@ -114,19 +117,31 @@ class PatternTracker:
         try:
             response = requests.get(f"{self.base_url}/health", timeout=2)
             if response.status_code == 200:
-                print(f"✅ [PatternTracker] Phase 4 API reachable at {self.base_url}", file=sys.stderr)
+                print(
+                    f"✅ [PatternTracker] Phase 4 API reachable at {self.base_url}",
+                    file=sys.stderr,
+                )
                 return True
             else:
-                print(f"⚠️ [PatternTracker] Phase 4 API unhealthy: HTTP {response.status_code}", file=sys.stderr)
+                print(
+                    f"⚠️ [PatternTracker] Phase 4 API unhealthy: HTTP {response.status_code}",
+                    file=sys.stderr,
+                )
                 return False
         except requests.exceptions.ConnectionError as e:
-            print(f"❌ [PatternTracker] Cannot connect to Phase 4 API at {self.base_url}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker] Cannot connect to Phase 4 API at {self.base_url}: {e}",
+                file=sys.stderr,
+            )
             return False
         except requests.exceptions.Timeout as e:
             print(f"❌ [PatternTracker] Health check timeout: {e}", file=sys.stderr)
             return False
         except Exception as e:
-            print(f"⚠️ [PatternTracker] Health check failed: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"⚠️ [PatternTracker] Health check failed: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             return False
 
     @classmethod
@@ -161,7 +176,9 @@ class PatternTracker:
             Unique pattern ID
         """
         # Create hash from code + key context fields
-        hash_input = f"{code}:{context.get('language', '')}:{context.get('pattern_type', '')}"
+        hash_input = (
+            f"{code}:{context.get('language', '')}:{context.get('pattern_type', '')}"
+        )
         hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()[:12]
 
         # Create readable pattern ID
@@ -196,7 +213,10 @@ class PatternTracker:
 
     @graceful_tracking(fallback_return={})
     async def track_pattern_creation(
-        self, code: str, context: Dict[str, Any], parent_pattern_ids: Optional[List[str]] = None
+        self,
+        code: str,
+        context: Dict[str, Any],
+        parent_pattern_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Track pattern creation event.
@@ -232,7 +252,9 @@ class PatternTracker:
 
         # Check if already tracked (deduplication)
         if pattern_id in self._pattern_cache:
-            logger.debug(f"[PatternTracker] Pattern {pattern_id} already tracked, skipping")
+            logger.debug(
+                f"[PatternTracker] Pattern {pattern_id} already tracked, skipping"
+            )
             return {"success": True, "cached": True, "pattern_id": pattern_id}
 
         # Prepare pattern data
@@ -244,7 +266,11 @@ class PatternTracker:
             "framework": context.get("framework", ""),
             "pattern_type": context.get("pattern_type", "code"),
             "created_at": datetime.utcnow().isoformat(),
-            "metadata": {k: v for k, v in context.items() if k not in ["code", "language", "file_path", "tool_name"]},
+            "metadata": {
+                k: v
+                for k, v in context.items()
+                if k not in ["code", "language", "file_path", "tool_name"]
+            },
         }
 
         # Track via resilient API client with comprehensive error handling
@@ -264,7 +290,10 @@ class PatternTracker:
             # Cache pattern ID on success
             if result.get("success"):
                 self._pattern_cache[pattern_id] = pattern_name
-                print(f"✅ [PatternTracker] Pattern created: {pattern_id}", file=sys.stderr)
+                print(
+                    f"✅ [PatternTracker] Pattern created: {pattern_id}",
+                    file=sys.stderr,
+                )
 
             return result
 
@@ -275,21 +304,32 @@ class PatternTracker:
             )
             return None
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.track_pattern_creation] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_creation] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return None
         except KeyError as e:
-            print(f"❌ [PatternTracker.track_pattern_creation] Missing field in API response: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_creation] Missing field in API response: {e}",
+                file=sys.stderr,
+            )
             return None
         except Exception as e:
             print(
-                f"❌ [PatternTracker.track_pattern_creation] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr
+                f"❌ [PatternTracker.track_pattern_creation] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
             )
             traceback.print_exc(file=sys.stderr)
             return None
 
     @graceful_tracking(fallback_return={})
     async def track_pattern_modification(
-        self, pattern_id: str, new_code: str, context: Dict[str, Any], reason: Optional[str] = None
+        self,
+        pattern_id: str,
+        new_code: str,
+        context: Dict[str, Any],
+        reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Track pattern modification event.
@@ -350,7 +390,10 @@ class PatternTracker:
             )
 
             if result.get("success"):
-                print(f"✅ [PatternTracker] Pattern modified: {new_pattern_id} (from {pattern_id})", file=sys.stderr)
+                print(
+                    f"✅ [PatternTracker] Pattern modified: {new_pattern_id} (from {pattern_id})",
+                    file=sys.stderr,
+                )
 
             return result
 
@@ -361,10 +404,16 @@ class PatternTracker:
             )
             return None
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.track_pattern_modification] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_modification] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return None
         except KeyError as e:
-            print(f"❌ [PatternTracker.track_pattern_modification] Missing field in API response: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_modification] Missing field in API response: {e}",
+                file=sys.stderr,
+            )
             return None
         except Exception as e:
             print(
@@ -375,7 +424,9 @@ class PatternTracker:
             return None
 
     @graceful_tracking(fallback_return={})
-    async def track_pattern_application(self, pattern_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def track_pattern_application(
+        self, pattern_id: str, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Track pattern application event.
 
@@ -420,7 +471,10 @@ class PatternTracker:
             )
 
             if result.get("success"):
-                print(f"✅ [PatternTracker] Pattern applied: {pattern_id}", file=sys.stderr)
+                print(
+                    f"✅ [PatternTracker] Pattern applied: {pattern_id}",
+                    file=sys.stderr,
+                )
 
             return result
 
@@ -431,10 +485,16 @@ class PatternTracker:
             )
             return None
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.track_pattern_application] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_application] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return None
         except KeyError as e:
-            print(f"❌ [PatternTracker.track_pattern_application] Missing field in API response: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_application] Missing field in API response: {e}",
+                file=sys.stderr,
+            )
             return None
         except Exception as e:
             print(
@@ -446,7 +506,11 @@ class PatternTracker:
 
     @graceful_tracking(fallback_return={})
     async def track_pattern_merge(
-        self, source_pattern_ids: List[str], merged_code: str, context: Dict[str, Any], reason: Optional[str] = None
+        self,
+        source_pattern_ids: List[str],
+        merged_code: str,
+        context: Dict[str, Any],
+        reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Track pattern merge event.
@@ -519,13 +583,22 @@ class PatternTracker:
             )
             return None
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.track_pattern_merge] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_merge] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return None
         except KeyError as e:
-            print(f"❌ [PatternTracker.track_pattern_merge] Missing field in API response: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_merge] Missing field in API response: {e}",
+                file=sys.stderr,
+            )
             return None
         except Exception as e:
-            print(f"❌ [PatternTracker.track_pattern_merge] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.track_pattern_merge] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             traceback.print_exc(file=sys.stderr)
             return None
 
@@ -564,7 +637,10 @@ class PatternTracker:
                 "resilience": {"error": "connection_failed"},
             }
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.get_tracker_stats] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.get_tracker_stats] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return {
                 "tracker": {
                     "enabled": self.enable_tracking,
@@ -574,7 +650,10 @@ class PatternTracker:
                 "resilience": {"error": "timeout"},
             }
         except Exception as e:
-            print(f"❌ [PatternTracker.get_tracker_stats] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.get_tracker_stats] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             traceback.print_exc(file=sys.stderr)
             return {
                 "tracker": {
@@ -598,8 +677,13 @@ class PatternTracker:
         try:
             sync_stats = await self.api_client.cache.sync_cached_events(self.api_client)
 
-            logger.info(f"[PatternTracker] Synced {sync_stats['synced']} offline events")
-            print(f"✅ [PatternTracker] Synced {sync_stats.get('synced', 0)} offline events", file=sys.stderr)
+            logger.info(
+                f"[PatternTracker] Synced {sync_stats['synced']} offline events"
+            )
+            print(
+                f"✅ [PatternTracker] Synced {sync_stats.get('synced', 0)} offline events",
+                file=sys.stderr,
+            )
 
             return {"success": True, "sync_stats": sync_stats}
 
@@ -610,13 +694,22 @@ class PatternTracker:
             )
             return {"success": False, "error": "connection_failed"}
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.sync_offline_events] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.sync_offline_events] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return {"success": False, "error": "timeout"}
         except KeyError as e:
-            print(f"❌ [PatternTracker.sync_offline_events] Missing field in sync response: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.sync_offline_events] Missing field in sync response: {e}",
+                file=sys.stderr,
+            )
             return {"success": False, "error": f"missing_field: {e}"}
         except Exception as e:
-            print(f"❌ [PatternTracker.sync_offline_events] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.sync_offline_events] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             traceback.print_exc(file=sys.stderr)
             return {"success": False, "error": str(e)}
 
@@ -634,7 +727,10 @@ class PatternTracker:
             cleaned = await self.api_client.cache.cleanup_old_events()
 
             logger.info(f"[PatternTracker] Cleaned up {cleaned} old cached events")
-            print(f"✅ [PatternTracker] Cleaned up {cleaned} old cached events", file=sys.stderr)
+            print(
+                f"✅ [PatternTracker] Cleaned up {cleaned} old cached events",
+                file=sys.stderr,
+            )
 
             return {"success": True, "cleaned_count": cleaned}
 
@@ -645,10 +741,16 @@ class PatternTracker:
             )
             return {"success": False, "error": "connection_failed"}
         except httpx.TimeoutError as e:
-            print(f"❌ [PatternTracker.cleanup_cache] Phase 4 API timeout: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.cleanup_cache] Phase 4 API timeout: {e}",
+                file=sys.stderr,
+            )
             return {"success": False, "error": "timeout"}
         except Exception as e:
-            print(f"❌ [PatternTracker.cleanup_cache] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTracker.cleanup_cache] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             traceback.print_exc(file=sys.stderr)
             return {"success": False, "error": str(e)}
 
@@ -658,7 +760,9 @@ class PatternTracker:
 # ============================================================================
 
 
-async def track_write_tool_pattern(file_path: str, content: str, language: str = "unknown") -> Dict[str, Any]:
+async def track_write_tool_pattern(
+    file_path: str, content: str, language: str = "unknown"
+) -> Dict[str, Any]:
     """
     Convenience function for tracking Write tool patterns.
 
@@ -674,12 +778,21 @@ async def track_write_tool_pattern(file_path: str, content: str, language: str =
 
     return await tracker.track_pattern_creation(
         code=content,
-        context={"file_path": file_path, "language": language, "tool_name": "Write", "pattern_type": "code"},
+        context={
+            "file_path": file_path,
+            "language": language,
+            "tool_name": "Write",
+            "pattern_type": "code",
+        },
     )
 
 
 async def track_edit_tool_pattern(
-    file_path: str, pattern_id: str, new_content: str, language: str = "unknown", reason: Optional[str] = None
+    file_path: str,
+    pattern_id: str,
+    new_content: str,
+    language: str = "unknown",
+    reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Convenience function for tracking Edit tool patterns.
@@ -699,7 +812,12 @@ async def track_edit_tool_pattern(
     return await tracker.track_pattern_modification(
         pattern_id=pattern_id,
         new_code=new_content,
-        context={"file_path": file_path, "language": language, "tool_name": "Edit", "pattern_type": "code"},
+        context={
+            "file_path": file_path,
+            "language": language,
+            "tool_name": "Edit",
+            "pattern_type": "code",
+        },
         reason=reason,
     )
 
@@ -742,7 +860,11 @@ function authenticateJWT(token, options = {}) {
     return decoded;
 }
         """,
-        context={"file_path": "src/auth/jwt.js", "language": "javascript", "tool_name": "Edit"},
+        context={
+            "file_path": "src/auth/jwt.js",
+            "language": "javascript",
+            "tool_name": "Edit",
+        },
         reason="Added options parameter for flexibility",
     )
     print(f"Pattern modification: {result2}")

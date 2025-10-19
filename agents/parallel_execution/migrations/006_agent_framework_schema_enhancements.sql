@@ -1,5 +1,5 @@
--- Migration: 006_phase7_schema_enhancements
--- Description: Phase 7 refinement - Add tables for mixin learning, pattern feedback, performance metrics, template caching, and event processing
+-- Migration: 006_agent_framework_schema_enhancements
+-- Description: Agent framework refinement - Add tables for mixin learning, pattern feedback, performance metrics, template caching, and event processing
 -- Author: agent-workflow-coordinator
 -- Created: 2025-10-15
 -- ONEX Compliance: Effect/Reducer node patterns for ML learning and performance optimization
@@ -523,7 +523,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 INSERT INTO schema_migrations (version, description, execution_time_ms)
 VALUES (
   6,
-  'Phase 7: Add mixin learning, pattern feedback, performance metrics, template caching, and event processing tables',
+  'Agent Framework: Add mixin learning, pattern feedback, performance metrics, template caching, and event processing tables',
   EXTRACT(MILLISECONDS FROM NOW() - statement_timestamp())::INTEGER
 )
 ON CONFLICT (version) DO NOTHING;

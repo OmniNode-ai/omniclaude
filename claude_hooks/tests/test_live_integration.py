@@ -18,17 +18,16 @@ Usage:
 """
 
 import asyncio
-import sys
 import os
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
-from phase4_api_client import Phase4APIClient
 from pattern_id_system import PatternIDSystem, PatternLineageDetector
-
+from phase4_api_client import Phase4APIClient
 
 # Test configuration
 API_BASE_URL = os.getenv("API_URL", "http://localhost:8053")
@@ -118,7 +117,9 @@ async def fetch_user_data(user_id: str):
                     for component, status in health["components"].items():
                         print(f"       - {component}: {status}")
             else:
-                print_warning(f"API health check returned: {health.get('status', 'unknown')}")
+                print_warning(
+                    f"API health check returned: {health.get('status', 'unknown')}"
+                )
 
                 if "error" in health:
                     print_info("Error", health["error"])
@@ -168,12 +169,18 @@ async def fetch_user_data(user_id: str):
                 if VERBOSE and "data" in result:
                     print_info("Lineage ID", result["data"].get("lineage_id", "N/A"))
             else:
-                print_warning(f"Pattern tracking: {result.get('error', 'Unknown error')}")
+                print_warning(
+                    f"Pattern tracking: {result.get('error', 'Unknown error')}"
+                )
 
                 # Check if database is unavailable
                 if "database" in result.get("error", "").lower():
-                    print_info("Note", "Database unavailable - lineage tracking disabled")
-                    print_info("Tip", "Configure TRACEABILITY_DB_URL environment variable")
+                    print_info(
+                        "Note", "Database unavailable - lineage tracking disabled"
+                    )
+                    print_info(
+                        "Tip", "Configure TRACEABILITY_DB_URL environment variable"
+                    )
 
     except Exception as e:
         print_error(f"Pattern creation tracking failed: {e}")
@@ -185,9 +192,24 @@ async def fetch_user_data(user_id: str):
     print_step(3, "Simulating Pattern Execution (3 iterations)")
 
     execution_metrics = [
-        {"success": True, "quality_score": 0.90, "execution_time": 0.123, "violations": 0},
-        {"success": True, "quality_score": 0.92, "execution_time": 0.118, "violations": 0},
-        {"success": True, "quality_score": 0.95, "execution_time": 0.115, "violations": 0},
+        {
+            "success": True,
+            "quality_score": 0.90,
+            "execution_time": 0.123,
+            "violations": 0,
+        },
+        {
+            "success": True,
+            "quality_score": 0.92,
+            "execution_time": 0.118,
+            "violations": 0,
+        },
+        {
+            "success": True,
+            "quality_score": 0.95,
+            "execution_time": 0.115,
+            "violations": 0,
+        },
     ]
 
     try:
@@ -213,7 +235,9 @@ async def fetch_user_data(user_id: str):
                 )
 
                 if result.get("success"):
-                    print_success(f"Execution {i} tracked (quality: {metrics['quality_score']:.2f})")
+                    print_success(
+                        f"Execution {i} tracked (quality: {metrics['quality_score']:.2f})"
+                    )
                 else:
                     print_warning(f"Execution {i} tracking: {result.get('error')}")
 
@@ -237,7 +261,14 @@ async def fetch_user_data(user_id: str):
     print_info("Parent ID", pattern_id[:16])
     print_info("Child ID", modified_pattern_id[:16])
     print_info("Similarity", f"{derivation['similarity_score']:.2%}")
-    print_info("Modification Type", derivation["modification_type"].value if derivation["modification_type"] else "N/A")
+    print_info(
+        "Modification Type",
+        (
+            derivation["modification_type"].value
+            if derivation["modification_type"]
+            else "N/A"
+        ),
+    )
 
     # Track modification
     print("\n   Tracking pattern modification...")
@@ -271,7 +302,9 @@ async def fetch_user_data(user_id: str):
     try:
         async with Phase4APIClient(base_url=API_BASE_URL) as client:
             lineage = await client.query_lineage(
-                pattern_id=modified_pattern_id, include_ancestors=True, include_descendants=True
+                pattern_id=modified_pattern_id,
+                include_ancestors=True,
+                include_descendants=True,
             )
 
             if lineage.get("success"):
@@ -281,7 +314,9 @@ async def fetch_user_data(user_id: str):
                     data = lineage["data"]
                     print_info("Ancestry Depth", str(data.get("ancestry_depth", 0)))
                     print_info("Total Ancestors", str(data.get("total_ancestors", 0)))
-                    print_info("Total Descendants", str(data.get("total_descendants", 0)))
+                    print_info(
+                        "Total Descendants", str(data.get("total_descendants", 0))
+                    )
             else:
                 print_warning(f"Lineage query: {lineage.get('error')}")
 
@@ -297,7 +332,10 @@ async def fetch_user_data(user_id: str):
     try:
         async with Phase4APIClient(base_url=API_BASE_URL) as client:
             analytics = await client.compute_analytics(
-                pattern_id=pattern_id, time_window_type="daily", include_performance=True, include_trends=True
+                pattern_id=pattern_id,
+                time_window_type="daily",
+                include_performance=True,
+                include_trends=True,
             )
 
             if analytics.get("success"):
@@ -306,13 +344,23 @@ async def fetch_user_data(user_id: str):
                 if VERBOSE:
                     if "usage_metrics" in analytics:
                         metrics = analytics["usage_metrics"]
-                        print_info("Total Executions", str(metrics.get("total_executions", 0)))
-                        print_info("Executions/Day", f"{metrics.get('executions_per_day', 0):.2f}")
+                        print_info(
+                            "Total Executions", str(metrics.get("total_executions", 0))
+                        )
+                        print_info(
+                            "Executions/Day",
+                            f"{metrics.get('executions_per_day', 0):.2f}",
+                        )
 
                     if "success_metrics" in analytics:
                         metrics = analytics["success_metrics"]
-                        print_info("Success Rate", f"{metrics.get('success_rate', 0):.2%}")
-                        print_info("Avg Quality Score", f"{metrics.get('avg_quality_score', 0):.2f}")
+                        print_info(
+                            "Success Rate", f"{metrics.get('success_rate', 0):.2%}"
+                        )
+                        print_info(
+                            "Avg Quality Score",
+                            f"{metrics.get('avg_quality_score', 0):.2f}",
+                        )
             else:
                 print_warning(f"Analytics computation: {analytics.get('error')}")
 

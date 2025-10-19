@@ -11,16 +11,15 @@ Tests:
 - Database unavailable handling
 """
 
-import sys
-import uuid
-import time
-import psycopg2
-from psycopg2.extras import Json
-
-
 # Database connection
 # Note: Set PGPASSWORD environment variable before running
 import os
+import sys
+import time
+import uuid
+
+import psycopg2
+from psycopg2.extras import Json
 
 DB_CONFIG = {
     "host": "localhost",
@@ -62,8 +61,14 @@ class IntegrationTest:
         """Cleanup test data from database."""
         try:
             with self.conn.cursor() as cur:
-                cur.execute("DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s", (correlation_id,))
-                cur.execute("DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s", (correlation_id,))
+                cur.execute(
+                    "DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s",
+                    (correlation_id,),
+                )
+                cur.execute(
+                    "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s",
+                    (correlation_id,),
+                )
                 self.conn.commit()
         except Exception as e:
             print(f"⚠ Cleanup warning: {e}")
@@ -90,7 +95,15 @@ class IntegrationTest:
                         %s
                     )
                 """,
-                    (session_id, Json({"correlation_id": correlation_id, "test": "full_correlation_flow"})),
+                    (
+                        session_id,
+                        Json(
+                            {
+                                "correlation_id": correlation_id,
+                                "test": "full_correlation_flow",
+                            }
+                        ),
+                    ),
                 )
                 self.conn.commit()
 
@@ -111,8 +124,15 @@ class IntegrationTest:
                     )
                 """,
                     (
-                        Json({"prompt": "Create a function", "agent_detected": "agent-code-generator"}),
-                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                        Json(
+                            {
+                                "prompt": "Create a function",
+                                "agent_detected": "agent-code-generator",
+                            }
+                        ),
+                        Json(
+                            {"correlation_id": correlation_id, "session_id": session_id}
+                        ),
                     ),
                 )
                 self.conn.commit()
@@ -138,7 +158,9 @@ class IntegrationTest:
                 """,
                     (
                         Json({"file_path": "/test/example.py", "content_length": 200}),
-                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                        Json(
+                            {"correlation_id": correlation_id, "session_id": session_id}
+                        ),
                     ),
                 )
                 self.conn.commit()
@@ -163,7 +185,9 @@ class IntegrationTest:
                 """,
                     (
                         Json({"file_path": "/test/example.py", "success": True}),
-                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                        Json(
+                            {"correlation_id": correlation_id, "session_id": session_id}
+                        ),
                     ),
                 )
                 self.conn.commit()
@@ -188,7 +212,9 @@ class IntegrationTest:
                 """,
                     (
                         Json({"response_length": 1500, "model": "claude-sonnet-4-5"}),
-                        Json({"correlation_id": correlation_id, "session_id": session_id}),
+                        Json(
+                            {"correlation_id": correlation_id, "session_id": session_id}
+                        ),
                     ),
                 )
                 self.conn.commit()
@@ -222,17 +248,26 @@ class IntegrationTest:
                 events = cur.fetchall()
 
             if len(events) == 4:  # UserPromptSubmit, PreToolUse, PostToolUse, Stop
-                expected_sources = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
+                expected_sources = [
+                    "UserPromptSubmit",
+                    "PreToolUse",
+                    "PostToolUse",
+                    "Stop",
+                ]
                 actual_sources = [event[0] for event in events]
 
                 if actual_sources == expected_sources:
-                    self.log_success("Full correlation flow: All 4 hooks executed in correct order")
+                    self.log_success(
+                        "Full correlation flow: All 4 hooks executed in correct order"
+                    )
                 else:
                     self.log_error(
                         f"Full correlation flow: Incorrect order. Expected {expected_sources}, got {actual_sources}"
                     )
             else:
-                self.log_error(f"Full correlation flow: Expected 4 events, found {len(events)}")
+                self.log_error(
+                    f"Full correlation flow: Expected 4 events, found {len(events)}"
+                )
 
         except Exception as e:
             self.log_error(f"Full correlation flow failed: {e}")
@@ -263,7 +298,15 @@ class IntegrationTest:
                             %s
                         )
                     """,
-                        (source, Json({"correlation_id": correlation_id, "session_id": session_id})),
+                        (
+                            source,
+                            Json(
+                                {
+                                    "correlation_id": correlation_id,
+                                    "session_id": session_id,
+                                }
+                            ),
+                        ),
                     )
                     self.conn.commit()
 
@@ -283,7 +326,9 @@ class IntegrationTest:
                 distinct_correlations, total_events = result
 
             if distinct_correlations == 1 and total_events == 4:
-                self.log_success("Correlation ID propagation: All events share same correlation ID")
+                self.log_success(
+                    "Correlation ID propagation: All events share same correlation ID"
+                )
             else:
                 self.log_error(
                     f"Correlation ID propagation: Expected 1 distinct ID and 4 events, got {distinct_correlations} and {total_events}"
@@ -327,7 +372,12 @@ class IntegrationTest:
                             NOW()
                         )
                     """,
-                        (source, action, Json({"order": order}), Json({"correlation_id": correlation_id})),
+                        (
+                            source,
+                            action,
+                            Json({"order": order}),
+                            Json({"correlation_id": correlation_id}),
+                        ),
                     )
                     self.conn.commit()
 
@@ -346,13 +396,20 @@ class IntegrationTest:
                 results = cur.fetchall()
 
             # Check if order matches expected sequence
-            expected_order = [("UserPromptSubmit", "1"), ("PreToolUse", "2"), ("PostToolUse", "3"), ("Stop", "4")]
+            expected_order = [
+                ("UserPromptSubmit", "1"),
+                ("PreToolUse", "2"),
+                ("PostToolUse", "3"),
+                ("Stop", "4"),
+            ]
             actual_order = [(r[0], r[1]) for r in results]
 
             if actual_order == expected_order:
                 self.log_success("Timeline verification: Events ordered correctly")
             else:
-                self.log_error(f"Timeline verification: Expected {expected_order}, got {actual_order}")
+                self.log_error(
+                    f"Timeline verification: Expected {expected_order}, got {actual_order}"
+                )
 
         except Exception as e:
             self.log_error(f"Timeline verification failed: {e}")
@@ -405,7 +462,11 @@ class IntegrationTest:
                         %s
                     )
                 """,
-                    (Json({"correlation_id": correlation_id, "session_id": session_id}),),
+                    (
+                        Json(
+                            {"correlation_id": correlation_id, "session_id": session_id}
+                        ),
+                    ),
                 )
                 self.conn.commit()
 
@@ -504,13 +565,17 @@ class IntegrationTest:
                 result = cur.fetchone()
 
             if result:
-                self.log_success("Graceful degradation: System handles incomplete data gracefully")
+                self.log_success(
+                    "Graceful degradation: System handles incomplete data gracefully"
+                )
             else:
                 self.log_error("Graceful degradation: Failed to handle incomplete data")
 
         except Exception as e:
             # Expected: some operations might fail, but system should continue
-            self.log_success(f"Graceful degradation: System continues despite error ({type(e).__name__})")
+            self.log_success(
+                f"Graceful degradation: System continues despite error ({type(e).__name__})"
+            )
         finally:
             try:
                 self.cleanup_test_data(correlation_id)

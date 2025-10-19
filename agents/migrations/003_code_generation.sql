@@ -47,5 +47,3 @@ CREATE INDEX IF NOT EXISTS idx_generation_artifacts_session ON generation_artifa
 CREATE INDEX IF NOT EXISTS idx_generation_intelligence_session ON generation_intelligence(session_id);
 
 COMMIT;
-
-

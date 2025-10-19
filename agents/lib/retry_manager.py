@@ -6,10 +6,10 @@ Integrates with circuit breaker pattern for robust error handling.
 """
 
 import asyncio
-from typing import Any, Callable, Dict, Optional, Tuple
+import random
 from dataclasses import dataclass
 from enum import Enum
-import random
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 class RetryStrategy(Enum):
@@ -37,7 +37,11 @@ class RetryConfig:
     exponential_base: float = 2.0
     jitter: bool = True
     strategy: RetryStrategy = RetryStrategy.EXPONENTIAL_BACKOFF
-    retry_on_exceptions: Tuple[type, ...] = (TransientError, ConnectionError, TimeoutError)
+    retry_on_exceptions: Tuple[type, ...] = (
+        TransientError,
+        ConnectionError,
+        TimeoutError,
+    )
     backoff_multiplier: float = 1.0
 
 
@@ -178,7 +182,11 @@ class RetryManager:
         elif config.strategy == RetryStrategy.LINEAR_BACKOFF:
             delay = config.base_delay * (attempt + 1) * config.backoff_multiplier
         else:  # EXPONENTIAL_BACKOFF
-            delay = config.base_delay * (config.exponential_base**attempt) * config.backoff_multiplier
+            delay = (
+                config.base_delay
+                * (config.exponential_base**attempt)
+                * config.backoff_multiplier
+            )
 
         # Apply jitter to prevent thundering herd
         if config.jitter:
@@ -189,7 +197,12 @@ class RetryManager:
         return min(delay, config.max_delay)
 
     async def execute_with_circuit_breaker(
-        self, func: Callable, circuit_breaker_name: str, *args, config: Optional[RetryConfig] = None, **kwargs
+        self,
+        func: Callable,
+        circuit_breaker_name: str,
+        *args,
+        config: Optional[RetryConfig] = None,
+        **kwargs,
     ) -> Tuple[bool, Any]:
         """
         Execute function with both retry logic and circuit breaker protection.
@@ -205,7 +218,7 @@ class RetryManager:
             Tuple of (success, result)
         """
         try:
-            from .circuit_breaker import call_with_breaker, CircuitBreakerConfig
+            from .circuit_breaker import CircuitBreakerConfig, call_with_breaker
 
             # Create circuit breaker config for retry operations
             # Use retry config values to create circuit breaker config
@@ -220,7 +233,12 @@ class RetryManager:
 
             # Use circuit breaker with retry logic
             cb_success, cb_result = await call_with_breaker(
-                circuit_breaker_name, self.execute_with_retry, func, *args, config=cb_config, **kwargs
+                circuit_breaker_name,
+                self.execute_with_retry,
+                func,
+                *args,
+                config=cb_config,
+                **kwargs,
             )
 
             # cb_result is a tuple (retry_success, retry_result) from execute_with_retry
@@ -238,7 +256,9 @@ class RetryManager:
         """Get retry statistics."""
         success_rate = 0.0
         if self._stats["total_attempts"] > 0:
-            success_rate = self._stats["total_successes"] / self._stats["total_attempts"]
+            success_rate = (
+                self._stats["total_successes"] / self._stats["total_attempts"]
+            )
 
         retry_rate = 0.0
         if self._stats["total_attempts"] > 0:
@@ -279,14 +299,21 @@ class RetryManagerManager:
         self._managers: Dict[str, RetryManager] = {}
         self._default_config = RetryConfig()
 
-    def get_manager(self, name: str, config: Optional[RetryConfig] = None) -> RetryManager:
+    def get_manager(
+        self, name: str, config: Optional[RetryConfig] = None
+    ) -> RetryManager:
         """Get or create a retry manager."""
         if name not in self._managers:
             self._managers[name] = RetryManager(config or self._default_config)
         return self._managers[name]
 
     async def execute_with_retry(
-        self, manager_name: str, func: Callable, *args, config: Optional[RetryConfig] = None, **kwargs
+        self,
+        manager_name: str,
+        func: Callable,
+        *args,
+        config: Optional[RetryConfig] = None,
+        **kwargs,
     ) -> Tuple[bool, Any]:
         """Execute function with named retry manager."""
         manager = self.get_manager(manager_name, config)
@@ -303,7 +330,9 @@ class RetryManagerManager:
     ) -> Tuple[bool, Any]:
         """Execute function with both retry and circuit breaker."""
         manager = self.get_manager(manager_name, config)
-        return await manager.execute_with_circuit_breaker(func, circuit_breaker_name, *args, config=config, **kwargs)
+        return await manager.execute_with_circuit_breaker(
+            func, circuit_breaker_name, *args, config=config, **kwargs
+        )
 
     def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
         """Get statistics for all retry managers."""
@@ -321,10 +350,16 @@ retry_manager_manager = RetryManagerManager()
 
 # Convenience functions
 async def execute_with_retry(
-    func: Callable, *args, manager_name: str = "default", config: Optional[RetryConfig] = None, **kwargs
+    func: Callable,
+    *args,
+    manager_name: str = "default",
+    config: Optional[RetryConfig] = None,
+    **kwargs,
 ) -> Tuple[bool, Any]:
     """Execute function with retry logic."""
-    return await retry_manager_manager.execute_with_retry(manager_name, func, *args, config=config, **kwargs)
+    return await retry_manager_manager.execute_with_retry(
+        manager_name, func, *args, config=config, **kwargs
+    )
 
 
 async def execute_with_circuit_breaker(
@@ -366,15 +401,24 @@ def reset_all_retry_stats():
 
 # Predefined retry configurations for common scenarios
 QUICK_RETRY_CONFIG = RetryConfig(
-    max_retries=2, base_delay=0.5, max_delay=5.0, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+    max_retries=2,
+    base_delay=0.5,
+    max_delay=5.0,
+    strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
 )
 
 STANDARD_RETRY_CONFIG = RetryConfig(
-    max_retries=3, base_delay=1.0, max_delay=30.0, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=30.0,
+    strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
 )
 
 AGGRESSIVE_RETRY_CONFIG = RetryConfig(
-    max_retries=5, base_delay=2.0, max_delay=120.0, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+    max_retries=5,
+    base_delay=2.0,
+    max_delay=120.0,
+    strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
 )
 
 DATABASE_RETRY_CONFIG = RetryConfig(

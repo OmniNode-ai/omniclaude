@@ -11,19 +11,15 @@ Demonstrates real-world usage patterns for:
 - Integration patterns
 """
 
+import threading
+
 from pattern_id_system import (
-    PatternIDSystem,
-    PatternVersion,
-    PatternLineageDetector,
     PatternDeduplicator,
-    ModificationType,
-    generate_pattern_id,
+    PatternVersion,
     detect_pattern_derivation,
-    register_pattern,
+    generate_pattern_id,
     get_global_deduplicator,
 )
-import threading
-from typing import List, Dict
 
 
 def example1_basic_id_generation():
@@ -119,7 +115,9 @@ def example2_version_evolution():
     # Track subsequent versions
     current_code = first_code
     for label, next_code in evolution[1:]:
-        original_meta, modified_meta = dedup.register_with_lineage(current_code, next_code)
+        original_meta, modified_meta = dedup.register_with_lineage(
+            current_code, next_code
+        )
 
         print(f"✓ {label}: {modified_meta.pattern_id}")
         print(f"  Version: {original_meta.version} → {modified_meta.version}")
@@ -132,7 +130,9 @@ def example2_version_evolution():
     print("\nComplete lineage chain:")
     lineage = dedup.get_pattern_lineage(modified_meta.pattern_id)
     for i, meta in enumerate(lineage, 1):
-        parent_note = f" (parent: {meta.parent_id[:8]})" if meta.parent_id else " (root)"
+        parent_note = (
+            f" (parent: {meta.parent_id[:8]})" if meta.parent_id else " (root)"
+        )
         print(f"  {i}. {meta.pattern_id} v{meta.version}{parent_note}")
 
 
@@ -259,7 +259,9 @@ def example4_deduplication():
             registered_ids.add(meta.pattern_id)
 
     print(f"\n✓ {len(variations)} variations → {len(registered_ids)} unique pattern(s)")
-    print(f"✓ Deduplication prevented {len(variations) - len(registered_ids)} duplicates")
+    print(
+        f"✓ Deduplication prevented {len(variations) - len(registered_ids)} duplicates"
+    )
 
 
 def example5_thread_safety():
@@ -305,10 +307,10 @@ def example5_thread_safety():
 
     print(f"✓ Registered {total_patterns} patterns from {num_threads} threads")
     print(f"✓ All {unique_ids} pattern IDs are unique")
-    print(f"✓ No race conditions or duplicates detected")
+    print("✓ No race conditions or duplicates detected")
 
     stats = dedup.get_stats()
-    print(f"\nDeduplicator statistics:")
+    print("\nDeduplicator statistics:")
     print(f"  Total patterns: {stats['total_patterns']}")
     print(f"  Unique patterns: {stats['unique_patterns']}")
 
@@ -436,10 +438,26 @@ def example8_metadata_enrichment():
 
     # Register patterns with rich metadata
     patterns_with_tags = [
-        ("Utility function", "def square(x): return x ** 2", {"utility", "math", "pure"}),
-        ("API endpoint", "def get_user(id): return db.query(id)", {"api", "database", "crud"}),
-        ("Test helper", "def assert_valid(data): assert data is not None", {"test", "validation"}),
-        ("Algorithm", "def quicksort(arr): return sorted(arr)", {"algorithm", "sorting", "performance"}),
+        (
+            "Utility function",
+            "def square(x): return x ** 2",
+            {"utility", "math", "pure"},
+        ),
+        (
+            "API endpoint",
+            "def get_user(id): return db.query(id)",
+            {"api", "database", "crud"},
+        ),
+        (
+            "Test helper",
+            "def assert_valid(data): assert data is not None",
+            {"test", "validation"},
+        ),
+        (
+            "Algorithm",
+            "def quicksort(arr): return sorted(arr)",
+            {"algorithm", "sorting", "performance"},
+        ),
     ]
 
     print("Registering patterns with tags:\n")
@@ -487,8 +505,10 @@ def example9_statistics_and_insights():
     print(f"  Derived patterns: {stats['derived_patterns']}")
     print(f"  Deduplication rate: {stats['deduplication_rate']:.2%}")
 
-    print(f"\n✓ Successfully tracked pattern relationships")
-    print(f"✓ {stats['derived_patterns']} patterns traced to {stats['root_patterns']} roots")
+    print("\n✓ Successfully tracked pattern relationships")
+    print(
+        f"✓ {stats['derived_patterns']} patterns traced to {stats['root_patterns']} roots"
+    )
 
 
 def main():

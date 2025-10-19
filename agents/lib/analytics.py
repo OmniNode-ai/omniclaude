@@ -44,7 +44,7 @@ class DebugAnalytics:
             # Get workflow steps summary
             steps_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_steps,
                     COUNT(CASE WHEN success = true THEN 1 END) as successful_steps,
                     COUNT(CASE WHEN success = false THEN 1 END) as failed_steps,
@@ -60,7 +60,7 @@ class DebugAnalytics:
             # Get phase breakdown
             phase_breakdown = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     phase,
                     COUNT(*) as step_count,
                     COUNT(CASE WHEN success = true THEN 1 END) as success_count,
@@ -76,7 +76,7 @@ class DebugAnalytics:
             # Get error events summary
             error_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_errors,
                     COUNT(DISTINCT run_id) as runs_with_errors,
                     COUNT(CASE WHEN error_type = 'EXECUTION_ERROR' THEN 1 END) as execution_errors,
@@ -92,7 +92,7 @@ class DebugAnalytics:
             # Get success events summary
             success_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_successes,
                     COUNT(CASE WHEN is_golden = true THEN 1 END) as golden_states,
                     COUNT(DISTINCT run_id) as successful_runs
@@ -131,7 +131,7 @@ class DebugAnalytics:
             # Get total cost summary
             cost_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_calls,
                     SUM(computed_cost_usd) as total_cost_usd,
                     AVG(computed_cost_usd) as avg_cost_per_call,
@@ -146,7 +146,7 @@ class DebugAnalytics:
             # Get cost by model
             cost_by_model = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     model,
                     provider,
                     COUNT(*) as call_count,
@@ -165,7 +165,7 @@ class DebugAnalytics:
             # Get cost by run
             cost_by_run = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     run_id,
                     COUNT(*) as call_count,
                     SUM(computed_cost_usd) as total_cost_usd,
@@ -207,7 +207,7 @@ class DebugAnalytics:
             # Get error frequency by type
             error_frequency = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     error_type,
                     COUNT(*) as error_count,
                     COUNT(DISTINCT run_id) as affected_runs
@@ -222,7 +222,7 @@ class DebugAnalytics:
             # Get error-success correlations
             error_success_correlations = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     e.error_type,
                     COUNT(*) as correlation_count,
                     AVG(esm.n_success::numeric / NULLIF(esm.n_trials, 0)) as avg_success_rate,
@@ -239,7 +239,7 @@ class DebugAnalytics:
             # Get most problematic runs
             problematic_runs = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     run_id,
                     COUNT(*) as error_count,
                     COUNT(DISTINCT error_type) as error_type_count,
@@ -259,7 +259,9 @@ class DebugAnalytics:
                 "period_days": days,
                 "since_date": since_date.isoformat(),
                 "error_frequency": [dict(row) for row in error_frequency],
-                "error_success_correlations": [dict(row) for row in error_success_correlations],
+                "error_success_correlations": [
+                    dict(row) for row in error_success_correlations
+                ],
                 "problematic_runs": [dict(row) for row in problematic_runs],
             }
 
@@ -283,7 +285,7 @@ class DebugAnalytics:
             # Get STF usage summary
             stf_usage = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     dtf.name,
                     dtf.version,
                     COUNT(ws.id) as execution_count,
@@ -301,7 +303,7 @@ class DebugAnalytics:
             # Get STF success rates
             stf_success_rates = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     dtf.name,
                     dtf.version,
                     COUNT(*) as total_executions,
@@ -322,7 +324,7 @@ class DebugAnalytics:
             # Get reward events summary
             reward_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_rewards,
                     SUM(reward_usd) as total_reward_usd,
                     AVG(reward_usd) as avg_reward_usd,
@@ -361,7 +363,7 @@ class DebugAnalytics:
             # Get lineage edge summary
             lineage_summary = await conn.fetchrow(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_edges,
                     COUNT(DISTINCT src_type) as source_types,
                     COUNT(DISTINCT dst_type) as target_types,
@@ -375,7 +377,7 @@ class DebugAnalytics:
             # Get edge type breakdown
             edge_type_breakdown = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     edge_type,
                     COUNT(*) as edge_count,
                     COUNT(DISTINCT src_type) as source_type_count,
@@ -391,7 +393,7 @@ class DebugAnalytics:
             # Get most connected entities
             connected_entities = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     src_type,
                     src_id,
                     COUNT(*) as connection_count

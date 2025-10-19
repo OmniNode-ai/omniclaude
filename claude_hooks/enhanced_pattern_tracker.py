@@ -20,21 +20,22 @@ Performance Optimizations:
 
 import asyncio
 import hashlib
-import httpx
 import json
 import os
-import uuid
-import yaml
-import time
 import threading
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
+import time
+import uuid
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import cachetools
+import httpx
 import psutil
+import yaml
 
 
 class ProcessingMode(Enum):
@@ -61,13 +62,17 @@ class PerformanceMetrics:
     avg_api_response_time_ms: float = 0.0
     connection_pool_size: int = 0
     memory_usage_mb: float = 0.0
-    last_updated: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_updated: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
     def update_processing_time(self, duration_ms: float):
         """Update processing time metrics."""
         self.total_processing_time_ms += duration_ms
         self.total_operations += 1
-        self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
+        self.avg_processing_time_ms = (
+            self.total_processing_time_ms / self.total_operations
+        )
 
     def update_api_time(self, response_time_ms: float):
         """Update API response time metrics."""
@@ -76,7 +81,9 @@ class PerformanceMetrics:
         if self.avg_api_response_time_ms == 0:
             self.avg_api_response_time_ms = response_time_ms
         else:
-            self.avg_api_response_time_ms = self.avg_api_response_time_ms * 0.9 + response_time_ms * 0.1
+            self.avg_api_response_time_ms = (
+                self.avg_api_response_time_ms * 0.9 + response_time_ms * 0.1
+            )
 
     def get_success_rate(self) -> float:
         """Calculate success rate percentage."""
@@ -128,7 +135,9 @@ class EnhancedPatternTrackerConfig:
     """Enhanced configuration with performance optimizations."""
 
     def __init__(self, config_path: Optional[Path] = None):
-        self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        self.config_path = (
+            config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        )
         self._config = self._load_config()
 
     def _load_config(self) -> Dict:
@@ -167,15 +176,23 @@ class EnhancedPatternTrackerConfig:
 
     @property
     def intelligence_url(self) -> str:
-        return self.get("INTELLIGENCE_SERVICE_URL", ["pattern_tracking", "intelligence_url"], "http://localhost:8053")
+        return self.get(
+            "INTELLIGENCE_SERVICE_URL",
+            ["pattern_tracking", "intelligence_url"],
+            "http://localhost:8053",
+        )
 
     @property
     def enabled(self) -> bool:
-        return self.get("PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True)
+        return self.get(
+            "PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True
+        )
 
     @property
     def processing_mode(self) -> ProcessingMode:
-        mode_str = self.get("PATTERN_TRACKING_MODE", ["pattern_tracking", "processing_mode"], "async")
+        mode_str = self.get(
+            "PATTERN_TRACKING_MODE", ["pattern_tracking", "processing_mode"], "async"
+        )
         try:
             return ProcessingMode(mode_str)
         except ValueError:
@@ -183,11 +200,15 @@ class EnhancedPatternTrackerConfig:
 
     @property
     def timeout_seconds(self) -> float:
-        return self.get("PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0)
+        return self.get(
+            "PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0
+        )
 
     @property
     def max_retries(self) -> int:
-        return self.get("PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3)
+        return self.get(
+            "PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3
+        )
 
     @property
     def batch_config(self) -> BatchProcessingConfig:
@@ -234,7 +255,11 @@ class PerformanceMonitor:
         self._operation_counts = defaultdict(int)
 
     def record_operation(
-        self, operation: str, success: bool, duration_ms: float, api_response_time_ms: Optional[float] = None
+        self,
+        operation: str,
+        success: bool,
+        duration_ms: float,
+        api_response_time_ms: Optional[float] = None,
     ):
         """Record a completed operation."""
         with self._lock:
@@ -290,7 +315,9 @@ class PerformanceMonitor:
     def get_recent_performance(self, window_seconds: int = 60) -> Dict[str, float]:
         """Get performance metrics for recent time window."""
         cutoff_time = time.time() - window_seconds
-        recent_times = [t for t in self._response_times if (time.time() - t / 1000) > cutoff_time]
+        recent_times = [
+            t for t in self._response_times if (time.time() - t / 1000) > cutoff_time
+        ]
 
         if not recent_times:
             return {"avg_time_ms": 0, "operations_per_second": 0, "p95_time_ms": 0}
@@ -298,7 +325,11 @@ class PerformanceMonitor:
         return {
             "avg_time_ms": sum(recent_times) / len(recent_times),
             "operations_per_second": len(recent_times) / window_seconds,
-            "p95_time_ms": sorted(recent_times)[int(len(recent_times) * 0.95)] if recent_times else 0,
+            "p95_time_ms": (
+                sorted(recent_times)[int(len(recent_times) * 0.95)]
+                if recent_times
+                else 0
+            ),
         }
 
 
@@ -320,7 +351,10 @@ class BatchProcessor:
             return
 
         self._running = True
-        self._workers = [asyncio.create_task(self._worker(f"worker-{i}")) for i in range(self.config.worker_count)]
+        self._workers = [
+            asyncio.create_task(self._worker(f"worker-{i}"))
+            for i in range(self.config.worker_count)
+        ]
 
         # Start batch timer
         self._batch_timer = asyncio.create_task(self._batch_timer_handler())
@@ -449,10 +483,12 @@ class EnhancedPatternTracker:
 
         # Caching
         self.pattern_id_cache = cachetools.TTLCache(
-            maxsize=self.config.cache_config.pattern_id_cache_size, ttl=self.config.cache_config.cache_ttl_seconds
+            maxsize=self.config.cache_config.pattern_id_cache_size,
+            ttl=self.config.cache_config.cache_ttl_seconds,
         )
         self.response_cache = cachetools.TTLCache(
-            maxsize=self.config.cache_config.api_response_cache_size, ttl=self.config.cache_config.cache_ttl_seconds
+            maxsize=self.config.cache_config.api_response_cache_size,
+            ttl=self.config.cache_config.cache_ttl_seconds,
         )
 
         # Batch processing
@@ -462,7 +498,10 @@ class EnhancedPatternTracker:
         self._setup_logging()
 
         # Start batch processor if enabled
-        if self.config.batch_config.enabled and self.config.processing_mode == ProcessingMode.BATCH:
+        if (
+            self.config.batch_config.enabled
+            and self.config.processing_mode == ProcessingMode.BATCH
+        ):
             asyncio.create_task(self.batch_processor.start())
 
     def _create_http_client(self) -> httpx.AsyncClient:
@@ -482,7 +521,11 @@ class EnhancedPatternTracker:
         log_file = (
             self.config.log_file
             if hasattr(self.config, "log_file")
-            else Path.home() / ".claude" / "hooks" / "logs" / "enhanced-pattern-tracker.log"
+            else Path.home()
+            / ".claude"
+            / "hooks"
+            / "logs"
+            / "enhanced-pattern-tracker.log"
         )
         log_file.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = log_file
@@ -491,7 +534,9 @@ class EnhancedPatternTracker:
         """Generate unique session identifier."""
         return str(uuid.uuid4())
 
-    def _generate_pattern_id_cached(self, code: str, context: Optional[Dict] = None) -> str:
+    def _generate_pattern_id_cached(
+        self, code: str, context: Optional[Dict] = None
+    ) -> str:
         """Generate pattern ID with caching."""
         if not self.config.cache_config.enable_pattern_caching:
             return self._generate_pattern_id_uncached(code, context)
@@ -511,7 +556,9 @@ class EnhancedPatternTracker:
 
         return pattern_id
 
-    def _generate_pattern_id_uncached(self, code: str, context: Optional[Dict] = None) -> str:
+    def _generate_pattern_id_uncached(
+        self, code: str, context: Optional[Dict] = None
+    ) -> str:
         """Generate pattern ID without caching."""
         normalized_code = code.strip()
         code_hash = hashlib.sha256(normalized_code.encode("utf-8")).hexdigest()
@@ -538,7 +585,11 @@ class EnhancedPatternTracker:
         # Use batch processor if enabled and requested
         if use_batch and self.config.batch_config.enabled:
             await self.batch_processor.add_task(
-                "track_pattern_creation", code=code, context=context, metadata=metadata, correlation_id=correlation_id
+                "track_pattern_creation",
+                code=code,
+                context=context,
+                metadata=metadata,
+                correlation_id=correlation_id,
             )
             return self._generate_pattern_id_cached(code, context)
 
@@ -565,12 +616,16 @@ class EnhancedPatternTracker:
                 "metadata": metadata or {},
             },
             "triggered_by": "claude-code",
-            "reason": context.get("reason", f"Code generated by {context.get('tool', 'Write')} tool"),
+            "reason": context.get(
+                "reason", f"Code generated by {context.get('tool', 'Write')} tool"
+            ),
         }
 
         # Check response cache
         if self.config.cache_config.enable_response_caching:
-            cache_key = hashlib.sha256(f"track_lineage:{json.dumps(event, sort_keys=True)}".encode()).hexdigest()
+            cache_key = hashlib.sha256(
+                f"track_lineage:{json.dumps(event, sort_keys=True)}".encode()
+            ).hexdigest()
             if cache_key in self.response_cache:
                 self.monitor.record_cache_hit()
                 return pattern_id
@@ -595,7 +650,9 @@ class EnhancedPatternTracker:
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
-        self.monitor.record_operation("track_pattern_creation", success, duration_ms, api_response_time)
+        self.monitor.record_operation(
+            "track_pattern_creation", success, duration_ms, api_response_time
+        )
 
         return pattern_id
 
@@ -607,7 +664,10 @@ class EnhancedPatternTracker:
             return []
 
         if not self.config.enabled:
-            return [self._generate_pattern_id_cached(code, context) for code, context, _ in patterns]
+            return [
+                self._generate_pattern_id_cached(code, context)
+                for code, context, _ in patterns
+            ]
 
         start_time = time.time()
 
@@ -637,7 +697,9 @@ class EnhancedPatternTracker:
                     "metadata": metadata or {},
                 },
                 "triggered_by": "claude-code",
-                "reason": context.get("reason", f"Code generated by {context.get('tool', 'Write')} tool"),
+                "reason": context.get(
+                    "reason", f"Code generated by {context.get('tool', 'Write')} tool"
+                ),
             }
 
             batch_events.append(event)
@@ -648,7 +710,9 @@ class EnhancedPatternTracker:
         api_response_time = None
         try:
             api_start = time.time()
-            response = await self._send_to_api_optimized("track_lineage_batch", {"events": batch_events})
+            response = await self._send_to_api_optimized(
+                "track_lineage_batch", {"events": batch_events}
+            )
             api_response_time = (time.time() - api_start) * 1000
 
             success = response is not None
@@ -658,7 +722,9 @@ class EnhancedPatternTracker:
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
-        self.monitor.record_operation("track_pattern_creation_batch", success, duration_ms, api_response_time)
+        self.monitor.record_operation(
+            "track_pattern_creation_batch", success, duration_ms, api_response_time
+        )
 
         return pattern_ids
 
@@ -706,7 +772,9 @@ class EnhancedPatternTracker:
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
-        self.monitor.record_operation("track_pattern_execution", api_success, duration_ms, api_response_time)
+        self.monitor.record_operation(
+            "track_pattern_execution", api_success, duration_ms, api_response_time
+        )
 
     async def _send_to_api_optimized(
         self, endpoint_key: str, data: Dict[str, Any], retry_count: int = 0
@@ -730,15 +798,21 @@ class EnhancedPatternTracker:
         except httpx.TimeoutException:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
         except httpx.NetworkError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
         except httpx.HTTPStatusError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
 
         return None
 
@@ -763,11 +837,15 @@ class EnhancedPatternTracker:
             },
             "connection_pool": {
                 "max_connections": self.config.connection_pool_config.max_connections,
-                "current_connections": getattr(self.http_client, "_connection_pool", {}).get("_num_connections", 0),
+                "current_connections": getattr(
+                    self.http_client, "_connection_pool", {}
+                ).get("_num_connections", 0),
             },
             "batch_processing": {
                 "enabled": self.config.batch_config.enabled,
-                "queue_size": self.batch_processor._queue.qsize() if self.batch_processor else 0,
+                "queue_size": (
+                    self.batch_processor._queue.qsize() if self.batch_processor else 0
+                ),
                 "worker_count": self.config.batch_config.worker_count,
             },
         }

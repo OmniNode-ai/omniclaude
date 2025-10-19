@@ -73,13 +73,17 @@ jobs:
       - name: Run Black (code formatting check)
         run: |
           echo "::group::Black Formatting Check"
-          poetry run black --check --diff .
+          # Explicitly scan only project source directories to avoid .venv
+          poetry run black --check --diff \
+            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
+            agents/ claude_hooks/ cli/ scripts/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
-          poetry run ruff check . --show-source --show-fixes
+          # Scan only project source directories, aligned with pre-commit config
+          poetry run ruff check agents/ claude_hooks/ cli/ scripts/ tests/ --show-source --show-fixes
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
@@ -267,7 +271,7 @@ jobs:
             --ignore=agents/tests/test_integration_smoke.py \
             --ignore=agents/tests/test_phase4_integration.py \
             --ignore=agents/tests/test_phase5_integration.py \
-            --ignore=agents/tests/test_phase7_integration.py \
+            --ignore=agents/tests/test_framework_integration.py \
             --ignore=agents/tests/test_end_to_end_workflows.py \
             -m "not integration" \
             --cov=agents \
@@ -372,7 +376,7 @@ jobs:
             agents/tests/test_integration_smoke.py \
             agents/tests/test_phase4_integration.py \
             agents/tests/test_phase5_integration.py \
-            agents/tests/test_phase7_integration.py \
+            agents/tests/test_framework_integration.py \
             agents/tests/test_end_to_end_workflows.py \
             -v \
             -m integration \

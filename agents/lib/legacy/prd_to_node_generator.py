@@ -96,21 +96,39 @@ class VerificationStage(Enum):
 class Task(BaseModel):
     """Represents a decomposed task from PRD analysis."""
 
-    task_id: str = Field(..., description="Changed from 'id' to 'task_id' to match ArtifactTask")
+    task_id: str = Field(
+        ..., description="Changed from 'id' to 'task_id' to match ArtifactTask"
+    )
     title: str = Field(..., description="Task title")
     description: str = Field(..., description="Task description")
-    acceptance_criteria: List[str] = Field(default_factory=list, description="Acceptance criteria")
+    acceptance_criteria: List[str] = Field(
+        default_factory=list, description="Acceptance criteria"
+    )
     priority: str = Field(default="medium", description="Will hold TaskPriority.value")
-    complexity: str = Field(default="moderate", description="Will hold TaskComplexity.value")
-    estimated_effort_hours: float = Field(default=0.0, description="Estimated effort in hours")
-    dependencies: List[str] = Field(default_factory=list, description="Task dependencies")
-    required_skills: List[str] = Field(default_factory=list, description="Required skills")
-    deliverables: List[str] = Field(default_factory=list, description="Expected deliverables")
-    verification_criteria: List[str] = Field(default_factory=list, description="Verification criteria")
+    complexity: str = Field(
+        default="moderate", description="Will hold TaskComplexity.value"
+    )
+    estimated_effort_hours: float = Field(
+        default=0.0, description="Estimated effort in hours"
+    )
+    dependencies: List[str] = Field(
+        default_factory=list, description="Task dependencies"
+    )
+    required_skills: List[str] = Field(
+        default_factory=list, description="Required skills"
+    )
+    deliverables: List[str] = Field(
+        default_factory=list, description="Expected deliverables"
+    )
+    verification_criteria: List[str] = Field(
+        default_factory=list, description="Verification criteria"
+    )
 
     # Legacy fields for backward compatibility
     complexity_score: float = Field(default=0.0, description="Complexity score")
-    node_type_hints: List[NodeType] = Field(default_factory=list, description="Node type hints")
+    node_type_hints: List[NodeType] = Field(
+        default_factory=list, description="Node type hints"
+    )
 
 
 # Import InfrastructureContext from services to avoid duplication
@@ -134,7 +152,9 @@ class NodeGenerationState(BaseModel):
     current_task_index: int = 0
 
     # Infrastructure Context
-    infrastructure_context: Optional[InfrastructureContext] = Field(None, description="Infrastructure context")
+    infrastructure_context: Optional[InfrastructureContext] = Field(
+        None, description="Infrastructure context"
+    )
 
     # Dependency Analysis
     dependencies: List[Dict[str, Any]] = Field(default_factory=list)
@@ -245,7 +265,9 @@ class PRDToNodeGenerator:
         except Exception as e:
             self.logger.error(f"Failed to save artifacts for {stage_name}: {e}")
 
-    def _create_state_artifact(self, state: NodeGenerationState, current_stage: str) -> WorkflowStateArtifact:
+    def _create_state_artifact(
+        self, state: NodeGenerationState, current_stage: str
+    ) -> WorkflowStateArtifact:
         """Create a WorkflowStateArtifact from the current state."""
         try:
             # Convert existing state data to artifact models
@@ -297,7 +319,9 @@ class PRDToNodeGenerator:
             artifact_contracts = []
             for contract in state.contracts:
                 artifact_contract = ArtifactContract(
-                    contract_name=getattr(contract, "contract_name", "Unnamed Contract"),
+                    contract_name=getattr(
+                        contract, "contract_name", "Unnamed Contract"
+                    ),
                     input_schema=getattr(contract, "input_schema", {}),
                     output_schema=getattr(contract, "output_schema", {}),
                     error_codes=getattr(contract, "error_codes", {}),
@@ -329,13 +353,19 @@ class PRDToNodeGenerator:
                 contracts=artifact_contracts,
                 subcontracts=[
                     ArtifactContract(
-                        contract_name=getattr(subcontract, "contract_name", "Unnamed Subcontract"),
+                        contract_name=getattr(
+                            subcontract, "contract_name", "Unnamed Subcontract"
+                        ),
                         input_schema=getattr(subcontract, "input_schema", {}),
                         output_schema=getattr(subcontract, "output_schema", {}),
                         error_codes=getattr(subcontract, "error_codes", {}),
                         capabilities=getattr(subcontract, "capabilities", []),
                     )
-                    for subcontract in (getattr(state, "subcontracts", []) if hasattr(state, "subcontracts") else [])
+                    for subcontract in (
+                        getattr(state, "subcontracts", [])
+                        if hasattr(state, "subcontracts")
+                        else []
+                    )
                 ],
                 generated_node_code=state.generated_node_code,
                 generated_tests=state.generated_tests,
@@ -348,7 +378,8 @@ class PRDToNodeGenerator:
                     }
                     for stage_name, result in (
                         state.verification_results.items()
-                        if hasattr(state, "verification_results") and state.verification_results
+                        if hasattr(state, "verification_results")
+                        and state.verification_results
                         else []
                     )
                 ],
@@ -391,8 +422,12 @@ class PRDToNodeGenerator:
             "workflow_summary": {
                 "total_tasks": len(state.tasks),
                 "current_task_index": state.current_task_index,
-                "target_node_type": (state.target_node_type.value if state.target_node_type else None),
-                "verification_stages_completed": list(state.verification_results.keys()),
+                "target_node_type": (
+                    state.target_node_type.value if state.target_node_type else None
+                ),
+                "verification_stages_completed": list(
+                    state.verification_results.keys()
+                ),
                 "overall_validation_passed": state.overall_validation_passed,
                 "errors_count": len(state.errors),
                 "warnings_count": len(state.warnings),
@@ -421,8 +456,12 @@ class PRDToNodeGenerator:
 
         # Add workflow nodes
         workflow.add_node("decompose_prd_tasks", self._decompose_prd_tasks)
-        workflow.add_node("gather_infrastructure_context", self._gather_infrastructure_context)
-        workflow.add_node("verify_infrastructure_context", self._verify_infrastructure_context)
+        workflow.add_node(
+            "gather_infrastructure_context", self._gather_infrastructure_context
+        )
+        workflow.add_node(
+            "verify_infrastructure_context", self._verify_infrastructure_context
+        )
         workflow.add_node("analyze_dependencies", self._analyze_dependencies)
         workflow.add_node("extract_method_signatures", self._extract_method_signatures)
         workflow.add_node("lab_verify_analysis", self._lab_verify_analysis)
@@ -436,7 +475,9 @@ class PRDToNodeGenerator:
         # Define workflow edges
         workflow.add_edge(START, "decompose_prd_tasks")
         workflow.add_edge("decompose_prd_tasks", "gather_infrastructure_context")
-        workflow.add_edge("gather_infrastructure_context", "verify_infrastructure_context")
+        workflow.add_edge(
+            "gather_infrastructure_context", "verify_infrastructure_context"
+        )
 
         # Conditional edge for infrastructure verification
         workflow.add_conditional_edges(
@@ -554,20 +595,28 @@ class PRDToNodeGenerator:
                 completion_artifact = WorkflowCompletionArtifact(
                     success=result["success"],
                     stage_summary=(
-                        "Workflow completed successfully" if result["success"] else "Workflow completed with errors"
+                        "Workflow completed successfully"
+                        if result["success"]
+                        else "Workflow completed with errors"
                     ),
                     total_processing_time=result.get("processing_time_seconds", 0.0),
                     stages_completed=list(final_state.verification_results.keys()),
                     overall_success=result["success"],
                     final_outputs=result,
-                    performance_metrics={"processing_time": result.get("processing_time_seconds", 0.0)},
+                    performance_metrics={
+                        "processing_time": result.get("processing_time_seconds", 0.0)
+                    },
                     resource_usage={"workflow_summary": final_summary},
                 )
-                self._save_stage_artifacts(final_state, "workflow_completion", completion_artifact)
+                self._save_stage_artifacts(
+                    final_state, "workflow_completion", completion_artifact
+                )
                 result["artifact_summary"] = final_summary
                 result["artifacts_saved_to"] = artifact_output_dir
 
-            self.logger.info(f"PRD-to-Node generation completed. Success: {result['success']}")
+            self.logger.info(
+                f"PRD-to-Node generation completed. Success: {result['success']}"
+            )
             return result
 
         except Exception as e:
@@ -635,9 +684,15 @@ class PRDToNodeGenerator:
                             title=task.title,
                             description=task.description,
                             acceptance_criteria=task.acceptance_criteria,
-                            priority=(TaskPriority(task.priority) if isinstance(task.priority, str) else task.priority),
+                            priority=(
+                                TaskPriority(task.priority)
+                                if isinstance(task.priority, str)
+                                else task.priority
+                            ),
                             complexity=(
-                                TaskComplexity(task.complexity) if isinstance(task.complexity, str) else task.complexity
+                                TaskComplexity(task.complexity)
+                                if isinstance(task.complexity, str)
+                                else task.complexity
                             ),
                             estimated_effort_hours=task.estimated_effort_hours,
                             dependencies=task.dependencies,
@@ -649,15 +704,23 @@ class PRDToNodeGenerator:
 
                     decomposition_artifact = TaskDecompositionArtifact(
                         stage_summary=f"Successfully decomposed PRD into {len(state.tasks)} actionable tasks with {sum(task.estimated_effort_hours for task in state.tasks):.1f} hours estimated effort",
-                        prd_content=(prd_content[:500] + "..." if len(prd_content) > 500 else prd_content),
+                        prd_content=(
+                            prd_content[:500] + "..."
+                            if len(prd_content) > 500
+                            else prd_content
+                        ),
                         total_tasks=len(state.tasks),
                         tasks=task_artifacts,
                         critical_path=[],  # Will be populated in full run
-                        estimated_total_effort=sum(task.estimated_effort_hours for task in state.tasks),
+                        estimated_total_effort=sum(
+                            task.estimated_effort_hours for task in state.tasks
+                        ),
                         success=len(state.tasks) > 0,
                         error_message=state.errors[-1] if state.errors else None,
                     )
-                    self._save_stage_artifacts(state, "task_decomposition", decomposition_artifact)
+                    self._save_stage_artifacts(
+                        state, "task_decomposition", decomposition_artifact
+                    )
 
             # Step 2: Infrastructure Context (if requested)
             if max_steps >= 2:
@@ -764,14 +827,30 @@ class PRDToNodeGenerator:
             artifact_infra_context = None
             if state.infrastructure_context:
                 artifact_infra_context = ArtifactInfrastructureContext(
-                    canary_references=getattr(state.infrastructure_context, "canary_references", []),
-                    contract_examples=getattr(state.infrastructure_context, "contract_examples", []),
-                    coding_standards=getattr(state.infrastructure_context, "coding_standards", {}),
-                    naming_conventions=getattr(state.infrastructure_context, "naming_conventions", {}),
-                    deployment_patterns=getattr(state.infrastructure_context, "deployment_patterns", []),
-                    testing_patterns=getattr(state.infrastructure_context, "testing_patterns", []),
-                    architecture_patterns=getattr(state.infrastructure_context, "architecture_patterns", []),
-                    integration_patterns=getattr(state.infrastructure_context, "integration_patterns", []),
+                    canary_references=getattr(
+                        state.infrastructure_context, "canary_references", []
+                    ),
+                    contract_examples=getattr(
+                        state.infrastructure_context, "contract_examples", []
+                    ),
+                    coding_standards=getattr(
+                        state.infrastructure_context, "coding_standards", {}
+                    ),
+                    naming_conventions=getattr(
+                        state.infrastructure_context, "naming_conventions", {}
+                    ),
+                    deployment_patterns=getattr(
+                        state.infrastructure_context, "deployment_patterns", []
+                    ),
+                    testing_patterns=getattr(
+                        state.infrastructure_context, "testing_patterns", []
+                    ),
+                    architecture_patterns=getattr(
+                        state.infrastructure_context, "architecture_patterns", []
+                    ),
+                    integration_patterns=getattr(
+                        state.infrastructure_context, "integration_patterns", []
+                    ),
                 )
 
             # Create properly typed result
@@ -783,17 +862,27 @@ class PRDToNodeGenerator:
                 warnings=state.warnings,
                 tasks=artifact_tasks,
                 total_tasks=len(state.tasks),
-                estimated_total_effort=sum(task.estimated_effort_hours for task in state.tasks),
-                infrastructure_context=(artifact_infra_context if max_steps >= 2 else None),
+                estimated_total_effort=sum(
+                    task.estimated_effort_hours for task in state.tasks
+                ),
+                infrastructure_context=(
+                    artifact_infra_context if max_steps >= 2 else None
+                ),
                 dependencies=artifact_dependencies if max_steps >= 3 else [],
                 method_signatures=state.method_signatures if max_steps >= 3 else [],
                 required_protocols=state.required_protocols if max_steps >= 3 else [],
                 contracts=artifact_contracts if max_steps >= 4 else [],
                 subcontracts=artifact_subcontracts if max_steps >= 4 else [],
-                generated_node_code=(state.generated_node_code if max_steps >= 5 else None),
+                generated_node_code=(
+                    state.generated_node_code if max_steps >= 5 else None
+                ),
                 generated_tests=state.generated_tests if max_steps >= 5 else None,
-                verification_results=(artifact_verification_results if max_steps >= 6 else []),
-                overall_validation_passed=(state.overall_validation_passed if max_steps >= 6 else False),
+                verification_results=(
+                    artifact_verification_results if max_steps >= 6 else []
+                ),
+                overall_validation_passed=(
+                    state.overall_validation_passed if max_steps >= 6 else False
+                ),
                 processing_time_seconds=0.0,  # Would need to track this
                 artifact_files_generated=[],  # Would need to collect from artifacts
             )
@@ -816,7 +905,9 @@ class PRDToNodeGenerator:
 
     # Workflow Node Implementations (Service-based)
 
-    async def _decompose_prd_tasks(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _decompose_prd_tasks(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """
         Step 1: Decompose PRD into actionable tasks using PRD Decomposition Service.
         """
@@ -873,27 +964,65 @@ class PRDToNodeGenerator:
                 "service_used": "PRDDecompositionService",
             }
 
-            self.logger.info(f"Successfully decomposed PRD into {len(tasks)} tasks using service")
+            self.logger.info(
+                f"Successfully decomposed PRD into {len(tasks)} tasks using service"
+            )
 
             # Save artifacts for verification using proper model
             task_artifact = TaskDecompositionArtifact(
                 success=True,
                 stage_summary=f"Decomposed PRD into {len(tasks)} actionable tasks",
-                project_name=(decomposition_result.project_name if decomposition_result else "Unknown Project"),
-                project_description=(decomposition_result.project_description if decomposition_result else ""),
+                project_name=(
+                    decomposition_result.project_name
+                    if decomposition_result
+                    else "Unknown Project"
+                ),
+                project_description=(
+                    decomposition_result.project_description
+                    if decomposition_result
+                    else ""
+                ),
                 total_tasks=len(tasks),
                 tasks=self._convert_to_artifact_tasks(tasks),
-                task_dependencies=(decomposition_result.task_dependencies if decomposition_result else {}),
-                critical_path=(decomposition_result.critical_path if decomposition_result else []),
-                estimated_total_effort=(decomposition_result.estimated_total_effort if decomposition_result else 0.0),
-                technology_stack=(decomposition_result.technology_stack if decomposition_result else []),
-                architecture_requirements=(
-                    decomposition_result.architecture_requirements if decomposition_result else []
+                task_dependencies=(
+                    decomposition_result.task_dependencies
+                    if decomposition_result
+                    else {}
                 ),
-                quality_requirements=(decomposition_result.quality_requirements if decomposition_result else []),
-                success_metrics=(decomposition_result.success_metrics if decomposition_result else []),
-                risks_identified=(decomposition_result.risks_identified if decomposition_result else []),
-                assumptions=(decomposition_result.assumptions if decomposition_result else []),
+                critical_path=(
+                    decomposition_result.critical_path if decomposition_result else []
+                ),
+                estimated_total_effort=(
+                    decomposition_result.estimated_total_effort
+                    if decomposition_result
+                    else 0.0
+                ),
+                technology_stack=(
+                    decomposition_result.technology_stack
+                    if decomposition_result
+                    else []
+                ),
+                architecture_requirements=(
+                    decomposition_result.architecture_requirements
+                    if decomposition_result
+                    else []
+                ),
+                quality_requirements=(
+                    decomposition_result.quality_requirements
+                    if decomposition_result
+                    else []
+                ),
+                success_metrics=(
+                    decomposition_result.success_metrics if decomposition_result else []
+                ),
+                risks_identified=(
+                    decomposition_result.risks_identified
+                    if decomposition_result
+                    else []
+                ),
+                assumptions=(
+                    decomposition_result.assumptions if decomposition_result else []
+                ),
             )
             self._save_stage_artifacts(state, "task_decomposition", task_artifact)
 
@@ -916,7 +1045,9 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _gather_infrastructure_context(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _gather_infrastructure_context(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """
         Step 2: Gather infrastructure context using Infrastructure Context Service.
         """
@@ -927,13 +1058,21 @@ class PRDToNodeGenerator:
             # Build service request
             context_request = ModelInfrastructureContextRequest(
                 target_node_type=ServiceNodeType(state.target_node_type.value),
-                current_task_title=(state.current_task.title if state.current_task else None),
-                current_task_description=(state.current_task.description if state.current_task else None),
+                current_task_title=(
+                    state.current_task.title if state.current_task else None
+                ),
+                current_task_description=(
+                    state.current_task.description if state.current_task else None
+                ),
                 project_context=state.project_context,
             )
 
             # Use Infrastructure Context Service
-            context_response = await self.infrastructure_context_service.gather_infrastructure_context(context_request)
+            context_response = (
+                await self.infrastructure_context_service.gather_infrastructure_context(
+                    context_request
+                )
+            )
 
             if context_response.success and context_response.infrastructure_context:
                 # Store infrastructure context in state
@@ -953,7 +1092,10 @@ class PRDToNodeGenerator:
                     f"Successfully gathered infrastructure context with completeness score: {context_response.completeness_score:.2f}"
                 )
             else:
-                error_msg = context_response.error_message or "Infrastructure context gathering failed"
+                error_msg = (
+                    context_response.error_message
+                    or "Infrastructure context gathering failed"
+                )
                 self.logger.error(error_msg)
                 state.errors.append(error_msg)
                 if context_response.warnings:
@@ -966,7 +1108,9 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _verify_infrastructure_context(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _verify_infrastructure_context(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """
         Step 3: Verify infrastructure context using Verification Service.
         """
@@ -980,22 +1124,34 @@ class PRDToNodeGenerator:
                 validation_types=["completeness", "quality"],
                 target_data={
                     "infrastructure_context": (
-                        state.infrastructure_context.__dict__ if state.infrastructure_context else None
+                        state.infrastructure_context.__dict__
+                        if state.infrastructure_context
+                        else None
                     ),
                     "target_node_type": state.target_node_type.value,
                     "current_task": {
-                        "title": (state.current_task.title if state.current_task else None),
-                        "description": (state.current_task.description if state.current_task else None),
+                        "title": (
+                            state.current_task.title if state.current_task else None
+                        ),
+                        "description": (
+                            state.current_task.description
+                            if state.current_task
+                            else None
+                        ),
                     },
                 },
                 confidence_threshold=0.7,
             )
 
             # Use Verification Service
-            verification_response = await self.verification_service.verify_component(verification_request)
+            verification_response = await self.verification_service.verify_component(
+                verification_request
+            )
 
             # Store verification results
-            state.verification_results[VerificationStage.INFRASTRUCTURE_CONTEXT.value] = {
+            state.verification_results[
+                VerificationStage.INFRASTRUCTURE_CONTEXT.value
+            ] = {
                 "success": verification_response.success,
                 "overall_confidence": verification_response.overall_confidence,
                 "total_issues": verification_response.total_issues,
@@ -1021,7 +1177,9 @@ class PRDToNodeGenerator:
             error_msg = f"Infrastructure context verification failed: {e}"
             self.logger.error(error_msg)
             state.errors.append(error_msg)
-            state.verification_results[VerificationStage.INFRASTRUCTURE_CONTEXT.value] = {
+            state.verification_results[
+                VerificationStage.INFRASTRUCTURE_CONTEXT.value
+            ] = {
                 "success": False,
                 "error": error_msg,
             }
@@ -1033,12 +1191,16 @@ class PRDToNodeGenerator:
     def _should_proceed_to_dependency_analysis(self, state: NodeGenerationState) -> str:
         """Decide whether to proceed to dependency analysis based on infrastructure verification."""
 
-        verification = state.verification_results.get(VerificationStage.INFRASTRUCTURE_CONTEXT.value, {})
+        verification = state.verification_results.get(
+            VerificationStage.INFRASTRUCTURE_CONTEXT.value, {}
+        )
 
         if verification.get("success", False):
             return "proceed"
         elif state.infrastructure_context_retries >= state.MAX_RETRIES:
-            self.logger.warning(f"Infrastructure context failed after {state.MAX_RETRIES} retries, failing workflow")
+            self.logger.warning(
+                f"Infrastructure context failed after {state.MAX_RETRIES} retries, failing workflow"
+            )
             return "fail"
         else:
             state.infrastructure_context_retries += 1
@@ -1050,12 +1212,16 @@ class PRDToNodeGenerator:
     def _should_proceed_to_contracts(self, state: NodeGenerationState) -> str:
         """Decide whether to proceed to contract generation based on analysis verification."""
 
-        verification = state.verification_results.get(VerificationStage.DEPENDENCY_ANALYSIS.value, {})
+        verification = state.verification_results.get(
+            VerificationStage.DEPENDENCY_ANALYSIS.value, {}
+        )
 
         if verification.get("success", False):
             return "proceed"
         elif state.dependency_analysis_retries >= state.MAX_RETRIES:
-            self.logger.warning(f"Dependency analysis failed after {state.MAX_RETRIES} retries, failing workflow")
+            self.logger.warning(
+                f"Dependency analysis failed after {state.MAX_RETRIES} retries, failing workflow"
+            )
             return "fail"
         else:
             state.dependency_analysis_retries += 1
@@ -1067,12 +1233,16 @@ class PRDToNodeGenerator:
     def _should_proceed_to_canary_clone(self, state: NodeGenerationState) -> str:
         """Decide whether to proceed to canary cloning based on contract verification."""
 
-        verification = state.verification_results.get(VerificationStage.CONTRACT_GENERATION.value, {})
+        verification = state.verification_results.get(
+            VerificationStage.CONTRACT_GENERATION.value, {}
+        )
 
         if verification.get("success", False):
             return "proceed"
         elif state.contract_generation_retries >= state.MAX_RETRIES:
-            self.logger.warning(f"Contract generation failed after {state.MAX_RETRIES} retries, failing workflow")
+            self.logger.warning(
+                f"Contract generation failed after {state.MAX_RETRIES} retries, failing workflow"
+            )
             return "fail"
         else:
             state.contract_generation_retries += 1
@@ -1084,21 +1254,29 @@ class PRDToNodeGenerator:
     def _should_proceed_to_final_generation(self, state: NodeGenerationState) -> str:
         """Decide whether to proceed to final node generation based on canary verification."""
 
-        verification = state.verification_results.get(VerificationStage.CANARY_CLONE.value, {})
+        verification = state.verification_results.get(
+            VerificationStage.CANARY_CLONE.value, {}
+        )
 
         if verification.get("success", False):
             return "proceed"
         elif state.canary_clone_retries >= state.MAX_RETRIES:
-            self.logger.warning(f"Canary clone failed after {state.MAX_RETRIES} retries, failing workflow")
+            self.logger.warning(
+                f"Canary clone failed after {state.MAX_RETRIES} retries, failing workflow"
+            )
             return "fail"
         else:
             state.canary_clone_retries += 1
-            self.logger.info(f"Retrying canary clone (attempt {state.canary_clone_retries}/{state.MAX_RETRIES})")
+            self.logger.info(
+                f"Retrying canary clone (attempt {state.canary_clone_retries}/{state.MAX_RETRIES})"
+            )
             return "retry"
 
     # Service-based implementations for remaining workflow nodes
 
-    async def _analyze_dependencies(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _analyze_dependencies(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """
         Step 4: Analyze dependencies using Dependency Analysis Service.
         """
@@ -1108,16 +1286,30 @@ class PRDToNodeGenerator:
         try:
             # Build dependency analysis request
             analysis_request = ModelDependencyAnalysisRequest(
-                task_title=(state.current_task.title if state.current_task else "Unknown Task"),
-                task_description=(state.current_task.description if state.current_task else "No description"),
+                task_title=(
+                    state.current_task.title if state.current_task else "Unknown Task"
+                ),
+                task_description=(
+                    state.current_task.description
+                    if state.current_task
+                    else "No description"
+                ),
                 target_node_type=state.target_node_type.value,
-                infrastructure_context=(state.infrastructure_context.__dict__ if state.infrastructure_context else {}),
+                infrastructure_context=(
+                    state.infrastructure_context.__dict__
+                    if state.infrastructure_context
+                    else {}
+                ),
                 project_context=state.project_context,
                 analysis_depth="comprehensive",
             )
 
             # Use Dependency Analysis Service
-            analysis_response = await self.dependency_analysis_service.analyze_dependencies(analysis_request)
+            analysis_response = (
+                await self.dependency_analysis_service.analyze_dependencies(
+                    analysis_request
+                )
+            )
 
             if analysis_response.success:
                 # Store analysis results in state
@@ -1133,7 +1325,9 @@ class PRDToNodeGenerator:
                     f"Complexity: {analysis_response.complexity_score:.2f}"
                 )
             else:
-                error_msg = analysis_response.error_message or "Dependency analysis failed"
+                error_msg = (
+                    analysis_response.error_message or "Dependency analysis failed"
+                )
                 self.logger.error(error_msg)
                 state.errors.append(error_msg)
 
@@ -1144,13 +1338,19 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _extract_method_signatures(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _extract_method_signatures(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 5: Method signatures are now extracted by the Dependency Analysis Service."""
-        self.logger.info("Method signatures already extracted by dependency analysis service")
+        self.logger.info(
+            "Method signatures already extracted by dependency analysis service"
+        )
         # Method signatures are now handled by the dependency analysis service
         return state
 
-    async def _lab_verify_analysis(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _lab_verify_analysis(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 6: Verify dependency analysis using Verification Service."""
         self.logger.info("Verifying dependency analysis with service")
 
@@ -1165,15 +1365,23 @@ class PRDToNodeGenerator:
                     "protocol_requirements": state.required_protocols,
                     "required_classes": state.required_classes,
                     "current_task": {
-                        "title": (state.current_task.title if state.current_task else None),
-                        "description": (state.current_task.description if state.current_task else None),
+                        "title": (
+                            state.current_task.title if state.current_task else None
+                        ),
+                        "description": (
+                            state.current_task.description
+                            if state.current_task
+                            else None
+                        ),
                     },
                 },
                 confidence_threshold=0.7,
             )
 
             # Use Verification Service
-            verification_response = await self.verification_service.verify_component(verification_request)
+            verification_response = await self.verification_service.verify_component(
+                verification_request
+            )
 
             # Store verification results
             state.verification_results[VerificationStage.DEPENDENCY_ANALYSIS.value] = {
@@ -1183,7 +1391,9 @@ class PRDToNodeGenerator:
                 "service_used": "VerificationValidationService",
             }
 
-            self.logger.info(f"Dependency analysis verification completed. Success: {verification_response.success}")
+            self.logger.info(
+                f"Dependency analysis verification completed. Success: {verification_response.success}"
+            )
 
         except Exception as e:
             error_msg = f"Dependency analysis verification failed: {e}"
@@ -1196,25 +1406,41 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _generate_contracts(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _generate_contracts(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 7: Generate contracts using Contract Generation Service."""
         self.logger.info("Generating contracts and subcontracts with service")
 
         try:
             # Build contract generation request
             contract_request = ModelContractGenerationRequest(
-                task_title=(state.current_task.title if state.current_task else "Unknown Task"),
-                task_description=(state.current_task.description if state.current_task else "No description"),
+                task_title=(
+                    state.current_task.title if state.current_task else "Unknown Task"
+                ),
+                task_description=(
+                    state.current_task.description
+                    if state.current_task
+                    else "No description"
+                ),
                 node_type=state.target_node_type.value,
                 dependencies=state.dependencies,
                 method_signatures=state.method_signatures,
-                infrastructure_context=(state.infrastructure_context.__dict__ if state.infrastructure_context else {}),
+                infrastructure_context=(
+                    state.infrastructure_context.__dict__
+                    if state.infrastructure_context
+                    else {}
+                ),
                 contract_types=["main_contract"],
                 validation_level="strict",
             )
 
             # Use Contract Generation Service
-            contract_response = await self.contract_generation_service.generate_contracts(contract_request)
+            contract_response = (
+                await self.contract_generation_service.generate_contracts(
+                    contract_request
+                )
+            )
 
             if contract_response.success:
                 # Store contract results in state
@@ -1227,7 +1453,9 @@ class PRDToNodeGenerator:
                     f"Quality: {contract_response.quality_score:.2f}"
                 )
             else:
-                error_msg = contract_response.error_message or "Contract generation failed"
+                error_msg = (
+                    contract_response.error_message or "Contract generation failed"
+                )
                 self.logger.error(error_msg)
                 state.errors.append(error_msg)
 
@@ -1238,7 +1466,9 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _verify_contracts(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _verify_contracts(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 8: Verify contracts using Verification Service."""
         self.logger.info("Verifying contracts with service")
 
@@ -1256,7 +1486,9 @@ class PRDToNodeGenerator:
             )
 
             # Use Verification Service
-            verification_response = await self.verification_service.verify_component(verification_request)
+            verification_response = await self.verification_service.verify_component(
+                verification_request
+            )
 
             # Store verification results
             state.verification_results[VerificationStage.CONTRACT_GENERATION.value] = {
@@ -1266,7 +1498,9 @@ class PRDToNodeGenerator:
                 "service_used": "VerificationValidationService",
             }
 
-            self.logger.info(f"Contract verification completed. Success: {verification_response.success}")
+            self.logger.info(
+                f"Contract verification completed. Success: {verification_response.success}"
+            )
 
         except Exception as e:
             error_msg = f"Contract verification failed: {e}"
@@ -1279,22 +1513,31 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _clone_canary_node(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _clone_canary_node(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 9: Clone canary node using Node Generation Service (if canary available)."""
         self.logger.info("Preparing canary node context for generation service")
 
         # Select best canary template from infrastructure context
         canary_template = None
-        if state.infrastructure_context and state.infrastructure_context.canary_references:
+        if (
+            state.infrastructure_context
+            and state.infrastructure_context.canary_references
+        ):
             # Select the best matching canary template
-            canary_template = state.infrastructure_context.canary_references[0]  # Simple selection
+            canary_template = state.infrastructure_context.canary_references[
+                0
+            ]  # Simple selection
 
         # Store canary template for node generation step
         state.canary_clone_template = canary_template
 
         return state
 
-    async def _verify_canary_clone(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _verify_canary_clone(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 10: Verify canary clone preparation."""
         self.logger.info("Verifying canary clone preparation")
 
@@ -1303,25 +1546,41 @@ class PRDToNodeGenerator:
         if state.canary_clone_template:
             self.logger.info("Canary template selected for node generation")
         else:
-            self.logger.info("No canary template available - will generate from scratch")
+            self.logger.info(
+                "No canary template available - will generate from scratch"
+            )
 
-        state.verification_results[VerificationStage.CANARY_CLONE.value] = {"success": success}
+        state.verification_results[VerificationStage.CANARY_CLONE.value] = {
+            "success": success
+        }
         return state
 
-    async def _generate_final_node(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _generate_final_node(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 11: Generate final node using Node Generation Service."""
         self.logger.info("Generating final node with service")
 
         try:
             # Build node generation request
             node_request = ModelNodeGenerationRequest(
-                task_title=(state.current_task.title if state.current_task else "Unknown Task"),
-                task_description=(state.current_task.description if state.current_task else "No description"),
+                task_title=(
+                    state.current_task.title if state.current_task else "Unknown Task"
+                ),
+                task_description=(
+                    state.current_task.description
+                    if state.current_task
+                    else "No description"
+                ),
                 node_type=state.target_node_type.value,
                 contracts=state.contracts,
                 dependencies=state.dependencies,
                 method_signatures=state.method_signatures,
-                infrastructure_context=(state.infrastructure_context.__dict__ if state.infrastructure_context else {}),
+                infrastructure_context=(
+                    state.infrastructure_context.__dict__
+                    if state.infrastructure_context
+                    else {}
+                ),
                 canary_template=state.canary_clone_template,
                 generation_type="final_node",
                 code_quality="production",
@@ -1332,7 +1591,9 @@ class PRDToNodeGenerator:
             )
 
             # Use Node Generation Service
-            node_response = await self.node_generation_service.generate_node(node_request)
+            node_response = await self.node_generation_service.generate_node(
+                node_request
+            )
 
             if node_response.success:
                 # Store node generation results in state
@@ -1356,7 +1617,9 @@ class PRDToNodeGenerator:
 
         return state
 
-    async def _final_verification(self, state: NodeGenerationState) -> NodeGenerationState:
+    async def _final_verification(
+        self, state: NodeGenerationState
+    ) -> NodeGenerationState:
         """Step 12: Final verification using Verification Service."""
         self.logger.info("Running final verification with service")
 
@@ -1381,7 +1644,9 @@ class PRDToNodeGenerator:
             )
 
             # Use Verification Service
-            verification_response = await self.verification_service.verify_component(verification_request)
+            verification_response = await self.verification_service.verify_component(
+                verification_request
+            )
 
             # Store final verification results
             state.verification_results[VerificationStage.FINAL_NODE.value] = {

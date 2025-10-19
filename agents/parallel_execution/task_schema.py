@@ -6,8 +6,8 @@ Use this file as a reference when creating task definitions.
 """
 
 from typing import Any, Dict, List, Literal
-from pydantic import BaseModel, Field
 
+from pydantic import BaseModel, Field
 
 # ============================================================================
 # Agent-Specific Input Schemas
@@ -17,12 +17,18 @@ from pydantic import BaseModel, Field
 class CoderTaskInput(BaseModel):
     """Input schema for CoderAgent tasks."""
 
-    contract_description: str = Field(..., description="Natural language description of what to generate")
+    contract_description: str = Field(
+        ..., description="Natural language description of what to generate"
+    )
     node_type: Literal["Effect", "Compute", "Reducer", "Orchestrator"] = Field(
         ..., description="ONEX node type to generate"
     )
-    output_path: str = Field(..., description="Absolute path where generated code should be written")
-    context_files: List[str] = Field(default_factory=list, description="Absolute paths to related files for context")
+    output_path: str = Field(
+        ..., description="Absolute path where generated code should be written"
+    )
+    context_files: List[str] = Field(
+        default_factory=list, description="Absolute paths to related files for context"
+    )
     validation_level: Literal["strict", "moderate", "lenient"] = Field(
         default="moderate", description="How strictly to validate ONEX compliance"
     )
@@ -31,13 +37,22 @@ class CoderTaskInput(BaseModel):
 class DebugTaskInput(BaseModel):
     """Input schema for DebugAgent tasks."""
 
-    problem_description: str = Field(..., description="Description of the bug or issue to investigate")
-    affected_files: List[str] = Field(..., description="Absolute paths to files potentially involved")
-    error_traces: List[str] = Field(default_factory=list, description="Stack traces, error messages, or log excerpts")
+    problem_description: str = Field(
+        ..., description="Description of the bug or issue to investigate"
+    )
+    affected_files: List[str] = Field(
+        ..., description="Absolute paths to files potentially involved"
+    )
+    error_traces: List[str] = Field(
+        default_factory=list,
+        description="Stack traces, error messages, or log excerpts",
+    )
     analysis_depth: Literal["quick", "standard", "deep"] = Field(
         default="standard", description="How deeply to analyze the issue"
     )
-    hypothesis: str = Field(default="", description="Initial hypothesis about root cause (optional)")
+    hypothesis: str = Field(
+        default="", description="Initial hypothesis about root cause (optional)"
+    )
 
 
 # ============================================================================
@@ -53,7 +68,10 @@ EXAMPLE_CODER_TASKS = [
             "contract_description": "Create an Effect node that writes user data to PostgreSQL database",
             "node_type": "Effect",
             "output_path": "/path/to/node_database_writer_effect.py",
-            "context_files": ["/path/to/model_user.py", "/path/to/model_contract_effect.py"],
+            "context_files": [
+                "/path/to/model_user.py",
+                "/path/to/model_contract_effect.py",
+            ],
             "validation_level": "strict",
         },
         "dependencies": [],
@@ -100,7 +118,10 @@ EXAMPLE_DEBUG_TASKS = [
         "description": "Analyze API response time degradation",
         "input_data": {
             "problem_description": "API endpoints responding 2x slower than baseline",
-            "affected_files": ["/path/to/api/endpoints.py", "/path/to/database/query_builder.py"],
+            "affected_files": [
+                "/path/to/api/endpoints.py",
+                "/path/to/database/query_builder.py",
+            ],
             "error_traces": [],
             "analysis_depth": "standard",
         },
@@ -212,7 +233,9 @@ def validate_task_dependencies(tasks: List[Dict[str, Any]]) -> List[str]:
     for task in tasks:
         for dep_id in task.get("dependencies", []):
             if dep_id not in task_ids:
-                errors.append(f"Task '{task['task_id']}' depends on unknown task '{dep_id}'")
+                errors.append(
+                    f"Task '{task['task_id']}' depends on unknown task '{dep_id}'"
+                )
 
     return errors
 
@@ -241,7 +264,9 @@ def detect_circular_dependencies(tasks: List[Dict[str, Any]]) -> List[str]:
 
     for task in tasks:
         if has_cycle(task["task_id"], set(), []):
-            errors.append(f"Circular dependency detected involving task '{task['task_id']}'")
+            errors.append(
+                f"Circular dependency detected involving task '{task['task_id']}'"
+            )
 
     return errors
 

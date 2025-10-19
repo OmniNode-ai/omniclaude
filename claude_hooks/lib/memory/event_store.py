@@ -14,15 +14,14 @@ Features:
 """
 
 import json
+import logging
 import sqlite3
 import time
-import logging
-from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime, timedelta
-import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from .event_models import WorkflowEvent, EventType, WorkflowSummary, IntentContextData
+from .event_models import EventType, IntentContextData, WorkflowEvent
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +168,9 @@ class EventStore:
                 logger.info("Qdrant vector storage available")
                 return True
             else:
-                logger.warning(f"Qdrant returned status {response.status_code}, using SQLite only")
+                logger.warning(
+                    f"Qdrant returned status {response.status_code}, using SQLite only"
+                )
                 return False
 
         except Exception as e:
@@ -183,7 +184,11 @@ class EventStore:
         # Use nomic-embed-text model (768 dimensions)
         collection_config = {"vectors": {"size": 768, "distance": "Cosine"}}
 
-        response = httpx.put(f"{self.qdrant_url}/collections/workflow_events", json=collection_config, timeout=5.0)
+        response = httpx.put(
+            f"{self.qdrant_url}/collections/workflow_events",
+            json=collection_config,
+            timeout=5.0,
+        )
 
         if response.status_code in [200, 201]:
             logger.info("Created Qdrant collection: workflow_events")
@@ -231,8 +236,16 @@ class EventStore:
 
         # Serialize complex fields to JSON
         intent_json = json.dumps(event.intent.to_dict()) if event.intent else None
-        violations_json = json.dumps([v.to_dict() for v in event.violations]) if event.violations else None
-        corrections_json = json.dumps([c.to_dict() for c in event.corrections]) if event.corrections else None
+        violations_json = (
+            json.dumps([v.to_dict() for v in event.violations])
+            if event.violations
+            else None
+        )
+        corrections_json = (
+            json.dumps([c.to_dict() for c in event.corrections])
+            if event.corrections
+            else None
+        )
         scores_json = json.dumps(event.scores.to_dict()) if event.scores else None
         metadata_json = json.dumps(event.metadata)
 
@@ -290,13 +303,17 @@ class EventStore:
                 "file_path": event.file_path,
                 "timestamp": event.timestamp.isoformat(),
                 "success": event.success,
-                "intent_category": event.intent.primary_intent if event.intent else "unknown",
+                "intent_category": (
+                    event.intent.primary_intent if event.intent else "unknown"
+                ),
                 "embedding_text": embedding_text,
             },
         }
 
         response = httpx.put(
-            f"{self.qdrant_url}/collections/workflow_events/points", json={"points": [point]}, timeout=3.0
+            f"{self.qdrant_url}/collections/workflow_events/points",
+            json={"points": [point]},
+            timeout=3.0,
         )
 
         if response.status_code not in [200, 201]:
@@ -308,7 +325,11 @@ class EventStore:
 
         Combines key event details into semantic representation.
         """
-        parts = [f"Tool: {event.tool_name}", f"File: {Path(event.file_path).name}", f"Event: {event.event_type.value}"]
+        parts = [
+            f"Tool: {event.tool_name}",
+            f"File: {Path(event.file_path).name}",
+            f"Event: {event.event_type.value}",
+        ]
 
         if event.intent:
             parts.append(f"Intent: {event.intent.primary_intent}")
@@ -345,7 +366,9 @@ class EventStore:
             import httpx
 
             response = httpx.post(
-                f"{self.ollama_url}/api/embeddings", json={"model": "nomic-embed-text", "prompt": text}, timeout=5.0
+                f"{self.ollama_url}/api/embeddings",
+                json={"model": "nomic-embed-text", "prompt": text},
+                timeout=5.0,
             )
 
             if response.status_code == 200:
@@ -488,7 +511,9 @@ class EventStore:
             }
 
             response = httpx.post(
-                f"{self.qdrant_url}/collections/workflow_events/points/search", json=search_request, timeout=3.0
+                f"{self.qdrant_url}/collections/workflow_events/points/search",
+                json=search_request,
+                timeout=3.0,
             )
 
             if response.status_code != 200:
@@ -514,7 +539,9 @@ class EventStore:
             logger.error(f"Vector search failed: {e}")
             return []
 
-    def _find_similar_sqlite(self, query_event: WorkflowEvent, limit: int) -> List[Tuple[WorkflowEvent, float]]:
+    def _find_similar_sqlite(
+        self, query_event: WorkflowEvent, limit: int
+    ) -> List[Tuple[WorkflowEvent, float]]:
         """
         Fallback similarity search using SQLite.
 
@@ -538,7 +565,12 @@ class EventStore:
             ORDER BY timestamp DESC
             LIMIT ?
         """,
-            (EventType.WRITE_SUCCESS.value, query_event.tool_name, f"%{query_event.intent.primary_intent}%", limit),
+            (
+                EventType.WRITE_SUCCESS.value,
+                query_event.tool_name,
+                f"%{query_event.intent.primary_intent}%",
+                limit,
+            ),
         )
 
         rows = cursor.fetchall()
@@ -566,7 +598,9 @@ class EventStore:
             return self._row_to_event(row)
         return None
 
-    def get_recent_workflows(self, days: int = 7, success_only: bool = False) -> List[str]:
+    def get_recent_workflows(
+        self, days: int = 7, success_only: bool = False
+    ) -> List[str]:
         """
         Get recent workflow correlation IDs.
 
@@ -623,7 +657,9 @@ class EventStore:
         conn.commit()
         conn.close()
 
-        logger.info(f"Cleaned up {deleted_count} events older than {self.retention_days} days")
+        logger.info(
+            f"Cleaned up {deleted_count} events older than {self.retention_days} days"
+        )
         return deleted_count
 
     def get_stats(self) -> Dict[str, Any]:
@@ -646,7 +682,9 @@ class EventStore:
         cursor.execute("SELECT COUNT(*) FROM events WHERE success = 1")
         success_count = cursor.fetchone()[0]
         stats["success_count"] = success_count
-        stats["success_rate"] = success_count / stats["total_events"] if stats["total_events"] > 0 else 0.0
+        stats["success_rate"] = (
+            success_count / stats["total_events"] if stats["total_events"] > 0 else 0.0
+        )
 
         # Events by type
         cursor.execute(

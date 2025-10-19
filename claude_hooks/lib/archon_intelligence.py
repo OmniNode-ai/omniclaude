@@ -4,12 +4,13 @@ Archon MCP Intelligence Executor
 Executes RAG queries and intelligence gathering via Archon MCP.
 """
 
-import httpx
+import asyncio
+import json
 import os
 import sys
-import json
-import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, Optional
+
+import httpx
 
 
 class ArchonIntelligence:
@@ -23,10 +24,14 @@ class ArchonIntelligence:
             archon_url: Archon MCP server URL (defaults to env or localhost:8051)
             timeout: Request timeout in seconds
         """
-        self.archon_url = archon_url or os.getenv("ARCHON_MCP_URL", "http://localhost:8051")
+        self.archon_url = archon_url or os.getenv(
+            "ARCHON_MCP_URL", "http://localhost:8051"
+        )
         self.timeout = timeout
 
-    async def gather_debug_intelligence(self, agent_type: str, task_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def gather_debug_intelligence(
+        self, agent_type: str, task_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute IC-001: gather_debug_intelligence
 
@@ -39,11 +44,17 @@ class ArchonIntelligence:
         Returns:
             Debug intelligence from previous sessions
         """
-        query = f"debugging errors failures {agent_type} {task_context.get('domain', '')}"
+        query = (
+            f"debugging errors failures {agent_type} {task_context.get('domain', '')}"
+        )
 
-        return await self._execute_rag_query(query=query, context="debugging", match_count=5)
+        return await self._execute_rag_query(
+            query=query, context="debugging", match_count=5
+        )
 
-    async def gather_domain_standards(self, agent_type: str, task_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def gather_domain_standards(
+        self, agent_type: str, task_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute IC-002: gather_domain_standards
 
@@ -58,7 +69,9 @@ class ArchonIntelligence:
         """
         query = f"standards best practices patterns {agent_type} {task_context.get('domain', '')}"
 
-        return await self._execute_rag_query(query=query, context="general", match_count=5)
+        return await self._execute_rag_query(
+            query=query, context="general", match_count=5
+        )
 
     async def gather_performance_quality_intelligence(
         self, agent_type: str, task_context: Dict[str, Any]
@@ -77,9 +90,13 @@ class ArchonIntelligence:
         """
         query = f"performance optimization quality {agent_type} {task_context.get('domain', '')}"
 
-        return await self._execute_rag_query(query=query, context="general", match_count=5)
+        return await self._execute_rag_query(
+            query=query, context="general", match_count=5
+        )
 
-    async def gather_collaboration_intelligence(self, agent_type: str, task_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def gather_collaboration_intelligence(
+        self, agent_type: str, task_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute IC-004: gather_collaboration_intelligence
 
@@ -94,9 +111,13 @@ class ArchonIntelligence:
         """
         query = f"agent coordination collaboration patterns {agent_type}"
 
-        return await self._execute_rag_query(query=query, context="architecture", match_count=3)
+        return await self._execute_rag_query(
+            query=query, context="architecture", match_count=3
+        )
 
-    async def gather_all_intelligence(self, agent_type: str, task_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def gather_all_intelligence(
+        self, agent_type: str, task_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute all intelligence gathering functions in parallel.
 
@@ -116,13 +137,23 @@ class ArchonIntelligence:
         )
 
         return {
-            "debug_intelligence": results[0] if not isinstance(results[0], Exception) else {},
-            "domain_standards": results[1] if not isinstance(results[1], Exception) else {},
-            "performance_quality": results[2] if not isinstance(results[2], Exception) else {},
-            "collaboration": results[3] if not isinstance(results[3], Exception) else {},
+            "debug_intelligence": (
+                results[0] if not isinstance(results[0], Exception) else {}
+            ),
+            "domain_standards": (
+                results[1] if not isinstance(results[1], Exception) else {}
+            ),
+            "performance_quality": (
+                results[2] if not isinstance(results[2], Exception) else {}
+            ),
+            "collaboration": (
+                results[3] if not isinstance(results[3], Exception) else {}
+            ),
         }
 
-    async def _execute_rag_query(self, query: str, context: str, match_count: int = 5) -> Dict[str, Any]:
+    async def _execute_rag_query(
+        self, query: str, context: str, match_count: int = 5
+    ) -> Dict[str, Any]:
         """
         Execute RAG query against Archon MCP server.
 

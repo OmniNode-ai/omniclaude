@@ -5,21 +5,22 @@ Generation Performance Tests
 Performance benchmarks and optimization tests for code generation.
 """
 
-import pytest
 import asyncio
-import time
 import tempfile
-from typing import Dict, Any
+import time
+from typing import Any, Dict
 
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
-    REDUCER_NODE_PRD,
+    EFFECT_NODE_PRD,
     LARGE_PRD_CONTENT,
-    PERFORMANCE_EXPECTATIONS,
     NODE_TYPE_FIXTURES,
+    PERFORMANCE_EXPECTATIONS,
+    REDUCER_NODE_PRD,
 )
 
 
@@ -43,7 +44,9 @@ class TestGenerationLatency:
 
         # Soft assertion - warn but don't fail
         if latency_ms > expected_ms:
-            pytest.skip(f"PRD analysis slower than expected: {latency_ms:.2f}ms > {expected_ms}ms")
+            pytest.skip(
+                f"PRD analysis slower than expected: {latency_ms:.2f}ms > {expected_ms}ms"
+            )
 
     @pytest.mark.asyncio
     async def test_node_generation_latency(self):
@@ -98,10 +101,14 @@ class TestGenerationLatency:
         expected_ms = PERFORMANCE_EXPECTATIONS["total_pipeline_ms"]
 
         assert result is not None
-        print(f"Full pipeline latency: {total_latency_ms:.2f}ms (expected: <{expected_ms}ms)")
+        print(
+            f"Full pipeline latency: {total_latency_ms:.2f}ms (expected: <{expected_ms}ms)"
+        )
 
         if total_latency_ms > expected_ms:
-            pytest.skip(f"Pipeline slower than expected: {total_latency_ms:.2f}ms > {expected_ms}ms")
+            pytest.skip(
+                f"Pipeline slower than expected: {total_latency_ms:.2f}ms > {expected_ms}ms"
+            )
 
     @pytest.mark.asyncio
     async def test_large_prd_analysis_performance(self):
@@ -141,7 +148,9 @@ class TestParallelGenerationSpeedup:
 
         # Parallel generation
         parallel_start = time.time()
-        await asyncio.gather(*[analyzer.analyze_prd(prd_content) for prd_content in prds])
+        await asyncio.gather(
+            *[analyzer.analyze_prd(prd_content) for prd_content in prds]
+        )
         parallel_end = time.time()
         parallel_time = parallel_end - parallel_start
 
@@ -151,10 +160,14 @@ class TestParallelGenerationSpeedup:
         # Parallel should be faster or similar (not slower)
         # Note: For very fast operations (<10ms), async overhead can make parallel slower
         if sequential_time * 1000 < 10:
-            pytest.skip(f"Operations too fast ({sequential_time*1000:.2f}ms) for meaningful parallel comparison")
+            pytest.skip(
+                f"Operations too fast ({sequential_time*1000:.2f}ms) for meaningful parallel comparison"
+            )
 
         # Allow some overhead for task spawning (3x multiplier)
-        assert parallel_time <= sequential_time * 3.0, "Parallel generation unexpectedly slower"
+        assert (
+            parallel_time <= sequential_time * 3.0
+        ), "Parallel generation unexpectedly slower"
 
     @pytest.mark.asyncio
     async def test_concurrent_node_generation(self):
@@ -175,7 +188,10 @@ class TestParallelGenerationSpeedup:
 
         # Generate all node types concurrently
         results = await asyncio.gather(
-            *[generate_single_node(node_type, fixture) for node_type, fixture in NODE_TYPE_FIXTURES.items()]
+            *[
+                generate_single_node(node_type, fixture)
+                for node_type, fixture in NODE_TYPE_FIXTURES.items()
+            ]
         )
 
         end_time = time.time()
@@ -185,7 +201,9 @@ class TestParallelGenerationSpeedup:
         print(f"Concurrent generation of 4 nodes: {total_time_ms:.2f}ms")
 
         # Should complete in reasonable time
-        assert total_time_ms < 20000, f"Concurrent generation too slow: {total_time_ms:.2f}ms"
+        assert (
+            total_time_ms < 20000
+        ), f"Concurrent generation too slow: {total_time_ms:.2f}ms"
 
 
 class TestMemoryUsage:
@@ -194,8 +212,9 @@ class TestMemoryUsage:
     @pytest.mark.asyncio
     async def test_memory_usage_single_generation(self):
         """Test memory usage for single node generation"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -225,8 +244,9 @@ class TestMemoryUsage:
     @pytest.mark.asyncio
     async def test_memory_usage_large_prd(self):
         """Test memory usage with large PRD"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -240,7 +260,9 @@ class TestMemoryUsage:
         print(f"Large PRD memory increase: {memory_increase:.2f}MB")
 
         # Should handle large PRDs efficiently
-        assert memory_increase < 1000, f"Excessive memory for large PRD: {memory_increase:.2f}MB"
+        assert (
+            memory_increase < 1000
+        ), f"Excessive memory for large PRD: {memory_increase:.2f}MB"
 
 
 class TestScalability:
@@ -300,7 +322,9 @@ class TestScalability:
                 )
 
         start_time = time.time()
-        results = await asyncio.gather(*[generate_one(i) for i in range(num_concurrent)])
+        results = await asyncio.gather(
+            *[generate_one(i) for i in range(num_concurrent)]
+        )
         end_time = time.time()
 
         total_time_ms = (end_time - start_time) * 1000
@@ -361,7 +385,9 @@ class TestCachingOptimizations:
         print(f"Second generation: {second_latency:.2f}ms")
 
         # Second should not be significantly slower (templates cached)
-        assert second_latency <= first_latency * 2, "Repeated generation unexpectedly slow"
+        assert (
+            second_latency <= first_latency * 2
+        ), "Repeated generation unexpectedly slow"
 
 
 class TestBenchmarks:
@@ -396,7 +422,9 @@ class TestBenchmarks:
 
         # All should complete in reasonable time
         for node_type, latency_ms in benchmarks.items():
-            assert latency_ms < 10000, f"{node_type} generation too slow: {latency_ms:.2f}ms"
+            assert (
+                latency_ms < 10000
+            ), f"{node_type} generation too slow: {latency_ms:.2f}ms"
 
     @pytest.mark.asyncio
     async def test_benchmark_full_pipeline(self):

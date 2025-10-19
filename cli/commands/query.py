@@ -22,7 +22,13 @@ def query():
 @click.option("--max-confidence", type=float, help="Maximum confidence score")
 @click.option("--hours", "-h", type=int, help="Records from last N hours")
 @click.option("--limit", "-l", type=int, default=10, help="Maximum records to return")
-@click.option("--format", "-f", type=click.Choice(["table", "json", "csv"]), default="table", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="Output format",
+)
 def query_routing(
     agent: Optional[str],
     strategy: Optional[str],
@@ -103,7 +109,13 @@ def query_routing(
 @click.option("--success/--failure", default=None, help="Filter by success status")
 @click.option("--hours", "-h", type=int, help="Records from last N hours")
 @click.option("--limit", "-l", type=int, default=10, help="Maximum records to return")
-@click.option("--format", "-f", type=click.Choice(["table", "json", "csv"]), default="table", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="Output format",
+)
 def query_transformations(
     source: Optional[str],
     target: Optional[str],
@@ -179,7 +191,13 @@ def query_transformations(
 @click.option("--max-duration", type=int, help="Maximum duration in milliseconds")
 @click.option("--hours", "-h", type=int, help="Records from last N hours")
 @click.option("--limit", "-l", type=int, default=10, help="Maximum records to return")
-@click.option("--format", "-f", type=click.Choice(["table", "json", "csv"]), default="table", help="Output format")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="Output format",
+)
 def query_performance(
     strategy: Optional[str],
     cache_hit: Optional[bool],
@@ -314,7 +332,9 @@ def query_stats():
         click.echo(f"  Total: {transformation_stats['total']}")
         click.echo(f"  Successful: {transformation_stats['successful']}")
         if transformation_stats["total"] > 0:
-            success_rate = (transformation_stats["successful"] / transformation_stats["total"]) * 100
+            success_rate = (
+                transformation_stats["successful"] / transformation_stats["total"]
+            ) * 100
             click.echo(f"  Success Rate: {success_rate:.1f}%")
         click.echo(
             f"  Avg Duration: {transformation_stats['avg_duration']:.0f}ms"
@@ -331,7 +351,9 @@ def query_stats():
         )
         click.echo(f"  Cache Hits: {performance_stats['cache_hits']}")
         if performance_stats["total"] > 0:
-            cache_hit_rate = (performance_stats["cache_hits"] / performance_stats["total"]) * 100
+            cache_hit_rate = (
+                performance_stats["cache_hits"] / performance_stats["total"]
+            ) * 100
             click.echo(f"  Cache Hit Rate: {cache_hit_rate:.1f}%")
         click.echo(
             f"  Avg Candidates: {performance_stats['avg_candidates']:.1f}"

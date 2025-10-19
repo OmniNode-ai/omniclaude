@@ -11,8 +11,8 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 from pathlib import Path
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -215,7 +215,9 @@ class IntentClassifier:
 
         # Get secondary intents (score >= 0.5)
         secondary_intents = [
-            intent for intent, score in normalized_scores.items() if intent != primary_intent and score >= 0.5
+            intent
+            for intent, score in normalized_scores.items()
+            if intent != primary_intent and score >= 0.5
         ]
 
         # Build intent context
@@ -281,7 +283,12 @@ class IntentClassifier:
             scores["component_creation"] = 0.8
 
         # Check for infrastructure files
-        if path_obj.name in ["Dockerfile", "docker-compose.yml", ".gitlab-ci.yml", ".github"]:
+        if path_obj.name in [
+            "Dockerfile",
+            "docker-compose.yml",
+            ".gitlab-ci.yml",
+            ".github",
+        ]:
             scores["infrastructure"] = 1.0
 
         # Check for documentation
@@ -305,7 +312,14 @@ class IntentClassifier:
         content_lower = content.lower()
 
         # API-related keywords
-        api_keywords = ["@app.route", "@router", "async def", "fastapi", "flask", "endpoint"]
+        api_keywords = [
+            "@app.route",
+            "@router",
+            "async def",
+            "fastapi",
+            "flask",
+            "endpoint",
+        ]
         if any(kw in content_lower for kw in api_keywords):
             scores["api_design"] = 0.6
 
@@ -340,7 +354,9 @@ class IntentClassifier:
             return arguments["new_string"]
         elif "edits" in arguments:
             # MultiEdit case
-            return "\n".join(edit.get("new_string", "") for edit in arguments.get("edits", []))
+            return "\n".join(
+                edit.get("new_string", "") for edit in arguments.get("edits", [])
+            )
         return ""
 
     def _detect_language(self, file_path: str) -> Optional[str]:

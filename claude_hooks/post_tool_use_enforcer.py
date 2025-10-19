@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """PostToolUse Quality Enforcer - Auto-fix violations after file write."""
 
+import asyncio
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Optional
+
 import yaml
-import asyncio
-import time
 
 # Add lib directory to path AFTER stdlib imports
 SCRIPT_DIR = Path(__file__).parent
@@ -53,7 +54,10 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
 
     # Check if pattern tracker is available
     if not PATTERN_TRACKING_ENABLED:
-        print("[PostToolUse] Pattern tracking: UNAVAILABLE (module not imported)", file=sys.stderr)
+        print(
+            "[PostToolUse] Pattern tracking: UNAVAILABLE (module not imported)",
+            file=sys.stderr,
+        )
         return False
 
     # Only process Python files
@@ -62,7 +66,10 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
 
     # Skip if file doesn't exist
     if not file_path.exists():
-        print(f"[PostToolUse] Pattern tracking: File does not exist: {file_path}", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracking: File does not exist: {file_path}",
+            file=sys.stderr,
+        )
         return False
 
     print(f"[PostToolUse] Pattern tracking: Processing {file_path}", file=sys.stderr)
@@ -70,7 +77,10 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
     # Initialize pattern tracker
     try:
         pattern_tracker = PatternTrackerSync()
-        print(f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"[PostToolUse] Pattern tracker init failed: {e}", file=sys.stderr)
         return False
@@ -83,9 +93,14 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
     try:
         with open(file_path, "r") as f:
             content = f.read()
-        print(f"[PostToolUse] Pattern tracking: Read {len(content)} chars", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracking: Read {len(content)} chars",
+            file=sys.stderr,
+        )
     except Exception as e:
-        print(f"[PostToolUse] Pattern tracking: Error reading file: {e}", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracking: Error reading file: {e}", file=sys.stderr
+        )
         return False
 
     # Track pattern creation
@@ -101,15 +116,24 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
             },
         )
         if pattern_id:
-            print(f"[PostToolUse] Pattern tracking: SUCCESS - {pattern_id}", file=sys.stderr)
+            print(
+                f"[PostToolUse] Pattern tracking: SUCCESS - {pattern_id}",
+                file=sys.stderr,
+            )
             return True
         else:
-            print("[PostToolUse] Pattern tracking: FAILED - returned None", file=sys.stderr)
+            print(
+                "[PostToolUse] Pattern tracking: FAILED - returned None",
+                file=sys.stderr,
+            )
             return False
     except Exception as e:
         print(f"[PostToolUse] Pattern tracking: EXCEPTION - {e}", file=sys.stderr)
         if pattern_config.get("fail_gracefully", True):
-            print("[PostToolUse] Pattern tracking: Continuing despite failure", file=sys.stderr)
+            print(
+                "[PostToolUse] Pattern tracking: Continuing despite failure",
+                file=sys.stderr,
+            )
             return False
         else:
             raise
@@ -185,7 +209,10 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
     if PATTERN_TRACKING_ENABLED:
         try:
             pattern_tracker = PatternTrackerSync()
-            print(f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})", file=sys.stderr)
+            print(
+                f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
+                file=sys.stderr,
+            )
         except Exception as e:
             print(f"[PostToolUse] Pattern tracker init failed: {e}", file=sys.stderr)
             pattern_tracker = None
@@ -200,14 +227,19 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
     try:
         with open(file_path, "r") as f:
             original_content = f.read()
-        print(f"[PostToolUse] Read {len(original_content)} chars from {file_path}", file=sys.stderr)
+        print(
+            f"[PostToolUse] Read {len(original_content)} chars from {file_path}",
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"[PostToolUse] Error reading {file_path}: {e}", file=sys.stderr)
         return False
 
     # Track original pattern creation (synchronous, blocking)
     if pattern_tracker:
-        print("[PostToolUse] Attempting pattern tracking (original)...", file=sys.stderr)
+        print(
+            "[PostToolUse] Attempting pattern tracking (original)...", file=sys.stderr
+        )
         try:
             pattern_id = pattern_tracker.track_pattern_creation(
                 code=original_content,
@@ -220,9 +252,15 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
                 },
             )
             if pattern_id:
-                print(f"[PostToolUse] Pattern tracking complete: {pattern_id}", file=sys.stderr)
+                print(
+                    f"[PostToolUse] Pattern tracking complete: {pattern_id}",
+                    file=sys.stderr,
+                )
             else:
-                print("[PostToolUse] Pattern tracking returned None (check errors above)", file=sys.stderr)
+                print(
+                    "[PostToolUse] Pattern tracking returned None (check errors above)",
+                    file=sys.stderr,
+                )
         except Exception as e:
             print(f"[PostToolUse] Pattern tracking exception: {e}", file=sys.stderr)
 
@@ -236,19 +274,29 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
     if not violations:
         print("[PostToolUse] No violations found ✓", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
-        print(f"[PostToolUse] ===== END processing {file_path} (clean) =====", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
+        print(
+            f"[PostToolUse] ===== END processing {file_path} (clean) =====",
+            file=sys.stderr,
+        )
         return False
 
     print(f"[PostToolUse] Found {len(violations)} violation(s):", file=sys.stderr)
     for v in violations[:3]:  # Show first 3
-        print(f"  - {v.get('old_name', 'unknown')} (line {v.get('line', '?')})", file=sys.stderr)
+        print(
+            f"  - {v.get('old_name', 'unknown')} (line {v.get('line', '?')})",
+            file=sys.stderr,
+        )
     if len(violations) > 3:
         print(f"  ... and {len(violations) - 3} more", file=sys.stderr)
 
     # Track pattern with violations context (synchronous)
     if pattern_tracker:
-        print("[PostToolUse] Attempting pattern tracking (violations)...", file=sys.stderr)
+        print(
+            "[PostToolUse] Attempting pattern tracking (violations)...", file=sys.stderr
+        )
         try:
             quality_score = pattern_tracker.calculate_quality_score(violations)
             pattern_id = pattern_tracker.track_pattern_creation(
@@ -265,9 +313,15 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
                 },
             )
             if pattern_id:
-                print(f"[PostToolUse] Pattern tracking complete (quality: {quality_score:.2f})", file=sys.stderr)
+                print(
+                    f"[PostToolUse] Pattern tracking complete (quality: {quality_score:.2f})",
+                    file=sys.stderr,
+                )
         except Exception as e:
-            print(f"[PostToolUse] Pattern tracking (violations) failed: {e}", file=sys.stderr)
+            print(
+                f"[PostToolUse] Pattern tracking (violations) failed: {e}",
+                file=sys.stderr,
+            )
 
     # Phase 2: Generate corrections
     print("[PostToolUse] Generating corrections...", file=sys.stderr)
@@ -275,13 +329,20 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     generator = CorrectionGenerator()
 
-    corrections = await generator.generate_corrections(violations, original_content, str(file_path), language)
+    corrections = await generator.generate_corrections(
+        violations, original_content, str(file_path), language
+    )
 
     if not corrections:
         print("[PostToolUse] No corrections generated", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
-        print(f"[PostToolUse] ===== END processing {file_path} (no corrections) =====", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
+        print(
+            f"[PostToolUse] ===== END processing {file_path} (no corrections) =====",
+            file=sys.stderr,
+        )
         return False
 
     print(f"[PostToolUse] Generated {len(corrections)} correction(s)", file=sys.stderr)
@@ -297,7 +358,9 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
         scored_corrections = []
         for correction in corrections:
-            score = await quorum.score_correction(correction, original_content, str(file_path))
+            score = await quorum.score_correction(
+                correction, original_content, str(file_path)
+            )
             if score.should_apply:
                 scored_corrections.append((correction, score))
                 print(
@@ -313,12 +376,19 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
     if not corrections:
         print("[PostToolUse] No corrections passed threshold", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
-        print(f"[PostToolUse] ===== END processing {file_path} (no passing corrections) =====", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
+        print(
+            f"[PostToolUse] ===== END processing {file_path} (no passing corrections) =====",
+            file=sys.stderr,
+        )
         return False
 
     # Phase 5: Apply corrections
-    print(f"[PostToolUse] Applying {len(corrections)} correction(s)...", file=sys.stderr)
+    print(
+        f"[PostToolUse] Applying {len(corrections)} correction(s)...", file=sys.stderr
+    )
     corrected_content = original_content
     for correction in corrections:
         corrected_content = apply_correction(corrected_content, correction)
@@ -326,23 +396,38 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
     if corrected_content == original_content:
         print("[PostToolUse] No changes after correction attempt", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
-        print(f"[PostToolUse] ===== END processing {file_path} (no changes) =====", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
+        print(
+            f"[PostToolUse] ===== END processing {file_path} (no changes) =====",
+            file=sys.stderr,
+        )
         return False
 
-    print(f"[PostToolUse] Applied corrections, {len(corrected_content)} chars", file=sys.stderr)
+    print(
+        f"[PostToolUse] Applied corrections, {len(corrected_content)} chars",
+        file=sys.stderr,
+    )
 
     # Write corrected content back to file
     try:
         with open(file_path, "w") as f:
             f.write(corrected_content)
-        print(f"[PostToolUse] ✓ Applied {len(corrections)} correction(s) to {file_path}")
+        print(
+            f"[PostToolUse] ✓ Applied {len(corrections)} correction(s) to {file_path}"
+        )
 
         # Track corrected pattern as modified version (synchronous)
         if pattern_tracker:
-            print("[PostToolUse] Attempting pattern tracking (corrected)...", file=sys.stderr)
+            print(
+                "[PostToolUse] Attempting pattern tracking (corrected)...",
+                file=sys.stderr,
+            )
             try:
-                corrected_quality_score = 1.0  # After corrections, quality should be perfect
+                corrected_quality_score = (
+                    1.0  # After corrections, quality should be perfect
+                )
                 corrected_pattern_id = pattern_tracker.track_pattern_creation(
                     code=corrected_content,
                     context={
@@ -359,13 +444,24 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
                     },
                 )
                 if corrected_pattern_id:
-                    print("[PostToolUse] Pattern tracking complete (corrected)", file=sys.stderr)
+                    print(
+                        "[PostToolUse] Pattern tracking complete (corrected)",
+                        file=sys.stderr,
+                    )
             except Exception as e:
-                print(f"[PostToolUse] Corrected pattern tracking failed: {e}", file=sys.stderr)
+                print(
+                    f"[PostToolUse] Corrected pattern tracking failed: {e}",
+                    file=sys.stderr,
+                )
 
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
-        print(f"[PostToolUse] ===== END processing {file_path} (success) =====", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
+        print(
+            f"[PostToolUse] ===== END processing {file_path} (success) =====",
+            file=sys.stderr,
+        )
         return True
     except Exception as e:
         print(f"[PostToolUse] Error writing {file_path}: {e}", file=sys.stderr)
@@ -399,10 +495,17 @@ def main():
             file=sys.stderr,
         )
         print(
-            f"  - Pattern tracking enabled: {config.get('pattern_tracking', {}).get('enabled', False)}", file=sys.stderr
+            f"  - Pattern tracking enabled: {config.get('pattern_tracking', {}).get('enabled', False)}",
+            file=sys.stderr,
         )
-        print(f"  - Pattern tracking available: {PATTERN_TRACKING_ENABLED}", file=sys.stderr)
-        print(f"  - Quorum enabled: {config.get('quorum', {}).get('enabled', False)}", file=sys.stderr)
+        print(
+            f"  - Pattern tracking available: {PATTERN_TRACKING_ENABLED}",
+            file=sys.stderr,
+        )
+        print(
+            f"  - Quorum enabled: {config.get('quorum', {}).get('enabled', False)}",
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"[PostToolUse] Error loading config: {e}", file=sys.stderr)
         sys.exit(1)
@@ -415,9 +518,15 @@ def main():
         for file_path in file_paths:
             if track_pattern_for_file(file_path, config):
                 patterns_tracked += 1
-        print(f"[PostToolUse] Pattern tracking: {patterns_tracked}/{len(file_paths)} file(s) tracked", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracking: {patterns_tracked}/{len(file_paths)} file(s) tracked",
+            file=sys.stderr,
+        )
     else:
-        print("[PostToolUse] Pattern tracking: SKIPPED (disabled in config)", file=sys.stderr)
+        print(
+            "[PostToolUse] Pattern tracking: SKIPPED (disabled in config)",
+            file=sys.stderr,
+        )
 
     # PHASE 2: Auto-fix (only if enabled)
     auto_fix_enabled = config.get("enforcement", {}).get("post_tool_use_enabled", True)
@@ -435,7 +544,10 @@ def main():
             fixes_applied += 1
 
     if fixes_applied > 0:
-        print(f"[PostToolUse] Auto-fix: {fixes_applied} file(s) corrected", file=sys.stderr)
+        print(
+            f"[PostToolUse] Auto-fix: {fixes_applied} file(s) corrected",
+            file=sys.stderr,
+        )
     else:
         print("[PostToolUse] Auto-fix: No corrections needed", file=sys.stderr)
 

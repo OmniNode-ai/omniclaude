@@ -6,6 +6,7 @@ performance degradation. Provides insights for optimization.
 """
 
 import asyncio
+import sys
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -80,10 +81,16 @@ class PerformanceMonitor:
         """Setup default performance thresholds."""
         default_thresholds = {
             "CONTEXT_GATHERING": PerformanceThreshold(
-                phase="CONTEXT_GATHERING", warning_duration_ms=200.0, critical_duration_ms=500.0, min_success_rate=0.9
+                phase="CONTEXT_GATHERING",
+                warning_duration_ms=200.0,
+                critical_duration_ms=500.0,
+                min_success_rate=0.9,
             ),
             "QUORUM_VALIDATION": PerformanceThreshold(
-                phase="QUORUM_VALIDATION", warning_duration_ms=2000.0, critical_duration_ms=5000.0, min_success_rate=0.8
+                phase="QUORUM_VALIDATION",
+                warning_duration_ms=2000.0,
+                critical_duration_ms=5000.0,
+                min_success_rate=0.8,
             ),
             "TASK_ARCHITECTURE": PerformanceThreshold(
                 phase="TASK_ARCHITECTURE",
@@ -133,13 +140,17 @@ class PerformanceMonitor:
             else:
                 metrics.failed_executions += 1
                 if error_type:
-                    metrics.error_types[error_type] = metrics.error_types.get(error_type, 0) + 1
+                    metrics.error_types[error_type] = (
+                        metrics.error_types.get(error_type, 0) + 1
+                    )
 
             # Update duration statistics
             metrics.total_duration_ms += duration_ms
             metrics.min_duration_ms = min(metrics.min_duration_ms, duration_ms)
             metrics.max_duration_ms = max(metrics.max_duration_ms, duration_ms)
-            metrics.avg_duration_ms = metrics.total_duration_ms / metrics.total_executions
+            metrics.avg_duration_ms = (
+                metrics.total_duration_ms / metrics.total_executions
+            )
 
             # Update recent durations for percentile calculations
             metrics.recent_durations.append(duration_ms)
@@ -158,7 +169,9 @@ class PerformanceMonitor:
             # Check for performance issues
             await self._check_performance_thresholds(phase, metrics)
 
-    async def _check_performance_thresholds(self, phase: str, metrics: PerformanceMetrics):
+    async def _check_performance_thresholds(
+        self, phase: str, metrics: PerformanceMetrics
+    ):
         """Check if performance meets thresholds and generate alerts."""
         if phase not in self.thresholds:
             return
@@ -192,7 +205,9 @@ class PerformanceMonitor:
                     metrics=metrics,
                 )
 
-    async def _generate_alert(self, phase: str, level: str, message: str, metrics: PerformanceMetrics):
+    async def _generate_alert(
+        self, phase: str, level: str, message: str, metrics: PerformanceMetrics
+    ):
         """Generate a performance alert."""
         alert = {
             "timestamp": datetime.now().isoformat(),
@@ -201,7 +216,8 @@ class PerformanceMonitor:
             "message": message,
             "metrics": {
                 "total_executions": metrics.total_executions,
-                "success_rate": metrics.successful_executions / max(metrics.total_executions, 1),
+                "success_rate": metrics.successful_executions
+                / max(metrics.total_executions, 1),
                 "avg_duration_ms": metrics.avg_duration_ms,
                 "p95_duration_ms": metrics.p95_duration_ms,
             },
@@ -279,7 +295,11 @@ class PerformanceMonitor:
     def get_recent_alerts(self, hours: int = 24) -> List[Dict[str, Any]]:
         """Get recent alerts within specified hours."""
         cutoff = datetime.now() - timedelta(hours=hours)
-        return [alert for alert in self.alerts if datetime.fromisoformat(alert["timestamp"]) >= cutoff]
+        return [
+            alert
+            for alert in self.alerts
+            if datetime.fromisoformat(alert["timestamp"]) >= cutoff
+        ]
 
     def get_performance_summary(self) -> Dict[str, Any]:
         """Get overall performance summary."""
@@ -293,19 +313,27 @@ class PerformanceMonitor:
         }
 
         if self.metrics:
-            total_successful = sum(m.successful_executions for m in self.metrics.values())
+            total_successful = sum(
+                m.successful_executions for m in self.metrics.values()
+            )
             total_executions = sum(m.total_executions for m in self.metrics.values())
-            summary["overall_success_rate"] = total_successful / max(total_executions, 1)
+            summary["overall_success_rate"] = total_successful / max(
+                total_executions, 1
+            )
 
         # Phase summaries
         for phase, metrics in self.metrics.items():
-            success_rate = metrics.successful_executions / max(metrics.total_executions, 1)
+            success_rate = metrics.successful_executions / max(
+                metrics.total_executions, 1
+            )
             summary["phase_summaries"][phase] = {
                 "executions": metrics.total_executions,
                 "success_rate": success_rate,
                 "avg_duration_ms": metrics.avg_duration_ms,
                 "p95_duration_ms": metrics.p95_duration_ms,
-                "performance_level": self.get_performance_level(phase, metrics.avg_duration_ms).value,
+                "performance_level": self.get_performance_level(
+                    phase, metrics.avg_duration_ms
+                ).value,
             }
 
         return summary
@@ -370,7 +398,9 @@ async def track_phase_performance(
     metadata: Optional[Dict[str, Any]] = None,
 ):
     """Track performance metrics for a phase execution."""
-    await performance_monitor.track_phase_performance(phase, duration_ms, success, error_type, metadata)
+    await performance_monitor.track_phase_performance(
+        phase, duration_ms, success, error_type, metadata
+    )
 
 
 async def check_performance_threshold(phase: str, duration_ms: float) -> bool:

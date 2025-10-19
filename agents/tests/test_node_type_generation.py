@@ -5,17 +5,16 @@ Node Type Generation Tests
 Tests specific to each ONEX node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR).
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.tests.fixtures.phase4_fixtures import (
-    NODE_TYPE_FIXTURES,
-)
+from agents.tests.fixtures.phase4_fixtures import NODE_TYPE_FIXTURES
 from agents.tests.utils.generation_test_helpers import (
-    parse_generated_python,
     extract_class_definitions,
+    parse_generated_python,
 )
 
 
@@ -75,7 +74,9 @@ class TestEffectNodeGeneration:
             assert "__init__" in effect_class["methods"], "Missing __init__ method"
 
             # Check that the class has some async methods (common for EFFECT nodes)
-            assert len(effect_class["methods"]) >= 1, "Effect class should have at least one method"
+            assert (
+                len(effect_class["methods"]) >= 1
+            ), "Effect class should have at least one method"
 
     @pytest.mark.asyncio
     async def test_effect_node_imports_base_class(self):
@@ -120,7 +121,9 @@ class TestEffectNodeGeneration:
 
             # EFFECT nodes typically interact with external systems
             # Check for common patterns
-            assert "async" in content or "await" in content, "EFFECT should have async operations"
+            assert (
+                "async" in content or "await" in content
+            ), "EFFECT should have async operations"
 
 
 class TestComputeNodeGeneration:
@@ -314,7 +317,9 @@ class TestOrchestratorNodeGeneration:
 
             # ORCHESTRATOR nodes should have orchestrator methods
             classes = extract_class_definitions(tree)
-            orchestrator_class = next((c for c in classes if "Orchestrator" in c["name"]), None)
+            orchestrator_class = next(
+                (c for c in classes if "Orchestrator" in c["name"]), None
+            )
             assert orchestrator_class is not None, "No Orchestrator class found"
 
     @pytest.mark.asyncio
@@ -337,7 +342,11 @@ class TestOrchestratorNodeGeneration:
                 content = f.read()
 
             # ORCHESTRATOR nodes coordinate workflows
-            assert "orchestrate" in content.lower() or "coordinate" in content.lower() or "workflow" in content.lower()
+            assert (
+                "orchestrate" in content.lower()
+                or "coordinate" in content.lower()
+                or "workflow" in content.lower()
+            )
 
 
 class TestNodeTypeComparison:

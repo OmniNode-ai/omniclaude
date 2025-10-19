@@ -1,8 +1,8 @@
--- Rollback Migration: 006_phase7_schema_enhancements
--- Description: Rollback Phase 7 refinement schema changes
+-- Rollback Migration: 006_agent_framework_schema_enhancements
+-- Description: Rollback agent framework refinement schema changes
 -- Author: agent-workflow-coordinator
 -- Created: 2025-10-15
--- IMPORTANT: This rollback script safely removes all Phase 7 enhancements
+-- IMPORTANT: This rollback script safely removes all agent framework enhancements
 
 -- =============================================================================
 -- ROLLBACK MIGRATION

@@ -5,8 +5,8 @@ Test script for PatternTracker integration.
 Tests the pattern tracker in isolation to verify API communication.
 """
 
-import sys
 import asyncio
+import sys
 from pathlib import Path
 
 # Add current directory to path
@@ -65,7 +65,9 @@ def calculate_sum(numbers):
     }
 
     try:
-        pattern_id = await tracker.track_pattern_creation(sample_code, context_with_quality)
+        pattern_id = await tracker.track_pattern_creation(
+            sample_code, context_with_quality
+        )
         if pattern_id:
             print(f"   ✓ Pattern with quality metrics tracked: {pattern_id[:16]}...")
         else:

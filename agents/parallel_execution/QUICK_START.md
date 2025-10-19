@@ -477,7 +477,7 @@ See `examples/` directory for complete examples:
 ## Support
 
 - **Task Schema Reference**: `task_schema.py`
-- **Agent Instructions**: `agent-parallel-dispatcher.md`
+- **Agent Instructions**: `AGENT-PARALLEL-DISPATCHER.md`
 - **Architecture Details**: `ARCHITECTURE.md`
 - **Trace Analysis Guide**: `TRACE_GUIDE.md`
 

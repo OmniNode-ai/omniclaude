@@ -13,8 +13,8 @@ Version: 1.0.0
 """
 
 import re
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -103,7 +103,9 @@ class AgentPathwayDetector:
 
         # No agent invocation detected
         self.detection_stats["no_agent"] += 1
-        return PathwayDetection(pathway=None, agents=[], task=prompt, confidence=1.0, trigger_pattern=None)
+        return PathwayDetection(
+            pathway=None, agents=[], task=prompt, confidence=1.0, trigger_pattern=None
+        )
 
     def _check_coordinator(self, prompt: str) -> Optional[PathwayDetection]:
         """Check if prompt requests coordinator dispatch."""
@@ -135,7 +137,11 @@ class AgentPathwayDetector:
                     task = self._clean_task(prompt, pattern, agents)
 
                     return PathwayDetection(
-                        pathway="direct_parallel", agents=agents, task=task, confidence=0.95, trigger_pattern=pattern
+                        pathway="direct_parallel",
+                        agents=agents,
+                        task=task,
+                        confidence=0.95,
+                        trigger_pattern=pattern,
                     )
 
         # Alternative: Check for multiple @agent mentions without explicit parallel keyword
@@ -161,7 +167,11 @@ class AgentPathwayDetector:
                 agent_name = match.group(1)
 
                 return PathwayDetection(
-                    pathway="direct_single", agents=[agent_name], task=prompt, confidence=0.95, trigger_pattern=pattern
+                    pathway="direct_single",
+                    agents=[agent_name],
+                    task=prompt,
+                    confidence=0.95,
+                    trigger_pattern=pattern,
                 )
 
         return None
@@ -185,7 +195,9 @@ class AgentPathwayDetector:
 
         return unique_agents
 
-    def _clean_task(self, prompt: str, trigger_pattern: Optional[str], agents: List[str]) -> str:
+    def _clean_task(
+        self, prompt: str, trigger_pattern: Optional[str], agents: List[str]
+    ) -> str:
         """
         Clean task description by removing trigger keywords and agent names.
 
@@ -209,9 +221,15 @@ class AgentPathwayDetector:
             # Remove @agent-name mentions
             task = re.sub(rf"@{re.escape(agent)}\b", "", task, flags=re.IGNORECASE)
             # Remove "use agent-name" patterns
-            task = re.sub(rf"\buse\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE)
-            task = re.sub(rf"\binvoke\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE)
-            task = re.sub(rf"\bwith\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE)
+            task = re.sub(
+                rf"\buse\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
+            task = re.sub(
+                rf"\binvoke\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
+            task = re.sub(
+                rf"\bwith\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
 
         # Clean up extra whitespace and commas
         task = re.sub(r"\s*,\s*,\s*", ", ", task)  # Remove double commas
@@ -234,7 +252,10 @@ class AgentPathwayDetector:
         return {
             **self.detection_stats,
             "total": total,
-            "rates": {pathway: f"{count/total*100:.1f}%" for pathway, count in self.detection_stats.items()},
+            "rates": {
+                pathway: f"{count/total*100:.1f}%"
+                for pathway, count in self.detection_stats.items()
+            },
         }
 
     def reset_stats(self):
@@ -274,15 +295,21 @@ def detect_invocation_pathway(prompt: str) -> Dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     if len(sys.argv) < 2:
         print("Usage: python agent_pathway_detector.py '<prompt>'")
         print("\nExamples:")
-        print("  python agent_pathway_detector.py 'coordinate: Implement authentication'")
-        print("  python agent_pathway_detector.py '@agent-testing Analyze test coverage'")
-        print("  python agent_pathway_detector.py 'parallel: @agent-testing, @agent-commit Review PR'")
+        print(
+            "  python agent_pathway_detector.py 'coordinate: Implement authentication'"
+        )
+        print(
+            "  python agent_pathway_detector.py '@agent-testing Analyze test coverage'"
+        )
+        print(
+            "  python agent_pathway_detector.py 'parallel: @agent-testing, @agent-commit Review PR'"
+        )
         sys.exit(1)
 
     prompt = " ".join(sys.argv[1:])

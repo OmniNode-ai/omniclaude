@@ -12,16 +12,16 @@ Provides comprehensive metrics collection for:
 Target: <10ms collection overhead per operation
 """
 
+import asyncio
+import json
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Deque
 from statistics import mean, median, stdev
-import json
-import asyncio
+from typing import Any, Deque, Dict, List, Optional
 
 
 class MetricType(str, Enum):
@@ -136,7 +136,9 @@ class RouterMetricsCollector:
         self.metrics_dir.mkdir(parents=True, exist_ok=True)
 
         # Sliding windows for different metric types
-        self._metrics: Dict[MetricType, Deque[MetricDataPoint]] = defaultdict(lambda: deque(maxlen=window_size))
+        self._metrics: Dict[MetricType, Deque[MetricDataPoint]] = defaultdict(
+            lambda: deque(maxlen=window_size)
+        )
 
         # Threshold violations history
         self._violations: Deque[ThresholdViolation] = deque(maxlen=1000)
@@ -412,7 +414,11 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=latency_ms,
-                    metadata={"agent_selected": agent_selected, "cache_hit": cache_hit, **(metadata or {})},
+                    metadata={
+                        "agent_selected": agent_selected,
+                        "cache_hit": cache_hit,
+                        **(metadata or {}),
+                    },
                     metric_type=MetricType.ROUTING_LATENCY,
                 )
             )
@@ -446,7 +452,9 @@ class RouterMetricsCollector:
                 self._cache_misses += 1
 
             # Check threshold violations
-            await self._check_threshold_violation("ROUTING_LATENCY", latency_ms, metadata)
+            await self._check_threshold_violation(
+                "ROUTING_LATENCY", latency_ms, metadata
+            )
 
         # Track collection overhead
         overhead_ms = (time.time() - start_time) * 1000
@@ -455,7 +463,11 @@ class RouterMetricsCollector:
             print(f"⚠️ Metrics collection overhead: {overhead_ms:.2f}ms (target: <10ms)")
 
     async def record_agent_loading(
-        self, agent_name: str, loading_time_ms: float, success: bool, metadata: Optional[Dict[str, Any]] = None
+        self,
+        agent_name: str,
+        loading_time_ms: float,
+        success: bool,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """
         Record agent loading performance.
@@ -471,7 +483,11 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=loading_time_ms,
-                    metadata={"agent_name": agent_name, "success": success, **(metadata or {})},
+                    metadata={
+                        "agent_name": agent_name,
+                        "success": success,
+                        **(metadata or {}),
+                    },
                     metric_type=MetricType.AGENT_LOADING,
                 )
             )
@@ -502,7 +518,12 @@ class RouterMetricsCollector:
                 MetricDataPoint(
                     timestamp=time.time(),
                     value=transformation_time_ms,
-                    metadata={"from_agent": from_agent, "to_agent": to_agent, "success": success, **(metadata or {})},
+                    metadata={
+                        "from_agent": from_agent,
+                        "to_agent": to_agent,
+                        "success": success,
+                        **(metadata or {}),
+                    },
                     metric_type=MetricType.AGENT_TRANSFORMATION,
                 )
             )
@@ -523,7 +544,10 @@ class RouterMetricsCollector:
                 )
 
     async def record_threshold_metric(
-        self, threshold_id: str, measured_value: float, metadata: Optional[Dict[str, Any]] = None
+        self,
+        threshold_id: str,
+        measured_value: float,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """
         Record a measurement against a specific performance threshold.
@@ -569,10 +593,15 @@ class RouterMetricsCollector:
             )
 
             # Check threshold violation
-            await self._check_threshold_violation(threshold_id, measured_value, metadata)
+            await self._check_threshold_violation(
+                threshold_id, measured_value, metadata
+            )
 
     async def _check_threshold_violation(
-        self, threshold_id: str, measured_value: float, metadata: Optional[Dict[str, Any]] = None
+        self,
+        threshold_id: str,
+        measured_value: float,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Check if measurement violates threshold and record if so."""
         # Handle special case for routing latency
@@ -613,7 +642,9 @@ class RouterMetricsCollector:
             if status != ThresholdStatus.NORMAL:
                 await self._record_violation(
                     threshold_id=threshold_id,
-                    threshold_name=self._thresholds.get(threshold_id, {}).get("name", threshold_id),
+                    threshold_name=self._thresholds.get(threshold_id, {}).get(
+                        "name", threshold_id
+                    ),
                     measured_value=measured_value,
                     threshold_value=threshold_value,
                     metadata=metadata,
@@ -660,7 +691,9 @@ class RouterMetricsCollector:
 
         # Log critical violations
         if status in [ThresholdStatus.CRITICAL, ThresholdStatus.EMERGENCY]:
-            print(f"🚨 {status.value.upper()}: {threshold_name} = {measured_value:.2f} (threshold: {threshold_value})")
+            print(
+                f"🚨 {status.value.upper()}: {threshold_name} = {measured_value:.2f} (threshold: {threshold_value})"
+            )
 
     async def establish_baseline(
         self, metric_type: MetricType, force_refresh: bool = False
@@ -711,7 +744,9 @@ class RouterMetricsCollector:
             self._baselines[metric_type] = baseline
             return baseline
 
-    async def analyze_trends(self, metric_type: MetricType, window_minutes: int = 5) -> Optional[TrendAnalysis]:
+    async def analyze_trends(
+        self, metric_type: MetricType, window_minutes: int = 5
+    ) -> Optional[TrendAnalysis]:
         """
         Analyze performance trends for a metric type.
 
@@ -741,7 +776,9 @@ class RouterMetricsCollector:
             current_mean = mean(recent_values)
 
             # Calculate degradation
-            degradation_percent = ((current_mean - baseline.baseline_mean) / baseline.baseline_mean) * 100
+            degradation_percent = (
+                (current_mean - baseline.baseline_mean) / baseline.baseline_mean
+            ) * 100
 
             # Determine trend direction
             if degradation_percent < -5:
@@ -767,12 +804,16 @@ class RouterMetricsCollector:
                 recommendations.append("Performance degradation detected")
                 if degradation_percent > 20:
                     recommendations.append("Consider immediate optimization")
-                    recommendations.append("Review recent changes for performance impact")
+                    recommendations.append(
+                        "Review recent changes for performance impact"
+                    )
                 elif degradation_percent > 15:
                     recommendations.append("Monitor closely for further degradation")
                     recommendations.append("Schedule optimization review")
             elif trend_direction == "improving":
-                recommendations.append("Performance improving - recent optimizations effective")
+                recommendations.append(
+                    "Performance improving - recent optimizations effective"
+                )
 
             return TrendAnalysis(
                 metric_type=metric_type,
@@ -787,7 +828,11 @@ class RouterMetricsCollector:
 
     def get_cache_statistics(self) -> Dict[str, Any]:
         """Get cache performance statistics."""
-        hit_rate = (self._cache_hits / self._cache_queries * 100) if self._cache_queries > 0 else 0
+        hit_rate = (
+            (self._cache_hits / self._cache_queries * 100)
+            if self._cache_queries > 0
+            else 0
+        )
 
         return {
             "cache_hits": self._cache_hits,
@@ -800,7 +845,11 @@ class RouterMetricsCollector:
 
     def get_routing_statistics(self) -> Dict[str, Any]:
         """Get routing decision statistics."""
-        success_rate = (self._successful_routings / self._routing_decisions * 100) if self._routing_decisions > 0 else 0
+        success_rate = (
+            (self._successful_routings / self._routing_decisions * 100)
+            if self._routing_decisions > 0
+            else 0
+        )
 
         return {
             "total_decisions": self._routing_decisions,
@@ -812,14 +861,19 @@ class RouterMetricsCollector:
     def get_transformation_statistics(self) -> Dict[str, Any]:
         """Get agent transformation statistics."""
         success_rate = (
-            ((self._transformations - self._transformation_failures) / self._transformations * 100)
+            (
+                (self._transformations - self._transformation_failures)
+                / self._transformations
+                * 100
+            )
             if self._transformations > 0
             else 0
         )
 
         return {
             "total_transformations": self._transformations,
-            "successful_transformations": self._transformations - self._transformation_failures,
+            "successful_transformations": self._transformations
+            - self._transformation_failures,
             "failed_transformations": self._transformation_failures,
             "success_rate_percent": success_rate,
         }
@@ -847,7 +901,9 @@ class RouterMetricsCollector:
             }
             min_priority = status_priority[min_status]
 
-            filtered = [v for v in self._violations if status_priority[v.status] >= min_priority]
+            filtered = [
+                v for v in self._violations if status_priority[v.status] >= min_priority
+            ]
 
             # Sort by timestamp descending
             filtered.sort(key=lambda v: v.timestamp, reverse=True)
@@ -938,7 +994,8 @@ class RouterMetricsCollector:
                     metric_type.value: {
                         "count": len(self._metrics[metric_type]),
                         "latest_values": [
-                            {"timestamp": m.timestamp, "value": m.value} for m in list(self._metrics[metric_type])[-10:]
+                            {"timestamp": m.timestamp, "value": m.value}
+                            for m in list(self._metrics[metric_type])[-10:]
                         ],
                     }
                     for metric_type in self._metrics.keys()

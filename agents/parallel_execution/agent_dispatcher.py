@@ -6,16 +6,16 @@ Executes multiple agents concurrently with dependency tracking and trace logging
 
 import asyncio
 import time
-from typing import Dict, List, Any
 from collections import defaultdict
+from typing import Any, Dict, List
 
-from agent_model import AgentTask, AgentResult
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from agent_analyzer import ArchitecturalAnalyzerAgent
 from agent_coder import CoderAgent
 from agent_debug_intelligence import DebugIntelligenceAgent
-from agent_analyzer import ArchitecturalAnalyzerAgent
+from agent_model import AgentResult, AgentTask
 from agent_researcher import ResearchIntelligenceAgent
 from agent_validator import AgentValidator
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 
 class ParallelCoordinator:
@@ -58,7 +58,11 @@ class ParallelCoordinator:
         self._coordinator_trace_id = await self.trace_logger.start_coordinator_trace(
             coordinator_type="parallel",
             total_agents=len(tasks),
-            metadata={"tasks": [{"task_id": t.task_id, "description": t.description} for t in tasks]},
+            metadata={
+                "tasks": [
+                    {"task_id": t.task_id, "description": t.description} for t in tasks
+                ]
+            },
         )
 
         await self.trace_logger.log_event(
@@ -79,7 +83,8 @@ class ParallelCoordinator:
             ready_tasks = [
                 task
                 for task in tasks
-                if task.task_id not in completed_tasks and all(dep in completed_tasks for dep in task.dependencies)
+                if task.task_id not in completed_tasks
+                and all(dep in completed_tasks for dep in task.dependencies)
             ]
 
             if not ready_tasks:
@@ -88,7 +93,9 @@ class ParallelCoordinator:
                 error_msg = f"Dependency deadlock detected. Pending tasks: {pending}"
 
                 await self.trace_logger.log_event(
-                    event_type=TraceEventType.PARALLEL_BATCH_END, message=error_msg, level=TraceLevel.ERROR
+                    event_type=TraceEventType.PARALLEL_BATCH_END,
+                    message=error_msg,
+                    level=TraceLevel.ERROR,
                 )
                 break
 
@@ -114,7 +121,9 @@ class ParallelCoordinator:
                 level=TraceLevel.INFO,
                 metadata={
                     "completed": list(batch_results.keys()),
-                    "success_count": sum(1 for r in batch_results.values() if r.success),
+                    "success_count": sum(
+                        1 for r in batch_results.values() if r.success
+                    ),
                 },
             )
 
@@ -135,7 +144,10 @@ class ParallelCoordinator:
             event_type=TraceEventType.COORDINATOR_END,
             message=f"Parallel execution complete: {len(results)} tasks in {total_time_ms:.2f}ms",
             level=TraceLevel.INFO,
-            metadata={"total_time_ms": total_time_ms, "results": {tid: r.success for tid, r in results.items()}},
+            metadata={
+                "total_time_ms": total_time_ms,
+                "results": {tid: r.success for tid, r in results.items()},
+            },
         )
 
         return results
@@ -187,7 +199,9 @@ class ParallelCoordinator:
 
         # Execute all in parallel
         if execution_coros:
-            results_list = await asyncio.gather(*execution_coros, return_exceptions=True)
+            results_list = await asyncio.gather(
+                *execution_coros, return_exceptions=True
+            )
 
             # Process results
             for i, result in enumerate(results_list):
@@ -227,7 +241,11 @@ class ParallelCoordinator:
             level = TraceLevel.INFO if result.success else TraceLevel.ERROR
 
             await self.trace_logger.log_event(
-                event_type=TraceEventType.TASK_COMPLETED if result.success else TraceEventType.TASK_FAILED,
+                event_type=(
+                    TraceEventType.TASK_COMPLETED
+                    if result.success
+                    else TraceEventType.TASK_FAILED
+                ),
                 message=f"Task {task.task_id} {status} in {result.execution_time_ms:.2f}ms",
                 level=level,
                 agent_name=result.agent_name,
@@ -241,12 +259,17 @@ class ParallelCoordinator:
             error_msg = f"Agent execution exception: {str(e)}"
 
             await self.trace_logger.log_event(
-                event_type=TraceEventType.AGENT_ERROR, message=error_msg, level=TraceLevel.ERROR, task_id=task.task_id
+                event_type=TraceEventType.AGENT_ERROR,
+                message=error_msg,
+                level=TraceLevel.ERROR,
+                task_id=task.task_id,
             )
 
             return AgentResult(
                 task_id=task.task_id,
-                agent_name=task.agent_name if hasattr(task, "agent_name") else "unknown",
+                agent_name=(
+                    task.agent_name if hasattr(task, "agent_name") else "unknown"
+                ),
                 success=False,
                 error=error_msg,
                 execution_time_ms=0.0,
@@ -262,7 +285,11 @@ class ParallelCoordinator:
         description_lower = task.description.lower()
 
         # Check for debug keywords first (higher priority)
-        if "debug" in description_lower or "investigate" in description_lower or "bug" in description_lower:
+        if (
+            "debug" in description_lower
+            or "investigate" in description_lower
+            or "bug" in description_lower
+        ):
             return "agent-debug-intelligence"
         # Then check for generation keywords
         elif (
@@ -275,7 +302,10 @@ class ParallelCoordinator:
         # If contains "code" but not debug/generate, check context
         elif "code" in description_lower:
             # If it's about analyzing/fixing code, use debug intelligence
-            if any(word in description_lower for word in ["analyze", "fix", "error", "issue", "problem"]):
+            if any(
+                word in description_lower
+                for word in ["analyze", "fix", "error", "issue", "problem"]
+            ):
                 return "agent-debug-intelligence"
             # Otherwise use code generator
             return "agent-contract-driven-generator"

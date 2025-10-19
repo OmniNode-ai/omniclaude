@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for Template Cache (Phase 7 Stream 2)
+Comprehensive tests for Template Cache (Agent Framework)
 
 Tests cover:
 - Cache hit/miss behavior
@@ -17,8 +17,8 @@ import pytest
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 import time
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from agents.lib.template_cache import TemplateCache
 
@@ -28,7 +28,9 @@ class TestCacheBasics:
 
     def test_cache_initialization(self):
         """Test cache initialization with different configurations"""
-        cache = TemplateCache(max_templates=50, max_size_mb=25, ttl_seconds=1800, enable_persistence=False)
+        cache = TemplateCache(
+            max_templates=50, max_size_mb=25, ttl_seconds=1800, enable_persistence=False
+        )
 
         assert cache.max_templates == 50
         assert cache.max_size_mb == 25
@@ -163,7 +165,9 @@ class TestContentBasedInvalidation:
         template_file.write_text("# Original content\n")
 
         # Load and cache
-        content1, hit1 = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        content1, hit1 = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text()
+        )
         assert not hit1
         assert "Original content" in content1
 
@@ -175,7 +179,9 @@ class TestContentBasedInvalidation:
         template_file.write_text("# Modified content\n")
 
         # Next access should detect change and reload
-        content3, hit3 = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        content3, hit3 = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text()
+        )
         assert not hit3, "Modified file should invalidate cache"
         assert "Modified content" in content3
         assert cache.invalidations == 1
@@ -221,13 +227,17 @@ class TestLRUEviction:
 
         # template_0 should be evicted (least recently used)
         template_0_file = tmp_path / "template_0.py"
-        _, hit = cache.get("template_0", "TEST", template_0_file, lambda p: p.read_text())
+        _, hit = cache.get(
+            "template_0", "TEST", template_0_file, lambda p: p.read_text()
+        )
         assert not hit, "Evicted template should be cache miss"
 
     def test_size_limit_eviction(self, tmp_path):
         """Test eviction based on size limit"""
         # Create small cache (1MB)
-        cache = TemplateCache(max_size_mb=1, max_templates=100, enable_persistence=False)
+        cache = TemplateCache(
+            max_size_mb=1, max_templates=100, enable_persistence=False
+        )
 
         # Create large templates
         large_content = "# " + ("X" * 500_000)  # ~500KB each
@@ -237,7 +247,9 @@ class TestLRUEviction:
             template_file = tmp_path / f"large_template_{i}.py"
             template_file.write_text(large_content)
             template_files.append(template_file)
-            cache.get(f"large_template_{i}", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                f"large_template_{i}", "TEST", template_file, lambda p: p.read_text()
+            )
 
         # Should have evicted some templates due to size limit
         stats = cache.get_stats()
@@ -316,7 +328,9 @@ class TestTTLExpiration:
         # Multiple accesses within TTL should hit cache
         for _ in range(5):
             time.sleep(0.5)  # Total 2.5 seconds, well within 5 second TTL
-            _, hit = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+            _, hit = cache.get(
+                "template", "TEST", template_file, lambda p: p.read_text()
+            )
             assert hit, "Template should remain cached within TTL"
 
 
@@ -341,7 +355,9 @@ class TestCacheWarmup:
 
         # Subsequent accesses should be cache hits
         template_file = tmp_path / "effect_node_template.py"
-        _, hit = cache.get("EFFECT_template", "EFFECT", template_file, lambda p: p.read_text())
+        _, hit = cache.get(
+            "EFFECT_template", "EFFECT", template_file, lambda p: p.read_text()
+        )
         assert hit, "Warmed template should be cache hit"
 
     def test_warmup_skips_missing_templates(self, tmp_path):
@@ -410,7 +426,9 @@ class TestStatistics:
             template_file.write_text(f"# Template {i}\n")
             # Access different numbers of times
             for _ in range(i + 1):
-                cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
+                cache.get(
+                    f"template_{i}", "TEST", template_file, lambda p: p.read_text()
+                )
 
         detailed_stats = cache.get_detailed_stats()
         assert "templates" in detailed_stats
@@ -423,7 +441,9 @@ class TestStatistics:
 
     def test_capacity_usage_metrics(self, tmp_path):
         """Test capacity usage percentage calculations"""
-        cache = TemplateCache(max_templates=10, max_size_mb=10, enable_persistence=False)
+        cache = TemplateCache(
+            max_templates=10, max_size_mb=10, enable_persistence=False
+        )
 
         # Add 3 templates
         for i in range(3):
@@ -474,11 +494,18 @@ class TestThreadSafety:
 
         def load_template(template_id, template_file):
             for _ in range(3):
-                cache.get(f"template_{template_id}", "TEST", template_file, lambda p: p.read_text())
+                cache.get(
+                    f"template_{template_id}",
+                    "TEST",
+                    template_file,
+                    lambda p: p.read_text(),
+                )
 
         # Load templates concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(load_template, tid, tfile) for tid, tfile in templates]
+            futures = [
+                executor.submit(load_template, tid, tfile) for tid, tfile in templates
+            ]
             for future in futures:
                 future.result()
 
@@ -557,7 +584,8 @@ class TestPerformanceBenchmark:
         # Cache should show measurable improvement
         # Note: Even with OS caching, avoiding file I/O should provide some benefit
         assert avg_cached_ms < avg_uncached_ms, (
-            f"Cache should improve performance. " f"Uncached: {avg_uncached_ms:.3f}ms, Cached: {avg_cached_ms:.3f}ms"
+            f"Cache should improve performance. "
+            f"Uncached: {avg_uncached_ms:.3f}ms, Cached: {avg_cached_ms:.3f}ms"
         )
 
         # Verify cache is actually being used

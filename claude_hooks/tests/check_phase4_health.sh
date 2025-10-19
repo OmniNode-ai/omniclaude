@@ -49,30 +49,30 @@ test_endpoint() {
     local endpoint=$2
     local description=$3
     local data=$4
-    
+
     echo "-----------------------------------------------------------------------"
     echo "Testing: $description"
     echo "  $method $endpoint"
     echo "-----------------------------------------------------------------------"
-    
+
     # Build curl command
     local curl_cmd="curl -s -w '\n%{http_code}' -X $method"
-    
+
     if [ -n "$data" ]; then
         curl_cmd="$curl_cmd -H 'Content-Type: application/json' -d '$data'"
     fi
-    
+
     curl_cmd="$curl_cmd $API_BASE_URL$endpoint"
-    
+
     # Execute request
     local response=$(eval $curl_cmd)
     local http_code=$(echo "$response" | tail -n1)
     local body=$(echo "$response" | sed '$d')
-    
+
     # Check status code
     if [ "$http_code" == "200" ] || [ "$http_code" == "201" ]; then
         echo -e "${GREEN}✓ HTTP $http_code${NC}"
-        
+
         # Pretty print JSON if jq is available
         if [ "$JQ_AVAILABLE" = true ] && echo "$body" | jq . &> /dev/null; then
             echo ""
@@ -80,7 +80,7 @@ test_endpoint() {
         else
             echo "$body"
         fi
-        
+
         echo ""
         TESTS_PASSED=$((TESTS_PASSED + 1))
         return 0

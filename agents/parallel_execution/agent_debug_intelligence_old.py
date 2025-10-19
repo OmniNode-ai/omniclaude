@@ -7,11 +7,11 @@ Based on agent-debug-intelligence.yaml configuration.
 """
 
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 
 class DebugIntelligenceAgent:
@@ -48,7 +48,10 @@ class DebugIntelligenceAgent:
         self._current_trace_id = await self.trace_logger.start_agent_trace(
             agent_name=self.config.agent_name,
             task_id=task.task_id,
-            metadata={"domain": self.config.agent_domain, "input_data": task.input_data},
+            metadata={
+                "domain": self.config.agent_domain,
+                "input_data": task.input_data,
+            },
         )
 
         try:
@@ -87,18 +90,24 @@ class DebugIntelligenceAgent:
                 for key, context_item in pre_gathered_context.items():
                     context_type = context_item.get("type")
                     if context_type == "rag" and "domain" in key:
-                        intelligence["domain_patterns"] = context_item.get("content", {})
+                        intelligence["domain_patterns"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "pattern":
                         intelligence["anti_patterns"] = context_item.get("content", {})
                     elif context_type == "file":
                         # Could be used for analyzing related files
-                        intelligence.setdefault("related_files", []).append(context_item.get("content", ""))
+                        intelligence.setdefault("related_files", []).append(
+                            context_item.get("content", "")
+                        )
 
                 # Still need to assess the problematic code itself
                 if self.config.archon_mcp_enabled and problematic_code:
                     try:
                         quality_result = await self.mcp_client.assess_code_quality(
-                            content=problematic_code, source_path=file_path, language=language
+                            content=problematic_code,
+                            source_path=file_path,
+                            language=language,
                         )
                         intelligence["code_quality"] = quality_result
                     except Exception as e:
@@ -128,7 +137,9 @@ class DebugIntelligenceAgent:
                     task_id=task.task_id,
                 )
 
-                intelligence = await self._gather_intelligence(problematic_code, file_path, language, error_message)
+                intelligence = await self._gather_intelligence(
+                    problematic_code, file_path, language, error_message
+                )
 
             # Phase 2: BFROS Framework Analysis
             await self.trace_logger.log_event(
@@ -140,7 +151,9 @@ class DebugIntelligenceAgent:
             )
 
             bfros_analysis = self._apply_bfros_framework(
-                problematic_code=problematic_code, error_message=error_message, intelligence=intelligence
+                problematic_code=problematic_code,
+                error_message=error_message,
+                intelligence=intelligence,
             )
 
             # Phase 3: Root Cause Analysis
@@ -152,7 +165,9 @@ class DebugIntelligenceAgent:
                 task_id=task.task_id,
             )
 
-            root_cause = self._determine_root_cause(intelligence=intelligence, bfros_analysis=bfros_analysis)
+            root_cause = self._determine_root_cause(
+                intelligence=intelligence, bfros_analysis=bfros_analysis
+            )
 
             # Phase 4: Solution Generation
             await self.trace_logger.log_event(
@@ -164,7 +179,9 @@ class DebugIntelligenceAgent:
             )
 
             solution = self._generate_solution(
-                problematic_code=problematic_code, root_cause=root_cause, intelligence=intelligence
+                problematic_code=problematic_code,
+                root_cause=root_cause,
+                intelligence=intelligence,
             )
 
             # Calculate execution time
@@ -177,9 +194,13 @@ class DebugIntelligenceAgent:
                 "bfros_analysis": bfros_analysis,
                 "root_cause": root_cause,
                 "solution": solution,
-                "quality_improvement": self._calculate_quality_improvement(intelligence, solution),
+                "quality_improvement": self._calculate_quality_improvement(
+                    intelligence, solution
+                ),
                 "root_cause_confidence": root_cause.get("confidence_score", 0.0),
-                "intelligence_sources": len(intelligence.get("domain_patterns", {}).get("results", {})),
+                "intelligence_sources": len(
+                    intelligence.get("domain_patterns", {}).get("results", {})
+                ),
             }
 
             # Create result
@@ -194,7 +215,9 @@ class DebugIntelligenceAgent:
 
             # End trace successfully
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -221,7 +244,9 @@ class DebugIntelligenceAgent:
                 metadata={"error": str(e)},
             )
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             return AgentResult(
                 task_id=task.task_id,
@@ -232,7 +257,9 @@ class DebugIntelligenceAgent:
                 trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(self, code: str, file_path: str, language: str, error: str) -> Dict[str, Any]:
+    async def _gather_intelligence(
+        self, code: str, file_path: str, language: str, error: str
+    ) -> Dict[str, Any]:
         """
         Gather pre-investigation intelligence using MCP tools.
 
@@ -351,11 +378,15 @@ class DebugIntelligenceAgent:
             "root_cause_factors": {
                 "quality_issues": quality.get("improvement_opportunities", []),
                 "architectural_violations": compliance.get("violations", []),
-                "anti_patterns": intelligence.get("anti_patterns", {}).get("patterns", []),
+                "anti_patterns": intelligence.get("anti_patterns", {}).get(
+                    "patterns", []
+                ),
             },
         }
 
-    def _determine_root_cause(self, intelligence: Dict[str, Any], bfros_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    def _determine_root_cause(
+        self, intelligence: Dict[str, Any], bfros_analysis: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Determine root cause with confidence scoring.
 
@@ -398,12 +429,19 @@ class DebugIntelligenceAgent:
                 "pattern_issues": factors.get("anti_patterns", []),
             },
             "confidence_score": confidence_score,
-            "confidence_level": "High" if confidence_score >= 0.7 else "Medium" if confidence_score >= 0.5 else "Low",
+            "confidence_level": (
+                "High"
+                if confidence_score >= 0.7
+                else "Medium" if confidence_score >= 0.5 else "Low"
+            ),
             "validation_method": "Intelligence-based multi-factor analysis",
         }
 
     def _generate_solution(
-        self, problematic_code: str, root_cause: Dict[str, Any], intelligence: Dict[str, Any]
+        self,
+        problematic_code: str,
+        root_cause: Dict[str, Any],
+        intelligence: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Generate optimal solution addressing root cause.
@@ -436,7 +474,9 @@ class DebugIntelligenceAgent:
             },
         }
 
-    def _calculate_quality_improvement(self, intelligence: Dict[str, Any], solution: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_quality_improvement(
+        self, intelligence: Dict[str, Any], solution: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Calculate expected quality improvement from solution.
 
@@ -459,7 +499,9 @@ class DebugIntelligenceAgent:
             "after": after_score,
             "delta": estimated_improvement,
             "improvement_percentage": (
-                (estimated_improvement / max(0.01, before_score)) * 100 if before_score > 0 else 0
+                (estimated_improvement / max(0.01, before_score)) * 100
+                if before_score > 0
+                else 0
             ),
             "meets_minimum": after_score >= 0.6,
         }

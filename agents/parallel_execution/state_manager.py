@@ -34,9 +34,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
-
 from database_integration import DatabaseIntegrationLayer, get_database_layer
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -372,7 +371,9 @@ class NodeStateSnapshotEffect:
             logger.error(f"Failed to link error to success: {e}")
             raise
 
-    async def query_similar_snapshots(self, task_signature: str, limit: int = 5) -> List[ModelStateSnapshot]:
+    async def query_similar_snapshots(
+        self, task_signature: str, limit: int = 5
+    ) -> List[ModelStateSnapshot]:
         """Query snapshots with similar task signatures."""
         query = """
             SELECT
@@ -389,7 +390,9 @@ class NodeStateSnapshotEffect:
         """
 
         try:
-            rows = await self.db.execute_query(query, f"%{task_signature}%", limit, fetch="all")
+            rows = await self.db.execute_query(
+                query, f"%{task_signature}%", limit, fetch="all"
+            )
 
             snapshots = []
             for row in rows:
@@ -412,7 +415,9 @@ class NodeStateDiffCompute:
     """
 
     @staticmethod
-    def compute_diff(before_state: Dict[str, Any], after_state: Dict[str, Any]) -> Dict[str, Any]:
+    def compute_diff(
+        before_state: Dict[str, Any], after_state: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Compute difference between two states.
 
@@ -430,7 +435,10 @@ class NodeStateDiffCompute:
             if key not in before_state:
                 diff["added"][key] = after_value
             elif before_state[key] != after_value:
-                diff["modified"][key] = {"before": before_state[key], "after": after_value}
+                diff["modified"][key] = {
+                    "before": before_state[key],
+                    "after": after_value,
+                }
 
         # Find removed keys
         for key in before_state:
@@ -543,7 +551,9 @@ class StateManager:
     """
 
     def __init__(
-        self, db_layer: Optional[DatabaseIntegrationLayer] = None, verbose_mode: VerboseMode = VerboseMode.VERBOSE
+        self,
+        db_layer: Optional[DatabaseIntegrationLayer] = None,
+        verbose_mode: VerboseMode = VerboseMode.VERBOSE,
     ):
         """
         Initialize state manager.
@@ -576,7 +586,9 @@ class StateManager:
         try:
             # Verify database connection
             if not self.db.pool:
-                logger.warning("Database pool not initialized, attempting initialization...")
+                logger.warning(
+                    "Database pool not initialized, attempting initialization..."
+                )
                 success = await self.db.initialize()
                 if not success:
                     logger.error("Failed to initialize database pool")
@@ -700,7 +712,8 @@ class StateManager:
 
         if self.verbose_mode == VerboseMode.VERBOSE:
             logger.error(
-                f"Recorded {error_severity.value} error: {error_id} " f"({error.error_type}: {error.error_message})"
+                f"Recorded {error_severity.value} error: {error_id} "
+                f"({error.error_type}: {error.error_message})"
             )
 
         return error_id
@@ -815,7 +828,9 @@ class StateManager:
 
         return link_id
 
-    async def recall_similar_states(self, task_signature: str, limit: int = 5) -> List[ModelStateSnapshot]:
+    async def recall_similar_states(
+        self, task_signature: str, limit: int = 5
+    ) -> List[ModelStateSnapshot]:
         """
         Recall states similar to given task signature.
 
@@ -827,10 +842,15 @@ class StateManager:
             List of similar state snapshots
         """
         # Query similar snapshots
-        snapshots = await self.snapshot_effect.query_similar_snapshots(task_signature=task_signature, limit=limit)
+        snapshots = await self.snapshot_effect.query_similar_snapshots(
+            task_signature=task_signature, limit=limit
+        )
 
         if self.verbose_mode == VerboseMode.VERBOSE:
-            logger.info(f"Recalled {len(snapshots)} similar states " f"for signature: '{task_signature[:50]}...'")
+            logger.info(
+                f"Recalled {len(snapshots)} similar states "
+                f"for signature: '{task_signature[:50]}...'"
+            )
 
         return snapshots
 

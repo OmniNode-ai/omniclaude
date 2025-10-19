@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
 import yaml
 
 from .monitoring import AlertSeverity, MonitoringAlert
@@ -99,7 +100,7 @@ class ManagedAlert:
 
 class AlertManager:
     """
-    Advanced alert management system for Phase 7 monitoring.
+    Advanced alert management system for agent framework monitoring.
 
     Features:
     - Alert rule configuration and evaluation
@@ -172,7 +173,9 @@ class AlertManager:
                 for channel_config in config["channels"]:
                     severity_filter = None
                     if "severity_filter" in channel_config:
-                        severity_filter = {AlertSeverity(s) for s in channel_config["severity_filter"]}
+                        severity_filter = {
+                            AlertSeverity(s) for s in channel_config["severity_filter"]
+                        }
 
                     channel = AlertChannel(
                         name=channel_config["name"],
@@ -188,9 +191,13 @@ class AlertManager:
                 for policy_config in config["escalation_policies"]:
                     policy = EscalationPolicy(
                         name=policy_config["name"],
-                        initial_delay_seconds=policy_config.get("initial_delay_seconds", 300),
+                        initial_delay_seconds=policy_config.get(
+                            "initial_delay_seconds", 300
+                        ),
                         escalation_levels=policy_config.get("escalation_levels", []),
-                        repeat_interval_seconds=policy_config.get("repeat_interval_seconds", 1800),
+                        repeat_interval_seconds=policy_config.get(
+                            "repeat_interval_seconds", 1800
+                        ),
                         max_escalations=policy_config.get("max_escalations", 3),
                     )
                     self.policies[policy.name] = policy
@@ -245,7 +252,9 @@ class AlertManager:
         self.policies[policy.name] = policy
         logger.info(f"Added escalation policy: {policy.name}")
 
-    async def process_alert(self, alert: MonitoringAlert, escalation_policy: Optional[str] = None) -> ManagedAlert:
+    async def process_alert(
+        self, alert: MonitoringAlert, escalation_policy: Optional[str] = None
+    ) -> ManagedAlert:
         """Process an incoming alert.
 
         Args:
@@ -285,7 +294,11 @@ class AlertManager:
 
             # Start escalation if policy specified
             if escalation_policy and escalation_policy in self.policies:
-                asyncio.create_task(self._handle_escalation(managed_alert, self.policies[escalation_policy]))
+                asyncio.create_task(
+                    self._handle_escalation(
+                        managed_alert, self.policies[escalation_policy]
+                    )
+                )
 
             return managed_alert
 
@@ -332,16 +345,24 @@ class AlertManager:
                 continue
 
             # Check severity filter
-            if channel.severity_filter and alert.severity not in channel.severity_filter:
+            if (
+                channel.severity_filter
+                and alert.severity not in channel.severity_filter
+            ):
                 continue
 
             # Send to channel
             try:
                 await self._send_to_channel(channel, alert)
             except Exception as e:
-                logger.error(f"Failed to send alert to channel {channel.name}: {e}", exc_info=True)
+                logger.error(
+                    f"Failed to send alert to channel {channel.name}: {e}",
+                    exc_info=True,
+                )
 
-    async def _send_to_channel(self, channel: AlertChannel, alert: MonitoringAlert) -> None:
+    async def _send_to_channel(
+        self, channel: AlertChannel, alert: MonitoringAlert
+    ) -> None:
         """Send alert to a specific channel.
 
         Args:
@@ -370,16 +391,22 @@ class AlertManager:
         elif channel.channel_type == "webhook":
             # Webhook channel - send HTTP POST
             # This would require aiohttp or similar
-            logger.info(f"Would send webhook to {channel.config.get('url')}: {alert.message}")
+            logger.info(
+                f"Would send webhook to {channel.config.get('url')}: {alert.message}"
+            )
 
         elif channel.channel_type == "email":
             # Email channel - send email notification
-            logger.info(f"Would send email to {channel.config.get('recipients')}: {alert.message}")
+            logger.info(
+                f"Would send email to {channel.config.get('recipients')}: {alert.message}"
+            )
 
         else:
             logger.warning(f"Unknown channel type: {channel.channel_type}")
 
-    async def _handle_escalation(self, managed_alert: ManagedAlert, policy: EscalationPolicy) -> None:
+    async def _handle_escalation(
+        self, managed_alert: ManagedAlert, policy: EscalationPolicy
+    ) -> None:
         """Handle alert escalation according to policy.
 
         Args:
@@ -410,13 +437,17 @@ class AlertManager:
             # Notify escalation channels
             for channel_name in level_config.get("channels", []):
                 if channel_name in self.channels:
-                    await self._send_to_channel(self.channels[channel_name], managed_alert.alert)
+                    await self._send_to_channel(
+                        self.channels[channel_name], managed_alert.alert
+                    )
 
             # Wait for repeat interval
             if level_idx < len(policy.escalation_levels) - 1:
                 await asyncio.sleep(policy.repeat_interval_seconds)
 
-    async def acknowledge_alert(self, alert_id: str, acknowledged_by: str, note: Optional[str] = None) -> bool:
+    async def acknowledge_alert(
+        self, alert_id: str, acknowledged_by: str, note: Optional[str] = None
+    ) -> bool:
         """Acknowledge an alert.
 
         Args:
@@ -439,11 +470,16 @@ class AlertManager:
             if note:
                 managed_alert.metadata["acknowledgement_note"] = note
 
-            logger.info(f"Alert acknowledged by {acknowledged_by}: {alert_id}", extra={"alert_id": alert_id})
+            logger.info(
+                f"Alert acknowledged by {acknowledged_by}: {alert_id}",
+                extra={"alert_id": alert_id},
+            )
 
             return True
 
-    async def resolve_alert(self, alert_id: str, resolution_note: Optional[str] = None) -> bool:
+    async def resolve_alert(
+        self, alert_id: str, resolution_note: Optional[str] = None
+    ) -> bool:
         """Resolve an alert.
 
         Args:
@@ -477,7 +513,9 @@ class AlertManager:
 
             return True
 
-    async def suppress_alert(self, alert_id: str, duration_minutes: int, reason: Optional[str] = None) -> bool:
+    async def suppress_alert(
+        self, alert_id: str, duration_minutes: int, reason: Optional[str] = None
+    ) -> bool:
         """Suppress an alert for a specified duration.
 
         Args:
@@ -494,12 +532,17 @@ class AlertManager:
 
             managed_alert = self.active_alerts[alert_id]
             managed_alert.status = AlertStatus.SUPPRESSED
-            managed_alert.suppressed_until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+            managed_alert.suppressed_until = datetime.now(timezone.utc) + timedelta(
+                minutes=duration_minutes
+            )
 
             if reason:
                 managed_alert.metadata["suppression_reason"] = reason
 
-            logger.info(f"Alert suppressed for {duration_minutes} minutes: {alert_id}", extra={"alert_id": alert_id})
+            logger.info(
+                f"Alert suppressed for {duration_minutes} minutes: {alert_id}",
+                extra={"alert_id": alert_id},
+            )
 
             return True
 
@@ -554,7 +597,12 @@ class AlertManager:
             "active_alerts": len(self.active_alerts),
             "by_severity": {"critical": 0, "warning": 0, "info": 0},
             "by_component": defaultdict(int),
-            "by_status": {"active": 0, "acknowledged": 0, "resolved": 0, "suppressed": 0},
+            "by_status": {
+                "active": 0,
+                "acknowledged": 0,
+                "resolved": 0,
+                "suppressed": 0,
+            },
             "avg_resolution_time_minutes": 0.0,
             "escalated_count": 0,
         }
@@ -573,7 +621,9 @@ class AlertManager:
 
             # Track resolution times
             if alert.resolved_at:
-                resolution_time = (alert.resolved_at - alert.alert.created_at).total_seconds() / 60
+                resolution_time = (
+                    alert.resolved_at - alert.alert.created_at
+                ).total_seconds() / 60
                 resolution_times.append(resolution_time)
 
             # Count escalations
@@ -582,7 +632,9 @@ class AlertManager:
 
         # Calculate average resolution time
         if resolution_times:
-            stats["avg_resolution_time_minutes"] = sum(resolution_times) / len(resolution_times)
+            stats["avg_resolution_time_minutes"] = sum(resolution_times) / len(
+                resolution_times
+            )
 
         return stats
 
@@ -612,7 +664,11 @@ class AlertManager:
                     "name": channel.name,
                     "type": channel.channel_type,
                     "config": channel.config,
-                    "severity_filter": [s.value for s in channel.severity_filter] if channel.severity_filter else None,
+                    "severity_filter": (
+                        [s.value for s in channel.severity_filter]
+                        if channel.severity_filter
+                        else None
+                    ),
                     "enabled": channel.enabled,
                 }
                 for channel in self.channels.values()
@@ -652,7 +708,9 @@ def get_alert_manager(config_path: Optional[Path] = None) -> AlertManager:
 
 
 # Convenience functions
-async def process_alert(alert: MonitoringAlert, escalation_policy: Optional[str] = None) -> ManagedAlert:
+async def process_alert(
+    alert: MonitoringAlert, escalation_policy: Optional[str] = None
+) -> ManagedAlert:
     """Process an alert.
 
     Args:
@@ -666,7 +724,9 @@ async def process_alert(alert: MonitoringAlert, escalation_policy: Optional[str]
     return await manager.process_alert(alert, escalation_policy)
 
 
-async def acknowledge_alert(alert_id: str, acknowledged_by: str, note: Optional[str] = None) -> bool:
+async def acknowledge_alert(
+    alert_id: str, acknowledged_by: str, note: Optional[str] = None
+) -> bool:
     """Acknowledge an alert.
 
     Args:

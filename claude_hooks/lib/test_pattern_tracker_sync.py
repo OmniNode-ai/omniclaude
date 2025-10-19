@@ -2,6 +2,7 @@
 """Quick verification script for PatternTrackerSync."""
 
 import sys
+
 from lib.pattern_tracker_sync import PatternTrackerSync
 
 
@@ -33,7 +34,7 @@ def calculate_fibonacci(n: int) -> int:
         "violations_found": 2,  # Example: No memoization, recursive complexity
     }
 
-    print(f"\n📝 Tracking pattern...", file=sys.stderr)
+    print("\n📝 Tracking pattern...", file=sys.stderr)
     pattern_id = tracker.track_pattern_creation(code, context)
 
     if pattern_id:
@@ -42,7 +43,7 @@ def calculate_fibonacci(n: int) -> int:
         print(f"   Quality: {context['quality_score']}", file=sys.stderr)
         return True
     else:
-        print(f"\n❌ FAILED! Pattern was not tracked", file=sys.stderr)
+        print("\n❌ FAILED! Pattern was not tracked", file=sys.stderr)
         return False
 
 
@@ -50,7 +51,7 @@ def test_quality_calculation():
     """Test quality score calculation."""
     tracker = PatternTrackerSync()
 
-    print(f"\n" + "=" * 60, file=sys.stderr)
+    print("\n" + "=" * 60, file=sys.stderr)
     print("Testing Quality Score Calculation", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
@@ -58,7 +59,11 @@ def test_quality_calculation():
         ([], 1.0, "No violations"),
         (["violation1"], 0.9, "1 violation"),
         (["v1", "v2", "v3"], 0.7, "3 violations"),
-        (["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"], 0.0, "10 violations"),
+        (
+            ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"],
+            0.0,
+            "10 violations",
+        ),
         (["v1"] * 15, 0.0, "15 violations (floor at 0.0)"),
     ]
 
@@ -68,7 +73,10 @@ def test_quality_calculation():
         passed = score == expected
         all_passed = all_passed and passed
         status = "✅" if passed else "❌"
-        print(f"{status} {description}: {score:.2f} (expected {expected:.2f})", file=sys.stderr)
+        print(
+            f"{status} {description}: {score:.2f} (expected {expected:.2f})",
+            file=sys.stderr,
+        )
 
     return all_passed
 
@@ -83,15 +91,21 @@ if __name__ == "__main__":
     test2_passed = test_quality_calculation()
 
     # Summary
-    print(f"\n" + "=" * 60, file=sys.stderr)
+    print("\n" + "=" * 60, file=sys.stderr)
     print("Test Summary", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
-    print(f"Basic Tracking: {'✅ PASSED' if test1_passed else '❌ FAILED'}", file=sys.stderr)
-    print(f"Quality Calculation: {'✅ PASSED' if test2_passed else '❌ FAILED'}", file=sys.stderr)
+    print(
+        f"Basic Tracking: {'✅ PASSED' if test1_passed else '❌ FAILED'}",
+        file=sys.stderr,
+    )
+    print(
+        f"Quality Calculation: {'✅ PASSED' if test2_passed else '❌ FAILED'}",
+        file=sys.stderr,
+    )
 
     if test1_passed and test2_passed:
-        print(f"\n🎉 All tests passed!", file=sys.stderr)
+        print("\n🎉 All tests passed!", file=sys.stderr)
         sys.exit(0)
     else:
-        print(f"\n⚠️ Some tests failed", file=sys.stderr)
+        print("\n⚠️ Some tests failed", file=sys.stderr)
         sys.exit(1)

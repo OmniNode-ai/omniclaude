@@ -57,7 +57,7 @@ class AgentAnalytics:
             await conn.execute(
                 """
                 INSERT INTO agent_performance (
-                    id, agent_id, task_type, success, duration_ms, run_id, 
+                    id, agent_id, task_type, success, duration_ms, run_id,
                     correlation_id, metadata, created_at
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW()
@@ -279,8 +279,12 @@ class AgentAnalytics:
             for row in agent_performance:
                 # Calculate confidence score based on success rate and consistency
                 success_rate = row["success_rate_percent"] or 0
-                duration_consistency = 1.0 - (row["duration_stddev"] or 0) / max(row["avg_duration_ms"] or 1, 1)
-                confidence_score = (success_rate / 100.0) * 0.7 + duration_consistency * 0.3
+                duration_consistency = 1.0 - (row["duration_stddev"] or 0) / max(
+                    row["avg_duration_ms"] or 1, 1
+                )
+                confidence_score = (
+                    success_rate / 100.0
+                ) * 0.7 + duration_consistency * 0.3
 
                 recommendations.append(
                     {
@@ -292,13 +296,17 @@ class AgentAnalytics:
                         "avg_duration_ms": row["avg_duration_ms"],
                         "duration_stddev": row["duration_stddev"],
                         "confidence_score": confidence_score,
-                        "recommendation_reason": self._get_recommendation_reason(success_rate, row["avg_duration_ms"]),
+                        "recommendation_reason": self._get_recommendation_reason(
+                            success_rate, row["avg_duration_ms"]
+                        ),
                     }
                 )
 
             return recommendations
 
-    def _get_recommendation_reason(self, success_rate: float, avg_duration: float) -> str:
+    def _get_recommendation_reason(
+        self, success_rate: float, avg_duration: float
+    ) -> str:
         """Generates a human-readable reason for the recommendation."""
         if success_rate >= 90:
             if avg_duration < 1000:  # Less than 1 second
@@ -374,30 +382,48 @@ class AgentAnalytics:
                 second_half = trends[len(trends) // 2 :]
 
                 first_avg_success = (
-                    sum(row["success_rate_percent"] or 0 for row in first_half) / len(first_half) if first_half else 0
+                    sum(row["success_rate_percent"] or 0 for row in first_half)
+                    / len(first_half)
+                    if first_half
+                    else 0
                 )
                 second_avg_success = (
-                    sum(row["success_rate_percent"] or 0 for row in second_half) / len(second_half)
+                    sum(row["success_rate_percent"] or 0 for row in second_half)
+                    / len(second_half)
                     if second_half
                     else 0
                 )
 
                 first_avg_duration = (
-                    sum(row["avg_duration_ms"] or 0 for row in first_half) / len(first_half) if first_half else 0
+                    sum(row["avg_duration_ms"] or 0 for row in first_half)
+                    / len(first_half)
+                    if first_half
+                    else 0
                 )
                 second_avg_duration = (
-                    sum(row["avg_duration_ms"] or 0 for row in second_half) / len(second_half) if second_half else 0
+                    sum(row["avg_duration_ms"] or 0 for row in second_half)
+                    / len(second_half)
+                    if second_half
+                    else 0
                 )
 
                 success_trend = (
                     "improving"
                     if second_avg_success > first_avg_success
-                    else "declining" if second_avg_success < first_avg_success else "stable"
+                    else (
+                        "declining"
+                        if second_avg_success < first_avg_success
+                        else "stable"
+                    )
                 )
                 duration_trend = (
                     "improving"
                     if second_avg_duration < first_avg_duration
-                    else "declining" if second_avg_duration > first_avg_duration else "stable"
+                    else (
+                        "declining"
+                        if second_avg_duration > first_avg_duration
+                        else "stable"
+                    )
                 )
             else:
                 success_trend = "stable"
@@ -411,8 +437,12 @@ class AgentAnalytics:
                 "success_trend": success_trend,
                 "duration_trend": duration_trend,
                 "trend_summary": {
-                    "success_rate_change": second_avg_success - first_avg_success if trends else 0,
-                    "duration_change": second_avg_duration - first_avg_duration if trends else 0,
+                    "success_rate_change": (
+                        second_avg_success - first_avg_success if trends else 0
+                    ),
+                    "duration_change": (
+                        second_avg_duration - first_avg_duration if trends else 0
+                    ),
                 },
             }
 
@@ -420,7 +450,9 @@ class AgentAnalytics:
         """Checks if the performance cache is still valid."""
         if self._last_cache_update is None:
             return False
-        return (datetime.now() - self._last_cache_update).total_seconds() < self._cache_ttl
+        return (
+            datetime.now() - self._last_cache_update
+        ).total_seconds() < self._cache_ttl
 
     def _invalidate_cache(self):
         """Invalidates the performance cache."""
@@ -520,7 +552,9 @@ async def test_agent_analytics():
 
     print(f"✓ Found {len(recommendations)} agent recommendations")
     for rec in recommendations:
-        print(f"  - {rec['agent_id']}: {rec['success_rate_percent']:.1f}% success, {rec['avg_duration_ms']:.0f}ms avg")
+        print(
+            f"  - {rec['agent_id']}: {rec['success_rate_percent']:.1f}% success, {rec['avg_duration_ms']:.0f}ms avg"
+        )
 
     # Test performance summary
     summary = await agent_analytics.get_agent_performance_summary(days=1)

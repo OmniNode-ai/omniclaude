@@ -5,12 +5,12 @@ Modified Performance Test Script - Avoids duplicate key constraints
 This script validates the performance improvements while avoiding API constraints.
 """
 
+import json
 import sys
 import time
-import json
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict
 
 # Add lib to path
 SCRIPT_DIR = Path(__file__).parent
@@ -30,7 +30,11 @@ class ModifiedPerformanceTestSuite:
     """Modified performance testing suite that avoids duplicate constraints."""
 
     def __init__(self):
-        self.results = {"test_timestamp": datetime.now().isoformat(), "sync_tracker": {}, "comparison": {}}
+        self.results = {
+            "test_timestamp": datetime.now().isoformat(),
+            "sync_tracker": {},
+            "comparison": {},
+        }
 
     def test_sync_tracker_unique_patterns(self) -> Dict[str, Any]:
         """Test performance of synchronous tracker with unique patterns."""
@@ -51,14 +55,20 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
             test_patterns.append(unique_code)
 
         test_contexts = [
-            {"event_type": "pattern_created", "file_path": f"/test/unique_file_{i}.py", "language": "python"}
+            {
+                "event_type": "pattern_created",
+                "file_path": f"/test/unique_file_{i}.py",
+                "language": "python",
+            }
             for i in range(10)
         ]
 
         # Test 1: Single operation performance
         start_time = time.time()
         try:
-            pattern_id = tracker.track_pattern_creation(test_patterns[0], test_contexts[0])
+            pattern_id = tracker.track_pattern_creation(
+                test_patterns[0], test_contexts[0]
+            )
             single_op_time = (time.time() - start_time) * 1000
             single_op_success = pattern_id is not None
         except Exception as e:
@@ -87,7 +97,9 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
         cache_hits = 0
         for _ in range(3):
             try:
-                result = tracker.track_pattern_creation(test_patterns[0], test_contexts[0])
+                result = tracker.track_pattern_creation(
+                    test_patterns[0], test_contexts[0]
+                )
                 if result:
                     cache_hits += 1
             except:
@@ -104,17 +116,23 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
             "multi_operations_time": multi_op_time,
             "successful_operations": successful_ops,
             "attempted_operations": 5,
-            "operations_per_second": successful_ops / multi_op_time if multi_op_time > 0 else 0,
+            "operations_per_second": (
+                successful_ops / multi_op_time if multi_op_time > 0 else 0
+            ),
             "cache_test_time": cache_time,
             "cache_hits": cache_hits,
-            "cache_operations_per_second": cache_hits / cache_time if cache_time > 0 else 0,
+            "cache_operations_per_second": (
+                cache_hits / cache_time if cache_time > 0 else 0
+            ),
             "success_rate": (successful_ops / 5) * 100,
             "metrics": metrics,
         }
 
         print(f"✅ Sync Tracker: {result['operations_per_second']:.1f} ops/sec")
         print(f"✅ Success Rate: {result['success_rate']:.1f}%")
-        print(f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec")
+        print(
+            f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec"
+        )
 
         return result
 
@@ -153,7 +171,11 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
                 pattern_id_cache[cache_key] = pattern_id
         cached_time = time.time() - start_time
 
-        caching_improvement = ((uncached_time - cached_time) / uncached_time * 100) if uncached_time > 0 else 0
+        caching_improvement = (
+            ((uncached_time - cached_time) / uncached_time * 100)
+            if uncached_time > 0
+            else 0
+        )
 
         # Test 2: HTTP Connection Pooling Performance
         print("Testing HTTP Connection Pooling...")
@@ -162,7 +184,9 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
         # Test connection pooling setup time
         start_time = time.time()
         session = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=3)
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10, pool_maxsize=20, max_retries=3
+        )
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         setup_time = time.time() - start_time
@@ -174,7 +198,11 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
                 "improvement_percent": caching_improvement,
                 "cache_hit_rate": (len(pattern_id_cache) / iterations) * 100,
             },
-            "connection_pooling": {"setup_time_ms": setup_time * 1000, "pool_connections": 10, "pool_maxsize": 20},
+            "connection_pooling": {
+                "setup_time_ms": setup_time * 1000,
+                "pool_connections": 10,
+                "pool_maxsize": 20,
+            },
         }
 
         print(f"✅ Pattern ID Caching: {caching_improvement:.1f}% improvement")
@@ -219,7 +247,9 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
         # Component improvements
         if "pattern_id_generation" in component_results:
             caching = component_results["pattern_id_generation"]
-            print(f"   Pattern ID Caching: {caching['improvement_percent']:.1f}% improvement")
+            print(
+                f"   Pattern ID Caching: {caching['improvement_percent']:.1f}% improvement"
+            )
 
         if "connection_pooling" in component_results:
             pooling = component_results["connection_pooling"]
@@ -265,7 +295,9 @@ def main():
 
     # Check tracker availability
     print("📋 System Status:")
-    print(f"   Sync Tracker: {'✅ Available' if SYNC_AVAILABLE else '❌ Not Available'}")
+    print(
+        f"   Sync Tracker: {'✅ Available' if SYNC_AVAILABLE else '❌ Not Available'}"
+    )
     print()
 
     # Run performance tests
@@ -281,7 +313,9 @@ def main():
         components = results["components"]
         if "pattern_id_generation" in components:
             caching = components["pattern_id_generation"]
-            print(f"   Pattern ID caching improvement: {caching['improvement_percent']:.1f}%")
+            print(
+                f"   Pattern ID caching improvement: {caching['improvement_percent']:.1f}%"
+            )
 
     if "sync_tracker" in results and results["sync_tracker"].get("available"):
         sync = results["sync_tracker"]

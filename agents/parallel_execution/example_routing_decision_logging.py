@@ -5,6 +5,7 @@ Demonstrates how to use the TraceLogger for routing decision logging.
 """
 
 import asyncio
+
 from trace_logger import get_trace_logger
 
 
@@ -14,7 +15,9 @@ async def example_routing_decision():
 
     # Start a coordinator trace
     coord_id = await logger.start_coordinator_trace(
-        coordinator_type="routing", total_agents=1, metadata={"workflow": "agent_selection"}
+        coordinator_type="routing",
+        total_agents=1,
+        metadata={"workflow": "agent_selection"},
     )
 
     # Log a routing decision
@@ -49,7 +52,11 @@ async def example_routing_decision():
             "3) Strong capability alignment with performance optimization domain"
         ),
         routing_strategy="enhanced_fuzzy_matching",
-        context={"domain": "performance_optimization", "project_type": "database_heavy", "previous_agent": None},
+        context={
+            "domain": "performance_optimization",
+            "project_type": "database_heavy",
+            "previous_agent": None,
+        },
         routing_time_ms=45.3,
     )
 
@@ -102,21 +109,29 @@ async def example_query_routing_decisions():
     recent = await logger.get_recent_routing_decisions(limit=5)
     for event in recent:
         metadata = event.metadata
-        print(f"   - {metadata['selected_agent']} (confidence: {metadata['confidence_score']:.2%})")
+        print(
+            f"   - {metadata['selected_agent']} (confidence: {metadata['confidence_score']:.2%})"
+        )
         print(f"     Request: {metadata['user_request'][:60]}...")
 
     # Get low confidence decisions
     print("\n2. Low confidence routing decisions (<0.7):")
-    low_conf = await logger.get_low_confidence_routing_decisions(confidence_threshold=0.7)
+    low_conf = await logger.get_low_confidence_routing_decisions(
+        confidence_threshold=0.7
+    )
     for event in low_conf:
         metadata = event.metadata
-        print(f"   - {metadata['selected_agent']} (confidence: {metadata['confidence_score']:.2%})")
+        print(
+            f"   - {metadata['selected_agent']} (confidence: {metadata['confidence_score']:.2%})"
+        )
         print(f"     Request: {metadata['user_request'][:60]}...")
         print(f"     Reasoning: {metadata['reasoning'][:80]}...")
 
     # Get decisions for specific agent
     print("\n3. Decisions for agent-debug-intelligence:")
-    agent_decisions = await logger.get_routing_decisions_for_agent("agent-debug-intelligence")
+    agent_decisions = await logger.get_routing_decisions_for_agent(
+        "agent-debug-intelligence"
+    )
     print(f"   Found {len(agent_decisions)} decisions for this agent")
 
     # Get routing statistics

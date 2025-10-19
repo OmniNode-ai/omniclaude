@@ -20,17 +20,17 @@ Usage:
     pytest tests/test_phase4_integration.py::test_pattern_creation_flow -v
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
-from phase4_api_client import Phase4APIClient
 from pattern_id_system import PatternIDSystem, PatternLineageDetector
 from pattern_tracker import PatternTracker
-
+from phase4_api_client import Phase4APIClient
 
 # ============================================================================
 # Test Configuration
@@ -110,7 +110,9 @@ async def test_pattern_creation_flow(api_client, test_code_simple):
     pattern_id = PatternIDSystem.generate_id(test_code_simple, normalize=True)
 
     assert pattern_id is not None, "Pattern ID should be generated"
-    assert len(pattern_id) == 16, f"Pattern ID should be 16 chars, got {len(pattern_id)}"
+    assert (
+        len(pattern_id) == 16
+    ), f"Pattern ID should be 16 chars, got {len(pattern_id)}"
     assert PatternIDSystem.validate_id(pattern_id), "Pattern ID should be valid"
 
     # 2. Track pattern creation
@@ -119,7 +121,11 @@ async def test_pattern_creation_flow(api_client, test_code_simple):
         pattern_name="test_calculate_sum",
         code=test_code_simple,
         language="python",
-        context={"file_path": "/tmp/test.py", "tool": "Write", "session_id": "test-session-123"},
+        context={
+            "file_path": "/tmp/test.py",
+            "tool": "Write",
+            "session_id": "test-session-123",
+        },
     )
 
     # Database might not be available - that's okay
@@ -183,7 +189,9 @@ def test_pattern_id_normalization():
     id3 = PatternIDSystem.generate_id(code3, normalize=True)
 
     # All normalized IDs should be identical
-    assert id1 == id2 == id3, "Normalized IDs should match despite formatting differences"
+    assert (
+        id1 == id2 == id3
+    ), "Normalized IDs should match despite formatting differences"
 
     print(f" Normalization verified: {id1}")
 
@@ -222,15 +230,23 @@ def test_lineage_detection(test_code_simple, test_code_modified):
     Verifies that lineage detection identifies related patterns.
     """
     # Detect derivation
-    result = PatternLineageDetector.detect_derivation(test_code_simple, test_code_modified, language="python")
+    result = PatternLineageDetector.detect_derivation(
+        test_code_simple, test_code_modified, language="python"
+    )
 
     # Verify derivation was detected
     assert result["is_derived"] is True, "Modified code should be detected as derived"
-    assert result["parent_id"] != result["child_id"], "Parent and child should have different IDs"
+    assert (
+        result["parent_id"] != result["child_id"]
+    ), "Parent and child should have different IDs"
     assert result["similarity_score"] > 0.5, "Similarity should be significant"
-    assert result["modification_type"] is not None, "Modification type should be classified"
+    assert (
+        result["modification_type"] is not None
+    ), "Modification type should be classified"
 
-    print(f" Lineage detection: {result['similarity_score']:.2%} similarity, {result['modification_type'].value}")
+    print(
+        f" Lineage detection: {result['similarity_score']:.2%} similarity, {result['modification_type'].value}"
+    )
 
 
 # ============================================================================
@@ -253,7 +269,10 @@ async def test_analytics_flow(api_client, test_code_simple):
     pattern_id = PatternIDSystem.generate_id(test_code_simple)
 
     creation_result = await api_client.track_pattern_creation(
-        pattern_id=pattern_id, pattern_name="test_analytics_pattern", code=test_code_simple, language="python"
+        pattern_id=pattern_id,
+        pattern_name="test_analytics_pattern",
+        code=test_code_simple,
+        language="python",
     )
 
     if not creation_result.get("success"):
@@ -283,7 +302,10 @@ async def test_analytics_flow(api_client, test_code_simple):
 
     # 3. Compute analytics
     analytics = await api_client.compute_analytics(
-        pattern_id=pattern_id, time_window_type="daily", include_performance=True, include_trends=True
+        pattern_id=pattern_id,
+        time_window_type="daily",
+        include_performance=True,
+        include_trends=True,
     )
 
     if analytics.get("success"):
@@ -316,7 +338,9 @@ async def test_api_health_check(api_client):
     """
     health = await api_client.health_check()
 
-    assert health.get("success") or "status" in health, "Health check should return status"
+    assert (
+        health.get("success") or "status" in health
+    ), "Health check should return status"
 
     if "status" in health:
         status = health["status"]
@@ -349,7 +373,12 @@ async def test_pattern_tracker_integration(pattern_tracker, test_code_complex):
     # 1. Track pattern creation
     pattern_id = await pattern_tracker.track_pattern_creation(
         code=test_code_complex,
-        context={"tool": "Write", "language": "python", "file_path": "/tmp/api.py", "session_id": "test-session-456"},
+        context={
+            "tool": "Write",
+            "language": "python",
+            "file_path": "/tmp/api.py",
+            "session_id": "test-session-456",
+        },
         pattern_name="fetch_user_data",
     )
 
@@ -361,7 +390,12 @@ async def test_pattern_tracker_integration(pattern_tracker, test_code_complex):
     try:
         await pattern_tracker.track_pattern_execution(
             pattern_id=pattern_id,
-            metrics={"execution_success": True, "quality_score": 0.92, "violations_found": 0, "execution_time": 0.156},
+            metrics={
+                "execution_success": True,
+                "quality_score": 0.92,
+                "violations_found": 0,
+                "execution_time": 0.156,
+            },
         )
         print(" Execution tracked")
     except Exception as e:
@@ -401,9 +435,14 @@ async def test_graceful_degradation():
     Ensures that failures don't crash the system.
     """
     # Try to connect to non-existent service
-    async with Phase4APIClient(base_url="http://localhost:9999", timeout=1.0, max_retries=1) as client:
+    async with Phase4APIClient(
+        base_url="http://localhost:9999", timeout=1.0, max_retries=1
+    ) as client:
         result = await client.track_pattern_creation(
-            pattern_id="test123456789abc", pattern_name="test_pattern", code="def test(): pass", language="python"
+            pattern_id="test123456789abc",
+            pattern_name="test_pattern",
+            code="def test(): pass",
+            language="python",
         )
 
         # Should return error dict, not raise exception

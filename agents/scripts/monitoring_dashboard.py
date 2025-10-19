@@ -2,7 +2,7 @@
 """
 Monitoring Dashboard Data Generator
 
-Generates comprehensive dashboard data for Phase 7 monitoring including:
+Generates comprehensive dashboard data for agent framework monitoring including:
 - Real-time metrics aggregation
 - Health status visualization data
 - Alert summaries
@@ -29,15 +29,19 @@ from typing import Any, Dict
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.monitoring import (
-    collect_all_metrics,
-    get_monitoring_summary,
-    get_active_alerts,
-    export_prometheus_metrics,
-    AlertSeverity,
-)
-from lib.health_checker import check_system_health, get_overall_health_status, HealthCheckStatus
 from lib.alert_manager import get_alert_statistics
+from lib.health_checker import (
+    HealthCheckStatus,
+    check_system_health,
+    get_overall_health_status,
+)
+from lib.monitoring import (
+    AlertSeverity,
+    collect_all_metrics,
+    export_prometheus_metrics,
+    get_active_alerts,
+    get_monitoring_summary,
+)
 
 
 async def generate_dashboard_data(time_window_minutes: int = 60) -> Dict[str, Any]:
@@ -49,7 +53,10 @@ async def generate_dashboard_data(time_window_minutes: int = 60) -> Dict[str, An
     Returns:
         Dictionary containing all dashboard data
     """
-    print(f"Generating dashboard data (time window: {time_window_minutes} minutes)...", file=sys.stderr)
+    print(
+        f"Generating dashboard data (time window: {time_window_minutes} minutes)...",
+        file=sys.stderr,
+    )
 
     # Collect all metrics
     print("Collecting metrics from all subsystems...", file=sys.stderr)
@@ -120,10 +127,14 @@ async def generate_dashboard_data(time_window_minutes: int = 60) -> Dict[str, An
             "total_components": len(health_results),
             "healthy_components": sum(1 for h in health_results.values() if h.healthy),
             "degraded_components": sum(
-                1 for h in health_results.values() if not h.healthy and h.status == HealthCheckStatus.DEGRADED
+                1
+                for h in health_results.values()
+                if not h.healthy and h.status == HealthCheckStatus.DEGRADED
             ),
             "critical_components": sum(
-                1 for h in health_results.values() if not h.healthy and h.status == HealthCheckStatus.CRITICAL
+                1
+                for h in health_results.values()
+                if not h.healthy and h.status == HealthCheckStatus.CRITICAL
             ),
             "active_alerts": monitoring_summary["alerts"]["active_count"],
             "critical_alerts": monitoring_summary["alerts"]["critical_count"],
@@ -145,7 +156,11 @@ async def generate_dashboard_data(time_window_minutes: int = 60) -> Dict[str, An
             },
         },
         "metrics": metrics,
-        "alerts": {"summary": alert_stats, "active": active_alerts, "monitoring_summary": monitoring_summary["alerts"]},
+        "alerts": {
+            "summary": alert_stats,
+            "active": active_alerts,
+            "monitoring_summary": monitoring_summary["alerts"],
+        },
         "components": {
             "template_cache": _build_template_cache_dashboard(metrics),
             "parallel_generation": _build_parallel_generation_dashboard(metrics),
@@ -177,7 +192,9 @@ def _build_template_cache_dashboard(metrics: Dict[str, Any]) -> Dict[str, Any]:
             "total_templates": cache_data.get("total_templates", 0),
         },
         "by_type": cache_data.get("by_type", []),
-        "status": "healthy" if cache_data.get("overall_hit_rate", 0) >= 0.8 else "degraded",
+        "status": (
+            "healthy" if cache_data.get("overall_hit_rate", 0) >= 0.8 else "degraded"
+        ),
     }
 
 
@@ -198,7 +215,11 @@ def _build_parallel_generation_dashboard(metrics: Dict[str, Any]) -> Dict[str, A
             "avg_speedup": parallel_data.get("avg_speedup", 0.0),
         },
         "by_phase": parallel_data.get("by_phase", []),
-        "status": "healthy" if parallel_data.get("parallel_usage_rate", 0) >= 0.5 else "degraded",
+        "status": (
+            "healthy"
+            if parallel_data.get("parallel_usage_rate", 0) >= 0.5
+            else "degraded"
+        ),
     }
 
 
@@ -219,7 +240,11 @@ def _build_mixin_learning_dashboard(metrics: Dict[str, Any]) -> Dict[str, Any]:
             "avg_compatibility_score": mixin_data.get("avg_compatibility_score", 0.0),
         },
         "by_node_type": mixin_data.get("by_node_type", []),
-        "status": "healthy" if mixin_data.get("overall_success_rate", 0) >= 0.9 else "degraded",
+        "status": (
+            "healthy"
+            if mixin_data.get("overall_success_rate", 0) >= 0.9
+            else "degraded"
+        ),
     }
 
 
@@ -263,7 +288,9 @@ def _build_event_processing_dashboard(metrics: Dict[str, Any]) -> Dict[str, Any]
             "p95_latency_ms": event_data.get("p95_latency_ms", 0.0),
         },
         "by_event_type": event_data.get("by_event_type", []),
-        "status": "healthy" if event_data.get("p95_latency_ms", 0) <= 200 else "degraded",
+        "status": (
+            "healthy" if event_data.get("p95_latency_ms", 0) <= 200 else "degraded"
+        ),
     }
 
 
@@ -285,7 +312,7 @@ def generate_html_dashboard(dashboard_data: Dict[str, Any]) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phase 7 Monitoring Dashboard</title>
+    <title>Agent Framework Monitoring Dashboard</title>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -381,7 +408,7 @@ def generate_html_dashboard(dashboard_data: Dict[str, Any]) -> str:
 </head>
 <body>
     <div class="container">
-        <h1>Phase 7 Monitoring Dashboard</h1>
+        <h1>Agent Framework Monitoring Dashboard</h1>
         <div class="timestamp">Generated: {dashboard_data['generated_at']}</div>
 
         <div class="overview">
@@ -465,11 +492,29 @@ def generate_html_dashboard(dashboard_data: Dict[str, Any]) -> str:
 
 async def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Generate Phase 7 monitoring dashboard data")
-    parser.add_argument("--format", choices=["json", "html"], default="json", help="Output format (default: json)")
-    parser.add_argument("--output", type=Path, help="Output file path (default: stdout)")
-    parser.add_argument("--time-window", type=int, default=60, help="Time window in minutes for metrics (default: 60)")
-    parser.add_argument("--prometheus", action="store_true", help="Output Prometheus-compatible metrics instead")
+    parser = argparse.ArgumentParser(
+        description="Generate agent framework monitoring dashboard data"
+    )
+    parser.add_argument(
+        "--format",
+        choices=["json", "html"],
+        default="json",
+        help="Output format (default: json)",
+    )
+    parser.add_argument(
+        "--output", type=Path, help="Output file path (default: stdout)"
+    )
+    parser.add_argument(
+        "--time-window",
+        type=int,
+        default=60,
+        help="Time window in minutes for metrics (default: 60)",
+    )
+    parser.add_argument(
+        "--prometheus",
+        action="store_true",
+        help="Output Prometheus-compatible metrics instead",
+    )
 
     args = parser.parse_args()
 

@@ -40,7 +40,9 @@ def validate_agent_name(agent_name: str) -> str:
 
     # Allow alphanumeric, hyphens, underscores
     if not all(c.isalnum() or c in ["-", "_"] for c in agent_name):
-        raise click.BadParameter("Agent name can only contain alphanumeric characters, hyphens, and underscores")
+        raise click.BadParameter(
+            "Agent name can only contain alphanumeric characters, hyphens, and underscores"
+        )
 
     return agent_name
 
@@ -109,7 +111,9 @@ def validate_routing_strategy(strategy: str) -> str:
     ]
 
     if strategy not in valid_strategies:
-        raise click.BadParameter(f"Invalid routing strategy. Must be one of: {', '.join(valid_strategies)}")
+        raise click.BadParameter(
+            f"Invalid routing strategy. Must be one of: {', '.join(valid_strategies)}"
+        )
 
     return strategy
 
@@ -162,10 +166,18 @@ def validate_trigger_match_strategy(strategy: str) -> str:
     Raises:
         click.BadParameter: If strategy is invalid
     """
-    valid_strategies = ["exact_substring", "fuzzy_similarity", "keyword_overlap", "capability_alignment", "combined"]
+    valid_strategies = [
+        "exact_substring",
+        "fuzzy_similarity",
+        "keyword_overlap",
+        "capability_alignment",
+        "combined",
+    ]
 
     if strategy not in valid_strategies:
-        raise click.BadParameter(f"Invalid trigger match strategy. Must be one of: {', '.join(valid_strategies)}")
+        raise click.BadParameter(
+            f"Invalid trigger match strategy. Must be one of: {', '.join(valid_strategies)}"
+        )
 
     return strategy
 

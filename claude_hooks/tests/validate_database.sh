@@ -58,13 +58,13 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_lineage_nodes');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_lineage_nodes table exists${NC}"
-    
+
     # Get row count
     ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_lineage_nodes;")
-    
+
     echo "  Total patterns: $ROW_COUNT"
-    
+
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample pattern data (last 5):"
@@ -88,13 +88,13 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_analytics');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_analytics table exists${NC}"
-    
+
     # Get row count
     ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_analytics;")
-    
+
     echo "  Total analytics records: $ROW_COUNT"
-    
+
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample analytics data (last 5):"
@@ -118,13 +118,13 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_feedback');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_feedback table exists${NC}"
-    
+
     # Get row count
     ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_feedback;")
-    
+
     echo "  Total feedback records: $ROW_COUNT"
-    
+
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample feedback data (last 5):"

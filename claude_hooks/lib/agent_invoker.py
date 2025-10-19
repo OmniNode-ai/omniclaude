@@ -12,14 +12,14 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import sys
-import os
 import asyncio
 import json
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+import os
+import sys
 import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Add agent framework to path (use environment variable or relative path)
 AGENT_FRAMEWORK_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
@@ -39,8 +39,8 @@ if HOOKS_LIB_PATH.exists():
     sys.path.insert(0, str(HOOKS_LIB_PATH))
 
 try:
-    from agent_model import AgentTask, AgentResult
     from agent_dispatcher import ParallelCoordinator
+    from agent_model import AgentResult, AgentTask
     from agent_pathway_detector import AgentPathwayDetector, PathwayDetection
 except ImportError as e:
     print(f"ERROR: Failed to import agent framework: {e}", file=sys.stderr)
@@ -94,7 +94,10 @@ class AgentInvoker:
         }
 
     async def invoke(
-        self, prompt: str, context: Optional[Dict[str, Any]] = None, force_pathway: Optional[str] = None
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+        force_pathway: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke agent(s) based on prompt analysis.
@@ -136,7 +139,10 @@ class AgentInvoker:
                     "success": True,
                     "pathway": None,
                     "message": "No agent invocation required",
-                    "detection": {"confidence": detection.confidence, "task": detection.task},
+                    "detection": {
+                        "confidence": detection.confidence,
+                        "task": detection.task,
+                    },
                 }
 
             # Add execution metadata
@@ -155,7 +161,8 @@ class AgentInvoker:
                 "success": False,
                 "error": f"Agent invocation failed: {str(e)}",
                 "pathway": detection.pathway if "detection" in locals() else None,
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
+                "execution_time_ms": (datetime.now() - start_time).total_seconds()
+                * 1000,
             }
 
     async def _invoke_coordinator(
@@ -196,11 +203,16 @@ class AgentInvoker:
                 "success": False,
                 "pathway": "coordinator",
                 "error": "Coordinator did not return result",
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
+                "execution_time_ms": (datetime.now() - start_time).total_seconds()
+                * 1000,
             }
 
         # Get router stats
-        router_stats = self._coordinator.get_router_stats() if hasattr(self._coordinator, "get_router_stats") else {}
+        router_stats = (
+            self._coordinator.get_router_stats()
+            if hasattr(self._coordinator, "get_router_stats")
+            else {}
+        )
 
         return {
             "success": result.success,
@@ -234,7 +246,8 @@ class AgentInvoker:
                 "success": False,
                 "pathway": "direct_single",
                 "error": f"Agent config not found: {agent_name}",
-                "execution_time_ms": (datetime.now() - start_time).total_seconds() * 1000,
+                "execution_time_ms": (datetime.now() - start_time).total_seconds()
+                * 1000,
             }
 
         # For direct single mode, we return the config for hook to inject
@@ -332,7 +345,10 @@ class AgentInvoker:
         config_paths = [
             Path.home() / ".claude" / "agents" / "configs" / f"{agent_name}.yaml",
             Path.home() / ".claude" / "agent-definitions" / f"{agent_name}.yaml",
-            Path.home() / ".claude" / "agent-definitions" / f"{agent_name.replace('agent-', '')}.yaml",
+            Path.home()
+            / ".claude"
+            / "agent-definitions"
+            / f"{agent_name.replace('agent-', '')}.yaml",
         ]
 
         for config_path in config_paths:
@@ -369,10 +385,20 @@ class AgentInvoker:
             # Extract all agent names from prompt
             agents = self.detector._extract_agent_names(prompt)
             return PathwayDetection(
-                pathway="direct_parallel", agents=agents, task=prompt, confidence=1.0, trigger_pattern="forced"
+                pathway="direct_parallel",
+                agents=agents,
+                task=prompt,
+                confidence=1.0,
+                trigger_pattern="forced",
             )
         else:
-            return PathwayDetection(pathway=None, agents=[], task=prompt, confidence=1.0, trigger_pattern="forced")
+            return PathwayDetection(
+                pathway=None,
+                agents=[],
+                task=prompt,
+                confidence=1.0,
+                trigger_pattern="forced",
+            )
 
     async def cleanup(self):
         """Cleanup resources."""
@@ -384,7 +410,10 @@ class AgentInvoker:
         return {**self.stats, "detection_stats": self.detector.get_stats()}
 
     def invoke_sync(
-        self, prompt: str, context: Optional[Dict[str, Any]] = None, force_pathway: Optional[str] = None
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+        force_pathway: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Synchronous wrapper for async invoke."""
         return asyncio.run(self.invoke(prompt, context, force_pathway))
@@ -409,7 +438,9 @@ async def main():
     )
     parser.add_argument("--correlation-id", help="Correlation ID for tracking")
     parser.add_argument("--context", help="JSON context for agent execution")
-    parser.add_argument("--stats", action="store_true", help="Show statistics after execution")
+    parser.add_argument(
+        "--stats", action="store_true", help="Show statistics after execution"
+    )
 
     args = parser.parse_args()
 

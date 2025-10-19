@@ -8,11 +8,11 @@ for parallel agent execution.
 Uses LLM to analyze user requests and plan optimal task breakdown.
 """
 
-import sys
-import json
 import asyncio
-from typing import Dict, Any, Optional
+import json
+import sys
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -28,7 +28,9 @@ class TaskArchitect:
     def __init__(self):
         self.mcp = ArchonMCPClient()
 
-    async def analyze_prompt(self, user_prompt: str, global_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def analyze_prompt(
+        self, user_prompt: str, global_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Analyze user prompt and generate task breakdown.
 
@@ -98,7 +100,9 @@ Return ONLY valid JSON in this exact format:
 
         try:
             # Use RAG query to get intelligent task planning
-            result = await self.mcp.perform_rag_query(query=analysis_prompt, match_count=3)
+            result = await self.mcp.perform_rag_query(
+                query=analysis_prompt, match_count=3
+            )
 
             # Ensure result is a dictionary
             if not isinstance(result, dict):
@@ -121,7 +125,9 @@ Return ONLY valid JSON in this exact format:
             # Fallback on error
             return self._fallback_task_generation(user_prompt)
 
-    def _parse_rag_response(self, rag_result: Dict[str, Any], user_prompt: str) -> Dict[str, Any]:
+    def _parse_rag_response(
+        self, rag_result: Dict[str, Any], user_prompt: str
+    ) -> Dict[str, Any]:
         """
         Parse RAG query response to extract task definitions.
 
@@ -173,21 +179,38 @@ Return ONLY valid JSON in this exact format:
         prompt_lower = user_prompt.lower()
 
         # Determine task type from keywords
-        is_generation = any(kw in prompt_lower for kw in ["create", "generate", "build", "implement", "make"])
-        is_debug = any(kw in prompt_lower for kw in ["debug", "fix", "analyze", "investigate", "error", "bug"])
+        is_generation = any(
+            kw in prompt_lower
+            for kw in ["create", "generate", "build", "implement", "make"]
+        )
+        is_debug = any(
+            kw in prompt_lower
+            for kw in ["debug", "fix", "analyze", "investigate", "error", "bug"]
+        )
 
         # Detect if ONEX architecture is explicitly requested
-        is_onex = any(kw in prompt_lower for kw in ["onex", "node", "effect", "compute", "reducer", "orchestrator"])
+        is_onex = any(
+            kw in prompt_lower
+            for kw in ["onex", "node", "effect", "compute", "reducer", "orchestrator"]
+        )
 
         tasks = []
 
         if is_generation:
             # Build input_data dynamically based on whether ONEX is needed
-            input_data = {"description": user_prompt, "language": "python", "context": user_prompt}
+            input_data = {
+                "description": user_prompt,
+                "language": "python",
+                "context": user_prompt,
+            }
 
             # Only add ONEX-specific fields if explicitly requested
             if is_onex:
-                input_data["contract"] = {"name": "UserRequest", "description": user_prompt, "type": "application"}
+                input_data["contract"] = {
+                    "name": "UserRequest",
+                    "description": user_prompt,
+                    "type": "application",
+                }
                 input_data["node_type"] = "Compute"
 
             # Build context requirements dynamically
@@ -303,7 +326,9 @@ async def main():
 
         # Debug: Check type
         if not isinstance(task_plan, dict):
-            raise RuntimeError(f"Task plan is not a dict, got: {type(task_plan)}, value: {task_plan}")
+            raise RuntimeError(
+                f"Task plan is not a dict, got: {type(task_plan)}, value: {task_plan}"
+            )
 
         # Output as JSON
         output = {

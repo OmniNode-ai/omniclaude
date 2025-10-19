@@ -10,7 +10,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .db import get_pg_pool
 from .lineage import LineageWriter
@@ -105,16 +105,27 @@ class STFRegistry:
         return stf_id
 
     async def _calculate_function_hash(
-        self, code_repo: str, commit_sha: str, file_path: str, symbol: str, line_start: int, line_end: int
+        self,
+        code_repo: str,
+        commit_sha: str,
+        file_path: str,
+        symbol: str,
+        line_start: int,
+        line_end: int,
     ) -> bytes:
         """Calculate hash of the function code."""
         # For now, create a hash based on the metadata
         # In a real implementation, this would fetch and hash the actual code
-        content = f"{code_repo}:{commit_sha}:{file_path}:{symbol}:{line_start}:{line_end}"
+        content = (
+            f"{code_repo}:{commit_sha}:{file_path}:{symbol}:{line_start}:{line_end}"
+        )
         return hashlib.sha256(content.encode()).digest()
 
     async def discover_stfs(
-        self, error_type: Optional[str] = None, lang: Optional[str] = None, is_pure: bool = True
+        self,
+        error_type: Optional[str] = None,
+        lang: Optional[str] = None,
+        is_pure: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Discover STFs that might be applicable to a given error or context.
@@ -226,7 +237,13 @@ class STFRegistry:
             return mock_stf
 
     async def _load_function_from_source(
-        self, code_repo: str, file_path: str, symbol: str, line_start: int, line_end: int, lang: str
+        self,
+        code_repo: str,
+        file_path: str,
+        symbol: str,
+        line_start: int,
+        line_end: int,
+        lang: str,
     ) -> Optional[Callable]:
         """
         Load a function from source code.
@@ -255,7 +272,9 @@ class STFRegistry:
                 import os
 
                 if os.path.exists(file_path):
-                    return await self._load_from_local_file(file_path, symbol, line_start, line_end)
+                    return await self._load_from_local_file(
+                        file_path, symbol, line_start, line_end
+                    )
 
             # For remote repositories, we would:
             # 1. Clone/fetch the repository
@@ -308,7 +327,11 @@ class STFRegistry:
             return None
 
     async def execute_stf(
-        self, stf_id: str, inputs: Dict[str, Any], run_id: str, correlation_id: Optional[str] = None
+        self,
+        stf_id: str,
+        inputs: Dict[str, Any],
+        run_id: str,
+        correlation_id: Optional[str] = None,
     ) -> Tuple[bool, Any, str]:
         """
         Execute an STF with given inputs.
@@ -334,7 +357,9 @@ class STFRegistry:
             result = stf_func(**inputs)
 
             # Log the execution
-            await self._log_stf_execution(execution_id, stf_id, run_id, correlation_id, True, result)
+            await self._log_stf_execution(
+                execution_id, stf_id, run_id, correlation_id, True, result
+            )
 
             # Emit lineage edge
             await self._lineage_writer.emit(
@@ -355,12 +380,20 @@ class STFRegistry:
 
         except Exception as e:
             # Log the failed execution
-            await self._log_stf_execution(execution_id, stf_id, run_id, correlation_id, False, {"error": str(e)})
+            await self._log_stf_execution(
+                execution_id, stf_id, run_id, correlation_id, False, {"error": str(e)}
+            )
 
             return False, {"error": str(e)}, execution_id
 
     async def _log_stf_execution(
-        self, execution_id: str, stf_id: str, run_id: str, correlation_id: Optional[str], success: bool, result: Any
+        self,
+        execution_id: str,
+        stf_id: str,
+        run_id: str,
+        correlation_id: Optional[str],
+        success: bool,
+        result: Any,
     ) -> None:
         """Log STF execution details."""
         pool = await get_pg_pool()
@@ -395,7 +428,9 @@ class STFRegistry:
 stf_registry = STFRegistry()
 
 
-async def discover_applicable_stfs(error_type: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+async def discover_applicable_stfs(
+    error_type: str, context: Dict[str, Any]
+) -> List[Dict[str, Any]]:
     """
     Discover STFs that might be applicable to fix a given error.
 
@@ -406,11 +441,16 @@ async def discover_applicable_stfs(error_type: str, context: Dict[str, Any]) -> 
     Returns:
         List of applicable STFs
     """
-    return await stf_registry.discover_stfs(error_type=error_type, lang=context.get("language", "python"), is_pure=True)
+    return await stf_registry.discover_stfs(
+        error_type=error_type, lang=context.get("language", "python"), is_pure=True
+    )
 
 
 async def apply_stf_fix(
-    stf_id: str, inputs: Dict[str, Any], run_id: str, correlation_id: Optional[str] = None
+    stf_id: str,
+    inputs: Dict[str, Any],
+    run_id: str,
+    correlation_id: Optional[str] = None,
 ) -> Tuple[bool, Any]:
     """
     Apply an STF to fix an error or improve state.
@@ -424,6 +464,8 @@ async def apply_stf_fix(
     Returns:
         Tuple of (success, result)
     """
-    success, result, execution_id = await stf_registry.execute_stf(stf_id, inputs, run_id, correlation_id)
+    success, result, execution_id = await stf_registry.execute_stf(
+        stf_id, inputs, run_id, correlation_id
+    )
 
     return success, result

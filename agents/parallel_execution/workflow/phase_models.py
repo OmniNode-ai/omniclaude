@@ -10,7 +10,7 @@ Defines data structures for phase-by-phase workflow control including:
 
 import json
 import sys
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path

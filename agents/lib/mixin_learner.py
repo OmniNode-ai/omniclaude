@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 """
-Mixin Compatibility Learner for Phase 7 - ML-Powered Recommendations
+Mixin Compatibility Learner - ML-Powered Recommendations
 
 Trains machine learning models to predict mixin compatibility and provide
 intelligent recommendations for mixin combinations based on historical data.
 
 Author: OmniClaude Autonomous Code Generation System
-Phase: 7 Stream 4
 Target Accuracy: ≥95%
 """
 
 import asyncio
 import logging
 import pickle
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.model_selection import cross_val_score, train_test_split
 
 from .mixin_features import MixinFeatureExtractor
 from .persistence import CodegenPersistence
@@ -91,8 +96,12 @@ class MixinLearner:
     - Model persistence and versioning
     """
 
-    DEFAULT_MODEL_PATH = Path(__file__).parent.parent / "models" / "mixin_compatibility_rf.pkl"
-    DEFAULT_METRICS_PATH = Path(__file__).parent.parent / "models" / "mixin_compatibility_metrics.pkl"
+    DEFAULT_MODEL_PATH = (
+        Path(__file__).parent.parent / "models" / "mixin_compatibility_rf.pkl"
+    )
+    DEFAULT_METRICS_PATH = (
+        Path(__file__).parent.parent / "models" / "mixin_compatibility_metrics.pkl"
+    )
 
     def __init__(
         self,
@@ -198,7 +207,8 @@ class MixinLearner:
 
         if len(training_data) < min_samples:
             raise ValueError(
-                f"Insufficient training data: {len(training_data)} samples " f"(minimum {min_samples} required)"
+                f"Insufficient training data: {len(training_data)} samples "
+                f"(minimum {min_samples} required)"
             )
 
         self.logger.info(f"Fetched {len(training_data)} training samples")
@@ -207,7 +217,9 @@ class MixinLearner:
         X, y, historical_map = self._prepare_training_data(training_data)
 
         # Split train/test
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=42, stratify=y
+        )
 
         # Train ensemble of Random Forest and Gradient Boosting for better accuracy
         rf_model = RandomForestClassifier(
@@ -265,7 +277,9 @@ class MixinLearner:
         f1 = f1_score(y_test, y_pred, average="binary", zero_division=0)
 
         # Cross-validation
-        cv_scores = cross_val_score(self.model, X_train, y_train, cv=cross_val_folds, scoring="accuracy")
+        cv_scores = cross_val_score(
+            self.model, X_train, y_train, cv=cross_val_folds, scoring="accuracy"
+        )
 
         self.metrics = ModelMetrics(
             accuracy=accuracy,
@@ -372,11 +386,15 @@ class MixinLearner:
             }
 
         # Extract features
-        feature_matrix = self.feature_extractor.batch_extract_features(mixin_pairs, historical_map)
+        feature_matrix = self.feature_extractor.batch_extract_features(
+            mixin_pairs, historical_map
+        )
 
         return feature_matrix, np.array(labels), historical_map
 
-    async def _fetch_historical_data(self, mixin_a: str, mixin_b: str, node_type: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_historical_data(
+        self, mixin_a: str, mixin_b: str, node_type: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Fetch historical data for mixin pair from database.
 
@@ -415,7 +433,9 @@ class MixinLearner:
                         return {
                             "success_rate": row["success_count"] / total_tests,
                             "total_tests": total_tests,
-                            "avg_compatibility": float(row["compatibility_score"] or 0.5),
+                            "avg_compatibility": float(
+                                row["compatibility_score"] or 0.5
+                            ),
                         }
         except Exception as e:
             self.logger.debug(f"Could not fetch historical data: {e}")
@@ -423,7 +443,11 @@ class MixinLearner:
         return None
 
     def predict_compatibility(
-        self, mixin_a: str, mixin_b: str, node_type: str, historical_data: Optional[Dict[str, Any]] = None
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        historical_data: Optional[Dict[str, Any]] = None,
     ) -> MixinPrediction:
         """
         Predict compatibility for mixin pair.
@@ -452,14 +476,18 @@ class MixinLearner:
             confidence = float(probabilities[int(cached_prediction)])
 
             # Apply structural adjustments even for cached predictions
-            prediction, confidence = self._adjust_confidence(mixin_a, mixin_b, node_type, cached_prediction, confidence)
+            prediction, confidence = self._adjust_confidence(
+                mixin_a, mixin_b, node_type, cached_prediction, confidence
+            )
         else:
             # Check feature cache
             if cache_key in self._feature_cache:
                 feature_vector = self._feature_cache[cache_key]
             else:
                 # Extract features
-                features = self.feature_extractor.extract_features(mixin_a, mixin_b, node_type, historical_data)
+                features = self.feature_extractor.extract_features(
+                    mixin_a, mixin_b, node_type, historical_data
+                )
                 feature_vector = features.combined_vector
 
                 # Cache features for future use
@@ -491,10 +519,14 @@ class MixinLearner:
             confidence = float(probabilities[int(prediction)])
 
             # Apply confidence adjustment and possible prediction override
-            prediction, confidence = self._adjust_confidence(mixin_a, mixin_b, node_type, prediction, confidence)
+            prediction, confidence = self._adjust_confidence(
+                mixin_a, mixin_b, node_type, prediction, confidence
+            )
 
         # Generate explanation (pass None for features as it's only used for metadata)
-        explanation = self._generate_explanation(mixin_a, mixin_b, node_type, prediction, confidence, None)
+        explanation = self._generate_explanation(
+            mixin_a, mixin_b, node_type, prediction, confidence, None
+        )
 
         return MixinPrediction(
             mixin_a=mixin_a,
@@ -507,7 +539,12 @@ class MixinLearner:
         )
 
     def _adjust_confidence(
-        self, mixin_a: str, mixin_b: str, node_type: str, prediction: int, base_confidence: float
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        prediction: int,
+        base_confidence: float,
     ) -> Tuple[int, float]:
         """
         Adjust prediction and confidence based on strong structural indicators.
@@ -587,7 +624,8 @@ class MixinLearner:
             # Override to compatible if model predicted incompatible
             if prediction == 0:
                 self.logger.debug(
-                    f"Overriding incompatible prediction for {mixin_a}+{mixin_b}: " f"structural score {net_score:.2f}"
+                    f"Overriding incompatible prediction for {mixin_a}+{mixin_b}: "
+                    f"structural score {net_score:.2f}"
                 )
                 prediction = 1
             # Boost confidence
@@ -596,7 +634,8 @@ class MixinLearner:
             # Override to incompatible if model predicted compatible
             if prediction == 1:
                 self.logger.debug(
-                    f"Overriding compatible prediction for {mixin_a}+{mixin_b}: " f"structural score {net_score:.2f}"
+                    f"Overriding compatible prediction for {mixin_a}+{mixin_b}: "
+                    f"structural score {net_score:.2f}"
                 )
                 prediction = 0
             # Boost confidence
@@ -608,14 +647,22 @@ class MixinLearner:
         return prediction, adjusted_confidence
 
     def _generate_explanation(
-        self, mixin_a: str, mixin_b: str, node_type: str, prediction: int, confidence: float, features: Any
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        prediction: int,
+        confidence: float,
+        features: Any,
     ) -> str:
         """Generate human-readable explanation for prediction"""
         char_a = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_a)
         char_b = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_b)
 
         if not char_a or not char_b:
-            return f"Prediction based on learned patterns (confidence: {confidence:.2%})"
+            return (
+                f"Prediction based on learned patterns (confidence: {confidence:.2%})"
+            )
 
         explanations = []
 
@@ -623,13 +670,17 @@ class MixinLearner:
         if char_a.category == char_b.category:
             explanations.append(f"Both mixins are in '{char_a.category}' category")
         else:
-            explanations.append(f"Mixins from different categories: '{char_a.category}' and '{char_b.category}'")
+            explanations.append(
+                f"Mixins from different categories: '{char_a.category}' and '{char_b.category}'"
+            )
 
         # Lifecycle conflicts
         hooks_a = set(char_a.lifecycle_hooks)
         hooks_b = set(char_b.lifecycle_hooks)
         if hooks_a & hooks_b:
-            explanations.append(f"Shared lifecycle hooks: {', '.join(hooks_a & hooks_b)}")
+            explanations.append(
+                f"Shared lifecycle hooks: {', '.join(hooks_a & hooks_b)}"
+            )
 
         # State modification
         if char_a.state_modifying and char_b.state_modifying:
@@ -645,10 +696,14 @@ class MixinLearner:
         tags_a = char_a.compatibility_tags
         tags_b = char_b.compatibility_tags
         if tags_a & tags_b:
-            explanations.append(f"Common capabilities: {', '.join(list(tags_a & tags_b)[:3])}")
+            explanations.append(
+                f"Common capabilities: {', '.join(list(tags_a & tags_b)[:3])}"
+            )
 
         result = "compatible" if prediction else "incompatible"
-        explanation = f"Predicted {result} ({confidence:.2%} confidence). " + "; ".join(explanations[:3])
+        explanation = f"Predicted {result} ({confidence:.2%} confidence). " + "; ".join(
+            explanations[:3]
+        )
 
         return explanation
 
@@ -691,8 +746,13 @@ class MixinLearner:
             min_confidence = 1.0
 
             for existing_mixin in existing_mixins:
-                prediction = self.predict_compatibility(existing_mixin, mixin, node_type)
-                if not prediction.compatible or prediction.confidence < self.min_confidence_threshold:
+                prediction = self.predict_compatibility(
+                    existing_mixin, mixin, node_type
+                )
+                if (
+                    not prediction.compatible
+                    or prediction.confidence < self.min_confidence_threshold
+                ):
                     compatible_with_all = False
                     break
                 min_confidence = min(min_confidence, prediction.confidence)
@@ -703,7 +763,9 @@ class MixinLearner:
             # Check if mixin provides required capabilities
             char = MixinFeatureExtractor.MIXIN_CHARACTERISTICS[mixin]
             capability_match = sum(
-                1 for cap in required_capabilities if cap.lower() in {tag.lower() for tag in char.compatibility_tags}
+                1
+                for cap in required_capabilities
+                if cap.lower() in {tag.lower() for tag in char.compatibility_tags}
             )
 
             if capability_match > 0:
@@ -748,13 +810,20 @@ class MixinLearner:
             cap_lower = cap.lower()
             for keyword, mixin in capability_map.items():
                 if keyword in cap_lower and mixin not in seen_mixins:
-                    recommendations.append((mixin, 0.5, f"Rule-based match for '{cap}'"))
+                    recommendations.append(
+                        (mixin, 0.5, f"Rule-based match for '{cap}'")
+                    )
                     seen_mixins.add(mixin)
 
         return recommendations
 
     async def update_from_feedback(
-        self, mixin_a: str, mixin_b: str, node_type: str, success: bool, retrain_threshold: int = 100
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        success: bool,
+        retrain_threshold: int = 100,
     ):
         """
         Update model with new feedback and optionally retrain.
@@ -773,7 +842,10 @@ class MixinLearner:
 
         # Check if retraining needed
         training_data = await self._fetch_training_data()
-        if self.metrics and len(training_data) >= self.metrics.training_samples + retrain_threshold:
+        if (
+            self.metrics
+            and len(training_data) >= self.metrics.training_samples + retrain_threshold
+        ):
             self.logger.info(f"Retraining model with {len(training_data)} samples...")
             await self.train_model()
 

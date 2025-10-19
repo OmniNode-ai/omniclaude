@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mixin Compatibility Manager for Phase 7 - Stream 4
+Mixin Compatibility Manager for Agent Framework
 
 High-level interface for mixin compatibility checking, recommendations,
 and continuous learning integration.
@@ -10,12 +10,12 @@ Phase: 7 Stream 4
 """
 
 import logging
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from .mixin_learner import MixinLearner, MixinPrediction
 from .mixin_features import MixinFeatureExtractor
+from .mixin_learner import MixinLearner, MixinPrediction
 from .persistence import CodegenPersistence
 
 logger = logging.getLogger(__name__)
@@ -128,7 +128,9 @@ class MixinCompatibilityManager:
 
         self.feature_extractor = MixinFeatureExtractor()
 
-    async def check_compatibility(self, mixin_a: str, mixin_b: str, node_type: str) -> CompatibilityCheck:
+    async def check_compatibility(
+        self, mixin_a: str, mixin_b: str, node_type: str
+    ) -> CompatibilityCheck:
         """
         Check compatibility between two mixins for a node type.
 
@@ -145,9 +147,13 @@ class MixinCompatibilityManager:
 
         # ML prediction
         if self.enable_ml and self.learner and self.learner.is_trained():
-            prediction = self.learner.predict_compatibility(mixin_a, mixin_b, node_type, historical_data)
+            prediction = self.learner.predict_compatibility(
+                mixin_a, mixin_b, node_type, historical_data
+            )
 
-            level = self._classify_compatibility_level(prediction.compatible, prediction.confidence)
+            level = self._classify_compatibility_level(
+                prediction.compatible, prediction.confidence
+            )
 
             reasons = [prediction.explanation]
             suggestions = self._generate_suggestions(mixin_a, mixin_b, prediction)
@@ -184,7 +190,10 @@ class MixinCompatibilityManager:
             for mixin_b in mixins[i + 1 :]:
                 check = await self.check_compatibility(mixin_a, mixin_b, node_type)
 
-                if check.level in [CompatibilityLevel.INCOMPATIBLE, CompatibilityLevel.HIGHLY_INCOMPATIBLE]:
+                if check.level in [
+                    CompatibilityLevel.INCOMPATIBLE,
+                    CompatibilityLevel.HIGHLY_INCOMPATIBLE,
+                ]:
                     warnings.append(
                         f"Potential conflict between {mixin_a} and {mixin_b}: "
                         f"{check.reasons[0] if check.reasons else 'Unknown reason'}"
@@ -194,7 +203,9 @@ class MixinCompatibilityManager:
 
         # Calculate overall compatibility
         if compatibility_scores:
-            overall_compatibility = sum(compatibility_scores) / len(compatibility_scores)
+            overall_compatibility = sum(compatibility_scores) / len(
+                compatibility_scores
+            )
         else:
             overall_compatibility = 1.0  # Single mixin or no mixins
 
@@ -203,7 +214,10 @@ class MixinCompatibilityManager:
         warnings.extend(node_type_warnings)
 
         return MixinSet(
-            node_type=node_type, mixins=mixins, overall_compatibility=overall_compatibility, warnings=warnings
+            node_type=node_type,
+            mixins=mixins,
+            overall_compatibility=overall_compatibility,
+            warnings=warnings,
         )
 
     async def recommend_mixins(
@@ -237,7 +251,9 @@ class MixinCompatibilityManager:
                 compatibility_scores = {}
                 if existing_mixins:
                     for existing in existing_mixins:
-                        check = await self.check_compatibility(existing, mixin_name, node_type)
+                        check = await self.check_compatibility(
+                            existing, mixin_name, node_type
+                        )
                         compatibility_scores[existing] = check.confidence
 
                 recommendations.append(
@@ -252,7 +268,9 @@ class MixinCompatibilityManager:
             return recommendations
 
         # Fallback to rule-based recommendations
-        return self._rule_based_recommendations(node_type, required_capabilities, existing_mixins)
+        return self._rule_based_recommendations(
+            node_type, required_capabilities, existing_mixins
+        )
 
     async def record_feedback(
         self,
@@ -286,17 +304,25 @@ class MixinCompatibilityManager:
 
         # Update ML model if enabled
         if self.enable_ml and self.learner:
-            await self.learner.update_from_feedback(mixin_a, mixin_b, node_type, success)
+            await self.learner.update_from_feedback(
+                mixin_a, mixin_b, node_type, success
+            )
 
     # Private helper methods
 
-    async def _get_historical_data(self, mixin_a: str, mixin_b: str, node_type: str) -> Optional[Dict[str, Any]]:
+    async def _get_historical_data(
+        self, mixin_a: str, mixin_b: str, node_type: str
+    ) -> Optional[Dict[str, Any]]:
         """Get historical compatibility data from database"""
-        record = await self.persistence.get_mixin_compatibility(mixin_a, mixin_b, node_type)
+        record = await self.persistence.get_mixin_compatibility(
+            mixin_a, mixin_b, node_type
+        )
 
         if not record:
             # Try reverse order
-            record = await self.persistence.get_mixin_compatibility(mixin_b, mixin_a, node_type)
+            record = await self.persistence.get_mixin_compatibility(
+                mixin_b, mixin_a, node_type
+            )
 
         if record:
             success_count = record["success_count"]
@@ -312,7 +338,9 @@ class MixinCompatibilityManager:
 
         return None
 
-    def _classify_compatibility_level(self, compatible: bool, confidence: float) -> CompatibilityLevel:
+    def _classify_compatibility_level(
+        self, compatible: bool, confidence: float
+    ) -> CompatibilityLevel:
         """Classify compatibility level from prediction"""
         if compatible:
             if confidence >= 0.9:
@@ -329,7 +357,9 @@ class MixinCompatibilityManager:
             else:
                 return CompatibilityLevel.UNCERTAIN
 
-    def _generate_suggestions(self, mixin_a: str, mixin_b: str, prediction: MixinPrediction) -> List[str]:
+    def _generate_suggestions(
+        self, mixin_a: str, mixin_b: str, prediction: MixinPrediction
+    ) -> List[str]:
         """Generate suggestions for improving compatibility"""
         suggestions = []
 
@@ -350,18 +380,22 @@ class MixinCompatibilityManager:
                 # Check for state modification conflicts
                 if char_a.state_modifying and char_b.state_modifying:
                     suggestions.append(
-                        "Both mixins modify state - ensure proper ordering " "and use transactions if needed"
+                        "Both mixins modify state - ensure proper ordering "
+                        "and use transactions if needed"
                     )
 
                 # Check for resource conflicts
                 if char_a.resource_intensive and char_b.resource_intensive:
                     suggestions.append(
-                        "Both mixins are resource-intensive - monitor performance " "and consider caching strategies"
+                        "Both mixins are resource-intensive - monitor performance "
+                        "and consider caching strategies"
                     )
 
         return suggestions
 
-    async def _rule_based_compatibility_check(self, mixin_a: str, mixin_b: str, node_type: str) -> CompatibilityCheck:
+    async def _rule_based_compatibility_check(
+        self, mixin_a: str, mixin_b: str, node_type: str
+    ) -> CompatibilityCheck:
         """Fallback rule-based compatibility checking"""
         char_a = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_a)
         char_b = MixinFeatureExtractor.MIXIN_CHARACTERISTICS.get(mixin_b)
@@ -413,7 +447,9 @@ class MixinCompatibilityManager:
             suggestions=[],
         )
 
-    def _check_node_type_compatibility(self, mixins: List[str], node_type: str) -> List[str]:
+    def _check_node_type_compatibility(
+        self, mixins: List[str], node_type: str
+    ) -> List[str]:
         """Check if mixins are compatible with node type"""
         warnings = []
         node_profile = MixinFeatureExtractor.NODE_TYPE_PROFILES.get(node_type, {})
@@ -425,16 +461,23 @@ class MixinCompatibilityManager:
 
             # Check async compatibility
             if node_profile.get("async_required") and not char.async_safe:
-                warnings.append(f"Mixin {mixin} may not be async-safe, but {node_type} requires async")
+                warnings.append(
+                    f"Mixin {mixin} may not be async-safe, but {node_type} requires async"
+                )
 
             # Check state modification compatibility
             if not node_profile.get("state_modifying") and char.state_modifying:
-                warnings.append(f"Mixin {mixin} modifies state, but {node_type} should be stateless")
+                warnings.append(
+                    f"Mixin {mixin} modifies state, but {node_type} should be stateless"
+                )
 
         return warnings
 
     def _rule_based_recommendations(
-        self, node_type: str, required_capabilities: List[str], existing_mixins: Optional[List[str]] = None
+        self,
+        node_type: str,
+        required_capabilities: List[str],
+        existing_mixins: Optional[List[str]] = None,
     ) -> List[MixinRecommendation]:
         """Fallback rule-based recommendations"""
         existing_mixins = existing_mixins or []
@@ -474,4 +517,10 @@ class MixinCompatibilityManager:
         return recommendations[:5]  # Limit to 5 recommendations
 
 
-__all__ = ["MixinCompatibilityManager", "CompatibilityCheck", "MixinRecommendation", "MixinSet", "CompatibilityLevel"]
+__all__ = [
+    "MixinCompatibilityManager",
+    "CompatibilityCheck",
+    "MixinRecommendation",
+    "MixinSet",
+    "CompatibilityLevel",
+]

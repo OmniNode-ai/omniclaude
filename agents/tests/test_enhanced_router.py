@@ -12,21 +12,20 @@ Tests all components of the enhanced routing system:
 Run with: python -m pytest tests/test_enhanced_router.py -v
 """
 
-import pytest
+# Add parent directory to path for imports
+import sys
 import time
 from pathlib import Path
 
-# Add parent directory to path for imports
-import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.trigger_matcher import EnhancedTriggerMatcher
-from lib.confidence_scorer import ConfidenceScorer, ConfidenceScore
 from lib.capability_index import CapabilityIndex
-from lib.result_cache import ResultCache
+from lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
 from lib.enhanced_router import EnhancedAgentRouter
-
+from lib.result_cache import ResultCache
+from lib.trigger_matcher import EnhancedTriggerMatcher
 
 # Sample test registry data
 SAMPLE_REGISTRY = {
@@ -103,7 +102,9 @@ class TestEnhancedTriggerMatcher:
 
         agent_names = [m[0] for m in matches]
         # Should match both api and performance agents
-        assert "agent-api-architect" in agent_names or "agent-performance" in agent_names
+        assert (
+            "agent-api-architect" in agent_names or "agent-performance" in agent_names
+        )
 
     def test_capability_match(self, matcher):
         """Test capability-based matching."""
@@ -252,7 +253,9 @@ class TestCapabilityIndex:
 
     def test_multiple_capabilities(self, index):
         """Test finding agents with multiple capabilities."""
-        results = index.find_agents_with_multiple_capabilities(["debugging", "error_analysis"])
+        results = index.find_agents_with_multiple_capabilities(
+            ["debugging", "error_analysis"]
+        )
 
         # Should return list of (agent, count) tuples
         assert len(results) > 0
@@ -393,7 +396,9 @@ class TestEnhancedAgentRouter:
 
     def test_multi_recommendation(self, router):
         """Test multiple recommendations."""
-        recommendations = router.route("optimize api performance", max_recommendations=5)
+        recommendations = router.route(
+            "optimize api performance", max_recommendations=5
+        )
 
         assert len(recommendations) > 1
         # All should have valid confidence
@@ -487,7 +492,12 @@ class TestPerformance:
         """Test that routing meets performance target (<100ms)."""
         import time
 
-        queries = ["debug this error", "optimize performance", "design api endpoint", "write unit tests"]
+        queries = [
+            "debug this error",
+            "optimize performance",
+            "design api endpoint",
+            "write unit tests",
+        ]
 
         for query in queries:
             start = time.time()
@@ -495,7 +505,9 @@ class TestPerformance:
             duration = (time.time() - start) * 1000  # Convert to ms
 
             # Should be under 100ms
-            assert duration < 100, f"Query '{query}' took {duration:.1f}ms (target: <100ms)"
+            assert (
+                duration < 100
+            ), f"Query '{query}' took {duration:.1f}ms (target: <100ms)"
 
     def test_cache_performance(self, router):
         """Test that cache hits are fast (<5ms)."""

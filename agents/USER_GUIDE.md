@@ -1638,7 +1638,7 @@ async def process_events_with_monitoring(events: List[BaseEvent]):
 - **Deep Dive**: Read [Architecture](./ARCHITECTURE.md) for system design details
 - **Operations**: See [Operations Guide](./OPERATIONS_GUIDE.md) for deployment and monitoring
 - **Integration**: Check [Integration Guide](./INTEGRATION_GUIDE.md) for cross-stream patterns
-- **API Reference**: Consult [API Reference](./PHASE_7_API_REFERENCE.md) for detailed API documentation
+- **API Reference**: Consult [API Reference](./API_REFERENCE.md) for detailed API documentation
 
 ---
 
@@ -1647,5 +1647,5 @@ async def process_events_with_monitoring(events: List[BaseEvent]):
 For questions or issues:
 1. Check [Troubleshooting](#troubleshooting) section
 2. Review [Best Practices](#best-practices)
-3. Consult [API Reference](./PHASE_7_API_REFERENCE.md)
+3. Consult [API Reference](./API_REFERENCE.md)
 4. Check test suites for usage examples

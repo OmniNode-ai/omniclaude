@@ -2,6 +2,7 @@
 """Quick verification script for PatternTrackerSync."""
 
 import sys
+
 from lib.pattern_tracker_sync import PatternTrackerSync
 
 
@@ -67,7 +68,10 @@ def test_quality_calculation():
         passed = score == expected
         all_passed = all_passed and passed
         status = "✅" if passed else "❌"
-        print(f"{status} {description}: {score:.2f} (expected {expected:.2f})", file=sys.stderr)
+        print(
+            f"{status} {description}: {score:.2f} (expected {expected:.2f})",
+            file=sys.stderr,
+        )
 
     return all_passed
 
@@ -83,8 +87,14 @@ if __name__ == "__main__":
     print("\n" + "=" * 60, file=sys.stderr)
     print("Test Summary", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
-    print(f"Basic Tracking: {'✅ PASSED' if test1_passed else '❌ FAILED'}", file=sys.stderr)
-    print(f"Quality Calculation: {'✅ PASSED' if test2_passed else '❌ FAILED'}", file=sys.stderr)
+    print(
+        f"Basic Tracking: {'✅ PASSED' if test1_passed else '❌ FAILED'}",
+        file=sys.stderr,
+    )
+    print(
+        f"Quality Calculation: {'✅ PASSED' if test2_passed else '❌ FAILED'}",
+        file=sys.stderr,
+    )
 
     if test1_passed and test2_passed:
         print("\n🎉 All tests passed!", file=sys.stderr)

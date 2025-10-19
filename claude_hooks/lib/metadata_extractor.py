@@ -4,12 +4,11 @@ Enhanced Metadata Extractor - Rich context capture for user prompts
 Performance target: <15ms overhead
 """
 
-import re
 import os
 import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class MetadataExtractor:
@@ -17,9 +16,32 @@ class MetadataExtractor:
 
     # Workflow stage keywords
     WORKFLOW_KEYWORDS = {
-        "debugging": ["debug", "error", "fix", "bug", "issue", "problem", "crash", "fail"],
-        "feature_development": ["implement", "add", "create", "new", "build", "develop"],
-        "refactoring": ["refactor", "improve", "optimize", "clean", "restructure", "reorganize"],
+        "debugging": [
+            "debug",
+            "error",
+            "fix",
+            "bug",
+            "issue",
+            "problem",
+            "crash",
+            "fail",
+        ],
+        "feature_development": [
+            "implement",
+            "add",
+            "create",
+            "new",
+            "build",
+            "develop",
+        ],
+        "refactoring": [
+            "refactor",
+            "improve",
+            "optimize",
+            "clean",
+            "restructure",
+            "reorganize",
+        ],
         "testing": ["test", "verify", "check", "validate", "coverage", "unit test"],
         "documentation": ["document", "docs", "readme", "comment", "explain"],
         "review": ["review", "analyze", "inspect", "evaluate", "assess"],
@@ -61,7 +83,19 @@ class MetadataExtractor:
 
     # File type classifications
     FILE_TYPE_MAP = {
-        "source": [".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cpp", ".c", ".go", ".rs", ".rb"],
+        "source": [
+            ".py",
+            ".js",
+            ".ts",
+            ".tsx",
+            ".jsx",
+            ".java",
+            ".cpp",
+            ".c",
+            ".go",
+            ".rs",
+            ".rb",
+        ],
         "test": ["_test.py", "_test.js", ".test.ts", ".spec.js", ".test.tsx", "test_"],
         "config": [".yaml", ".yml", ".json", ".toml", ".ini", ".conf", ".cfg"],
         "doc": [".md", ".rst", ".txt", ".adoc"],
@@ -77,7 +111,10 @@ class MetadataExtractor:
         self.working_dir = Path(working_dir or os.getcwd())
 
     def extract_all(
-        self, prompt: str, agent_name: Optional[str] = None, correlation_context: Optional[Dict[str, Any]] = None
+        self,
+        prompt: str,
+        agent_name: Optional[str] = None,
+        correlation_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Extract all metadata from prompt and environment.
 
@@ -165,7 +202,9 @@ class MetadataExtractor:
         try:
             # Look for recently modified files in current directory
             recent_files = sorted(
-                [f for f in self.working_dir.rglob("*") if f.is_file()], key=lambda f: f.stat().st_mtime, reverse=True
+                [f for f in self.working_dir.rglob("*") if f.is_file()],
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
             )[
                 :5
             ]  # Top 5 most recent
@@ -242,7 +281,9 @@ class MetadataExtractor:
 
         return "other"
 
-    def _extract_session_context(self, correlation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _extract_session_context(
+        self, correlation_context: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """Extract session-level context.
 
         Args:
@@ -251,7 +292,10 @@ class MetadataExtractor:
         Returns:
             Session context
         """
-        context = {"prompts_in_session": 1, "time_since_last_prompt_seconds": None}  # Default: first prompt
+        context = {
+            "prompts_in_session": 1,
+            "time_since_last_prompt_seconds": None,
+        }  # Default: first prompt
 
         if correlation_context:
             # Get prompt count from correlation context
@@ -260,7 +304,9 @@ class MetadataExtractor:
             # Calculate time since last prompt
             if "last_accessed" in correlation_context:
                 try:
-                    last_accessed = datetime.fromisoformat(correlation_context["last_accessed"])
+                    last_accessed = datetime.fromisoformat(
+                        correlation_context["last_accessed"]
+                    )
                     now = datetime.now(last_accessed.tzinfo)
                     delta = (now - last_accessed).total_seconds()
                     context["time_since_last_prompt_seconds"] = round(delta, 1)
@@ -348,8 +394,8 @@ def extract_metadata(
 
 
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     # Test metadata extraction
     if len(sys.argv) < 2:

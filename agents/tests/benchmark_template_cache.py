@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Performance Benchmark for Template Cache (Phase 7 Stream 2)
+Performance Benchmark for Template Cache (Agent Framework)
 
 Measures:
 - Template load time improvement (target: 50% reduction)
@@ -9,11 +9,11 @@ Measures:
 - Concurrent access performance
 """
 
+import statistics
 import sys
 import time
-import statistics
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -132,7 +132,9 @@ def benchmark_cached_loads(templates_dir: Path, iterations: int = 100):
     }
 
 
-def benchmark_concurrent_loads(templates_dir: Path, num_threads: int = 10, iterations_per_thread: int = 10):
+def benchmark_concurrent_loads(
+    templates_dir: Path, num_threads: int = 10, iterations_per_thread: int = 10
+):
     """Benchmark concurrent template loading"""
     print("\n" + "=" * 70)
     print("BENCHMARK 3: Concurrent Cached Loading")
@@ -148,7 +150,9 @@ def benchmark_concurrent_loads(templates_dir: Path, num_threads: int = 10, itera
         """Worker task for concurrent loading"""
         for _ in range(iterations_per_thread):
             for template_type in template_types:
-                template_path = templates_dir / f"{template_type.lower()}_node_template.py"
+                template_path = (
+                    templates_dir / f"{template_type.lower()}_node_template.py"
+                )
                 if template_path.exists():
                     cache.get(
                         template_name=f"{template_type}_template",
@@ -159,7 +163,9 @@ def benchmark_concurrent_loads(templates_dir: Path, num_threads: int = 10, itera
 
     print(f"\n  Threads: {num_threads}")
     print(f"  Iterations per thread: {iterations_per_thread}")
-    print(f"  Expected total loads: {num_threads * iterations_per_thread * len(template_types)}")
+    print(
+        f"  Expected total loads: {num_threads * iterations_per_thread * len(template_types)}"
+    )
 
     start_time = time.perf_counter()
 
@@ -176,7 +182,9 @@ def benchmark_concurrent_loads(templates_dir: Path, num_threads: int = 10, itera
     print(f"  Cache hits: {stats['hits']}")
     print(f"  Cache misses: {stats['misses']}")
     print(f"  Hit rate: {stats['hit_rate']:.1%}")
-    print(f"  Throughput: {(stats['hits'] + stats['misses']) / (elapsed_ms / 1000):.0f} loads/sec")
+    print(
+        f"  Throughput: {(stats['hits'] + stats['misses']) / (elapsed_ms / 1000):.0f} loads/sec"
+    )
 
     return {
         "total_ms": elapsed_ms,
@@ -234,12 +242,17 @@ def print_summary(uncached_results, cached_results):
     print("=" * 70)
 
     # Calculate improvements
-    avg_improvement_pct = ((uncached_results["avg_ms"] - cached_results["avg_ms"]) / uncached_results["avg_ms"]) * 100
+    avg_improvement_pct = (
+        (uncached_results["avg_ms"] - cached_results["avg_ms"])
+        / uncached_results["avg_ms"]
+    ) * 100
     median_improvement_pct = (
-        (uncached_results["median_ms"] - cached_results["median_ms"]) / uncached_results["median_ms"]
+        (uncached_results["median_ms"] - cached_results["median_ms"])
+        / uncached_results["median_ms"]
     ) * 100
     total_time_improvement_pct = (
-        (uncached_results["total_ms"] - cached_results["total_ms"]) / uncached_results["total_ms"]
+        (uncached_results["total_ms"] - cached_results["total_ms"])
+        / uncached_results["total_ms"]
     ) * 100
 
     print("\n  Average Load Time:")
@@ -256,7 +269,9 @@ def print_summary(uncached_results, cached_results):
     print(f"    Uncached: {uncached_results['total_ms']:.2f}ms")
     print(f"    Cached:   {cached_results['total_ms']:.2f}ms")
     print(f"    Improvement: {total_time_improvement_pct:.1f}%")
-    print(f"    Time saved: {uncached_results['total_ms'] - cached_results['total_ms']:.2f}ms")
+    print(
+        f"    Time saved: {uncached_results['total_ms'] - cached_results['total_ms']:.2f}ms"
+    )
 
     print(f"\n  Cache Hit Rate: {cached_results['hit_rate']:.1%}")
 
@@ -268,8 +283,12 @@ def print_summary(uncached_results, cached_results):
     improvement_met = avg_improvement_pct >= target_improvement
     hit_rate_met = cached_results["hit_rate"] >= target_hit_rate
 
-    print(f"    ✓ Load time reduction ≥50%: {'✓ PASS' if improvement_met else '✗ FAIL'} ({avg_improvement_pct:.1f}%)")
-    print(f"    ✓ Hit rate ≥80%: {'✓ PASS' if hit_rate_met else '✗ FAIL'} ({cached_results['hit_rate']:.1%})")
+    print(
+        f"    ✓ Load time reduction ≥50%: {'✓ PASS' if improvement_met else '✗ FAIL'} ({avg_improvement_pct:.1f}%)"
+    )
+    print(
+        f"    ✓ Hit rate ≥80%: {'✓ PASS' if hit_rate_met else '✗ FAIL'} ({cached_results['hit_rate']:.1%})"
+    )
 
     if improvement_met and hit_rate_met:
         print("\n  🎉 ALL TARGETS MET!")
@@ -287,7 +306,7 @@ def main():
     """Run all benchmarks"""
     print("\n" + "=" * 70)
     print("TEMPLATE CACHE PERFORMANCE BENCHMARK")
-    print("Phase 7 Stream 2: Template Caching System")
+    print("Agent Framework: Template Caching System")
     print("=" * 70)
 
     # Find templates directory

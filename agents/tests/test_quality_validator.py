@@ -10,13 +10,12 @@ import pytest
 
 from agents.lib.quality_validator import QualityValidator
 from agents.tests.fixtures.phase4_fixtures import (
-    VALID_EFFECT_NODE_CODE,
     INVALID_SYNTAX_CODE,
-    ONEX_VIOLATION_CODE,
     MISSING_ERROR_HANDLING_CODE,
+    ONEX_VIOLATION_CODE,
     SAMPLE_CONTRACT_WITH_CRUD,
+    VALID_EFFECT_NODE_CODE,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -65,7 +64,9 @@ class TestSyntaxValidation:
         assert result["ast_tree"] is not None
 
     @pytest.mark.asyncio
-    async def test_validate_invalid_syntax(self, quality_validator, invalid_syntax_sample):
+    async def test_validate_invalid_syntax(
+        self, quality_validator, invalid_syntax_sample
+    ):
         """Test validation of code with syntax errors"""
         result = await quality_validator.validate_syntax(invalid_syntax_sample)
 
@@ -74,7 +75,9 @@ class TestSyntaxValidation:
         assert any("syntax" in error.lower() for error in result["errors"])
 
     @pytest.mark.asyncio
-    async def test_syntax_error_line_numbers(self, quality_validator, invalid_syntax_sample):
+    async def test_syntax_error_line_numbers(
+        self, quality_validator, invalid_syntax_sample
+    ):
         """Test that syntax errors include line numbers"""
         result = await quality_validator.validate_syntax(invalid_syntax_sample)
 
@@ -95,7 +98,9 @@ class TestOnexCompliance:
     async def test_validate_onex_naming(self, quality_validator, valid_code_sample):
         """Test ONEX naming convention validation"""
         result = await quality_validator.validate_onex_naming(
-            valid_code_sample, expected_class_prefix="Node", expected_class_suffix="Effect"
+            valid_code_sample,
+            expected_class_prefix="Node",
+            expected_class_suffix="Effect",
         )
 
         assert result["valid"] is True
@@ -109,7 +114,9 @@ class BadName:  # Should be Node<Name>Effect
     pass
 """
         result = await quality_validator.validate_onex_naming(
-            code_with_bad_naming, expected_class_prefix="Node", expected_class_suffix="Effect"
+            code_with_bad_naming,
+            expected_class_prefix="Node",
+            expected_class_suffix="Effect",
         )
 
         assert result["valid"] is False
@@ -126,7 +133,9 @@ class BadName:  # Should be Node<Name>Effect
         assert result["uses_bare_any"] is False
 
     @pytest.mark.asyncio
-    async def test_detect_bare_any_usage(self, quality_validator, onex_violation_sample):
+    async def test_detect_bare_any_usage(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test detection of bare Any type usage"""
         result = await quality_validator.validate_type_safety(onex_violation_sample)
 
@@ -147,7 +156,9 @@ class BadName:  # Should be Node<Name>Effect
     @pytest.mark.asyncio
     async def test_detect_missing_error_handling(self, quality_validator):
         """Test detection of missing error handling"""
-        result = await quality_validator.validate_error_handling(MISSING_ERROR_HANDLING_CODE)
+        result = await quality_validator.validate_error_handling(
+            MISSING_ERROR_HANDLING_CODE
+        )
 
         assert result["valid"] is False
         assert len(result["violations"]) > 0
@@ -167,7 +178,9 @@ class TestContractConformance:
         code = VALID_EFFECT_NODE_CODE
         contract = SAMPLE_CONTRACT_WITH_CRUD
 
-        result = await quality_validator.validate_contract_conformance(code=code, contract=contract)
+        result = await quality_validator.validate_contract_conformance(
+            code=code, contract=contract
+        )
 
         assert result["valid"] is True
         assert result["all_methods_present"] is True
@@ -184,7 +197,9 @@ class NodeTestEffect:
 """
         contract = SAMPLE_CONTRACT_WITH_CRUD
 
-        result = await quality_validator.validate_contract_conformance(code=code, contract=contract)
+        result = await quality_validator.validate_contract_conformance(
+            code=code, contract=contract
+        )
 
         assert result["valid"] is False
         assert len(result["missing_methods"]) > 0
@@ -196,7 +211,9 @@ class NodeTestEffect:
         code = VALID_EFFECT_NODE_CODE
         contract = SAMPLE_CONTRACT_WITH_CRUD
 
-        result = await quality_validator.validate_method_signatures(code=code, contract=contract)
+        result = await quality_validator.validate_method_signatures(
+            code=code, contract=contract
+        )
 
         assert result["valid"] is True
         assert len(result["signature_mismatches"]) == 0
@@ -207,7 +224,9 @@ class NodeTestEffect:
         code = VALID_EFFECT_NODE_CODE
         contract = SAMPLE_CONTRACT_WITH_CRUD
 
-        result = await quality_validator.validate_return_types(code=code, contract=contract)
+        result = await quality_validator.validate_return_types(
+            code=code, contract=contract
+        )
 
         # Should validate that return types match contract output types
         assert "validation_results" in result
@@ -222,7 +241,9 @@ class TestQualityScoreCalculation:
     """Tests for quality score calculation"""
 
     @pytest.mark.asyncio
-    async def test_calculate_quality_score_valid_code(self, quality_validator, valid_code_sample):
+    async def test_calculate_quality_score_valid_code(
+        self, quality_validator, valid_code_sample
+    ):
         """Test quality score for valid code"""
         result = await quality_validator.calculate_quality_score(
             code=valid_code_sample, contract=SAMPLE_CONTRACT_WITH_CRUD
@@ -233,9 +254,13 @@ class TestQualityScoreCalculation:
         assert result["quality_score"] >= 0.8, "Valid code should score >= 0.8"
 
     @pytest.mark.asyncio
-    async def test_calculate_quality_score_invalid_code(self, quality_validator, onex_violation_sample):
+    async def test_calculate_quality_score_invalid_code(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test quality score for invalid code"""
-        result = await quality_validator.calculate_quality_score(code=onex_violation_sample, contract={})
+        result = await quality_validator.calculate_quality_score(
+            code=onex_violation_sample, contract={}
+        )
 
         assert "quality_score" in result
         assert result["quality_score"] < 0.8, "Invalid code should score < 0.8"
@@ -281,7 +306,9 @@ class TestThresholdValidation:
         assert result["quality_score"] >= 0.8
 
     @pytest.mark.asyncio
-    async def test_validate_fails_threshold(self, quality_validator, onex_violation_sample):
+    async def test_validate_fails_threshold(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test validation failure against threshold"""
         result = await quality_validator.validate_quality_threshold(
             code=onex_violation_sample, contract={}, threshold=0.8
@@ -311,9 +338,13 @@ class TestViolationDetection:
     """Tests for comprehensive violation detection"""
 
     @pytest.mark.asyncio
-    async def test_detect_all_violations(self, quality_validator, onex_violation_sample):
+    async def test_detect_all_violations(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test comprehensive violation detection"""
-        result = await quality_validator.detect_all_violations(code=onex_violation_sample, contract={})
+        result = await quality_validator.detect_all_violations(
+            code=onex_violation_sample, contract={}
+        )
 
         assert "violations" in result
         assert len(result["violations"]) > 0
@@ -323,9 +354,13 @@ class TestViolationDetection:
         assert "type_safety" in violation_types
 
     @pytest.mark.asyncio
-    async def test_violation_reporting_format(self, quality_validator, onex_violation_sample):
+    async def test_violation_reporting_format(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test violation reporting format"""
-        result = await quality_validator.detect_all_violations(code=onex_violation_sample, contract={})
+        result = await quality_validator.detect_all_violations(
+            code=onex_violation_sample, contract={}
+        )
 
         for violation in result["violations"]:
             # Verify violation structure
@@ -335,7 +370,9 @@ class TestViolationDetection:
             assert "line" in violation or "location" in violation
 
     @pytest.mark.asyncio
-    async def test_no_violations_for_valid_code(self, quality_validator, valid_code_sample):
+    async def test_no_violations_for_valid_code(
+        self, quality_validator, valid_code_sample
+    ):
         """Test that valid code has no violations"""
         result = await quality_validator.detect_all_violations(
             code=valid_code_sample, contract=SAMPLE_CONTRACT_WITH_CRUD
@@ -353,7 +390,9 @@ class TestImportValidation:
     """Tests for import statement validation"""
 
     @pytest.mark.asyncio
-    async def test_validate_required_imports(self, quality_validator, valid_code_sample):
+    async def test_validate_required_imports(
+        self, quality_validator, valid_code_sample
+    ):
         """Test validation of required imports"""
         result = await quality_validator.validate_imports(
             code=valid_code_sample, required_imports=["OnexError", "NodeEffect"]
@@ -369,7 +408,9 @@ class TestImportValidation:
 class NodeTestEffect:
     pass
 """
-        result = await quality_validator.validate_imports(code=code, required_imports=["OnexError", "NodeEffect"])
+        result = await quality_validator.validate_imports(
+            code=code, required_imports=["OnexError", "NodeEffect"]
+        )
 
         assert result["valid"] is False
         assert len(result["missing_imports"]) == 2
@@ -384,10 +425,14 @@ class TestComprehensiveValidation:
     """Tests for comprehensive validation pipeline"""
 
     @pytest.mark.asyncio
-    async def test_full_validation_valid_code(self, quality_validator, valid_code_sample):
+    async def test_full_validation_valid_code(
+        self, quality_validator, valid_code_sample
+    ):
         """Test full validation pipeline on valid code"""
         result = await quality_validator.validate_code(
-            code=valid_code_sample, contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
+            code=valid_code_sample,
+            contract=SAMPLE_CONTRACT_WITH_CRUD,
+            quality_threshold=0.8,
         )
 
         assert result["valid"] is True
@@ -396,9 +441,13 @@ class TestComprehensiveValidation:
         assert result["meets_threshold"] is True
 
     @pytest.mark.asyncio
-    async def test_full_validation_invalid_code(self, quality_validator, onex_violation_sample):
+    async def test_full_validation_invalid_code(
+        self, quality_validator, onex_violation_sample
+    ):
         """Test full validation pipeline on invalid code"""
-        result = await quality_validator.validate_code(code=onex_violation_sample, contract={}, quality_threshold=0.8)
+        result = await quality_validator.validate_code(
+            code=onex_violation_sample, contract={}, quality_threshold=0.8
+        )
 
         assert result["valid"] is False
         assert result["quality_score"] < 0.8
@@ -412,7 +461,9 @@ class TestComprehensiveValidation:
 
         start = time.time()
         await quality_validator.validate_code(
-            code=valid_code_sample, contract=SAMPLE_CONTRACT_WITH_CRUD, quality_threshold=0.8
+            code=valid_code_sample,
+            contract=SAMPLE_CONTRACT_WITH_CRUD,
+            quality_threshold=0.8,
         )
         duration_ms = (time.time() - start) * 1000
 

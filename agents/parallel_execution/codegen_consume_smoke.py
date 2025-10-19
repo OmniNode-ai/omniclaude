@@ -22,7 +22,9 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bootstrap", type=str, default=None)
     parser.add_argument("--correlation-id", type=str, default=None)
-    parser.add_argument("--rpk", action="store_true", help="Consume via rpk inside container")
+    parser.add_argument(
+        "--rpk", action="store_true", help="Consume via rpk inside container"
+    )
     args = parser.parse_args()
 
     topic = "dev.omniclaude.codegen.analyze.response.v1"
@@ -33,8 +35,8 @@ async def main() -> None:
         return True
 
     if args.rpk:
-        import subprocess
         import json
+        import subprocess
 
         # Use rpk inside the container; read a single message and filter client-side
         cmd = [

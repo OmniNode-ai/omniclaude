@@ -9,9 +9,9 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
-import aiofiles
+from typing import Any, Dict, Optional
 
+import aiofiles
 from enhanced_pattern_tracker import EnhancedPatternTracker, get_enhanced_tracker
 
 
@@ -20,8 +20,12 @@ class PerformanceDashboard:
 
     def __init__(self, tracker: Optional[EnhancedPatternTracker] = None):
         self.tracker = tracker or get_enhanced_tracker()
-        self.dashboard_file = Path.home() / ".claude" / "hooks" / "logs" / "performance-dashboard.html"
-        self.metrics_file = Path.home() / ".claude" / "hooks" / "logs" / "performance-metrics.jsonl"
+        self.dashboard_file = (
+            Path.home() / ".claude" / "hooks" / "logs" / "performance-dashboard.html"
+        )
+        self.metrics_file = (
+            Path.home() / ".claude" / "hooks" / "logs" / "performance-metrics.jsonl"
+        )
         self._running = False
 
     async def start_monitoring(self, interval_seconds: float = 5.0):
@@ -339,7 +343,9 @@ class PerformanceDashboard:
         async with aiofiles.open(data_file, "w") as f:
             await f.write(json.dumps(performance_data, indent=2))
 
-    async def generate_performance_report(self, duration_minutes: int = 60) -> Dict[str, Any]:
+    async def generate_performance_report(
+        self, duration_minutes: int = 60
+    ) -> Dict[str, Any]:
         """Generate performance report for specified duration."""
         # Read metrics from log file
         metrics_data = []
@@ -353,18 +359,28 @@ class PerformanceDashboard:
 
         # Filter by time window
         cutoff_time = datetime.now(timezone.utc).timestamp() - (duration_minutes * 60)
-        recent_metrics = [m for m in metrics_data if datetime.fromisoformat(m["timestamp"]).timestamp() > cutoff_time]
+        recent_metrics = [
+            m
+            for m in metrics_data
+            if datetime.fromisoformat(m["timestamp"]).timestamp() > cutoff_time
+        ]
 
         if not recent_metrics:
             return {"error": f"No data available for last {duration_minutes} minutes"}
 
         # Calculate aggregate statistics
         total_ops = sum(m["metrics"]["total_operations"] for m in recent_metrics)
-        total_success = sum(m["metrics"]["successful_operations"] for m in recent_metrics)
+        total_success = sum(
+            m["metrics"]["successful_operations"] for m in recent_metrics
+        )
         total_failures = sum(m["metrics"]["failed_operations"] for m in recent_metrics)
 
-        avg_processing_time = sum(m["metrics"]["avg_processing_time_ms"] for m in recent_metrics) / len(recent_metrics)
-        avg_cache_hit_rate = sum(m["metrics"]["get_cache_hit_rate"]() for m in recent_metrics) / len(recent_metrics)
+        avg_processing_time = sum(
+            m["metrics"]["avg_processing_time_ms"] for m in recent_metrics
+        ) / len(recent_metrics)
+        avg_cache_hit_rate = sum(
+            m["metrics"]["get_cache_hit_rate"]() for m in recent_metrics
+        ) / len(recent_metrics)
 
         return {
             "report_period_minutes": duration_minutes,
@@ -372,16 +388,22 @@ class PerformanceDashboard:
             "total_operations": total_ops,
             "successful_operations": total_success,
             "failed_operations": total_failures,
-            "overall_success_rate": (total_success / total_ops * 100) if total_ops > 0 else 0,
+            "overall_success_rate": (
+                (total_success / total_ops * 100) if total_ops > 0 else 0
+            ),
             "average_processing_time_ms": avg_processing_time,
             "average_cache_hit_rate": avg_cache_hit_rate,
-            "peak_memory_usage_mb": max(m["metrics"]["memory_usage_mb"] for m in recent_metrics),
+            "peak_memory_usage_mb": max(
+                m["metrics"]["memory_usage_mb"] for m in recent_metrics
+            ),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     async def cleanup_old_metrics(self, retention_days: int = 7):
         """Clean up old metrics data."""
-        cutoff_time = datetime.now(timezone.utc).timestamp() - (retention_days * 24 * 3600)
+        cutoff_time = datetime.now(timezone.utc).timestamp() - (
+            retention_days * 24 * 3600
+        )
 
         try:
             # Read all data
@@ -392,7 +414,11 @@ class PerformanceDashboard:
                         all_data.append(json.loads(line))
 
             # Filter and rewrite
-            recent_data = [d for d in all_data if datetime.fromisoformat(d["timestamp"]).timestamp() > cutoff_time]
+            recent_data = [
+                d
+                for d in all_data
+                if datetime.fromisoformat(d["timestamp"]).timestamp() > cutoff_time
+            ]
 
             async with aiofiles.open(self.metrics_file, "w") as f:
                 for entry in recent_data:

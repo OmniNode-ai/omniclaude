@@ -5,28 +5,29 @@ Generation Validation Tests
 Tests for ONEX compliance, type safety, contract validation, and enum serialization.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.tests.fixtures.phase4_fixtures import (
     EFFECT_ANALYSIS_RESULT,
-    ONEX_NAMING_VIOLATIONS,
-    ONEX_NAMING_VALID,
-    TYPE_SAFETY_VIOLATIONS,
     EXPECTED_EFFECT_CONTRACT_YAML,
+    ONEX_NAMING_VALID,
+    ONEX_NAMING_VIOLATIONS,
+    TYPE_SAFETY_VIOLATIONS,
 )
 from agents.tests.utils.generation_test_helpers import (
-    parse_generated_yaml,
-    validate_contract_schema,
-    parse_generated_python,
-    check_type_annotations,
     check_for_any_types,
-    validate_onex_naming,
+    check_type_annotations,
+    parse_generated_python,
+    parse_generated_yaml,
     validate_class_naming,
+    validate_contract_schema,
     validate_enum_serialization,
     validate_mixin_compatibility,
+    validate_onex_naming,
 )
 
 
@@ -369,7 +370,9 @@ class TestMixinValidation:
             # Check mixin compatibility
             mixins = EFFECT_ANALYSIS_RESULT.recommended_mixins
             is_compatible, conflicts = validate_mixin_compatibility(mixins)
-            assert is_compatible, f"Generated code uses incompatible mixins: {conflicts}"
+            assert (
+                is_compatible
+            ), f"Generated code uses incompatible mixins: {conflicts}"
 
 
 class TestQualityMetrics:
@@ -414,7 +417,11 @@ class TestQualityMetrics:
 
             tree, _ = parse_generated_python(content)
             imports = [
-                node for node in tree.body if isinstance(node, (__import__("ast").Import, __import__("ast").ImportFrom))
+                node
+                for node in tree.body
+                if isinstance(
+                    node, (__import__("ast").Import, __import__("ast").ImportFrom)
+                )
             ]
             assert len(imports) > 0, "No imports found"
 

@@ -59,7 +59,11 @@ class DebugLogger:
             print(f"{'='*80}\n", file=sys.stderr)
 
     def log_phase_complete(
-        self, phase_name: str, duration_ms: float, success: bool = True, details: Optional[str] = None
+        self,
+        phase_name: str,
+        duration_ms: float,
+        success: bool = True,
+        details: Optional[str] = None,
     ):
         """Log phase completion with appropriate verbosity."""
         if self.is_silent():
@@ -70,7 +74,10 @@ class DebugLogger:
             print(f"[{phase_name}] {status} {duration_ms:.0f}ms", file=sys.stderr)
         else:
             status = "✓" if success else "✗"
-            print(f"[DispatchRunner] {status} {phase_name} completed in {duration_ms:.0f}ms", file=sys.stderr)
+            print(
+                f"[DispatchRunner] {status} {phase_name} completed in {duration_ms:.0f}ms",
+                file=sys.stderr,
+            )
             if details:
                 print(f"[DispatchRunner] {details}", file=sys.stderr)
             print("", file=sys.stderr)
@@ -145,19 +152,40 @@ class DebugLogger:
             print("\n" + "=" * 80, file=sys.stderr)
             print("AUTOMATED WORKFLOW INITIATED", file=sys.stderr)
             print("=" * 80, file=sys.stderr)
-            print(f"\nUser Request: {user_prompt[:120]}{'...' if len(user_prompt) > 120 else ''}", file=sys.stderr)
+            print(
+                f"\nUser Request: {user_prompt[:120]}{'...' if len(user_prompt) > 120 else ''}",
+                file=sys.stderr,
+            )
             print(f"Correlation ID: {correlation_id}", file=sys.stderr)
             print(f"Workspace: {workspace_path}", file=sys.stderr)
             print("\nWorkflow Configuration:", file=sys.stderr)
-            print(f"  - Context Gathering: {'ENABLED' if enable_context else 'DISABLED'}", file=sys.stderr)
-            print(f"  - Quorum Validation: {'ENABLED' if enable_quorum else 'DISABLED'}", file=sys.stderr)
-            print(f"  - Interactive Mode: {'ENABLED' if enable_interactive else 'DISABLED'}", file=sys.stderr)
-            print(f"  - Task Architect: {'ENABLED' if enable_architect else 'DISABLED'}", file=sys.stderr)
+            print(
+                f"  - Context Gathering: {'ENABLED' if enable_context else 'DISABLED'}",
+                file=sys.stderr,
+            )
+            print(
+                f"  - Quorum Validation: {'ENABLED' if enable_quorum else 'DISABLED'}",
+                file=sys.stderr,
+            )
+            print(
+                f"  - Interactive Mode: {'ENABLED' if enable_interactive else 'DISABLED'}",
+                file=sys.stderr,
+            )
+            print(
+                f"  - Task Architect: {'ENABLED' if enable_architect else 'DISABLED'}",
+                file=sys.stderr,
+            )
 
             if phase_config.get("only_phase") is not None:
-                print(f"  - Execution Mode: SINGLE PHASE ({phase_config['only_phase']})", file=sys.stderr)
+                print(
+                    f"  - Execution Mode: SINGLE PHASE ({phase_config['only_phase']})",
+                    file=sys.stderr,
+                )
             elif phase_config.get("stop_after_phase") is not None:
-                print(f"  - Execution Mode: STOP AFTER PHASE {phase_config['stop_after_phase']}", file=sys.stderr)
+                print(
+                    f"  - Execution Mode: STOP AFTER PHASE {phase_config['stop_after_phase']}",
+                    file=sys.stderr,
+                )
             else:
                 print("  - Execution Mode: FULL PIPELINE", file=sys.stderr)
 
@@ -174,13 +202,21 @@ class DebugLogger:
         if self.is_quiet():
             print(f"[Quorum] {decision} ({confidence:.1%})", file=sys.stderr)
         else:
-            print(f"[DispatchRunner] Quorum decision: {decision} (confidence: {confidence:.1%})", file=sys.stderr)
+            print(
+                f"[DispatchRunner] Quorum decision: {decision} (confidence: {confidence:.1%})",
+                file=sys.stderr,
+            )
             if deficiencies and not self.is_quiet():
-                print(f"[DispatchRunner] Deficiencies found: {len(deficiencies)}", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] Deficiencies found: {len(deficiencies)}",
+                    file=sys.stderr,
+                )
                 for deficiency in deficiencies:
                     print(f"[DispatchRunner]   - {deficiency}", file=sys.stderr)
 
-    def log_task_breakdown(self, num_subtasks: int, execution_order: str, reasoning: str):
+    def log_task_breakdown(
+        self, num_subtasks: int, execution_order: str, reasoning: str
+    ):
         """Log task breakdown with appropriate verbosity."""
         if self.is_silent():
             return
@@ -189,10 +225,13 @@ class DebugLogger:
             print(f"[Architect] {num_subtasks} subtasks", file=sys.stderr)
         else:
             print(
-                f"[DispatchRunner] ✓ Breakdown complete: {num_subtasks} subtasks ({execution_order})", file=sys.stderr
+                f"[DispatchRunner] ✓ Breakdown complete: {num_subtasks} subtasks ({execution_order})",
+                file=sys.stderr,
             )
             if self.is_verbose():
-                print(f"[DispatchRunner] Reasoning: {reasoning[:150]}...", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] Reasoning: {reasoning[:150]}...", file=sys.stderr
+                )
 
     def log_execution_summary(self, successful: int, failed: int, total: int):
         """Log execution summary with appropriate verbosity."""
@@ -202,7 +241,10 @@ class DebugLogger:
         if self.is_quiet():
             print(f"[Execution] {successful}/{total} succeeded", file=sys.stderr)
         else:
-            print(f"[DispatchRunner] ✓ Phase 4 completed ({successful} succeeded, {failed} failed)", file=sys.stderr)
+            print(
+                f"[DispatchRunner] ✓ Phase 4 completed ({successful} succeeded, {failed} failed)",
+                file=sys.stderr,
+            )
 
     def estimate_token_savings(self, verbose_tokens: int, silent_tokens: int):
         """Estimate token savings from silent mode."""
@@ -216,7 +258,9 @@ class DebugLogger:
         return {
             "verbose_tokens": self._verbose_tokens,
             "silent_tokens": self._silent_tokens,
-            "savings_percent": self.estimate_token_savings(self._verbose_tokens, self._silent_tokens),
+            "savings_percent": self.estimate_token_savings(
+                self._verbose_tokens, self._silent_tokens
+            ),
             "mode": self.level.value,
         }
 

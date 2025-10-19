@@ -6,12 +6,12 @@ Defines event types and data structures for tracking complete workflows
 from intent detection through validation, correction, and final outcome.
 """
 
-from dataclasses import dataclass, field, asdict
+import hashlib
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List, Dict, Optional, Any
-import uuid
-import hashlib
+from typing import Any, Dict, List, Optional
 
 
 class EventType(Enum):
@@ -220,7 +220,13 @@ class WorkflowEvent:
 
     @classmethod
     def create(
-        cls, correlation_id: str, event_type: EventType, tool_name: str, file_path: str, content: str, **kwargs
+        cls,
+        correlation_id: str,
+        event_type: EventType,
+        tool_name: str,
+        file_path: str,
+        content: str,
+        **kwargs,
     ) -> "WorkflowEvent":
         """
         Factory method to create a new event.

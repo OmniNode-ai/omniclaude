@@ -133,7 +133,7 @@ The enhanced-ci.yml workflow provides 11 specialized jobs organized into validat
 - `test_integration_smoke.py`
 - `test_phase4_integration.py`
 - `test_phase5_integration.py`
-- `test_phase7_integration.py`
+- `test_framework_integration.py`
 - `test_end_to_end_workflows.py`
 
 **Success Criteria**: All unit tests pass with >80% coverage
@@ -157,7 +157,7 @@ The enhanced-ci.yml workflow provides 11 specialized jobs organized into validat
 - `test_integration_smoke.py`
 - `test_phase4_integration.py`
 - `test_phase5_integration.py`
-- `test_phase7_integration.py`
+- `test_framework_integration.py`
 - `test_end_to_end_workflows.py`
 
 **Environment Variables**:

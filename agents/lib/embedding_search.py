@@ -5,10 +5,11 @@ Implements semantic search for error patterns to enable intelligent STF recommen
 based on historical data. Uses embeddings to find similar errors and their successful fixes.
 """
 
-import numpy as np
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 from .db import get_pg_pool
 
@@ -63,7 +64,9 @@ class EmbeddingSearch:
 
         return vector
 
-    async def _calculate_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    async def _calculate_similarity(
+        self, embedding1: np.ndarray, embedding2: np.ndarray
+    ) -> float:
         """Calculate cosine similarity between two embeddings."""
         if len(embedding1) == 0 or len(embedding2) == 0:
             return 0.0
@@ -86,7 +89,11 @@ class EmbeddingSearch:
         return dot_product / (norm1 * norm2)
 
     async def find_similar_errors(
-        self, error_text: str, error_type: Optional[str] = None, limit: int = 10, min_similarity: float = 0.3
+        self,
+        error_text: str,
+        error_type: Optional[str] = None,
+        limit: int = 10,
+        min_similarity: float = 0.3,
     ) -> List[SimilarityResult]:
         """
         Find similar errors based on semantic similarity.
@@ -139,11 +146,15 @@ class EmbeddingSearch:
                 error_embedding = await self._get_error_embedding(row["message"])
 
                 # Calculate similarity
-                similarity = await self._calculate_similarity(query_embedding, error_embedding)
+                similarity = await self._calculate_similarity(
+                    query_embedding, error_embedding
+                )
 
                 if similarity >= min_similarity:
                     # Get success correlations for this error
-                    success_correlations = await self._get_success_correlations(row["id"], conn)
+                    success_correlations = await self._get_success_correlations(
+                        row["id"], conn
+                    )
 
                     similarities.append(
                         SimilarityResult(
@@ -161,7 +172,9 @@ class EmbeddingSearch:
             similarities.sort(key=lambda x: x.similarity_score, reverse=True)
             return similarities[:limit]
 
-    async def _get_success_correlations(self, error_id: str, conn) -> List[Dict[str, Any]]:
+    async def _get_success_correlations(
+        self, error_id: str, conn
+    ) -> List[Dict[str, Any]]:
         """Get success correlations for an error."""
         try:
             rows = await conn.fetch(
@@ -225,17 +238,27 @@ class EmbeddingSearch:
                     # Weight by similarity score
                     weight = similar_error.similarity_score
                     stf_scores[stf_key]["total_similarity"] += weight
-                    stf_scores[stf_key]["total_successes"] += correlation.get("n_success", 0) * weight
-                    stf_scores[stf_key]["total_trials"] += correlation.get("n_trials", 0) * weight
-                    stf_scores[stf_key]["avg_uplift_ms"] += correlation.get("uplift_ms", 0) * weight
-                    stf_scores[stf_key]["avg_uplift_cost_usd"] += float(correlation.get("uplift_cost_usd", 0)) * weight
+                    stf_scores[stf_key]["total_successes"] += (
+                        correlation.get("n_success", 0) * weight
+                    )
+                    stf_scores[stf_key]["total_trials"] += (
+                        correlation.get("n_trials", 0) * weight
+                    )
+                    stf_scores[stf_key]["avg_uplift_ms"] += (
+                        correlation.get("uplift_ms", 0) * weight
+                    )
+                    stf_scores[stf_key]["avg_uplift_cost_usd"] += (
+                        float(correlation.get("uplift_cost_usd", 0)) * weight
+                    )
 
         # Calculate confidence scores
         recommendations = []
         for stf_key, data in stf_scores.items():
             if data["total_trials"] > 0:
                 success_rate = data["total_successes"] / data["total_trials"]
-                confidence = (data["total_similarity"] / len(similar_errors)) * success_rate
+                confidence = (
+                    data["total_similarity"] / len(similar_errors)
+                ) * success_rate
 
                 recommendations.append(
                     {
@@ -246,8 +269,10 @@ class EmbeddingSearch:
                         "total_similarities": data["total_similarity"],
                         "total_successes": data["total_successes"],
                         "total_trials": data["total_trials"],
-                        "avg_uplift_ms": data["avg_uplift_ms"] / max(1, data["total_similarity"]),
-                        "avg_uplift_cost_usd": data["avg_uplift_cost_usd"] / max(1, data["total_similarity"]),
+                        "avg_uplift_ms": data["avg_uplift_ms"]
+                        / max(1, data["total_similarity"]),
+                        "avg_uplift_cost_usd": data["avg_uplift_cost_usd"]
+                        / max(1, data["total_similarity"]),
                     }
                 )
 
@@ -255,7 +280,9 @@ class EmbeddingSearch:
         recommendations.sort(key=lambda x: x["confidence"], reverse=True)
         return recommendations[:limit]
 
-    async def get_error_patterns(self, days: int = 7, min_frequency: int = 2) -> List[Dict[str, Any]]:
+    async def get_error_patterns(
+        self, days: int = 7, min_frequency: int = 2
+    ) -> List[Dict[str, Any]]:
         """
         Get common error patterns from recent data.
 
@@ -276,7 +303,7 @@ class EmbeddingSearch:
             # Get error frequency by type and message pattern
             rows = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     error_type,
                     message,
                     COUNT(*) as frequency,
@@ -310,7 +337,9 @@ class EmbeddingSearch:
 
             return patterns
 
-    async def _get_success_correlations_for_pattern(self, error_type: str, message: str, conn) -> List[Dict[str, Any]]:
+    async def _get_success_correlations_for_pattern(
+        self, error_type: str, message: str, conn
+    ) -> List[Dict[str, Any]]:
         """Get success correlations for a specific error pattern."""
         try:
             rows = await conn.fetch(
@@ -340,16 +369,24 @@ async def find_similar_errors(
     error_text: str, error_type: Optional[str] = None, limit: int = 10
 ) -> List[SimilarityResult]:
     """Find similar errors based on semantic similarity."""
-    return await embedding_search.find_similar_errors(error_text=error_text, error_type=error_type, limit=limit)
+    return await embedding_search.find_similar_errors(
+        error_text=error_text, error_type=error_type, limit=limit
+    )
 
 
 async def recommend_stfs_for_error(
     error_text: str, error_type: Optional[str] = None, limit: int = 5
 ) -> List[Dict[str, Any]]:
     """Recommend STFs based on similar error patterns."""
-    return await embedding_search.recommend_stfs(error_text=error_text, error_type=error_type, limit=limit)
+    return await embedding_search.recommend_stfs(
+        error_text=error_text, error_type=error_type, limit=limit
+    )
 
 
-async def get_error_patterns_analysis(days: int = 7, min_frequency: int = 2) -> List[Dict[str, Any]]:
+async def get_error_patterns_analysis(
+    days: int = 7, min_frequency: int = 2
+) -> List[Dict[str, Any]]:
     """Get common error patterns from recent data."""
-    return await embedding_search.get_error_patterns(days=days, min_frequency=min_frequency)
+    return await embedding_search.get_error_patterns(
+        days=days, min_frequency=min_frequency
+    )

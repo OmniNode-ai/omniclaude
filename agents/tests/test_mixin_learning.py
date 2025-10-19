@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for Mixin Compatibility Learning System (Phase 7 Stream 4)
+Comprehensive tests for Mixin Compatibility Learning System (Agent Framework)
 
 Tests ML-powered mixin compatibility prediction, recommendations, and validation.
 Target accuracy: ≥95%
@@ -10,13 +10,15 @@ Author: OmniClaude Autonomous Code Generation System
 
 import os
 from pathlib import Path
-import pytest
+
 import numpy as np
+import pytest
+
+from agents.lib.mixin_compatibility import CompatibilityLevel, MixinCompatibilityManager
 
 # Import modules to test
 from agents.lib.mixin_features import MixinFeatureExtractor
 from agents.lib.mixin_learner import MixinLearner
-from agents.lib.mixin_compatibility import MixinCompatibilityManager, CompatibilityLevel
 from agents.lib.persistence import CodegenPersistence
 
 # Mark all tests in this module as integration tests (require database)
@@ -101,7 +103,9 @@ class TestMixinFeatureExtractor:
 
     def test_extract_features_single_pair(self, feature_extractor):
         """Test feature extraction for single mixin pair"""
-        features = feature_extractor.extract_features("MixinCaching", "MixinLogging", "EFFECT")
+        features = feature_extractor.extract_features(
+            "MixinCaching", "MixinLogging", "EFFECT"
+        )
 
         assert features is not None
         assert features.combined_vector is not None
@@ -135,11 +139,17 @@ class TestMixinFeatureExtractor:
 
     def test_canonical_ordering(self, feature_extractor):
         """Test that mixin pairs are canonically ordered"""
-        features1 = feature_extractor.extract_features("MixinCaching", "MixinLogging", "EFFECT")
-        features2 = feature_extractor.extract_features("MixinLogging", "MixinCaching", "EFFECT")
+        features1 = feature_extractor.extract_features(
+            "MixinCaching", "MixinLogging", "EFFECT"
+        )
+        features2 = feature_extractor.extract_features(
+            "MixinLogging", "MixinCaching", "EFFECT"
+        )
 
         # Should produce identical features due to canonical ordering
-        np.testing.assert_array_almost_equal(features1.combined_vector, features2.combined_vector)
+        np.testing.assert_array_almost_equal(
+            features1.combined_vector, features2.combined_vector
+        )
 
 
 # =============================================================================
@@ -158,7 +168,9 @@ class TestMixinLearner:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model.pkl"
-            learner = MixinLearner(persistence=persistence, auto_train=False, model_path=model_path)
+            learner = MixinLearner(
+                persistence=persistence, auto_train=False, model_path=model_path
+            )
 
             assert learner is not None
             assert learner.feature_extractor is not None
@@ -183,16 +195,22 @@ class TestMixinLearner:
         metrics = trained_learner.get_metrics()
 
         # Check accuracy target
-        assert metrics.accuracy >= 0.95, f"Accuracy {metrics.accuracy:.2%} below 95% target"
+        assert (
+            metrics.accuracy >= 0.95
+        ), f"Accuracy {metrics.accuracy:.2%} below 95% target"
 
         # Check F1 score
-        assert metrics.f1_score >= 0.90, f"F1 score {metrics.f1_score:.2%} below 90% target"
+        assert (
+            metrics.f1_score >= 0.90
+        ), f"F1 score {metrics.f1_score:.2%} below 90% target"
 
     @pytest.mark.asyncio
     async def test_prediction(self, trained_learner):
         """Test compatibility prediction"""
         # Test compatible pair
-        prediction = trained_learner.predict_compatibility("MixinLogging", "MixinMetrics", "EFFECT")
+        prediction = trained_learner.predict_compatibility(
+            "MixinLogging", "MixinMetrics", "EFFECT"
+        )
 
         assert prediction is not None
         assert prediction.mixin_a == "MixinLogging"
@@ -207,22 +225,31 @@ class TestMixinLearner:
         # Known compatible pairs that should have strong agreement
         compatible_pairs = [
             ("MixinRetry", "MixinCircuitBreaker"),  # Strong pattern: resilience mixins
-            ("MixinTransaction", "MixinConnection"),  # Strong pattern: data access mixins
+            (
+                "MixinTransaction",
+                "MixinConnection",
+            ),  # Strong pattern: data access mixins
             ("MixinValidation", "MixinSecurity"),  # Strong pattern: business mixins
         ]
 
         correct_predictions = 0
         for mixin_a, mixin_b in compatible_pairs:
-            prediction = trained_learner.predict_compatibility(mixin_a, mixin_b, "EFFECT")
+            prediction = trained_learner.predict_compatibility(
+                mixin_a, mixin_b, "EFFECT"
+            )
 
             if prediction.compatible:
                 correct_predictions += 1
 
             # Check confidence is reasonable
-            assert prediction.confidence > 0.5, f"Very low confidence for pair {mixin_a}, {mixin_b}"
+            assert (
+                prediction.confidence > 0.5
+            ), f"Very low confidence for pair {mixin_a}, {mixin_b}"
 
         # At least 2 out of 3 should be correctly predicted as compatible
-        assert correct_predictions >= 2, f"Only {correct_predictions}/3 compatible pairs predicted correctly"
+        assert (
+            correct_predictions >= 2
+        ), f"Only {correct_predictions}/3 compatible pairs predicted correctly"
 
     @pytest.mark.asyncio
     async def test_recommendations(self, trained_learner):
@@ -278,7 +305,9 @@ class TestMixinCompatibilityManager:
     @pytest.mark.asyncio
     async def test_check_compatibility(self, mixin_manager):
         """Test compatibility checking"""
-        check = await mixin_manager.check_compatibility("MixinLogging", "MixinMetrics", "EFFECT")
+        check = await mixin_manager.check_compatibility(
+            "MixinLogging", "MixinMetrics", "EFFECT"
+        )
 
         assert check is not None
         assert check.mixin_a == "MixinLogging"
@@ -313,7 +342,10 @@ class TestMixinCompatibilityManager:
     async def test_recommend_mixins(self, mixin_manager):
         """Test mixin recommendations"""
         recommendations = await mixin_manager.recommend_mixins(
-            node_type="EFFECT", required_capabilities=["logging", "caching"], existing_mixins=[], max_recommendations=5
+            node_type="EFFECT",
+            required_capabilities=["logging", "caching"],
+            existing_mixins=[],
+            max_recommendations=5,
         )
 
         assert len(recommendations) > 0
@@ -328,7 +360,11 @@ class TestMixinCompatibilityManager:
         """Test feedback recording"""
         # Record successful compatibility
         await mixin_manager.record_feedback(
-            "MixinLogging", "MixinMetrics", "EFFECT", success=True, resolution_pattern="Works well together"
+            "MixinLogging",
+            "MixinMetrics",
+            "EFFECT",
+            success=True,
+            resolution_pattern="Works well together",
         )
 
         # Should succeed without errors
@@ -337,7 +373,9 @@ class TestMixinCompatibilityManager:
     async def test_compatibility_levels(self, mixin_manager):
         """Test different compatibility levels"""
         # Highly compatible
-        check = await mixin_manager.check_compatibility("MixinLogging", "MixinMetrics", "EFFECT")
+        check = await mixin_manager.check_compatibility(
+            "MixinLogging", "MixinMetrics", "EFFECT"
+        )
 
         # Should be highly compatible or compatible
         assert check.level in [
@@ -368,20 +406,26 @@ class TestIntegration:
         assert metrics.accuracy >= 0.95, f"Accuracy {metrics.accuracy:.2%} below target"
 
         # 3. Make predictions
-        prediction = learner.predict_compatibility("MixinLogging", "MixinMetrics", "EFFECT")
+        prediction = learner.predict_compatibility(
+            "MixinLogging", "MixinMetrics", "EFFECT"
+        )
 
         assert prediction.confidence > 0.5
 
         # 4. Get recommendations
         recommendations = learner.recommend_mixins(
-            node_type="EFFECT", required_capabilities=["logging", "metrics"], existing_mixins=[]
+            node_type="EFFECT",
+            required_capabilities=["logging", "metrics"],
+            existing_mixins=[],
         )
 
         assert len(recommendations) > 0
 
         # 5. Record feedback
         manager = MixinCompatibilityManager(persistence=persistence, enable_ml=True)
-        await manager.record_feedback("MixinLogging", "MixinMetrics", "EFFECT", success=True)
+        await manager.record_feedback(
+            "MixinLogging", "MixinMetrics", "EFFECT", success=True
+        )
 
     @pytest.mark.asyncio
     async def test_continuous_learning(self, persistence):
@@ -396,10 +440,14 @@ class TestIntegration:
 
         # Add new feedback
         for _ in range(10):
-            await persistence.update_mixin_compatibility("MixinTest", "MixinLogging", "EFFECT", success=True)
+            await persistence.update_mixin_compatibility(
+                "MixinTest", "MixinLogging", "EFFECT", success=True
+            )
 
         # Update model (should trigger retrain if threshold met)
-        await learner.update_from_feedback("MixinTest", "MixinLogging", "EFFECT", success=True, retrain_threshold=5)
+        await learner.update_from_feedback(
+            "MixinTest", "MixinLogging", "EFFECT", success=True, retrain_threshold=5
+        )
 
         # Model should be updated
         assert learner.is_trained()
@@ -422,12 +470,16 @@ class TestPerformance:
 
         # Make 100 predictions
         for _ in range(100):
-            trained_learner.predict_compatibility("MixinLogging", "MixinMetrics", "EFFECT")
+            trained_learner.predict_compatibility(
+                "MixinLogging", "MixinMetrics", "EFFECT"
+            )
 
         elapsed = time.time() - start
 
         # Should complete 100 predictions in < 1 second
-        assert elapsed < 1.0, f"Predictions too slow: {elapsed:.3f}s for 100 predictions"
+        assert (
+            elapsed < 1.0
+        ), f"Predictions too slow: {elapsed:.3f}s for 100 predictions"
 
     @pytest.mark.asyncio
     async def test_feature_extraction_performance(self, feature_extractor):
@@ -444,7 +496,9 @@ class TestPerformance:
         elapsed = time.time() - start
 
         # Should extract features for 100 pairs in < 0.5 seconds
-        assert elapsed < 0.5, f"Feature extraction too slow: {elapsed:.3f}s for 100 pairs"
+        assert (
+            elapsed < 0.5
+        ), f"Feature extraction too slow: {elapsed:.3f}s for 100 pairs"
 
 
 # =============================================================================
@@ -510,9 +564,24 @@ async def _ensure_training_data(persistence: CodegenPersistence):
             ("MixinCaching", "MixinTransaction", "EFFECT", False),  # Both modify state
             ("MixinCaching", "MixinRepository", "EFFECT", False),  # Both modify state
             ("MixinTransaction", "MixinAudit", "EFFECT", False),  # Both modify state
-            ("MixinCircuitBreaker", "MixinRateLimiter", "EFFECT", False),  # Both modify state
-            ("MixinCaching", "MixinCircuitBreaker", "EFFECT", False),  # Both modify state
-            ("MixinTransaction", "MixinRepository", "REDUCER", False),  # Both modify state in reducer
+            (
+                "MixinCircuitBreaker",
+                "MixinRateLimiter",
+                "EFFECT",
+                False,
+            ),  # Both modify state
+            (
+                "MixinCaching",
+                "MixinCircuitBreaker",
+                "EFFECT",
+                False,
+            ),  # Both modify state
+            (
+                "MixinTransaction",
+                "MixinRepository",
+                "REDUCER",
+                False,
+            ),  # Both modify state in reducer
             # INCOMPATIBLE PAIRS (Same Functionality Duplication - obvious conflicts)
             ("MixinRetry", "MixinRetry", "EFFECT", False),
             ("MixinLogging", "MixinLogging", "EFFECT", False),
@@ -523,14 +592,44 @@ async def _ensure_training_data(persistence: CodegenPersistence):
             ("MixinValidation", "MixinValidation", "COMPUTE", False),
             ("MixinAudit", "MixinAudit", "EFFECT", False),
             # INCOMPATIBLE PAIRS (Node Type Incompatibility - resource-intensive in COMPUTE)
-            ("MixinCaching", "MixinTransaction", "COMPUTE", False),  # Resource intensive
-            ("MixinConnection", "MixinRepository", "COMPUTE", False),  # Resource intensive
-            ("MixinTransaction", "MixinEventBus", "COMPUTE", False),  # Resource intensive
+            (
+                "MixinCaching",
+                "MixinTransaction",
+                "COMPUTE",
+                False,
+            ),  # Resource intensive
+            (
+                "MixinConnection",
+                "MixinRepository",
+                "COMPUTE",
+                False,
+            ),  # Resource intensive
+            (
+                "MixinTransaction",
+                "MixinEventBus",
+                "COMPUTE",
+                False,
+            ),  # Resource intensive
             ("MixinCaching", "MixinConnection", "COMPUTE", False),  # Resource intensive
-            ("MixinRateLimiter", "MixinTransaction", "COMPUTE", False),  # Resource intensive
+            (
+                "MixinRateLimiter",
+                "MixinTransaction",
+                "COMPUTE",
+                False,
+            ),  # Resource intensive
             # INCOMPATIBLE PAIRS (Lifecycle + State Conflicts)
-            ("MixinCaching", "MixinRateLimiter", "EFFECT", False),  # Both modify state + shared deps
-            ("MixinTransaction", "MixinCircuitBreaker", "EFFECT", False),  # State + lifecycle conflict
+            (
+                "MixinCaching",
+                "MixinRateLimiter",
+                "EFFECT",
+                False,
+            ),  # Both modify state + shared deps
+            (
+                "MixinTransaction",
+                "MixinCircuitBreaker",
+                "EFFECT",
+                False,
+            ),  # State + lifecycle conflict
             # ADDITIONAL COMPATIBLE PAIRS (For Balance)
             ("MixinValidation", "MixinHealthCheck", "COMPUTE", True),
             ("MixinSecurity", "MixinHealthCheck", "EFFECT", True),
@@ -565,7 +664,9 @@ async def _ensure_training_data(persistence: CodegenPersistence):
         for mixin_a, mixin_b, node_type, success in samples:
             # Simulate 4-6 tests per pair to meet min threshold
             for _ in range(5):
-                await persistence.update_mixin_compatibility(mixin_a, mixin_b, node_type, success)
+                await persistence.update_mixin_compatibility(
+                    mixin_a, mixin_b, node_type, success
+                )
 
 
 if __name__ == "__main__":

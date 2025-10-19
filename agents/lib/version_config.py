@@ -26,7 +26,9 @@ class VersionConfig:
     use_core_stable: bool = True  # Use omnibase_core as dependency
     use_spi_validators: bool = True  # Use omnibase_spi as dependency
     use_archon_events: bool = False  # Use omniarchon event handlers when ready
-    use_bridge_events: bool = False  # Use omninode_bridge event infrastructure when ready
+    use_bridge_events: bool = (
+        False  # Use omninode_bridge event infrastructure when ready
+    )
 
     # Implementation modes
     prd_parser_mode: ImplementationMode = ImplementationMode.LEGACY
@@ -62,7 +64,9 @@ class VersionConfig:
     postgres_port: int = 5436
     postgres_db: str = "omninode_bridge"
     postgres_user: str = "postgres"
-    postgres_password: str = ""  # REQUIRED: Set via POSTGRES_PASSWORD environment variable
+    postgres_password: str = (
+        ""  # REQUIRED: Set via POSTGRES_PASSWORD environment variable
+    )
 
     # ONEX MCP Service configuration
     onex_mcp_host: str = "localhost"  # Set via ONEX_MCP_HOST environment variable
@@ -114,21 +118,37 @@ class VersionConfig:
 
         # Core library flags
         self.use_core_stable = os.getenv("USE_CORE_STABLE", "false").lower() == "true"
-        self.use_archon_events = os.getenv("USE_ARCHON_EVENTS", "false").lower() == "true"
-        self.use_bridge_events = os.getenv("USE_BRIDGE_EVENTS", "false").lower() == "true"
-        self.use_spi_validators = os.getenv("USE_SPI_VALIDATORS", "false").lower() == "true"
+        self.use_archon_events = (
+            os.getenv("USE_ARCHON_EVENTS", "false").lower() == "true"
+        )
+        self.use_bridge_events = (
+            os.getenv("USE_BRIDGE_EVENTS", "false").lower() == "true"
+        )
+        self.use_spi_validators = (
+            os.getenv("USE_SPI_VALIDATORS", "false").lower() == "true"
+        )
 
         # Event-driven features
-        self.enable_event_driven_analysis = os.getenv("ENABLE_EVENT_DRIVEN_ANALYSIS", "false").lower() == "true"
-        self.enable_event_driven_validation = os.getenv("ENABLE_EVENT_DRIVEN_VALIDATION", "false").lower() == "true"
-        self.enable_event_driven_patterns = os.getenv("ENABLE_EVENT_DRIVEN_PATTERNS", "false").lower() == "true"
+        self.enable_event_driven_analysis = (
+            os.getenv("ENABLE_EVENT_DRIVEN_ANALYSIS", "false").lower() == "true"
+        )
+        self.enable_event_driven_validation = (
+            os.getenv("ENABLE_EVENT_DRIVEN_VALIDATION", "false").lower() == "true"
+        )
+        self.enable_event_driven_patterns = (
+            os.getenv("ENABLE_EVENT_DRIVEN_PATTERNS", "false").lower() == "true"
+        )
 
         # Database configuration
         self.postgres_host = os.getenv("POSTGRES_HOST", self.postgres_host)
         try:
-            self.postgres_port = int(os.getenv("POSTGRES_PORT", str(self.postgres_port)))
+            self.postgres_port = int(
+                os.getenv("POSTGRES_PORT", str(self.postgres_port))
+            )
         except ValueError as e:
-            raise ValueError(f"Invalid POSTGRES_PORT value. Must be a valid integer: {e}")
+            raise ValueError(
+                f"Invalid POSTGRES_PORT value. Must be a valid integer: {e}"
+            )
         self.postgres_db = os.getenv("POSTGRES_DB", self.postgres_db)
         self.postgres_user = os.getenv("POSTGRES_USER", self.postgres_user)
         self.postgres_password = os.getenv("POSTGRES_PASSWORD", self.postgres_password)
@@ -136,9 +156,13 @@ class VersionConfig:
         # ONEX MCP Service configuration
         self.onex_mcp_host = os.getenv("ONEX_MCP_HOST", self.onex_mcp_host)
         try:
-            self.onex_mcp_port = int(os.getenv("ONEX_MCP_PORT", str(self.onex_mcp_port)))
+            self.onex_mcp_port = int(
+                os.getenv("ONEX_MCP_PORT", str(self.onex_mcp_port))
+            )
         except ValueError as e:
-            raise ValueError(f"Invalid ONEX_MCP_PORT value. Must be a valid integer: {e}")
+            raise ValueError(
+                f"Invalid ONEX_MCP_PORT value. Must be a valid integer: {e}"
+            )
 
         # Redis configuration
         self.redis_host = os.getenv("REDIS_HOST", self.redis_host)
@@ -148,20 +172,30 @@ class VersionConfig:
             raise ValueError(f"Invalid REDIS_PORT value. Must be a valid integer: {e}")
 
         # Kafka configuration
-        self.kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", self.kafka_bootstrap_servers)
+        self.kafka_bootstrap_servers = os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS", self.kafka_bootstrap_servers
+        )
         self.consumer_group = os.getenv("CONSUMER_GROUP", self.consumer_group)
 
         # Quality gates
-        self.quality_threshold = float(os.getenv("QUALITY_THRESHOLD", str(self.quality_threshold)))
+        self.quality_threshold = float(
+            os.getenv("QUALITY_THRESHOLD", str(self.quality_threshold))
+        )
         self.onex_compliance_threshold = float(
             os.getenv("ONEX_COMPLIANCE_THRESHOLD", str(self.onex_compliance_threshold))
         )
-        self.require_human_review = os.getenv("REQUIRE_HUMAN_REVIEW", "true").lower() == "true"
+        self.require_human_review = (
+            os.getenv("REQUIRE_HUMAN_REVIEW", "true").lower() == "true"
+        )
 
         # Timeouts
-        self.analysis_timeout_seconds = int(os.getenv("ANALYSIS_TIMEOUT_SECONDS", str(self.analysis_timeout_seconds)))
+        self.analysis_timeout_seconds = int(
+            os.getenv("ANALYSIS_TIMEOUT_SECONDS", str(self.analysis_timeout_seconds))
+        )
         self.validation_timeout_seconds = int(
-            os.getenv("VALIDATION_TIMEOUT_SECONDS", str(self.validation_timeout_seconds))
+            os.getenv(
+                "VALIDATION_TIMEOUT_SECONDS", str(self.validation_timeout_seconds)
+            )
         )
 
 

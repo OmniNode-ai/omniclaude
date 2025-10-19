@@ -1,16 +1,15 @@
 """Routing decision command for logging agent routing decisions."""
 
 import json
-from typing import Optional
 
 import click
 
-from ..utils.db import execute_query, get_db_cursor
+from ..utils.db import get_db_cursor
 from ..utils.validators import (
     validate_agent_name,
     validate_confidence_score,
-    validate_json_string,
     validate_json_array,
+    validate_json_string,
     validate_non_negative_integer,
     validate_required_field,
     validate_routing_strategy,
@@ -20,12 +19,26 @@ from ..utils.validators import (
 @click.command("routing-decision")
 @click.option("--request", "-r", required=True, help="User request text")
 @click.option("--agent", "-a", required=True, help="Selected agent name")
-@click.option("--confidence", "-c", type=float, required=True, help="Confidence score (0.0-1.0)")
-@click.option("--alternatives", type=str, default="[]", help="JSON array of alternative agents")
+@click.option(
+    "--confidence", "-c", type=float, required=True, help="Confidence score (0.0-1.0)"
+)
+@click.option(
+    "--alternatives", type=str, default="[]", help="JSON array of alternative agents"
+)
 @click.option("--reasoning", type=str, default="", help="Reasoning for agent selection")
-@click.option("--strategy", "-s", default="enhanced_fuzzy_matching", help="Routing strategy used")
-@click.option("--context", type=str, default="{}", help="JSON object with additional context")
-@click.option("--routing-time", "-t", type=int, default=0, help="Routing decision time in milliseconds")
+@click.option(
+    "--strategy", "-s", default="enhanced_fuzzy_matching", help="Routing strategy used"
+)
+@click.option(
+    "--context", type=str, default="{}", help="JSON object with additional context"
+)
+@click.option(
+    "--routing-time",
+    "-t",
+    type=int,
+    default=0,
+    help="Routing decision time in milliseconds",
+)
 def routing_decision(
     request: str,
     agent: str,

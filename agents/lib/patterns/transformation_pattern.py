@@ -8,7 +8,7 @@ Typical for COMPUTE nodes.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,9 @@ class TransformationPattern:
             "encode",
         }
 
-        text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        text = (
+            f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        )
         matched = sum(1 for kw in transform_keywords if kw in text)
 
         return min(matched / 2.5, 1.0)  # 2-3 matches = 100% confidence
@@ -79,7 +81,9 @@ class TransformationPattern:
         elif transform_type == "data_mapping":
             return self._generate_data_mapping(method_name, description, context)
         elif transform_type == "validation":
-            return self._generate_validation_transform(method_name, description, context)
+            return self._generate_validation_transform(
+                method_name, description, context
+            )
         elif transform_type == "streaming":
             return self._generate_streaming_transform(method_name, description, context)
         else:
@@ -101,7 +105,9 @@ class TransformationPattern:
             "MixinCaching",  # Cache transformation results (optional)
         ]
 
-    def _generate_format_conversion(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
+    def _generate_format_conversion(
+        self, method_name: str, description: str, context: Dict[str, Any]
+    ) -> str:
         """Generate format conversion method"""
         return f'''
     async def {method_name}(
@@ -184,7 +190,9 @@ class TransformationPattern:
             return data
 '''
 
-    def _generate_data_mapping(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
+    def _generate_data_mapping(
+        self, method_name: str, description: str, context: Dict[str, Any]
+    ) -> str:
         """Generate data mapping method"""
         return f'''
     async def {method_name}(
@@ -256,7 +264,9 @@ class TransformationPattern:
         return value
 '''
 
-    def _generate_validation_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
+    def _generate_validation_transform(
+        self, method_name: str, description: str, context: Dict[str, Any]
+    ) -> str:
         """Generate validation transformation method"""
         return f'''
     async def {method_name}(
@@ -363,7 +373,9 @@ class TransformationPattern:
         return value
 '''
 
-    def _generate_streaming_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
+    def _generate_streaming_transform(
+        self, method_name: str, description: str, context: Dict[str, Any]
+    ) -> str:
         """Generate streaming transformation method"""
         return f'''
     async def {method_name}(
@@ -431,7 +443,9 @@ class TransformationPattern:
         return item
 '''
 
-    def _generate_generic_transform(self, method_name: str, description: str, context: Dict[str, Any]) -> str:
+    def _generate_generic_transform(
+        self, method_name: str, description: str, context: Dict[str, Any]
+    ) -> str:
         """Generate generic transformation method"""
         return f'''
     async def {method_name}(self, input_data: Any) -> Any:
@@ -477,9 +491,13 @@ class TransformationPattern:
         name = re.sub(r"[-\s]+", "_", name)
         return name.strip("_") or "transform_data"
 
-    def _detect_transformation_type(self, capability: Dict[str, Any], context: Dict[str, Any]) -> str:
+    def _detect_transformation_type(
+        self, capability: Dict[str, Any], context: Dict[str, Any]
+    ) -> str:
         """Detect specific transformation type"""
-        text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        text = (
+            f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        )
 
         if any(kw in text for kw in ["convert", "format", "parse"]):
             return "format_conversion"

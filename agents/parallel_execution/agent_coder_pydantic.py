@@ -5,16 +5,14 @@ Generates ONEX-compliant code using LLM intelligence with structured outputs.
 """
 
 import time
-from typing import Any, Dict, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
+from agent_model import AgentConfig, AgentResult, AgentTask
+from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
-from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
-
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # ============================================================================
 # Pydantic Models for Structured Outputs
@@ -24,14 +22,22 @@ from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 class ONEXNodeCode(BaseModel):
     """Structured output for ONEX node generation."""
 
-    node_name: str = Field(description="Full node class name (e.g., NodePostgreSQLAdapterEffect)")
-    node_type: str = Field(description="ONEX node type (Effect, Compute, Reducer, Orchestrator)")
+    node_name: str = Field(
+        description="Full node class name (e.g., NodePostgreSQLAdapterEffect)"
+    )
+    node_type: str = Field(
+        description="ONEX node type (Effect, Compute, Reducer, Orchestrator)"
+    )
     imports: list[str] = Field(description="Required import statements")
     input_model_code: str = Field(description="Pydantic input model code")
     output_model_code: str = Field(description="Pydantic output model code")
     node_class_code: str = Field(description="Complete node class implementation")
-    dependencies: list[str] = Field(default_factory=list, description="External dependencies needed")
-    onex_compliance_notes: str = Field(description="Notes on ONEX architectural compliance")
+    dependencies: list[str] = Field(
+        default_factory=list, description="External dependencies needed"
+    )
+    onex_compliance_notes: str = Field(
+        description="Notes on ONEX architectural compliance"
+    )
 
 
 class CodeGenerationContext(BaseModel):
@@ -137,9 +143,15 @@ async def get_intelligence_context(ctx: RunContext[AgentDeps]) -> str:
 
     # Add context files
     if "context_files" in intelligence:
-        context_summary.append(f"\n**Context Files:** {len(intelligence['context_files'])} available")
+        context_summary.append(
+            f"\n**Context Files:** {len(intelligence['context_files'])} available"
+        )
 
-    return "\n".join(context_summary) if context_summary else "No intelligence context available"
+    return (
+        "\n".join(context_summary)
+        if context_summary
+        else "No intelligence context available"
+    )
 
 
 @code_generator_agent.tool
@@ -194,7 +206,9 @@ async def validate_node_name(ctx: RunContext[AgentDeps], node_name: str) -> str:
     if not node_name.startswith("Node"):
         return f"❌ Node name must start with 'Node' (got: {node_name})"
 
-    if not any(node_name.endswith(t) for t in ["Effect", "Compute", "Reducer", "Orchestrator"]):
+    if not any(
+        node_name.endswith(t) for t in ["Effect", "Compute", "Reducer", "Orchestrator"]
+    ):
         return f"❌ Node name must end with Effect/Compute/Reducer/Orchestrator (got: {node_name})"
 
     return f"✅ Node name '{node_name}' follows ONEX conventions"
@@ -232,7 +246,9 @@ class CoderAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -281,7 +297,9 @@ class CoderAgent:
             final_code = self._assemble_code(generated_output)
 
             # Validate quality
-            quality_metrics = await self._validate_quality(final_code, node_type, node_name)
+            quality_metrics = await self._validate_quality(
+                final_code, node_type, node_name
+            )
 
             # Calculate execution time
             execution_time_ms = (time.time() - start_time) * 1000
@@ -316,7 +334,9 @@ class CoderAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -333,7 +353,9 @@ class CoderAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Code generation failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -352,7 +374,9 @@ class CoderAgent:
                 trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(self, task: AgentTask, pre_gathered_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _gather_intelligence(
+        self, task: AgentTask, pre_gathered_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
 
@@ -365,7 +389,9 @@ class CoderAgent:
                 elif context_type == "pattern":
                     intelligence["pattern_examples"] = context_item.get("content", {})
                 elif context_type == "file":
-                    intelligence.setdefault("context_files", []).append(context_item.get("content", ""))
+                    intelligence.setdefault("context_files", []).append(
+                        context_item.get("content", "")
+                    )
         elif self.config.archon_mcp_enabled:
             # Gather fresh intelligence
             try:
@@ -386,7 +412,9 @@ class CoderAgent:
 
         return intelligence
 
-    def _build_generation_prompt(self, task: AgentTask, node_name: str, node_type: str) -> str:
+    def _build_generation_prompt(
+        self, task: AgentTask, node_name: str, node_type: str
+    ) -> str:
         """Build detailed generation prompt for LLM."""
         return f"""Generate a complete ONEX {node_type} node with these specifications:
 
@@ -440,7 +468,9 @@ Generate complete, high-quality code that solves the specific problem described.
 
         return "\n".join(code_parts)
 
-    async def _validate_quality(self, code: str, node_type: str, node_name: str) -> Dict[str, Any]:
+    async def _validate_quality(
+        self, code: str, node_type: str, node_name: str
+    ) -> Dict[str, Any]:
         """Validate code quality via Archon MCP."""
         try:
             quality_result = await self.mcp_client.assess_code_quality(

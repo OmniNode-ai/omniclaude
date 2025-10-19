@@ -79,7 +79,11 @@ async def test_patterns():
         best_match = matches[0]
         print(f"\n  Generating code using {best_match.pattern_type.value} pattern...")
 
-        context = {"has_event_bus": True, "service_name": "test_service", **best_match.context}
+        context = {
+            "has_event_bus": True,
+            "service_name": "test_service",
+            **best_match.context,
+        }
 
         generated_code = registry.generate_code_for_pattern(
             pattern_match=best_match, capability=capability, context=context
@@ -115,12 +119,16 @@ async def test_patterns():
     stats = registry.get_cache_stats()
     print("\nPattern Registry Statistics:")
     print(f"  Total Patterns: {stats['pattern_count']}")
-    print(f"  Registered Patterns: {', '.join([p.value for p in stats['patterns_registered']])}")
+    print(
+        f"  Registered Patterns: {', '.join([p.value for p in stats['patterns_registered']])}"
+    )
 
     # Show pattern priorities
     priorities = registry.get_pattern_priorities()
     print("\nPattern Priorities:")
-    for pattern_type, priority in sorted(priorities.items(), key=lambda x: x[1], reverse=True):
+    for pattern_type, priority in sorted(
+        priorities.items(), key=lambda x: x[1], reverse=True
+    ):
         print(f"  {pattern_type.value}: {priority}")
 
 

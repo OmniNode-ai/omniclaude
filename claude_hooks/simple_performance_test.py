@@ -3,9 +3,10 @@
 Simple Performance Test - Validates core optimizations without import conflicts.
 """
 
-import time
 import hashlib
+import time
 import uuid
+
 import requests
 
 
@@ -46,8 +47,12 @@ def test_basic_performance():
 
     print(f"   Uncached: {uncached_time:.3f}s for {iterations} operations")
     print(f"   Cached: {cached_time:.3f}s for {iterations} operations")
-    print(f"   Cache improvement: {((uncached_time - cached_time) / uncached_time * 100):.1f}% faster")
-    print(f"   Cache hit rate: {len(pattern_id_cache)}/{iterations} = {(len(pattern_id_cache)/iterations)*100:.1f}%")
+    print(
+        f"   Cache improvement: {((uncached_time - cached_time) / uncached_time * 100):.1f}% faster"
+    )
+    print(
+        f"   Cache hit rate: {len(pattern_id_cache)}/{iterations} = {(len(pattern_id_cache)/iterations)*100:.1f}%"
+    )
 
     # Test 2: HTTP Connection Pooling Performance
     print("\n📊 Test 2: HTTP Connection Performance")
@@ -74,7 +79,9 @@ def test_basic_performance():
 
     print(f"   No pooling: {no_pool_time:.3f}s for 5 requests")
     print(f"   With pooling: {with_pool_time:.3f}s for 5 requests")
-    print(f"   Pooling improvement: {((no_pool_time - with_pool_time) / no_pool_time * 100):.1f}% faster")
+    print(
+        f"   Pooling improvement: {((no_pool_time - with_pool_time) / no_pool_time * 100):.1f}% faster"
+    )
 
     # Test 3: Pattern Tracking Integration Test
     print("\n📊 Test 3: End-to-End Pattern Tracking")
@@ -120,7 +127,9 @@ def test_basic_performance():
                     "reason": "Performance test",
                 }
                 response = self._session.post(
-                    f"{self.base_url}/api/pattern-traceability/lineage/track", json=payload, timeout=self.timeout
+                    f"{self.base_url}/api/pattern-traceability/lineage/track",
+                    json=payload,
+                    timeout=self.timeout,
                 )
                 response_time = (time.time() - start_time) * 1000
                 self._metrics["total_requests"] += 1
@@ -154,7 +163,9 @@ def test_basic_performance():
     print(f"   Tracked {len(pattern_ids)} patterns in {total_time:.3f}s")
     print(f"   Operations per second: {len(pattern_ids)/total_time:.1f}")
     if response_times:
-        print(f"   Average response time: {sum(response_times)/len(response_times):.1f}ms")
+        print(
+            f"   Average response time: {sum(response_times)/len(response_times):.1f}ms"
+        )
         print(f"   Cache hits: {tracker._metrics['cache_hits']}")
         print(
             f"   Cache efficiency: {tracker._metrics['cache_hits']}/{len(pattern_ids)} = {(tracker._metrics['cache_hits']/len(pattern_ids)*100):.1f}%"
@@ -163,8 +174,12 @@ def test_basic_performance():
     # Performance Summary
     print("\n📈 Performance Summary")
     print("=" * 60)
-    print(f"✅ Pattern ID caching: {((uncached_time - cached_time) / uncached_time * 100):.1f}% improvement")
-    print(f"✅ HTTP connection pooling: {((no_pool_time - with_pool_time) / no_pool_time * 100):.1f}% improvement")
+    print(
+        f"✅ Pattern ID caching: {((uncached_time - cached_time) / uncached_time * 100):.1f}% improvement"
+    )
+    print(
+        f"✅ HTTP connection pooling: {((no_pool_time - with_pool_time) / no_pool_time * 100):.1f}% improvement"
+    )
     print(f"✅ Overall throughput: {len(pattern_ids)/total_time:.1f} ops/sec")
 
     if len(pattern_ids) / total_time >= 20:
@@ -177,11 +192,19 @@ def test_basic_performance():
     print(f"✅ Performance Tier: {performance_tier}")
 
     return {
-        "pattern_id_caching_improvement": ((uncached_time - cached_time) / uncached_time * 100),
-        "connection_pooling_improvement": ((no_pool_time - with_pool_time) / no_pool_time * 100),
+        "pattern_id_caching_improvement": (
+            (uncached_time - cached_time) / uncached_time * 100
+        ),
+        "connection_pooling_improvement": (
+            (no_pool_time - with_pool_time) / no_pool_time * 100
+        ),
         "throughput_ops_per_sec": len(pattern_ids) / total_time,
         "performance_tier": performance_tier,
-        "cache_hit_rate": (tracker._metrics["cache_hits"] / len(pattern_ids) * 100) if pattern_ids else 0,
+        "cache_hit_rate": (
+            (tracker._metrics["cache_hits"] / len(pattern_ids) * 100)
+            if pattern_ids
+            else 0
+        ),
     }
 
 

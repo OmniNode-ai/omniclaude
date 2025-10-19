@@ -10,13 +10,12 @@ Run this example:
 """
 
 import asyncio
-from uuid import uuid4, UUID
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+from uuid import UUID, uuid4
 
-from .structured_logger import get_logger
 from .log_context import async_log_context, with_log_context
 from .log_rotation import LogRotationConfig
-
+from .structured_logger import get_logger
 
 # Initialize loggers for different components
 research_logger = get_logger(__name__ + ".research", component="agent-researcher")
@@ -41,14 +40,17 @@ async def simple_research_task(query: str, correlation_id: UUID) -> Dict[str, An
         results = {"query": query, "results": ["result1", "result2", "result3"]}
 
         research_logger.info(
-            "Research task completed", metadata={"query": query, "results_count": len(results["results"])}
+            "Research task completed",
+            metadata={"query": query, "results_count": len(results["results"])},
         )
 
         return results
 
     except Exception as e:
         research_logger.error(
-            "Research task failed", metadata={"query": query, "error_type": type(e).__name__}, exc_info=e
+            "Research task failed",
+            metadata={"query": query, "error_type": type(e).__name__},
+            exc_info=e,
         )
         raise
 
@@ -64,32 +66,51 @@ async def multi_phase_workflow(request: Dict[str, Any]) -> Dict[str, Any]:
     correlation_id = uuid4()
 
     async with async_log_context(correlation_id=correlation_id):
-        workflow_logger.info("Workflow started", metadata={"request_id": request.get("id"), "phases": 3})
+        workflow_logger.info(
+            "Workflow started", metadata={"request_id": request.get("id"), "phases": 3}
+        )
 
         try:
             # Phase 1: Research
-            workflow_logger.info("Phase started", metadata={"phase": "research", "phase_num": 1})
+            workflow_logger.info(
+                "Phase started", metadata={"phase": "research", "phase_num": 1}
+            )
             research_results = await research_phase(request["query"])
             workflow_logger.info(
                 "Phase completed",
-                metadata={"phase": "research", "phase_num": 1, "results_count": len(research_results)},
+                metadata={
+                    "phase": "research",
+                    "phase_num": 1,
+                    "results_count": len(research_results),
+                },
             )
 
             # Phase 2: Analysis
-            workflow_logger.info("Phase started", metadata={"phase": "analysis", "phase_num": 2})
+            workflow_logger.info(
+                "Phase started", metadata={"phase": "analysis", "phase_num": 2}
+            )
             analysis_results = await analysis_phase(research_results)
             workflow_logger.info(
                 "Phase completed",
-                metadata={"phase": "analysis", "phase_num": 2, "analysis_score": analysis_results.get("score")},
+                metadata={
+                    "phase": "analysis",
+                    "phase_num": 2,
+                    "analysis_score": analysis_results.get("score"),
+                },
             )
 
             # Phase 3: Synthesis
-            workflow_logger.info("Phase started", metadata={"phase": "synthesis", "phase_num": 3})
+            workflow_logger.info(
+                "Phase started", metadata={"phase": "synthesis", "phase_num": 3}
+            )
             final_results = await synthesis_phase(research_results, analysis_results)
-            workflow_logger.info("Phase completed", metadata={"phase": "synthesis", "phase_num": 3})
+            workflow_logger.info(
+                "Phase completed", metadata={"phase": "synthesis", "phase_num": 3}
+            )
 
             workflow_logger.info(
-                "Workflow completed successfully", metadata={"correlation_id": str(correlation_id), "total_phases": 3}
+                "Workflow completed successfully",
+                metadata={"correlation_id": str(correlation_id), "total_phases": 3},
             )
 
             return final_results
@@ -97,7 +118,10 @@ async def multi_phase_workflow(request: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as e:
             workflow_logger.error(
                 "Workflow failed",
-                metadata={"correlation_id": str(correlation_id), "error_phase": "unknown"},
+                metadata={
+                    "correlation_id": str(correlation_id),
+                    "error_phase": "unknown",
+                },
                 exc_info=e,
             )
             raise
@@ -113,23 +137,36 @@ async def nested_context_example(query: str) -> Dict[str, Any]:
     """
     main_correlation_id = uuid4()
 
-    async with async_log_context(correlation_id=main_correlation_id, component="main-workflow"):
+    async with async_log_context(
+        correlation_id=main_correlation_id, component="main-workflow"
+    ):
         workflow_logger.info("Main workflow started", metadata={"query": query})
 
         # Nested context for research (different component, same correlation ID)
         async with async_log_context(component="agent-researcher"):
             research_logger.info("Starting nested research", metadata={"query": query})
             research_results = await perform_research(query)
-            research_logger.info("Nested research completed", metadata={"results_count": len(research_results)})
+            research_logger.info(
+                "Nested research completed",
+                metadata={"results_count": len(research_results)},
+            )
 
         # Back to main context
-        workflow_logger.info("Main workflow continuing", metadata={"next_step": "analysis"})
+        workflow_logger.info(
+            "Main workflow continuing", metadata={"next_step": "analysis"}
+        )
 
         # Nested context for analysis
         async with async_log_context(component="agent-analyzer"):
-            analysis_logger.info("Starting nested analysis", metadata={"results_count": len(research_results)})
+            analysis_logger.info(
+                "Starting nested analysis",
+                metadata={"results_count": len(research_results)},
+            )
             analysis_results = await perform_analysis(research_results)
-            analysis_logger.info("Nested analysis completed", metadata={"score": analysis_results["score"]})
+            analysis_logger.info(
+                "Nested analysis completed",
+                metadata={"score": analysis_results["score"]},
+            )
 
         workflow_logger.info("Main workflow completed")
 
@@ -158,7 +195,8 @@ async def error_handling_example(task_id: str) -> Dict[str, Any]:
             # Simulate validation error
             if not task_id:
                 workflow_logger.warning(
-                    "Validation warning", metadata={"task_id": task_id, "validation": "empty_task_id"}
+                    "Validation warning",
+                    metadata={"task_id": task_id, "validation": "empty_task_id"},
                 )
                 raise ValueError("Task ID cannot be empty")
 
@@ -166,24 +204,33 @@ async def error_handling_example(task_id: str) -> Dict[str, Any]:
             result = await process_task(task_id)
 
             workflow_logger.info(
-                "Task completed successfully", metadata={"task_id": task_id, "result_type": type(result).__name__}
+                "Task completed successfully",
+                metadata={"task_id": task_id, "result_type": type(result).__name__},
             )
 
             return result
 
         except ValueError as e:
             workflow_logger.error(
-                "Validation error", metadata={"task_id": task_id, "error_type": "validation"}, exc_info=e
+                "Validation error",
+                metadata={"task_id": task_id, "error_type": "validation"},
+                exc_info=e,
             )
             raise
 
         except asyncio.TimeoutError as e:
-            workflow_logger.error("Timeout error", metadata={"task_id": task_id, "error_type": "timeout"}, exc_info=e)
+            workflow_logger.error(
+                "Timeout error",
+                metadata={"task_id": task_id, "error_type": "timeout"},
+                exc_info=e,
+            )
             raise
 
         except Exception as e:
             workflow_logger.critical(
-                "Unexpected error", metadata={"task_id": task_id, "error_type": "unexpected"}, exc_info=e
+                "Unexpected error",
+                metadata={"task_id": task_id, "error_type": "unexpected"},
+                exc_info=e,
             )
             raise
 
@@ -198,16 +245,24 @@ async def research_phase(query: str) -> List[str]:
 
 async def analysis_phase(results: List[str]) -> Dict[str, Any]:
     """Simulate analysis phase"""
-    analysis_logger.debug("Performing analysis", metadata={"results_count": len(results)})
+    analysis_logger.debug(
+        "Performing analysis", metadata={"results_count": len(results)}
+    )
     await asyncio.sleep(0.1)
     return {"score": 0.85, "confidence": 0.92}
 
 
-async def synthesis_phase(research: List[str], analysis: Dict[str, Any]) -> Dict[str, Any]:
+async def synthesis_phase(
+    research: List[str], analysis: Dict[str, Any]
+) -> Dict[str, Any]:
     """Simulate synthesis phase"""
     workflow_logger.debug("Performing synthesis")
     await asyncio.sleep(0.1)
-    return {"research_count": len(research), "analysis_score": analysis["score"], "final_recommendation": "approved"}
+    return {
+        "research_count": len(research),
+        "analysis_score": analysis["score"],
+        "final_recommendation": "approved",
+    }
 
 
 async def perform_research(query: str) -> List[str]:
@@ -249,7 +304,9 @@ async def main():
     print("Example 1: Simple research task with decorator")
     print("-" * 80)
     correlation_id_1 = uuid4()
-    results_1 = await simple_research_task("What is Python?", correlation_id=correlation_id_1)
+    results_1 = await simple_research_task(
+        "What is Python?", correlation_id=correlation_id_1
+    )
     print(f"✓ Correlation ID: {correlation_id_1}")
     print(f"✓ Results: {results_1}\n")
 

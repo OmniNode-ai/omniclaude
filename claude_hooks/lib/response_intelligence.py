@@ -9,8 +9,8 @@ Performance target: <30ms execution time.
 import sys
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -65,7 +65,9 @@ class ResponseIntelligence:
                 created_at_str = corr_context.get("created_at")
                 if created_at_str:
                     try:
-                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                        created_at = datetime.fromisoformat(
+                            created_at_str.replace("Z", "+00:00")
+                        )
                         now = datetime.now(timezone.utc)
                         response_time_ms = (now - created_at).total_seconds() * 1000
                     except Exception:
@@ -102,7 +104,11 @@ class ResponseIntelligence:
                     "agent_name": agent_name,
                     "agent_domain": agent_domain,
                     "hook_type": "Stop",
-                    "interruption_point": event_metadata.get("interruption_point") if interrupted else None,
+                    "interruption_point": (
+                        event_metadata.get("interruption_point")
+                        if interrupted
+                        else None
+                    ),
                 }
             )
 
@@ -129,7 +135,10 @@ class ResponseIntelligence:
             return event_id
 
         except Exception as e:
-            print(f"⚠️  [ResponseIntelligence] Failed to log response completion: {e}", file=sys.stderr)
+            print(
+                f"⚠️  [ResponseIntelligence] Failed to log response completion: {e}",
+                file=sys.stderr,
+            )
             return None
 
     def detect_multi_tool_workflow(self, tools_executed: List[str]) -> Dict[str, Any]:
@@ -150,7 +159,7 @@ class ResponseIntelligence:
         # Detect common workflow patterns
         workflow_pattern = None
         if is_multi_tool:
-            tools_str = " -> ".join(tools_executed)
+            " -> ".join(tools_executed)
 
             # Common patterns
             if "Read" in tools_executed and "Edit" in tools_executed:
@@ -195,7 +204,10 @@ def log_response_completion(
     """
     intelligence = ResponseIntelligence()
     return intelligence.log_response_completion(
-        session_id=session_id, tools_executed=tools_executed, completion_status=completion_status, metadata=metadata
+        session_id=session_id,
+        tools_executed=tools_executed,
+        completion_status=completion_status,
+        metadata=metadata,
     )
 
 
@@ -206,14 +218,18 @@ if __name__ == "__main__":
     # Test 1: Simple response completion
     print("\n1. Testing simple response completion...")
     event_id = log_response_completion(
-        session_id="test-session-123", tools_executed=["Write"], completion_status="complete"
+        session_id="test-session-123",
+        tools_executed=["Write"],
+        completion_status="complete",
     )
     print(f"✓ Event logged: {event_id}")
 
     # Test 2: Multi-tool workflow
     print("\n2. Testing multi-tool workflow...")
     event_id = log_response_completion(
-        session_id="test-session-456", tools_executed=["Read", "Edit", "Bash"], completion_status="complete"
+        session_id="test-session-456",
+        tools_executed=["Read", "Edit", "Bash"],
+        completion_status="complete",
     )
     print(f"✓ Event logged: {event_id}")
 

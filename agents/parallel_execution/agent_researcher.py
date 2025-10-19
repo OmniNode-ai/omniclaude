@@ -7,17 +7,16 @@ and comprehensive knowledge gathering.
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -37,9 +36,14 @@ except ImportError:
 class SourceReference(BaseModel):
     """Reference to a research source."""
 
-    source_name: str = Field(..., description="Name of the research source (e.g., RAG, Documentation, GitHub).")
+    source_name: str = Field(
+        ...,
+        description="Name of the research source (e.g., RAG, Documentation, GitHub).",
+    )
     url: str | None = Field(None, description="URL of the source, if applicable.")
-    excerpt: str | None = Field(None, description="A short excerpt from the source demonstrating relevance.")
+    excerpt: str | None = Field(
+        None, description="A short excerpt from the source demonstrating relevance."
+    )
 
 
 class ResearchFindings(BaseModel):
@@ -50,15 +54,21 @@ class ResearchFindings(BaseModel):
     references: List[SourceReference] = Field(
         default_factory=list, description="List of sources referenced in the findings."
     )
-    raw_data: Dict[str, Any] | None = Field(None, description="Optional raw data from research sources.")
+    raw_data: Dict[str, Any] | None = Field(
+        None, description="Optional raw data from research sources."
+    )
 
 
 class ResearchQuery(BaseModel):
     """Input query specification for research."""
 
     topic: str = Field(..., description="The main topic or question for research.")
-    keywords: List[str] = Field(default_factory=list, description="Keywords to refine the search.")
-    depth: str = Field("medium", description="Desired depth of research (e.g., shallow, medium, deep).")
+    keywords: List[str] = Field(
+        default_factory=list, description="Keywords to refine the search."
+    )
+    depth: str = Field(
+        "medium", description="Desired depth of research (e.g., shallow, medium, deep)."
+    )
     sources_to_include: List[str] = Field(
         default_factory=lambda: ["all"],
         description="Specific sources to prioritize (e.g., RAG, documentation, code_examples).",
@@ -73,10 +83,18 @@ class ResearchReport(BaseModel):
     key_insights: List[str] = Field(description="Key insights discovered")
     source_breakdown: Dict[str, str] = Field(description="Findings by source type")
     references: List[SourceReference] = Field(description="All sources consulted")
-    confidence_score: float = Field(description="Confidence in research completeness 0.0-1.0", ge=0.0, le=1.0)
-    recommendations: List[str] = Field(description="Actionable recommendations based on research")
-    research_depth_achieved: str = Field(description="Actual depth achieved (shallow/medium/deep)")
-    sources_consulted: int = Field(description="Number of sources successfully consulted")
+    confidence_score: float = Field(
+        description="Confidence in research completeness 0.0-1.0", ge=0.0, le=1.0
+    )
+    recommendations: List[str] = Field(
+        description="Actionable recommendations based on research"
+    )
+    research_depth_achieved: str = Field(
+        description="Actual depth achieved (shallow/medium/deep)"
+    )
+    sources_consulted: int = Field(
+        description="Number of sources successfully consulted"
+    )
 
 
 # ============================================================================
@@ -194,9 +212,7 @@ async def search_documentation(ctx: RunContext[AgentDeps]) -> str:
     query = deps.research_query
 
     # Simulate documentation search (in real implementation, would use MCP)
-    doc_content = (
-        f"Documentation search for '{query.topic}' revealed key concepts, implementation patterns, and best practices."
-    )
+    doc_content = f"Documentation search for '{query.topic}' revealed key concepts, implementation patterns, and best practices."
 
     return f"""**Documentation Findings:**
 - Topic Coverage: Comprehensive
@@ -263,12 +279,19 @@ async def analyze_research_quality(ctx: RunContext[AgentDeps]) -> str:
     # Calculate confidence
     confidence = 0.0
     if "rag_results" in intelligence:
-        confidence = max(confidence, intelligence["rag_results"].get("synthesis", {}).get("confidence_score", 0.0))
+        confidence = max(
+            confidence,
+            intelligence["rag_results"]
+            .get("synthesis", {})
+            .get("confidence_score", 0.0),
+        )
 
     quality_metrics.append(f"- Information Confidence: {confidence:.2f}")
 
     # Depth assessment
-    depth = "deep" if sources_found > 10 else "medium" if sources_found > 5 else "shallow"
+    depth = (
+        "deep" if sources_found > 10 else "medium" if sources_found > 5 else "shallow"
+    )
     quality_metrics.append(f"- Depth Achieved: {depth}")
 
     # Completeness
@@ -286,7 +309,12 @@ async def analyze_research_quality(ctx: RunContext[AgentDeps]) -> str:
 @register_agent(
     agent_name="researcher",
     agent_type="researcher",
-    capabilities=["rag_intelligence", "documentation_search", "code_examples", "multi_source_synthesis"],
+    capabilities=[
+        "rag_intelligence",
+        "documentation_search",
+        "code_examples",
+        "multi_source_synthesis",
+    ],
     description="Multi-source research intelligence agent",
 )
 class ResearchIntelligenceAgent:
@@ -325,7 +353,9 @@ class ResearchIntelligenceAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -354,7 +384,9 @@ class ResearchIntelligenceAgent:
             )
 
             # Gather intelligence
-            intelligence = await self._gather_intelligence(task, research_query, pre_gathered_context)
+            intelligence = await self._gather_intelligence(
+                task, research_query, pre_gathered_context
+            )
 
             # Create agent dependencies
             deps = AgentDeps(
@@ -390,7 +422,10 @@ class ResearchIntelligenceAgent:
                 "query": research_query.topic,
                 "summary": research_output.executive_summary,
                 "references": [ref.model_dump() for ref in research_output.references],
-                "raw_data": {"research_report": research_output.model_dump(), "intelligence_gathered": intelligence},
+                "raw_data": {
+                    "research_report": research_output.model_dump(),
+                    "intelligence_gathered": intelligence,
+                },
                 # Additional fields from ResearchReport
                 "key_insights": research_output.key_insights,
                 "source_breakdown": research_output.source_breakdown,
@@ -416,7 +451,9 @@ class ResearchIntelligenceAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -433,7 +470,9 @@ class ResearchIntelligenceAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Research failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -489,11 +528,17 @@ class ResearchIntelligenceAgent:
         else:
             # Return empty findings on error
             return ResearchFindings(
-                query=query.topic, summary=f"Research failed: {result.error}", references=[], raw_data=None
+                query=query.topic,
+                summary=f"Research failed: {result.error}",
+                references=[],
+                raw_data=None,
             )
 
     async def _gather_intelligence(
-        self, task: AgentTask, query: ResearchQuery, pre_gathered_context: Dict[str, Any]
+        self,
+        task: AgentTask,
+        query: ResearchQuery,
+        pre_gathered_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
@@ -513,15 +558,23 @@ class ResearchIntelligenceAgent:
         if self.config.archon_mcp_enabled:
             try:
                 # RAG query for domain knowledge
-                if "RAG" in query.sources_to_include or "all" in query.sources_to_include:
+                if (
+                    "RAG" in query.sources_to_include
+                    or "all" in query.sources_to_include
+                ):
                     rag_result = await self.mcp_client.perform_rag_query(
                         query=query.topic, context="general", match_count=5
                     )
                     intelligence["rag_results"] = rag_result
 
                 # Code patterns search if requested
-                if "code_examples" in query.sources_to_include or "all" in query.sources_to_include:
-                    code_result = await self.mcp_client.search_code_examples(query=query.topic, match_count=5)
+                if (
+                    "code_examples" in query.sources_to_include
+                    or "all" in query.sources_to_include
+                ):
+                    code_result = await self.mcp_client.search_code_examples(
+                        query=query.topic, match_count=5
+                    )
                     intelligence["code_patterns"] = code_result
 
             except Exception as e:

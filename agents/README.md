@@ -41,7 +41,7 @@ The OmniClaude Agent Framework provides a dynamic system for orchestrating speci
 ## Available Agents
 
 ### 🎭 Workflow Orchestration (4 agents)
-- [`agent-workflow-coordinator`](agent-workflow-coordinator.md) - Unified multi-agent coordination
+- [`agent-workflow-coordinator`](AGENT-WORKFLOW-COORDINATOR.md) - Unified multi-agent coordination
 - `agent-multi-step-framework` - Complex multi-step execution
 - `agent-onex-coordinator` - ONEX architecture coordination
 - `agent-parallel-execution` - Parallel task coordination

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Template Cache - Phase 7 Stream 2
-==================================
+Template Cache - Agent Framework
+=================================
 
 Intelligent template caching with LRU eviction, TTL, and content-based invalidation.
 
@@ -36,16 +36,16 @@ Target Performance:
 - Memory usage: ≤50MB
 """
 
-from typing import Dict, Any, Optional, Tuple, Callable, Set
-from pathlib import Path
-from datetime import datetime, timezone
-from dataclasses import dataclass
-from threading import RLock
-import hashlib
-import time
-import logging
 import asyncio
+import hashlib
+import logging
+import time
 from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import RLock
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,11 @@ class TemplateCache:
     """
 
     def __init__(
-        self, max_templates: int = 100, max_size_mb: int = 50, ttl_seconds: int = 3600, enable_persistence: bool = True
+        self,
+        max_templates: int = 100,
+        max_size_mb: int = 50,
+        ttl_seconds: int = 3600,
+        enable_persistence: bool = True,
     ):
         """
         Initialize template cache.
@@ -123,7 +127,11 @@ class TemplateCache:
         )
 
     def get(
-        self, template_name: str, template_type: str, file_path: Path, loader_func: Callable[[Path], str]
+        self,
+        template_name: str,
+        template_type: str,
+        file_path: Path,
+        loader_func: Callable[[Path], str],
     ) -> Tuple[str, bool]:
         """
         Get template from cache or load from filesystem.
@@ -151,7 +159,9 @@ class TemplateCache:
                     # Check TTL
                     age = datetime.now(timezone.utc) - cached.loaded_at
                     if age.total_seconds() >= self.ttl_seconds:
-                        logger.info(f"Template {template_name} expired: TTL {age.total_seconds():.1f}s")
+                        logger.info(
+                            f"Template {template_name} expired: TTL {age.total_seconds():.1f}s"
+                        )
                         self._invalidate_template(template_name)
                     else:
                         # Cache hit!
@@ -204,7 +214,10 @@ class TemplateCache:
                 load_time_ms = (time.perf_counter() - start_time) * 1000
                 self.total_load_time_ms += load_time_ms
 
-                logger.debug(f"Cache MISS for {template_name} " f"(load time: {load_time_ms:.2f}ms)")
+                logger.debug(
+                    f"Cache MISS for {template_name} "
+                    f"(load time: {load_time_ms:.2f}ms)"
+                )
 
                 # Compute file hash for content-based invalidation
                 file_hash = self._compute_file_hash(file_path)
@@ -351,7 +364,10 @@ class TemplateCache:
                 loaded_count += 1
 
         warmup_time_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"Cache warmup complete: {loaded_count} templates loaded " f"in {warmup_time_ms:.2f}ms")
+        logger.info(
+            f"Cache warmup complete: {loaded_count} templates loaded "
+            f"in {warmup_time_ms:.2f}ms"
+        )
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """
@@ -439,11 +455,16 @@ class TemplateCache:
 
         # Wait for all tasks to complete with timeout
         try:
-            await asyncio.wait_for(asyncio.gather(*self._background_tasks, return_exceptions=True), timeout=timeout)
+            await asyncio.wait_for(
+                asyncio.gather(*self._background_tasks, return_exceptions=True),
+                timeout=timeout,
+            )
             logger.debug("All background tasks completed successfully")
         except asyncio.TimeoutError:
             # Cancel remaining tasks
-            logger.warning(f"Task cleanup timeout after {timeout}s, cancelling remaining tasks")
+            logger.warning(
+                f"Task cleanup timeout after {timeout}s, cancelling remaining tasks"
+            )
             for task in self._background_tasks:
                 if not task.done():
                     task.cancel()
@@ -508,13 +529,19 @@ class TemplateCache:
             hit_rate = self.hits / total_requests if total_requests > 0 else 0.0
 
             # Calculate average load times
-            avg_uncached_load_ms = self.total_load_time_ms / self.misses if self.misses > 0 else 0.0
-            avg_cached_load_ms = self.cached_load_time_ms / self.hits if self.hits > 0 else 0.0
+            avg_uncached_load_ms = (
+                self.total_load_time_ms / self.misses if self.misses > 0 else 0.0
+            )
+            avg_cached_load_ms = (
+                self.cached_load_time_ms / self.hits if self.hits > 0 else 0.0
+            )
 
             # Calculate time savings
             if self.hits > 0 and avg_uncached_load_ms > 0:
                 time_saved_ms = self.hits * (avg_uncached_load_ms - avg_cached_load_ms)
-                improvement_pct = ((avg_uncached_load_ms - avg_cached_load_ms) / avg_uncached_load_ms) * 100
+                improvement_pct = (
+                    (avg_uncached_load_ms - avg_cached_load_ms) / avg_uncached_load_ms
+                ) * 100
             else:
                 time_saved_ms = 0.0
                 improvement_pct = 0.0
@@ -536,8 +563,12 @@ class TemplateCache:
                 "avg_cached_load_ms": round(avg_cached_load_ms, 2),
                 "time_saved_ms": round(time_saved_ms, 2),
                 "improvement_percent": round(improvement_pct, 1),
-                "capacity_usage_percent": round((len(self._cache) / self.max_templates) * 100, 1),
-                "memory_usage_percent": round((total_size_mb / self.max_size_mb) * 100, 1),
+                "capacity_usage_percent": round(
+                    (len(self._cache) / self.max_templates) * 100, 1
+                ),
+                "memory_usage_percent": round(
+                    (total_size_mb / self.max_size_mb) * 100, 1
+                ),
             }
 
     def get_detailed_stats(self) -> Dict[str, Any]:
@@ -553,7 +584,9 @@ class TemplateCache:
             # Add per-template breakdown
             template_stats = []
             for name, cached in self._cache.items():
-                age_seconds = (datetime.now(timezone.utc) - cached.loaded_at).total_seconds()
+                age_seconds = (
+                    datetime.now(timezone.utc) - cached.loaded_at
+                ).total_seconds()
 
                 template_stats.append(
                     {
@@ -562,7 +595,8 @@ class TemplateCache:
                         "size_bytes": cached.size_bytes,
                         "access_count": cached.access_count,
                         "age_seconds": round(age_seconds, 1),
-                        "file_hash": cached.file_hash[:8] + "...",  # Truncated for readability
+                        "file_hash": cached.file_hash[:8]
+                        + "...",  # Truncated for readability
                     }
                 )
 
@@ -585,14 +619,21 @@ if __name__ == "__main__":
 
         # Create test template files
         effect_template = tmpdir / "effect_node_template.py"
-        effect_template.write_text("# Effect template content\nclass NodeEffect:\n    pass\n")
+        effect_template.write_text(
+            "# Effect template content\nclass NodeEffect:\n    pass\n"
+        )
 
         compute_template = tmpdir / "compute_node_template.py"
-        compute_template.write_text("# Compute template content\nclass NodeCompute:\n    pass\n")
+        compute_template.write_text(
+            "# Compute template content\nclass NodeCompute:\n    pass\n"
+        )
 
         # Initialize cache
         cache = TemplateCache(
-            max_templates=10, max_size_mb=1, ttl_seconds=5, enable_persistence=False  # Short TTL for testing
+            max_templates=10,
+            max_size_mb=1,
+            ttl_seconds=5,
+            enable_persistence=False,  # Short TTL for testing
         )
 
         # Test 1: Cache miss
@@ -619,7 +660,9 @@ if __name__ == "__main__":
 
         # Test 3: Content-based invalidation
         print("\n3. Content-Based Invalidation:")
-        effect_template.write_text("# Modified effect template\nclass NodeEffect:\n    def new_method(self): pass\n")
+        effect_template.write_text(
+            "# Modified effect template\nclass NodeEffect:\n    def new_method(self): pass\n"
+        )
         content, hit = cache.get(
             template_name="EFFECT_template",
             template_type="EFFECT",

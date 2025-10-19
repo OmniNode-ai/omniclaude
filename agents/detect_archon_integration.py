@@ -73,7 +73,9 @@ def scan_agents_directory(agents_dir: str) -> List[Dict]:
     agent_files = []
     for md_file in agents_path.glob("*.md"):
         # Skip common framework files
-        if md_file.name.startswith(("COMMON_", "FRAMEWORK_", "ONEX_", "ARCHON_", "INTEGRATION_")):
+        if md_file.name.startswith(
+            ("COMMON_", "FRAMEWORK_", "ONEX_", "ARCHON_", "INTEGRATION_")
+        ):
             continue
         # Only process agent files
         if md_file.name.startswith("agent-"):
@@ -118,10 +120,17 @@ def print_summary_report(results: List[Dict]):
     print(f"   🔄 Partially Integrated: {partially_integrated}")
     print(f"   🟡 Basic Integration: {basic_integration}")
     print(f"   ❌ Not Integrated: {not_integrated}")
-    print(f"   📈 Integration Rate: {((fully_integrated + partially_integrated) / total_agents * 100):.1f}%")
+    print(
+        f"   📈 Integration Rate: {((fully_integrated + partially_integrated) / total_agents * 100):.1f}%"
+    )
 
     # Detailed breakdown by status
-    for status in ["FULLY_INTEGRATED", "PARTIALLY_INTEGRATED", "BASIC_INTEGRATION", "NOT_INTEGRATED"]:
+    for status in [
+        "FULLY_INTEGRATED",
+        "PARTIALLY_INTEGRATED",
+        "BASIC_INTEGRATION",
+        "NOT_INTEGRATED",
+    ]:
         if status not in status_groups:
             continue
 
@@ -129,18 +138,26 @@ def print_summary_report(results: List[Dict]):
         if not agents:
             continue
 
-        print(f"\n{get_status_emoji(status)} {status.replace('_', ' ').title()} ({len(agents)} agents):")
+        print(
+            f"\n{get_status_emoji(status)} {status.replace('_', ' ').title()} ({len(agents)} agents):"
+        )
         print("-" * 60)
 
-        for agent in sorted(agents, key=lambda x: x["completeness_score"], reverse=True):
+        for agent in sorted(
+            agents, key=lambda x: x["completeness_score"], reverse=True
+        ):
             score = agent["completeness_score"] * 100
             patterns = agent["matched_patterns"]
             total = agent["total_patterns"]
-            print(f"   {agent['agent_name']:<35} {score:5.1f}% ({patterns}/{total} patterns)")
+            print(
+                f"   {agent['agent_name']:<35} {score:5.1f}% ({patterns}/{total} patterns)"
+            )
 
     # Agents needing attention
     print("\n🎯 NEXT ACTIONS:")
-    needs_work = status_groups.get("NOT_INTEGRATED", []) + status_groups.get("BASIC_INTEGRATION", [])
+    needs_work = status_groups.get("NOT_INTEGRATED", []) + status_groups.get(
+        "BASIC_INTEGRATION", []
+    )
     if needs_work:
         print(f"   Agents needing 4-phase integration: {len(needs_work)}")
         for agent in sorted(needs_work, key=lambda x: x["agent_name"]):

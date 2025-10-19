@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import asyncio
-from agents.lib.performance_optimization import optimize_database_performance, create_performance_indexes
+
+from agents.lib.performance_optimization import (
+    create_performance_indexes,
+    optimize_database_performance,
+)
 
 
 async def test_performance_optimization():

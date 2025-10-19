@@ -1,6 +1,9 @@
 exclude_dirs:
-  - /agents/tests/
-  - /agents/templates/
-  - /claude_hooks/tests/
+  - agents/tests
+  - agents/templates
+  - claude_hooks/tests
+  - .venv
+  - .git
+  - __pycache__
 skips:
-  - B101
+  - B101  # Skip assert_used check

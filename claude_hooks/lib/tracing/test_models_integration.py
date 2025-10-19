@@ -7,8 +7,8 @@ execution traces and hook executions using Pydantic models.
 
 import asyncio
 import os
-from uuid import uuid4
 from datetime import datetime, timezone
+from uuid import uuid4
 
 # Test imports
 try:
@@ -21,13 +21,13 @@ try:
     from hooks.lib.tracing.models import (
         ExecutionTrace,
         HookExecution,
-        TraceContext,
         HookMetadata,
-        generate_correlation_id,
-        create_new_trace,
+        TraceContext,
         create_new_hook_execution,
-        parse_trace_from_row,
+        create_new_trace,
+        generate_correlation_id,
         parse_hook_from_row,
+        parse_trace_from_row,
     )
     from hooks.lib.tracing.postgres_client import PostgresTracingClient
 
@@ -103,10 +103,20 @@ async def test_model_validation():
 
     # Test valid hook types
     hook = create_new_hook_execution(
-        trace_id=trace.correlation_id, hook_type="PreToolUse", hook_name="test", execution_order=1
+        trace_id=trace.correlation_id,
+        hook_type="PreToolUse",
+        hook_name="test",
+        execution_order=1,
     )
 
-    valid_types = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionStart", "SessionEnd"]
+    valid_types = [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "SessionStart",
+        "SessionEnd",
+    ]
     for hook_type in valid_types:
         hook.hook_type = hook_type
     print(f"✓ All valid hook types accepted ({len(valid_types)} types)")
@@ -278,7 +288,9 @@ async def test_database_integration():
         # Retrieve trace as model
         retrieved_trace = await client.get_trace_model(trace.correlation_id)
         if retrieved_trace:
-            print(f"✓ Retrieved trace: status={retrieved_trace.status}, duration={retrieved_trace.duration_ms}ms")
+            print(
+                f"✓ Retrieved trace: status={retrieved_trace.status}, duration={retrieved_trace.duration_ms}ms"
+            )
             assert retrieved_trace.correlation_id == trace.correlation_id
             assert retrieved_trace.status == "completed"
         else:

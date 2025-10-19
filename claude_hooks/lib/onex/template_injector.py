@@ -9,10 +9,11 @@ Automatically enhances prompts with:
 - Best practices
 """
 
+import os
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from enum import Enum
 
 
 class ONEXNodeType(Enum):
@@ -28,7 +29,9 @@ class ONEXTemplateInjector:
     """Inject ONEX patterns into prompts based on intent analysis."""
 
     # ONEX architecture patterns location (configurable via environment variable)
-    PATTERNS_DOC = Path(os.getenv("ONEX_PATTERNS_DOC", "~/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md")).expanduser()
+    PATTERNS_DOC = Path(
+        os.getenv("ONEX_PATTERNS_DOC", "~/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md")
+    ).expanduser()
 
     # Intent patterns for node type detection
     NODE_INTENT_PATTERNS = {
@@ -63,7 +66,15 @@ class ONEXTemplateInjector:
     ]
 
     # Naming convention keywords
-    NAMING_KEYWORDS = ["model", "enum", "typed dict", "protocol", "node", "naming convention", "file name"]
+    NAMING_KEYWORDS = [
+        "model",
+        "enum",
+        "typed dict",
+        "protocol",
+        "node",
+        "naming convention",
+        "file name",
+    ]
 
     def __init__(self):
         """Initialize template injector with ONEX patterns."""
@@ -82,20 +93,28 @@ class ONEXTemplateInjector:
 
         # Extract Effect template
         effect_match = re.search(
-            r"### Creating an Effect Node\n```python\n(.*?)\n```", self.patterns_content, re.DOTALL
+            r"### Creating an Effect Node\n```python\n(.*?)\n```",
+            self.patterns_content,
+            re.DOTALL,
         )
         if effect_match:
             templates[ONEXNodeType.EFFECT] = effect_match.group(1)
 
         # Extract Compute template
         compute_match = re.search(
-            r"### Creating a Compute Node\n```python\n(.*?)\n```", self.patterns_content, re.DOTALL
+            r"### Creating a Compute Node\n```python\n(.*?)\n```",
+            self.patterns_content,
+            re.DOTALL,
         )
         if compute_match:
             templates[ONEXNodeType.COMPUTE] = compute_match.group(1)
 
         # Contract YAML template
-        contract_match = re.search(r"### Contract YAML Template\n```yaml\n(.*?)\n```", self.patterns_content, re.DOTALL)
+        contract_match = re.search(
+            r"### Contract YAML Template\n```yaml\n(.*?)\n```",
+            self.patterns_content,
+            re.DOTALL,
+        )
         if contract_match:
             templates["contract"] = contract_match.group(1)
 
@@ -143,7 +162,10 @@ class ONEXTemplateInjector:
             reasons.append("naming_conventions")
 
         # Check for architecture questions
-        if any(term in prompt_lower for term in ["onex", "architecture", "pattern", "best practice"]):
+        if any(
+            term in prompt_lower
+            for term in ["onex", "architecture", "pattern", "best practice"]
+        ):
             reasons.append("architecture_question")
 
         return len(reasons) > 0, reasons
@@ -161,7 +183,9 @@ class ONEXTemplateInjector:
         # Add architecture context
         injection_parts.append("## ONEX Architecture Context")
         injection_parts.append("")
-        injection_parts.append("**4-Node Architecture**: EFFECT → COMPUTE → REDUCER → ORCHESTRATOR (unidirectional)")
+        injection_parts.append(
+            "**4-Node Architecture**: EFFECT → COMPUTE → REDUCER → ORCHESTRATOR (unidirectional)"
+        )
         injection_parts.append("")
 
         # Add node-specific template if detected
@@ -205,7 +229,11 @@ class ONEXTemplateInjector:
 
     def _extract_naming_section(self) -> str:
         """Extract naming conventions section from patterns doc."""
-        match = re.search(r"## 4\. Naming Conventions\n\n(.*?)\n\n##", self.patterns_content, re.DOTALL)
+        match = re.search(
+            r"## 4\. Naming Conventions\n\n(.*?)\n\n##",
+            self.patterns_content,
+            re.DOTALL,
+        )
         if match:
             # Get first 500 chars of naming section
             section = match.group(1)

@@ -12,19 +12,19 @@ Usage:
     python agents/scripts/generate_mixin_training_data.py --samples 200
 """
 
-import asyncio
 import argparse
+import asyncio
 import logging
 import random
-from typing import List, Tuple
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import List, Tuple
 
 # Add agents lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.persistence import CodegenPersistence
 from lib.mixin_features import MixinFeatureExtractor
+from lib.persistence import CodegenPersistence
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -91,11 +91,25 @@ NODE_TYPE_PATTERNS = {
         "avoid_mixins": [],
     },
     "COMPUTE": {
-        "preferred_mixins": ["MixinValidation", "MixinLogging", "MixinMetrics", "MixinCaching"],
-        "avoid_mixins": ["MixinTransaction", "MixinConnection"],  # Compute should be pure
+        "preferred_mixins": [
+            "MixinValidation",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinCaching",
+        ],
+        "avoid_mixins": [
+            "MixinTransaction",
+            "MixinConnection",
+        ],  # Compute should be pure
     },
     "REDUCER": {
-        "preferred_mixins": ["MixinTransaction", "MixinConnection", "MixinLogging", "MixinMetrics", "MixinValidation"],
+        "preferred_mixins": [
+            "MixinTransaction",
+            "MixinConnection",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinValidation",
+        ],
         "avoid_mixins": [],
     },
     "ORCHESTRATOR": {
@@ -107,12 +121,16 @@ NODE_TYPE_PATTERNS = {
             "MixinRetry",
             "MixinHealthCheck",
         ],
-        "avoid_mixins": ["MixinTransaction"],  # Orchestrator shouldn't manage transactions
+        "avoid_mixins": [
+            "MixinTransaction"
+        ],  # Orchestrator shouldn't manage transactions
     },
 }
 
 
-def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, str, bool, str]]:
+def generate_training_samples(
+    num_samples: int = 200,
+) -> List[Tuple[str, str, str, bool, str]]:
     """
     Generate training samples with known compatibility outcomes.
 
@@ -135,7 +153,9 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
     for _ in range(rule_samples):
         # Randomly select compatibility level
         level = random.choices(
-            list(COMPATIBILITY_RULES.keys()), weights=[30, 40, 20, 10], k=1  # More compatible than incompatible
+            list(COMPATIBILITY_RULES.keys()),
+            weights=[30, 40, 20, 10],
+            k=1,  # More compatible than incompatible
         )[0]
 
         pairs = COMPATIBILITY_RULES[level]
@@ -161,7 +181,9 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         reason = f"Generated from {level} rule"
 
         # Add sample with test counts
-        samples.append((mixin_a, mixin_b, node_type, success_count, failure_count, reason))
+        samples.append(
+            (mixin_a, mixin_b, node_type, success_count, failure_count, reason)
+        )
 
     # Generate random samples (30% of data) for unknown combinations
     random_samples = num_samples - rule_samples
@@ -182,9 +204,15 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         success_prob = 0.7 if same_category else 0.5
 
         # Node type preference adjustment
-        if mixin_a in node_pattern["preferred_mixins"] or mixin_b in node_pattern["preferred_mixins"]:
+        if (
+            mixin_a in node_pattern["preferred_mixins"]
+            or mixin_b in node_pattern["preferred_mixins"]
+        ):
             success_prob += 0.15
-        if mixin_a in node_pattern["avoid_mixins"] or mixin_b in node_pattern["avoid_mixins"]:
+        if (
+            mixin_a in node_pattern["avoid_mixins"]
+            or mixin_b in node_pattern["avoid_mixins"]
+        ):
             success_prob -= 0.25
 
         # Lifecycle conflict penalty
@@ -207,7 +235,9 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
 
         reason = "Generated from random sampling with heuristics"
 
-        samples.append((mixin_a, mixin_b, node_type, success_count, failure_count, reason))
+        samples.append(
+            (mixin_a, mixin_b, node_type, success_count, failure_count, reason)
+        )
 
     logger.info(f"Generated {len(samples)} training samples")
     return samples
@@ -223,7 +253,14 @@ async def populate_database(samples: List[Tuple[str, str, str, int, int, str]]):
     persistence = CodegenPersistence()
 
     try:
-        for idx, (mixin_a, mixin_b, node_type, success_count, failure_count, reason) in enumerate(samples):
+        for idx, (
+            mixin_a,
+            mixin_b,
+            node_type,
+            success_count,
+            failure_count,
+            reason,
+        ) in enumerate(samples):
             # Update compatibility matrix multiple times to simulate test history
             for _ in range(success_count):
                 await persistence.update_mixin_compatibility(
@@ -266,11 +303,21 @@ async def generate_and_populate(num_samples: int):
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="Generate mixin compatibility training data")
-    parser.add_argument(
-        "--samples", type=int, default=200, help="Number of training samples to generate (default: 200)"
+    parser = argparse.ArgumentParser(
+        description="Generate mixin compatibility training data"
     )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    parser.add_argument(
+        "--samples",
+        type=int,
+        default=200,
+        help="Number of training samples to generate (default: 200)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
 
     args = parser.parse_args()
 

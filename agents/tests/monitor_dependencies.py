@@ -6,8 +6,8 @@ Monitors Archon task completion status for streams 1-7
 
 import asyncio
 import sys
-from typing import Dict, Optional
 from datetime import datetime
+from typing import Dict, Optional
 
 
 class DependencyMonitor:
@@ -79,7 +79,9 @@ class DependencyMonitor:
         status["ready_for_testing"] = status["all_complete"]
         status["complete_count"] = complete_count
         status["total_count"] = len(self.REQUIRED_STREAMS)
-        status["completion_percentage"] = (complete_count / len(self.REQUIRED_STREAMS)) * 100
+        status["completion_percentage"] = (
+            complete_count / len(self.REQUIRED_STREAMS)
+        ) * 100
 
         return status
 
@@ -90,7 +92,8 @@ class DependencyMonitor:
         print("=" * 70)
         print(f"Check #{status['check_count']} - {status['last_check']}")
         print(
-            f"Progress: {status['complete_count']}/{status['total_count']} " f"({status['completion_percentage']:.1f}%)"
+            f"Progress: {status['complete_count']}/{status['total_count']} "
+            f"({status['completion_percentage']:.1f}%)"
         )
         print("-" * 70)
 
@@ -107,11 +110,16 @@ class DependencyMonitor:
         if status["all_complete"]:
             print("✅ ALL DEPENDENCIES COMPLETE - READY FOR INTEGRATION TESTING")
         else:
-            print(f"⏸️  WAITING FOR {len(self.REQUIRED_STREAMS) - status['complete_count']} " f"STREAMS TO COMPLETE")
+            print(
+                f"⏸️  WAITING FOR {len(self.REQUIRED_STREAMS) - status['complete_count']} "
+                f"STREAMS TO COMPLETE"
+            )
 
         print("=" * 70 + "\n")
 
-    async def wait_for_completion(self, check_interval: int = 60, max_checks: Optional[int] = None):
+    async def wait_for_completion(
+        self, check_interval: int = 60, max_checks: Optional[int] = None
+    ):
         """
         Wait for all dependencies to complete
 
@@ -132,7 +140,9 @@ class DependencyMonitor:
                     return True
 
                 if max_checks and self.check_count >= max_checks:
-                    print(f"⚠️  Maximum checks ({max_checks}) reached. Stopping monitor.")
+                    print(
+                        f"⚠️  Maximum checks ({max_checks}) reached. Stopping monitor."
+                    )
                     return False
 
                 print(f"Next check in {check_interval} seconds...\n")

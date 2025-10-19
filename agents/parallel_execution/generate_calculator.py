@@ -6,14 +6,14 @@ Generate ONEX-compliant calculator using agent_coder via parallel dispatcher.
 import asyncio
 import json
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-import agent_model
 import agent_dispatcher
+import agent_model
 import trace_logger
 
 AgentTask = agent_model.AgentTask
@@ -32,13 +32,27 @@ CALCULATOR_CONTRACT = {
             "description": "Arithmetic operation: 'add', 'subtract', 'multiply', 'divide'",
             "required": True,
         },
-        "operand_a": {"type": "float", "description": "First operand for calculation", "required": True},
-        "operand_b": {"type": "float", "description": "Second operand for calculation", "required": True},
+        "operand_a": {
+            "type": "float",
+            "description": "First operand for calculation",
+            "required": True,
+        },
+        "operand_b": {
+            "type": "float",
+            "description": "Second operand for calculation",
+            "required": True,
+        },
     },
     "output_model": {
         "result": {"type": "float", "description": "Calculated result"},
-        "operation_performed": {"type": "str", "description": "Operation that was executed"},
-        "error": {"type": "str | None", "description": "Error message if operation failed (e.g., division by zero)"},
+        "operation_performed": {
+            "type": "str",
+            "description": "Operation that was executed",
+        },
+        "error": {
+            "type": "str | None",
+            "description": "Error message if operation failed (e.g., division by zero)",
+        },
     },
     "requirements": [
         "Pure transformation function (no side effects)",
@@ -125,19 +139,31 @@ async def generate_calculator():
             print("Quality Metrics:")
             print(f"  Lines Generated: {output.get('lines_generated', 0)}")
             print(f"  Quality Score: {output.get('quality_score', 0):.2f}/100")
-            print(f"  Validation Passed: {'✅' if output.get('validation_passed', False) else '❌'}")
+            print(
+                f"  Validation Passed: {'✅' if output.get('validation_passed', False) else '❌'}"
+            )
             print(f"  Node Type: {output.get('node_type', 'Unknown')}")
-            print(f"  ONEX Compliant: {'✅' if output.get('onex_compliant', False) else '❌'}")
+            print(
+                f"  ONEX Compliant: {'✅' if output.get('onex_compliant', False) else '❌'}"
+            )
             print()
 
             # Show validation results if available
             if "validation_results" in output:
                 validation = output["validation_results"]
                 print("Validation Details:")
-                print(f"  Type Safety: {'✅' if validation.get('type_safety', False) else '❌'}")
-                print(f"  Error Handling: {'✅' if validation.get('error_handling', False) else '❌'}")
-                print(f"  Documentation: {'✅' if validation.get('documentation', False) else '❌'}")
-                print(f"  ONEX Naming: {'✅' if validation.get('onex_naming', False) else '❌'}")
+                print(
+                    f"  Type Safety: {'✅' if validation.get('type_safety', False) else '❌'}"
+                )
+                print(
+                    f"  Error Handling: {'✅' if validation.get('error_handling', False) else '❌'}"
+                )
+                print(
+                    f"  Documentation: {'✅' if validation.get('documentation', False) else '❌'}"
+                )
+                print(
+                    f"  ONEX Naming: {'✅' if validation.get('onex_naming', False) else '❌'}"
+                )
                 print()
 
             # Show intelligence sources used
@@ -196,7 +222,11 @@ async def generate_calculator():
         print()
 
         if coordinator._coordinator_trace_id:
-            trace_file = Path(__file__).parent / "traces" / f"{coordinator._coordinator_trace_id}.json"
+            trace_file = (
+                Path(__file__).parent
+                / "traces"
+                / f"{coordinator._coordinator_trace_id}.json"
+            )
             print(f"Trace File: {trace_file}")
 
             if trace_file.exists():
@@ -213,7 +243,9 @@ async def generate_calculator():
                 for agent_id, agent_data in agents.items():
                     print(f"  - {agent_data.get('agent_name', agent_id)}")
                     print(f"    Status: {agent_data.get('status', 'unknown')}")
-                    print(f"    Duration: {agent_data.get('execution_time_ms', 0):.2f}ms")
+                    print(
+                        f"    Duration: {agent_data.get('execution_time_ms', 0):.2f}ms"
+                    )
 
                     if agent_data.get("mcp_calls"):
                         print(f"    MCP Calls: {len(agent_data['mcp_calls'])}")

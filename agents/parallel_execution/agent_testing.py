@@ -5,16 +5,15 @@ Generates comprehensive test suites (pytest, unit tests, integration tests).
 """
 
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from agent_model import AgentConfig, AgentResult, AgentTask
+from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
-from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -37,8 +36,12 @@ class TestCase(BaseModel):
     test_name: str = Field(description="Descriptive test function name (test_*)")
     test_type: str = Field(description="Type of test: unit, integration, or functional")
     test_code: str = Field(description="Complete test function implementation")
-    fixtures_needed: List[str] = Field(default_factory=list, description="Pytest fixtures required")
-    mocks_needed: List[str] = Field(default_factory=list, description="Mocks/patches needed")
+    fixtures_needed: List[str] = Field(
+        default_factory=list, description="Pytest fixtures required"
+    )
+    mocks_needed: List[str] = Field(
+        default_factory=list, description="Mocks/patches needed"
+    )
     assertions: int = Field(description="Number of assertions in the test")
 
 
@@ -49,17 +52,22 @@ class TestSuite(BaseModel):
     test_cases: List[TestCase] = Field(description="List of test cases")
 
     # Setup and teardown
-    fixtures: List[str] = Field(default_factory=list, description="Pytest fixture implementations")
+    fixtures: List[str] = Field(
+        default_factory=list, description="Pytest fixture implementations"
+    )
     setup_code: str = Field(default="", description="Module-level setup code")
 
     # Dependencies
     imports: List[str] = Field(description="Required import statements")
     test_dependencies: List[str] = Field(
-        default_factory=list, description="Test-specific dependencies (pytest-mock, etc)"
+        default_factory=list,
+        description="Test-specific dependencies (pytest-mock, etc)",
     )
 
     # Coverage and quality
-    coverage_target: int = Field(default=80, description="Target code coverage percentage")
+    coverage_target: int = Field(
+        default=80, description="Target code coverage percentage"
+    )
     test_strategy: str = Field(description="Testing strategy and rationale")
 
 
@@ -155,7 +163,9 @@ testing_agent = Agent[AgentDeps, TestSuite](
 
 
 @testing_agent.tool
-async def analyze_code_for_testing(ctx: RunContext[AgentDeps], code_description: str) -> str:
+async def analyze_code_for_testing(
+    ctx: RunContext[AgentDeps], code_description: str
+) -> str:
     """Analyze code to determine appropriate testing strategy.
 
     Args:
@@ -203,7 +213,10 @@ async def suggest_test_cases(ctx: RunContext[AgentDeps], functionality: str) -> 
     ]
 
     func_slug = functionality.lower().replace(" ", "_")[:30]
-    suggested = [template.replace("<functionality>", func_slug) for template in test_case_templates]
+    suggested = [
+        template.replace("<functionality>", func_slug)
+        for template in test_case_templates
+    ]
 
     return "💡 Suggested test cases:\n" + "\n".join(f"  - {tc}" for tc in suggested)
 
@@ -279,7 +292,9 @@ class TestingAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -360,7 +375,9 @@ class TestingAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -377,7 +394,9 @@ class TestingAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Test generation failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -396,7 +415,9 @@ class TestingAgent:
                 trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(self, task: AgentTask, pre_gathered_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _gather_intelligence(
+        self, task: AgentTask, pre_gathered_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
 
@@ -409,7 +430,9 @@ class TestingAgent:
             # Gather fresh intelligence
             try:
                 testing_intel = await self.mcp_client.perform_rag_query(
-                    query="pytest testing patterns best practices", context="testing", match_count=3
+                    query="pytest testing patterns best practices",
+                    context="testing",
+                    match_count=3,
                 )
                 intelligence["testing_patterns"] = testing_intel
             except Exception as e:
@@ -423,7 +446,9 @@ class TestingAgent:
 
         return intelligence
 
-    def _build_testing_prompt(self, task: AgentTask, target_file: str, requirements: str) -> str:
+    def _build_testing_prompt(
+        self, task: AgentTask, target_file: str, requirements: str
+    ) -> str:
         """Build detailed testing prompt for LLM."""
         return f"""Generate a comprehensive pytest test suite for the following:
 
@@ -471,27 +496,39 @@ Generate a complete, production-ready test suite."""
 
         # Setup code
         if test_suite.setup_code:
-            code_parts.append("# ============================================================================")
+            code_parts.append(
+                "# ============================================================================"
+            )
             code_parts.append("# Setup")
-            code_parts.append("# ============================================================================")
+            code_parts.append(
+                "# ============================================================================"
+            )
             code_parts.append("")
             code_parts.append(test_suite.setup_code)
             code_parts.append("")
 
         # Fixtures
         if test_suite.fixtures:
-            code_parts.append("# ============================================================================")
+            code_parts.append(
+                "# ============================================================================"
+            )
             code_parts.append("# Fixtures")
-            code_parts.append("# ============================================================================")
+            code_parts.append(
+                "# ============================================================================"
+            )
             code_parts.append("")
             for fixture in test_suite.fixtures:
                 code_parts.append(fixture)
                 code_parts.append("")
 
         # Test cases
-        code_parts.append("# ============================================================================")
+        code_parts.append(
+            "# ============================================================================"
+        )
         code_parts.append("# Test Cases")
-        code_parts.append("# ============================================================================")
+        code_parts.append(
+            "# ============================================================================"
+        )
         code_parts.append("")
 
         for test_case in test_suite.test_cases:

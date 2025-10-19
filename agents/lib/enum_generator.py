@@ -6,13 +6,13 @@ Generates ONEX-compliant enum classes from PRD analysis.
 Includes operation type enums, status enums, and domain-specific enums.
 """
 
-import re
 import logging
-from typing import List, Set, Optional
+import re
 from dataclasses import dataclass
+from typing import List, Optional, Set
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .simple_prd_analyzer import SimplePRDAnalysisResult
 
@@ -177,7 +177,10 @@ class EnumGenerator:
 
             # Generate source code
             source_code = self._generate_enum_source(
-                class_name=class_name, values=sorted_values, docstring=docstring, service_name=service_name
+                class_name=class_name,
+                values=sorted_values,
+                docstring=docstring,
+                service_name=service_name,
             )
 
             # Validate generated code
@@ -251,7 +254,10 @@ class EnumGenerator:
 
             # Generate source code
             source_code = self._generate_enum_source(
-                class_name=class_name, values=sorted_values, docstring=docstring, service_name=service_name
+                class_name=class_name,
+                values=sorted_values,
+                docstring=docstring,
+                service_name=service_name,
             )
 
             # Validate generated code
@@ -274,7 +280,9 @@ class EnumGenerator:
                 details={"service_name": service_name},
             )
 
-    def infer_enum_values(self, prd_analysis: SimplePRDAnalysisResult, enum_type: str = "operation") -> Set[EnumValue]:
+    def infer_enum_values(
+        self, prd_analysis: SimplePRDAnalysisResult, enum_type: str = "operation"
+    ) -> Set[EnumValue]:
         """
         Extract enum values from PRD functional requirements using NLP.
 
@@ -330,7 +338,10 @@ class EnumGenerator:
             errors.append(f"Missing or incorrect class definition for {class_name}")
 
         # Check for from_string classmethod
-        if "@classmethod" not in source_code or "def from_string(cls" not in source_code:
+        if (
+            "@classmethod" not in source_code
+            or "def from_string(cls" not in source_code
+        ):
             errors.append("Missing from_string() classmethod")
 
         # Check for __str__ method
@@ -376,14 +387,22 @@ class EnumGenerator:
             pattern = r"\b" + verb + r"(s|ing|ed)?\b"
             if re.search(pattern, text):
                 found_operations.add(
-                    EnumValue(name=verb.upper(), value=verb, description=f"{verb.capitalize()} operation")
+                    EnumValue(
+                        name=verb.upper(),
+                        value=verb,
+                        description=f"{verb.capitalize()} operation",
+                    )
                 )
 
         # Extract CRUD patterns
         crud_patterns = {
             r"\b(add|insert|new)\b": EnumValue("CREATE", "create", "Create operation"),
-            r"\b(get|fetch|retrieve|view)\b": EnumValue("READ", "read", "Read operation"),
-            r"\b(modify|edit|change)\b": EnumValue("UPDATE", "update", "Update operation"),
+            r"\b(get|fetch|retrieve|view)\b": EnumValue(
+                "READ", "read", "Read operation"
+            ),
+            r"\b(modify|edit|change)\b": EnumValue(
+                "UPDATE", "update", "Update operation"
+            ),
             r"\b(remove|drop)\b": EnumValue("DELETE", "delete", "Delete operation"),
         }
 
@@ -399,18 +418,38 @@ class EnumGenerator:
 
         # Status patterns
         status_patterns = {
-            r"\b(queued|waiting|scheduled)\b": EnumValue("PENDING", "pending", "Pending status"),
-            r"\b(processing|running|executing)\b": EnumValue("IN_PROGRESS", "in_progress", "In progress status"),
-            r"\b(done|finished|success|completed)\b": EnumValue("COMPLETED", "completed", "Completed status"),
-            r"\b(error|failure|unsuccessful|failed)\b": EnumValue("FAILED", "failed", "Failed status"),
-            r"\b(cancelled|aborted|terminated)\b": EnumValue("CANCELLED", "cancelled", "Cancelled status"),
-            r"\b(expired|timed.*out)\b": EnumValue("TIMEOUT", "timeout", "Timeout status"),
-            r"\b(retry|retrying|reattempt)\b": EnumValue("RETRYING", "retrying", "Retrying status"),
-            r"\b(approved|accepted)\b": EnumValue("APPROVED", "approved", "Approved status"),
-            r"\b(rejected|denied)\b": EnumValue("REJECTED", "rejected", "Rejected status"),
+            r"\b(queued|waiting|scheduled)\b": EnumValue(
+                "PENDING", "pending", "Pending status"
+            ),
+            r"\b(processing|running|executing)\b": EnumValue(
+                "IN_PROGRESS", "in_progress", "In progress status"
+            ),
+            r"\b(done|finished|success|completed)\b": EnumValue(
+                "COMPLETED", "completed", "Completed status"
+            ),
+            r"\b(error|failure|unsuccessful|failed)\b": EnumValue(
+                "FAILED", "failed", "Failed status"
+            ),
+            r"\b(cancelled|aborted|terminated)\b": EnumValue(
+                "CANCELLED", "cancelled", "Cancelled status"
+            ),
+            r"\b(expired|timed.*out)\b": EnumValue(
+                "TIMEOUT", "timeout", "Timeout status"
+            ),
+            r"\b(retry|retrying|reattempt)\b": EnumValue(
+                "RETRYING", "retrying", "Retrying status"
+            ),
+            r"\b(approved|accepted)\b": EnumValue(
+                "APPROVED", "approved", "Approved status"
+            ),
+            r"\b(rejected|denied)\b": EnumValue(
+                "REJECTED", "rejected", "Rejected status"
+            ),
             r"\b(suspended|paused)\b": EnumValue("PAUSED", "paused", "Paused status"),
             r"\b(active|enabled)\b": EnumValue("ACTIVE", "active", "Active status"),
-            r"\b(inactive|disabled)\b": EnumValue("INACTIVE", "inactive", "Inactive status"),
+            r"\b(inactive|disabled)\b": EnumValue(
+                "INACTIVE", "inactive", "Inactive status"
+            ),
         }
 
         for pattern, enum_value in status_patterns.items():
@@ -431,7 +470,13 @@ class EnumGenerator:
             if len(word) > 2:  # Skip very short words
                 enum_name = self._to_enum_name(word)
                 enum_val = word.lower().replace(" ", "_")
-                found_values.add(EnumValue(name=enum_name, value=enum_val, description=f"{word} domain value"))
+                found_values.add(
+                    EnumValue(
+                        name=enum_name,
+                        value=enum_val,
+                        description=f"{word} domain value",
+                    )
+                )
 
         return found_values
 
@@ -474,14 +519,22 @@ class EnumGenerator:
         # Capitalize first letter of each word
         return "".join(word.capitalize() for word in words)
 
-    def _generate_enum_source(self, class_name: str, values: List[EnumValue], docstring: str, service_name: str) -> str:
+    def _generate_enum_source(
+        self,
+        class_name: str,
+        values: List[EnumValue],
+        docstring: str,
+        service_name: str,
+    ) -> str:
         """Generate complete enum source code"""
 
         # Generate enum value definitions
         enum_defs = []
         for value in values:
             if value.description:
-                enum_defs.append(f'    {value.name} = "{value.value}"  # {value.description}')
+                enum_defs.append(
+                    f'    {value.name} = "{value.value}"  # {value.description}'
+                )
             else:
                 enum_defs.append(f'    {value.name} = "{value.value}"')
 

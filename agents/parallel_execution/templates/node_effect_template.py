@@ -128,8 +128,18 @@ TEMPLATES = {
                 "method": "_health_check",
                 "docstring": "Perform health check on service",
             },
-            {"name": "KV_GET", "value": "kv_get", "method": "_kv_get", "docstring": "Get value from Consul KV store"},
-            {"name": "KV_SET", "value": "kv_set", "method": "_kv_set", "docstring": "Set value in Consul KV store"},
+            {
+                "name": "KV_GET",
+                "value": "kv_get",
+                "method": "_kv_get",
+                "docstring": "Get value from Consul KV store",
+            },
+            {
+                "name": "KV_SET",
+                "value": "kv_set",
+                "method": "_kv_set",
+                "docstring": "Set value in Consul KV store",
+            },
         ],
         "config_fields": [
             {"name": "consul_url", "type": "str", "default": '"http://localhost:8500"'},
@@ -184,7 +194,9 @@ TEMPLATES = {
 }
 
 
-def generate_node_effect_code(template_name: str, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+def generate_node_effect_code(
+    template_name: str, agent_name: str, task_id: str, recommendations: List[Dict]
+) -> str:
     """Generate node effect code from template."""
     template_config = TEMPLATES.get(template_name, TEMPLATES["consul_adapter"])
 

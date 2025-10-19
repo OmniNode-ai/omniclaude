@@ -21,17 +21,18 @@ Design Philosophy:
 
 import asyncio
 import hashlib
-import httpx
 import json
 import os
 import sys
 import uuid
-import yaml
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import httpx
+import yaml
 
 # Add resilience imports (if available via environment variable or in path)
 resilience_lib_path = os.getenv("ARCHON_HOOKS_LIB_PATH")
@@ -39,9 +40,9 @@ if resilience_lib_path and Path(resilience_lib_path).exists():
     sys.path.insert(0, resilience_lib_path)
 
 try:
-    from error_handling import CircuitBreaker, resilient_operation
-    from resilience import ResilientAPIClient, PatternCache
     from debug_utils import ServiceMonitor
+    from error_handling import CircuitBreaker, resilient_operation
+    from resilience import PatternCache, ResilientAPIClient
 
     RESILIENCE_AVAILABLE = True
 except ImportError:
@@ -165,7 +166,9 @@ class PatternTrackerConfig:
         Args:
             config_path: Path to config.yaml (defaults to ~/.claude/hooks/config.yaml)
         """
-        self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        self.config_path = (
+            config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        )
         self._config = self._load_config()
 
     def _load_config(self) -> Dict:
@@ -220,28 +223,40 @@ class PatternTrackerConfig:
     @property
     def intelligence_url(self) -> str:
         """Get Intelligence Service base URL."""
-        return self.get("INTELLIGENCE_SERVICE_URL", ["pattern_tracking", "intelligence_url"], "http://localhost:8053")
+        return self.get(
+            "INTELLIGENCE_SERVICE_URL",
+            ["pattern_tracking", "intelligence_url"],
+            "http://localhost:8053",
+        )
 
     @property
     def enabled(self) -> bool:
         """Check if pattern tracking is enabled."""
-        return self.get("PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True)
+        return self.get(
+            "PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True
+        )
 
     @property
     def timeout_seconds(self) -> float:
         """Get API call timeout in seconds."""
-        return self.get("PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 2.0)
+        return self.get(
+            "PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 2.0
+        )
 
     @property
     def max_retries(self) -> int:
         """Get maximum retry attempts for failed API calls."""
-        return self.get("PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3)
+        return self.get(
+            "PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3
+        )
 
     @property
     def log_file(self) -> Path:
         """Get log file path."""
         log_path = self.get(
-            "PATTERN_TRACKING_LOG", ["pattern_tracking", "log_file"], "~/.claude/hooks/logs/pattern-tracker.log"
+            "PATTERN_TRACKING_LOG",
+            ["pattern_tracking", "log_file"],
+            "~/.claude/hooks/logs/pattern-tracker.log",
         )
         return Path(log_path).expanduser()
 
@@ -293,7 +308,11 @@ class PatternTracker:
             self.circuit_breaker = CircuitBreaker(
                 failure_threshold=5,  # Open after 5 failures
                 recovery_timeout=60,  # Try recovery after 60 seconds
-                expected_exception=(httpx.RequestError, httpx.HTTPStatusError, Exception),
+                expected_exception=(
+                    httpx.RequestError,
+                    httpx.HTTPStatusError,
+                    Exception,
+                ),
             )
             self._log("INFO", "Circuit breaker initialized for API resilience")
 
@@ -317,7 +336,10 @@ class PatternTracker:
             self.pattern_cache = None
             self.service_monitor = None
             self.error_metrics = {}
-            self._log("WARNING", "Resilience features unavailable - using basic error handling")
+            self._log(
+                "WARNING",
+                "Resilience features unavailable - using basic error handling",
+            )
 
     def _generate_session_id(self) -> str:
         """
@@ -394,7 +416,12 @@ class PatternTracker:
         # Use first 16 characters for pattern ID
         pattern_id = code_hash[:16]
 
-        self._log("DEBUG", "Generated pattern ID", pattern_id=pattern_id, code_length=len(code))
+        self._log(
+            "DEBUG",
+            "Generated pattern ID",
+            pattern_id=pattern_id,
+            code_length=len(code),
+        )
 
         return pattern_id
 
@@ -457,7 +484,11 @@ class PatternTracker:
         )
 
         self._log(
-            "INFO", "Tracking pattern creation", pattern_id=pattern_id, correlation_id=correlation_id, context=context
+            "INFO",
+            "Tracking pattern creation",
+            pattern_id=pattern_id,
+            correlation_id=correlation_id,
+            context=context,
         )
 
         # Transform to LineageTrackRequest format for Phase 4 API
@@ -478,7 +509,9 @@ class PatternTracker:
                 "metadata": metadata or {},
             },
             "triggered_by": "claude-code",
-            "reason": context.get("reason", f"Code generated by {context.get('tool', 'Write')} tool"),
+            "reason": context.get(
+                "reason", f"Code generated by {context.get('tool', 'Write')} tool"
+            ),
         }
 
         # Send to Phase 4 API
@@ -514,7 +547,12 @@ class PatternTracker:
             asyncio.set_event_loop(loop)
 
         return loop.run_until_complete(
-            self.track_pattern_creation(code=code, context=context, metadata=metadata, correlation_id=correlation_id)
+            self.track_pattern_creation(
+                code=code,
+                context=context,
+                metadata=metadata,
+                correlation_id=correlation_id,
+            )
         )
 
     async def track_pattern_execution(
@@ -645,7 +683,9 @@ class PatternTracker:
 
         return pattern_id
 
-    async def _make_http_request(self, endpoint_key: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _make_http_request(
+        self, endpoint_key: str, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Make HTTP request to Phase 4 API - protected by circuit breaker.
 
@@ -662,13 +702,23 @@ class PatternTracker:
         """
         url = f"{self.config.intelligence_url}{self.ENDPOINTS[endpoint_key]}"
 
-        self._log("INFO", "Making HTTP request with circuit breaker protection", endpoint=endpoint_key, url=url)
+        self._log(
+            "INFO",
+            "Making HTTP request with circuit breaker protection",
+            endpoint=endpoint_key,
+            url=url,
+        )
 
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
             response = await client.post(url, json=data)
 
             # Log the response
-            self._log("INFO", "HTTP request completed", endpoint=endpoint_key, status_code=response.status_code)
+            self._log(
+                "INFO",
+                "HTTP request completed",
+                endpoint=endpoint_key,
+                status_code=response.status_code,
+            )
 
             if response.status_code == 200:
                 return response.json()
@@ -682,14 +732,18 @@ class PatternTracker:
                     response_text=response.text[:200],
                 )
                 raise httpx.HTTPStatusError(
-                    f"Client error {response.status_code}", request=response.request, response=response
+                    f"Client error {response.status_code}",
+                    request=response.request,
+                    response=response,
                 )
             else:
                 # Retry for server errors
                 response.raise_for_status()
 
     @resilient_operation
-    async def _send_to_api(self, endpoint_key: str, data: Dict[str, Any], retry_count: int = 0) -> Optional[Dict]:
+    async def _send_to_api(
+        self, endpoint_key: str, data: Dict[str, Any], retry_count: int = 0
+    ) -> Optional[Dict]:
         """
         Send data to Phase 4 API with enhanced resilience.
 
@@ -713,7 +767,12 @@ class PatternTracker:
             self.error_metrics["total_requests"] += 1
 
         if retry_count >= self.config.max_retries:
-            self._log("ERROR", "Max retries exceeded - giving up", endpoint=endpoint_key, retry_count=retry_count)
+            self._log(
+                "ERROR",
+                "Max retries exceeded - giving up",
+                endpoint=endpoint_key,
+                retry_count=retry_count,
+            )
             if RESILIENCE_AVAILABLE:
                 self.error_metrics["failed_requests"] += 1
             return None
@@ -721,21 +780,35 @@ class PatternTracker:
         try:
             if self.circuit_breaker and RESILIENCE_AVAILABLE:
                 # Use circuit breaker for protection
-                result = await self.circuit_breaker(self._make_http_request)(endpoint_key, data)
-                self._log("INFO", "API call successful with circuit breaker protection", endpoint=endpoint_key)
+                result = await self.circuit_breaker(self._make_http_request)(
+                    endpoint_key, data
+                )
+                self._log(
+                    "INFO",
+                    "API call successful with circuit breaker protection",
+                    endpoint=endpoint_key,
+                )
                 if RESILIENCE_AVAILABLE:
                     self.error_metrics["successful_requests"] += 1
                 return result
             else:
                 # Fallback to direct HTTP request
                 result = await self._make_http_request(endpoint_key, data)
-                self._log("INFO", "API call successful (fallback mode)", endpoint=endpoint_key)
+                self._log(
+                    "INFO", "API call successful (fallback mode)", endpoint=endpoint_key
+                )
                 if RESILIENCE_AVAILABLE:
                     self.error_metrics["successful_requests"] += 1
                 return result
 
         except httpx.TimeoutException as e:
-            self._log("WARNING", "API call timed out", endpoint=endpoint_key, error=str(e), retry_count=retry_count)
+            self._log(
+                "WARNING",
+                "API call timed out",
+                endpoint=endpoint_key,
+                error=str(e),
+                retry_count=retry_count,
+            )
             if RESILIENCE_AVAILABLE:
                 self.error_metrics["retry_attempts"] += 1
         except httpx.NetworkError as e:
@@ -776,14 +849,23 @@ class PatternTracker:
             base_delay = 2**retry_count
             jitter = random.uniform(0.1, 0.5)  # Add jitter to avoid thundering herd
             delay = base_delay + jitter
-            self._log("INFO", f"Retrying after {delay:.2f}s delay", endpoint=endpoint_key, retry_count=retry_count + 1)
+            self._log(
+                "INFO",
+                f"Retrying after {delay:.2f}s delay",
+                endpoint=endpoint_key,
+                retry_count=retry_count + 1,
+            )
             if RESILIENCE_AVAILABLE:
                 self.error_metrics["retry_attempts"] += 1
             await asyncio.sleep(delay)
             return await self._send_to_api(endpoint_key, data, retry_count + 1)
 
         # All retries exhausted - try offline caching if available
-        if self.pattern_cache and RESILIENCE_AVAILABLE and endpoint_key == "track_lineage":
+        if (
+            self.pattern_cache
+            and RESILIENCE_AVAILABLE
+            and endpoint_key == "track_lineage"
+        ):
             try:
                 event_id = await self.pattern_cache.cache_pattern_event(data)
                 if event_id:
@@ -796,9 +878,18 @@ class PatternTracker:
                     self.error_metrics["cached_events"] += 1
                     return {"cached": True, "event_id": event_id}
                 else:
-                    self._log("WARNING", "Failed to cache event locally", endpoint=endpoint_key)
+                    self._log(
+                        "WARNING",
+                        "Failed to cache event locally",
+                        endpoint=endpoint_key,
+                    )
             except Exception as e:
-                self._log("ERROR", "Offline caching failed", endpoint=endpoint_key, error=str(e))
+                self._log(
+                    "ERROR",
+                    "Offline caching failed",
+                    endpoint=endpoint_key,
+                    error=str(e),
+                )
 
         if RESILIENCE_AVAILABLE:
             self.error_metrics["failed_requests"] += 1
@@ -876,9 +967,15 @@ class PatternTracker:
         retry_attempts = self.error_metrics.get("retry_attempts", 0)
         cached_events = self.error_metrics.get("cached_events", 0)
 
-        success_rate = (successful_requests / total_requests * 100) if total_requests > 0 else 0
-        failure_rate = (failed_requests / total_requests * 100) if total_requests > 0 else 0
-        retry_rate = (retry_attempts / total_requests * 100) if total_requests > 0 else 0
+        success_rate = (
+            (successful_requests / total_requests * 100) if total_requests > 0 else 0
+        )
+        failure_rate = (
+            (failed_requests / total_requests * 100) if total_requests > 0 else 0
+        )
+        retry_rate = (
+            (retry_attempts / total_requests * 100) if total_requests > 0 else 0
+        )
 
         # Determine health status
         health_status = "healthy"
@@ -906,7 +1003,11 @@ class PatternTracker:
         if retry_rate > 30:  # More than 30% of requests are retries
             health_status = "warning" if health_status == "healthy" else "critical"
             alerts.append(
-                {"type": "high_retry_rate", "message": f"High retry rate: {retry_rate:.1f}%", "severity": "warning"}
+                {
+                    "type": "high_retry_rate",
+                    "message": f"High retry rate: {retry_rate:.1f}%",
+                    "severity": "warning",
+                }
             )
 
         if cached_events > 10:  # Many cached events might indicate API issues
@@ -923,9 +1024,15 @@ class PatternTracker:
         if self.service_monitor:
             try:
                 service_status = {
-                    "api_reachable": getattr(self.service_monitor, "api_reachable", False),
-                    "last_check": getattr(self.service_monitor, "last_check_time", None),
-                    "uptime_percent": getattr(self.service_monitor, "uptime_percent", 0),
+                    "api_reachable": getattr(
+                        self.service_monitor, "api_reachable", False
+                    ),
+                    "last_check": getattr(
+                        self.service_monitor, "last_check_time", None
+                    ),
+                    "uptime_percent": getattr(
+                        self.service_monitor, "uptime_percent", 0
+                    ),
                 }
             except Exception:
                 service_status = {"error": "Service monitor status unavailable"}
@@ -944,25 +1051,37 @@ class PatternTracker:
             },
             "service_status": service_status,
             "alerts": alerts,
-            "recommendations": self._generate_recommendations(failure_rate, retry_rate, cached_events),
+            "recommendations": self._generate_recommendations(
+                failure_rate, retry_rate, cached_events
+            ),
         }
 
-    def _generate_recommendations(self, failure_rate: float, retry_rate: float, cached_events: int) -> List[str]:
+    def _generate_recommendations(
+        self, failure_rate: float, retry_rate: float, cached_events: int
+    ) -> List[str]:
         """Generate operational recommendations based on metrics."""
         recommendations = []
 
         if failure_rate > 20:
-            recommendations.append("Critical: Check Phase 4 API service availability and connectivity")
+            recommendations.append(
+                "Critical: Check Phase 4 API service availability and connectivity"
+            )
             recommendations.append("Consider enabling graceful degradation mode")
         elif failure_rate > 10:
-            recommendations.append("Warning: Monitor API performance and consider scaling")
+            recommendations.append(
+                "Warning: Monitor API performance and consider scaling"
+            )
 
         if retry_rate > 30:
-            recommendations.append("High retry rate detected - check network stability and API response times")
+            recommendations.append(
+                "High retry rate detected - check network stability and API response times"
+            )
 
         if cached_events > 10:
             recommendations.append("Multiple events cached - API may be unavailable")
-            recommendations.append("Consider manually syncing cached events when API is available")
+            recommendations.append(
+                "Consider manually syncing cached events when API is available"
+            )
 
         if not recommendations:
             recommendations.append("System operating normally")
@@ -980,12 +1099,17 @@ class PatternTracker:
             True if monitoring started successfully
         """
         if not self.service_monitor or not RESILIENCE_AVAILABLE:
-            self._log("WARNING", "Service monitor unavailable - cannot start monitoring")
+            self._log(
+                "WARNING", "Service monitor unavailable - cannot start monitoring"
+            )
             return False
 
         try:
             await self.service_monitor.start_monitoring()
-            self._log("INFO", f"Started real-time monitoring with {interval_seconds}s interval")
+            self._log(
+                "INFO",
+                f"Started real-time monitoring with {interval_seconds}s interval",
+            )
             return True
         except Exception as e:
             self._log("ERROR", f"Failed to start monitoring: {e}")
@@ -1022,7 +1146,9 @@ class PatternTracker:
         # Overall system health assessment
         if error_metrics.get("health_status") == "critical":
             overall_health = "critical"
-            health_message = "System experiencing critical issues - immediate attention required"
+            health_message = (
+                "System experiencing critical issues - immediate attention required"
+            )
         elif error_metrics.get("health_status") == "warning":
             overall_health = "degraded"
             health_message = "System performance degraded - monitoring recommended"
@@ -1035,13 +1161,20 @@ class PatternTracker:
             "health_message": health_message,
             "components": {
                 "pattern_tracker": "operational",
-                "circuit_breaker": "operational" if self.circuit_breaker else "unavailable",
+                "circuit_breaker": (
+                    "operational" if self.circuit_breaker else "unavailable"
+                ),
                 "offline_cache": "operational" if self.pattern_cache else "unavailable",
-                "service_monitor": "operational" if self.service_monitor else "unavailable",
+                "service_monitor": (
+                    "operational" if self.service_monitor else "unavailable"
+                ),
             },
             "metrics": error_metrics,
             "cache": cache_status,
-            "session_info": {"session_id": self.session_id, "uptime_minutes": self._get_session_uptime_minutes()},
+            "session_info": {
+                "session_id": self.session_id,
+                "uptime_minutes": self._get_session_uptime_minutes(),
+            },
             "resilience_features": {
                 "circuit_breaker": bool(self.circuit_breaker),
                 "offline_caching": bool(self.pattern_cache),
@@ -1074,7 +1207,10 @@ def get_tracker() -> PatternTracker:
 
 
 def track_pattern_creation_sync(
-    code: str, context: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None, correlation_id: Optional[str] = None
+    code: str,
+    context: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None,
+    correlation_id: Optional[str] = None,
 ) -> str:
     """
     Synchronous wrapper for track_pattern_creation.
@@ -1100,7 +1236,9 @@ def track_pattern_creation_sync(
         asyncio.set_event_loop(loop)
 
     return loop.run_until_complete(
-        tracker.track_pattern_creation(code=code, context=context, metadata=metadata, correlation_id=correlation_id)
+        tracker.track_pattern_creation(
+            code=code, context=context, metadata=metadata, correlation_id=correlation_id
+        )
     )
 
 

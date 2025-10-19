@@ -282,8 +282,8 @@ pip install pytest pytest-asyncio httpx pydantic
 
 **Solution:** Wait a few seconds and retry, or check database directly:
 ```sql
-SELECT * FROM pattern_lineage_nodes 
-WHERE pattern_id = 'your-pattern-id' 
+SELECT * FROM pattern_lineage_nodes
+WHERE pattern_id = 'your-pattern-id'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
@@ -357,6 +357,6 @@ For issues or questions:
 
 ---
 
-**Last Updated:** 2025-10-03  
-**Test Suite Version:** 1.0.0  
+**Last Updated:** 2025-10-03
+**Test Suite Version:** 1.0.0
 **Phase 4 Integration:** Complete

@@ -19,23 +19,24 @@ Performance Targets:
 - Cache miss: <100ms
 """
 
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
-import yaml
 import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 # Use absolute imports to avoid relative import issues
 try:
-    from trigger_matcher import EnhancedTriggerMatcher
-    from confidence_scorer import ConfidenceScorer, ConfidenceScore
     from capability_index import CapabilityIndex
+    from confidence_scorer import ConfidenceScore, ConfidenceScorer
     from result_cache import ResultCache
+    from trigger_matcher import EnhancedTriggerMatcher
 except ImportError:
     # Fallback to relative imports if used as a package
-    from .trigger_matcher import EnhancedTriggerMatcher
-    from .confidence_scorer import ConfidenceScorer, ConfidenceScore
     from .capability_index import CapabilityIndex
+    from .confidence_scorer import ConfidenceScore, ConfidenceScorer
     from .result_cache import ResultCache
+    from .trigger_matcher import EnhancedTriggerMatcher
 
 
 @dataclass
@@ -67,7 +68,9 @@ class EnhancedAgentRouter:
     """
 
     def __init__(
-        self, registry_path: str = "/Users/jonah/.claude/agent-definitions/agent-registry.yaml", cache_ttl: int = 3600
+        self,
+        registry_path: str = "/Users/jonah/.claude/agent-definitions/agent-registry.yaml",
+        cache_ttl: int = 3600,
     ):
         """
         Initialize enhanced router.
@@ -96,7 +99,10 @@ class EnhancedAgentRouter:
         }
 
     def route(
-        self, user_request: str, context: Optional[Dict[str, Any]] = None, max_recommendations: int = 5
+        self,
+        user_request: str,
+        context: Optional[Dict[str, Any]] = None,
+        max_recommendations: int = 5,
     ) -> List[AgentRecommendation]:
         """
         Route user request to best agent(s).
@@ -203,7 +209,9 @@ class EnhancedAgentRouter:
 
         return None
 
-    def _create_explicit_recommendation(self, agent_name: str) -> Optional[AgentRecommendation]:
+    def _create_explicit_recommendation(
+        self, agent_name: str
+    ) -> Optional[AgentRecommendation]:
         """
         Create recommendation for explicitly requested agent.
 
@@ -278,7 +286,10 @@ class EnhancedAgentRouter:
         Args:
             registry_path: Path to registry file (uses default if None)
         """
-        path = registry_path or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        path = (
+            registry_path
+            or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        )
 
         with open(path) as f:
             self.registry = yaml.safe_load(f)
@@ -295,7 +306,9 @@ class EnhancedAgentRouter:
 if __name__ == "__main__":
     from pathlib import Path
 
-    registry_path = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    registry_path = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     if not registry_path.exists():
         print(f"Registry not found at: {registry_path}")

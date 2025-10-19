@@ -7,17 +7,16 @@ quality metrics, anti-patterns detection, and actionable recommendations.
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -37,27 +36,45 @@ except ImportError:
 class CodeQualityMetrics(BaseModel):
     """Code quality assessment metrics."""
 
-    overall_quality_score: float = Field(description="Overall quality score 0.0-1.0", ge=0.0, le=1.0)
-    maintainability_index: float = Field(description="Maintainability index 0.0-100.0", ge=0.0, le=100.0)
-    complexity_score: float = Field(description="Complexity score (lower is better)", ge=0.0)
-    architectural_compliance: float = Field(description="ONEX compliance score 0.0-1.0", ge=0.0, le=1.0)
-    code_coverage_estimate: float = Field(description="Estimated test coverage 0.0-1.0", ge=0.0, le=1.0)
+    overall_quality_score: float = Field(
+        description="Overall quality score 0.0-1.0", ge=0.0, le=1.0
+    )
+    maintainability_index: float = Field(
+        description="Maintainability index 0.0-100.0", ge=0.0, le=100.0
+    )
+    complexity_score: float = Field(
+        description="Complexity score (lower is better)", ge=0.0
+    )
+    architectural_compliance: float = Field(
+        description="ONEX compliance score 0.0-1.0", ge=0.0, le=1.0
+    )
+    code_coverage_estimate: float = Field(
+        description="Estimated test coverage 0.0-1.0", ge=0.0, le=1.0
+    )
     technical_debt_level: str = Field(description="Low/Medium/High/Critical")
     lines_of_code: int = Field(description="Total lines of code analyzed", ge=0)
-    comment_ratio: float = Field(description="Comment to code ratio 0.0-1.0", ge=0.0, le=1.0)
+    comment_ratio: float = Field(
+        description="Comment to code ratio 0.0-1.0", ge=0.0, le=1.0
+    )
 
 
 class DesignPattern(BaseModel):
     """Detected design pattern with context."""
 
     pattern_name: str = Field(description="Name of the design pattern")
-    pattern_type: str = Field(description="Creational/Structural/Behavioral/Architectural")
-    confidence_score: float = Field(description="Detection confidence 0.0-1.0", ge=0.0, le=1.0)
+    pattern_type: str = Field(
+        description="Creational/Structural/Behavioral/Architectural"
+    )
+    confidence_score: float = Field(
+        description="Detection confidence 0.0-1.0", ge=0.0, le=1.0
+    )
     location: str = Field(description="Where the pattern is implemented")
     implementation_quality: str = Field(description="Excellent/Good/Fair/Poor")
     description: str = Field(description="How the pattern is used")
     benefits: List[str] = Field(description="Benefits of this pattern usage")
-    potential_improvements: List[str] = Field(default_factory=list, description="Suggestions to improve implementation")
+    potential_improvements: List[str] = Field(
+        default_factory=list, description="Suggestions to improve implementation"
+    )
 
 
 class AntiPattern(BaseModel):
@@ -70,35 +87,55 @@ class AntiPattern(BaseModel):
     impact: str = Field(description="Impact on code quality and maintainability")
     refactoring_difficulty: str = Field(description="Easy/Medium/Hard/Very Hard")
     recommended_pattern: str = Field(description="Recommended pattern to replace it")
-    code_smell_indicators: List[str] = Field(description="Code smells associated with this anti-pattern")
+    code_smell_indicators: List[str] = Field(
+        description="Code smells associated with this anti-pattern"
+    )
 
 
 class Recommendation(BaseModel):
     """Improvement recommendation with priority."""
 
-    category: str = Field(description="Architecture/Quality/Performance/Security/Maintainability")
+    category: str = Field(
+        description="Architecture/Quality/Performance/Security/Maintainability"
+    )
     priority: str = Field(description="Critical/High/Medium/Low")
     title: str = Field(description="Short recommendation title")
     description: str = Field(description="Detailed description of the recommendation")
     rationale: str = Field(description="Why this recommendation matters")
-    implementation_steps: List[str] = Field(description="Steps to implement the recommendation")
-    expected_benefits: List[str] = Field(description="Expected improvements from implementation")
+    implementation_steps: List[str] = Field(
+        description="Steps to implement the recommendation"
+    )
+    expected_benefits: List[str] = Field(
+        description="Expected improvements from implementation"
+    )
     estimated_effort: str = Field(description="Small/Medium/Large/Extra Large")
-    dependencies: List[str] = Field(default_factory=list, description="Other recommendations this depends on")
+    dependencies: List[str] = Field(
+        default_factory=list, description="Other recommendations this depends on"
+    )
 
 
 class AnalysisReport(BaseModel):
     """Complete architectural analysis report."""
 
     analysis_summary: str = Field(description="Executive summary of the analysis")
-    quality_metrics: CodeQualityMetrics = Field(description="Quality metrics assessment")
+    quality_metrics: CodeQualityMetrics = Field(
+        description="Quality metrics assessment"
+    )
     design_patterns: List[DesignPattern] = Field(description="Design patterns detected")
     anti_patterns: List[AntiPattern] = Field(description="Anti-patterns detected")
-    recommendations: List[Recommendation] = Field(description="Improvement recommendations sorted by priority")
+    recommendations: List[Recommendation] = Field(
+        description="Improvement recommendations sorted by priority"
+    )
     architecture_assessment: str = Field(description="Overall architecture evaluation")
-    onex_compliance_notes: str = Field(description="ONEX architectural compliance assessment")
-    intelligence_sources_used: int = Field(description="Number of intelligence sources consulted")
-    analysis_completeness: float = Field(description="Completeness score 0.0-1.0", ge=0.0, le=1.0)
+    onex_compliance_notes: str = Field(
+        description="ONEX architectural compliance assessment"
+    )
+    intelligence_sources_used: int = Field(
+        description="Number of intelligence sources consulted"
+    )
+    analysis_completeness: float = Field(
+        description="Completeness score 0.0-1.0", ge=0.0, le=1.0
+    )
 
 
 # ============================================================================
@@ -192,7 +229,9 @@ async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
 
     try:
         # Query for design patterns based on the code language
-        pattern_query = f"{deps.language} design patterns best practices SOLID principles"
+        pattern_query = (
+            f"{deps.language} design patterns best practices SOLID principles"
+        )
 
         pattern_intel = await deps.mcp_client.perform_rag_query(
             query=pattern_query, context="architecture", match_count=5
@@ -220,7 +259,11 @@ async def get_design_pattern_intelligence(ctx: RunContext[AgentDeps]) -> str:
                     for action in synthesis["recommended_actions"][:3]:
                         summary.append(f"- {action}")
 
-            return "\n".join(summary) if summary else "Design pattern intelligence gathered"
+            return (
+                "\n".join(summary)
+                if summary
+                else "Design pattern intelligence gathered"
+            )
 
         return "Design pattern intelligence available from knowledge base"
 
@@ -250,9 +293,15 @@ async def get_code_quality_assessment(ctx: RunContext[AgentDeps]) -> str:
     if "code_quality" in intelligence:
         quality = intelligence["code_quality"]
         quality_summary.append("**Code Quality Assessment:**")
-        quality_summary.append(f"- Overall Quality Score: {quality.get('quality_score', 0.0):.2f}")
-        quality_summary.append(f"- ONEX Compliance: {quality.get('onex_compliance', 0.0):.2f}")
-        quality_summary.append(f"- Complexity: {quality.get('complexity_score', 0.0):.2f}")
+        quality_summary.append(
+            f"- Overall Quality Score: {quality.get('quality_score', 0.0):.2f}"
+        )
+        quality_summary.append(
+            f"- ONEX Compliance: {quality.get('onex_compliance', 0.0):.2f}"
+        )
+        quality_summary.append(
+            f"- Complexity: {quality.get('complexity_score', 0.0):.2f}"
+        )
 
         if "improvement_opportunities" in quality:
             quality_summary.append("- Top Improvement Opportunities:")
@@ -263,8 +312,12 @@ async def get_code_quality_assessment(ctx: RunContext[AgentDeps]) -> str:
     if "architectural_compliance" in intelligence:
         compliance = intelligence["architectural_compliance"]
         quality_summary.append("\n**Architectural Compliance:**")
-        quality_summary.append(f"- Compliance Score: {compliance.get('compliance_score', 0.0):.2f}")
-        quality_summary.append(f"- Architecture Type: {compliance.get('architecture_type', 'unknown')}")
+        quality_summary.append(
+            f"- Compliance Score: {compliance.get('compliance_score', 0.0):.2f}"
+        )
+        quality_summary.append(
+            f"- Architecture Type: {compliance.get('architecture_type', 'unknown')}"
+        )
 
         violations = compliance.get("violations", [])
         if violations:
@@ -283,7 +336,11 @@ async def get_code_quality_assessment(ctx: RunContext[AgentDeps]) -> str:
                 for practice in best_practices[:3]:
                     quality_summary.append(f"  • {practice}")
 
-    return "\n".join(quality_summary) if quality_summary else "Quality assessment data available"
+    return (
+        "\n".join(quality_summary)
+        if quality_summary
+        else "Quality assessment data available"
+    )
 
 
 @architectural_analyzer_agent.tool
@@ -389,7 +446,11 @@ async def get_anti_pattern_detection(ctx: RunContext[AgentDeps]) -> str:
             for smell in smells[:5]:
                 anti_patterns_summary.append(f"- {smell}")
 
-    return "\n".join(anti_patterns_summary) if anti_patterns_summary else "No significant anti-patterns detected"
+    return (
+        "\n".join(anti_patterns_summary)
+        if anti_patterns_summary
+        else "No significant anti-patterns detected"
+    )
 
 
 # ============================================================================
@@ -400,7 +461,12 @@ async def get_anti_pattern_detection(ctx: RunContext[AgentDeps]) -> str:
 @register_agent(
     agent_name="analyzer",
     agent_type="analyzer",
-    capabilities=["architecture_analysis", "design_patterns", "quality_metrics", "anti_patterns"],
+    capabilities=[
+        "architecture_analysis",
+        "design_patterns",
+        "quality_metrics",
+        "anti_patterns",
+    ],
     description="Architectural and code quality analysis agent",
 )
 class ArchitecturalAnalyzerAgent:
@@ -463,7 +529,12 @@ class ArchitecturalAnalyzerAgent:
 
             # Gather intelligence
             intelligence = await self._gather_intelligence(
-                task, code_to_analyze, file_path, language, analysis_focus, pre_gathered_context
+                task,
+                code_to_analyze,
+                file_path,
+                language,
+                analysis_focus,
+                pre_gathered_context,
             )
 
             # Create agent dependencies
@@ -480,7 +551,9 @@ class ArchitecturalAnalyzerAgent:
             )
 
             # Build analysis prompt
-            prompt = self._build_analysis_prompt(task, code_to_analyze, file_path, language, analysis_focus)
+            prompt = self._build_analysis_prompt(
+                task, code_to_analyze, file_path, language, analysis_focus
+            )
 
             # Run Pydantic AI agent with model fallback
             await self.trace_logger.log_event(
@@ -537,9 +610,15 @@ class ArchitecturalAnalyzerAgent:
                 "language": language,
                 "analysis_summary": analysis_report.analysis_summary,
                 "quality_metrics": analysis_report.quality_metrics.model_dump(),
-                "design_patterns": [p.model_dump() for p in analysis_report.design_patterns],
-                "anti_patterns": [ap.model_dump() for ap in analysis_report.anti_patterns],
-                "recommendations": [r.model_dump() for r in analysis_report.recommendations],
+                "design_patterns": [
+                    p.model_dump() for p in analysis_report.design_patterns
+                ],
+                "anti_patterns": [
+                    ap.model_dump() for ap in analysis_report.anti_patterns
+                ],
+                "recommendations": [
+                    r.model_dump() for r in analysis_report.recommendations
+                ],
                 "architecture_assessment": analysis_report.architecture_assessment,
                 "onex_compliance_notes": analysis_report.onex_compliance_notes,
                 "intelligence_sources": analysis_report.intelligence_sources_used,
@@ -549,10 +628,18 @@ class ArchitecturalAnalyzerAgent:
                     "anti_patterns_detected": len(analysis_report.anti_patterns),
                     "recommendations_count": len(analysis_report.recommendations),
                     "critical_recommendations": len(
-                        [r for r in analysis_report.recommendations if r.priority == "Critical"]
+                        [
+                            r
+                            for r in analysis_report.recommendations
+                            if r.priority == "Critical"
+                        ]
                     ),
                     "high_priority_recommendations": len(
-                        [r for r in analysis_report.recommendations if r.priority == "High"]
+                        [
+                            r
+                            for r in analysis_report.recommendations
+                            if r.priority == "High"
+                        ]
                     ),
                 },
                 "pydantic_ai_metadata": {
@@ -573,7 +660,9 @@ class ArchitecturalAnalyzerAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -591,7 +680,9 @@ class ArchitecturalAnalyzerAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Architectural analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -644,7 +735,9 @@ class ArchitecturalAnalyzerAgent:
 
                 # Architectural compliance check
                 compliance_result = await self.mcp_client.call_tool(
-                    "check_architectural_compliance", content=code, architecture_type="onex"
+                    "check_architectural_compliance",
+                    content=code,
+                    architecture_type="onex",
                 )
                 intelligence["architectural_compliance"] = compliance_result
 
@@ -681,7 +774,12 @@ class ArchitecturalAnalyzerAgent:
         return intelligence
 
     def _build_analysis_prompt(
-        self, task: AgentTask, code: str, file_path: str, language: str, analysis_focus: str
+        self,
+        task: AgentTask,
+        code: str,
+        file_path: str,
+        language: str,
+        analysis_focus: str,
     ) -> str:
         """Build detailed analysis prompt for LLM."""
         return f"""Perform comprehensive architectural and code quality analysis:
@@ -823,7 +921,9 @@ class UserManager:
             print(f"- {anti['anti_pattern_name']} [{anti['severity']}]")
             print(f"  Location: {anti['location']}")
 
-        print(f"\n--- Top Recommendations ({output['statistics']['critical_recommendations']} critical) ---")
+        print(
+            f"\n--- Top Recommendations ({output['statistics']['critical_recommendations']} critical) ---"
+        )
         for rec in output["recommendations"][:5]:
             print(f"- [{rec['priority']}] {rec['title']}")
             print(f"  Category: {rec['category']}")
@@ -840,7 +940,9 @@ class UserManager:
         print(f"Patterns Detected: {stats['patterns_detected']}")
         print(f"Anti-Patterns: {stats['anti_patterns_detected']}")
         print(f"Total Recommendations: {stats['recommendations_count']}")
-        print(f"Critical: {stats['critical_recommendations']}, High: {stats['high_priority_recommendations']}")
+        print(
+            f"Critical: {stats['critical_recommendations']}, High: {stats['high_priority_recommendations']}"
+        )
 
         print(f"\nExecution Time: {result.execution_time_ms:.2f}ms")
     else:

@@ -6,9 +6,10 @@ Identifies agent invocations in user prompts and extracts agent configuration.
 
 import re
 import sys
-import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class AgentDetector:
@@ -35,7 +36,9 @@ class AgentDetector:
     ]
 
     AGENT_CONFIG_DIR = Path.home() / ".claude" / "agents" / "configs"
-    AGENT_REGISTRY_PATH = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    AGENT_REGISTRY_PATH = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     def __init__(self):
         """Initialize detector and load agent registry."""
@@ -123,7 +126,9 @@ class AgentDetector:
         """
         # Try explicit pattern matching (case-insensitive)
         for i, pattern in enumerate(self.AGENT_PATTERNS):
-            match = re.search(pattern, prompt, re.IGNORECASE)  # Case-insensitive matching
+            match = re.search(
+                pattern, prompt, re.IGNORECASE
+            )  # Case-insensitive matching
             if match:
                 # Handle patterns that capture groups vs those that don't
                 if match.groups():
@@ -174,7 +179,9 @@ class AgentDetector:
             print(f"Error loading agent config: {e}", file=sys.stderr)
             return None
 
-    def extract_intelligence_queries(self, agent_config: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_intelligence_queries(
+        self, agent_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Extract domain and implementation queries from agent config.
 

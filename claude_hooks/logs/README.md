@@ -36,5 +36,3 @@ Each file entry:
 - `severity_breakdown` (optional): object mapping severity to counts.
 
 See `violations_summary.schema.json` for the precise schema.
-
-

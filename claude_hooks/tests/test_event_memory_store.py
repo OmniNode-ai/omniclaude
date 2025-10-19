@@ -8,21 +8,21 @@ validation, correction, and final outcome.
 Run with: pytest tests/test_event_memory_store.py -v
 """
 
-import pytest
 import tempfile
 import uuid
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
+import pytest
 from lib.memory import (
-    EventStore,
-    EventAnalytics,
-    WorkflowEvent,
-    EventType,
-    Violation,
-    Correction,
     AIQuorumScore,
+    Correction,
+    EventAnalytics,
+    EventStore,
+    EventType,
     IntentContextData,
+    Violation,
+    WorkflowEvent,
 )
 
 
@@ -73,7 +73,12 @@ def sample_violations():
             line_number=10,
             suggested_fix="Rename myFunction to my_function",
         ),
-        Violation(rule="missing_docstring", severity="warning", message="Function missing docstring", line_number=10),
+        Violation(
+            rule="missing_docstring",
+            severity="warning",
+            message="Function missing docstring",
+            line_number=10,
+        ),
     ]
 
 
@@ -190,7 +195,12 @@ class TestEventStore:
         assert stats["total_events"] == 1
 
     def test_complete_workflow_tracking(
-        self, event_store, sample_intent, sample_violations, sample_corrections, sample_quorum_score
+        self,
+        event_store,
+        sample_intent,
+        sample_violations,
+        sample_corrections,
+        sample_quorum_score,
     ):
         """Test tracking a complete workflow from start to finish."""
         correlation_id = str(uuid.uuid4())
@@ -402,7 +412,9 @@ class TestEventAnalytics:
         assert metrics.total_workflows == 0
         assert metrics.success_rate == 0.0
 
-    def test_workflow_metrics_with_data(self, event_store, sample_intent, sample_violations, sample_corrections):
+    def test_workflow_metrics_with_data(
+        self, event_store, sample_intent, sample_violations, sample_corrections
+    ):
         """Test workflow metrics calculation with real data."""
         # Create successful workflow
         correlation_id = str(uuid.uuid4())
@@ -415,7 +427,9 @@ class TestEventAnalytics:
             (EventType.WRITE_SUCCESS, None, None, None, True),
         ]
 
-        for i, (event_type, intent, violations, corrections, success) in enumerate(events):
+        for i, (event_type, intent, violations, corrections, success) in enumerate(
+            events
+        ):
             event = WorkflowEvent.create(
                 correlation_id=correlation_id,
                 event_type=event_type,
@@ -439,7 +453,9 @@ class TestEventAnalytics:
         assert metrics.avg_violations >= 2  # We had 2 violations
         assert metrics.most_common_intent == "file_modification"
 
-    def test_correction_effectiveness(self, event_store, sample_corrections, sample_quorum_score):
+    def test_correction_effectiveness(
+        self, event_store, sample_corrections, sample_quorum_score
+    ):
         """Test correction effectiveness analysis."""
         # Create workflow with corrections
         correlation_id = str(uuid.uuid4())
@@ -509,7 +525,11 @@ class TestEventAnalytics:
         correlation_id = str(uuid.uuid4())
 
         # Create simple workflow
-        events = [EventType.INTENT_DETECTED, EventType.VALIDATION_PASSED, EventType.WRITE_SUCCESS]
+        events = [
+            EventType.INTENT_DETECTED,
+            EventType.VALIDATION_PASSED,
+            EventType.WRITE_SUCCESS,
+        ]
 
         for event_type in events:
             event = WorkflowEvent.create(
@@ -518,7 +538,9 @@ class TestEventAnalytics:
                 tool_name="Write",
                 file_path="/test/summary.py",
                 content="content",
-                intent=sample_intent if event_type == EventType.INTENT_DETECTED else None,
+                intent=(
+                    sample_intent if event_type == EventType.INTENT_DETECTED else None
+                ),
                 success=event_type == EventType.WRITE_SUCCESS,
             )
             event_store.record_event(event)
@@ -570,7 +592,9 @@ class TestEventAnalytics:
 class TestIntegrationScenarios:
     """Test complete integration scenarios."""
 
-    def test_multiple_correction_iterations(self, event_store, sample_intent, sample_violations):
+    def test_multiple_correction_iterations(
+        self, event_store, sample_intent, sample_violations
+    ):
         """Test workflow with multiple correction attempts."""
         correlation_id = str(uuid.uuid4())
         file_path = "/test/iterations.py"
@@ -589,8 +613,14 @@ class TestIntegrationScenarios:
                 tool_name="Write",
                 file_path=file_path,
                 content="iteration 1 content",
-                intent=sample_intent if event_type == EventType.INTENT_DETECTED else None,
-                violations=sample_violations if event_type == EventType.VALIDATION_FAILED else None,
+                intent=(
+                    sample_intent if event_type == EventType.INTENT_DETECTED else None
+                ),
+                violations=(
+                    sample_violations
+                    if event_type == EventType.VALIDATION_FAILED
+                    else None
+                ),
                 iteration_number=1,
             )
             event_store.record_event(event)

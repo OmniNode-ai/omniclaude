@@ -3,11 +3,17 @@
 Test OmniNode Template Engine
 """
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
+from agents.lib.simple_prd_analyzer import (
+    SimpleDecompositionResult,
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+)
 
 
 class TestOmniNodeTemplateEngine:
@@ -103,8 +109,8 @@ class TestOmniNodeTemplateEngine:
             verification_successful=True,
         )
 
-        from uuid import uuid4
         from datetime import datetime
+        from uuid import uuid4
 
         analysis_result = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -120,7 +126,9 @@ class TestOmniNodeTemplateEngine:
             analysis_timestamp=datetime.utcnow(),
         )
 
-        context = engine._prepare_template_context(analysis_result, "EFFECT", "user_management", "identity")
+        context = engine._prepare_template_context(
+            analysis_result, "EFFECT", "user_management", "identity"
+        )
 
         # Check basic context
         assert context["DOMAIN"] == "identity"
@@ -178,8 +186,8 @@ class TestOmniNodeTemplateEngine:
             verification_successful=True,
         )
 
-        from uuid import uuid4
         from datetime import datetime
+        from uuid import uuid4
 
         analysis_result = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -248,7 +256,10 @@ class TestOmniNodeTemplateEngine:
         imports = engine._generate_mixin_imports(mixins)
         assert "from omnibase_core.mixins.mixineventbus import MixinEventBus" in imports
         assert "from omnibase_core.mixins.mixincaching import MixinCaching" in imports
-        assert "from omnibase_core.mixins.mixinhealthcheck import MixinHealthCheck" in imports
+        assert (
+            "from omnibase_core.mixins.mixinhealthcheck import MixinHealthCheck"
+            in imports
+        )
 
         # Test mixin inheritance
         inheritance = engine._generate_mixin_inheritance(mixins)

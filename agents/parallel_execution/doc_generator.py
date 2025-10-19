@@ -11,7 +11,7 @@ Responsible for:
 
 import os
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class MarkdownDocGenerator:
@@ -49,10 +49,14 @@ class MarkdownDocGenerator:
                 elif isinstance(results_data, list):
                     results_list = results_data
                 else:
-                    print(f"[DocGenerator] Warning: Unexpected results format: {type(results_data)}")
+                    print(
+                        f"[DocGenerator] Warning: Unexpected results format: {type(results_data)}"
+                    )
                     return
 
-            print(f"[DocGenerator] Generating documentation from {len(results_list)} results")
+            print(
+                f"[DocGenerator] Generating documentation from {len(results_list)} results"
+            )
 
             # Normalize structure for internal methods
             normalized_results = {"results": results_list}
@@ -223,7 +227,9 @@ This directory contains a complete ONEX-compliant implementation generated throu
                         content += f"### {i}. {rec.get('title', 'No title')}\n\n"
                         content += f"**Priority:** {rec.get('priority', 'Unknown')}\n"
                         content += f"**Category:** {rec.get('category', 'Unknown')}\n"
-                        content += f"**Effort:** {rec.get('estimated_effort', 'Unknown')}\n\n"
+                        content += (
+                            f"**Effort:** {rec.get('estimated_effort', 'Unknown')}\n\n"
+                        )
 
                         if rec.get("description"):
                             content += f"**Description:** {rec['description']}\n\n"

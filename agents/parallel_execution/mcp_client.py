@@ -7,6 +7,7 @@ Uses direct HTTP POST requests to the FastMCP stateless HTTP endpoint.
 import asyncio
 import json
 from typing import Any, Dict, Optional
+
 import httpx
 
 try:
@@ -15,7 +16,10 @@ except Exception:
     log_llm_call = None  # type: ignore
 
 try:
-    from agents.lib.circuit_breaker import call_with_breaker, CircuitBreakerConfig  # type: ignore
+    from agents.lib.circuit_breaker import (  # type: ignore
+        CircuitBreakerConfig,
+        call_with_breaker,
+    )
 except Exception:
     call_with_breaker = None  # type: ignore
     CircuitBreakerConfig = None  # type: ignore
@@ -59,7 +63,9 @@ class ArchonMCPClient:
         if self.client is None:
             self.client = httpx.AsyncClient(timeout=self.default_timeout)
 
-    async def call_tool(self, tool_name: str, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
+    async def call_tool(
+        self, tool_name: str, timeout: Optional[float] = None, **kwargs
+    ) -> Dict[str, Any]:
         """
         Call an MCP tool via stateless HTTP POST with timeout and circuit breaker protection.
 
@@ -87,7 +93,9 @@ class ArchonMCPClient:
         else:
             return await self._call_tool_internal(tool_name, timeout, **kwargs)
 
-    async def _call_tool_internal(self, tool_name: str, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
+    async def _call_tool_internal(
+        self, tool_name: str, timeout: Optional[float] = None, **kwargs
+    ) -> Dict[str, Any]:
         """
         Internal method to call MCP tool without circuit breaker.
         """
@@ -109,7 +117,10 @@ class ArchonMCPClient:
                 response = await self.client.post(
                     self.mcp_url,
                     json=request,
-                    headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
                 )
                 response.raise_for_status()
                 return response
@@ -138,7 +149,9 @@ class ArchonMCPClient:
 
             if "error" in result:
                 error = result["error"]
-                raise RuntimeError(f"MCP error: {error.get('message', 'Unknown error')}")
+                raise RuntimeError(
+                    f"MCP error: {error.get('message', 'Unknown error')}"
+                )
 
             # Extract result
             mcp_result = result.get("result", {})
@@ -177,23 +190,33 @@ class ArchonMCPClient:
 
         except asyncio.TimeoutError:
             raise RuntimeError(
-                f"MCP tool call timed out after {timeout_value}s. " f"Tool: {tool_name}, Server: {self.base_url}"
+                f"MCP tool call timed out after {timeout_value}s. "
+                f"Tool: {tool_name}, Server: {self.base_url}"
             )
         except httpx.HTTPStatusError as e:
             raise RuntimeError(f"HTTP error calling MCP tool: {e}")
         except httpx.ConnectError as e:
             raise RuntimeError(
-                f"Cannot connect to MCP server at {self.base_url}. " f"Is the server running? Error: {e}"
+                f"Cannot connect to MCP server at {self.base_url}. "
+                f"Is the server running? Error: {e}"
             )
         except Exception as e:
             raise RuntimeError(f"Tool call failed: {e}")
 
     async def assess_code_quality(
-        self, content: str, source_path: str = "", language: str = "python", timeout: Optional[float] = None
+        self,
+        content: str,
+        source_path: str = "",
+        language: str = "python",
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Assess code quality using Archon MCP tool."""
         return await self.call_tool(
-            "assess_code_quality", timeout=timeout, content=content, source_path=source_path, language=language
+            "assess_code_quality",
+            timeout=timeout,
+            content=content,
+            source_path=source_path,
+            language=language,
         )
 
     async def perform_rag_query(
@@ -205,14 +228,22 @@ class ArchonMCPClient:
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Perform RAG query for intelligence gathering."""
-        args = {"query": query, "max_results_per_source": match_count, "context": context}
+        args = {
+            "query": query,
+            "max_results_per_source": match_count,
+            "context": context,
+        }
         if source_domain:
             args["source_domain"] = source_domain
 
         return await self.call_tool("perform_rag_query", timeout=timeout, **args)
 
     async def search_code_examples(
-        self, query: str, source_domain: Optional[str] = None, match_count: int = 3, timeout: Optional[float] = None
+        self,
+        query: str,
+        source_domain: Optional[str] = None,
+        match_count: int = 3,
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Search for code examples using RAG."""
         args = {"query": query, "max_results_per_source": match_count}

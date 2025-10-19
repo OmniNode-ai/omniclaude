@@ -20,16 +20,15 @@ Usage:
     logger.error("Task failed", metadata={"error": str(e)})
 """
 
-import logging
 import json
+import logging
 import sys
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import UUID
-from datetime import datetime, timezone
-from dataclasses import dataclass, asdict
-from contextvars import ContextVar
-from enum import Enum
-
 
 # Context variables for thread-safe correlation tracking
 _correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
@@ -115,7 +114,12 @@ class StructuredLogger:
         logger.info("Research started", metadata={"query": query})
     """
 
-    def __init__(self, name: str, component: Optional[str] = None, level: LogLevel = LogLevel.INFO):
+    def __init__(
+        self,
+        name: str,
+        component: Optional[str] = None,
+        level: LogLevel = LogLevel.INFO,
+    ):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(getattr(logging, level.value))
 
@@ -189,11 +193,21 @@ class StructuredLogger:
         """Log warning message"""
         self._log(LogLevel.WARNING, message, metadata)
 
-    def error(self, message: str, metadata: Optional[Dict[str, Any]] = None, exc_info: Optional[Exception] = None):
+    def error(
+        self,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        exc_info: Optional[Exception] = None,
+    ):
         """Log error message with optional exception info"""
         self._log(LogLevel.ERROR, message, metadata, exc_info)
 
-    def critical(self, message: str, metadata: Optional[Dict[str, Any]] = None, exc_info: Optional[Exception] = None):
+    def critical(
+        self,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        exc_info: Optional[Exception] = None,
+    ):
         """Log critical message with optional exception info"""
         self._log(LogLevel.CRITICAL, message, metadata, exc_info)
 

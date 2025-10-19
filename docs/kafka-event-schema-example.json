@@ -1,0 +1,18 @@
+{
+  "event_type": "document_added",
+  "timestamp": "2025-10-18T16:11:16.499123Z",
+  "file_path": "TEST-PIPELINE.md",
+  "file_name": "TEST-PIPELINE.md",
+  "file_extension": ".md",
+  "file_size_bytes": 8,
+  "commit_hash": "7e815dbac37f7e9724b38757f3f61b1a6b394793",
+  "content": "# Test\n",
+  "diff": "+# Test\n",
+  "git_metadata": {
+    "author_name": "Jonah",
+    "author_email": "jonah@example.com",
+    "timestamp": 1760803876,
+    "commit_message": "test: pipeline verification for Kafka integration"
+  },
+  "repository": "omniclaude"
+}

@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from agents.lib.kafka_codegen_client import KafkaCodegenClient
 from agents.lib.codegen_events import CodegenAnalysisRequest
+from agents.lib.kafka_codegen_client import KafkaCodegenClient
 
 
 def _can_connect(bootstrap: str) -> bool:
@@ -54,8 +54,12 @@ async def test_integration_publish_consume_skip_when_unreachable():
             )
             print(f"[confluent fallback] Published {evt.correlation_id}")
         except Exception as fallback_e:
-            await asyncio.gather(client.stop_producer(), client.stop_consumer(), return_exceptions=True)
-            pytest.skip(f"aiokafka bootstrap failed; confluent fallback also failed: {e} -> {fallback_e}")
+            await asyncio.gather(
+                client.stop_producer(), client.stop_consumer(), return_exceptions=True
+            )
+            pytest.skip(
+                f"aiokafka bootstrap failed; confluent fallback also failed: {e} -> {fallback_e}"
+            )
 
     topic = "dev.omniclaude.codegen.analyze.response.v1"
 
@@ -67,4 +71,6 @@ async def test_integration_publish_consume_skip_when_unreachable():
     try:
         _ = await client.consume_until(topic, matches, timeout_seconds=0.3)
     finally:
-        await asyncio.gather(client.stop_producer(), client.stop_consumer(), return_exceptions=True)
+        await asyncio.gather(
+            client.stop_producer(), client.stop_consumer(), return_exceptions=True
+        )

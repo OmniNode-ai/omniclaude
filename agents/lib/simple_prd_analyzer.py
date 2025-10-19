@@ -3,20 +3,20 @@
 Simple PRD Analyzer for Phase 0
 
 A simplified PRD analyzer that doesn't depend on legacy omniagent code.
-Updated for Phase 7 Stream 4: ML-powered mixin recommendations.
+Updated for Framework: ML-powered mixin recommendations.
 """
 
-import re
 import logging
-from typing import Dict, Any, List, Optional
-from uuid import UUID, uuid4
-from datetime import datetime, timezone
+import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-# Phase 7: ML-powered mixin compatibility (optional import)
+# Framework: ML-powered mixin compatibility (optional import)
 try:
     from .mixin_compatibility import MixinCompatibilityManager
 
@@ -64,14 +64,16 @@ class SimplePRDAnalyzer:
         """
         self.logger = logging.getLogger(__name__)
 
-        # Phase 7: Initialize ML-powered mixin compatibility manager
+        # Framework: Initialize ML-powered mixin compatibility manager
         self.enable_ml = enable_ml_recommendations and ML_AVAILABLE
         if self.enable_ml:
             try:
                 self.mixin_manager = MixinCompatibilityManager(enable_ml=True)
                 self.logger.info("ML-powered mixin recommendations enabled")
             except Exception as e:
-                self.logger.warning(f"Failed to initialize ML recommendations: {e}. Using rule-based fallback.")
+                self.logger.warning(
+                    f"Failed to initialize ML recommendations: {e}. Using rule-based fallback."
+                )
                 self.enable_ml = False
                 self.mixin_manager = None
         else:
@@ -105,16 +107,24 @@ class SimplePRDAnalyzer:
             node_type_hints = self._extract_node_type_hints(parsed_prd)
 
             # Recommend mixins
-            recommended_mixins = self._recommend_mixins(parsed_prd, decomposition_result)
+            recommended_mixins = self._recommend_mixins(
+                parsed_prd, decomposition_result
+            )
 
             # Identify external systems
-            external_systems = self._identify_external_systems(parsed_prd, decomposition_result)
+            external_systems = self._identify_external_systems(
+                parsed_prd, decomposition_result
+            )
 
             # Calculate quality baseline
-            quality_baseline = self._calculate_quality_baseline(parsed_prd, decomposition_result)
+            quality_baseline = self._calculate_quality_baseline(
+                parsed_prd, decomposition_result
+            )
 
             # Calculate confidence score
-            confidence_score = self._calculate_confidence_score(parsed_prd, decomposition_result, node_type_hints)
+            confidence_score = self._calculate_confidence_score(
+                parsed_prd, decomposition_result, node_type_hints
+            )
 
             result = SimplePRDAnalysisResult(
                 session_id=session_id,
@@ -149,50 +159,86 @@ class SimplePRDAnalyzer:
         title = title_match.group(1) if title_match else "Untitled PRD"
 
         # Extract description
-        description_match = re.search(r"## Overview\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        description_match = re.search(
+            r"## Overview\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         description = description_match.group(1).strip() if description_match else ""
 
         # Extract functional requirements
         requirements = []
-        req_match = re.search(r"## Functional Requirements\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        req_match = re.search(
+            r"## Functional Requirements\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         if req_match:
             req_text = req_match.group(1)
-            requirements = [line.strip("- ").strip() for line in req_text.split("\n") if line.strip().startswith("-")]
+            requirements = [
+                line.strip("- ").strip()
+                for line in req_text.split("\n")
+                if line.strip().startswith("-")
+            ]
 
         # Extract features
         features = []
-        features_match = re.search(r"## Features\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        features_match = re.search(
+            r"## Features\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         if features_match:
             features_text = features_match.group(1)
-            features = [line.strip("- ").strip() for line in features_text.split("\n") if line.strip().startswith("-")]
+            features = [
+                line.strip("- ").strip()
+                for line in features_text.split("\n")
+                if line.strip().startswith("-")
+            ]
 
         # Extract success criteria
         success_criteria = []
-        success_match = re.search(r"## Success Criteria\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        success_match = re.search(
+            r"## Success Criteria\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         if success_match:
             success_text = success_match.group(1)
             success_criteria = [
-                line.strip("- ").strip() for line in success_text.split("\n") if line.strip().startswith("-")
+                line.strip("- ").strip()
+                for line in success_text.split("\n")
+                if line.strip().startswith("-")
             ]
 
         # Extract technical details
         technical_details = []
-        tech_match = re.search(r"## Technical Details\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        tech_match = re.search(
+            r"## Technical Details\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         if tech_match:
             tech_text = tech_match.group(1)
             technical_details = [
-                line.strip("- ").strip() for line in tech_text.split("\n") if line.strip().startswith("-")
+                line.strip("- ").strip()
+                for line in tech_text.split("\n")
+                if line.strip().startswith("-")
             ]
 
         # Extract dependencies
         dependencies = []
-        deps_match = re.search(r"## Dependencies\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL)
+        deps_match = re.search(
+            r"## Dependencies\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
         if deps_match:
             deps_text = deps_match.group(1)
-            dependencies = [line.strip("- ").strip() for line in deps_text.split("\n") if line.strip().startswith("-")]
+            dependencies = [
+                line.strip("- ").strip()
+                for line in deps_text.split("\n")
+                if line.strip().startswith("-")
+            ]
 
         # Extract keywords
-        all_text = title + " " + description + " " + " ".join(requirements) + " " + " ".join(features)
+        all_text = (
+            title
+            + " "
+            + description
+            + " "
+            + " ".join(requirements)
+            + " "
+            + " ".join(features)
+        )
         keywords = re.findall(r"\b[A-Z][a-z]+\b", all_text)
         keywords = list(set(keywords))[:10]  # Top 10 unique keywords
 
@@ -226,7 +272,11 @@ class SimplePRDAnalyzer:
                     "id": f"task_{i+1}",
                     "title": req,
                     "description": f"Implement {req}",
-                    "priority": "high" if "authentication" in req.lower() or "security" in req.lower() else "medium",
+                    "priority": (
+                        "high"
+                        if "authentication" in req.lower() or "security" in req.lower()
+                        else "medium"
+                    ),
                     "complexity": "high" if len(req.split()) > 10 else "medium",
                 }
             )
@@ -243,7 +293,9 @@ class SimplePRDAnalyzer:
                 }
             )
 
-        return SimpleDecompositionResult(tasks=tasks, total_tasks=len(tasks), verification_successful=True)
+        return SimpleDecompositionResult(
+            tasks=tasks, total_tasks=len(tasks), verification_successful=True
+        )
 
     def _extract_node_type_hints(self, parsed_prd: SimpleParsedPRD) -> Dict[str, float]:
         """Extract node type hints from parsed PRD"""
@@ -261,23 +313,60 @@ class SimplePRDAnalyzer:
         ).lower()
 
         # EFFECT indicators
-        effect_indicators = ["create", "update", "delete", "modify", "change", "write", "store"]
-        effect_score = sum(1 for indicator in effect_indicators if indicator in all_text)
+        effect_indicators = [
+            "create",
+            "update",
+            "delete",
+            "modify",
+            "change",
+            "write",
+            "store",
+        ]
+        effect_score = sum(
+            1 for indicator in effect_indicators if indicator in all_text
+        )
         hints["EFFECT"] = min(effect_score / 10.0, 1.0)
 
         # COMPUTE indicators
-        compute_indicators = ["calculate", "process", "analyze", "compute", "process", "algorithm"]
-        compute_score = sum(1 for indicator in compute_indicators if indicator in all_text)
+        compute_indicators = [
+            "calculate",
+            "process",
+            "analyze",
+            "compute",
+            "process",
+            "algorithm",
+        ]
+        compute_score = sum(
+            1 for indicator in compute_indicators if indicator in all_text
+        )
         hints["COMPUTE"] = min(compute_score / 10.0, 1.0)
 
         # REDUCER indicators
-        reducer_indicators = ["aggregate", "summarize", "reduce", "combine", "merge", "consolidate"]
-        reducer_score = sum(1 for indicator in reducer_indicators if indicator in all_text)
+        reducer_indicators = [
+            "aggregate",
+            "summarize",
+            "reduce",
+            "combine",
+            "merge",
+            "consolidate",
+        ]
+        reducer_score = sum(
+            1 for indicator in reducer_indicators if indicator in all_text
+        )
         hints["REDUCER"] = min(reducer_score / 10.0, 1.0)
 
         # ORCHESTRATOR indicators
-        orchestrator_indicators = ["coordinate", "orchestrate", "manage", "workflow", "pipeline", "sequence"]
-        orchestrator_score = sum(1 for indicator in orchestrator_indicators if indicator in all_text)
+        orchestrator_indicators = [
+            "coordinate",
+            "orchestrate",
+            "manage",
+            "workflow",
+            "pipeline",
+            "sequence",
+        ]
+        orchestrator_score = sum(
+            1 for indicator in orchestrator_indicators if indicator in all_text
+        )
         hints["ORCHESTRATOR"] = min(orchestrator_score / 10.0, 1.0)
 
         # If no strong hints, default to EFFECT
@@ -304,11 +393,17 @@ class SimplePRDAnalyzer:
             List of recommended mixin names
         """
         # Extract required capabilities from PRD
-        requirements_text = " ".join(parsed_prd.functional_requirements + parsed_prd.features).lower()
+        requirements_text = " ".join(
+            parsed_prd.functional_requirements + parsed_prd.features
+        ).lower()
         required_capabilities = self._extract_capabilities(requirements_text)
 
         # Determine primary node type
-        primary_node_type = max(node_type_hints.items(), key=lambda x: x[1])[0] if node_type_hints else "EFFECT"
+        primary_node_type = (
+            max(node_type_hints.items(), key=lambda x: x[1])[0]
+            if node_type_hints
+            else "EFFECT"
+        )
 
         # Use ML recommendations if available
         if self.enable_ml and self.mixin_manager:
@@ -321,20 +416,28 @@ class SimplePRDAnalyzer:
                 )
 
                 # Extract mixin names from recommendations
-                mixins = [rec.mixin_name for rec in recommendations if rec.confidence >= 0.6]
+                mixins = [
+                    rec.mixin_name for rec in recommendations if rec.confidence >= 0.6
+                ]
 
                 # Validate mixin set for compatibility
                 if mixins:
-                    mixin_set = await self.mixin_manager.validate_mixin_set(mixins, primary_node_type)
+                    mixin_set = await self.mixin_manager.validate_mixin_set(
+                        mixins, primary_node_type
+                    )
 
                     if mixin_set.warnings:
-                        self.logger.warning(f"Mixin compatibility warnings: {mixin_set.warnings}")
+                        self.logger.warning(
+                            f"Mixin compatibility warnings: {mixin_set.warnings}"
+                        )
 
                 self.logger.info(f"ML recommendations: {mixins}")
                 return mixins
 
             except Exception as e:
-                self.logger.warning(f"ML recommendation failed: {e}. Using rule-based fallback.")
+                self.logger.warning(
+                    f"ML recommendation failed: {e}. Using rule-based fallback."
+                )
                 # Fall through to rule-based recommendations
 
         # Fallback to rule-based recommendations
@@ -364,14 +467,18 @@ class SimplePRDAnalyzer:
         return capabilities
 
     def _recommend_mixins(
-        self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult
+        self,
+        parsed_prd: SimpleParsedPRD,
+        decomposition_result: SimpleDecompositionResult,
     ) -> List[str]:
         """
         Synchronous wrapper for mixin recommendations (for backward compatibility).
 
         Note: This is deprecated. Use _recommend_mixins_async for ML-powered recommendations.
         """
-        requirements_text = " ".join(parsed_prd.functional_requirements + parsed_prd.features).lower()
+        requirements_text = " ".join(
+            parsed_prd.functional_requirements + parsed_prd.features
+        ).lower()
         return self._recommend_mixins_rule_based(requirements_text)
 
     def _recommend_mixins_rule_based(self, requirements_text: str) -> List[str]:
@@ -379,45 +486,74 @@ class SimplePRDAnalyzer:
         mixins = []
 
         # Event-driven patterns
-        if any(keyword in requirements_text for keyword in ["event", "notification", "publish", "subscribe"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["event", "notification", "publish", "subscribe"]
+        ):
             mixins.append("MixinEventBus")
 
         # Caching patterns
-        if any(keyword in requirements_text for keyword in ["cache", "caching", "performance", "speed"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["cache", "caching", "performance", "speed"]
+        ):
             mixins.append("MixinCaching")
 
         # Health monitoring
-        if any(keyword in requirements_text for keyword in ["health", "monitoring", "status", "alive"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["health", "monitoring", "status", "alive"]
+        ):
             mixins.append("MixinHealthCheck")
 
         # Retry patterns
-        if any(keyword in requirements_text for keyword in ["retry", "resilient", "fault", "error"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["retry", "resilient", "fault", "error"]
+        ):
             mixins.append("MixinRetry")
 
         # Circuit breaker patterns
-        if any(keyword in requirements_text for keyword in ["circuit", "breaker", "fallback", "timeout"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["circuit", "breaker", "fallback", "timeout"]
+        ):
             mixins.append("MixinCircuitBreaker")
 
         # Logging patterns
-        if any(keyword in requirements_text for keyword in ["log", "logging", "audit", "trace"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["log", "logging", "audit", "trace"]
+        ):
             mixins.append("MixinLogging")
 
         # Metrics patterns
-        if any(keyword in requirements_text for keyword in ["metric", "monitoring", "analytics", "kpi"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["metric", "monitoring", "analytics", "kpi"]
+        ):
             mixins.append("MixinMetrics")
 
         # Security patterns
-        if any(keyword in requirements_text for keyword in ["security", "auth", "encrypt", "secure"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["security", "auth", "encrypt", "secure"]
+        ):
             mixins.append("MixinSecurity")
 
         # Validation patterns
-        if any(keyword in requirements_text for keyword in ["validate", "validation", "check", "verify"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["validate", "validation", "check", "verify"]
+        ):
             mixins.append("MixinValidation")
 
         return mixins
 
     def _identify_external_systems(
-        self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult
+        self,
+        parsed_prd: SimpleParsedPRD,
+        decomposition_result: SimpleDecompositionResult,
     ) -> List[str]:
         """Identify external systems from PRD analysis"""
         external_systems = []
@@ -448,7 +584,9 @@ class SimplePRDAnalyzer:
         return list(set(external_systems))  # Remove duplicates
 
     def _calculate_quality_baseline(
-        self, parsed_prd: SimpleParsedPRD, decomposition_result: SimpleDecompositionResult
+        self,
+        parsed_prd: SimpleParsedPRD,
+        decomposition_result: SimpleDecompositionResult,
     ) -> float:
         """Calculate quality baseline for generated code"""
         baseline = 0.5  # Start with 50%

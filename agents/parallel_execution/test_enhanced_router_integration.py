@@ -13,8 +13,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_model import AgentTask
 from agent_dispatcher import ParallelCoordinator
+from agent_model import AgentTask
 
 
 async def test_router_integration():
@@ -27,7 +27,9 @@ async def test_router_integration():
     # Initialize coordinator with enhanced router
     print("\n1. Initializing ParallelCoordinator with enhanced router...")
     coordinator = ParallelCoordinator(
-        use_dynamic_loading=True, use_enhanced_router=True, router_confidence_threshold=0.6
+        use_dynamic_loading=True,
+        use_enhanced_router=True,
+        router_confidence_threshold=0.6,
     )
 
     await coordinator.initialize()
@@ -68,7 +70,9 @@ async def test_router_integration():
     results = []
     for test_case in test_cases:
         task = AgentTask(
-            task_id=test_case["task_id"], description=test_case["description"], input_data={"domain": "api_development"}
+            task_id=test_case["task_id"],
+            description=test_case["description"],
+            input_data={"domain": "api_development"},
         )
 
         print(f"\nTask {test_case['task_id']}: {test_case['description']}")
@@ -129,7 +133,9 @@ async def test_router_integration():
     print("=" * 70)
 
     print(f"\nTested {len(results)} task scenarios")
-    print(f"Router was {'successfully integrated' if router_stats['enabled'] else 'not available'}")
+    print(
+        f"Router was {'successfully integrated' if router_stats['enabled'] else 'not available'}"
+    )
 
     if router_stats["router_used"] > 0:
         print(f"✓ Router successfully routed {router_stats['router_used']} tasks")
@@ -158,7 +164,9 @@ async def test_parallel_execution_with_router():
 
     # Initialize coordinator
     coordinator = ParallelCoordinator(
-        use_dynamic_loading=True, use_enhanced_router=True, router_confidence_threshold=0.6
+        use_dynamic_loading=True,
+        use_enhanced_router=True,
+        router_confidence_threshold=0.6,
     )
 
     await coordinator.initialize()
@@ -193,7 +201,9 @@ async def test_parallel_execution_with_router():
 
         for task_id, result in results.items():
             status = "✓" if result.success else "✗"
-            print(f"  {status} {task_id}: {result.agent_name} ({result.execution_time_ms:.2f}ms)")
+            print(
+                f"  {status} {task_id}: {result.agent_name} ({result.execution_time_ms:.2f}ms)"
+            )
 
     except Exception as e:
         print(f"\n✗ Parallel execution failed: {e}")

@@ -13,19 +13,24 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
 import sys
-import uuid
 import time
+import uuid
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hook_event_logger import HookEventLogger, log_userprompt, log_pretooluse, log_posttooluse
-
+from hook_event_logger import (
+    HookEventLogger,
+    log_posttooluse,
+    log_pretooluse,
+    log_userprompt,
+)
 
 # ============================================================================
 # FIXTURES
@@ -64,8 +69,16 @@ def sample_event_data():
         "action": "agent_detected",
         "resource": "agent",
         "resource_id": "agent-testing",
-        "payload": {"agent_name": "agent-testing", "agent_domain": "testing", "confidence": 0.95, "method": "pattern"},
-        "metadata": {"correlation_id": str(uuid.uuid4()), "agent_name": "agent-testing"},
+        "payload": {
+            "agent_name": "agent-testing",
+            "agent_domain": "testing",
+            "confidence": 0.95,
+            "method": "pattern",
+        },
+        "metadata": {
+            "correlation_id": str(uuid.uuid4()),
+            "agent_name": "agent-testing",
+        },
     }
 
 
@@ -96,10 +109,16 @@ class TestConnectionManagement:
             # First attempt should fail gracefully
             try:
                 result = logger.log_event(
-                    source="Test", action="test", resource="test", resource_id="test-id", payload={}
+                    source="Test",
+                    action="test",
+                    resource="test",
+                    resource_id="test-id",
+                    payload={},
                 )
                 # Should handle gracefully
-                assert result is not None or result is None  # Either outcome is acceptable
+                assert (
+                    result is not None or result is None
+                )  # Either outcome is acceptable
             except Exception:
                 # Graceful degradation is acceptable
                 pass
@@ -110,7 +129,13 @@ class TestConnectionManagement:
 
         # Make multiple log calls
         for i in range(10):
-            logger.log_event(source="Test", action=f"action_{i}", resource="test", resource_id=f"test-{i}", payload={})
+            logger.log_event(
+                source="Test",
+                action=f"action_{i}",
+                resource="test",
+                resource_id=f"test-{i}",
+                payload={},
+            )
 
         # Should reuse connections (not create 10 new ones)
         # This is implementation-dependent
@@ -124,7 +149,13 @@ class TestConnectionManagement:
 
             # Should not crash, just log warning
             try:
-                logger.log_event(source="Test", action="test", resource="test", resource_id="test-id", payload={})
+                logger.log_event(
+                    source="Test",
+                    action="test",
+                    resource="test",
+                    resource_id="test-id",
+                    payload={},
+                )
                 # Graceful degradation - returns None or continues
                 assert True
             except Exception:
@@ -148,7 +179,10 @@ class TestEventLogging:
             agent_detected="agent-testing",
             agent_domain="testing",
             correlation_id=correlation_id,
-            intelligence_queries={"domain": "testing patterns", "implementation": "pytest examples"},
+            intelligence_queries={
+                "domain": "testing patterns",
+                "implementation": "pytest examples",
+            },
             metadata={"prompt_length": 18, "working_dir": "/test"},
         )
 
@@ -200,7 +234,11 @@ class TestEventLogging:
         }
 
         logger.log_event(
-            source="Test", action="complex_data", resource="test", resource_id="test-id", payload=complex_payload
+            source="Test",
+            action="complex_data",
+            resource="test",
+            resource_id="test-id",
+            payload=complex_payload,
         )
 
         # Should serialize to JSON without error
@@ -244,13 +282,25 @@ class TestCorrelationTracking:
     def test_correlation_chain(self, mock_db_connection, correlation_id):
         """Test correlation ID links events together."""
         # Log UserPromptSubmit
-        log_userprompt(prompt="test prompt", agent_detected="agent-testing", correlation_id=correlation_id)
+        log_userprompt(
+            prompt="test prompt",
+            agent_detected="agent-testing",
+            correlation_id=correlation_id,
+        )
 
         # Log PreToolUse with same correlation ID
-        log_pretooluse(tool_name="Write", tool_input={"file_path": "/test"}, correlation_id=correlation_id)
+        log_pretooluse(
+            tool_name="Write",
+            tool_input={"file_path": "/test"},
+            correlation_id=correlation_id,
+        )
 
         # Log PostToolUse with same correlation ID
-        log_posttooluse(tool_name="Write", tool_output={"success": True}, correlation_id=correlation_id)
+        log_posttooluse(
+            tool_name="Write",
+            tool_output={"success": True},
+            correlation_id=correlation_id,
+        )
 
         # All three should use same correlation ID
         assert mock_db_connection["cursor"].execute.call_count >= 3
@@ -296,7 +346,11 @@ class TestQueryPerformance:
 
         for i in range(iterations):
             logger.log_event(
-                source="Test", action=f"action_{i}", resource="test", resource_id=f"test-{i}", payload={"data": "test"}
+                source="Test",
+                action=f"action_{i}",
+                resource="test",
+                resource_id=f"test-{i}",
+                payload={"data": "test"},
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
@@ -315,7 +369,11 @@ class TestQueryPerformance:
 
         def log_event(i):
             logger.log_event(
-                source="Test", action=f"concurrent_{i}", resource="test", resource_id=f"test-{i}", payload={}
+                source="Test",
+                action=f"concurrent_{i}",
+                resource="test",
+                resource_id=f"test-{i}",
+                payload={},
             )
 
         start_time = time.time()
@@ -348,7 +406,13 @@ class TestErrorHandling:
 
             # Should not crash
             try:
-                logger.log_event(source="Test", action="test", resource="test", resource_id="test-id", payload={})
+                logger.log_event(
+                    source="Test",
+                    action="test",
+                    resource="test",
+                    resource_id="test-id",
+                    payload={},
+                )
                 assert True  # Graceful handling
             except Exception:
                 pass  # Also acceptable
@@ -361,7 +425,13 @@ class TestErrorHandling:
 
         # Should not crash
         try:
-            logger.log_event(source="Test", action="test", resource="test", resource_id="test-id", payload={})
+            logger.log_event(
+                source="Test",
+                action="test",
+                resource="test",
+                resource_id="test-id",
+                payload={},
+            )
             assert True  # Graceful handling
         except Exception:
             pass  # Also acceptable
@@ -376,7 +446,11 @@ class TestErrorHandling:
 
         try:
             logger.log_event(
-                source="Test", action="test", resource="test", resource_id="test-id", payload={"obj": NonSerializable()}
+                source="Test",
+                action="test",
+                resource="test",
+                resource_id="test-id",
+                payload={"obj": NonSerializable()},
             )
             # Should handle gracefully
         except Exception:
@@ -396,7 +470,13 @@ class TestErrorHandling:
 
             # Should timeout gracefully
             try:
-                logger.log_event(source="Test", action="test", resource="test", resource_id="test-id", payload={})
+                logger.log_event(
+                    source="Test",
+                    action="test",
+                    resource="test",
+                    resource_id="test-id",
+                    payload={},
+                )
             except Exception:
                 pass  # Acceptable
 
@@ -468,7 +548,13 @@ class TestStatisticsMetrics:
 
         # Log multiple events
         for i in range(50):
-            logger.log_event(source="Test", action=f"action_{i}", resource="test", resource_id=f"test-{i}", payload={})
+            logger.log_event(
+                source="Test",
+                action=f"action_{i}",
+                resource="test",
+                resource_id=f"test-{i}",
+                payload={},
+            )
 
         # Should have logged 50 events
         assert mock_db_connection["cursor"].execute.call_count >= 50
@@ -482,7 +568,13 @@ class TestStatisticsMetrics:
 
         start_time = time.time()
 
-        logger.log_event(source="Test", action="perf_test", resource="test", resource_id="test-id", payload={})
+        logger.log_event(
+            source="Test",
+            action="perf_test",
+            resource="test",
+            resource_id="test-id",
+            payload={},
+        )
 
         elapsed_ms = (time.time() - start_time) * 1000
 

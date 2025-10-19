@@ -24,11 +24,23 @@ from agents.lib.kafka_confluent_client import ConfluentKafkaClient
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true", help="Do not send to Kafka; just print payload")
-    parser.add_argument("--prd-file", type=str, default=None, help="Path to PRD markdown file")
-    parser.add_argument("--bootstrap", type=str, default=None, help="Kafka bootstrap servers override")
-    parser.add_argument("--confluent", action="store_true", help="Use confluent-kafka client")
-    parser.add_argument("--rpk", action="store_true", help="Publish via rpk inside container")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not send to Kafka; just print payload",
+    )
+    parser.add_argument(
+        "--prd-file", type=str, default=None, help="Path to PRD markdown file"
+    )
+    parser.add_argument(
+        "--bootstrap", type=str, default=None, help="Kafka bootstrap servers override"
+    )
+    parser.add_argument(
+        "--confluent", action="store_true", help="Use confluent-kafka client"
+    )
+    parser.add_argument(
+        "--rpk", action="store_true", help="Publish via rpk inside container"
+    )
     args = parser.parse_args()
 
     prd_content = "# Sample PRD\n\n## Overview\nGenerate a user management EFFECT node."
@@ -56,8 +68,8 @@ async def main() -> None:
 
     if args.rpk:
         # Produce inside Redpanda container to bypass advertised-listener issues
-        import subprocess
         import shlex
+        import subprocess
 
         topic = evt.to_kafka_topic()
         payload = json.dumps(
@@ -75,7 +87,9 @@ async def main() -> None:
         print("[rpk] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     elif args.confluent:
-        client = ConfluentKafkaClient(bootstrap_servers=args.bootstrap or "localhost:29092")
+        client = ConfluentKafkaClient(
+            bootstrap_servers=args.bootstrap or "localhost:29092"
+        )
         client.publish(
             evt.to_kafka_topic(),
             {

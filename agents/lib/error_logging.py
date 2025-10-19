@@ -60,7 +60,11 @@ async def log_error_event(
 
 
 async def log_validation_error(
-    run_id: str, phase: str, validation_type: str, message: str, details: Optional[Dict[str, Any]] = None
+    run_id: str,
+    phase: str,
+    validation_type: str,
+    message: str,
+    details: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log a validation error event."""
     return await log_error_event(
@@ -77,7 +81,11 @@ async def log_validation_error(
 
 
 async def log_execution_error(
-    run_id: str, phase: str, task_id: Optional[str], error: Exception, details: Optional[Dict[str, Any]] = None
+    run_id: str,
+    phase: str,
+    task_id: Optional[str],
+    error: Exception,
+    details: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log an execution error event."""
     return await log_error_event(
@@ -95,7 +103,10 @@ async def log_execution_error(
 
 
 async def log_timeout_error(
-    run_id: str, phase: str, timeout_seconds: float, details: Optional[Dict[str, Any]] = None
+    run_id: str,
+    phase: str,
+    timeout_seconds: float,
+    details: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log a timeout error event."""
     return await log_error_event(

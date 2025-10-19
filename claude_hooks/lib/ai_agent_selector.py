@@ -11,12 +11,13 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import sys
 import json
-import yaml
+import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import subprocess
+
+import yaml
 
 
 class AIAgentSelector:
@@ -51,7 +52,12 @@ class AIAgentSelector:
         self.agents = self._load_agent_metadata()
 
         # Selection stats
-        self.stats = {"total_selections": 0, "ai_selections": 0, "fallback_selections": 0, "model_used": {}}
+        self.stats = {
+            "total_selections": 0,
+            "ai_selections": 0,
+            "fallback_selections": 0,
+            "model_used": {},
+        }
 
     def _load_agent_metadata(self) -> List[Dict]:
         """Load metadata from all agent YAML files."""
@@ -98,7 +104,9 @@ class AIAgentSelector:
 
         return agents
 
-    def select_agent(self, prompt: str, context: Optional[Dict] = None, top_n: int = 1) -> List[Tuple[str, float, str]]:
+    def select_agent(
+        self, prompt: str, context: Optional[Dict] = None, top_n: int = 1
+    ) -> List[Tuple[str, float, str]]:
         """
         Select best agent(s) for the prompt using AI analysis.
 
@@ -125,7 +133,9 @@ class AIAgentSelector:
         self.stats["fallback_selections"] += 1
         return self._fallback_select(prompt, top_n)
 
-    def _ai_select(self, prompt: str, context: Optional[Dict], top_n: int) -> Optional[List[Tuple[str, float, str]]]:
+    def _ai_select(
+        self, prompt: str, context: Optional[Dict], top_n: int
+    ) -> Optional[List[Tuple[str, float, str]]]:
         """Use AI model to select agent."""
 
         # Build agent catalog for AI
@@ -148,7 +158,9 @@ class AIAgentSelector:
 
         # Track which model was used
         model_name = model.get("name", "unknown")
-        self.stats["model_used"][model_name] = self.stats["model_used"].get(model_name, 0) + 1
+        self.stats["model_used"][model_name] = (
+            self.stats["model_used"].get(model_name, 0) + 1
+        )
 
         return selections[:top_n]
 
@@ -163,7 +175,9 @@ class AIAgentSelector:
 
         return "\n".join(lines)
 
-    def _build_selection_prompt(self, user_prompt: str, agent_catalog: str, context: Optional[Dict], top_n: int) -> str:
+    def _build_selection_prompt(
+        self, user_prompt: str, agent_catalog: str, context: Optional[Dict], top_n: int
+    ) -> str:
         """Build prompt for AI model to select agent."""
 
         context_str = ""
@@ -216,7 +230,9 @@ Be concise. Match user intent to agent domain and triggers."""
             # Check if vLLM is running on 5090
             try:
                 result = subprocess.run(
-                    ["curl", "-s", "http://192.168.86.201:8001/v1/models"], capture_output=True, timeout=1
+                    ["curl", "-s", "http://192.168.86.201:8001/v1/models"],
+                    capture_output=True,
+                    timeout=1,
                 )
                 if result.returncode == 0:
                     return {
@@ -276,7 +292,7 @@ Be concise. Match user intent to agent domain and triggers."""
             # Use poetry to call Zen MCP chat tool
             # This leverages the existing Zen MCP integration
             # Determine hooks lib path dynamically
-            hooks_lib = Path.home() / ".claude" / "hooks" / "lib"
+            Path.home() / ".claude" / "hooks" / "lib"
 
             # Find project root (walk up from current file)
             project_root = Path(__file__).resolve().parent.parent.parent
@@ -287,7 +303,7 @@ Be concise. Match user intent to agent domain and triggers."""
                     "run",
                     "python3",
                     "-c",
-                    f"""
+                    """
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.home() / '.claude' / 'hooks' / 'lib'))
@@ -325,7 +341,9 @@ print("CLOUD_MODEL_PLACEHOLDER")
 
                 selections = []
                 for item in data.get("selections", []):
-                    selections.append((item["agent"], float(item["confidence"]), item["reasoning"]))
+                    selections.append(
+                        (item["agent"], float(item["confidence"]), item["reasoning"])
+                    )
 
                 return selections
 
@@ -391,7 +409,9 @@ print("CLOUD_MODEL_PLACEHOLDER")
         }
 
 
-def select_agent_for_prompt(prompt: str, model_preference: str = "auto", context: Optional[Dict] = None) -> Dict:
+def select_agent_for_prompt(
+    prompt: str, model_preference: str = "auto", context: Optional[Dict] = None
+) -> Dict:
     """
     Convenience function for single agent selection.
 
@@ -413,7 +433,12 @@ def select_agent_for_prompt(prompt: str, model_preference: str = "auto", context
     selections = selector.select_agent(prompt, context, top_n=1)
 
     if not selections:
-        return {"agent": None, "confidence": 0.0, "reasoning": "No suitable agent found", "model_used": "none"}
+        return {
+            "agent": None,
+            "confidence": 0.0,
+            "reasoning": "No suitable agent found",
+            "model_used": "none",
+        }
 
     agent_name, confidence, reasoning = selections[0]
 
@@ -440,8 +465,12 @@ if __name__ == "__main__":
         choices=["auto", "5090", "local", "gemini", "glm", "cloud"],
         help="AI model preference",
     )
-    parser.add_argument("--top-n", type=int, default=1, help="Number of agents to return")
-    parser.add_argument("--stats", action="store_true", help="Show selection statistics")
+    parser.add_argument(
+        "--top-n", type=int, default=1, help="Number of agents to return"
+    )
+    parser.add_argument(
+        "--stats", action="store_true", help="Show selection statistics"
+    )
 
     args = parser.parse_args()
 
@@ -452,7 +481,10 @@ if __name__ == "__main__":
     # Output results
     result = {
         "prompt": args.prompt,
-        "selections": [{"agent": agent, "confidence": conf, "reasoning": reason} for agent, conf, reason in selections],
+        "selections": [
+            {"agent": agent, "confidence": conf, "reasoning": reason}
+            for agent, conf, reason in selections
+        ],
     }
 
     if args.stats:

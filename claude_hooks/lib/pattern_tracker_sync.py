@@ -5,14 +5,14 @@ where async execution causes premature exit.
 Enhanced with performance optimizations from the enhanced tracker.
 """
 
-import sys
 import hashlib
+import sys
 import time
-from typing import Dict, Any, Optional
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 import requests
-from pathlib import Path
 
 
 class PatternTrackerSync:
@@ -27,10 +27,17 @@ class PatternTrackerSync:
         self._session = requests.Session()
         self._pattern_id_cache = {}
         self._cache_ttl = 300  # 5 minutes
-        self._metrics = {"total_requests": 0, "cache_hits": 0, "cache_misses": 0, "total_time_ms": 0}
+        self._metrics = {
+            "total_requests": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "total_time_ms": 0,
+        }
 
         # Configure session with connection pooling
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=3)
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10, pool_maxsize=20, max_retries=3
+        )
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
 
@@ -42,11 +49,14 @@ class PatternTrackerSync:
         try:
             response = requests.get(f"{self.base_url}/health", timeout=5)
             if response.status_code == 200:
-                print(f"✅ [PatternTrackerSync] Phase 4 API reachable", file=sys.stderr)
+                print("✅ [PatternTrackerSync] Phase 4 API reachable", file=sys.stderr)
                 self._api_healthy = True
                 return True
             else:
-                print(f"⚠️ [PatternTrackerSync] Phase 4 API unhealthy: {response.status_code}", file=sys.stderr)
+                print(
+                    f"⚠️ [PatternTrackerSync] Phase 4 API unhealthy: {response.status_code}",
+                    file=sys.stderr,
+                )
                 self._api_healthy = False
                 return False
         except Exception as e:
@@ -84,7 +94,9 @@ class PatternTrackerSync:
         """
         return self.track_pattern_creation(code, context)
 
-    def track_pattern_creation(self, code: str, context: Dict[str, Any]) -> Optional[str]:
+    def track_pattern_creation(
+        self, code: str, context: Dict[str, Any]
+    ) -> Optional[str]:
         """Track pattern creation synchronously.
 
         Args:
@@ -102,7 +114,10 @@ class PatternTrackerSync:
         """
         # Check if API is available before attempting to track
         if not self.is_api_available():
-            print(f"⚠️ [PatternTrackerSync] Skipping pattern tracking - API not available", file=sys.stderr)
+            print(
+                "⚠️ [PatternTrackerSync] Skipping pattern tracking - API not available",
+                file=sys.stderr,
+            )
             return None
 
         try:
@@ -133,9 +148,14 @@ class PatternTrackerSync:
 
             # Make synchronous API call with connection pooling
             start_time = time.time()
-            print(f"📤 [PatternTrackerSync] Sending pattern to Phase 4 API...", file=sys.stderr)
+            print(
+                "📤 [PatternTrackerSync] Sending pattern to Phase 4 API...",
+                file=sys.stderr,
+            )
             response = self._session.post(
-                f"{self.base_url}/api/pattern-traceability/lineage/track", json=payload, timeout=self.timeout
+                f"{self.base_url}/api/pattern-traceability/lineage/track",
+                json=payload,
+                timeout=self.timeout,
             )
             response.raise_for_status()
 
@@ -144,24 +164,39 @@ class PatternTrackerSync:
             self._metrics["total_time_ms"] += response_time_ms
 
             result = response.json()
-            print(f"✅ [PatternTrackerSync] Pattern tracked: {pattern_id}", file=sys.stderr)
+            print(
+                f"✅ [PatternTrackerSync] Pattern tracked: {pattern_id}",
+                file=sys.stderr,
+            )
             print(f"   Status: {result.get('status', 'unknown')}", file=sys.stderr)
             print(f"   Response time: {response_time_ms:.1f}ms", file=sys.stderr)
             return pattern_id
 
         except requests.exceptions.ConnectionError as e:
             print(f"❌ [PatternTrackerSync] Connection failed: {e}", file=sys.stderr)
-            print(f"   Make sure Intelligence service is running on {self.base_url}", file=sys.stderr)
+            print(
+                f"   Make sure Intelligence service is running on {self.base_url}",
+                file=sys.stderr,
+            )
             return None
         except requests.exceptions.Timeout as e:
-            print(f"❌ [PatternTrackerSync] Timeout after {self.timeout}s: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTrackerSync] Timeout after {self.timeout}s: {e}",
+                file=sys.stderr,
+            )
             return None
         except requests.exceptions.HTTPError as e:
             print(f"❌ [PatternTrackerSync] HTTP error: {e}", file=sys.stderr)
-            print(f"   Response: {e.response.text if hasattr(e, 'response') else 'N/A'}", file=sys.stderr)
+            print(
+                f"   Response: {e.response.text if hasattr(e, 'response') else 'N/A'}",
+                file=sys.stderr,
+            )
             return None
         except Exception as e:
-            print(f"❌ [PatternTrackerSync] Unexpected error: {type(e).__name__}: {e}", file=sys.stderr)
+            print(
+                f"❌ [PatternTrackerSync] Unexpected error: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             import traceback
 
             traceback.print_exc(file=sys.stderr)
@@ -228,16 +263,19 @@ class PatternTrackerSync:
     def print_performance_summary(self):
         """Print performance summary to stderr."""
         metrics = self.get_performance_metrics()
-        print(f"\n📊 [PatternTrackerSync] Performance Summary:", file=sys.stderr)
+        print("\n📊 [PatternTrackerSync] Performance Summary:", file=sys.stderr)
         print(f"   Total Requests: {metrics['total_requests']}", file=sys.stderr)
         print(f"   Cache Hit Rate: {metrics['cache_hit_rate']:.1f}%", file=sys.stderr)
-        print(f"   Avg Response Time: {metrics['average_response_time_ms']:.1f}ms", file=sys.stderr)
+        print(
+            f"   Avg Response Time: {metrics['average_response_time_ms']:.1f}ms",
+            file=sys.stderr,
+        )
         print(f"   Cache Size: {len(self._pattern_id_cache)} entries", file=sys.stderr)
 
     def clear_cache(self):
         """Clear the pattern ID cache."""
         self._pattern_id_cache.clear()
-        print(f"🧹 [PatternTrackerSync] Cache cleared", file=sys.stderr)
+        print("🧹 [PatternTrackerSync] Cache cleared", file=sys.stderr)
 
     def calculate_quality_score(self, violations: list) -> float:
         """Calculate quality score based on violations.
@@ -300,9 +338,15 @@ def example_function():
 
     # Print performance summary
     tracker.print_performance_summary()
-    print(f"\n⏱️  Performance Test Results:", file=sys.stderr)
-    print(f"   10 operations in {total_time:.3f}s ({10/total_time:.1f} ops/sec)", file=sys.stderr)
-    print(f"   5 cached operations in {cache_time:.3f}s ({5/cache_time:.1f} ops/sec)", file=sys.stderr)
+    print("\n⏱️  Performance Test Results:", file=sys.stderr)
+    print(
+        f"   10 operations in {total_time:.3f}s ({10/total_time:.1f} ops/sec)",
+        file=sys.stderr,
+    )
+    print(
+        f"   5 cached operations in {cache_time:.3f}s ({5/cache_time:.1f} ops/sec)",
+        file=sys.stderr,
+    )
 
     # Basic functionality test
     print("\n📝 Basic functionality test...", file=sys.stderr)
@@ -310,9 +354,9 @@ def example_function():
 
     if pattern_id:
         print(f"\n✅ Test passed! Pattern ID: {pattern_id}", file=sys.stderr)
-        print(f"✅ Performance optimizations working correctly!", file=sys.stderr)
+        print("✅ Performance optimizations working correctly!", file=sys.stderr)
     else:
-        print(f"\n❌ Test failed! Pattern was not tracked", file=sys.stderr)
+        print("\n❌ Test failed! Pattern was not tracked", file=sys.stderr)
         sys.exit(1)
 
 

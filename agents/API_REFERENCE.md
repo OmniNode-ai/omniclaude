@@ -362,7 +362,7 @@ SELECT record_pattern_feedback(
 
 ### Pydantic Models
 
-Located in `agents/lib/schema_phase7.py`.
+Located in `agents/lib/schema_agent_framework.py`.
 
 **Key Models**:
 - `MixinCompatibilityMatrix` - Mixin compatibility record
@@ -1732,7 +1732,7 @@ async def export_prometheus_metrics() -> str
 prom_metrics = await monitoring.export_prometheus_metrics()
 
 # Write to file for Prometheus scraping
-with open("/var/metrics/phase7.prom", "w") as f:
+with open("/var/metrics/agent_framework.prom", "w") as f:
     f.write(prom_metrics)
 ```
 

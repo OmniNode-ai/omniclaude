@@ -44,17 +44,24 @@ neo4j = "^6.0.2"
 asyncpg = "^0.29.0"
 pytest-cov = "^7.0.0"
 psutil = "^6.1.0"
+isort = "^7.0.0"
+pre-commit = "^4.3.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-line-length = 120
+line-length = 88
 target-version = ['py312']
 
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+
 [tool.ruff]
-line-length = 120
+line-length = 88
 target-version = "py312"
 exclude = [
     "agents/templates/*.py",  # Template files with placeholder syntax

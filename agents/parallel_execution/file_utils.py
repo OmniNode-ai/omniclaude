@@ -8,11 +8,11 @@ Responsible for:
 - Backup and cleanup operations
 """
 
-import os
 import json
+import os
 import shutil
 import time
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 
 class FileUtils:
@@ -144,7 +144,9 @@ class FileUtils:
         self.copy_file(file_path, backup_path)
         return backup_path
 
-    def list_files(self, directory_path: str, pattern: str = "*", recursive: bool = False) -> List[str]:
+    def list_files(
+        self, directory_path: str, pattern: str = "*", recursive: bool = False
+    ) -> List[str]:
         """List files in directory matching pattern."""
         full_path = self._resolve_path(directory_path)
 
@@ -157,13 +159,17 @@ class FileUtils:
             for root, dirs, filenames in os.walk(full_path):
                 for filename in filenames:
                     if self._matches_pattern(filename, pattern):
-                        rel_path = os.path.relpath(os.path.join(root, filename), self.base_path)
+                        rel_path = os.path.relpath(
+                            os.path.join(root, filename), self.base_path
+                        )
                         files.append(rel_path)
         else:
             try:
                 for filename in os.listdir(full_path):
                     file_full_path = os.path.join(full_path, filename)
-                    if os.path.isfile(file_full_path) and self._matches_pattern(filename, pattern):
+                    if os.path.isfile(file_full_path) and self._matches_pattern(
+                        filename, pattern
+                    ):
                         rel_path = os.path.relpath(file_full_path, self.base_path)
                         files.append(rel_path)
             except OSError:
@@ -240,7 +246,9 @@ class FileUtils:
 
         return deleted_count
 
-    def archive_directory(self, directory_path: str, archive_path: str, format: str = "zip") -> str:
+    def archive_directory(
+        self, directory_path: str, archive_path: str, format: str = "zip"
+    ) -> str:
         """Archive directory into specified format."""
         full_path = self._resolve_path(directory_path)
         archive_full_path = self._resolve_path(archive_path)
@@ -256,7 +264,9 @@ class FileUtils:
             try:
                 import zipfile
 
-                with zipfile.ZipFile(archive_full_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                with zipfile.ZipFile(
+                    archive_full_path, "w", zipfile.ZIP_DEFLATED
+                ) as zipf:
                     for root, dirs, files in os.walk(full_path):
                         for file in files:
                             file_path = os.path.join(root, file)
@@ -269,7 +279,9 @@ class FileUtils:
 
         return archive_full_path
 
-    def extract_archive(self, archive_path: str, extract_path: str, format: str = "zip") -> None:
+    def extract_archive(
+        self, archive_path: str, extract_path: str, format: str = "zip"
+    ) -> None:
         """Extract archive into specified directory."""
         archive_full_path = self._resolve_path(archive_path)
         extract_full_path = self._resolve_path(extract_path)
@@ -349,7 +361,9 @@ class BackupManager:
 
     def _rotate_backups(self, file_basename: str) -> None:
         """Rotate backups to maintain maximum count."""
-        backup_files = self.file_utils.list_files(self.backup_dir, pattern=f"{file_basename}.*.bak")
+        backup_files = self.file_utils.list_files(
+            self.backup_dir, pattern=f"{file_basename}.*.bak"
+        )
 
         if len(backup_files) > self.max_backups:
             # Sort by timestamp (oldest first)
@@ -372,7 +386,9 @@ class BackupManager:
 
     def list_backups(self, file_basename: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available backups with metadata."""
-        backup_files = self.file_utils.list_files(self.backup_dir, pattern=f"{file_basename or '*'}.*.bak")
+        backup_files = self.file_utils.list_files(
+            self.backup_dir, pattern=f"{file_basename or '*'}.*.bak"
+        )
 
         backups = []
         for backup_file in backup_files:
@@ -395,7 +411,9 @@ class BackupManager:
 
         return backups
 
-    def restore_backup(self, backup_path: str, target_path: Optional[str] = None) -> str:
+    def restore_backup(
+        self, backup_path: str, target_path: Optional[str] = None
+    ) -> str:
         """Restore file from backup."""
         backup_full_path = self.file_utils._resolve_path(backup_path)
 

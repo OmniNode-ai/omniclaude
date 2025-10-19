@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from agents.lib.kafka_codegen_client import KafkaCodegenClient
 from agents.lib.codegen_events import CodegenAnalysisRequest
+from agents.lib.kafka_codegen_client import KafkaCodegenClient
 
 
 class DummyProducer:

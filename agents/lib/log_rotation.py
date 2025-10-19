@@ -29,10 +29,9 @@ Usage:
 import logging
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal, Optional
 
-from .structured_logger import StructuredLogger, JSONFormatter
-
+from .structured_logger import JSONFormatter, StructuredLogger
 
 LogRotationType = Literal["size", "time"]
 
@@ -95,7 +94,9 @@ class LogRotationConfig:
         )
 
     @classmethod
-    def daily_rotation(cls, log_dir: str = "./logs", retention_days: int = 30) -> "LogRotationConfig":
+    def daily_rotation(
+        cls, log_dir: str = "./logs", retention_days: int = 30
+    ) -> "LogRotationConfig":
         """Daily rotation configuration"""
         return cls(
             log_dir=log_dir,
@@ -138,7 +139,9 @@ def configure_file_rotation(
     # Use config if provided, otherwise create from parameters
     if config is None:
         config = LogRotationConfig(
-            log_dir=log_dir or "./logs", max_bytes=max_bytes or 100 * 1024 * 1024, backup_count=backup_count or 30
+            log_dir=log_dir or "./logs",
+            max_bytes=max_bytes or 100 * 1024 * 1024,
+            backup_count=backup_count or 30,
         )
 
     # Create log directory if it doesn't exist
@@ -153,7 +156,10 @@ def configure_file_rotation(
     # Create appropriate handler based on rotation type
     if config.rotation_type == "size":
         handler = RotatingFileHandler(
-            filename=str(log_file), maxBytes=config.max_bytes, backupCount=config.backup_count, encoding=config.encoding
+            filename=str(log_file),
+            maxBytes=config.max_bytes,
+            backupCount=config.backup_count,
+            encoding=config.encoding,
         )
     else:  # time-based rotation
         handler = TimedRotatingFileHandler(
@@ -172,7 +178,8 @@ def configure_file_rotation(
 
 
 def configure_global_rotation(
-    config: Optional[LogRotationConfig] = None, environment: Literal["development", "production"] = "development"
+    config: Optional[LogRotationConfig] = None,
+    environment: Literal["development", "production"] = "development",
 ):
     """
     Configure rotation for all loggers globally.
@@ -287,11 +294,23 @@ def get_log_stats(log_dir: str) -> dict:
 
     log_path = Path(log_dir)
     if not log_path.exists():
-        return {"file_count": 0, "total_size_bytes": 0, "total_size_mb": 0.0, "oldest_file": None, "newest_file": None}
+        return {
+            "file_count": 0,
+            "total_size_bytes": 0,
+            "total_size_mb": 0.0,
+            "oldest_file": None,
+            "newest_file": None,
+        }
 
     log_files = list(log_path.glob("*.log*"))
     if not log_files:
-        return {"file_count": 0, "total_size_bytes": 0, "total_size_mb": 0.0, "oldest_file": None, "newest_file": None}
+        return {
+            "file_count": 0,
+            "total_size_bytes": 0,
+            "total_size_mb": 0.0,
+            "oldest_file": None,
+            "newest_file": None,
+        }
 
     total_size = sum(f.stat().st_size for f in log_files)
     oldest_file = min(log_files, key=lambda f: f.stat().st_mtime)

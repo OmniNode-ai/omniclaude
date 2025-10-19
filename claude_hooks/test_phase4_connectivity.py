@@ -67,7 +67,9 @@ def test_pattern_tracking():
         }
 
         response = requests.post(
-            f"{PHASE4_BASE_URL}/api/pattern-traceability/lineage/track", json=payload, timeout=TIMEOUT_SECONDS
+            f"{PHASE4_BASE_URL}/api/pattern-traceability/lineage/track",
+            json=payload,
+            timeout=TIMEOUT_SECONDS,
         )
         print(f"  ✅ Status: {response.status_code}")
         print(f"  ✅ Response: {response.json()}")

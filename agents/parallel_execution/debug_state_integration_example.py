@@ -98,7 +98,8 @@ class DebugStateManager:
         )
 
         logger.debug(
-            f"Captured {snapshot_type} snapshot {snapshot_id} " f"for {agent_name} (correlation: {correlation_id})"
+            f"Captured {snapshot_type} snapshot {snapshot_id} "
+            f"for {agent_name} (correlation: {correlation_id})"
         )
 
         return snapshot_id
@@ -122,7 +123,9 @@ class DebugStateManager:
                 WHERE correlation_id = $1 AND snapshot_type = $2
                 ORDER BY captured_at
             """
-            rows = await self.db.execute_query(query, correlation_id, snapshot_type, fetch="all")
+            rows = await self.db.execute_query(
+                query, correlation_id, snapshot_type, fetch="all"
+            )
         else:
             query = """
                 SELECT * FROM debug_state_snapshots
@@ -220,7 +223,9 @@ class DebugStateManager:
 
         return error_id
 
-    async def mark_error_recovered(self, error_id: UUID, recovery_strategy: str, recovery_successful: bool = True):
+    async def mark_error_recovered(
+        self, error_id: UUID, recovery_strategy: str, recovery_successful: bool = True
+    ):
         """Mark error as recovered."""
         query = """
             UPDATE debug_error_events
@@ -231,10 +236,13 @@ class DebugStateManager:
             WHERE id = $1
         """
 
-        await self.db.execute_query(query, error_id, recovery_successful, recovery_strategy)
+        await self.db.execute_query(
+            query, error_id, recovery_successful, recovery_strategy
+        )
 
         logger.info(
-            f"Marked error {error_id} as recovered " f"(strategy: {recovery_strategy}, success: {recovery_successful})"
+            f"Marked error {error_id} as recovered "
+            f"(strategy: {recovery_strategy}, success: {recovery_successful})"
         )
 
     # =========================================================================
@@ -377,7 +385,10 @@ class DebugStateManager:
             fetch="val",
         )
 
-        logger.debug(f"Started workflow step {step_id} (step {step_number}): " f"{agent_name}.{operation_name}")
+        logger.debug(
+            f"Started workflow step {step_id} (step {step_number}): "
+            f"{agent_name}.{operation_name}"
+        )
 
         return step_id
 
@@ -413,7 +424,12 @@ class DebugStateManager:
         """
 
         await self.db.execute_query(
-            query, step_id, status, error_event_id, success_event_id, json.dumps(output_data or {})
+            query,
+            step_id,
+            status,
+            error_event_id,
+            success_event_id,
+            json.dumps(output_data or {}),
         )
 
         logger.debug(f"Completed workflow step {step_id} with status: {status}")
@@ -466,7 +482,10 @@ class DebugStateManager:
             fetch="val",
         )
 
-        logger.info(f"Correlated error {error_event_id} to success {success_event_id} " f"via {recovery_strategy}")
+        logger.info(
+            f"Correlated error {error_event_id} to success {success_event_id} "
+            f"via {recovery_strategy}"
+        )
 
         return corr_id
 
@@ -474,7 +493,9 @@ class DebugStateManager:
     # Analysis and Reporting
     # =========================================================================
 
-    async def get_workflow_debug_summary(self, correlation_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_workflow_debug_summary(
+        self, correlation_id: UUID
+    ) -> Optional[Dict[str, Any]]:
         """Get comprehensive debug summary for a workflow."""
         query = """
             SELECT * FROM get_workflow_debug_summary($1)
@@ -502,7 +523,9 @@ class DebugStateManager:
                 WHERE error_type = $1
                 AND avg_confidence >= $2
             """
-            rows = await self.db.execute_query(query, error_type, min_confidence, fetch="all")
+            rows = await self.db.execute_query(
+                query, error_type, min_confidence, fetch="all"
+            )
         else:
             query = """
                 SELECT * FROM debug_error_recovery_patterns
@@ -512,7 +535,9 @@ class DebugStateManager:
 
         return [dict(row) for row in rows]
 
-    async def get_workflow_errors(self, correlation_id: UUID, include_recovered: bool = False) -> List[Dict[str, Any]]:
+    async def get_workflow_errors(
+        self, correlation_id: UUID, include_recovered: bool = False
+    ) -> List[Dict[str, Any]]:
         """Get all errors for a workflow."""
         if include_recovered:
             query = """
@@ -550,7 +575,7 @@ class DebugStateManager:
 
 async def example_usage():
     """Example of using DebugStateManager."""
-    from database_integration import DatabaseIntegrationLayer, DatabaseConfig
+    from database_integration import DatabaseConfig, DatabaseIntegrationLayer
 
     # Initialize database layer
     config = DatabaseConfig.from_env()
@@ -596,11 +621,15 @@ async def example_usage():
             )
 
             # Mark step as failed
-            await debug_mgr.complete_workflow_step(step_id=step_id, success=False, error_event_id=error_id)
+            await debug_mgr.complete_workflow_step(
+                step_id=step_id, success=False, error_event_id=error_id
+            )
 
             # Attempt recovery
             await debug_mgr.mark_error_recovered(
-                error_id=error_id, recovery_strategy="retry_with_fallback", recovery_successful=True
+                error_id=error_id,
+                recovery_strategy="retry_with_fallback",
+                recovery_successful=True,
             )
 
             # Capture success after recovery

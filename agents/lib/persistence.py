@@ -13,6 +13,7 @@ from urllib.parse import quote_plus
 from uuid import UUID
 
 import asyncpg
+
 from .version_config import get_config
 
 
@@ -31,9 +32,7 @@ class CodegenPersistence:
             # URL-encode credentials to handle special characters
             user = quote_plus(config.postgres_user)
             password = quote_plus(config.postgres_password)
-            self.dsn = (
-                f"postgresql://{user}:{password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
-            )
+            self.dsn = f"postgresql://{user}:{password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
         self._pool: Optional[asyncpg.Pool] = None
 
     async def _ensure_pool(self) -> asyncpg.Pool:
@@ -111,7 +110,7 @@ class CodegenPersistence:
             self._pool = None
 
     # =========================================================================
-    # Phase 7 Schema Operations
+    # Agent Framework Schema Operations
     # =========================================================================
 
     # Mixin Compatibility Matrix Operations
@@ -154,7 +153,9 @@ class CodegenPersistence:
             )
             return result
 
-    async def get_mixin_compatibility(self, mixin_a: str, mixin_b: str, node_type: str) -> Optional[Dict[str, Any]]:
+    async def get_mixin_compatibility(
+        self, mixin_a: str, mixin_b: str, node_type: str
+    ) -> Optional[Dict[str, Any]]:
         """Get mixin compatibility record.
 
         Args:
@@ -235,7 +236,9 @@ class CodegenPersistence:
             )
             return result
 
-    async def get_pattern_feedback_analysis(self, pattern_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_pattern_feedback_analysis(
+        self, pattern_name: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Get pattern feedback analysis.
 
         Args:
@@ -313,7 +316,9 @@ class CodegenPersistence:
                 metadata_jsonb,
             )
 
-    async def get_performance_metrics_summary(self, session_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
+    async def get_performance_metrics_summary(
+        self, session_id: Optional[UUID] = None
+    ) -> List[Dict[str, Any]]:
         """Get performance metrics summary.
 
         Args:
@@ -490,7 +495,9 @@ class CodegenPersistence:
                 batch_size,
             )
 
-    async def get_event_processing_health(self, event_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_event_processing_health(
+        self, event_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """Get event processing health metrics.
 
         Args:
