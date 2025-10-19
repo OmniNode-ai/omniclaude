@@ -6,13 +6,14 @@ Generates comprehensive reports on agent execution traces, routing decisions,
 and framework observability metrics from the PostgreSQL database.
 """
 
+import json
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import json
 
 
 class ObservabilityReporter:
@@ -22,9 +23,14 @@ class ObservabilityReporter:
         """Initialize reporter with database connection."""
         if connection_string is None:
             # Note: Set password via environment variable
-            password = os.getenv("POSTGRES_PASSWORD", "YOUR_PASSWORD")  # Replace YOUR_PASSWORD
+            password = os.getenv(
+                "POSTGRES_PASSWORD", "YOUR_PASSWORD"
+            )  # Replace YOUR_PASSWORD
             connection_string = (
-                f"host=localhost port=5436 " f"dbname=omninode_bridge " f"user=postgres " f"password={password}"
+                f"host=localhost port=5436 "
+                f"dbname=omninode_bridge "
+                f"user=postgres "
+                f"password={password}"
             )
         self.conn = psycopg2.connect(connection_string)
 
@@ -211,10 +217,18 @@ class ObservabilityReporter:
         if stats and stats["total_decisions"] > 0:
             report_lines.append(f"  Total Decisions: {stats['total_decisions']}")
             report_lines.append(f"  Avg Confidence: {stats['avg_confidence']:.4f}")
-            report_lines.append(f"  Confidence Range: {stats['min_confidence']:.4f} - {stats['max_confidence']:.4f}")
-            report_lines.append(f"  Avg Routing Time: {stats['avg_routing_time_ms']:.2f}ms")
-            report_lines.append(f"  Max Routing Time: {stats['max_routing_time_ms']:.2f}ms")
-            report_lines.append(f"  Time Range: {stats['earliest_decision']} to {stats['latest_decision']}")
+            report_lines.append(
+                f"  Confidence Range: {stats['min_confidence']:.4f} - {stats['max_confidence']:.4f}"
+            )
+            report_lines.append(
+                f"  Avg Routing Time: {stats['avg_routing_time_ms']:.2f}ms"
+            )
+            report_lines.append(
+                f"  Max Routing Time: {stats['max_routing_time_ms']:.2f}ms"
+            )
+            report_lines.append(
+                f"  Time Range: {stats['earliest_decision']} to {stats['latest_decision']}"
+            )
         else:
             report_lines.append("  ⚠️  No routing decisions found")
         report_lines.append("")
@@ -228,7 +242,9 @@ class ObservabilityReporter:
                 report_lines.append(f"  {stat['selected_agent']}")
                 report_lines.append(f"    Usage Count: {stat['usage_count']}")
                 report_lines.append(f"    Avg Confidence: {stat['avg_confidence']:.4f}")
-                report_lines.append(f"    Avg Routing Time: {stat['avg_routing_time_ms']:.2f}ms")
+                report_lines.append(
+                    f"    Avg Routing Time: {stat['avg_routing_time_ms']:.2f}ms"
+                )
                 report_lines.append("")
         else:
             report_lines.append("  ⚠️  No agent usage data found")
@@ -243,8 +259,12 @@ class ObservabilityReporter:
                 report_lines.append(f"  Decision #{i}")
                 report_lines.append(f"    Request: {decision['user_request']}")
                 report_lines.append(f"    Selected Agent: {decision['selected_agent']}")
-                report_lines.append(f"    Confidence: {decision['confidence_score']:.4f}")
-                report_lines.append(f"    Routing Time: {decision['routing_time_ms']}ms")
+                report_lines.append(
+                    f"    Confidence: {decision['confidence_score']:.4f}"
+                )
+                report_lines.append(
+                    f"    Routing Time: {decision['routing_time_ms']}ms"
+                )
                 report_lines.append(f"    Strategy: {decision['routing_strategy']}")
                 report_lines.append(f"    Created: {decision['created_at']}")
 
@@ -259,7 +279,9 @@ class ObservabilityReporter:
                         if alts:
                             report_lines.append("    Alternatives:")
                             for alt in alts[:3]:
-                                report_lines.append(f"      - {alt['agent']}: {alt['confidence']:.4f}")
+                                report_lines.append(
+                                    f"      - {alt['agent']}: {alt['confidence']:.4f}"
+                                )
                     except:
                         pass
                 report_lines.append("")

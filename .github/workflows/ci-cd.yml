@@ -65,10 +65,16 @@ jobs:
           }
 
       - name: Run Black (code formatting check)
-        run: poetry run black --check . --exclude 'agents/templates/'
+        run: |
+          # Explicitly scan only project source directories to avoid .venv
+          poetry run black --check --diff \
+            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
+            agents/ claude_hooks/ cli/ scripts/ tests/
 
       - name: Run Ruff (linting)
-        run: poetry run ruff check .
+        run: |
+          # Scan only project source directories, aligned with pre-commit config
+          poetry run ruff check agents/ claude_hooks/ cli/ scripts/ tests/
 
       - name: Run type checking (mypy)
         run: |
@@ -111,8 +117,13 @@ jobs:
       - name: Run Bandit (security linter for Python)
         run: |
           pip install bandit
-          bandit -r agents/ -f json -o bandit-report.json -c .bandit || true
-          bandit -r agents/ -f txt -c .bandit
+          # Explicitly exclude template directories to avoid false positives
+          bandit -r agents/ claude_hooks/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            -f json -o bandit-report.json || true
+          bandit -r agents/ claude_hooks/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            -f txt
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4

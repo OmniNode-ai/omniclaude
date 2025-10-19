@@ -15,8 +15,16 @@ from ..utils.validators import (
 @click.option("--source", "-s", required=True, help="Source agent name")
 @click.option("--target", "-t", required=True, help="Target agent name")
 @click.option("--reason", "-r", required=True, help="Transformation reason")
-@click.option("--confidence", "-c", type=float, required=True, help="Confidence score (0.0-1.0)")
-@click.option("--duration", "-d", type=int, default=0, help="Transformation duration in milliseconds")
+@click.option(
+    "--confidence", "-c", type=float, required=True, help="Confidence score (0.0-1.0)"
+)
+@click.option(
+    "--duration",
+    "-d",
+    type=int,
+    default=0,
+    help="Transformation duration in milliseconds",
+)
 @click.option("--success/--failure", default=True, help="Transformation success status")
 def transformation(
     source: str,
@@ -68,7 +76,11 @@ def transformation(
         status_icon = "✓" if success else "✗"
         status_color = "green" if success else "yellow"
 
-        click.secho(f"{status_icon} Transformation event recorded successfully", fg=status_color, bold=True)
+        click.secho(
+            f"{status_icon} Transformation event recorded successfully",
+            fg=status_color,
+            bold=True,
+        )
         click.echo(f"  ID: {result['id']}")
         click.echo(f"  Source: {source}")
         click.echo(f"  Target: {target}")

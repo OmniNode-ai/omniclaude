@@ -6,8 +6,8 @@ This simulates the PostToolUse hook workflow to test data flow
 from Claude Code hooks to Phase 4 APIs.
 """
 
-import sys
 import os
+import sys
 import tempfile
 import uuid
 
@@ -46,14 +46,20 @@ print(f"Result: {result}")
             "session_id": "test-session-123",
         }
 
-        metadata = {"author": "claude-code", "test": True, "purpose": "end-to-end validation"}
+        metadata = {
+            "author": "claude-code",
+            "test": True,
+            "purpose": "end-to-end validation",
+        }
 
         # Get tracker and test pattern creation
         tracker = get_tracker()
         print(f"✓ Pattern tracker initialized (session: {tracker.session_id})")
 
         # Test the sync wrapper (used by hooks)
-        pattern_id = tracker.track_pattern_creation_sync(code=test_code, context=context, metadata=metadata)
+        pattern_id = tracker.track_pattern_creation_sync(
+            code=test_code, context=context, metadata=metadata
+        )
 
         print("✓ Pattern creation tracked successfully")
         print(f"  - Pattern ID: {pattern_id}")
@@ -95,7 +101,7 @@ if __name__ == "__main__":
         print(f"✓ Created test file: {temp_file_path}")
 
         # Simulate the PostToolUse workflow
-        from post_tool_use_enforcer import track_pattern_for_file, load_config
+        from post_tool_use_enforcer import load_config, track_pattern_for_file
 
         config = load_config()
         print("✓ Loaded configuration")
@@ -152,7 +158,10 @@ def test_direct_api():
 
         # Make direct API call
         with httpx.Client(timeout=10.0) as client:
-            response = client.post("http://localhost:8053/api/pattern-traceability/lineage/track", json=test_payload)
+            response = client.post(
+                "http://localhost:8053/api/pattern-traceability/lineage/track",
+                json=test_payload,
+            )
 
             print(f"✓ API call completed with status: {response.status_code}")
 

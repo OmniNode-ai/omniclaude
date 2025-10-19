@@ -100,7 +100,10 @@ class StateSnapshotCapture:
             return None
 
         async with pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT snapshot, storage_uri FROM state_snapshots WHERE id = $1", snapshot_id)
+            row = await conn.fetchrow(
+                "SELECT snapshot, storage_uri FROM state_snapshots WHERE id = $1",
+                snapshot_id,
+            )
 
             if not row:
                 return None
@@ -120,8 +123,8 @@ class StateSnapshotCapture:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT id, snapshot, created_at 
-                FROM state_snapshots 
+                SELECT id, snapshot, created_at
+                FROM state_snapshots
                 WHERE run_id = $1 AND is_success_state = true
                 ORDER BY created_at DESC
                 """,
@@ -131,7 +134,10 @@ class StateSnapshotCapture:
             return [dict(row) for row in rows]
 
     async def mark_golden_state(
-        self, snapshot_id: str, approval_source: str, approval_metadata: Optional[Dict[str, Any]] = None
+        self,
+        snapshot_id: str,
+        approval_source: str,
+        approval_metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Mark a snapshot as a golden state with approval metadata.
@@ -152,7 +158,7 @@ class StateSnapshotCapture:
             # Update the snapshot with approval information
             await conn.execute(
                 """
-                UPDATE state_snapshots 
+                UPDATE state_snapshots
                 SET snapshot = jsonb_set(
                     COALESCE(snapshot, '{}'::jsonb),
                     '{approval}',
@@ -177,7 +183,9 @@ class StateSnapshotCapture:
 state_capture = StateSnapshotCapture()
 
 
-async def capture_workflow_state(run_id: str, phase: str, state_data: Dict[str, Any], is_success: bool = False) -> str:
+async def capture_workflow_state(
+    run_id: str, phase: str, state_data: Dict[str, Any], is_success: bool = False
+) -> str:
     """
     Convenience function to capture workflow state at phase boundaries.
 
@@ -192,7 +200,11 @@ async def capture_workflow_state(run_id: str, phase: str, state_data: Dict[str, 
     """
     return await state_capture.capture_snapshot(
         run_id=run_id,
-        state_data={"phase": phase, "timestamp": datetime.now().isoformat(), "state": state_data},
+        state_data={
+            "phase": phase,
+            "timestamp": datetime.now().isoformat(),
+            "state": state_data,
+        },
         is_success_state=is_success,
         replay_safe=True,
     )

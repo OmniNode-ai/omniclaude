@@ -1,10 +1,11 @@
 """Integration tests for the quality enforcement system."""
 
-import pytest
+import sys
 import tempfile
 import time
 from pathlib import Path
-import sys
+
+import pytest
 
 # Add parent directory to path to import lib modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -108,7 +109,9 @@ function processData() {
             violations = validator.validate_file(f.name)
 
         # Should detect violations: calculate_total, user_profile, data_processor
-        assert len(violations) >= 3, "Should detect function, class, and interface violations"
+        assert (
+            len(violations) >= 3
+        ), "Should detect function, class, and interface violations"
 
         # Check violation types
         violation_types = {v.violation_type for v in violations}
@@ -164,7 +167,9 @@ class user_profile:
             elapsed = time.time() - start
 
         # Should complete in much less than 100ms (design target)
-        assert elapsed < 0.1, f"Validation took {elapsed*1000:.2f}ms, exceeds 100ms budget"
+        assert (
+            elapsed < 0.1
+        ), f"Validation took {elapsed*1000:.2f}ms, exceeds 100ms budget"
         assert len(violations) > 0, "Should detect violations"
 
     def test_performance_budget_medium_file(self):

@@ -251,7 +251,7 @@ ls -lt /var/folders/*/T/interactive_session_*.json | head -1
 
 ### In This Project
 - `CLAUDE.md` - Project overview and provider management
-- `agents/AGENT_FRAMEWORK.md` - Agent architecture
+- `agents/ARCHITECTURE.md` - Agent architecture
 - `agents/quality-gates-spec.yaml` - 23 quality gates
 - `agents/performance-thresholds.yaml` - 33 performance thresholds
 

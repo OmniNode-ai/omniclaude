@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Mixin Feature Extractor for Phase 7 - ML-Powered Mixin Compatibility
+Mixin Feature Extractor - ML-Powered Mixin Compatibility
 
 Extracts features from mixin pairs and node types to train ML models for
 compatibility prediction and recommendation.
 
 Author: OmniClaude Autonomous Code Generation System
-Phase: 7 Stream 4
 """
 
 import logging
-from typing import Dict, List, Any, Set, Optional, Tuple
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -315,12 +315,20 @@ class MixinFeatureExtractor:
         self.initialize_mixin_characteristics()
 
         # Build feature encoding indices
-        self.mixin_to_idx = {mixin: idx for idx, mixin in enumerate(sorted(self.MIXIN_CATEGORIES.keys()))}
+        self.mixin_to_idx = {
+            mixin: idx for idx, mixin in enumerate(sorted(self.MIXIN_CATEGORIES.keys()))
+        }
         self.node_type_to_idx = {
-            node_type: idx for idx, node_type in enumerate(["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"])
+            node_type: idx
+            for idx, node_type in enumerate(
+                ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+            )
         }
         self.category_to_idx = {
-            category: idx for idx, category in enumerate(["infrastructure", "resilience", "business", "data_access"])
+            category: idx
+            for idx, category in enumerate(
+                ["infrastructure", "resilience", "business", "data_access"]
+            )
         }
 
         # Feature dimensions
@@ -340,10 +348,16 @@ class MixinFeatureExtractor:
             + self.interaction_feature_dim  # Interaction features
         )
 
-        self.logger.info(f"Initialized MixinFeatureExtractor with {self.total_feature_dim} features")
+        self.logger.info(
+            f"Initialized MixinFeatureExtractor with {self.total_feature_dim} features"
+        )
 
     def extract_features(
-        self, mixin_a: str, mixin_b: str, node_type: str, historical_data: Optional[Dict[str, Any]] = None
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        historical_data: Optional[Dict[str, Any]] = None,
     ) -> MixinFeatureVector:
         """
         Extract feature vector for mixin pair and node type.
@@ -369,10 +383,19 @@ class MixinFeatureExtractor:
         node_type_features = self._extract_node_type_features(node_type)
 
         # Extract interaction features
-        interaction_features = self._extract_interaction_features(mixin_a, mixin_b, node_type, historical_data)
+        interaction_features = self._extract_interaction_features(
+            mixin_a, mixin_b, node_type, historical_data
+        )
 
         # Combine all features
-        combined_vector = np.concatenate([mixin_a_features, mixin_b_features, node_type_features, interaction_features])
+        combined_vector = np.concatenate(
+            [
+                mixin_a_features,
+                mixin_b_features,
+                node_type_features,
+                interaction_features,
+            ]
+        )
 
         return MixinFeatureVector(
             mixin_a_features=mixin_a_features,
@@ -420,8 +443,12 @@ class MixinFeatureExtractor:
                     1.0 if characteristics.async_safe else 0.0,
                     1.0 if characteristics.state_modifying else 0.0,
                     1.0 if characteristics.resource_intensive else 0.0,
-                    float(len(characteristics.external_dependencies)),  # Number of dependencies
-                    float(len(characteristics.lifecycle_hooks)),  # Number of lifecycle hooks
+                    float(
+                        len(characteristics.external_dependencies)
+                    ),  # Number of dependencies
+                    float(
+                        len(characteristics.lifecycle_hooks)
+                    ),  # Number of lifecycle hooks
                     1.0 if "cache" in characteristics.compatibility_tags else 0.0,
                     1.0 if "resilience" in characteristics.compatibility_tags else 0.0,
                     1.0 if "security" in characteristics.compatibility_tags else 0.0,
@@ -470,7 +497,11 @@ class MixinFeatureExtractor:
         return np.concatenate([node_type_one_hot, profile_features])
 
     def _extract_interaction_features(
-        self, mixin_a: str, mixin_b: str, node_type: str, historical_data: Optional[Dict[str, Any]] = None
+        self,
+        mixin_a: str,
+        mixin_b: str,
+        node_type: str,
+        historical_data: Optional[Dict[str, Any]] = None,
     ) -> np.ndarray:
         """
         Extract interaction features between mixin pair and node type.
@@ -514,10 +545,14 @@ class MixinFeatureExtractor:
         dep_overlap = float(len(deps_a & deps_b))
 
         # State modification conflict
-        both_modify_state = 1.0 if (char_a.state_modifying and char_b.state_modifying) else 0.0
+        both_modify_state = (
+            1.0 if (char_a.state_modifying and char_b.state_modifying) else 0.0
+        )
 
         # Resource intensity
-        both_resource_intensive = 1.0 if (char_a.resource_intensive and char_b.resource_intensive) else 0.0
+        both_resource_intensive = (
+            1.0 if (char_a.resource_intensive and char_b.resource_intensive) else 0.0
+        )
 
         # Compatibility tag overlap
         tags_a = char_a.compatibility_tags
@@ -531,7 +566,9 @@ class MixinFeatureExtractor:
         # Historical features
         if historical_data:
             historical_success_rate = historical_data.get("success_rate", 0.5)
-            historical_total_tests = min(historical_data.get("total_tests", 0), 100) / 100.0  # Normalize
+            historical_total_tests = (
+                min(historical_data.get("total_tests", 0), 100) / 100.0
+            )  # Normalize
             historical_avg_compatibility = historical_data.get("avg_compatibility", 0.5)
         else:
             historical_success_rate = 0.5  # Neutral prior
@@ -553,10 +590,21 @@ class MixinFeatureExtractor:
                 historical_total_tests,
                 historical_avg_compatibility,
                 # Additional derived features
-                1.0 if (same_category and tag_overlap > 0) else 0.0,  # Strong category + tag match
-                1.0 if (hook_conflict and both_modify_state) else 0.0,  # High conflict potential
+                (
+                    1.0 if (same_category and tag_overlap > 0) else 0.0
+                ),  # Strong category + tag match
+                (
+                    1.0 if (hook_conflict and both_modify_state) else 0.0
+                ),  # High conflict potential
                 float(len(deps_a) + len(deps_b)),  # Total external dependencies
-                1.0 if (char_a.category == "data_access" or char_b.category == "data_access") else 0.0,
+                (
+                    1.0
+                    if (
+                        char_a.category == "data_access"
+                        or char_b.category == "data_access"
+                    )
+                    else 0.0
+                ),
             ]
         )
 
@@ -565,7 +613,9 @@ class MixinFeatureExtractor:
     def batch_extract_features(
         self,
         mixin_pairs: List[Tuple[str, str, str]],
-        historical_data_map: Optional[Dict[Tuple[str, str, str], Dict[str, Any]]] = None,
+        historical_data_map: Optional[
+            Dict[Tuple[str, str, str], Dict[str, Any]]
+        ] = None,
     ) -> np.ndarray:
         """
         Extract features for multiple mixin pairs efficiently.
@@ -585,9 +635,13 @@ class MixinFeatureExtractor:
                 # Try both orderings
                 key1 = (mixin_a, mixin_b, node_type)
                 key2 = (mixin_b, mixin_a, node_type)
-                historical_data = historical_data_map.get(key1, historical_data_map.get(key2))
+                historical_data = historical_data_map.get(
+                    key1, historical_data_map.get(key2)
+                )
 
-            feature_vector = self.extract_features(mixin_a, mixin_b, node_type, historical_data)
+            feature_vector = self.extract_features(
+                mixin_a, mixin_b, node_type, historical_data
+            )
             feature_vectors.append(feature_vector.combined_vector)
 
         return np.array(feature_vectors)
@@ -642,7 +696,12 @@ class MixinFeatureExtractor:
         # Node type features
         for node_type in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
             feature_names.append(f"node_type_{node_type}")
-        for profile_char in ["async_required", "state_modifying", "resource_intensive", "external_access"]:
+        for profile_char in [
+            "async_required",
+            "state_modifying",
+            "resource_intensive",
+            "external_access",
+        ]:
             feature_names.append(f"node_profile_{profile_char}")
 
         # Interaction features

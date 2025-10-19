@@ -20,7 +20,6 @@ HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
 import pytest
-
 from correction.ast_corrector import apply_corrections_with_ast
 from correction.framework_detector import FrameworkMethodDetector
 
@@ -156,7 +155,12 @@ class MyClass:
         return self.value == other.value
 """
         corrections = [
-            {"old_name": "__init__", "new_name": "__init_method__", "line": 2, "column": 8},
+            {
+                "old_name": "__init__",
+                "new_name": "__init_method__",
+                "line": 2,
+                "column": 8,
+            },
             {"old_name": "__str__", "new_name": "__string__", "line": 5, "column": 8},
         ]
 
@@ -412,7 +416,9 @@ def my_function():
 
         assert result.success
         assert result.performance_ms is not None
-        assert result.performance_ms < 100, f"Performance: {result.performance_ms}ms (target: <100ms)"
+        assert (
+            result.performance_ms < 100
+        ), f"Performance: {result.performance_ms}ms (target: <100ms)"
 
     def test_medium_file_performance(self):
         """Medium files should meet performance budget."""
@@ -427,12 +433,19 @@ def function_{i}():
             * 100
         )  # ~400 lines
 
-        correction = {"old_name": "function_0", "new_name": "func_0", "line": 1, "column": 4}
+        correction = {
+            "old_name": "function_0",
+            "new_name": "func_0",
+            "line": 1,
+            "column": 4,
+        }
 
         result = apply_corrections_with_ast(code, [correction])
 
         assert result.success
-        assert result.performance_ms < 100, f"Performance: {result.performance_ms}ms (target: <100ms)"
+        assert (
+            result.performance_ms < 100
+        ), f"Performance: {result.performance_ms}ms (target: <100ms)"
 
     @pytest.mark.benchmark
     def test_benchmark_correction_speed(self, benchmark):

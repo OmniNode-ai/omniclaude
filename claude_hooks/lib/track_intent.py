@@ -15,11 +15,11 @@ Usage:
         --session-id "def-456"
 """
 
-import sys
 import argparse
 import hashlib
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -69,11 +69,15 @@ def extract_intent_summary(prompt: str, max_length: int = 100) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Track user intent patterns")
-    parser.add_argument("--prompt", required=True, help="User's natural language prompt")
+    parser.add_argument(
+        "--prompt", required=True, help="User's natural language prompt"
+    )
     parser.add_argument("--agent", required=True, help="Agent name being invoked")
     parser.add_argument("--domain", required=True, help="Agent domain")
     parser.add_argument("--purpose", required=True, help="Agent purpose")
-    parser.add_argument("--correlation-id", required=True, help="Request correlation ID")
+    parser.add_argument(
+        "--correlation-id", required=True, help="Request correlation ID"
+    )
     parser.add_argument("--session-id", required=False, help="Session ID (optional)")
     args = parser.parse_args()
 
@@ -113,17 +117,26 @@ def main():
         )
 
         if pattern_id:
-            print(f"✅ [track_intent] Intent pattern tracked: {pattern_id}", file=sys.stderr)
-            print(f"   This intent can be correlated with generated code patterns", file=sys.stderr)
+            print(
+                f"✅ [track_intent] Intent pattern tracked: {pattern_id}",
+                file=sys.stderr,
+            )
+            print(
+                "   This intent can be correlated with generated code patterns",
+                file=sys.stderr,
+            )
             print(f"   Correlation ID: {args.correlation_id}", file=sys.stderr)
             sys.exit(0)
         else:
-            print(f"❌ [track_intent] Intent tracking returned None", file=sys.stderr)
+            print("❌ [track_intent] Intent tracking returned None", file=sys.stderr)
             # Don't fail the hook - just log
             sys.exit(0)
 
     except Exception as e:
-        print(f"❌ [track_intent] Unexpected exception: {type(e).__name__}: {e}", file=sys.stderr)
+        print(
+            f"❌ [track_intent] Unexpected exception: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
         import traceback
 
         traceback.print_exc(file=sys.stderr)

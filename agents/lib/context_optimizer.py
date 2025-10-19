@@ -92,9 +92,13 @@ class ContextOptimizer:
             # Update statistics
             record.sample_count += 1
             if success:
-                record.success_rate = ((record.success_rate * (record.sample_count - 1)) + 1.0) / record.sample_count
+                record.success_rate = (
+                    (record.success_rate * (record.sample_count - 1)) + 1.0
+                ) / record.sample_count
             else:
-                record.success_rate = (record.success_rate * (record.sample_count - 1)) / record.sample_count
+                record.success_rate = (
+                    record.success_rate * (record.sample_count - 1)
+                ) / record.sample_count
 
             # Update average duration
             record.avg_duration_ms = (
@@ -143,7 +147,9 @@ class ContextOptimizer:
 
             # Sort by effectiveness (success rate * speed factor)
             def effectiveness_score(record: ContextLearningRecord) -> float:
-                speed_factor = 1.0 / (1.0 + record.avg_duration_ms / 1000.0)  # Prefer faster contexts
+                speed_factor = 1.0 / (
+                    1.0 + record.avg_duration_ms / 1000.0
+                )  # Prefer faster contexts
                 return record.success_rate * speed_factor
 
             task_records.sort(key=effectiveness_score, reverse=True)
@@ -152,7 +158,10 @@ class ContextOptimizer:
             optimized_contexts = []
             for record in task_records:
                 for context_key in record.context_keys:
-                    if context_key in available_contexts and context_key not in optimized_contexts:
+                    if (
+                        context_key in available_contexts
+                        and context_key not in optimized_contexts
+                    ):
                         optimized_contexts.append(context_key)
                         if len(optimized_contexts) >= max_contexts:
                             break
@@ -161,7 +170,10 @@ class ContextOptimizer:
 
             # Fill remaining slots with available contexts
             for context_key in available_contexts:
-                if context_key not in optimized_contexts and len(optimized_contexts) < max_contexts:
+                if (
+                    context_key not in optimized_contexts
+                    and len(optimized_contexts) < max_contexts
+                ):
                     optimized_contexts.append(context_key)
 
             return optimized_contexts
@@ -249,16 +261,22 @@ class ContextOptimizer:
             predicted_contexts = []
 
             if any(keyword in prompt_lower for keyword in architecture_keywords):
-                predicted_contexts.extend(["rag:domain-patterns", "pattern:onex-architecture"])
+                predicted_contexts.extend(
+                    ["rag:domain-patterns", "pattern:onex-architecture"]
+                )
 
             if any(keyword in prompt_lower for keyword in api_keywords):
                 predicted_contexts.extend(["rag:api-patterns", "pattern:api-design"])
 
             if any(keyword in prompt_lower for keyword in database_keywords):
-                predicted_contexts.extend(["rag:database-patterns", "pattern:data-modeling"])
+                predicted_contexts.extend(
+                    ["rag:database-patterns", "pattern:data-modeling"]
+                )
 
             if any(keyword in prompt_lower for keyword in security_keywords):
-                predicted_contexts.extend(["rag:security-patterns", "pattern:auth-design"])
+                predicted_contexts.extend(
+                    ["rag:security-patterns", "pattern:auth-design"]
+                )
 
             # Always include general patterns if no specific patterns found
             if not predicted_contexts:
@@ -270,7 +288,9 @@ class ContextOptimizer:
             print(f"Warning: Context prediction failed: {e}")
             return ["rag:domain-patterns", "pattern:general"]
 
-    async def get_context_effectiveness_analysis(self, days: int = 30) -> Dict[str, Any]:
+    async def get_context_effectiveness_analysis(
+        self, days: int = 30
+    ) -> Dict[str, Any]:
         """
         Get analysis of context effectiveness over time.
 
@@ -291,7 +311,7 @@ class ContextOptimizer:
                 # Get context usage statistics
                 context_stats = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         context_keys,
                         AVG(success_rate) as avg_success_rate,
                         AVG(avg_duration_ms) as avg_duration_ms,
@@ -307,7 +327,7 @@ class ContextOptimizer:
                 # Get task type effectiveness
                 task_effectiveness = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         task_type,
                         AVG(success_rate) as avg_success_rate,
                         AVG(avg_duration_ms) as avg_duration_ms,
@@ -403,9 +423,15 @@ class ContextOptimizer:
         """Get current learning statistics."""
         return {
             "cached_records": len(self.learning_cache),
-            "task_types": len(set(record.task_type for record in self.learning_cache.values())),
-            "total_samples": sum(record.sample_count for record in self.learning_cache.values()),
-            "avg_success_rate": sum(record.success_rate for record in self.learning_cache.values())
+            "task_types": len(
+                set(record.task_type for record in self.learning_cache.values())
+            ),
+            "total_samples": sum(
+                record.sample_count for record in self.learning_cache.values()
+            ),
+            "avg_success_rate": sum(
+                record.success_rate for record in self.learning_cache.values()
+            )
             / max(len(self.learning_cache), 1),
             "cache_ttl": self._cache_ttl,
             "last_cache_update": self._last_cache_update,
@@ -425,12 +451,18 @@ async def learn_from_execution(
     metadata: Optional[Dict[str, Any]] = None,
 ):
     """Learn from a context execution outcome."""
-    await context_optimizer.learn_from_execution(task_type, context_keys, success, duration_ms, metadata)
+    await context_optimizer.learn_from_execution(
+        task_type, context_keys, success, duration_ms, metadata
+    )
 
 
-async def optimize_context_for_task(task_type: str, available_contexts: List[str], max_contexts: int = 5) -> List[str]:
+async def optimize_context_for_task(
+    task_type: str, available_contexts: List[str], max_contexts: int = 5
+) -> List[str]:
     """Return optimized context selection for a task type."""
-    return await context_optimizer.optimize_context_for_task(task_type, available_contexts, max_contexts)
+    return await context_optimizer.optimize_context_for_task(
+        task_type, available_contexts, max_contexts
+    )
 
 
 async def predict_context_needs(user_prompt: str) -> List[str]:

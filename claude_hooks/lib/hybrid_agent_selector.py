@@ -11,14 +11,14 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import sys
 import json
 import os
+import sys
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Import existing detection systems
 from agent_detector import AgentDetector
@@ -94,12 +94,20 @@ class HybridAgentSelector:
         self.config = config or self._load_config()
 
         # Apply overrides from constructor
-        self.enable_ai = enable_ai if enable_ai is not None else self.config.get("enable_ai", True)
-        self.confidence_threshold = (
-            confidence_threshold if confidence_threshold else self.config.get("confidence_threshold", 0.8)
+        self.enable_ai = (
+            enable_ai if enable_ai is not None else self.config.get("enable_ai", True)
         )
-        self.model_preference = model_preference or self.config.get("model_preference", "auto")
-        self.timeout_ms = timeout_ms if timeout_ms else self.config.get("timeout_ms", 500)
+        self.confidence_threshold = (
+            confidence_threshold
+            if confidence_threshold
+            else self.config.get("confidence_threshold", 0.8)
+        )
+        self.model_preference = model_preference or self.config.get(
+            "model_preference", "auto"
+        )
+        self.timeout_ms = (
+            timeout_ms if timeout_ms else self.config.get("timeout_ms", 500)
+        )
 
         # Initialize detection systems
         self.pattern_detector = AgentDetector()
@@ -108,9 +116,13 @@ class HybridAgentSelector:
         # Initialize AI selector if enabled
         if self.enable_ai:
             try:
-                self.ai_selector = AIAgentSelector(model_preference=self.model_preference, zen_mcp_available=True)
+                self.ai_selector = AIAgentSelector(
+                    model_preference=self.model_preference, zen_mcp_available=True
+                )
             except Exception as e:
-                print(f"Warning: AI selector initialization failed: {e}", file=sys.stderr)
+                print(
+                    f"Warning: AI selector initialization failed: {e}", file=sys.stderr
+                )
                 self.ai_selector = None
                 self.enable_ai = False
 
@@ -128,8 +140,11 @@ class HybridAgentSelector:
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from environment and config file."""
         config = {
-            "enable_ai": os.getenv("ENABLE_AI_AGENT_SELECTION", "true").lower() == "true",
-            "confidence_threshold": float(os.getenv("AI_AGENT_CONFIDENCE_THRESHOLD", "0.8")),
+            "enable_ai": os.getenv("ENABLE_AI_AGENT_SELECTION", "true").lower()
+            == "true",
+            "confidence_threshold": float(
+                os.getenv("AI_AGENT_CONFIDENCE_THRESHOLD", "0.8")
+            ),
             "model_preference": os.getenv("AI_MODEL_PREFERENCE", "auto"),
             "timeout_ms": int(os.getenv("AI_SELECTION_TIMEOUT_MS", "500")),
         }
@@ -149,7 +164,9 @@ class HybridAgentSelector:
 
         return config
 
-    def select_agent(self, prompt: str, context: Optional[Dict] = None) -> AgentSelection:
+    def select_agent(
+        self, prompt: str, context: Optional[Dict] = None
+    ) -> AgentSelection:
         """
         Select best agent using 3-stage pipeline.
 
@@ -245,7 +262,9 @@ class HybridAgentSelector:
             if config:
                 triggers = config.get("triggers", [])
                 prompt_lower = prompt.lower()
-                matches = sum(1 for trigger in triggers if trigger.lower() in prompt_lower)
+                matches = sum(
+                    1 for trigger in triggers if trigger.lower() in prompt_lower
+                )
 
                 # Confidence based on number of trigger matches
                 confidence = min(0.7 + (matches * 0.1), 0.95)
@@ -314,7 +333,9 @@ class HybridAgentSelector:
 
         self.stats["total_latency_ms"] += result.latency_ms
         if self.stats["total_selections"] > 0:
-            self.stats["avg_latency_ms"] = self.stats["total_latency_ms"] / self.stats["total_selections"]
+            self.stats["avg_latency_ms"] = (
+                self.stats["total_latency_ms"] / self.stats["total_selections"]
+            )
 
     def get_stats(self) -> Dict[str, Any]:
         """Get selection statistics."""
@@ -344,20 +365,35 @@ def main():
     """CLI interface for hybrid agent selector."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Hybrid agent selector with AI fallback")
+    parser = argparse.ArgumentParser(
+        description="Hybrid agent selector with AI fallback"
+    )
     parser.add_argument("prompt", nargs="+", help="User prompt to analyze")
     parser.add_argument(
-        "--enable-ai", type=str, default="true", choices=["true", "false"], help="Enable AI-powered selection"
+        "--enable-ai",
+        type=str,
+        default="true",
+        choices=["true", "false"],
+        help="Enable AI-powered selection",
     )
-    parser.add_argument("--confidence-threshold", type=float, default=0.8, help="Minimum confidence for AI selection")
+    parser.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=0.8,
+        help="Minimum confidence for AI selection",
+    )
     parser.add_argument(
         "--model-preference",
         default="auto",
         choices=["auto", "local", "gemini", "glm", "5090"],
         help="AI model preference",
     )
-    parser.add_argument("--timeout", type=int, default=500, help="AI selection timeout (ms)")
-    parser.add_argument("--stats", action="store_true", help="Show selection statistics")
+    parser.add_argument(
+        "--timeout", type=int, default=500, help="AI selection timeout (ms)"
+    )
+    parser.add_argument(
+        "--stats", action="store_true", help="Show selection statistics"
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()

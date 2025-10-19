@@ -4,22 +4,28 @@ Hook Intelligence Dashboard
 Real-time view of Claude Code hook system activity
 """
 
-import psycopg2
-from typing import Dict, List, Any
 import json
+from typing import Any, Dict, List
+
+import psycopg2
 
 
 class HookDashboard:
     """Simple dashboard for hook intelligence data"""
 
     def __init__(self, db_password: str = "omninode-bridge-postgres-dev-2024"):
-        self.conn_string = f"host=localhost port=5436 dbname=omninode_bridge " f"user=postgres password={db_password}"
+        self.conn_string = (
+            f"host=localhost port=5436 dbname=omninode_bridge "
+            f"user=postgres password={db_password}"
+        )
 
     def get_connection(self):
         """Get database connection"""
         return psycopg2.connect(self.conn_string)
 
-    def recent_agent_detections(self, hours: int = 24, limit: int = 10) -> List[Dict[str, Any]]:
+    def recent_agent_detections(
+        self, hours: int = 24, limit: int = 10
+    ) -> List[Dict[str, Any]]:
         """Get recent agent detections"""
         query = """
         SELECT
@@ -107,7 +113,10 @@ class HookDashboard:
             with conn.cursor() as cur:
                 cur.execute(query, (hours,))
                 rows = cur.fetchall()
-                return {row[0]: {"events": row[1], "first": row[2], "last": row[3]} for row in rows}
+                return {
+                    row[0]: {"events": row[1], "first": row[2], "last": row[3]}
+                    for row in rows
+                }
 
     def correlation_trace(self, correlation_id: str) -> Dict[str, Any]:
         """Get full correlation trace for a request"""
@@ -187,7 +196,9 @@ class HookDashboard:
             print(f"{'Agent':<30} {'Tool':<15} {'Count':<8} {'Avg ms':<10}")
             print("-" * 80)
             for u in usage[:10]:
-                print(f"{u['agent']:<30} {u['tool']:<15} {u['count']:<8} {u['avg_ms']:<10}")
+                print(
+                    f"{u['agent']:<30} {u['tool']:<15} {u['count']:<8} {u['avg_ms']:<10}"
+                )
         else:
             print("No tool usage found")
 

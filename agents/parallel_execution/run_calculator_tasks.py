@@ -10,17 +10,29 @@ from pathlib import Path
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_model import AgentTask
 from agent_dispatcher import ParallelCoordinator
+from agent_model import AgentTask
 
 # Calculator contract
 CALCULATOR_CONTRACT = {
     "name": "Calculator",
     "description": "Simple calculator with basic operations",
     "operations": {
-        "add": {"inputs": ["a: float", "b: float"], "output": "float", "description": "Add two numbers"},
-        "subtract": {"inputs": ["a: float", "b: float"], "output": "float", "description": "Subtract b from a"},
-        "multiply": {"inputs": ["a: float", "b: float"], "output": "float", "description": "Multiply two numbers"},
+        "add": {
+            "inputs": ["a: float", "b: float"],
+            "output": "float",
+            "description": "Add two numbers",
+        },
+        "subtract": {
+            "inputs": ["a: float", "b: float"],
+            "output": "float",
+            "description": "Subtract b from a",
+        },
+        "multiply": {
+            "inputs": ["a: float", "b: float"],
+            "output": "float",
+            "description": "Multiply two numbers",
+        },
         "divide": {
             "inputs": ["a: float", "b: float"],
             "output": "float",
@@ -48,7 +60,11 @@ async def create_calculator():
             AgentTask(
                 task_id="generate_calculator",
                 description="Generate ONEX Compute node for calculator from contract",
-                input_data={"contract": CALCULATOR_CONTRACT, "node_type": "Compute", "language": "python"},
+                input_data={
+                    "contract": CALCULATOR_CONTRACT,
+                    "node_type": "Compute",
+                    "language": "python",
+                },
             )
         ]
 

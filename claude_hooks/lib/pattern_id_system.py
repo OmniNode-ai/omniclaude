@@ -20,8 +20,8 @@ import re
 import threading
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Dict, Optional, Set, Tuple, List
 from enum import Enum
+from typing import Dict, List, Optional, Set, Tuple
 
 
 class ModificationType(Enum):
@@ -70,25 +70,45 @@ class PatternVersion:
 
     def __lt__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting"""
-        return (self.major, self.minor, self.patch) < (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) < (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __le__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (less than or equal)"""
-        return (self.major, self.minor, self.patch) <= (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) <= (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __gt__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (greater than)"""
-        return (self.major, self.minor, self.patch) > (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) > (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __ge__(self, other: "PatternVersion") -> bool:
         """Compare versions for sorting (greater than or equal)"""
-        return (self.major, self.minor, self.patch) >= (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) >= (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __eq__(self, other: object) -> bool:
         """Check version equality"""
         if not isinstance(other, PatternVersion):
             return False
-        return (self.major, self.minor, self.patch) == (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) == (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __hash__(self) -> int:
         """Hash for use in sets/dicts"""
@@ -114,7 +134,9 @@ class PatternMetadata:
             "version": str(self.version),
             "parent_id": self.parent_id,
             "similarity_score": self.similarity_score,
-            "modification_type": self.modification_type.value if self.modification_type else None,
+            "modification_type": (
+                self.modification_type.value if self.modification_type else None
+            ),
             "created_at": self.created_at,
             "tags": list(self.tags),
         }
@@ -191,7 +213,8 @@ class PatternIDSystem:
         """
         # Remove comments based on language
         comment_patterns = PatternIDSystem.COMMENT_PATTERNS.get(
-            language.lower(), PatternIDSystem.COMMENT_PATTERNS["python"]  # Default to Python
+            language.lower(),
+            PatternIDSystem.COMMENT_PATTERNS["python"],  # Default to Python
         )
 
         normalized = code
@@ -246,7 +269,10 @@ class PatternLineageDetector:
 
     @staticmethod
     def detect_derivation(
-        original_code: str, modified_code: str, original_id: Optional[str] = None, language: str = "python"
+        original_code: str,
+        modified_code: str,
+        original_id: Optional[str] = None,
+        language: str = "python",
     ) -> Dict:
         """
         Detect if modified code is derived from original.
@@ -267,7 +293,9 @@ class PatternLineageDetector:
             - suggested_version: PatternVersion - Suggested next version
         """
         # Generate pattern IDs
-        parent_id = original_id or PatternIDSystem.generate_id(original_code, language=language)
+        parent_id = original_id or PatternIDSystem.generate_id(
+            original_code, language=language
+        )
         child_id = PatternIDSystem.generate_id(modified_code, language=language)
 
         # If IDs are identical, it's the same pattern
@@ -283,7 +311,9 @@ class PatternLineageDetector:
             }
 
         # Calculate similarity
-        similarity = PatternLineageDetector._calculate_similarity(original_code, modified_code)
+        similarity = PatternLineageDetector._calculate_similarity(
+            original_code, modified_code
+        )
 
         # Classify modification type
         mod_type = PatternLineageDetector._classify_modification(similarity)
@@ -292,7 +322,8 @@ class PatternLineageDetector:
         suggested_version = PatternLineageDetector._suggest_version(mod_type)
 
         return {
-            "is_derived": similarity >= PatternLineageDetector.SIMILARITY_THRESHOLDS["major"],
+            "is_derived": similarity
+            >= PatternLineageDetector.SIMILARITY_THRESHOLDS["major"],
             "is_identical": False,
             "parent_id": parent_id,
             "child_id": child_id,
@@ -382,7 +413,9 @@ class PatternDeduplicator:
         self._lock = threading.RLock()  # Reentrant lock for nested calls
         self._pattern_count = 0
 
-    def check_duplicate(self, code: str, language: str = "python") -> Optional[PatternMetadata]:
+    def check_duplicate(
+        self, code: str, language: str = "python"
+    ) -> Optional[PatternMetadata]:
         """
         Check if pattern already exists in cache.
 
@@ -428,7 +461,10 @@ class PatternDeduplicator:
 
             # Create metadata
             metadata = PatternMetadata(
-                pattern_id=pattern_id, version=version or PatternVersion(), parent_id=parent_id, tags=tags or set()
+                pattern_id=pattern_id,
+                version=version or PatternVersion(),
+                parent_id=parent_id,
+                tags=tags or set(),
             )
 
             self._seen_patterns[pattern_id] = metadata
@@ -437,7 +473,11 @@ class PatternDeduplicator:
             return metadata
 
     def register_with_lineage(
-        self, original_code: str, modified_code: str, language: str = "python", tags: Optional[Set[str]] = None
+        self,
+        original_code: str,
+        modified_code: str,
+        language: str = "python",
+        tags: Optional[Set[str]] = None,
     ) -> Tuple[PatternMetadata, PatternMetadata]:
         """
         Register both original and modified patterns with lineage tracking.
@@ -455,11 +495,16 @@ class PatternDeduplicator:
             # Register original if not exists
             original_meta = self.check_duplicate(original_code, language)
             if not original_meta:
-                original_meta = self.register_pattern(original_code, language=language, tags=tags)
+                original_meta = self.register_pattern(
+                    original_code, language=language, tags=tags
+                )
 
             # Detect derivation
             derivation = PatternLineageDetector.detect_derivation(
-                original_code, modified_code, original_id=original_meta.pattern_id, language=language
+                original_code,
+                modified_code,
+                original_id=original_meta.pattern_id,
+                language=language,
             )
 
             # Register modified with lineage
@@ -478,7 +523,11 @@ class PatternDeduplicator:
                     parent_id = None
 
                 modified_meta = self.register_pattern(
-                    modified_code, version=next_version, parent_id=parent_id, language=language, tags=tags
+                    modified_code,
+                    version=next_version,
+                    parent_id=parent_id,
+                    language=language,
+                    tags=tags,
                 )
 
                 # Update with similarity info
@@ -543,7 +592,8 @@ class PatternDeduplicator:
                 "unique_patterns": len(self._seen_patterns),
                 "root_patterns": root_count,
                 "derived_patterns": derived_count,
-                "deduplication_rate": 1 - (len(self._seen_patterns) / max(self._pattern_count, 1)),
+                "deduplication_rate": 1
+                - (len(self._seen_patterns) / max(self._pattern_count, 1)),
             }
 
     def clear(self) -> None:
@@ -571,17 +621,25 @@ def get_global_deduplicator() -> PatternDeduplicator:
 
 
 # Convenience functions for common operations
-def generate_pattern_id(code: str, normalize: bool = True, language: str = "python") -> str:
+def generate_pattern_id(
+    code: str, normalize: bool = True, language: str = "python"
+) -> str:
     """Convenience function for ID generation"""
     return PatternIDSystem.generate_id(code, normalize, language)
 
 
-def detect_pattern_derivation(original: str, modified: str, language: str = "python") -> Dict:
+def detect_pattern_derivation(
+    original: str, modified: str, language: str = "python"
+) -> Dict:
     """Convenience function for derivation detection"""
-    return PatternLineageDetector.detect_derivation(original, modified, language=language)
+    return PatternLineageDetector.detect_derivation(
+        original, modified, language=language
+    )
 
 
-def register_pattern(code: str, language: str = "python", tags: Optional[Set[str]] = None) -> PatternMetadata:
+def register_pattern(
+    code: str, language: str = "python", tags: Optional[Set[str]] = None
+) -> PatternMetadata:
     """Convenience function for pattern registration"""
     dedup = get_global_deduplicator()
     return dedup.register_pattern(code, language=language, tags=tags)
@@ -621,7 +679,9 @@ if __name__ == "__main__":
     derivation = detect_pattern_derivation(code1, code3)
     print(f"Is derived: {derivation['is_derived']}")
     print(f"Similarity: {derivation['similarity_score']:.2%}")
-    print(f"Modification type: {derivation['modification_type'].value if derivation['modification_type'] else 'N/A'}")
+    print(
+        f"Modification type: {derivation['modification_type'].value if derivation['modification_type'] else 'N/A'}"
+    )
 
     # Example 3: Deduplication
     print("\n3. Pattern Registration:")

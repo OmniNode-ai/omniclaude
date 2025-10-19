@@ -126,18 +126,30 @@ TEMPLATES = {
             {"name": "CRITICAL", "value": "critical"},
         ],
         "input_fields": [
-            {"name": "operation", "type": "ConsulOperationType", "default": "ConsulOperationType.REGISTER"},
+            {
+                "name": "operation",
+                "type": "ConsulOperationType",
+                "default": "ConsulOperationType.REGISTER",
+            },
             {"name": "service_id", "type": "str"},
             {"name": "service_name", "type": "Optional[str]", "default": "None"},
             {"name": "address", "type": "Optional[str]", "default": "None"},
             {"name": "port", "type": "Optional[int]", "default": "None"},
             {"name": "health_check_url", "type": "Optional[str]", "default": "None"},
-            {"name": "tags", "type": "Optional[List[str]]", "default": "field(default_factory=list)"},
+            {
+                "name": "tags",
+                "type": "Optional[List[str]]",
+                "default": "field(default_factory=list)",
+            },
         ],
         "output_fields": [
             {"name": "success", "type": "bool"},
             {"name": "operation", "type": "ConsulOperationType"},
-            {"name": "data", "type": "Dict[str, Any]", "default": "field(default_factory=dict)"},
+            {
+                "name": "data",
+                "type": "Dict[str, Any]",
+                "default": "field(default_factory=dict)",
+            },
             {"name": "error", "type": "Optional[str]", "default": "None"},
             {"name": "timestamp", "type": "Optional[str]", "default": "None"},
         ],
@@ -201,13 +213,25 @@ TEMPLATES = {
             {"name": "CRITICAL", "value": "critical"},
         ],
         "input_fields": [
-            {"name": "operation", "type": "ValidationOperation", "default": "ValidationOperation.VALIDATE"},
+            {
+                "name": "operation",
+                "type": "ValidationOperation",
+                "default": "ValidationOperation.VALIDATE",
+            },
             {"name": "data", "type": "Dict[str, Any]"},
-            {"name": "rules", "type": "List[Dict[str, Any]]", "default": "field(default_factory=list)"},
+            {
+                "name": "rules",
+                "type": "List[Dict[str, Any]]",
+                "default": "field(default_factory=list)",
+            },
         ],
         "output_fields": [
             {"name": "is_valid", "type": "bool"},
-            {"name": "violations", "type": "List[Dict[str, Any]]", "default": "field(default_factory=list)"},
+            {
+                "name": "violations",
+                "type": "List[Dict[str, Any]]",
+                "default": "field(default_factory=list)",
+            },
             {"name": "summary", "type": "str"},
             {"name": "timestamp", "type": "Optional[str]", "default": "None"},
         ],
@@ -243,7 +267,9 @@ TEMPLATES = {
 }
 
 
-def generate_model_contract_code(template_name: str, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+def generate_model_contract_code(
+    template_name: str, agent_name: str, task_id: str, recommendations: List[Dict]
+) -> str:
     """Generate model contract code from template."""
     template_config = TEMPLATES.get(template_name, TEMPLATES["consul"])
 
@@ -259,12 +285,16 @@ def generate_model_contract_code(template_name: str, agent_name: str, task_id: s
     # Generate operation enum definitions
     operation_definitions = []
     for op in template_config["operations"]:
-        operation_definitions.append(f"{OPERATION_ENUM_DEFINITION_TEMPLATE.format(**op)}")
+        operation_definitions.append(
+            f"{OPERATION_ENUM_DEFINITION_TEMPLATE.format(**op)}"
+        )
 
     # Generate severity enum definitions
     severity_definitions = []
     for sev in template_config["severities"]:
-        severity_definitions.append(f"{SEVERITY_ENUM_DEFINITION_TEMPLATE.format(**sev)}")
+        severity_definitions.append(
+            f"{SEVERITY_ENUM_DEFINITION_TEMPLATE.format(**sev)}"
+        )
 
     # Generate input contract fields
     input_contract_fields = []

@@ -1,18 +1,21 @@
 import asyncio
+import os
+import sys
 from pathlib import Path
 from typing import List
 
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 from agents.lib.db import get_pg_pool
 
 
 async def _ensure_migrations_table(conn) -> str:
     # Create table if missing
-    await conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (applied_at TIMESTAMPTZ DEFAULT NOW())")
+    await conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (applied_at TIMESTAMPTZ DEFAULT NOW())"
+    )
 
     # Determine identifier column to use (support existing schemas)
     for col in ("filename", "name", "id", "version"):

@@ -5,11 +5,15 @@ Phase 4 Test Fixtures - Sample PRDs and Expected Outputs
 Comprehensive fixtures for testing contract, model, and enum generators.
 """
 
+from datetime import datetime, timezone
 from typing import List
 from uuid import uuid4
-from datetime import datetime, timezone
-from agents.lib.simple_prd_analyzer import SimpleParsedPRD, SimpleDecompositionResult, SimplePRDAnalysisResult
 
+from agents.lib.simple_prd_analyzer import (
+    SimpleDecompositionResult,
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+)
 
 # ============================================================================
 # SAMPLE PRDs FOR EACH NODE TYPE
@@ -206,7 +210,10 @@ across distributed operations.
 
 
 def create_mock_analysis_result(
-    prd_content: str, node_type: str, mixins: List[str] = None, external_systems: List[str] = None
+    prd_content: str,
+    node_type: str,
+    mixins: List[str] = None,
+    external_systems: List[str] = None,
 ) -> SimplePRDAnalysisResult:
     """Create a mock SimplePRDAnalysisResult for testing"""
 
@@ -255,7 +262,12 @@ def create_mock_analysis_result(
     )
 
     # Set node type hints
-    node_type_hints = {"EFFECT": 0.0, "COMPUTE": 0.0, "REDUCER": 0.0, "ORCHESTRATOR": 0.0}
+    node_type_hints = {
+        "EFFECT": 0.0,
+        "COMPUTE": 0.0,
+        "REDUCER": 0.0,
+        "ORCHESTRATOR": 0.0,
+    }
     node_type_hints[node_type] = 0.9
 
     return SimplePRDAnalysisResult(
@@ -282,7 +294,10 @@ EFFECT_ANALYSIS_RESULT = create_mock_analysis_result(
 )
 
 COMPUTE_ANALYSIS_RESULT = create_mock_analysis_result(
-    COMPUTE_NODE_PRD, "COMPUTE", mixins=["MixinValidation", "MixinMetrics"], external_systems=[]
+    COMPUTE_NODE_PRD,
+    "COMPUTE",
+    mixins=["MixinValidation", "MixinMetrics"],
+    external_systems=[],
 )
 
 REDUCER_ANALYSIS_RESULT = create_mock_analysis_result(
@@ -556,12 +571,16 @@ LARGE_PRD_CONTENT = (
 
 ## Functional Requirements
 """
-    + "\n".join([f"- Requirement {i}: Detailed requirement description {i}" for i in range(50)])
+    + "\n".join(
+        [f"- Requirement {i}: Detailed requirement description {i}" for i in range(50)]
+    )
     + """
 
 ## Technical Details
 """
-    + "\n".join([f"- Technical detail {i}: Implementation detail {i}" for i in range(50)])
+    + "\n".join(
+        [f"- Technical detail {i}: Implementation detail {i}" for i in range(50)]
+    )
 )
 
 
@@ -837,7 +856,9 @@ SAMPLE_CONTRACT_WITH_CRUD = {
             "output": {"success": "bool"},
         },
     ],
-    "subcontracts": [{"mixin": "MixinEventBus", "config": {"bootstrap_servers": "localhost:9092"}}],
+    "subcontracts": [
+        {"mixin": "MixinEventBus", "config": {"bootstrap_servers": "localhost:9092"}}
+    ],
 }
 
 SAMPLE_CONTRACT_WITH_TRANSFORMATION = {

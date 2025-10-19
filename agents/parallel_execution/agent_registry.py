@@ -8,12 +8,12 @@ the need for directory scanning and import validation.
 Legacy scanning functionality is still available but deprecated.
 """
 
-import logging
 import importlib.util
 import inspect
-from pathlib import Path
-from typing import Dict, List, Optional, Callable, Any, TypeVar
+import logging
 from functools import lru_cache
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 # Configure logging for agent registry
 logger = logging.getLogger(__name__)
@@ -215,8 +215,12 @@ class AgentRegistry:
             spec.loader.exec_module(module)
 
             # Check for required execute() function or agent attribute
-            has_execute = hasattr(module, "execute") and callable(getattr(module, "execute"))
-            has_agent = hasattr(module, "agent")  # Pydantic AI agents have 'agent' attribute
+            has_execute = hasattr(module, "execute") and callable(
+                getattr(module, "execute")
+            )
+            has_agent = hasattr(
+                module, "agent"
+            )  # Pydantic AI agents have 'agent' attribute
 
             return has_execute or has_agent
 

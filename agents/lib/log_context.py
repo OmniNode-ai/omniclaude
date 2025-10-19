@@ -24,17 +24,13 @@ Usage:
         logger.info("Task started")  # Automatically tagged
 """
 
+import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from functools import wraps
-from typing import Optional, Callable
+from typing import Callable, Optional
 from uuid import UUID
-import asyncio
 
-from .structured_logger import (
-    _correlation_id,
-    _session_id,
-    _component,
-)
+from .structured_logger import _component, _correlation_id, _session_id
 
 
 @contextmanager
@@ -126,7 +122,9 @@ async def async_log_context(
 
 
 def with_log_context(
-    component: Optional[str] = None, correlation_id_param: str = "correlation_id", session_id_param: str = "session_id"
+    component: Optional[str] = None,
+    correlation_id_param: str = "correlation_id",
+    session_id_param: str = "session_id",
 ):
     """
     Decorator for automatic log context propagation.
@@ -153,7 +151,11 @@ def with_log_context(
             session_id = kwargs.get(session_id_param)
 
             # Set up context
-            async with async_log_context(correlation_id=correlation_id, session_id=session_id, component=component):
+            async with async_log_context(
+                correlation_id=correlation_id,
+                session_id=session_id,
+                component=component,
+            ):
                 return await func(*args, **kwargs)
 
         @wraps(func)
@@ -163,7 +165,11 @@ def with_log_context(
             session_id = kwargs.get(session_id_param)
 
             # Set up context
-            with log_context(correlation_id=correlation_id, session_id=session_id, component=component):
+            with log_context(
+                correlation_id=correlation_id,
+                session_id=session_id,
+                component=component,
+            ):
                 return func(*args, **kwargs)
 
         # Return appropriate wrapper based on function type

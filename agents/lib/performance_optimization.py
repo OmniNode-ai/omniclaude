@@ -6,10 +6,10 @@ for high-volume scenarios in the debug pipeline.
 """
 
 import asyncio
-import time
-from typing import List, Dict, Any
-from dataclasses import dataclass
 import json
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
 from .db import get_pg_pool
 
@@ -44,7 +44,9 @@ class PerformanceOptimizer:
             self.pool = await get_pg_pool()
         return self.pool
 
-    async def batch_insert_workflow_steps(self, steps: List[Dict[str, Any]], batch_size: int = 1000) -> int:
+    async def batch_insert_workflow_steps(
+        self, steps: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
         """
         Batch insert workflow steps for better performance.
 
@@ -104,7 +106,9 @@ class PerformanceOptimizer:
 
         return total_inserted
 
-    async def batch_insert_llm_calls(self, calls: List[Dict[str, Any]], batch_size: int = 1000) -> int:
+    async def batch_insert_llm_calls(
+        self, calls: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
         """
         Batch insert LLM calls for better performance.
 
@@ -166,7 +170,9 @@ class PerformanceOptimizer:
 
         return total_inserted
 
-    async def batch_insert_error_events(self, events: List[Dict[str, Any]], batch_size: int = 1000) -> int:
+    async def batch_insert_error_events(
+        self, events: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
         """
         Batch insert error events for better performance.
 
@@ -220,7 +226,9 @@ class PerformanceOptimizer:
 
         return total_inserted
 
-    async def batch_insert_success_events(self, events: List[Dict[str, Any]], batch_size: int = 1000) -> int:
+    async def batch_insert_success_events(
+        self, events: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
         """
         Batch insert success events for better performance.
 
@@ -274,7 +282,9 @@ class PerformanceOptimizer:
 
         return total_inserted
 
-    async def batch_insert_lineage_edges(self, edges: List[Dict[str, Any]], batch_size: int = 1000) -> int:
+    async def batch_insert_lineage_edges(
+        self, edges: List[Dict[str, Any]], batch_size: int = 1000
+    ) -> int:
         """
         Batch insert lineage edges for better performance.
 
@@ -347,14 +357,14 @@ class PerformanceOptimizer:
             # Check for missing indexes (simplified for PostgreSQL)
             missing_indexes = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     schemaname,
                     tablename,
                     attname,
                     n_distinct,
                     correlation
-                FROM pg_stats 
-                WHERE schemaname = 'public' 
+                FROM pg_stats
+                WHERE schemaname = 'public'
                 AND n_distinct > 100
                 AND tablename IN ('workflow_steps', 'llm_calls', 'error_events', 'success_events', 'lineage_edges')
                 """
@@ -374,31 +384,36 @@ class PerformanceOptimizer:
             # Check table sizes
             table_sizes = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     tablename,
                     pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
                     pg_total_relation_size(schemaname||'.'||tablename) as size_bytes
-                FROM pg_tables 
+                FROM pg_tables
                 WHERE schemaname = 'public'
                 ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
                 """
             )
 
             optimizations["table_sizes"] = [
-                {"table": row["tablename"], "size": row["size"], "size_bytes": row["size_bytes"]} for row in table_sizes
+                {
+                    "table": row["tablename"],
+                    "size": row["size"],
+                    "size_bytes": row["size_bytes"],
+                }
+                for row in table_sizes
             ]
 
             # Check for long-running queries (simplified)
             try:
                 long_queries = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         query,
                         calls,
                         total_exec_time,
                         mean_exec_time,
                         rows
-                    FROM pg_stat_statements 
+                    FROM pg_stat_statements
                     WHERE mean_exec_time > 1000  -- queries taking more than 1 second on average
                     ORDER BY mean_exec_time DESC
                     LIMIT 10
@@ -411,7 +426,11 @@ class PerformanceOptimizer:
             if long_queries:
                 optimizations["slow_queries"] = [
                     {
-                        "query": row["query"][:200] + "..." if len(row["query"]) > 200 else row["query"],
+                        "query": (
+                            row["query"][:200] + "..."
+                            if len(row["query"]) > 200
+                            else row["query"]
+                        ),
                         "calls": row["calls"],
                         "total_time": row["total_exec_time"],
                         "mean_time": row["mean_exec_time"],
@@ -463,7 +482,9 @@ class PerformanceOptimizer:
 
         return created_indexes
 
-    async def batch_write_with_pooling(self, operations: List[BatchOperation]) -> Dict[str, int]:
+    async def batch_write_with_pooling(
+        self, operations: List[BatchOperation]
+    ) -> Dict[str, int]:
         """
         Optimized batch writes with connection pooling and smart batching.
 
@@ -514,7 +535,9 @@ class PerformanceOptimizer:
 
         return results
 
-    async def _execute_grouped_operations(self, key: str, operations: List[BatchOperation], pool) -> int:
+    async def _execute_grouped_operations(
+        self, key: str, operations: List[BatchOperation], pool
+    ) -> int:
         """Execute a group of similar operations."""
         total_affected = 0
 
@@ -551,7 +574,7 @@ class PerformanceOptimizer:
         columns_str = ", ".join(columns)
 
         insert_sql = f"""
-        INSERT INTO {table_name} ({columns_str}) 
+        INSERT INTO {table_name} ({columns_str})
         VALUES ({placeholders})
         ON CONFLICT DO NOTHING
         """
@@ -577,7 +600,7 @@ class PerformanceOptimizer:
 
         # Assume 'id' is the primary key
         update_sql = f"""
-        UPDATE {table_name} 
+        UPDATE {table_name}
         SET {', '.join([f'{col} = ${i+2}' for i, col in enumerate(op.data[0].keys()) if col != 'id'])}
         WHERE id = $1
         """
@@ -585,7 +608,9 @@ class PerformanceOptimizer:
         # Prepare batch data
         values = []
         for record in op.data:
-            row = [record.get("id")] + [record.get(col) for col in record.keys() if col != "id"]
+            row = [record.get("id")] + [
+                record.get(col) for col in record.keys() if col != "id"
+            ]
             values.append(tuple(row))
 
         # Execute batch update
@@ -624,11 +649,15 @@ class PerformanceOptimizer:
         write_id = f"write_{int(time.time() * 1000)}"
 
         # Queue the write for background processing
-        await self._write_queue.put({"id": write_id, "table": table, "data": data, "timestamp": time.time()})
+        await self._write_queue.put(
+            {"id": write_id, "table": table, "data": data, "timestamp": time.time()}
+        )
 
         # Start background writer if not running
         if self._background_writer is None:
-            self._background_writer = asyncio.create_task(self._background_write_worker())
+            self._background_writer = asyncio.create_task(
+                self._background_write_worker()
+            )
 
         return write_id
 
@@ -641,7 +670,9 @@ class PerformanceOptimizer:
         while True:
             try:
                 # Get item from queue with timeout
-                item = await asyncio.wait_for(self._write_queue.get(), timeout=batch_timeout)
+                item = await asyncio.wait_for(
+                    self._write_queue.get(), timeout=batch_timeout
+                )
                 batch.append(item)
 
                 # Process batch when full or timeout
@@ -681,7 +712,10 @@ class PerformanceOptimizer:
                 for table, records in by_table.items():
                     if records:
                         await self._batch_insert_operation(
-                            conn, BatchOperation(operation_type="insert", table_name=table, data=records)
+                            conn,
+                            BatchOperation(
+                                operation_type="insert", table_name=table, data=records
+                            ),
                         )
         except Exception as e:
             print(f"Warning: Failed to process write batch: {e}")
@@ -701,7 +735,13 @@ class PerformanceOptimizer:
 
         async with pool.acquire() as conn:
             # Get table row counts
-            tables = ["workflow_steps", "llm_calls", "error_events", "success_events", "lineage_edges"]
+            tables = [
+                "workflow_steps",
+                "llm_calls",
+                "error_events",
+                "success_events",
+                "lineage_edges",
+            ]
             row_counts = {}
 
             for table in tables:
@@ -720,7 +760,9 @@ class PerformanceOptimizer:
 
             # Get connection pool stats
             if hasattr(pool, "_pool"):
-                metrics["pool_size"] = len(pool._pool) if hasattr(pool._pool, "__len__") else "unknown"
+                metrics["pool_size"] = (
+                    len(pool._pool) if hasattr(pool._pool, "__len__") else "unknown"
+                )
             else:
                 metrics["pool_size"] = "unknown"
 

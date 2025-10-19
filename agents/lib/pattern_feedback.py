@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pattern Feedback System for Phase 7
+Pattern Feedback System - Agent Framework
 
 Collects and analyzes pattern matching feedback to improve pattern recognition
 precision and achieve ≥90% accuracy through continuous learning.
@@ -9,11 +9,11 @@ precision and achieve ≥90% accuracy through continuous learning.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Any, List, Optional
-from uuid import UUID
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from collections import Counter
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from .persistence import CodegenPersistence
 
@@ -93,7 +93,9 @@ class PatternFeedbackCollector:
         self._analysis_cache: Dict[str, tuple[PatternAnalysis, datetime]] = {}
         self._cache_ttl_seconds = 300  # 5 minutes
 
-    async def record_feedback(self, feedback: PatternFeedback, user_provided: bool = False) -> UUID:
+    async def record_feedback(
+        self, feedback: PatternFeedback, user_provided: bool = False
+    ) -> UUID:
         """
         Record pattern matching feedback.
 
@@ -126,12 +128,16 @@ class PatternFeedbackCollector:
 
             # Update false positives/negatives if provided
             if feedback.false_positives or feedback.false_negatives:
-                await self._update_fp_fn_tracking(feedback_id, feedback.false_positives, feedback.false_negatives)
+                await self._update_fp_fn_tracking(
+                    feedback_id, feedback.false_positives, feedback.false_negatives
+                )
 
             # Clear analysis cache for this pattern
             self._invalidate_cache(feedback.detected_pattern)
 
-            duration_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+            duration_ms = (
+                datetime.now(timezone.utc) - start_time
+            ).total_seconds() * 1000
 
             self.logger.info(
                 f"Recorded pattern feedback: {feedback.feedback_type} "
@@ -174,15 +180,24 @@ class PatternFeedbackCollector:
 
         if len(feedback_records) < min_samples:
             analysis = PatternAnalysis(
-                pattern_name=pattern_name, sufficient_data=False, sample_count=len(feedback_records), precision=0.0
+                pattern_name=pattern_name,
+                sufficient_data=False,
+                sample_count=len(feedback_records),
+                precision=0.0,
             )
             return analysis
 
         # Calculate metrics
         total = len(feedback_records)
-        correct = sum(1 for r in feedback_records if r.get("feedback_type") == "correct")
-        incorrect = sum(1 for r in feedback_records if r.get("feedback_type") == "incorrect")
-        partial = sum(1 for r in feedback_records if r.get("feedback_type") == "partial")
+        correct = sum(
+            1 for r in feedback_records if r.get("feedback_type") == "correct"
+        )
+        incorrect = sum(
+            1 for r in feedback_records if r.get("feedback_type") == "incorrect"
+        )
+        partial = sum(
+            1 for r in feedback_records if r.get("feedback_type") == "partial"
+        )
         sum(1 for r in feedback_records if r.get("feedback_type") == "adjusted")
 
         # Precision: correct / total predictions
@@ -221,7 +236,9 @@ class PatternFeedbackCollector:
         )
 
         # Suggest confidence threshold
-        suggested_threshold = self._calculate_suggested_threshold(precision, feedback_records)
+        suggested_threshold = self._calculate_suggested_threshold(
+            precision, feedback_records
+        )
 
         analysis = PatternAnalysis(
             pattern_name=pattern_name,
@@ -250,7 +267,9 @@ class PatternFeedbackCollector:
 
         return analysis
 
-    async def get_all_pattern_analyses(self, min_samples: int = 20) -> List[PatternAnalysis]:
+    async def get_all_pattern_analyses(
+        self, min_samples: int = 20
+    ) -> List[PatternAnalysis]:
         """
         Get analyses for all patterns with sufficient data.
 
@@ -274,14 +293,18 @@ class PatternFeedbackCollector:
                 if analysis.sufficient_data:
                     analyses.append(analysis)
             except Exception as e:
-                self.logger.warning(f"Failed to analyze pattern '{pattern_name}': {str(e)}")
+                self.logger.warning(
+                    f"Failed to analyze pattern '{pattern_name}': {str(e)}"
+                )
 
         # Sort by precision (lowest first - these need most attention)
         analyses.sort(key=lambda a: a.precision)
 
         return analyses
 
-    async def tune_pattern_threshold(self, pattern_name: str, target_precision: float = 0.90) -> Optional[float]:
+    async def tune_pattern_threshold(
+        self, pattern_name: str, target_precision: float = 0.90
+    ) -> Optional[float]:
         """
         Tune confidence threshold for pattern based on feedback.
 
@@ -298,7 +321,9 @@ class PatternFeedbackCollector:
         analysis = await self.analyze_feedback(pattern_name)
 
         if not analysis.sufficient_data:
-            self.logger.warning(f"Insufficient data to tune threshold for '{pattern_name}'")
+            self.logger.warning(
+                f"Insufficient data to tune threshold for '{pattern_name}'"
+            )
             return None
 
         current_precision = analysis.precision
@@ -357,12 +382,16 @@ class PatternFeedbackCollector:
         # Calculate weighted average precision
         total_samples = sum(a.sample_count for a in all_analyses)
         weighted_precision = (
-            sum(a.precision * a.sample_count for a in all_analyses) / total_samples if total_samples > 0 else 0.0
+            sum(a.precision * a.sample_count for a in all_analyses) / total_samples
+            if total_samples > 0
+            else 0.0
         )
 
         # Count patterns meeting target
         target_precision = 0.90
-        patterns_meeting_target = sum(1 for a in all_analyses if a.precision >= target_precision)
+        patterns_meeting_target = sum(
+            1 for a in all_analyses if a.precision >= target_precision
+        )
 
         # Identify patterns needing improvement
         needs_improvement = [
@@ -383,10 +412,12 @@ class PatternFeedbackCollector:
             "target_precision": target_precision,
             "needs_improvement": needs_improvement,
             "best_patterns": [
-                {"pattern": a.pattern_name, "precision": a.precision} for a in all_analyses[-5:]  # Top 5
+                {"pattern": a.pattern_name, "precision": a.precision}
+                for a in all_analyses[-5:]  # Top 5
             ],
             "worst_patterns": [
-                {"pattern": a.pattern_name, "precision": a.precision} for a in all_analyses[:5]  # Bottom 5
+                {"pattern": a.pattern_name, "precision": a.precision}
+                for a in all_analyses[:5]  # Bottom 5
             ],
         }
 
@@ -427,7 +458,8 @@ class PatternFeedbackCollector:
 
         # Confidence distribution recommendations
         avg_confidence = (
-            sum(r.get("detected_confidence", 0) for r in feedback_records) / len(feedback_records)
+            sum(r.get("detected_confidence", 0) for r in feedback_records)
+            / len(feedback_records)
             if feedback_records
             else 0
         )
@@ -440,15 +472,21 @@ class PatternFeedbackCollector:
 
         return recommendations
 
-    def _calculate_suggested_threshold(self, precision: float, feedback_records: List[Dict[str, Any]]) -> float:
+    def _calculate_suggested_threshold(
+        self, precision: float, feedback_records: List[Dict[str, Any]]
+    ) -> float:
         """Calculate suggested confidence threshold based on feedback."""
         # Analyze confidence distribution of correct vs incorrect predictions
         correct_confidences = [
-            r.get("detected_confidence", 0.5) for r in feedback_records if r.get("feedback_type") == "correct"
+            r.get("detected_confidence", 0.5)
+            for r in feedback_records
+            if r.get("feedback_type") == "correct"
         ]
 
         incorrect_confidences = [
-            r.get("detected_confidence", 0.5) for r in feedback_records if r.get("feedback_type") == "incorrect"
+            r.get("detected_confidence", 0.5)
+            for r in feedback_records
+            if r.get("feedback_type") == "incorrect"
         ]
 
         if not correct_confidences or not incorrect_confidences:
@@ -469,7 +507,9 @@ class PatternFeedbackCollector:
 
         return threshold
 
-    async def _get_pattern_feedback_details(self, pattern_name: str) -> List[Dict[str, Any]]:
+    async def _get_pattern_feedback_details(
+        self, pattern_name: str
+    ) -> List[Dict[str, Any]]:
         """
         Get detailed pattern feedback records.
 

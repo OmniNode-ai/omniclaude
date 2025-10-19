@@ -44,7 +44,10 @@ async def test_code_examples_error_handling():
     examples = await client.get_code_examples("error handling", "python", max_results=3)
 
     assert len(examples) > 0
-    assert any("exception" in e.pattern.lower() or "error" in e.pattern.lower() for e in examples)
+    assert any(
+        "exception" in e.pattern.lower() or "error" in e.pattern.lower()
+        for e in examples
+    )
     assert all(e.language == "python" for e in examples)
 
     await client.close()
@@ -95,11 +98,17 @@ async def test_context_specific_rules():
 
     # API context
     api_conventions = await client.get_naming_conventions("python", context="api")
-    assert any("REST" in c.description or "api" in c.description.lower() for c in api_conventions)
+    assert any(
+        "REST" in c.description or "api" in c.description.lower()
+        for c in api_conventions
+    )
 
     # Test context
     test_conventions = await client.get_naming_conventions("python", context="test")
-    assert any("test_" in c.pattern or "test" in c.description.lower() for c in test_conventions)
+    assert any(
+        "test_" in c.pattern or "test" in c.description.lower()
+        for c in test_conventions
+    )
 
     await client.close()
 
@@ -122,7 +131,9 @@ if __name__ == "__main__":
             print(f"  {conv.pattern}: {conv.description}")
 
         print("\n=== Python Error Handling Examples ===")
-        examples = await client.get_code_examples("error handling", "python", max_results=2)
+        examples = await client.get_code_examples(
+            "error handling", "python", max_results=2
+        )
         for ex in examples:
             print(f"  {ex.pattern}: {ex.description}")
 

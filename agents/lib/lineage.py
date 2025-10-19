@@ -1,7 +1,7 @@
-import os
 import asyncio
-from dataclasses import dataclass
 import json
+import os
+from dataclasses import dataclass
 from typing import Dict, Optional
 
 from .db import get_pg_pool
@@ -43,7 +43,9 @@ class MemgraphLineageStore:
         self._driver = None
 
         # Support both MEMGRAPH_* and NEO4J_* style envs
-        uri = os.getenv("MEMGRAPH_URI") or os.getenv("NEO4J_URI")  # bolt://localhost:7687
+        uri = os.getenv("MEMGRAPH_URI") or os.getenv(
+            "NEO4J_URI"
+        )  # bolt://localhost:7687
         user = os.getenv("MEMGRAPH_USER")
         password = os.getenv("MEMGRAPH_PASSWORD")
         if not user and not password:

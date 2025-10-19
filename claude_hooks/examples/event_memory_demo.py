@@ -8,23 +8,22 @@ through validation, correction, and final outcome.
 Run: python examples/event_memory_demo.py
 """
 
-import uuid
-from pathlib import Path
-
 # Add parent directory to path for imports
 import sys
+import uuid
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.memory import (
-    EventStore,
-    EventAnalytics,
-    WorkflowEvent,
-    EventType,
-    Violation,
-    Correction,
     AIQuorumScore,
+    Correction,
+    EventAnalytics,
+    EventStore,
+    EventType,
     IntentContextData,
+    Violation,
+    WorkflowEvent,
 )
 
 
@@ -42,7 +41,9 @@ def demo_complete_workflow():
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     store = EventStore(
-        storage_path=db_path, qdrant_url="http://localhost:6333", ollama_url="http://192.168.86.200:11434"
+        storage_path=db_path,
+        qdrant_url="http://localhost:6333",
+        ollama_url="http://192.168.86.200:11434",
     )
 
     print(f"✅ Event Store initialized: {db_path}")
@@ -161,12 +162,16 @@ def demo_complete_workflow():
     for c in corrections:
         print(f"   - {c.source.upper()} (confidence: {c.confidence:.2f})")
         print(f"     {c.reasoning}")
-    print(f"   Quorum Decision: {quorum_score.decision} (consensus: {quorum_score.consensus_score:.2f})")
+    print(
+        f"   Quorum Decision: {quorum_score.decision} (consensus: {quorum_score.consensus_score:.2f})"
+    )
     print()
 
     # Event 4: Correction Applied
     print("4️⃣  CORRECTION APPLIED")
-    corrected_content = 'def get_user():\n    """Get user by ID from database."""\n    pass'
+    corrected_content = (
+        'def get_user():\n    """Get user by ID from database."""\n    pass'
+    )
 
     event4 = WorkflowEvent.create(
         correlation_id=correlation_id,
@@ -226,7 +231,9 @@ def demo_complete_workflow():
     print()
 
     for i, event in enumerate(workflow, 1):
-        print(f"{i}. {event.event_type.value:30} [iter: {event.iteration_number}, success: {event.success}]")
+        print(
+            f"{i}. {event.event_type.value:30} [iter: {event.iteration_number}, success: {event.success}]"
+        )
     print()
 
     # Demonstrate analytics

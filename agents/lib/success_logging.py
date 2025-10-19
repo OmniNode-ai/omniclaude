@@ -61,7 +61,10 @@ async def log_success_event(
 
 
 async def log_phase_success(
-    run_id: str, phase: str, duration_ms: float, metadata: Optional[Dict[str, Any]] = None
+    run_id: str,
+    phase: str,
+    duration_ms: float,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log a phase completion success event."""
     return await log_success_event(
@@ -103,7 +106,11 @@ async def log_task_success(
 
 
 async def log_quorum_success(
-    run_id: str, phase: str, confidence: float, decision: str, metadata: Optional[Dict[str, Any]] = None
+    run_id: str,
+    phase: str,
+    confidence: float,
+    decision: str,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Log a quorum validation success event."""
     return await log_success_event(
@@ -122,7 +129,9 @@ async def log_quorum_success(
 
 
 async def mark_golden_state(
-    success_id: str, approval_source: str = "human", metadata: Optional[Dict[str, Any]] = None
+    success_id: str,
+    approval_source: str = "human",
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Mark a success event as a golden state.
@@ -142,7 +151,7 @@ async def mark_golden_state(
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            UPDATE success_events 
+            UPDATE success_events
             SET is_golden = true, approval_source = $2
             WHERE id = $1
             """,

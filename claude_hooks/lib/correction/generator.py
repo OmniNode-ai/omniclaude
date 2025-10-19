@@ -5,9 +5,9 @@ Generates correction suggestions using RAG intelligence from Archon MCP.
 """
 import re
 import sys
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Import from sibling modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -38,7 +38,9 @@ class CorrectionGenerator:
             archon_url: Archon MCP server URL (defaults to env or localhost:8051)
             timeout: Request timeout in seconds
         """
-        self.intelligence_client = ArchonIntelligence(archon_url=archon_url, timeout=timeout)
+        self.intelligence_client = ArchonIntelligence(
+            archon_url=archon_url, timeout=timeout
+        )
         self._cache = {}  # Cache RAG results during session
 
     async def generate_corrections(
@@ -83,7 +85,8 @@ class CorrectionGenerator:
             correction = {
                 "violation": violation,
                 "old_name": violation.name,
-                "new_name": violation.suggestion or self._infer_correction(violation, rag_result),
+                "new_name": violation.suggestion
+                or self._infer_correction(violation, rag_result),
                 "rag_context": rag_result,
                 "confidence": self._calculate_base_confidence(violation, rag_result),
                 "explanation": self._generate_explanation(violation, rag_result),
@@ -96,7 +99,9 @@ class CorrectionGenerator:
 
         return corrections
 
-    def _extract_context(self, content: str, violation: Violation, context_lines: int = 3) -> str:
+    def _extract_context(
+        self, content: str, violation: Violation, context_lines: int = 3
+    ) -> str:
         """
         Extract surrounding context for the violation.
 
@@ -141,16 +146,6 @@ class CorrectionGenerator:
             return self._cache[cache_key]
 
         # Build intelligent query for RAG
-        query = f"""
-        {language} naming conventions for {violation_type}.
-        Violation name: {violation_name}
-
-        Provide:
-        1. Correct naming pattern for {violation_type} in {language}
-        2. Examples of correct usage
-        3. Common mistakes to avoid
-        4. Rationale for the convention
-        """
 
         # Execute RAG query with domain standards context
         task_context = {
@@ -172,7 +167,9 @@ class CorrectionGenerator:
             # Return fallback with error info
             return {"error": str(e), "fallback": True, "results": []}
 
-    def _infer_correction(self, violation: Violation, rag_result: Dict[str, Any]) -> str:
+    def _infer_correction(
+        self, violation: Violation, rag_result: Dict[str, Any]
+    ) -> str:
         """
         Infer correction from RAG results or validator suggestion.
 
@@ -224,7 +221,9 @@ class CorrectionGenerator:
         transform_func = transformations.get(violation.type, lambda x: x)
         return transform_func(name)
 
-    def _generate_explanation(self, violation: Violation, rag_result: Dict[str, Any]) -> str:
+    def _generate_explanation(
+        self, violation: Violation, rag_result: Dict[str, Any]
+    ) -> str:
         """
         Generate human-readable explanation for the correction.
 
@@ -262,7 +261,9 @@ class CorrectionGenerator:
 
         return explanation
 
-    def _calculate_base_confidence(self, violation: Violation, rag_result: Dict[str, Any]) -> float:
+    def _calculate_base_confidence(
+        self, violation: Violation, rag_result: Dict[str, Any]
+    ) -> float:
         """
         Calculate base confidence score for the correction.
 
@@ -332,7 +333,6 @@ class CorrectionGenerator:
 # Example usage and testing
 async def main():
     """Example usage of the CorrectionGenerator."""
-    import asyncio
 
     # Example violations
     violations = [
@@ -389,7 +389,7 @@ SOME_CONSTANT = 42
         print(f"  New name: {correction['new_name']}")
         print(f"  Confidence: {correction['confidence']:.2f}")
         print(f"  Explanation: {correction['explanation']}")
-        print(f"\n  Code context:")
+        print("\n  Code context:")
         for line in correction["code_context"].split("\n"):
             print(f"    {line}")
         print()

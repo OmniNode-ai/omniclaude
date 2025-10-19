@@ -5,11 +5,11 @@ Simple file-based cache with TTL for RAG and AI model results.
 Provides significant performance improvements for repeated queries.
 """
 
-import json
 import hashlib
+import json
 import time
 from pathlib import Path
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 
 class CacheManager:
@@ -172,7 +172,11 @@ class CacheManager:
             except (json.JSONDecodeError, KeyError, OSError):
                 expired_entries += 1
 
-        oldest_age_hours = (current_time - oldest_timestamp) / 3600 if oldest_timestamp is not None else 0
+        oldest_age_hours = (
+            (current_time - oldest_timestamp) / 3600
+            if oldest_timestamp is not None
+            else 0
+        )
 
         return {
             "total_entries": total_entries,
@@ -233,7 +237,7 @@ if __name__ == "__main__":
 
     # Get statistics
     stats = cache.get_stats()
-    print(f"\nCache Statistics:")
+    print("\nCache Statistics:")
     print(f"  Total entries: {stats['total_entries']}")
     print(f"  Expired entries: {stats['expired_entries']}")
     print(f"  Total size: {stats['total_size_mb']:.2f} MB")

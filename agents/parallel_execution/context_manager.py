@@ -13,16 +13,21 @@ Reduces token usage by 60-80% and eliminates duplicate context gathering.
 """
 
 import asyncio
+import sys
 import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from mcp_client import ArchonMCPClient
 
 # Import context optimizer for intelligent context selection
 try:
-    from agents.lib.context_optimizer import learn_from_execution, optimize_context_for_task, predict_context_needs
+    from agents.lib.context_optimizer import (
+        learn_from_execution,
+        optimize_context_for_task,
+        predict_context_needs,
+    )
 
     CONTEXT_OPTIMIZER_AVAILABLE = True
 except ImportError:
@@ -94,9 +99,14 @@ class ContextManager:
         if enable_optimization and CONTEXT_OPTIMIZER_AVAILABLE:
             try:
                 predicted_queries = await predict_context_needs(user_prompt)
-                print(f"[ContextManager] Predicted context needs: {predicted_queries}", file=sys.stderr)
+                print(
+                    f"[ContextManager] Predicted context needs: {predicted_queries}",
+                    file=sys.stderr,
+                )
             except Exception as e:
-                print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
+                print(
+                    f"[ContextManager] Context prediction failed: {e}", file=sys.stderr
+                )
 
         # Merge predicted queries with provided queries
         if predicted_queries:
@@ -108,7 +118,10 @@ class ContextManager:
         # 1. RAG Queries for domain patterns and code examples (PARALLEL)
         if rag_queries:
             # Create parallel tasks for RAG queries
-            rag_tasks = [self._execute_rag_query(query, max_rag_results, "general") for query in rag_queries]
+            rag_tasks = [
+                self._execute_rag_query(query, max_rag_results, "general")
+                for query in rag_queries
+            ]
 
             # Execute all RAG queries in parallel
             rag_results = await asyncio.gather(*rag_tasks, return_exceptions=True)
@@ -137,7 +150,9 @@ class ContextManager:
         parallel_tasks = []
 
         # Default domain pattern query
-        parallel_tasks.append(self._execute_default_rag_query(user_prompt, max_rag_results))
+        parallel_tasks.append(
+            self._execute_default_rag_query(user_prompt, max_rag_results)
+        )
 
         # File system scanning (if workspace provided)
         if workspace_path:
@@ -199,7 +214,9 @@ class ContextManager:
         self.global_context = context_items
 
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[ContextManager] Gathered {len(context_items)} context items in {elapsed_ms:.0f}ms")
+        print(
+            f"[ContextManager] Gathered {len(context_items)} context items in {elapsed_ms:.0f}ms"
+        )
 
         return context_items
 
@@ -218,7 +235,9 @@ class ContextManager:
             print(f"[ContextManager] Context prediction failed: {e}", file=sys.stderr)
             return []
 
-    def filter_context(self, context_requirements: List[str], max_tokens: int = 5000) -> Dict[str, Any]:
+    def filter_context(
+        self, context_requirements: List[str], max_tokens: int = 5000
+    ) -> Dict[str, Any]:
         """
         Filter global context to extract only required items for a specific task.
 
@@ -246,7 +265,9 @@ class ContextManager:
             for item in matching_items:
                 # Check token budget
                 if total_tokens + item.tokens_estimate > max_tokens:
-                    print(f"[ContextManager] Token budget exceeded, skipping {item.key}")
+                    print(
+                        f"[ContextManager] Token budget exceeded, skipping {item.key}"
+                    )
                     break
 
                 # Add to filtered context
@@ -282,12 +303,18 @@ class ContextManager:
             key=key,
             content=content,
             tokens_estimate=len(content) // 4,  # Rough estimate: 4 chars per token
-            metadata={"file_path": file_path, "size_bytes": len(content), "timestamp": time.time()},
+            metadata={
+                "file_path": file_path,
+                "size_bytes": len(content),
+                "timestamp": time.time(),
+            },
         )
 
         return key
 
-    def add_pattern_context(self, pattern_name: str, pattern_data: Dict[str, Any]) -> str:
+    def add_pattern_context(
+        self, pattern_name: str, pattern_data: Dict[str, Any]
+    ) -> str:
         """
         Add a code pattern to the global context.
 
@@ -384,7 +411,9 @@ class ContextManager:
         Returns:
             Summary statistics
         """
-        total_tokens = sum(item.tokens_estimate for item in self.global_context.values())
+        total_tokens = sum(
+            item.tokens_estimate for item in self.global_context.values()
+        )
 
         by_type = {}
         for item in self.global_context.values():
@@ -397,7 +426,9 @@ class ContextManager:
             "keys": list(self.global_context.keys()),
         }
 
-    async def _execute_rag_query(self, query: str, match_count: int, context: str) -> Dict[str, Any]:
+    async def _execute_rag_query(
+        self, query: str, match_count: int, context: str
+    ) -> Dict[str, Any]:
         """
         Execute a single RAG query with error handling.
 
@@ -410,12 +441,16 @@ class ContextManager:
             RAG result dictionary
         """
         try:
-            return await self.mcp_client.perform_rag_query(query=query, match_count=match_count, context=context)
+            return await self.mcp_client.perform_rag_query(
+                query=query, match_count=match_count, context=context
+            )
         except Exception as e:
             # Re-raise the exception to be handled by the caller
             raise e
 
-    async def _execute_default_rag_query(self, user_prompt: str, max_rag_results: int) -> Dict[str, Any]:
+    async def _execute_default_rag_query(
+        self, user_prompt: str, max_rag_results: int
+    ) -> Dict[str, Any]:
         """
         Execute the default domain pattern query based on user prompt.
 
@@ -490,7 +525,9 @@ class ContextManager:
         try:
             workspace = Path(workspace_path)
             if not workspace.exists() or not workspace.is_dir():
-                raise ValueError(f"Workspace path does not exist or is not a directory: {workspace_path}")
+                raise ValueError(
+                    f"Workspace path does not exist or is not a directory: {workspace_path}"
+                )
 
             # Scan for relevant Python files
             python_files = list(workspace.rglob("*.py"))
@@ -498,11 +535,16 @@ class ContextManager:
             return {
                 "content": {
                     "workspace": str(workspace),
-                    "python_files": [str(f.relative_to(workspace)) for f in python_files[:50]],
+                    "python_files": [
+                        str(f.relative_to(workspace)) for f in python_files[:50]
+                    ],
                     "total_files": len(python_files),
                 },
                 "tokens_estimate": len(python_files) * 10,  # Rough estimate
-                "metadata": {"workspace_path": str(workspace), "file_count": len(python_files)},
+                "metadata": {
+                    "workspace_path": str(workspace),
+                    "file_count": len(python_files),
+                },
             }
         except Exception as e:
             raise e

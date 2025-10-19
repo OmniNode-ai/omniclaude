@@ -24,11 +24,11 @@ Design Philosophy:
 """
 
 import json
-import sys
-import time
 import os
 import subprocess
-from typing import Dict, Any
+import sys
+import time
+from typing import Any, Dict
 
 import requests
 
@@ -42,9 +42,9 @@ except ImportError:
 
 # Import pattern tracking components
 try:
-    from pattern_tracker import PatternTracker, get_tracker, PatternTrackerConfig
-    from health_checks import Phase4HealthChecker, get_health_checker
     from error_handling import PatternTrackingLogger, get_default_logger
+    from health_checks import Phase4HealthChecker, get_health_checker
+    from pattern_tracker import PatternTracker, PatternTrackerConfig, get_tracker
 
     HAS_PATTERN_TRACKING = True
 except ImportError:
@@ -60,42 +60,87 @@ def check_running_services() -> Dict[str, Any]:
     # Check intelligence service (Phase 4)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8053/health"], capture_output=True, text=True, timeout=5
+            ["curl", "-s", "http://localhost:8053/health"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             try:
                 health_data = json.loads(result.stdout)
-                services["intelligence_service"] = {"running": True, "details": health_data, "status": "healthy"}
+                services["intelligence_service"] = {
+                    "running": True,
+                    "details": health_data,
+                    "status": "healthy",
+                }
             except:
-                services["intelligence_service"] = {"running": True, "details": result.stdout, "status": "unknown"}
+                services["intelligence_service"] = {
+                    "running": True,
+                    "details": result.stdout,
+                    "status": "unknown",
+                }
         else:
-            services["intelligence_service"] = {"running": False, "error": result.stderr, "status": "stopped"}
+            services["intelligence_service"] = {
+                "running": False,
+                "error": result.stderr,
+                "status": "stopped",
+            }
     except subprocess.TimeoutExpired:
-        services["intelligence_service"] = {"running": False, "error": "Timeout", "status": "timeout"}
+        services["intelligence_service"] = {
+            "running": False,
+            "error": "Timeout",
+            "status": "timeout",
+        }
     except Exception as e:
-        services["intelligence_service"] = {"running": False, "error": str(e), "status": "error"}
+        services["intelligence_service"] = {
+            "running": False,
+            "error": str(e),
+            "status": "error",
+        }
 
     # Check main server (Port 8181)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8181/health"], capture_output=True, text=True, timeout=5
+            ["curl", "-s", "http://localhost:8181/health"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
-            services["main_server"] = {"running": True, "details": result.stdout, "status": "healthy"}
+            services["main_server"] = {
+                "running": True,
+                "details": result.stdout,
+                "status": "healthy",
+            }
         else:
-            services["main_server"] = {"running": False, "error": result.stderr, "status": "stopped"}
+            services["main_server"] = {
+                "running": False,
+                "error": result.stderr,
+                "status": "stopped",
+            }
     except Exception as e:
         services["main_server"] = {"running": False, "error": str(e), "status": "error"}
 
     # Check MCP server (Port 8051)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8051/health"], capture_output=True, text=True, timeout=5
+            ["curl", "-s", "http://localhost:8051/health"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
-            services["mcp_server"] = {"running": True, "details": result.stdout, "status": "healthy"}
+            services["mcp_server"] = {
+                "running": True,
+                "details": result.stdout,
+                "status": "healthy",
+            }
         else:
-            services["mcp_server"] = {"running": False, "error": result.stderr, "status": "stopped"}
+            services["mcp_server"] = {
+                "running": False,
+                "error": result.stderr,
+                "status": "stopped",
+            }
     except Exception as e:
         services["mcp_server"] = {"running": False, "error": str(e), "status": "error"}
 
@@ -109,11 +154,21 @@ def check_running_services() -> Dict[str, Any]:
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
-            docker_containers = [json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()]
-            postgres_containers = [c for c in docker_containers if "postgres" in c.get("Names", "").lower()]
+            docker_containers = [
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
+            ]
+            postgres_containers = [
+                c for c in docker_containers if "postgres" in c.get("Names", "").lower()
+            ]
 
             if postgres_containers:
-                services["database"] = {"running": True, "containers": len(postgres_containers), "status": "healthy"}
+                services["database"] = {
+                    "running": True,
+                    "containers": len(postgres_containers),
+                    "status": "healthy",
+                }
             else:
                 services["database"] = {
                     "running": False,
@@ -138,13 +193,27 @@ def check_running_services() -> Dict[str, Any]:
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
-            docker_containers = [json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()]
-            memgraph_containers = [c for c in docker_containers if "memgraph" in c.get("Names", "").lower()]
+            docker_containers = [
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
+            ]
+            memgraph_containers = [
+                c for c in docker_containers if "memgraph" in c.get("Names", "").lower()
+            ]
 
             if memgraph_containers:
-                services["memgraph"] = {"running": True, "containers": len(memgraph_containers), "status": "healthy"}
+                services["memgraph"] = {
+                    "running": True,
+                    "containers": len(memgraph_containers),
+                    "status": "healthy",
+                }
             else:
-                services["memgraph"] = {"running": False, "error": "No Memgraph containers found", "status": "stopped"}
+                services["memgraph"] = {
+                    "running": False,
+                    "error": "No Memgraph containers found",
+                    "status": "stopped",
+                }
         else:
             services["memgraph"] = {
                 "running": False,
@@ -157,16 +226,33 @@ def check_running_services() -> Dict[str, Any]:
     # Check Qdrant (if available)
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=qdrant", "--format", "json"], capture_output=True, text=True, timeout=10
+            ["docker", "ps", "--filter", "name=qdrant", "--format", "json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
-            docker_containers = [json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()]
-            qdrant_containers = [c for c in docker_containers if "qdrant" in c.get("Names", "").lower()]
+            docker_containers = [
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
+            ]
+            qdrant_containers = [
+                c for c in docker_containers if "qdrant" in c.get("Names", "").lower()
+            ]
 
             if qdrant_containers:
-                services["qdrant"] = {"running": True, "containers": len(qdrant_containers), "status": "healthy"}
+                services["qdrant"] = {
+                    "running": True,
+                    "containers": len(qdrant_containers),
+                    "status": "healthy",
+                }
             else:
-                services["qdrant"] = {"running": False, "error": "No Qdrant containers found", "status": "stopped"}
+                services["qdrant"] = {
+                    "running": False,
+                    "error": "No Qdrant containers found",
+                    "status": "stopped",
+                }
         else:
             services["qdrant"] = {
                 "running": False,
@@ -185,7 +271,10 @@ def check_network_connectivity() -> Dict[str, Any]:
         ("Intelligence Service", "http://localhost:8053/health"),
         ("Main Server", "http://localhost:8181/health"),
         ("MCP Server", "http://localhost:8051/health"),
-        ("Pattern Lineage API", "http://localhost:8053/api/pattern-traceability/health"),
+        (
+            "Pattern Lineage API",
+            "http://localhost:8053/api/pattern-traceability/health",
+        ),
     ]
 
     results = {}
@@ -205,7 +294,11 @@ def check_network_connectivity() -> Dict[str, Any]:
                 "success": response.status_code == 200,
             }
         except requests.exceptions.Timeout:
-            results[name] = {"status": "timeout", "response_time_ms": 5000, "success": False}
+            results[name] = {
+                "status": "timeout",
+                "response_time_ms": 5000,
+                "success": False,
+            }
         except Exception as e:
             results[name] = {"status": "error", "error": str(e), "success": False}
 
@@ -216,7 +309,12 @@ def check_pattern_tracking_files() -> Dict[str, Any]:
     """Check if pattern tracking files exist and are accessible"""
     hooks_dir = "/Users/jonah/.claude/hooks"
 
-    required_files = ["pattern_tracker.py", "health_checks.py", "error_handling.py", "debug_utils.py"]
+    required_files = [
+        "pattern_tracker.py",
+        "health_checks.py",
+        "error_handling.py",
+        "debug_utils.py",
+    ]
 
     file_status = {}
 
@@ -244,7 +342,11 @@ def check_python_environment() -> Dict[str, Any]:
     """Check Python environment and required packages"""
     print("🐍 Checking Python environment...", file=sys.stderr)
 
-    env_info = {"python_version": sys.version, "python_path": sys.executable, "packages": {}}
+    env_info = {
+        "python_version": sys.version,
+        "python_path": sys.executable,
+        "packages": {},
+    }
 
     required_packages = ["requests", "json", "subprocess", "logging"]
 
@@ -253,21 +355,36 @@ def check_python_environment() -> Dict[str, Any]:
             if package == "json":
                 import json
 
-                env_info["packages"][package] = {"available": True, "version": "builtin"}
+                env_info["packages"][package] = {
+                    "available": True,
+                    "version": "builtin",
+                }
             elif package == "subprocess":
                 import subprocess
 
-                env_info["packages"][package] = {"available": True, "version": "builtin"}
+                env_info["packages"][package] = {
+                    "available": True,
+                    "version": "builtin",
+                }
             elif package == "logging":
                 import logging
 
-                env_info["packages"][package] = {"available": True, "version": "builtin"}
+                env_info["packages"][package] = {
+                    "available": True,
+                    "version": "builtin",
+                }
             elif package == "requests":
                 import requests
 
-                env_info["packages"][package] = {"available": True, "version": requests.__version__}
+                env_info["packages"][package] = {
+                    "available": True,
+                    "version": requests.__version__,
+                }
         except ImportError:
-            env_info["packages"][package] = {"available": False, "error": "Not installed"}
+            env_info["packages"][package] = {
+                "available": False,
+                "error": "Not installed",
+            }
 
     return env_info
 
@@ -288,7 +405,10 @@ def print_debug_status():
             status_emoji = "❌"
             status_text = f"Not Running ({service_info.get('status', 'unknown')})"
 
-        print(f"  {status_emoji} {service_name.replace('_', ' ').title()}: {status_text}", file=sys.stderr)
+        print(
+            f"  {status_emoji} {service_name.replace('_', ' ').title()}: {status_text}",
+            file=sys.stderr,
+        )
 
         if not service_info.get("running", False) and "error" in service_info:
             print(f"    Error: {service_info['error']}", file=sys.stderr)
@@ -300,7 +420,10 @@ def print_debug_status():
         if info.get("success", False):
             status_emoji = "✅"
             response_time = info.get("response_time_ms", 0)
-            print(f"  {status_emoji} {endpoint}: Connected ({response_time}ms)", file=sys.stderr)
+            print(
+                f"  {status_emoji} {endpoint}: Connected ({response_time}ms)",
+                file=sys.stderr,
+            )
         else:
             status_emoji = "❌"
             status = info.get("status", "unknown")
@@ -315,7 +438,10 @@ def print_debug_status():
             size = info.get("size_bytes", 0)
             readable = "✅" if info.get("readable", False) else "❌"
             executable = "✅" if info.get("executable", False) else "❌"
-            print(f"  {status_emoji} {filename}: {size} bytes (R:{readable} X:{executable})", file=sys.stderr)
+            print(
+                f"  {status_emoji} {filename}: {size} bytes (R:{readable} X:{executable})",
+                file=sys.stderr,
+            )
         else:
             status_emoji = "❌"
             print(f"  {status_emoji} {filename}: Not found", file=sys.stderr)
@@ -355,11 +481,14 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
             "message": "Health checks imported successfully",
         }
     except Exception as e:
-        test_results["tests"]["import_health_checks"] = {"status": "error", "error": str(e)}
+        test_results["tests"]["import_health_checks"] = {
+            "status": "error",
+            "error": str(e),
+        }
 
     # Test 2: Import error handling
     try:
-        from error_handling import PatternTrackingLogger, PatternTrackingErrorHandler
+        from error_handling import PatternTrackingErrorHandler, PatternTrackingLogger
 
         logger = PatternTrackingLogger()
         PatternTrackingErrorHandler(logger)
@@ -368,7 +497,10 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
             "message": "Error handling imported successfully",
         }
     except Exception as e:
-        test_results["tests"]["import_error_handling"] = {"status": "error", "error": str(e)}
+        test_results["tests"]["import_error_handling"] = {
+            "status": "error",
+            "error": str(e),
+        }
 
     # Test 3: Run health check
     try:
@@ -378,12 +510,19 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
         ):
             health_results = checker.run_comprehensive_health_check()
             test_results["tests"]["health_check"] = {
-                "status": "success" if health_results["overall_status"] == "healthy" else "partial",
+                "status": (
+                    "success"
+                    if health_results["overall_status"] == "healthy"
+                    else "partial"
+                ),
                 "overall_status": health_results["overall_status"],
                 "summary": health_results["summary"],
             }
         else:
-            test_results["tests"]["health_check"] = {"status": "skipped", "reason": "Health checks not available"}
+            test_results["tests"]["health_check"] = {
+                "status": "skipped",
+                "reason": "Health checks not available",
+            }
     except Exception as e:
         test_results["tests"]["health_check"] = {"status": "error", "error": str(e)}
 
@@ -399,7 +538,9 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
         }
 
         response = requests.post(
-            "http://localhost:8053/api/pattern-traceability/lineage/track", json=test_payload, timeout=5
+            "http://localhost:8053/api/pattern-traceability/lineage/track",
+            json=test_payload,
+            timeout=5,
         )
 
         if response.status_code in [200, 201]:
@@ -420,8 +561,12 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
 
     # Summary
     total_tests = len(test_results["tests"])
-    successful_tests = len([t for t in test_results["tests"].values() if t["status"] == "success"])
-    failed_tests = len([t for t in test_results["tests"].values() if t["status"] == "error"])
+    successful_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "success"]
+    )
+    failed_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "error"]
+    )
 
     test_results["summary"] = {
         "total_tests": total_tests,
@@ -431,8 +576,14 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
     }
 
     print("\n📊 TEST SUMMARY:", file=sys.stderr)
-    print(f"  Total: {total_tests}, Successful: {successful_tests}, Failed: {failed_tests}", file=sys.stderr)
-    print(f"  Overall Status: {test_results['summary']['overall_status'].upper()}", file=sys.stderr)
+    print(
+        f"  Total: {total_tests}, Successful: {successful_tests}, Failed: {failed_tests}",
+        file=sys.stderr,
+    )
+    print(
+        f"  Overall Status: {test_results['summary']['overall_status'].upper()}",
+        file=sys.stderr,
+    )
 
     return test_results
 

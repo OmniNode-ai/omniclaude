@@ -26,7 +26,7 @@ ticket_organization:
     location: "{node}/work_tickets/"
     subdirectories:
       - "active/"      # Currently being worked
-      - "completed/"   # Finished work  
+      - "completed/"   # Finished work
       - "blocked/"     # Waiting on dependencies
       - "backlog/"     # Planned but not started
 
@@ -35,7 +35,7 @@ ticket_organization:
     subdirectories:
       - "active/"      # Currently being worked
       - "completed/"   # Finished work
-      - "blocked/"     # Waiting on dependencies  
+      - "blocked/"     # Waiting on dependencies
       - "backlog/"     # Planned but not started
       - "epics/"       # Epic-level organization
       - "cross_cutting/" # NEW: Cross-epic dependencies and blockers

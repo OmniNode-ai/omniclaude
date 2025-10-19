@@ -134,7 +134,9 @@ class BatchProcessor:
                     batch_size=batch_size,
                 )
 
-            self.logger.debug(f"Batch processed: {batch_size} events in {duration_ms:.0f}ms")
+            self.logger.debug(
+                f"Batch processed: {batch_size} events in {duration_ms:.0f}ms"
+            )
 
             # Clear batch
             self.batch.clear()

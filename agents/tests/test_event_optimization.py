@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 7 Stream 6: Event Processing Optimization Tests
+Agent Framework: Event Processing Optimization Tests
 
 Performance target: p95 latency ≤200ms (from ~500ms baseline)
 
@@ -23,7 +23,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 from agents.lib.batch_processor import BatchConfig, BatchProcessor
-from agents.lib.codegen_events import CodegenAnalysisRequest, BaseEvent
+from agents.lib.codegen_events import BaseEvent, CodegenAnalysisRequest
 from agents.lib.event_optimizer import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -31,7 +31,6 @@ from agents.lib.event_optimizer import (
     EventOptimizer,
     OptimizerConfig,
 )
-
 
 # ============================================================================
 # Batch Processor Tests
@@ -191,7 +190,9 @@ async def test_circuit_breaker_rejects_when_open():
 @pytest.mark.asyncio
 async def test_circuit_breaker_half_open_recovery():
     """Test circuit breaker transitions to half-open and recovers"""
-    config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout_ms=100, success_threshold=2)
+    config = CircuitBreakerConfig(
+        failure_threshold=2, recovery_timeout_ms=100, success_threshold=2
+    )
     cb = CircuitBreaker(config)
 
     async def failing_func():
@@ -224,7 +225,9 @@ async def test_circuit_breaker_half_open_recovery():
 @pytest.mark.asyncio
 async def test_circuit_breaker_reopens_on_half_open_failure():
     """Test circuit breaker reopens on failure in half-open state"""
-    config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout_ms=100, success_threshold=2)
+    config = CircuitBreakerConfig(
+        failure_threshold=2, recovery_timeout_ms=100, success_threshold=2
+    )
     cb = CircuitBreaker(config)
 
     async def failing_func():
@@ -305,8 +308,12 @@ async def test_event_optimizer_single_publish(monkeypatch):
     config = OptimizerConfig(enable_metrics=False)
     optimizer = EventOptimizer("localhost:9092", config=config)
 
-    monkeypatch.setattr(optimizer, "_get_producer", mock_get_producer.__get__(optimizer))
-    monkeypatch.setattr(optimizer, "_return_producer", mock_return_producer.__get__(optimizer))
+    monkeypatch.setattr(
+        optimizer, "_get_producer", mock_get_producer.__get__(optimizer)
+    )
+    monkeypatch.setattr(
+        optimizer, "_return_producer", mock_return_producer.__get__(optimizer)
+    )
 
     # Publish event
     event = CodegenAnalysisRequest()
@@ -337,8 +344,12 @@ async def test_event_optimizer_batch_publish(monkeypatch):
     config = OptimizerConfig(enable_metrics=False)
     optimizer = EventOptimizer("localhost:9092", config=config)
 
-    monkeypatch.setattr(optimizer, "_get_producer", mock_get_producer.__get__(optimizer))
-    monkeypatch.setattr(optimizer, "_return_producer", mock_return_producer.__get__(optimizer))
+    monkeypatch.setattr(
+        optimizer, "_get_producer", mock_get_producer.__get__(optimizer)
+    )
+    monkeypatch.setattr(
+        optimizer, "_return_producer", mock_return_producer.__get__(optimizer)
+    )
 
     # Create batch of events
     events = []
@@ -360,7 +371,9 @@ async def test_event_optimizer_circuit_breaker_integration(monkeypatch):
     """Test event optimizer uses circuit breaker"""
     config = OptimizerConfig(enable_metrics=False)
     circuit_config = CircuitBreakerConfig(failure_threshold=2)
-    optimizer = EventOptimizer("localhost:9092", config=config, circuit_config=circuit_config)
+    optimizer = EventOptimizer(
+        "localhost:9092", config=config, circuit_config=circuit_config
+    )
 
     # Mock publisher to fail
     async def failing_publish(event):
@@ -451,10 +464,16 @@ async def test_event_optimizer_throughput(monkeypatch):
 
     config = OptimizerConfig(enable_metrics=False)
     batch_config = BatchConfig(max_batch_size=10)
-    optimizer = EventOptimizer("localhost:9092", config=config, batch_config=batch_config)
+    optimizer = EventOptimizer(
+        "localhost:9092", config=config, batch_config=batch_config
+    )
 
-    monkeypatch.setattr(optimizer, "_get_producer", mock_get_producer.__get__(optimizer))
-    monkeypatch.setattr(optimizer, "_return_producer", mock_return_producer.__get__(optimizer))
+    monkeypatch.setattr(
+        optimizer, "_get_producer", mock_get_producer.__get__(optimizer)
+    )
+    monkeypatch.setattr(
+        optimizer, "_return_producer", mock_return_producer.__get__(optimizer)
+    )
 
     # Create events
     events = []
@@ -499,8 +518,12 @@ async def test_single_vs_batch_comparison(monkeypatch):
     config = OptimizerConfig(enable_metrics=False)
     optimizer = EventOptimizer("localhost:9092", config=config)
 
-    monkeypatch.setattr(optimizer, "_get_producer", mock_get_producer.__get__(optimizer))
-    monkeypatch.setattr(optimizer, "_return_producer", mock_return_producer.__get__(optimizer))
+    monkeypatch.setattr(
+        optimizer, "_get_producer", mock_get_producer.__get__(optimizer)
+    )
+    monkeypatch.setattr(
+        optimizer, "_return_producer", mock_return_producer.__get__(optimizer)
+    )
 
     # Create test events
     events = []
@@ -523,7 +546,9 @@ async def test_single_vs_batch_comparison(monkeypatch):
     await optimizer.publish_batch(events)
     batch_duration_ms = (time.time() - start) * 1000
 
-    improvement_pct = ((single_duration_ms - batch_duration_ms) / single_duration_ms) * 100
+    improvement_pct = (
+        (single_duration_ms - batch_duration_ms) / single_duration_ms
+    ) * 100
 
     print(f"\nSingle publish: {single_duration_ms:.2f}ms")
     print(f"Batch publish: {batch_duration_ms:.2f}ms")

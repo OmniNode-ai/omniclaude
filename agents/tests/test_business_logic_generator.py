@@ -6,29 +6,29 @@ Tests stub generation for all node types, method signatures from contracts,
 mixin integration, error handling patterns, and ONEX compliance.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+from omnibase_core.errors import OnexError
+
 from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_ANALYSIS_RESULT,
     COMPUTE_ANALYSIS_RESULT,
-    REDUCER_ANALYSIS_RESULT,
-    ORCHESTRATOR_ANALYSIS_RESULT,
+    EFFECT_ANALYSIS_RESULT,
     NODE_TYPE_FIXTURES,
+    ORCHESTRATOR_ANALYSIS_RESULT,
+    REDUCER_ANALYSIS_RESULT,
     SAMPLE_CONTRACT_WITH_CRUD,
     SAMPLE_CONTRACT_WITH_TRANSFORMATION,
 )
 from agents.tests.utils.generation_test_helpers import (
-    parse_generated_python,
     check_type_annotations,
     extract_class_definitions,
-    validate_onex_naming,
+    parse_generated_python,
     validate_class_naming,
+    validate_onex_naming,
 )
-from omnibase_core.errors import OnexError
-
 
 # ============================================================================
 # FIXTURES
@@ -102,7 +102,9 @@ class TestEffectNodeGeneration:
         main_class = classes[0]
 
         # Verify execute_effect method exists
-        assert "execute_effect" in main_class["methods"], "execute_effect method not found in EFFECT node"
+        assert (
+            "execute_effect" in main_class["methods"]
+        ), "execute_effect method not found in EFFECT node"
 
     @pytest.mark.asyncio
     async def test_effect_node_inherits_correct_base(self, business_logic_generator):
@@ -122,10 +124,14 @@ class TestEffectNodeGeneration:
         main_class = classes[0]
 
         # Verify NodeEffect is in bases
-        assert "NodeEffect" in main_class["bases"], "EFFECT node must inherit from NodeEffect"
+        assert (
+            "NodeEffect" in main_class["bases"]
+        ), "EFFECT node must inherit from NodeEffect"
 
     @pytest.mark.asyncio
-    async def test_effect_node_method_signatures_from_contract(self, business_logic_generator):
+    async def test_effect_node_method_signatures_from_contract(
+        self, business_logic_generator
+    ):
         """Test method signatures are generated from contract capabilities"""
         result = await business_logic_generator.generate_node_stub(
             node_type="EFFECT",
@@ -142,7 +148,9 @@ class TestEffectNodeGeneration:
         # Verify methods for each capability
         expected_methods = ["create_user", "get_user", "update_user", "delete_user"]
         for method_name in expected_methods:
-            assert method_name in main_class["methods"], f"Method {method_name} not generated from contract capability"
+            assert (
+                method_name in main_class["methods"]
+            ), f"Method {method_name} not generated from contract capability"
 
 
 # ============================================================================
@@ -187,7 +195,9 @@ class TestComputeNodeGeneration:
         classes = extract_class_definitions(tree)
         main_class = classes[0]
 
-        assert "execute_compute" in main_class["methods"], "execute_compute method not found in COMPUTE node"
+        assert (
+            "execute_compute" in main_class["methods"]
+        ), "execute_compute method not found in COMPUTE node"
 
     @pytest.mark.asyncio
     async def test_compute_node_is_pure(self, business_logic_generator):
@@ -247,7 +257,9 @@ class TestReducerNodeGeneration:
         classes = extract_class_definitions(tree)
         main_class = classes[0]
 
-        assert "execute_reduction" in main_class["methods"], "execute_reduction method not found in REDUCER node"
+        assert (
+            "execute_reduction" in main_class["methods"]
+        ), "execute_reduction method not found in REDUCER node"
 
 
 # ============================================================================
@@ -333,7 +345,10 @@ class TestMixinIntegration:
         """Test that mixins are in class inheritance"""
         contract_with_mixins = {
             **SAMPLE_CONTRACT_WITH_CRUD,
-            "subcontracts": [{"mixin": "MixinEventBus", "config": {}}, {"mixin": "MixinCaching", "config": {}}],
+            "subcontracts": [
+                {"mixin": "MixinEventBus", "config": {}},
+                {"mixin": "MixinCaching", "config": {}},
+            ],
         }
 
         result = await business_logic_generator.generate_node_stub(
@@ -388,7 +403,9 @@ class TestErrorHandlingPatterns:
         )
 
         code = result["code"]
-        assert "from omnibase_core.errors import OnexError" in code, "OnexError not imported"
+        assert (
+            "from omnibase_core.errors import OnexError" in code
+        ), "OnexError not imported"
         assert "raise OnexError" in code, "OnexError not raised in exception handling"
 
 
@@ -420,10 +437,14 @@ class TestOnexNamingCompliance:
             analysis_result=NODE_TYPE_FIXTURES[node_type]["analysis"],
         )
 
-        assert result["class_name"].endswith(suffix), f"{node_type} node must end with {suffix}"
+        assert result["class_name"].endswith(
+            suffix
+        ), f"{node_type} node must end with {suffix}"
 
     @pytest.mark.asyncio
-    async def test_file_name_convention(self, business_logic_generator, temp_output_dir):
+    async def test_file_name_convention(
+        self, business_logic_generator, temp_output_dir
+    ):
         """Test that generated file names follow ONEX conventions"""
         result = await business_logic_generator.generate_node_file(
             node_type="EFFECT",
@@ -497,7 +518,9 @@ class TestTypeHintGeneration:
                 violations.append(f"Line {i+1}: {line.strip()}")
 
         if violations:
-            pytest.fail("Bare Any type found in type annotations:\n" + "\n".join(violations))
+            pytest.fail(
+                "Bare Any type found in type annotations:\n" + "\n".join(violations)
+            )
 
 
 # ============================================================================

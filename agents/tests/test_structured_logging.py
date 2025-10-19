@@ -16,31 +16,22 @@ Test Coverage:
 """
 
 import json
-import pytest
 import logging
 import time
-from uuid import uuid4
-from pathlib import Path
 from io import StringIO
+from pathlib import Path
+from uuid import uuid4
 
+import pytest
+from lib.log_context import LogContext, async_log_context, log_context, with_log_context
+from lib.log_rotation import LogRotationConfig, configure_file_rotation, get_log_stats
 from lib.structured_logger import (
     StructuredLogger,
+    get_correlation_id,
     get_logger,
+    get_session_id,
     set_global_correlation_id,
     set_global_session_id,
-    get_correlation_id,
-    get_session_id,
-)
-from lib.log_context import (
-    log_context,
-    async_log_context,
-    with_log_context,
-    LogContext,
-)
-from lib.log_rotation import (
-    LogRotationConfig,
-    configure_file_rotation,
-    get_log_stats,
 )
 
 
@@ -189,7 +180,11 @@ class TestContextPropagation:
         correlation_id = uuid4()
         session_id = uuid4()
 
-        async with async_log_context(correlation_id=correlation_id, session_id=session_id, component="test-component"):
+        async with async_log_context(
+            correlation_id=correlation_id,
+            session_id=session_id,
+            component="test-component",
+        ):
             assert get_correlation_id() == str(correlation_id)
             assert get_session_id() == str(session_id)
 
@@ -256,7 +251,9 @@ class TestLogRotation:
 
     def test_rotation_config_creation(self):
         """Test LogRotationConfig creation"""
-        config = LogRotationConfig(log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
+        config = LogRotationConfig(
+            log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5
+        )
         assert config.log_dir == str(self.test_log_dir)
         assert config.max_bytes == 1024 * 1024
         assert config.backup_count == 5
@@ -286,7 +283,12 @@ class TestLogRotation:
     def test_configure_file_rotation(self):
         """Test file rotation configuration"""
         logger = get_logger("test_rotation", component="test")
-        configure_file_rotation(logger, log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
+        configure_file_rotation(
+            logger,
+            log_dir=str(self.test_log_dir),
+            max_bytes=1024 * 1024,
+            backup_count=5,
+        )
 
         # Should have file handler added
         assert len(logger.logger.handlers) > 0
@@ -369,14 +371,21 @@ class TestIntegration:
         logger = get_logger("test_integration", component="agent-researcher")
 
         # Configure rotation
-        configure_file_rotation(logger, log_dir=str(self.test_log_dir), max_bytes=1024 * 1024, backup_count=5)
+        configure_file_rotation(
+            logger,
+            log_dir=str(self.test_log_dir),
+            max_bytes=1024 * 1024,
+            backup_count=5,
+        )
 
         # Set up context
         correlation_id = uuid4()
         session_id = uuid4()
 
         async with async_log_context(
-            correlation_id=correlation_id, session_id=session_id, component="agent-researcher"
+            correlation_id=correlation_id,
+            session_id=session_id,
+            component="agent-researcher",
         ):
             # Log various events
             logger.info("Research task started", metadata={"query": "test query"})

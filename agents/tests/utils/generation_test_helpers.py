@@ -7,10 +7,10 @@ Helper functions for parsing, validating, and comparing generated code.
 
 import ast
 import re
-import yaml
-from typing import Dict, Any, List, Optional, Tuple
 from difflib import unified_diff
+from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
 
 # ============================================================================
 # YAML PARSING AND VALIDATION
@@ -52,7 +52,13 @@ def validate_contract_schema(contract: Dict[str, Any]) -> Tuple[bool, List[str]]
     errors = []
 
     # Required top-level fields
-    required_fields = ["version", "node_type", "domain", "microservice_name", "capabilities"]
+    required_fields = [
+        "version",
+        "node_type",
+        "domain",
+        "microservice_name",
+        "capabilities",
+    ]
     for field in required_fields:
         if field not in contract:
             errors.append(f"Missing required field: {field}")
@@ -89,7 +95,9 @@ def validate_contract_schema(contract: Dict[str, Any]) -> Tuple[bool, List[str]]
         else:
             for mixin in contract["mixins"]:
                 if not mixin.startswith("Mixin"):
-                    errors.append(f"Invalid mixin name: {mixin} (should start with 'Mixin')")
+                    errors.append(
+                        f"Invalid mixin name: {mixin} (should start with 'Mixin')"
+                    )
 
     return len(errors) == 0, errors
 
@@ -134,12 +142,16 @@ def check_type_annotations(tree: ast.Module) -> Tuple[bool, List[str]]:
         if isinstance(node, ast.FunctionDef):
             # Check return annotation
             if node.returns is None and node.name != "__init__":
-                violations.append(f"Function '{node.name}' missing return type annotation")
+                violations.append(
+                    f"Function '{node.name}' missing return type annotation"
+                )
 
             # Check parameter annotations
             for arg in node.args.args:
                 if arg.annotation is None and arg.arg != "self" and arg.arg != "cls":
-                    violations.append(f"Function '{node.name}' parameter '{arg.arg}' missing type annotation")
+                    violations.append(
+                        f"Function '{node.name}' parameter '{arg.arg}' missing type annotation"
+                    )
 
     return len(violations) == 0, violations
 
@@ -202,7 +214,10 @@ def extract_class_definitions(tree: ast.Module) -> List[Dict[str, Any]]:
         if isinstance(node, ast.ClassDef):
             class_info = {
                 "name": node.name,
-                "bases": [base.id if isinstance(base, ast.Name) else str(base) for base in node.bases],
+                "bases": [
+                    base.id if isinstance(base, ast.Name) else str(base)
+                    for base in node.bases
+                ],
                 "methods": [],
                 "attributes": [],
             }
@@ -263,34 +278,48 @@ def validate_onex_naming(filename: str) -> Tuple[bool, Optional[str]]:
     node_pattern = r"^node_[a-z][a-z0-9_]*_(effect|compute|reducer|orchestrator)\.py$"
     if filename.startswith("node_"):
         if not re.match(node_pattern, filename):
-            return False, "Node file must match pattern: node_<name>_<type>.py (lowercase, underscores)"
+            return (
+                False,
+                "Node file must match pattern: node_<name>_<type>.py (lowercase, underscores)",
+            )
         return True, None
 
     # Model files: model_<name>.py
     model_pattern = r"^model_[a-z][a-z0-9_]*\.py$"
     if filename.startswith("model_"):
         if not re.match(model_pattern, filename):
-            return False, "Model file must match pattern: model_<name>.py (lowercase, underscores)"
+            return (
+                False,
+                "Model file must match pattern: model_<name>.py (lowercase, underscores)",
+            )
         return True, None
 
     # Enum files: enum_<name>.py
     enum_pattern = r"^enum_[a-z][a-z0-9_]*\.py$"
     if filename.startswith("enum_"):
         if not re.match(enum_pattern, filename):
-            return False, "Enum file must match pattern: enum_<name>.py (lowercase, underscores)"
+            return (
+                False,
+                "Enum file must match pattern: enum_<name>.py (lowercase, underscores)",
+            )
         return True, None
 
     # Contract files: contract_<name>.yaml
     contract_pattern = r"^contract_[a-z][a-z0-9_]*\.yaml$"
     if filename.startswith("contract_"):
         if not re.match(contract_pattern, filename):
-            return False, "Contract file must match pattern: contract_<name>.yaml (lowercase, underscores)"
+            return (
+                False,
+                "Contract file must match pattern: contract_<name>.yaml (lowercase, underscores)",
+            )
         return True, None
 
     return False, f"Unknown file type: {filename}"
 
 
-def validate_class_naming(class_name: str, file_type: str) -> Tuple[bool, Optional[str]]:
+def validate_class_naming(
+    class_name: str, file_type: str
+) -> Tuple[bool, Optional[str]]:
     """
     Validate class name against ONEX conventions.
 
@@ -303,7 +332,9 @@ def validate_class_naming(class_name: str, file_type: str) -> Tuple[bool, Option
     """
     if file_type == "node":
         # Node classes: Node<Domain><Name><Type>
-        if not re.match(r"^Node[A-Z][a-zA-Z]*(Effect|Compute|Reducer|Orchestrator)$", class_name):
+        if not re.match(
+            r"^Node[A-Z][a-zA-Z]*(Effect|Compute|Reducer|Orchestrator)$", class_name
+        ):
             return False, "Node class must match: Node<Domain><Name><Type> (PascalCase)"
         return True, None
 
@@ -327,7 +358,9 @@ def validate_class_naming(class_name: str, file_type: str) -> Tuple[bool, Option
 # ============================================================================
 
 
-def compare_generated_code(expected: str, actual: str, context_lines: int = 3) -> Optional[str]:
+def compare_generated_code(
+    expected: str, actual: str, context_lines: int = 3
+) -> Optional[str]:
     """
     Compare expected and actual generated code.
 
@@ -343,7 +376,14 @@ def compare_generated_code(expected: str, actual: str, context_lines: int = 3) -
     actual_lines = actual.splitlines(keepends=True)
 
     diff = list(
-        unified_diff(expected_lines, actual_lines, fromfile="expected", tofile="actual", lineterm="", n=context_lines)
+        unified_diff(
+            expected_lines,
+            actual_lines,
+            fromfile="expected",
+            tofile="actual",
+            lineterm="",
+            n=context_lines,
+        )
     )
 
     if not diff:
@@ -403,16 +443,26 @@ def validate_enum_serialization(tree: ast.Module) -> Tuple[bool, List[str]]:
 
             if is_enum:
                 # Check if it inherits from str for JSON serialization
-                has_str_base = any(isinstance(base, ast.Name) and base.id == "str" for base in node.bases)
+                has_str_base = any(
+                    isinstance(base, ast.Name) and base.id == "str"
+                    for base in node.bases
+                )
 
                 if not has_str_base:
-                    violations.append(f"Enum class '{node.name}' should inherit from str for JSON serialization")
+                    violations.append(
+                        f"Enum class '{node.name}' should inherit from str for JSON serialization"
+                    )
 
                 # Check for __str__ method
-                has_str_method = any(isinstance(item, ast.FunctionDef) and item.name == "__str__" for item in node.body)
+                has_str_method = any(
+                    isinstance(item, ast.FunctionDef) and item.name == "__str__"
+                    for item in node.body
+                )
 
                 if not has_str_method:
-                    violations.append(f"Enum class '{node.name}' should implement __str__ method")
+                    violations.append(
+                        f"Enum class '{node.name}' should implement __str__ method"
+                    )
 
     return len(violations) == 0, violations
 
@@ -463,7 +513,13 @@ def estimate_code_complexity(tree: ast.Module) -> Dict[str, int]:
     Returns:
         Dictionary of complexity metrics
     """
-    metrics = {"num_classes": 0, "num_functions": 0, "num_lines": 0, "max_nesting_depth": 0, "num_imports": 0}
+    metrics = {
+        "num_classes": 0,
+        "num_functions": 0,
+        "num_lines": 0,
+        "max_nesting_depth": 0,
+        "num_imports": 0,
+    }
 
     def get_nesting_depth(node, depth=0):
         max_depth = depth

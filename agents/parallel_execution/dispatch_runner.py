@@ -50,7 +50,7 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -73,16 +73,19 @@ log_file = Path("/tmp/logging_implementation_coord.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file, mode="a"), logging.StreamHandler(sys.stderr)],
+    handlers=[
+        logging.FileHandler(log_file, mode="a"),
+        logging.StreamHandler(sys.stderr),
+    ],
 )
 logger = logging.getLogger(__name__)
 logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_file)
 
+from agent_architect import ArchitectAgent
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask
-from context_manager import ContextManager
-from agent_architect import ArchitectAgent
 from agent_registry import agent_exists
+from context_manager import ContextManager
 
 # Import all agents to trigger self-registration via decorators
 # This ensures agents register themselves when dispatch_runner loads
@@ -136,17 +139,27 @@ try:
     QUORUM_AVAILABLE = True
 except ImportError:
     QUORUM_AVAILABLE = False
-    print("[DispatchRunner] Warning: Quorum validation unavailable (quorum_minimal.py not found)", file=sys.stderr)
+    print(
+        "[DispatchRunner] Warning: Quorum validation unavailable (quorum_minimal.py not found)",
+        file=sys.stderr,
+    )
 
 # Import interactive validator (optional dependency)
 try:
-    from interactive_validator import create_validator, CheckpointType, UserChoice, InteractiveValidator, QuietValidator
+    from interactive_validator import (
+        CheckpointType,
+        InteractiveValidator,
+        QuietValidator,
+        UserChoice,
+        create_validator,
+    )
 
     INTERACTIVE_AVAILABLE = True
 except ImportError:
     INTERACTIVE_AVAILABLE = False
     print(
-        "[DispatchRunner] Warning: Interactive mode unavailable (interactive_validator.py not found)", file=sys.stderr
+        "[DispatchRunner] Warning: Interactive mode unavailable (interactive_validator.py not found)",
+        file=sys.stderr,
     )
 
 
@@ -329,7 +342,10 @@ async def execute_phase_0_context_gathering(
 
         print("[DispatchRunner] Gathering global context...", file=sys.stderr)
         global_context = await context_manager.gather_global_context(
-            user_prompt=user_prompt, workspace_path=workspace_path, rag_queries=rag_queries, max_rag_results=5
+            user_prompt=user_prompt,
+            workspace_path=workspace_path,
+            rag_queries=rag_queries,
+            max_rag_results=5,
         )
 
         # Print context summary
@@ -343,7 +359,11 @@ async def execute_phase_0_context_gathering(
         # Interactive checkpoint: Review gathered context
         if validator:
             # Build detailed context display with actual content
-            context_display = {"summary": summary, "rag_queries": rag_queries, "gathered_context": {}}
+            context_display = {
+                "summary": summary,
+                "rag_queries": rag_queries,
+                "gathered_context": {},
+            }
 
             # Include actual context content for review
             if global_context:
@@ -360,34 +380,54 @@ async def execute_phase_0_context_gathering(
                                 extracted = []
 
                                 # Extract from rag_search
-                                if "rag_search" in rag_results and rag_results["rag_search"].get("results"):
-                                    for item in rag_results["rag_search"]["results"][:3]:
+                                if "rag_search" in rag_results and rag_results[
+                                    "rag_search"
+                                ].get("results"):
+                                    for item in rag_results["rag_search"]["results"][
+                                        :3
+                                    ]:
                                         if isinstance(item, dict):
                                             extracted.append(
                                                 {
                                                     "source": "RAG Search",
-                                                    "content": item.get("content", item.get("text", str(item)))[:15000],
+                                                    "content": item.get(
+                                                        "content",
+                                                        item.get("text", str(item)),
+                                                    )[:15000],
                                                 }
                                             )
 
                                 # Extract from vector_search
-                                if "vector_search" in rag_results and rag_results["vector_search"].get("results"):
-                                    for item in rag_results["vector_search"]["results"][:2]:
+                                if "vector_search" in rag_results and rag_results[
+                                    "vector_search"
+                                ].get("results"):
+                                    for item in rag_results["vector_search"]["results"][
+                                        :2
+                                    ]:
                                         if isinstance(item, dict):
                                             extracted.append(
                                                 {
                                                     "source": "Vector Search",
-                                                    "content": item.get("content", item.get("text", str(item)))[:15000],
+                                                    "content": item.get(
+                                                        "content",
+                                                        item.get("text", str(item)),
+                                                    )[:15000],
                                                 }
                                             )
 
-                                context_display["gathered_context"][key] = extracted if extracted else content
+                                context_display["gathered_context"][key] = (
+                                    extracted if extracted else content
+                                )
                             else:
                                 context_display["gathered_context"][key] = content
                         else:
-                            context_display["gathered_context"][key] = str(content)[:2000]
+                            context_display["gathered_context"][key] = str(content)[
+                                :2000
+                            ]
                     elif isinstance(value, str):
-                        context_display["gathered_context"][key] = value[:2000] + "..." if len(value) > 2000 else value
+                        context_display["gathered_context"][key] = (
+                            value[:2000] + "..." if len(value) > 2000 else value
+                        )
                     elif isinstance(value, list):
                         context_display["gathered_context"][key] = value[:5]
                     elif isinstance(value, dict):
@@ -405,7 +445,10 @@ async def execute_phase_0_context_gathering(
             )
 
             if checkpoint_result.choice == UserChoice.SKIP:
-                print("[DispatchRunner] Context gathering skipped by user", file=sys.stderr)
+                print(
+                    "[DispatchRunner] Context gathering skipped by user",
+                    file=sys.stderr,
+                )
                 duration_ms = (time.time() - start_time) * 1000
                 return PhaseResult(
                     phase=phase,
@@ -417,14 +460,20 @@ async def execute_phase_0_context_gathering(
                     skipped=True,
                 )
             elif checkpoint_result.choice == UserChoice.QUIT:
-                print("[DispatchRunner] Workflow terminated by user at context gathering", file=sys.stderr)
+                print(
+                    "[DispatchRunner] Workflow terminated by user at context gathering",
+                    file=sys.stderr,
+                )
                 sys.exit(0)
 
         # Store context in phase state
         phase_state.global_context = global_context
 
         duration_ms = (time.time() - start_time) * 1000
-        print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         return PhaseResult(
             phase=phase,
@@ -433,13 +482,19 @@ async def execute_phase_0_context_gathering(
             duration_ms=duration_ms,
             started_at=started_at,
             completed_at=datetime.now().isoformat(),
-            output_data={"context_summary": summary, "total_items": summary["total_items"]},
+            output_data={
+                "context_summary": summary,
+                "total_items": summary["total_items"],
+            },
         )
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 0 failed: {e}", file=sys.stderr)
-        print(f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 0 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         return PhaseResult(
             phase=phase,
@@ -483,7 +538,10 @@ async def execute_phase_1_quorum_validation(
 
     if not QUORUM_AVAILABLE:
         duration_ms = (time.time() - start_time) * 1000
-        print(f"[DispatchRunner] Phase 1 skipped (quorum unavailable) in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 1 skipped (quorum unavailable) in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
         return PhaseResult(
             phase=phase,
             phase_name="Quorum Validation",
@@ -504,9 +562,15 @@ async def execute_phase_1_quorum_validation(
             quorum = MinimalQuorum()
 
             if retry_count > 0:
-                print(f"\n[DispatchRunner] Retry attempt {retry_count}/{max_retries}", file=sys.stderr)
+                print(
+                    f"\n[DispatchRunner] Retry attempt {retry_count}/{max_retries}",
+                    file=sys.stderr,
+                )
 
-            print("[DispatchRunner] Validating task breakdown with AI quorum...", file=sys.stderr)
+            print(
+                "[DispatchRunner] Validating task breakdown with AI quorum...",
+                file=sys.stderr,
+            )
             result = await quorum.validate_intent(user_prompt, task_breakdown)
 
             print(
@@ -515,7 +579,10 @@ async def execute_phase_1_quorum_validation(
             )
 
             if result.deficiencies:
-                print(f"[DispatchRunner] Deficiencies found: {len(result.deficiencies)}", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] Deficiencies found: {len(result.deficiencies)}",
+                    file=sys.stderr,
+                )
                 for deficiency in result.deficiencies:
                     print(f"[DispatchRunner]   - {deficiency}", file=sys.stderr)
 
@@ -552,13 +619,21 @@ async def execute_phase_1_quorum_validation(
 
                 elif checkpoint_result.choice == UserChoice.RETRY:
                     # User wants to retry with feedback
-                    quorum_result_dict["user_feedback"] = checkpoint_result.user_feedback
+                    quorum_result_dict["user_feedback"] = (
+                        checkpoint_result.user_feedback
+                    )
                     retry_count += 1
                     if retry_count <= max_retries:
-                        print("[DispatchRunner] User requested retry with feedback", file=sys.stderr)
+                        print(
+                            "[DispatchRunner] User requested retry with feedback",
+                            file=sys.stderr,
+                        )
                         continue
                     else:
-                        print("[DispatchRunner] Max retries exceeded, proceeding anyway", file=sys.stderr)
+                        print(
+                            "[DispatchRunner] Max retries exceeded, proceeding anyway",
+                            file=sys.stderr,
+                        )
 
                 elif checkpoint_result.choice == UserChoice.SKIP:
                     # User wants to skip validation
@@ -571,7 +646,10 @@ async def execute_phase_1_quorum_validation(
             if decision == ValidationDecision.FAIL:
                 # Critical failure - abort execution
                 duration_ms = (time.time() - start_time) * 1000
-                print(f"[DispatchRunner] ✗ Phase 1 failed critically in {duration_ms:.0f}ms\n", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] ✗ Phase 1 failed critically in {duration_ms:.0f}ms\n",
+                    file=sys.stderr,
+                )
                 return PhaseResult(
                     phase=phase,
                     phase_name="Quorum Validation",
@@ -589,7 +667,8 @@ async def execute_phase_1_quorum_validation(
                 retry_count += 1
                 if retry_count <= max_retries:
                     print(
-                        f"[DispatchRunner] Quorum suggests retry (attempt {retry_count}/{max_retries})", file=sys.stderr
+                        f"[DispatchRunner] Quorum suggests retry (attempt {retry_count}/{max_retries})",
+                        file=sys.stderr,
                     )
                     print("[DispatchRunner] Deficiencies to address:", file=sys.stderr)
                     for deficiency in result.deficiencies:
@@ -597,7 +676,10 @@ async def execute_phase_1_quorum_validation(
                     continue
                 else:
                     # Max retries exceeded, log warning but continue
-                    print("[DispatchRunner] ⚠ Max retries exceeded, proceeding with current breakdown", file=sys.stderr)
+                    print(
+                        "[DispatchRunner] ⚠ Max retries exceeded, proceeding with current breakdown",
+                        file=sys.stderr,
+                    )
 
             # Validation passed or max retries exceeded
             phase_state.quorum_result = quorum_result_dict
@@ -609,7 +691,10 @@ async def execute_phase_1_quorum_validation(
                     file=sys.stderr,
                 )
             else:
-                print(f"[DispatchRunner] ⚠ Phase 1 completed with warnings in {duration_ms:.0f}ms\n", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] ⚠ Phase 1 completed with warnings in {duration_ms:.0f}ms\n",
+                    file=sys.stderr,
+                )
 
             return PhaseResult(
                 phase=phase,
@@ -625,12 +710,21 @@ async def execute_phase_1_quorum_validation(
         except Exception as e:
             retry_count += 1
             if retry_count <= max_retries:
-                print(f"[DispatchRunner] Quorum validation error: {e}, retrying...", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] Quorum validation error: {e}, retrying...",
+                    file=sys.stderr,
+                )
                 continue
             else:
                 duration_ms = (time.time() - start_time) * 1000
-                print(f"[DispatchRunner] ✗ Phase 1 failed after {max_retries} retries: {e}", file=sys.stderr)
-                print(f"[DispatchRunner] Phase 1 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+                print(
+                    f"[DispatchRunner] ✗ Phase 1 failed after {max_retries} retries: {e}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"[DispatchRunner] Phase 1 completed in {duration_ms:.0f}ms\n",
+                    file=sys.stderr,
+                )
                 return PhaseResult(
                     phase=phase,
                     phase_name="Quorum Validation",
@@ -663,7 +757,9 @@ async def execute_phase_2_task_architecture(
 
     print(f"\n{'='*80}", file=sys.stderr)
     print("[DispatchRunner] Phase 2: Task Architecture", file=sys.stderr)
-    print("[DispatchRunner] Breaking down user request into subtasks...", file=sys.stderr)
+    print(
+        "[DispatchRunner] Breaking down user request into subtasks...", file=sys.stderr
+    )
     print(f"{'='*80}\n", file=sys.stderr)
 
     try:
@@ -694,7 +790,10 @@ async def execute_phase_2_task_architecture(
         reasoning = breakdown.get("reasoning", "")
         num_subtasks = breakdown.get("num_subtasks", len(subtasks))
 
-        print(f"[DispatchRunner] ✓ Breakdown complete: {num_subtasks} subtasks ({execution_order})", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✓ Breakdown complete: {num_subtasks} subtasks ({execution_order})",
+            file=sys.stderr,
+        )
         print(f"[DispatchRunner] Reasoning: {reasoning[:150]}...", file=sys.stderr)
 
         # Interactive checkpoint: Review task breakdown
@@ -718,10 +817,14 @@ async def execute_phase_2_task_architecture(
                 # User edited the breakdown
                 breakdown_edited = checkpoint_result.modified_output
                 subtasks = breakdown_edited.get("subtasks", subtasks)
-                print("[DispatchRunner] Using user-edited task breakdown", file=sys.stderr)
+                print(
+                    "[DispatchRunner] Using user-edited task breakdown", file=sys.stderr
+                )
 
             elif checkpoint_result.choice == UserChoice.SKIP:
-                print("[DispatchRunner] Task breakdown skipped by user", file=sys.stderr)
+                print(
+                    "[DispatchRunner] Task breakdown skipped by user", file=sys.stderr
+                )
                 duration_ms = (time.time() - start_time) * 1000
                 return PhaseResult(
                     phase=phase,
@@ -734,14 +837,20 @@ async def execute_phase_2_task_architecture(
                 )
 
             elif checkpoint_result.choice == UserChoice.QUIT:
-                print("[DispatchRunner] Workflow terminated by user at task breakdown", file=sys.stderr)
+                print(
+                    "[DispatchRunner] Workflow terminated by user at task breakdown",
+                    file=sys.stderr,
+                )
                 sys.exit(0)
 
         # Update phase state with breakdown
         phase_state.tasks_data = subtasks
 
         duration_ms = (time.time() - start_time) * 1000
-        print(f"[DispatchRunner] Phase 2 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 2 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         await architect.cleanup()
 
@@ -764,7 +873,10 @@ async def execute_phase_2_task_architecture(
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 2 failed: {e}", file=sys.stderr)
-        print(f"[DispatchRunner] Phase 2 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 2 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         return PhaseResult(
             phase=phase,
@@ -778,7 +890,10 @@ async def execute_phase_2_task_architecture(
 
 
 async def execute_phase_25_code_generation(
-    user_prompt: str, tasks_data: List[Dict[str, Any]], validator: Optional[Any], phase_state: PhaseState
+    user_prompt: str,
+    tasks_data: List[Dict[str, Any]],
+    validator: Optional[Any],
+    phase_state: PhaseState,
 ) -> PhaseResult:
     """Phase 2.5: Code generation for tasks requiring OmniNode generation.
 
@@ -800,7 +915,10 @@ async def execute_phase_25_code_generation(
 
     print(f"\n{'='*80}", file=sys.stderr)
     print("[DispatchRunner] Phase 2.5: Code Generation", file=sys.stderr)
-    print("[DispatchRunner] Analyzing tasks for code generation requirements...", file=sys.stderr)
+    print(
+        "[DispatchRunner] Analyzing tasks for code generation requirements...",
+        file=sys.stderr,
+    )
     print(f"{'='*80}\n", file=sys.stderr)
 
     try:
@@ -811,7 +929,10 @@ async def execute_phase_25_code_generation(
                 codegen_tasks.append(task_data)
 
         if not codegen_tasks:
-            print("[DispatchRunner] No code generation tasks detected, skipping phase", file=sys.stderr)
+            print(
+                "[DispatchRunner] No code generation tasks detected, skipping phase",
+                file=sys.stderr,
+            )
             duration_ms = (time.time() - start_time) * 1000
             return PhaseResult(
                 phase=phase,
@@ -824,7 +945,10 @@ async def execute_phase_25_code_generation(
                 output_data={"reason": "No code generation tasks detected"},
             )
 
-        print(f"[DispatchRunner] Found {len(codegen_tasks)} code generation task(s)", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Found {len(codegen_tasks)} code generation task(s)",
+            file=sys.stderr,
+        )
 
         # Import code generator agent
         from agent_code_generator import CodeGeneratorAgent
@@ -838,7 +962,9 @@ async def execute_phase_25_code_generation(
 
         for task_data in codegen_tasks:
             task_id = task_data.get("task_id", "unknown")
-            print(f"[DispatchRunner] Generating code for task: {task_id}", file=sys.stderr)
+            print(
+                f"[DispatchRunner] Generating code for task: {task_id}", file=sys.stderr
+            )
 
             # Build agent task
             codegen_input = _build_codegen_input(task_data, user_prompt, phase_state)
@@ -862,11 +988,21 @@ async def execute_phase_25_code_generation(
                         "execution_time_ms": result.execution_time_ms,
                     }
                 )
-                total_files += result.output_data.get("statistics", {}).get("total_files", 0)
-                print(f"[DispatchRunner] ✓ Code generation succeeded for {task_id}", file=sys.stderr)
+                total_files += result.output_data.get("statistics", {}).get(
+                    "total_files", 0
+                )
+                print(
+                    f"[DispatchRunner] ✓ Code generation succeeded for {task_id}",
+                    file=sys.stderr,
+                )
             else:
-                generation_results.append({"task_id": task_id, "success": False, "error": result.error})
-                print(f"[DispatchRunner] ✗ Code generation failed for {task_id}: {result.error}", file=sys.stderr)
+                generation_results.append(
+                    {"task_id": task_id, "success": False, "error": result.error}
+                )
+                print(
+                    f"[DispatchRunner] ✗ Code generation failed for {task_id}: {result.error}",
+                    file=sys.stderr,
+                )
 
         # Interactive checkpoint: Review code generation results
         if validator and INTERACTIVE_AVAILABLE:
@@ -891,8 +1027,14 @@ async def execute_phase_25_code_generation(
             )
 
             if checkpoint_result.choice == UserChoice.RETRY:
-                print("[DispatchRunner] User requested retry of code generation", file=sys.stderr)
-                print("[DispatchRunner] Note: Retry of code generation not yet implemented", file=sys.stderr)
+                print(
+                    "[DispatchRunner] User requested retry of code generation",
+                    file=sys.stderr,
+                )
+                print(
+                    "[DispatchRunner] Note: Retry of code generation not yet implemented",
+                    file=sys.stderr,
+                )
 
         # Count successes
         successful = sum(1 for r in generation_results if r.get("success", False))
@@ -928,7 +1070,10 @@ async def execute_phase_25_code_generation(
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 2.5 failed: {e}", file=sys.stderr)
-        print(f"[DispatchRunner] Phase 2.5 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 2.5 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         return PhaseResult(
             phase=phase,
@@ -965,7 +1110,15 @@ def _is_codegen_task(task_data: Dict[str, Any], user_prompt: str) -> bool:
 
     # Check task description
     description = task_data.get("description", "").lower()
-    codegen_keywords = ["generate", "code", "node", "prd", "implementation", "omninode", "contract"]
+    codegen_keywords = [
+        "generate",
+        "code",
+        "node",
+        "prd",
+        "implementation",
+        "omninode",
+        "contract",
+    ]
     if any(keyword in description for keyword in codegen_keywords):
         return True
 
@@ -978,13 +1131,18 @@ def _is_codegen_task(task_data: Dict[str, Any], user_prompt: str) -> bool:
 
     # Check user prompt
     prompt_lower = user_prompt.lower()
-    if any(keyword in prompt_lower for keyword in ["generate code", "prd", "omninode", "create node"]):
+    if any(
+        keyword in prompt_lower
+        for keyword in ["generate code", "prd", "omninode", "create node"]
+    ):
         return True
 
     return False
 
 
-def _build_codegen_input(task_data: Dict[str, Any], user_prompt: str, phase_state: PhaseState) -> Dict[str, Any]:
+def _build_codegen_input(
+    task_data: Dict[str, Any], user_prompt: str, phase_state: PhaseState
+) -> Dict[str, Any]:
     """
     Build input_data for code generation agent.
 
@@ -1015,7 +1173,11 @@ def _build_codegen_input(task_data: Dict[str, Any], user_prompt: str, phase_stat
     if phase_state.global_context and "workspace_context" not in input_data:
         input_data["workspace_context"] = {
             "context_available": True,
-            "sources": list(phase_state.global_context.keys()) if phase_state.global_context else [],
+            "sources": (
+                list(phase_state.global_context.keys())
+                if phase_state.global_context
+                else []
+            ),
         }
 
     return input_data
@@ -1046,12 +1208,17 @@ async def execute_phase_4_parallel_execution(
     coordinator = ParallelCoordinator()
 
     try:
-        print(f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Executing {len(tasks)} tasks in parallel...",
+            file=sys.stderr,
+        )
 
         # Log execution start for each task
         for task in tasks:
             agent_name = getattr(task, "agent_name", "unknown-agent")
-            logger.info("[AgentExecution] Starting: %s for task '%s'", agent_name, task.task_id)
+            logger.info(
+                "[AgentExecution] Starting: %s for task '%s'", agent_name, task.task_id
+            )
             logger.info("[AgentExecution] Task: '%s'", task.description)
 
         execution_start = time.time()
@@ -1067,7 +1234,9 @@ async def execute_phase_4_parallel_execution(
                 result.execution_time_ms,
             )
             if not result.success and result.error:
-                logger.error("[AgentExecution] Error for task '%s': %s", task_id, result.error)
+                logger.error(
+                    "[AgentExecution] Error for task '%s': %s", task_id, result.error
+                )
 
         # Automatic code extraction from debug agent outputs
         # Supports both Pydantic AI typed outputs (BaseModel) and legacy JSON (dict)
@@ -1086,7 +1255,9 @@ async def execute_phase_4_parallel_execution(
                             solution = output_data.solution
                             if hasattr(solution, "fixed_code"):
                                 fixed_code = solution.fixed_code
-                                extraction_method = "Pydantic BaseModel (solution.fixed_code)"
+                                extraction_method = (
+                                    "Pydantic BaseModel (solution.fixed_code)"
+                                )
 
                         print(
                             f"[DispatchRunner] Pydantic extraction for {task_id}: "
@@ -1097,8 +1268,14 @@ async def execute_phase_4_parallel_execution(
                     # Method 2: Legacy JSON dict with nested keys
                     elif isinstance(output_data, dict):
                         solution = output_data.get("solution", {})
-                        fixed_code = solution.get("fixed_code") if isinstance(solution, dict) else None
-                        extraction_method = "JSON dict (solution.fixed_code)" if fixed_code else None
+                        fixed_code = (
+                            solution.get("fixed_code")
+                            if isinstance(solution, dict)
+                            else None
+                        )
+                        extraction_method = (
+                            "JSON dict (solution.fixed_code)" if fixed_code else None
+                        )
 
                         print(
                             f"[DispatchRunner] JSON extraction for {task_id}: "
@@ -1108,7 +1285,11 @@ async def execute_phase_4_parallel_execution(
 
                     # Method 3: Handle None or unexpected types gracefully
                     else:
-                        output_type = type(output_data).__name__ if output_data is not None else "None"
+                        output_type = (
+                            type(output_data).__name__
+                            if output_data is not None
+                            else "None"
+                        )
                         print(
                             f"[DispatchRunner] Skipping {task_id}: "
                             f"output_data is {output_type}, expected BaseModel or dict",
@@ -1157,11 +1338,18 @@ async def execute_phase_4_parallel_execution(
                             if not hasattr(result, "_extraction_metadata"):
                                 result._extraction_metadata = {}
                             result._extraction_metadata["code_extracted"] = True
-                            result._extraction_metadata["extracted_file"] = str(output_file)
-                            result._extraction_metadata["extraction_method"] = extraction_method
+                            result._extraction_metadata["extracted_file"] = str(
+                                output_file
+                            )
+                            result._extraction_metadata["extraction_method"] = (
+                                extraction_method
+                            )
 
                 except Exception as e:
-                    print(f"[DispatchRunner] Warning: Failed to extract code from {task_id}: {e}", file=sys.stderr)
+                    print(
+                        f"[DispatchRunner] Warning: Failed to extract code from {task_id}: {e}",
+                        file=sys.stderr,
+                    )
 
         # Interactive checkpoint: Review execution results
         if validator and INTERACTIVE_AVAILABLE:
@@ -1175,7 +1363,11 @@ async def execute_phase_4_parallel_execution(
                 total_steps=3,
                 step_name=f"Agent Execution Results ({successful} succeeded, {failed} failed)",
                 output_data={
-                    "summary": {"total_tasks": len(results), "successful": successful, "failed": failed},
+                    "summary": {
+                        "total_tasks": len(results),
+                        "successful": successful,
+                        "failed": failed,
+                    },
                     "results": {
                         task_id: {
                             "agent": result.agent_name,
@@ -1189,8 +1381,14 @@ async def execute_phase_4_parallel_execution(
             )
 
             if checkpoint_result.choice == UserChoice.RETRY:
-                print("[DispatchRunner] User requested retry of agent execution", file=sys.stderr)
-                print("[DispatchRunner] Note: Retry of agent execution not yet implemented", file=sys.stderr)
+                print(
+                    "[DispatchRunner] User requested retry of agent execution",
+                    file=sys.stderr,
+                )
+                print(
+                    "[DispatchRunner] Note: Retry of agent execution not yet implemented",
+                    file=sys.stderr,
+                )
 
         # Count successes
         successful = sum(1 for r in results.values() if r.success)
@@ -1221,14 +1419,21 @@ async def execute_phase_4_parallel_execution(
                     }
                     for task_id, result in results.items()
                 },
-                "summary": {"total_tasks": len(results), "successful": successful, "failed": failed},
+                "summary": {
+                    "total_tasks": len(results),
+                    "successful": successful,
+                    "failed": failed,
+                },
             },
         )
 
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         print(f"[DispatchRunner] ✗ Phase 4 failed: {e}", file=sys.stderr)
-        print(f"[DispatchRunner] Phase 4 completed in {duration_ms:.0f}ms\n", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Phase 4 completed in {duration_ms:.0f}ms\n",
+            file=sys.stderr,
+        )
 
         return PhaseResult(
             phase=phase,
@@ -1262,10 +1467,15 @@ async def extract_code_from_results(output: dict, output_dir: str):
         # Write manifest
         extractor.write_manifest(code_files)
 
-        print(f"[DispatchRunner] ✓ Extracted {len(code_files)} code files to {output_dir}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✓ Extracted {len(code_files)} code files to {output_dir}",
+            file=sys.stderr,
+        )
 
     except ImportError as e:
-        print(f"[DispatchRunner] ✗ Failed to import code extractor: {e}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✗ Failed to import code extractor: {e}", file=sys.stderr
+        )
     except Exception as e:
         print(f"[DispatchRunner] ✗ Code extraction failed: {e}", file=sys.stderr)
 
@@ -1282,12 +1492,19 @@ async def generate_markdown_docs(output: dict, output_dir: str):
         doc_generator = MarkdownDocGenerator(output_dir)
         doc_generator.generate_from_results(output)
 
-        print(f"[DispatchRunner] ✓ Generated documentation in {output_dir}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✓ Generated documentation in {output_dir}",
+            file=sys.stderr,
+        )
 
     except ImportError as e:
-        print(f"[DispatchRunner] ✗ Failed to import doc generator: {e}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✗ Failed to import doc generator: {e}", file=sys.stderr
+        )
     except Exception as e:
-        print(f"[DispatchRunner] ✗ Documentation generation failed: {e}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] ✗ Documentation generation failed: {e}", file=sys.stderr
+        )
 
 
 # ============================================================================
@@ -1318,13 +1535,25 @@ Phase Control Examples:
     )
 
     # Feature flags
-    parser.add_argument("--enable-context", action="store_true", help="Enable RAG context gathering")
-    parser.add_argument("--enable-quorum", action="store_true", help="Enable quorum validation")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive checkpoints")
+    parser.add_argument(
+        "--enable-context", action="store_true", help="Enable RAG context gathering"
+    )
+    parser.add_argument(
+        "--enable-quorum", action="store_true", help="Enable quorum validation"
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Enable interactive checkpoints",
+    )
 
     # Phase control flags
     parser.add_argument(
-        "--only-phase", type=int, choices=[0, 1, 2, 25, 3, 4], help="Execute only this phase (0, 1, 2, 25 [2.5], 3, 4)"
+        "--only-phase",
+        type=int,
+        choices=[0, 1, 2, 25, 3, 4],
+        help="Execute only this phase (0, 1, 2, 25 [2.5], 3, 4)",
     )
     parser.add_argument(
         "--stop-after-phase",
@@ -1333,25 +1562,52 @@ Phase Control Examples:
         help="Stop after completing this phase (0, 1, 2, 25 [2.5], 3, 4)",
     )
     parser.add_argument(
-        "--skip-phases", type=str, help="Comma-separated phases to skip (e.g., '0,1' or '25' for phase 2.5)"
+        "--skip-phases",
+        type=str,
+        help="Comma-separated phases to skip (e.g., '0,1' or '25' for phase 2.5)",
     )
 
     # State management
-    parser.add_argument("--save-phase-state", type=str, help="Save phase state to JSON file")
-    parser.add_argument("--load-phase-state", type=str, help="Load phase state from JSON file")
+    parser.add_argument(
+        "--save-phase-state", type=str, help="Save phase state to JSON file"
+    )
+    parser.add_argument(
+        "--load-phase-state", type=str, help="Load phase state from JSON file"
+    )
 
     # Input/session management
-    parser.add_argument("--resume-session", type=str, help="Resume from saved session file")
-    parser.add_argument("--input-file", "-f", type=str, help="Read input from JSON file instead of stdin")
-    parser.add_argument("--output-file", "-o", type=str, help="Write JSON output to file instead of stdout")
     parser.add_argument(
-        "--extract-code", "-c", action="store_true", help="Extract Python code files from agent results"
+        "--resume-session", type=str, help="Resume from saved session file"
     )
     parser.add_argument(
-        "--generate-md", "-m", action="store_true", help="Generate human-readable Markdown documentation"
+        "--input-file",
+        "-f",
+        type=str,
+        help="Read input from JSON file instead of stdin",
     )
     parser.add_argument(
-        "--output-dir", type=str, default="generated_code", help="Directory for extracted code and docs"
+        "--output-file",
+        "-o",
+        type=str,
+        help="Write JSON output to file instead of stdout",
+    )
+    parser.add_argument(
+        "--extract-code",
+        "-c",
+        action="store_true",
+        help="Extract Python code files from agent results",
+    )
+    parser.add_argument(
+        "--generate-md",
+        "-m",
+        action="store_true",
+        help="Generate human-readable Markdown documentation",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="generated_code",
+        help="Directory for extracted code and docs",
     )
 
     args = parser.parse_args()
@@ -1377,9 +1633,15 @@ Phase Control Examples:
 
     # Print phase configuration
     if phase_config.only_phase is not None:
-        print(f"[DispatchRunner] Executing only Phase {phase_config.only_phase}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Executing only Phase {phase_config.only_phase}",
+            file=sys.stderr,
+        )
     elif phase_config.stop_after_phase is not None:
-        print(f"[DispatchRunner] Stopping after Phase {phase_config.stop_after_phase}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Stopping after Phase {phase_config.stop_after_phase}",
+            file=sys.stderr,
+        )
     if skip_phases:
         print(f"[DispatchRunner] Skipping phases: {skip_phases}", file=sys.stderr)
 
@@ -1389,7 +1651,10 @@ Phase Control Examples:
         print("[DispatchRunner] Interactive mode enabled", file=sys.stderr)
         validator = create_validator(interactive=True, session_file=resume_session_file)
     elif enable_interactive and not INTERACTIVE_AVAILABLE:
-        print("[DispatchRunner] Warning: Interactive mode requested but unavailable", file=sys.stderr)
+        print(
+            "[DispatchRunner] Warning: Interactive mode requested but unavailable",
+            file=sys.stderr,
+        )
 
     # Initialize phase state
     phase_state = PhaseState()
@@ -1400,22 +1665,34 @@ Phase Control Examples:
             phase_state = PhaseState.load(phase_config.load_state_file)
         else:
             print(
-                f"[DispatchRunner] Warning: Phase state file not found: {phase_config.load_state_file}", file=sys.stderr
+                f"[DispatchRunner] Warning: Phase state file not found: {phase_config.load_state_file}",
+                file=sys.stderr,
             )
 
     # Read input from file or stdin
     try:
         if args.input_file:
-            print(f"[DispatchRunner] Reading input from file: {args.input_file}", file=sys.stderr)
+            print(
+                f"[DispatchRunner] Reading input from file: {args.input_file}",
+                file=sys.stderr,
+            )
             with open(args.input_file, "r") as f:
                 input_data = json.load(f)
         else:
             input_data = json.loads(sys.stdin.read())
     except FileNotFoundError:
-        print(json.dumps({"success": False, "error": f"Input file not found: {args.input_file}"}), file=sys.stderr)
+        print(
+            json.dumps(
+                {"success": False, "error": f"Input file not found: {args.input_file}"}
+            ),
+            file=sys.stderr,
+        )
         sys.exit(1)
     except json.JSONDecodeError as e:
-        print(json.dumps({"success": False, "error": f"Invalid JSON input: {e}"}), file=sys.stderr)
+        print(
+            json.dumps({"success": False, "error": f"Invalid JSON input: {e}"}),
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Parse user prompt and tasks
@@ -1442,7 +1719,10 @@ Phase Control Examples:
     # Enable architect if no tasks provided
     enable_architect = not tasks_data
     if enable_architect:
-        print("[DispatchRunner] No tasks provided - architect agent will generate breakdown", file=sys.stderr)
+        print(
+            "[DispatchRunner] No tasks provided - architect agent will generate breakdown",
+            file=sys.stderr,
+        )
 
     # ========================================================================
     # Phase Execution
@@ -1453,7 +1733,9 @@ Phase Control Examples:
     quorum_result = None
 
     # Phase 0: Context Gathering
-    if enable_context and phase_config.should_execute_phase(ExecutionPhase.CONTEXT_GATHERING):
+    if enable_context and phase_config.should_execute_phase(
+        ExecutionPhase.CONTEXT_GATHERING
+    ):
         result = await execute_phase_0_context_gathering(
             user_prompt=user_prompt,
             workspace_path=input_data.get("workspace_path"),
@@ -1465,7 +1747,10 @@ Phase Control Examples:
         phase_state.current_phase = 0
 
         if not result.success and not result.skipped:
-            print("[DispatchRunner] Warning: Context gathering failed, continuing without context", file=sys.stderr)
+            print(
+                "[DispatchRunner] Warning: Context gathering failed, continuing without context",
+                file=sys.stderr,
+            )
             enable_context = False
         elif result.skipped:
             enable_context = False
@@ -1473,7 +1758,9 @@ Phase Control Examples:
             global_context = phase_state.global_context
 
         if phase_config.should_stop_after_phase(ExecutionPhase.CONTEXT_GATHERING):
-            print("[DispatchRunner] Stopping after Phase 0 as requested", file=sys.stderr)
+            print(
+                "[DispatchRunner] Stopping after Phase 0 as requested", file=sys.stderr
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1482,7 +1769,9 @@ Phase Control Examples:
                 json.dumps(
                     {
                         "success": True,
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                         "stopped_after_phase": 0,
                     },
                     indent=2,
@@ -1491,16 +1780,25 @@ Phase Control Examples:
             sys.exit(0)
 
     # Phase 1: Quorum Validation
-    if enable_quorum and phase_config.should_execute_phase(ExecutionPhase.QUORUM_VALIDATION):
+    if enable_quorum and phase_config.should_execute_phase(
+        ExecutionPhase.QUORUM_VALIDATION
+    ):
         result = await execute_phase_1_quorum_validation(
-            user_prompt=user_prompt, tasks_data=tasks_data, validator=validator, phase_state=phase_state, max_retries=3
+            user_prompt=user_prompt,
+            tasks_data=tasks_data,
+            validator=validator,
+            phase_state=phase_state,
+            max_retries=3,
         )
         phase_state.phases_executed.append(result)
         phase_state.current_phase = 1
 
         if not result.success and not result.skipped:
             # Quorum validation failed critically
-            print("[DispatchRunner] Critical validation failure, aborting", file=sys.stderr)
+            print(
+                "[DispatchRunner] Critical validation failure, aborting",
+                file=sys.stderr,
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1509,7 +1807,9 @@ Phase Control Examples:
                     {
                         "success": False,
                         "error": "Quorum validation failed critically",
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                     },
                     indent=2,
                 )
@@ -1519,7 +1819,9 @@ Phase Control Examples:
         quorum_result = phase_state.quorum_result
 
         if phase_config.should_stop_after_phase(ExecutionPhase.QUORUM_VALIDATION):
-            print("[DispatchRunner] Stopping after Phase 1 as requested", file=sys.stderr)
+            print(
+                "[DispatchRunner] Stopping after Phase 1 as requested", file=sys.stderr
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1527,7 +1829,9 @@ Phase Control Examples:
                 json.dumps(
                     {
                         "success": True,
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                         "stopped_after_phase": 1,
                         "quorum_result": quorum_result,
                     },
@@ -1537,7 +1841,9 @@ Phase Control Examples:
             sys.exit(0)
 
     # Phase 2: Task Architecture
-    if enable_architect and phase_config.should_execute_phase(ExecutionPhase.TASK_PLANNING):
+    if enable_architect and phase_config.should_execute_phase(
+        ExecutionPhase.TASK_PLANNING
+    ):
         result = await execute_phase_2_task_architecture(
             user_prompt=user_prompt, validator=validator, phase_state=phase_state
         )
@@ -1545,7 +1851,9 @@ Phase Control Examples:
         phase_state.current_phase = 2
 
         if not result.success and not result.skipped:
-            print("[DispatchRunner] Task architecture failed, aborting", file=sys.stderr)
+            print(
+                "[DispatchRunner] Task architecture failed, aborting", file=sys.stderr
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1554,7 +1862,9 @@ Phase Control Examples:
                     {
                         "success": False,
                         "error": "Task architecture failed",
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                     },
                     indent=2,
                 )
@@ -1564,10 +1874,15 @@ Phase Control Examples:
         # Update tasks_data with architect's breakdown
         if not result.skipped:
             tasks_data = phase_state.tasks_data
-            print(f"[DispatchRunner] Task breakdown updated: {len(tasks_data)} subtasks", file=sys.stderr)
+            print(
+                f"[DispatchRunner] Task breakdown updated: {len(tasks_data)} subtasks",
+                file=sys.stderr,
+            )
 
         if phase_config.should_stop_after_phase(ExecutionPhase.TASK_PLANNING):
-            print("[DispatchRunner] Stopping after Phase 2 as requested", file=sys.stderr)
+            print(
+                "[DispatchRunner] Stopping after Phase 2 as requested", file=sys.stderr
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1575,7 +1890,9 @@ Phase Control Examples:
                 json.dumps(
                     {
                         "success": True,
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                         "stopped_after_phase": 2,
                         "tasks_breakdown": tasks_data,
                     },
@@ -1587,17 +1904,26 @@ Phase Control Examples:
     # Phase 2.5: Code Generation
     if phase_config.should_execute_phase(ExecutionPhase.CODE_GENERATION):
         result = await execute_phase_25_code_generation(
-            user_prompt=user_prompt, tasks_data=tasks_data, validator=validator, phase_state=phase_state
+            user_prompt=user_prompt,
+            tasks_data=tasks_data,
+            validator=validator,
+            phase_state=phase_state,
         )
         phase_state.phases_executed.append(result)
         phase_state.current_phase = 25
 
         if not result.success and not result.skipped:
-            print("[DispatchRunner] Code generation failed, continuing with remaining phases", file=sys.stderr)
+            print(
+                "[DispatchRunner] Code generation failed, continuing with remaining phases",
+                file=sys.stderr,
+            )
             # Code generation failure is not fatal - continue with other phases
 
         if phase_config.should_stop_after_phase(ExecutionPhase.CODE_GENERATION):
-            print("[DispatchRunner] Stopping after Phase 2.5 as requested", file=sys.stderr)
+            print(
+                "[DispatchRunner] Stopping after Phase 2.5 as requested",
+                file=sys.stderr,
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1605,9 +1931,13 @@ Phase Control Examples:
                 json.dumps(
                     {
                         "success": True,
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                         "stopped_after_phase": 25,
-                        "code_generation_summary": result.output_data.get("summary", {}),
+                        "code_generation_summary": result.output_data.get(
+                            "summary", {}
+                        ),
                     },
                     indent=2,
                 )
@@ -1627,7 +1957,11 @@ Phase Control Examples:
                 requested_agent = task_data.get("agent", "")
                 task_id = task_data.get("task_id", "unknown")
 
-                logger.info("[AgentSelection] Requested agent: '%s' for task '%s'", requested_agent, task_id)
+                logger.info(
+                    "[AgentSelection] Requested agent: '%s' for task '%s'",
+                    requested_agent,
+                    task_id,
+                )
 
                 # Static mappings for known aliases
                 agent_alias_mapping = {
@@ -1637,14 +1971,26 @@ Phase Control Examples:
                 }
 
                 # Resolve alias first
-                agent_base_name = agent_alias_mapping.get(requested_agent, requested_agent)
+                agent_base_name = agent_alias_mapping.get(
+                    requested_agent, requested_agent
+                )
                 if requested_agent in agent_alias_mapping:
-                    logger.info("[AgentSelection] Agent alias resolved: '%s' -> '%s'", requested_agent, agent_base_name)
+                    logger.info(
+                        "[AgentSelection] Agent alias resolved: '%s' -> '%s'",
+                        requested_agent,
+                        agent_base_name,
+                    )
 
                 # Check if the agent exists in the registry
-                logger.info("[AgentSelection] Checking if agent exists: %s", agent_base_name)
+                logger.info(
+                    "[AgentSelection] Checking if agent exists: %s", agent_base_name
+                )
                 agent_exists_result = agent_exists(agent_base_name)
-                logger.info("[AgentSelection] agent_exists('%s') = %s", agent_base_name, agent_exists_result)
+                logger.info(
+                    "[AgentSelection] agent_exists('%s') = %s",
+                    agent_base_name,
+                    agent_exists_result,
+                )
 
                 if not agent_exists_result:
                     # Agent doesn't exist - fail immediately with clear error
@@ -1671,7 +2017,9 @@ Phase Control Examples:
 
                 # Agent exists, use it
                 agent_name = f"agent-{agent_base_name}"
-                logger.info("[AgentSelection] Selected agent: '%s' (from registry)", agent_name)
+                logger.info(
+                    "[AgentSelection] Selected agent: '%s' (from registry)", agent_name
+                )
                 agent_metadata = {"agent_source": "registry"}
 
                 # Filter context for this task (if enabled)
@@ -1695,7 +2043,9 @@ Phase Control Examples:
                             context_requirements=context_requirements, max_tokens=5000
                         )
 
-                        input_data_with_context["pre_gathered_context"] = filtered_context
+                        input_data_with_context["pre_gathered_context"] = (
+                            filtered_context
+                        )
 
                         print(
                             f"[DispatchRunner] Task {task_data['task_id']}: "
@@ -1718,14 +2068,19 @@ Phase Control Examples:
             except Exception as e:
                 print(
                     json.dumps(
-                        {"success": False, "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}"}
+                        {
+                            "success": False,
+                            "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}",
+                        }
                     ),
                     file=sys.stderr,
                 )
                 sys.exit(1)
 
         if phase_config.should_stop_after_phase(ExecutionPhase.CONTEXT_FILTERING):
-            print("[DispatchRunner] Stopping after Phase 3 as requested", file=sys.stderr)
+            print(
+                "[DispatchRunner] Stopping after Phase 3 as requested", file=sys.stderr
+            )
             if phase_config.save_state_file:
                 phase_state.save(phase_config.save_state_file)
 
@@ -1733,7 +2088,9 @@ Phase Control Examples:
                 json.dumps(
                     {
                         "success": True,
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                         "stopped_after_phase": 3,
                         "tasks_prepared": len(tasks),
                     },
@@ -1757,7 +2114,10 @@ Phase Control Examples:
             except Exception as e:
                 print(
                     json.dumps(
-                        {"success": False, "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}"}
+                        {
+                            "success": False,
+                            "error": f"Error parsing task {task_data.get('task_id', 'unknown')}: {e}",
+                        }
                     ),
                     file=sys.stderr,
                 )
@@ -1765,7 +2125,9 @@ Phase Control Examples:
 
     # Phase 4: Parallel Execution
     if phase_config.should_execute_phase(ExecutionPhase.PARALLEL_EXECUTION):
-        result = await execute_phase_4_parallel_execution(tasks=tasks, validator=validator, phase_state=phase_state)
+        result = await execute_phase_4_parallel_execution(
+            tasks=tasks, validator=validator, phase_state=phase_state
+        )
         phase_state.phases_executed.append(result)
         phase_state.current_phase = 4
 
@@ -1779,7 +2141,9 @@ Phase Control Examples:
                     {
                         "success": False,
                         "error": "Parallel execution failed",
-                        "phase_results": [p.to_dict() for p in phase_state.phases_executed],
+                        "phase_results": [
+                            p.to_dict() for p in phase_state.phases_executed
+                        ],
                     },
                     indent=2,
                 )
@@ -1805,7 +2169,12 @@ Phase Control Examples:
     output["timing_summary"] = {
         "total_duration_ms": total_duration,
         "phases": [
-            {"phase": p.phase.name, "duration_ms": p.duration_ms, "success": p.success, "skipped": p.skipped}
+            {
+                "phase": p.phase.name,
+                "duration_ms": p.duration_ms,
+                "success": p.success,
+                "skipped": p.skipped,
+            }
             for p in phase_state.phases_executed
         ],
     }
@@ -1818,7 +2187,10 @@ Phase Control Examples:
 
     # Extract execution results from Phase 4
     for phase_result in phase_state.phases_executed:
-        if phase_result.phase == ExecutionPhase.PARALLEL_EXECUTION and phase_result.success:
+        if (
+            phase_result.phase == ExecutionPhase.PARALLEL_EXECUTION
+            and phase_result.success
+        ):
             results_data = phase_result.output_data.get("results", {})
             for task_id, result_data in results_data.items():
                 output["results"].append(
@@ -1857,7 +2229,9 @@ Phase Control Examples:
     if args.output_file:
         with open(args.output_file, "w") as f:
             f.write(output_json)
-        print(f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr)
+        print(
+            f"[DispatchRunner] Results written to: {args.output_file}", file=sys.stderr
+        )
     else:
         print(output_json)
 

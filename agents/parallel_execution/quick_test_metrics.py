@@ -1,6 +1,7 @@
 """Quick test of metrics collector - basic functionality only."""
 
 import asyncio
+
 from metrics_collector import get_metrics_collector
 
 
@@ -18,7 +19,9 @@ async def main():
     )
 
     # Test threshold recording
-    await collector.record_threshold_metric(threshold_id="INT-001", measured_value=1450.0)
+    await collector.record_threshold_metric(
+        threshold_id="INT-001", measured_value=1450.0
+    )
 
     # Get statistics
     routing_stats = collector.get_routing_statistics()

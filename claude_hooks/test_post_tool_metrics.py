@@ -97,7 +97,9 @@ def test_quality_scoring_python():
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics("/test/example.py", test_case["content"])
+        metrics = collector._calculate_quality_metrics(
+            "/test/example.py", test_case["content"]
+        )
 
         score = metrics.quality_score
         expected_min = test_case.get("expected_min_score", 0.0)
@@ -106,7 +108,9 @@ def test_quality_scoring_python():
         is_valid = expected_min <= score <= expected_max
         status = "✓" if is_valid else "✗"
 
-        print(f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})")
+        print(
+            f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})"
+        )
         print(
             f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, "
             + f"Docs: {metrics.documentation}, Error: {metrics.error_handling}"
@@ -160,7 +164,9 @@ function calculateSum(a: number, b: number): number {
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics("/test/example.ts", test_case["content"])
+        metrics = collector._calculate_quality_metrics(
+            "/test/example.ts", test_case["content"]
+        )
 
         score = metrics.quality_score
         expected_min = test_case.get("expected_min_score", 0.0)
@@ -169,7 +175,9 @@ function calculateSum(a: number, b: number): number {
         is_valid = expected_min <= score <= expected_max
         status = "✓" if is_valid else "✗"
 
-        print(f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})")
+        print(
+            f"  {status} {test_case['name']}: {score:.2f} (expected: {expected_min:.2f}-{expected_max:.2f})"
+        )
         print(
             f"      Naming: {metrics.naming_conventions}, Type: {metrics.type_safety}, "
             + f"Docs: {metrics.documentation}, Error: {metrics.error_handling}"
@@ -190,7 +198,10 @@ def test_performance_metrics():
 
     tool_info = {
         "tool_name": "Write",
-        "tool_input": {"file_path": "/test/example.py", "content": "def test():\n    pass\n"},
+        "tool_input": {
+            "file_path": "/test/example.py",
+            "content": "def test():\n    pass\n",
+        },
         "tool_response": {"success": True},
     }
 

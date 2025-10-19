@@ -6,17 +6,16 @@ Loads agent definitions from YAML files with validation, hot-reload, and lifecyc
 
 import asyncio
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Set
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent, FileCreatedEvent
-
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
 
 
 class AgentCapabilities(BaseModel):
@@ -40,7 +39,9 @@ class AgentCapabilities(BaseModel):
     quality_driven_endpoint_design: bool = False
     performance_aware_architecture: bool = False
 
-    model_config = ConfigDict(extra="allow")  # Allow extra capabilities not in base schema
+    model_config = ConfigDict(
+        extra="allow"
+    )  # Allow extra capabilities not in base schema
 
 
 class IntelligenceConfig(BaseModel):
@@ -170,12 +171,16 @@ class AgentConfigChangeHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         """Handle file modification events."""
-        if isinstance(event, FileModifiedEvent) and event.src_path.endswith((".yaml", ".yml")):
+        if isinstance(event, FileModifiedEvent) and event.src_path.endswith(
+            (".yaml", ".yml")
+        ):
             asyncio.create_task(self._handle_config_change(event.src_path))
 
     def on_created(self, event):
         """Handle file creation events."""
-        if isinstance(event, FileCreatedEvent) and event.src_path.endswith((".yaml", ".yml")):
+        if isinstance(event, FileCreatedEvent) and event.src_path.endswith(
+            (".yaml", ".yml")
+        ):
             asyncio.create_task(self._handle_config_change(event.src_path))
 
     async def _handle_config_change(self, file_path: str):
@@ -206,7 +211,9 @@ class AgentLoader:
     - Capability indexing for enhanced routing
     """
 
-    def __init__(self, config_dir: Optional[Path] = None, enable_hot_reload: bool = True):
+    def __init__(
+        self, config_dir: Optional[Path] = None, enable_hot_reload: bool = True
+    ):
         """
         Initialize agent loader.
 
@@ -245,7 +252,9 @@ class AgentLoader:
         if not self.config_dir.exists():
             error_msg = f"Agent config directory not found: {self.config_dir}"
             await self.trace_logger.log_event(
-                event_type=TraceEventType.AGENT_ERROR, message=error_msg, level=TraceLevel.ERROR
+                event_type=TraceEventType.AGENT_ERROR,
+                message=error_msg,
+                level=TraceLevel.ERROR,
             )
             raise FileNotFoundError(error_msg)
 
@@ -277,7 +286,9 @@ class AgentLoader:
 
     async def _load_all_agents(self):
         """Load all agent configurations from directory."""
-        config_files = list(self.config_dir.glob("*.yaml")) + list(self.config_dir.glob("*.yml"))
+        config_files = list(self.config_dir.glob("*.yaml")) + list(
+            self.config_dir.glob("*.yml")
+        )
 
         await self.trace_logger.log_event(
             event_type=TraceEventType.PARALLEL_BATCH_START,
@@ -308,7 +319,11 @@ class AgentLoader:
                 error_msg = f"Failed to load {agent_name}: {str(e)}"
 
                 self.agents[agent_name] = LoadedAgent(
-                    agent_name=agent_name, config=None, status=AgentLoadStatus.FAILED, load_time_ms=0.0, error=error_msg
+                    agent_name=agent_name,
+                    config=None,
+                    status=AgentLoadStatus.FAILED,
+                    load_time_ms=0.0,
+                    error=error_msg,
                 )
 
                 await self.trace_logger.log_event(
@@ -349,7 +364,10 @@ class AgentLoader:
         load_time_ms = (time.time() - start_time) * 1000
 
         return LoadedAgent(
-            agent_name=config_file.stem, config=config, status=AgentLoadStatus.LOADED, load_time_ms=load_time_ms
+            agent_name=config_file.stem,
+            config=config,
+            status=AgentLoadStatus.LOADED,
+            load_time_ms=load_time_ms,
         )
 
     def _build_capability_index(self):
@@ -425,7 +443,10 @@ class AgentLoader:
         if not config_file.exists():
             error_msg = f"Config file not found for {agent_name}"
             await self.trace_logger.log_event(
-                event_type=TraceEventType.AGENT_ERROR, message=error_msg, level=TraceLevel.ERROR, agent_name=agent_name
+                event_type=TraceEventType.AGENT_ERROR,
+                message=error_msg,
+                level=TraceLevel.ERROR,
+                agent_name=agent_name,
             )
             return None
 
@@ -451,11 +472,18 @@ class AgentLoader:
             error_msg = f"Failed to reload {agent_name}: {str(e)}"
 
             self.agents[agent_name] = LoadedAgent(
-                agent_name=agent_name, config=None, status=AgentLoadStatus.FAILED, load_time_ms=0.0, error=error_msg
+                agent_name=agent_name,
+                config=None,
+                status=AgentLoadStatus.FAILED,
+                load_time_ms=0.0,
+                error=error_msg,
             )
 
             await self.trace_logger.log_event(
-                event_type=TraceEventType.TASK_FAILED, message=error_msg, level=TraceLevel.ERROR, agent_name=agent_name
+                event_type=TraceEventType.TASK_FAILED,
+                message=error_msg,
+                level=TraceLevel.ERROR,
+                agent_name=agent_name,
             )
 
             return None
@@ -534,7 +562,11 @@ class AgentLoader:
         Returns:
             Dictionary of agent_name to LoadedAgent
         """
-        return {name: agent for name, agent in self.agents.items() if agent.status == AgentLoadStatus.LOADED}
+        return {
+            name: agent
+            for name, agent in self.agents.items()
+            if agent.status == AgentLoadStatus.LOADED
+        }
 
     def get_agent_stats(self) -> Dict[str, Any]:
         """
@@ -544,8 +576,12 @@ class AgentLoader:
             Dictionary with stats
         """
         total = len(self.agents)
-        loaded = sum(1 for a in self.agents.values() if a.status == AgentLoadStatus.LOADED)
-        failed = sum(1 for a in self.agents.values() if a.status == AgentLoadStatus.FAILED)
+        loaded = sum(
+            1 for a in self.agents.values() if a.status == AgentLoadStatus.LOADED
+        )
+        failed = sum(
+            1 for a in self.agents.values() if a.status == AgentLoadStatus.FAILED
+        )
 
         return {
             "total_agents": total,

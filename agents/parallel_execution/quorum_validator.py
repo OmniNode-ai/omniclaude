@@ -8,10 +8,11 @@ Uses Gemini (direct API) and local Ollama models for voting.
 import asyncio
 import json
 import os
-from typing import Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List
+
 import httpx
 
 # Load environment variables from .env file
@@ -22,7 +23,9 @@ try:
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    print("Warning: python-dotenv not installed, relying on system environment variables")
+    print(
+        "Warning: python-dotenv not installed, relying on system environment variables"
+    )
 
 
 class ValidationDecision(Enum):
@@ -146,14 +149,19 @@ Task breakdown generated:
 CRITICAL: Do NOT repeat the task breakdown or user request in your response. Only return the validation JSON."""
 
         # Query models in parallel
-        tasks = [self._query_model(model_name, config, prompt) for model_name, config in self.models.items()]
+        tasks = [
+            self._query_model(model_name, config, prompt)
+            for model_name, config in self.models.items()
+        ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Calculate consensus
         return self._calculate_consensus(results)
 
-    async def _query_model(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
+    async def _query_model(
+        self, model_name: str, config: Dict[str, Any], prompt: str
+    ) -> Dict[str, Any]:
         """Query a model via API"""
 
         try:
@@ -172,7 +180,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 "recommendation": "FAIL",
             }
 
-    async def _query_gemini(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
+    async def _query_gemini(
+        self, model_name: str, config: Dict[str, Any], prompt: str
+    ) -> Dict[str, Any]:
         """Query Gemini API directly"""
 
         url = f"{config['endpoint']}?key={self.gemini_api_key}"
@@ -209,10 +219,16 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
             # Extract JSON from response
             return self._parse_model_response(model_name, text)
 
-    async def _query_zai(self, model_name: str, config: Dict[str, Any], prompt: str) -> Dict[str, Any]:
+    async def _query_zai(
+        self, model_name: str, config: Dict[str, Any], prompt: str
+    ) -> Dict[str, Any]:
         """Query Z.ai API using Anthropic Messages API format"""
 
-        headers = {"x-api-key": self.zai_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        headers = {
+            "x-api-key": self.zai_api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
 
         payload = {
             "model": config["model"],
@@ -222,7 +238,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(config["endpoint"], headers=headers, json=payload)
+            response = await client.post(
+                config["endpoint"], headers=headers, json=payload
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -285,7 +303,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         """Calculate weighted consensus"""
 
         # Filter valid results
-        valid_results = [r for r in results if isinstance(r, dict) and "recommendation" in r]
+        valid_results = [
+            r for r in results if isinstance(r, dict) and "recommendation" in r
+        ]
 
         if not valid_results:
             return QuorumResult(
@@ -299,7 +319,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         # Enforce MIN_MODEL_PARTICIPATION threshold
         total_models = len(self.models)
         participating_models = len(valid_results)
-        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+        participation_rate = (
+            participating_models / total_models if total_models > 0 else 0.0
+        )
 
         if participation_rate < MIN_MODEL_PARTICIPATION:
             return QuorumResult(

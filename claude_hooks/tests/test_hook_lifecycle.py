@@ -13,23 +13,27 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
-import sys
 import json
-import time
 import subprocess
+import sys
+import time
 import uuid
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
+from correlation_manager import (
+    clear_correlation_context,
+    get_correlation_context,
+    set_correlation_id,
+)
 from hook_event_logger import HookEventLogger
-from correlation_manager import set_correlation_id, get_correlation_context, clear_correlation_context
 from metadata_extractor import MetadataExtractor
-
 
 # ============================================================================
 # FIXTURES
@@ -143,7 +147,10 @@ class TestUserPromptSubmitHook:
             with open(log_file, "r") as f:
                 log_content = f.read()
                 # Should log agent detection
-                assert "agent-testing" in log_content.lower() or "agent detected" in log_content.lower()
+                assert (
+                    "agent-testing" in log_content.lower()
+                    or "agent detected" in log_content.lower()
+                )
 
     def test_context_injection(self, sample_prompts):
         """Test hook injects agent context."""
@@ -162,7 +169,9 @@ class TestUserPromptSubmitHook:
 
         # Should inject agent context
         if "@agent-testing" in prompt:
-            assert "Agent Framework Context" in output or "agent-testing" in output.lower()
+            assert (
+                "Agent Framework Context" in output or "agent-testing" in output.lower()
+            )
 
     def test_correlation_id_generation(self):
         """Test hook generates correlation ID."""
@@ -285,7 +294,9 @@ class TestMetadataExtractor:
         """Test basic metadata extraction from prompt."""
         extractor = MetadataExtractor(working_dir="/test")
 
-        metadata = extractor.extract_all(prompt="write pytest tests for the API", agent_name="agent-testing")
+        metadata = extractor.extract_all(
+            prompt="write pytest tests for the API", agent_name="agent-testing"
+        )
 
         assert isinstance(metadata, dict)
         # Check for actual metadata structure
@@ -330,7 +341,9 @@ class TestMetadataExtractor:
         extractor = MetadataExtractor(working_dir="/test")
 
         corr_context = get_correlation_context()
-        metadata = extractor.extract_all(prompt="write tests", correlation_context=corr_context)
+        metadata = extractor.extract_all(
+            prompt="write tests", correlation_context=corr_context
+        )
 
         assert isinstance(metadata, dict)
 
@@ -351,7 +364,10 @@ class TestPreToolUseHook:
         json_input = json.dumps(tool_info)
 
         result = subprocess.run(
-            [str(HOOKS_DIR / "pre-tool-use-quality.sh")], input=json_input, capture_output=True, text=True
+            [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
+            input=json_input,
+            capture_output=True,
+            text=True,
         )
 
         # Should pass through immediately
@@ -363,13 +379,19 @@ class TestPreToolUseHook:
         """Test hook intercepts Write tool for validation."""
         tool_info = {
             "tool_name": "Write",
-            "tool_input": {"file_path": "/test/model_test.py", "content": "def test_function():\n    pass\n"},
+            "tool_input": {
+                "file_path": "/test/model_test.py",
+                "content": "def test_function():\n    pass\n",
+            },
         }
 
         json_input = json.dumps(tool_info)
 
         result = subprocess.run(
-            [str(HOOKS_DIR / "pre-tool-use-quality.sh")], input=json_input, capture_output=True, text=True
+            [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
+            input=json_input,
+            capture_output=True,
+            text=True,
         )
 
         # Should intercept (exit 0 or 2)
@@ -380,7 +402,10 @@ class TestPreToolUseHook:
         # Set correlation context
         set_correlation_id(correlation_id=correlation_id)
 
-        tool_info = {"tool_name": "Write", "tool_input": {"file_path": "/test/file.py", "content": "pass"}}
+        tool_info = {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/test/file.py", "content": "pass"},
+        }
 
         json_input = json.dumps(tool_info)
 
@@ -421,7 +446,10 @@ class TestPostToolUseHook:
         json_input = json.dumps(tool_info)
 
         result = subprocess.run(
-            [str(HOOKS_DIR / "post-tool-use-quality.sh")], input=json_input, capture_output=True, text=True
+            [str(HOOKS_DIR / "post-tool-use-quality.sh")],
+            input=json_input,
+            capture_output=True,
+            text=True,
         )
 
         # Should always pass through (exit 0)
@@ -438,7 +466,10 @@ class TestPostToolUseHook:
         json_input = json.dumps(tool_info)
 
         result = subprocess.run(
-            [str(HOOKS_DIR / "post-tool-use-quality.sh")], input=json_input, capture_output=True, text=True
+            [str(HOOKS_DIR / "post-tool-use-quality.sh")],
+            input=json_input,
+            capture_output=True,
+            text=True,
         )
 
         assert result.returncode == 0
@@ -489,7 +520,13 @@ class TestDatabaseIntegration:
         start_time = time.time()
 
         for _ in range(10):
-            logger.log_event(source="Test", action="test_action", resource="test", resource_id="test-id", payload={})
+            logger.log_event(
+                source="Test",
+                action="test_action",
+                resource="test",
+                resource_id="test-id",
+                payload={},
+            )
 
         elapsed_ms = (time.time() - start_time) * 1000
 
@@ -526,11 +563,17 @@ class TestEndToEndWorkflow:
         test_file = tmp_path / "test_example.py"
         tool_info = {
             "tool_name": "Write",
-            "tool_input": {"file_path": str(test_file), "content": "def test_example():\n    pass\n"},
+            "tool_input": {
+                "file_path": str(test_file),
+                "content": "def test_example():\n    pass\n",
+            },
         }
 
         result2 = subprocess.run(
-            [str(HOOKS_DIR / "pre-tool-use-quality.sh")], input=json.dumps(tool_info), capture_output=True, text=True
+            [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
+            input=json.dumps(tool_info),
+            capture_output=True,
+            text=True,
         )
 
         assert result2.returncode in [0, 2]
@@ -596,7 +639,10 @@ class TestHookPerformance:
                 input=hook_input,
                 capture_output=True,
                 text=True,
-                env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
+                env={
+                    "ENABLE_AI_AGENT_SELECTION": "false",
+                    **dict(subprocess.os.environ),
+                },
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
@@ -607,7 +653,10 @@ class TestHookPerformance:
 
     def test_pretooluse_overhead(self, tmp_path):
         """Test PreToolUse hook overhead."""
-        tool_info = {"tool_name": "Write", "tool_input": {"file_path": str(tmp_path / "test.py"), "content": "pass"}}
+        tool_info = {
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(tmp_path / "test.py"), "content": "pass"},
+        }
 
         json_input = json.dumps(tool_info)
 
@@ -616,7 +665,10 @@ class TestHookPerformance:
 
         for _ in range(iterations):
             subprocess.run(
-                [str(HOOKS_DIR / "pre-tool-use-quality.sh")], input=json_input, capture_output=True, text=True
+                [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
+                input=json_input,
+                capture_output=True,
+                text=True,
             )
 
         elapsed_ms = (time.time() - start_time) * 1000

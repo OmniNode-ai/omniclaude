@@ -10,13 +10,13 @@ Matches the Intelligence Hook System database schema:
 """
 
 import asyncio
-import os
-import logging
-from typing import Dict, Optional, Any, List
-from datetime import datetime
-from contextlib import asynccontextmanager
-from uuid import UUID
 import json
+import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 try:
     import asyncpg
@@ -132,7 +132,9 @@ class PostgresTracingClient:
 
             while attempt < self.max_retry_attempts:
                 try:
-                    logger.info(f"Initializing connection pool (attempt {attempt + 1}/{self.max_retry_attempts})")
+                    logger.info(
+                        f"Initializing connection pool (attempt {attempt + 1}/{self.max_retry_attempts})"
+                    )
 
                     self.pool = await asyncpg.create_pool(
                         self.connection_url,
@@ -152,7 +154,9 @@ class PostgresTracingClient:
                     self._initialized = True
                     logger.info(
                         "PostgreSQL connection pool initialized successfully",
-                        extra={"pool_size": f"{self.min_pool_size}-{self.max_pool_size}"},
+                        extra={
+                            "pool_size": f"{self.min_pool_size}-{self.max_pool_size}"
+                        },
                     )
                     return True
 
@@ -412,7 +416,9 @@ class PostgresTracingClient:
                     tags,
                 )
                 trace_id = row["id"]
-                logger.debug(f"Created execution trace: {trace_id} (correlation: {correlation_id})")
+                logger.debug(
+                    f"Created execution trace: {trace_id} (correlation: {correlation_id})"
+                )
                 return trace_id
         except Exception as e:
             logger.error(f"Failed to create execution trace: {e}")
@@ -422,7 +428,11 @@ class PostgresTracingClient:
             return None
 
     async def complete_execution_trace(
-        self, correlation_id: UUID, success: bool, error_message: Optional[str] = None, error_type: Optional[str] = None
+        self,
+        correlation_id: UUID,
+        success: bool,
+        error_message: Optional[str] = None,
+        error_type: Optional[str] = None,
     ) -> bool:
         """
         Mark an execution trace as completed.
@@ -457,8 +467,12 @@ class PostgresTracingClient:
                 if not conn:
                     return False
 
-                await conn.execute(query, correlation_id, success, error_message, error_type)
-                logger.debug(f"Completed execution trace: {correlation_id} (success: {success})")
+                await conn.execute(
+                    query, correlation_id, success, error_message, error_type
+                )
+                logger.debug(
+                    f"Completed execution trace: {correlation_id} (success: {success})"
+                )
                 return True
         except Exception as e:
             logger.error(f"Failed to complete execution trace: {e}")
@@ -575,7 +589,9 @@ class PostgresTracingClient:
             print(f"[Tracing] Failed to record hook execution: {e}", file=sys.stderr)
             return None
 
-    async def get_trace_by_correlation_id(self, correlation_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_trace_by_correlation_id(
+        self, correlation_id: UUID
+    ) -> Optional[Dict[str, Any]]:
         """
         Get execution trace by correlation ID.
 
@@ -606,7 +622,9 @@ class PostgresTracingClient:
             logger.error(f"Failed to get trace by correlation ID: {e}")
             return None
 
-    async def get_hook_executions_for_trace(self, trace_id: UUID) -> List[Dict[str, Any]]:
+    async def get_hook_executions_for_trace(
+        self, trace_id: UUID
+    ) -> List[Dict[str, Any]]:
         """
         Get all hook executions for a trace.
 
@@ -855,10 +873,20 @@ class PostgresTracingClient:
 
         # Convert string UUIDs to UUID objects if necessary
         correlation_id = (
-            UUID(data["correlation_id"]) if isinstance(data["correlation_id"], str) else data["correlation_id"]
+            UUID(data["correlation_id"])
+            if isinstance(data["correlation_id"], str)
+            else data["correlation_id"]
         )
-        root_id = UUID(data["root_id"]) if isinstance(data["root_id"], str) else data["root_id"]
-        session_id = UUID(data["session_id"]) if isinstance(data["session_id"], str) else data["session_id"]
+        root_id = (
+            UUID(data["root_id"])
+            if isinstance(data["root_id"], str)
+            else data["root_id"]
+        )
+        session_id = (
+            UUID(data["session_id"])
+            if isinstance(data["session_id"], str)
+            else data["session_id"]
+        )
         parent_id = (
             UUID(data["parent_id"])
             if data.get("parent_id") and isinstance(data["parent_id"], str)
@@ -937,7 +965,11 @@ class PostgresTracingClient:
             raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
         # Convert string UUID to UUID object if necessary
-        trace_id = UUID(data["trace_id"]) if isinstance(data["trace_id"], str) else data["trace_id"]
+        trace_id = (
+            UUID(data["trace_id"])
+            if isinstance(data["trace_id"], str)
+            else data["trace_id"]
+        )
 
         # Call underlying method
         hook_id = await self.record_hook_execution(
@@ -967,7 +999,9 @@ class PostgresTracingClient:
 
         return str(hook_id)
 
-    async def update_execution_trace(self, correlation_id: str, updates: Dict[str, Any]) -> None:
+    async def update_execution_trace(
+        self, correlation_id: str, updates: Dict[str, Any]
+    ) -> None:
         """
         Update existing execution trace with completion data (spec-compliant API).
 
@@ -1001,7 +1035,9 @@ class PostgresTracingClient:
             raise ValueError("No updates provided")
 
         # Convert string to UUID if necessary
-        corr_id = UUID(correlation_id) if isinstance(correlation_id, str) else correlation_id
+        corr_id = (
+            UUID(correlation_id) if isinstance(correlation_id, str) else correlation_id
+        )
 
         # Special handling for simple completion updates
         if set(updates.keys()) <= {"status", "success", "error_message", "error_type"}:
@@ -1073,7 +1109,9 @@ class PostgresTracingClient:
             )
             raise RuntimeError(f"Failed to update execution trace: {e}")
 
-    async def get_trace_with_hooks(self, correlation_id: str) -> Optional[Dict[str, Any]]:
+    async def get_trace_with_hooks(
+        self, correlation_id: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieve execution trace with all associated hook executions.
 
@@ -1099,7 +1137,9 @@ class PostgresTracingClient:
             ...     print(f"Hook count: {len(result['hooks'])}")
         """
         # Convert string to UUID if necessary
-        corr_id = UUID(correlation_id) if isinstance(correlation_id, str) else correlation_id
+        corr_id = (
+            UUID(correlation_id) if isinstance(correlation_id, str) else correlation_id
+        )
 
         # Get trace
         trace = await self.get_trace_by_correlation_id(corr_id)

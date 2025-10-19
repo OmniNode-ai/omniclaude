@@ -5,18 +5,19 @@ Phase 4 Integration Tests - Full Generation Pipeline
 Tests the complete code generation pipeline from PRD to contracts, models, and enums.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
-    REDUCER_NODE_PRD,
-    ORCHESTRATOR_NODE_PRD,
     EFFECT_ANALYSIS_RESULT,
+    EFFECT_NODE_PRD,
+    ORCHESTRATOR_NODE_PRD,
+    REDUCER_NODE_PRD,
     create_mock_analysis_result,
 )
 from agents.tests.utils.generation_test_helpers import (
@@ -144,7 +145,12 @@ class TestPhase4Integration:
             ("EFFECT", "user_management", "identity", EFFECT_NODE_PRD),
             ("COMPUTE", "data_transformer", "processing", COMPUTE_NODE_PRD),
             ("REDUCER", "analytics_aggregator", "analytics", REDUCER_NODE_PRD),
-            ("ORCHESTRATOR", "workflow_coordinator", "orchestration", ORCHESTRATOR_NODE_PRD),
+            (
+                "ORCHESTRATOR",
+                "workflow_coordinator",
+                "orchestration",
+                ORCHESTRATOR_NODE_PRD,
+            ),
         ]
 
         analyzer = SimplePRDAnalyzer()
@@ -174,7 +180,9 @@ class TestPhase4Integration:
 
             # Verify no file conflicts
             main_files = [r["main_file"] for r in results]
-            assert len(main_files) == len(set(main_files)), "Duplicate file names detected"
+            assert len(main_files) == len(
+                set(main_files)
+            ), "Duplicate file names detected"
 
     @pytest.mark.asyncio
     async def test_generation_with_minimal_prd(self):
@@ -372,7 +380,9 @@ class TestGenerationArtifacts:
 
             # Verify all listed files exist
             for file_path in generated_files:
-                assert Path(file_path).exists(), f"Listed file does not exist: {file_path}"
+                assert Path(
+                    file_path
+                ).exists(), f"Listed file does not exist: {file_path}"
 
     @pytest.mark.asyncio
     async def test_init_file_generation(self):

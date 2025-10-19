@@ -7,21 +7,26 @@ requirements for OmniNode generation.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
-from uuid import UUID, uuid4
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, CoreErrorCode
+from omnibase_core.errors import CoreErrorCode, OnexError
+
+from .legacy.prd_decomposition_service import (
+    PRDDecompositionResult,
+    PRDDecompositionService,
+)
+
+# Import legacy omniagent code
+from .legacy.prd_parser import ModelParsedPRD, PRDParser
+from .version_config import get_config
 
 # TODO: Add omnibase_spi imports when available
 # from omnibase_spi.validation.tool_metadata_validator import ToolMetadataValidator
 # from omnibase_spi.validation.one_protocol_compliance import ONEProtocolComplianceChecker
 
-# Import legacy omniagent code
-from .legacy.prd_parser import PRDParser, ModelParsedPRD
-from .legacy.prd_decomposition_service import PRDDecompositionService, PRDDecompositionResult
-from .version_config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +105,24 @@ class PRDAnalyzer:
             node_type_hints = self._extract_node_type_hints(parsed_prd)
 
             # Recommend mixins
-            recommended_mixins = self._recommend_mixins(parsed_prd, decomposition_result)
+            recommended_mixins = self._recommend_mixins(
+                parsed_prd, decomposition_result
+            )
 
             # Identify external systems
-            external_systems = self._identify_external_systems(parsed_prd, decomposition_result)
+            external_systems = self._identify_external_systems(
+                parsed_prd, decomposition_result
+            )
 
             # Calculate quality baseline
-            quality_baseline = self._calculate_quality_baseline(parsed_prd, decomposition_result)
+            quality_baseline = self._calculate_quality_baseline(
+                parsed_prd, decomposition_result
+            )
 
             # Calculate confidence score
-            confidence_score = self._calculate_confidence_score(parsed_prd, decomposition_result, node_type_hints)
+            confidence_score = self._calculate_confidence_score(
+                parsed_prd, decomposition_result, node_type_hints
+            )
 
             result = PRDAnalysisResult(
                 session_id=session_id,
@@ -124,7 +137,9 @@ class PRDAnalyzer:
                 confidence_score=confidence_score,
             )
 
-            self.logger.info(f"PRD analysis completed for session {session_id} with confidence {confidence_score:.2f}")
+            self.logger.info(
+                f"PRD analysis completed for session {session_id} with confidence {confidence_score:.2f}"
+            )
             return result
 
         except Exception as e:
@@ -146,7 +161,9 @@ class PRDAnalyzer:
                 details={"content_length": len(prd_content)},
             )
 
-    async def _decompose_prd(self, parsed_prd: ModelParsedPRD) -> PRDDecompositionResult:
+    async def _decompose_prd(
+        self, parsed_prd: ModelParsedPRD
+    ) -> PRDDecompositionResult:
         """Decompose PRD into tasks using legacy omniagent service"""
         try:
             # Convert parsed PRD to decomposition input format
@@ -181,47 +198,78 @@ class PRDAnalyzer:
 
         return hints
 
-    def _recommend_mixins(self, parsed_prd: ModelParsedPRD, decomposition_result: PRDDecompositionResult) -> List[str]:
+    def _recommend_mixins(
+        self, parsed_prd: ModelParsedPRD, decomposition_result: PRDDecompositionResult
+    ) -> List[str]:
         """Recommend mixins based on PRD analysis"""
         mixins = []
 
         # Analyze requirements for mixin needs
-        requirements_text = " ".join(parsed_prd.functional_requirements + parsed_prd.features).lower()
+        requirements_text = " ".join(
+            parsed_prd.functional_requirements + parsed_prd.features
+        ).lower()
 
         # Event-driven patterns
-        if any(keyword in requirements_text for keyword in ["event", "notification", "publish", "subscribe"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["event", "notification", "publish", "subscribe"]
+        ):
             mixins.append("MixinEventBus")
 
         # Caching patterns
-        if any(keyword in requirements_text for keyword in ["cache", "caching", "performance", "speed"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["cache", "caching", "performance", "speed"]
+        ):
             mixins.append("MixinCaching")
 
         # Health monitoring
-        if any(keyword in requirements_text for keyword in ["health", "monitoring", "status", "alive"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["health", "monitoring", "status", "alive"]
+        ):
             mixins.append("MixinHealthCheck")
 
         # Retry patterns
-        if any(keyword in requirements_text for keyword in ["retry", "resilient", "fault", "error"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["retry", "resilient", "fault", "error"]
+        ):
             mixins.append("MixinRetry")
 
         # Circuit breaker patterns
-        if any(keyword in requirements_text for keyword in ["circuit", "breaker", "fallback", "timeout"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["circuit", "breaker", "fallback", "timeout"]
+        ):
             mixins.append("MixinCircuitBreaker")
 
         # Logging patterns
-        if any(keyword in requirements_text for keyword in ["log", "logging", "audit", "trace"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["log", "logging", "audit", "trace"]
+        ):
             mixins.append("MixinLogging")
 
         # Metrics patterns
-        if any(keyword in requirements_text for keyword in ["metric", "monitoring", "analytics", "kpi"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["metric", "monitoring", "analytics", "kpi"]
+        ):
             mixins.append("MixinMetrics")
 
         # Security patterns
-        if any(keyword in requirements_text for keyword in ["security", "auth", "encrypt", "secure"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["security", "auth", "encrypt", "secure"]
+        ):
             mixins.append("MixinSecurity")
 
         # Validation patterns
-        if any(keyword in requirements_text for keyword in ["validate", "validation", "check", "verify"]):
+        if any(
+            keyword in requirements_text
+            for keyword in ["validate", "validation", "check", "verify"]
+        ):
             mixins.append("MixinValidation")
 
         return mixins
@@ -314,7 +362,9 @@ class PRDAnalyzer:
 
         return min(confidence, 1.0)  # Cap at 100%
 
-    async def validate_generated_metadata(self, metadata_content: str) -> Dict[str, Any]:
+    async def validate_generated_metadata(
+        self, metadata_content: str
+    ) -> Dict[str, Any]:
         """Validate generated node metadata using omnibase_spi"""
         # TODO: Implement when omnibase_spi is available
         return {
@@ -326,7 +376,9 @@ class PRDAnalyzer:
             "compliance_level": "basic",
         }
 
-    async def validate_code_compliance(self, code_content: str, node_type: str) -> Dict[str, Any]:
+    async def validate_code_compliance(
+        self, code_content: str, node_type: str
+    ) -> Dict[str, Any]:
         """Validate generated code for O.N.E. protocol compliance"""
         # TODO: Implement when omnibase_spi is available
         return {

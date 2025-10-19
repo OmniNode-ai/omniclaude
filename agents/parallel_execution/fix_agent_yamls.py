@@ -54,7 +54,11 @@ def fix_intelligence_integration(agent_name: str) -> bool:
             end_idx = len(lines)
             for i in range(intel_line_idx + 1, len(lines)):
                 # Check if line starts with a top-level key (no indentation)
-                if lines[i].strip() and not lines[i].startswith(" ") and not lines[i].startswith("\t"):
+                if (
+                    lines[i].strip()
+                    and not lines[i].startswith(" ")
+                    and not lines[i].startswith("\t")
+                ):
                     if ":" in lines[i]:
                         end_idx = i
                         break

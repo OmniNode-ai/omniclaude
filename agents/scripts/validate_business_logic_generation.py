@@ -57,7 +57,11 @@ def validate_business_logic_generator():
         print("   ✗ BusinessLogicGenerator class not found")
         return False
 
-    methods = [node.name for node in blg_class.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    methods = [
+        node.name
+        for node in blg_class.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
 
     required_methods = [
         "__init__",
@@ -92,7 +96,15 @@ def validate_business_logic_generator():
 
     # Test 5: Pattern detection
     print("\n5. Checking pattern detection...")
-    patterns = ["CRUD_CREATE", "CRUD_READ", "CRUD_UPDATE", "CRUD_DELETE", "AGGREGATION", "TRANSFORMATION", "VALIDATION"]
+    patterns = [
+        "CRUD_CREATE",
+        "CRUD_READ",
+        "CRUD_UPDATE",
+        "CRUD_DELETE",
+        "AGGREGATION",
+        "TRANSFORMATION",
+        "VALIDATION",
+    ]
     for pattern in patterns:
         if pattern in code:
             print(f"   ✓ Found pattern: {pattern}")

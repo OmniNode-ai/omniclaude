@@ -10,16 +10,16 @@ Generates:
 - Recommendations for optimization
 """
 
-import sys
-import json
 import argparse
-import psycopg2
-from datetime import datetime, timezone
-
+import json
 
 # Database connection
 # Note: Set PGPASSWORD environment variable before running
 import os
+import sys
+from datetime import datetime, timezone
+
+import psycopg2
 
 DB_CONFIG = {
     "host": "localhost",
@@ -88,7 +88,11 @@ class ValidationReportGenerator:
                 "target_p95_ms": THRESHOLDS["stop_p95"],
                 "status": "✅",
             },
-            "metadata_overhead": {"avg_ms": 12.5, "target_ms": THRESHOLDS["metadata_overhead"], "status": "✅"},
+            "metadata_overhead": {
+                "avg_ms": 12.5,
+                "target_ms": THRESHOLDS["metadata_overhead"],
+                "status": "✅",
+            },
         }
 
         self.report_data["performance"] = performance_data
@@ -220,7 +224,9 @@ class ValidationReportGenerator:
 
                 for line in query_plan:
                     if "Execution Time" in str(line):
-                        execution_time = str(line).split("Execution Time:")[1].split("ms")[0].strip()
+                        execution_time = (
+                            str(line).split("Execution Time:")[1].split("ms")[0].strip()
+                        )
 
                 database_data = {
                     "total_hook_events": total_events,
@@ -284,11 +290,19 @@ class ValidationReportGenerator:
         integration_data = self.report_data.get("integration", {})
         if "error" not in integration_data:
             lines.append(f"- **Status:** {integration_data.get('status', '❓')}")
-            lines.append(f"- **Events Logged:** {integration_data.get('events_logged', 0):,}")
-            lines.append(f"- **Unique Correlations:** {integration_data.get('unique_correlations', 0):,}")
+            lines.append(
+                f"- **Events Logged:** {integration_data.get('events_logged', 0):,}"
+            )
+            lines.append(
+                f"- **Unique Correlations:** {integration_data.get('unique_correlations', 0):,}"
+            )
             lines.append(f"- **Full Traces:** {integration_data.get('full_traces', 0)}")
-            lines.append(f"- **Partial Traces:** {integration_data.get('partial_traces', 0)}")
-            lines.append(f"- **Coverage Rate:** {integration_data.get('coverage_rate', 0):.0%}")
+            lines.append(
+                f"- **Partial Traces:** {integration_data.get('partial_traces', 0)}"
+            )
+            lines.append(
+                f"- **Coverage Rate:** {integration_data.get('coverage_rate', 0):.0%}"
+            )
         else:
             lines.append(f"- **Error:** {integration_data['error']}")
 
@@ -300,12 +314,20 @@ class ValidationReportGenerator:
         db_data = self.report_data.get("database", {})
         if "error" not in db_data:
             lines.append(f"- **Status:** {db_data.get('status', '❓')}")
-            lines.append(f"- **Total Hook Events:** {db_data.get('total_hook_events', 0):,}")
+            lines.append(
+                f"- **Total Hook Events:** {db_data.get('total_hook_events', 0):,}"
+            )
             lines.append(f"- **Total Sessions:** {db_data.get('total_sessions', 0):,}")
-            lines.append(f"- **Processed Events:** {db_data.get('processed_events', 0):,}")
+            lines.append(
+                f"- **Processed Events:** {db_data.get('processed_events', 0):,}"
+            )
             lines.append(f"- **Retry Events:** {db_data.get('retry_events', 0):,}")
-            lines.append(f"- **Recent Events (24h):** {db_data.get('recent_events_24h', 0):,}")
-            lines.append(f"- **Query Performance:** {db_data.get('query_performance_ms', 'N/A')}")
+            lines.append(
+                f"- **Recent Events (24h):** {db_data.get('recent_events_24h', 0):,}"
+            )
+            lines.append(
+                f"- **Query Performance:** {db_data.get('query_performance_ms', 'N/A')}"
+            )
         else:
             lines.append(f"- **Error:** {db_data['error']}")
 
@@ -324,25 +346,40 @@ class ValidationReportGenerator:
                 lines.append("")
         else:
             lines.extend(
-                ["## Recommendations", "", "✅ No recommendations - all systems operating within targets!", ""]
+                [
+                    "## Recommendations",
+                    "",
+                    "✅ No recommendations - all systems operating within targets!",
+                    "",
+                ]
             )
 
         # Summary
         lines.extend(["## Summary", ""])
 
-        perf_status = all(m.get("status") == "✅" for m in perf_data.values() if "status" in m)
+        perf_status = all(
+            m.get("status") == "✅" for m in perf_data.values() if "status" in m
+        )
         int_status = integration_data.get("status") == "✅"
         db_status = db_data.get("status") == "✅"
 
-        lines.append(f"- **Performance:** {'✅ PASS' if perf_status else '⚠️ NEEDS ATTENTION'}")
-        lines.append(f"- **Integration:** {'✅ PASS' if int_status else '⚠️ NEEDS ATTENTION'}")
-        lines.append(f"- **Database:** {'✅ PASS' if db_status else '⚠️ NEEDS ATTENTION'}")
+        lines.append(
+            f"- **Performance:** {'✅ PASS' if perf_status else '⚠️ NEEDS ATTENTION'}"
+        )
+        lines.append(
+            f"- **Integration:** {'✅ PASS' if int_status else '⚠️ NEEDS ATTENTION'}"
+        )
+        lines.append(
+            f"- **Database:** {'✅ PASS' if db_status else '⚠️ NEEDS ATTENTION'}"
+        )
         lines.append("")
 
         if perf_status and int_status and db_status and not recommendations:
             lines.append("🎉 **Overall Status:** All systems validated successfully!")
         else:
-            lines.append("⚠️ **Overall Status:** Some areas require attention - see recommendations above.")
+            lines.append(
+                "⚠️ **Overall Status:** Some areas require attention - see recommendations above."
+            )
 
         return "\n".join(lines)
 
@@ -365,9 +402,14 @@ class ValidationReportGenerator:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate hook system validation report")
+    parser = argparse.ArgumentParser(
+        description="Generate hook system validation report"
+    )
     parser.add_argument(
-        "--format", choices=["markdown", "json"], default="markdown", help="Output format (default: markdown)"
+        "--format",
+        choices=["markdown", "json"],
+        default="markdown",
+        help="Output format (default: markdown)",
     )
 
     args = parser.parse_args()

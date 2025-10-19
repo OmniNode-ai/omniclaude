@@ -16,11 +16,11 @@ Components:
 __version__ = "1.0.0"
 __author__ = "Archon Agent Coordination System"
 
-from .trigger_matcher import EnhancedTriggerMatcher
-from .confidence_scorer import ConfidenceScorer, ConfidenceScore
 from .capability_index import CapabilityIndex
+from .confidence_scorer import ConfidenceScore, ConfidenceScorer
+from .enhanced_router import AgentRecommendation, EnhancedAgentRouter
 from .result_cache import ResultCache
-from .enhanced_router import EnhancedAgentRouter, AgentRecommendation
+from .trigger_matcher import EnhancedTriggerMatcher
 
 __all__ = [
     "EnhancedTriggerMatcher",

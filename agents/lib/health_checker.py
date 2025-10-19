@@ -1,7 +1,7 @@
 """
 Health Check Framework
 
-Provides comprehensive health checks for all Phase 7 components with:
+Provides comprehensive health checks for all agent framework components with:
 - Database connectivity checks
 - Template cache health
 - Parallel generation capacity
@@ -80,7 +80,7 @@ class HealthCheckConfig:
 
 class HealthChecker:
     """
-    Comprehensive health check framework for Phase 7 components.
+    Comprehensive health check framework for agent framework components.
 
     Features:
     - Individual component health checks
@@ -267,7 +267,10 @@ class HealthChecker:
                 )
 
                 await update_health_status(
-                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
+                    component=component,
+                    healthy=healthy,
+                    status=status.value,
+                    metadata=check_result.metadata,
                 )
 
                 return check_result
@@ -359,7 +362,10 @@ class HealthChecker:
                 )
 
                 await update_health_status(
-                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
+                    component=component,
+                    healthy=healthy,
+                    status=status.value,
+                    metadata=check_result.metadata,
                 )
 
                 return check_result
@@ -435,7 +441,9 @@ class HealthChecker:
                     else:
                         status = HealthCheckStatus.HEALTHY
                         healthy = True
-                        message = f"Mixin learning healthy (success rate: {success_rate:.1%})"
+                        message = (
+                            f"Mixin learning healthy (success rate: {success_rate:.1%})"
+                        )
 
                 check_duration_ms = (time.time() - start_time) * 1000
 
@@ -453,7 +461,10 @@ class HealthChecker:
                 )
 
                 await update_health_status(
-                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
+                    component=component,
+                    healthy=healthy,
+                    status=status.value,
+                    metadata=check_result.metadata,
                 )
 
                 return check_result
@@ -519,7 +530,11 @@ class HealthChecker:
                     message = "No recent pattern feedback"
                     precision = 0.0
                 else:
-                    precision = correct / (correct + incorrect) if (correct + incorrect) > 0 else 0.0
+                    precision = (
+                        correct / (correct + incorrect)
+                        if (correct + incorrect) > 0
+                        else 0.0
+                    )
 
                     if precision < self.config.pattern_min_precision:
                         status = HealthCheckStatus.DEGRADED
@@ -528,7 +543,9 @@ class HealthChecker:
                     else:
                         status = HealthCheckStatus.HEALTHY
                         healthy = True
-                        message = f"Pattern matching healthy (precision: {precision:.1%})"
+                        message = (
+                            f"Pattern matching healthy (precision: {precision:.1%})"
+                        )
 
                 check_duration_ms = (time.time() - start_time) * 1000
 
@@ -546,7 +563,10 @@ class HealthChecker:
                 )
 
                 await update_health_status(
-                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
+                    component=component,
+                    healthy=healthy,
+                    status=status.value,
+                    metadata=check_result.metadata,
                 )
 
                 return check_result
@@ -636,7 +656,10 @@ class HealthChecker:
                 )
 
                 await update_health_status(
-                    component=component, healthy=healthy, status=status.value, metadata=check_result.metadata
+                    component=component,
+                    healthy=healthy,
+                    status=status.value,
+                    metadata=check_result.metadata,
                 )
 
                 return check_result
@@ -745,15 +768,21 @@ class HealthChecker:
             return HealthCheckStatus.UNKNOWN
 
         # If any component is critical, system is critical
-        if any(c.status == HealthCheckStatus.CRITICAL for c in self.last_checks.values()):
+        if any(
+            c.status == HealthCheckStatus.CRITICAL for c in self.last_checks.values()
+        ):
             return HealthCheckStatus.CRITICAL
 
         # If any component is degraded, system is degraded
-        if any(c.status == HealthCheckStatus.DEGRADED for c in self.last_checks.values()):
+        if any(
+            c.status == HealthCheckStatus.DEGRADED for c in self.last_checks.values()
+        ):
             return HealthCheckStatus.DEGRADED
 
         # If all components are healthy
-        if all(c.status == HealthCheckStatus.HEALTHY for c in self.last_checks.values()):
+        if all(
+            c.status == HealthCheckStatus.HEALTHY for c in self.last_checks.values()
+        ):
             return HealthCheckStatus.HEALTHY
 
         # Otherwise unknown

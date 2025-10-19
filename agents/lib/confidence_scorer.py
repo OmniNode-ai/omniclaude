@@ -11,8 +11,8 @@ Confidence Components (weighted):
 4. Historical Score (10%) - Past success rates
 """
 
-from typing import Dict, Any
 from dataclasses import dataclass
+from typing import Any, Dict
 
 
 @dataclass
@@ -98,7 +98,12 @@ class ConfidenceScorer:
         weighted_historical = historical_score * self.WEIGHT_HISTORICAL
 
         # Total score
-        total = weighted_trigger + weighted_context + weighted_capability + weighted_historical
+        total = (
+            weighted_trigger
+            + weighted_context
+            + weighted_capability
+            + weighted_historical
+        )
 
         # Generate explanation
         explanation = self._generate_explanation(

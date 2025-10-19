@@ -8,15 +8,14 @@ Provides a simple, context-aware tracing interface that handles:
 - Context managers for automatic trace lifecycle management
 """
 
+import logging
 import os
 import time
-import logging
-from typing import Optional, Dict, Any, List
-from uuid import UUID, uuid4
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+from uuid import UUID, uuid4
 
 from .postgres_client import PostgresTracingClient
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,11 @@ class ExecutionTracer:
         ```
     """
 
-    def __init__(self, postgres_client: Optional[PostgresTracingClient] = None, auto_initialize: bool = True):
+    def __init__(
+        self,
+        postgres_client: Optional[PostgresTracingClient] = None,
+        auto_initialize: bool = True,
+    ):
         """
         Initialize the execution tracer.
 
@@ -160,7 +163,9 @@ class ExecutionTracer:
             try:
                 corr_uuid = UUID(correlation_id)
             except ValueError:
-                logger.warning(f"Invalid correlation_id: {correlation_id}, generating new one")
+                logger.warning(
+                    f"Invalid correlation_id: {correlation_id}, generating new one"
+                )
                 corr_uuid = uuid4()
         elif env_ids["correlation_id"]:
             corr_uuid = env_ids["correlation_id"]
@@ -213,7 +218,10 @@ class ExecutionTracer:
             if trace_id:
                 # Store trace context for hook tracking
                 self._trace_contexts[corr_uuid] = TraceContext(
-                    correlation_id=corr_uuid, trace_id=trace_id, started_at=time.time(), execution_order=0
+                    correlation_id=corr_uuid,
+                    trace_id=trace_id,
+                    started_at=time.time(),
+                    execution_order=0,
                 )
                 logger.debug(f"Started trace: {corr_uuid} (trace_id: {trace_id})")
             else:
@@ -274,18 +282,25 @@ class ExecutionTracer:
         try:
             corr_uuid = UUID(correlation_id)
         except ValueError:
-            logger.warning(f"Invalid correlation_id for hook tracking: {correlation_id}")
+            logger.warning(
+                f"Invalid correlation_id for hook tracking: {correlation_id}"
+            )
             return
 
         # Get trace context
         trace_ctx = self._trace_contexts.get(corr_uuid)
         if not trace_ctx:
-            logger.warning(f"No trace context found for {correlation_id}, attempting lookup")
+            logger.warning(
+                f"No trace context found for {correlation_id}, attempting lookup"
+            )
             # Try to get trace from database
             trace_data = await self.client.get_trace_by_correlation_id(corr_uuid)
             if trace_data:
                 trace_ctx = TraceContext(
-                    correlation_id=corr_uuid, trace_id=trace_data["id"], started_at=time.time(), execution_order=0
+                    correlation_id=corr_uuid,
+                    trace_id=trace_data["id"],
+                    started_at=time.time(),
+                    execution_order=0,
                 )
                 self._trace_contexts[corr_uuid] = trace_ctx
             else:
@@ -339,7 +354,9 @@ class ExecutionTracer:
             # Silent failure
             logger.error(f"Error tracking hook execution: {e}", exc_info=True)
 
-    async def complete_trace(self, correlation_id: str, success: bool, error: Optional[Exception] = None) -> None:
+    async def complete_trace(
+        self, correlation_id: str, success: bool, error: Optional[Exception] = None
+    ) -> None:
         """
         Mark a trace as completed.
 
@@ -369,7 +386,10 @@ class ExecutionTracer:
         try:
             # Complete trace in database
             await self.client.complete_execution_trace(
-                correlation_id=corr_uuid, success=success, error_message=error_message, error_type=error_type
+                correlation_id=corr_uuid,
+                success=success,
+                error_message=error_message,
+                error_type=error_type,
             )
 
             # Clean up trace context
@@ -498,7 +518,13 @@ class TraceContext:
     Provides helper methods for tracking hooks within a trace.
     """
 
-    def __init__(self, correlation_id: UUID, trace_id: UUID, started_at: float, execution_order: int):
+    def __init__(
+        self,
+        correlation_id: UUID,
+        trace_id: UUID,
+        started_at: float,
+        execution_order: int,
+    ):
         """
         Initialize trace context.
 
@@ -516,7 +542,12 @@ class TraceContext:
         self.tracer: Optional[ExecutionTracer] = None
 
     async def track_hook(
-        self, hook_name: str, tool_name: str, duration_ms: float, success: bool = True, **kwargs
+        self,
+        hook_name: str,
+        tool_name: str,
+        duration_ms: float,
+        success: bool = True,
+        **kwargs,
     ) -> None:
         """
         Convenience method to track a hook execution.

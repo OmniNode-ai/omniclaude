@@ -58,7 +58,14 @@ class QuorumIntegrationTest:
         print("=" * 70)
 
         input_data = {
-            "tasks": [{"task_id": "task1", "agent": "coder", "description": "Simple test task", "dependencies": []}],
+            "tasks": [
+                {
+                    "task_id": "task1",
+                    "agent": "coder",
+                    "description": "Simple test task",
+                    "dependencies": [],
+                }
+            ],
             "user_prompt": "Create a simple function",
         }
 
@@ -76,11 +83,17 @@ class QuorumIntegrationTest:
             if "quorum_validation_enabled" in result.stdout:
                 output = json.loads(result.stdout)
                 if not output.get("quorum_validation_enabled", False):
-                    self.record_pass("Backward compatibility", "Quorum disabled by default")
+                    self.record_pass(
+                        "Backward compatibility", "Quorum disabled by default"
+                    )
                 else:
-                    self.record_fail("Backward compatibility", "Quorum enabled without flag")
+                    self.record_fail(
+                        "Backward compatibility", "Quorum enabled without flag"
+                    )
             else:
-                self.record_pass("Backward compatibility", "No quorum validation in output")
+                self.record_pass(
+                    "Backward compatibility", "No quorum validation in output"
+                )
 
         except subprocess.TimeoutExpired:
             self.record_fail("Backward compatibility", "Timeout (agents may be slow)")
@@ -117,7 +130,9 @@ class QuorumIntegrationTest:
 
             # Check stderr for quorum activation
             if "Quorum validation enabled" in result.stderr:
-                self.record_pass("Quorum enabled", "Flag correctly activates validation")
+                self.record_pass(
+                    "Quorum enabled", "Flag correctly activates validation"
+                )
             else:
                 self.record_fail("Quorum enabled", "Flag did not activate validation")
 
@@ -170,7 +185,8 @@ class QuorumIntegrationTest:
             # Verify that quorum caught the issues
             if result.decision in [ValidationDecision.RETRY, ValidationDecision.FAIL]:
                 self.record_pass(
-                    "PostgreSQL failure detection", f"Quorum correctly detected issues ({result.decision.value})"
+                    "PostgreSQL failure detection",
+                    f"Quorum correctly detected issues ({result.decision.value})",
                 )
             else:
                 self.record_fail(
@@ -180,18 +196,28 @@ class QuorumIntegrationTest:
 
             # Check for specific deficiency detection
             deficiency_text = " ".join(result.deficiencies).lower()
-            caught_node_type = "node type" in deficiency_text or "effect" in deficiency_text
-            caught_name = "userauth" in deficiency_text or "postgres" in deficiency_text or "name" in deficiency_text
+            caught_node_type = (
+                "node type" in deficiency_text or "effect" in deficiency_text
+            )
+            caught_name = (
+                "userauth" in deficiency_text
+                or "postgres" in deficiency_text
+                or "name" in deficiency_text
+            )
 
             if caught_node_type:
                 self.record_pass("Node type detection", "Detected incorrect node type")
             else:
-                self.record_warning("Node type detection", "May not have explicitly caught node type")
+                self.record_warning(
+                    "Node type detection", "May not have explicitly caught node type"
+                )
 
             if caught_name:
                 self.record_pass("Name detection", "Detected incorrect component name")
             else:
-                self.record_warning("Name detection", "May not have explicitly caught name mismatch")
+                self.record_warning(
+                    "Name detection", "May not have explicitly caught name mismatch"
+                )
 
         except Exception as e:
             self.record_fail("PostgreSQL failure detection", f"Exception: {e}")
@@ -224,7 +250,8 @@ class QuorumIntegrationTest:
 
             if result.decision == ValidationDecision.PASS:
                 self.record_pass(
-                    "Valid breakdown passes", f"Correctly validated with {result.confidence:.1%} confidence"
+                    "Valid breakdown passes",
+                    f"Correctly validated with {result.confidence:.1%} confidence",
                 )
             else:
                 self.record_fail(
@@ -249,7 +276,9 @@ class QuorumIntegrationTest:
             dispatch_code = self.dispatch_runner.read_text()
 
             if "QUORUM_AVAILABLE" in dispatch_code:
-                self.record_pass("Graceful degradation", "Code checks for quorum availability")
+                self.record_pass(
+                    "Graceful degradation", "Code checks for quorum availability"
+                )
             else:
                 self.record_fail("Graceful degradation", "No availability check found")
 
@@ -263,17 +292,23 @@ class QuorumIntegrationTest:
 
     def record_pass(self, test_name: str, message: str):
         """Record a passing test"""
-        self.test_results.append({"test": test_name, "status": "PASS", "message": message})
+        self.test_results.append(
+            {"test": test_name, "status": "PASS", "message": message}
+        )
         print(f"✓ PASS: {test_name} - {message}")
 
     def record_fail(self, test_name: str, message: str):
         """Record a failing test"""
-        self.test_results.append({"test": test_name, "status": "FAIL", "message": message})
+        self.test_results.append(
+            {"test": test_name, "status": "FAIL", "message": message}
+        )
         print(f"✗ FAIL: {test_name} - {message}")
 
     def record_warning(self, test_name: str, message: str):
         """Record a warning"""
-        self.test_results.append({"test": test_name, "status": "WARN", "message": message})
+        self.test_results.append(
+            {"test": test_name, "status": "WARN", "message": message}
+        )
         print(f"⚠ WARN: {test_name} - {message}")
 
     def print_summary(self):

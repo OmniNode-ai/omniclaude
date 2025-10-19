@@ -5,12 +5,11 @@ Correlation ID Manager - Persist correlation IDs across hook invocations
 Enables tracing: User prompt → Agent detection → Tool execution
 """
 
-import os
 import json
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 class CorrelationManager:
@@ -80,7 +79,8 @@ class CorrelationManager:
             "agent_domain": agent_domain,
             "prompt_preview": prompt_preview,
             "prompt_count": prompt_count,
-            "created_at": existing_state.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            "created_at": existing_state.get("created_at")
+            or datetime.now(timezone.utc).isoformat(),
             "last_accessed": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -173,14 +173,16 @@ def clear_correlation_context():
 
 
 if __name__ == "__main__":
-    import sys
 
     # Test correlation manager
     print("Testing correlation manager...")
 
     # Set correlation ID
     set_correlation_id(
-        "test-correlation-123", agent_name="agent-test", agent_domain="testing", prompt_preview="This is a test prompt"
+        "test-correlation-123",
+        agent_name="agent-test",
+        agent_domain="testing",
+        prompt_preview="This is a test prompt",
     )
     print("✓ Correlation ID stored")
 

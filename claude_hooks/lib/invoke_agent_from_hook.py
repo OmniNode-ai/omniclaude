@@ -15,22 +15,29 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import sys
-import os
-import json
 import asyncio
+import json
+import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Add hooks lib to path
 HOOKS_LIB_PATH = Path("/Users/jonah/.claude/hooks/lib")
 sys.path.insert(0, str(HOOKS_LIB_PATH))
 
 try:
-    from agent_pathway_detector import AgentPathwayDetector
     from agent_invoker import AgentInvoker
+    from agent_pathway_detector import AgentPathwayDetector
 except ImportError as e:
-    print(json.dumps({"success": False, "error": f"Failed to import agent modules: {e}", "context_injection": None}))
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"Failed to import agent modules: {e}",
+                "context_injection": None,
+            }
+        )
+    )
     sys.exit(1)
 
 
@@ -180,14 +187,30 @@ def main():
         input_data = sys.stdin.read()
 
         if not input_data.strip():
-            print(json.dumps({"success": False, "error": "No input provided", "context_injection": None}))
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "No input provided",
+                        "context_injection": None,
+                    }
+                )
+            )
             sys.exit(1)
 
         # Parse JSON input
         try:
             data = json.loads(input_data)
         except json.JSONDecodeError as e:
-            print(json.dumps({"success": False, "error": f"Invalid JSON input: {e}", "context_injection": None}))
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": f"Invalid JSON input: {e}",
+                        "context_injection": None,
+                    }
+                )
+            )
             sys.exit(1)
 
         # Extract parameters
@@ -197,13 +220,24 @@ def main():
         context = data.get("context", {})
 
         if not prompt:
-            print(json.dumps({"success": False, "error": "No prompt provided", "context_injection": None}))
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "No prompt provided",
+                        "context_injection": None,
+                    }
+                )
+            )
             sys.exit(1)
 
         # Process agent invocation
         result = asyncio.run(
             process_agent_invocation(
-                prompt=prompt, correlation_id=correlation_id, session_id=session_id, context=context
+                prompt=prompt,
+                correlation_id=correlation_id,
+                session_id=session_id,
+                context=context,
             )
         )
 
@@ -215,7 +249,13 @@ def main():
 
     except Exception as e:
         print(
-            json.dumps({"success": False, "error": f"Unexpected error: {e}", "context_injection": None}),
+            json.dumps(
+                {
+                    "success": False,
+                    "error": f"Unexpected error: {e}",
+                    "context_injection": None,
+                }
+            ),
             file=sys.stderr,
         )
 

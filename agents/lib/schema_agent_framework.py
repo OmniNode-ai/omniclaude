@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Phase 7 Database Schema Models
+Agent Framework Database Schema Models
 
-Pydantic models for Phase 7 refinement and optimization tables:
+Pydantic models for agent framework refinement and optimization tables:
 - Mixin compatibility matrix
 - Pattern feedback logging
 - Generation performance metrics
@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
 
 # =============================================================================
 # Enums
@@ -84,7 +83,9 @@ class MixinCompatibilityMatrix(BaseModel):
     mixin_b: str = Field(..., max_length=100)
     node_type: NodeType
 
-    compatibility_score: Optional[Decimal] = Field(None, ge=0.0, le=1.0, decimal_places=4)
+    compatibility_score: Optional[Decimal] = Field(
+        None, ge=0.0, le=1.0, decimal_places=4
+    )
     success_count: int = Field(default=0, ge=0)
     failure_count: int = Field(default=0, ge=0)
 
@@ -139,7 +140,9 @@ class PatternFeedbackLog(BaseModel):
     session_id: UUID
     pattern_name: str = Field(..., max_length=100)
 
-    detected_confidence: Optional[Decimal] = Field(None, ge=0.0, le=1.0, decimal_places=4)
+    detected_confidence: Optional[Decimal] = Field(
+        None, ge=0.0, le=1.0, decimal_places=4
+    )
     actual_pattern: str = Field(..., max_length=100)
     feedback_type: FeedbackType
 
@@ -150,7 +153,9 @@ class PatternFeedbackLog(BaseModel):
     false_positives: List[str] = Field(default_factory=list)
     false_negatives: List[str] = Field(default_factory=list)
 
-    learning_weight: Decimal = Field(default=Decimal("1.0"), ge=0.0, le=1.0, decimal_places=4)
+    learning_weight: Decimal = Field(
+        default=Decimal("1.0"), ge=0.0, le=1.0, decimal_places=4
+    )
 
     created_at: datetime
 

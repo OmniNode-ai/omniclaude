@@ -27,7 +27,14 @@ class MockDatabaseLayer:
 
 async def test_state_manager():
     """Test state manager basic functionality."""
-    from state_manager import StateManager, SnapshotType, ErrorCategory, ErrorSeverity, VerboseMode, ModelCodePointer
+    from state_manager import (
+        ErrorCategory,
+        ErrorSeverity,
+        ModelCodePointer,
+        SnapshotType,
+        StateManager,
+        VerboseMode,
+    )
 
     # Create manager with mock database
     mock_db = MockDatabaseLayer()
@@ -40,7 +47,11 @@ async def test_state_manager():
 
     # Test 1: Capture snapshot
     correlation_id = uuid4()
-    agent_state = {"context": "test_context", "variables": {"x": 1, "y": 2}, "execution_step": 1}
+    agent_state = {
+        "context": "test_context",
+        "variables": {"x": 1, "y": 2},
+        "execution_step": 1,
+    }
 
     snapshot_id = await manager.capture_snapshot(
         agent_state=agent_state,
@@ -84,7 +95,10 @@ async def test_state_manager():
 
     # Test 4: Link error to success
     code_pointer = ModelCodePointer(
-        file_path="/path/to/stf.py", function_name="fix_validation_error", line_number=42, module_path="agents.stf"
+        file_path="/path/to/stf.py",
+        function_name="fix_validation_error",
+        line_number=42,
+        module_path="agents.stf",
     )
 
     link_id = await manager.link_error_to_success(

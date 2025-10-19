@@ -9,9 +9,9 @@ Follows patterns from omninode_bridge event models.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
-from datetime import datetime, timezone
 
 
 def _now_iso() -> str:

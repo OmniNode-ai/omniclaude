@@ -6,15 +6,14 @@ Architecture-independent - works for any project type.
 """
 
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from agent_model import AgentConfig, AgentResult, AgentTask
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -34,13 +33,22 @@ except ImportError:
 class SubTask(BaseModel):
     """A single subtask in the breakdown."""
 
-    task_id: str = Field(description="Unique identifier for this subtask (e.g., 'task_1', 'task_2')")
-    description: str = Field(description="Clear description of what this subtask should accomplish")
-    agent: str = Field(description="Which agent handles this task (e.g., 'coder', 'analyzer', 'validator')")
-    depends_on: List[str] = Field(
-        default_factory=list, description="List of task_ids this task depends on (empty if no dependencies)"
+    task_id: str = Field(
+        description="Unique identifier for this subtask (e.g., 'task_1', 'task_2')"
     )
-    input_data: Dict[str, Any] = Field(default_factory=dict, description="Input data/context for this subtask")
+    description: str = Field(
+        description="Clear description of what this subtask should accomplish"
+    )
+    agent: str = Field(
+        description="Which agent handles this task (e.g., 'coder', 'analyzer', 'validator')"
+    )
+    depends_on: List[str] = Field(
+        default_factory=list,
+        description="List of task_ids this task depends on (empty if no dependencies)",
+    )
+    input_data: Dict[str, Any] = Field(
+        default_factory=dict, description="Input data/context for this subtask"
+    )
 
 
 class TaskBreakdown(BaseModel):
@@ -50,7 +58,9 @@ class TaskBreakdown(BaseModel):
     execution_order: str = Field(
         description="Execution strategy: 'parallel' if tasks can run concurrently, 'sequential' if they must run in order"
     )
-    reasoning: str = Field(description="Explanation of how tasks were broken down and why")
+    reasoning: str = Field(
+        description="Explanation of how tasks were broken down and why"
+    )
 
 
 # ============================================================================
@@ -130,7 +140,9 @@ task_architect_agent = Agent[AgentDeps, TaskBreakdown](
 
 
 @task_architect_agent.tool
-async def analyze_task_complexity(ctx: RunContext[AgentDeps], task_description: str) -> str:
+async def analyze_task_complexity(
+    ctx: RunContext[AgentDeps], task_description: str
+) -> str:
     """Analyze the complexity of a task to help determine breakdown strategy.
 
     Args:
@@ -142,7 +154,14 @@ async def analyze_task_complexity(ctx: RunContext[AgentDeps], task_description: 
     indicators = {
         "simple": ["create", "add", "simple", "basic", "single"],
         "moderate": ["integrate", "implement", "refactor", "multiple", "several"],
-        "complex": ["architecture", "system", "distributed", "parallel", "many", "complex"],
+        "complex": [
+            "architecture",
+            "system",
+            "distributed",
+            "parallel",
+            "many",
+            "complex",
+        ],
     }
 
     task_lower = task_description.lower()
@@ -225,9 +244,7 @@ async def check_task_dependencies(ctx: RunContext[AgentDeps], task_list: str) ->
     has_dependencies = any(keyword in tasks_lower for keyword in dependency_keywords)
 
     if has_dependencies:
-        return (
-            "🔗 Dependencies detected - Recommend sequential or mixed execution with explicit depends_on relationships"
-        )
+        return "🔗 Dependencies detected - Recommend sequential or mixed execution with explicit depends_on relationships"
     else:
         return "✅ No obvious dependencies - Tasks can likely run in parallel"
 
@@ -263,7 +280,9 @@ class ArchitectAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -277,7 +296,10 @@ class ArchitectAgent:
 
             # Create agent dependencies
             deps = AgentDeps(
-                task=task, config=self.config, trace_logger=self.trace_logger, trace_id=self._current_trace_id
+                task=task,
+                config=self.config,
+                trace_logger=self.trace_logger,
+                trace_id=self._current_trace_id,
             )
 
             # Build breakdown prompt
@@ -323,7 +345,9 @@ class ArchitectAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -340,7 +364,9 @@ class ArchitectAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Task breakdown failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,

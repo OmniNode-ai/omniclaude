@@ -10,15 +10,14 @@ import pytest
 
 from agents.lib.pattern_library import PatternLibrary
 from agents.tests.fixtures.phase4_fixtures import (
-    CRUD_PATTERN_CONTRACT,
-    TRANSFORMATION_PATTERN_CONTRACT,
     AGGREGATION_PATTERN_CONTRACT,
+    CRUD_PATTERN_CONTRACT,
     ORCHESTRATION_PATTERN_CONTRACT,
     PATTERN_DETECTION_CASES,
     SAMPLE_CONTRACT_WITH_CRUD,
     SAMPLE_CONTRACT_WITH_TRANSFORMATION,
+    TRANSFORMATION_PATTERN_CONTRACT,
 )
-
 
 # ============================================================================
 # FIXTURES
@@ -59,7 +58,9 @@ class TestPatternMatching:
         assert result["confidence"] >= 0.8
         assert result["matched"] is True
 
-    def test_detect_transformation_pattern(self, pattern_library, transformation_contract):
+    def test_detect_transformation_pattern(
+        self, pattern_library, transformation_contract
+    ):
         """Test detection of Transformation pattern"""
         result = pattern_library.detect_pattern(transformation_contract)
 
@@ -85,7 +86,11 @@ class TestPatternMatching:
 
     def test_no_pattern_match_low_confidence(self, pattern_library):
         """Test that unclear patterns return low confidence"""
-        ambiguous_contract = {"capabilities": [{"name": "do_something", "type": "unknown", "required": True}]}
+        ambiguous_contract = {
+            "capabilities": [
+                {"name": "do_something", "type": "unknown", "required": True}
+            ]
+        }
 
         result = pattern_library.detect_pattern(ambiguous_contract)
 
@@ -220,7 +225,10 @@ class TestPatternCodeGeneration:
     def test_generated_code_is_valid_python(self, pattern_library):
         """Test that generated pattern code is valid Python"""
         result = pattern_library.generate_pattern_code(
-            pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD, node_type="EFFECT", class_name="NodeTestEffect"
+            pattern_name="CRUD",
+            contract=SAMPLE_CONTRACT_WITH_CRUD,
+            node_type="EFFECT",
+            class_name="NodeTestEffect",
         )
 
         # Verify code can be parsed
@@ -310,7 +318,10 @@ class TestMultiPatternComposition:
         patterns = ["CRUD", "Transformation"]
 
         result = pattern_library.compose_pattern_code(
-            patterns=patterns, contract=SAMPLE_CONTRACT_WITH_CRUD, node_type="EFFECT", class_name="NodeCompositeEffect"
+            patterns=patterns,
+            contract=SAMPLE_CONTRACT_WITH_CRUD,
+            node_type="EFFECT",
+            class_name="NodeCompositeEffect",
         )
 
         assert "code" in result
@@ -331,7 +342,9 @@ class TestImportMixinInference:
 
     def test_infer_crud_pattern_mixins(self, pattern_library):
         """Test mixin inference for CRUD pattern"""
-        result = pattern_library.infer_required_mixins(pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD)
+        result = pattern_library.infer_required_mixins(
+            pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD
+        )
 
         assert "mixins" in result
         # CRUD typically needs EventBus for change notifications
@@ -349,7 +362,9 @@ class TestImportMixinInference:
 
     def test_infer_pattern_imports(self, pattern_library):
         """Test import inference for pattern"""
-        result = pattern_library.infer_required_imports(pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD)
+        result = pattern_library.infer_required_imports(
+            pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD
+        )
 
         assert "imports" in result
         imports = result["imports"]
@@ -369,7 +384,11 @@ class TestPatternFallback:
 
     def test_fallback_when_no_match(self, pattern_library):
         """Test fallback pattern when no match found"""
-        unclear_contract = {"capabilities": [{"name": "do_stuff", "type": "operation", "required": True}]}
+        unclear_contract = {
+            "capabilities": [
+                {"name": "do_stuff", "type": "operation", "required": True}
+            ]
+        }
 
         result = pattern_library.detect_pattern(unclear_contract)
 
@@ -379,7 +398,10 @@ class TestPatternFallback:
     def test_generic_pattern_code_generation(self, pattern_library):
         """Test generic pattern code generation as fallback"""
         result = pattern_library.generate_pattern_code(
-            pattern_name="Generic", contract={"capabilities": []}, node_type="EFFECT", class_name="NodeGenericEffect"
+            pattern_name="Generic",
+            contract={"capabilities": []},
+            node_type="EFFECT",
+            class_name="NodeGenericEffect",
         )
 
         assert "code" in result
@@ -389,7 +411,10 @@ class TestPatternFallback:
     def test_fallback_has_basic_structure(self, pattern_library):
         """Test fallback pattern has basic code structure"""
         result = pattern_library.generate_pattern_code(
-            pattern_name="Generic", contract={}, node_type="EFFECT", class_name="NodeFallbackEffect"
+            pattern_name="Generic",
+            contract={},
+            node_type="EFFECT",
+            class_name="NodeFallbackEffect",
         )
 
         code = result["code"]
@@ -417,14 +442,19 @@ class TestPatternMatchingPerformance:
         duration_ms = (time.time() - start) * 1000
 
         # Pattern matching should be < 100ms
-        assert duration_ms < 100, f"Pattern matching took {duration_ms}ms, expected < 100ms"
+        assert (
+            duration_ms < 100
+        ), f"Pattern matching took {duration_ms}ms, expected < 100ms"
 
     def test_multiple_pattern_detection_performance(self, pattern_library):
         """Test detecting all patterns is fast"""
         import time
 
         mixed_contract = {
-            "capabilities": [{"name": f"capability_{i}", "type": "operation", "required": True} for i in range(20)]
+            "capabilities": [
+                {"name": f"capability_{i}", "type": "operation", "required": True}
+                for i in range(20)
+            ]
         }
 
         start = time.time()

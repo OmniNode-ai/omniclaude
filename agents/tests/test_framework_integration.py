@@ -1,7 +1,7 @@
 """
-Phase 7 Stream 10: Integration & End-to-End Testing
+Agent Framework: Integration & End-to-End Testing
 
-Tests complete workflow integration across all 8 Phase 7 streams:
+Tests complete workflow integration across all agent framework streams:
 - Stream 1: Database Schema
 - Stream 2: Template Caching
 - Stream 3: Parallel Generation
@@ -23,12 +23,12 @@ import pytest
 
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
-import time
-from uuid import uuid4
-from pathlib import Path
 import tempfile
+import time
+from pathlib import Path
+from uuid import uuid4
 
-# Import all Phase 7 components
+# Import all agent framework components
 from agents.lib.persistence import CodegenPersistence
 
 try:
@@ -36,14 +36,18 @@ try:
 except ImportError:
     CodegenWorkflow = None  # May not be available
 try:
-    from agents.lib.monitoring import MonitoringSystem, Metric, MetricType
+    from agents.lib.monitoring import Metric, MetricType, MonitoringSystem
 
     # Helper functions
     _monitoring_system = MonitoringSystem()
 
     async def record_metric(name, value, metric_type, labels=None, help_text=""):
         await _monitoring_system.record_metric(
-            name=name, value=value, metric_type=metric_type, labels=labels or {}, help_text=help_text
+            name=name,
+            value=value,
+            metric_type=metric_type,
+            labels=labels or {},
+            help_text=help_text,
         )
 
     async def collect_all_metrics(time_window_minutes=60):
@@ -75,9 +79,9 @@ except ImportError:
     check_system_health = None
     get_overall_health_status = None
 
-from agents.lib.structured_logger import get_logger
 from agents.lib.log_context import async_log_context
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.structured_logger import get_logger
 
 
 # Test fixtures
@@ -120,7 +124,7 @@ class TestEndToEndIntegration:
     @pytest.mark.asyncio
     async def test_complete_workflow_execution(self, sample_prd, output_dir):
         """
-        Test complete workflow from PRD to generated code with all Phase 7 features.
+        Test complete workflow from PRD to generated code with all framework features.
 
         This test validates:
         1. Database connectivity and persistence (Stream 1)
@@ -140,13 +144,16 @@ class TestEndToEndIntegration:
         async with async_log_context(correlation_id=correlation_id):
             logger.info(
                 "Starting end-to-end integration test",
-                metadata={"session_id": str(session_id), "test": "test_complete_workflow_execution"},
+                metadata={
+                    "session_id": str(session_id),
+                    "test": "test_complete_workflow_execution",
+                },
             )
 
             start_time = time.time()
 
             # Step 1: Initialize components
-            logger.info("Initializing Phase 7 components")
+            logger.info("Initializing framework components")
 
             persistence = CodegenPersistence()
             engine = OmniNodeTemplateEngine(enable_cache=True)
@@ -159,7 +166,9 @@ class TestEndToEndIntegration:
                 # Note: May fail if database not running, that's ok for test
                 logger.info(
                     "Database health check completed",
-                    metadata={"health_components": list(health.keys()) if health else []},
+                    metadata={
+                        "health_components": list(health.keys()) if health else []
+                    },
                 )
             else:
                 logger.info("Health checker not available, skipping database check")
@@ -189,10 +198,14 @@ class TestEndToEndIntegration:
 
             # Note: Actual parallel generation requires full codegen workflow
             # For integration test, we verify the capability exists
-            from agents.parallel_execution.agent_code_generator import ParallelCodeGenerator
+            from agents.parallel_execution.agent_code_generator import (
+                ParallelCodeGenerator,
+            )
 
             parallel_gen = ParallelCodeGenerator(max_workers=2)
-            assert parallel_gen.max_workers == 2, "Parallel generator should be configured"
+            assert (
+                parallel_gen.max_workers == 2
+            ), "Parallel generator should be configured"
             logger.info("Parallel generation capability verified")
 
             # Step 5: Test mixin learning (Stream 4)
@@ -204,10 +217,16 @@ class TestEndToEndIntegration:
                 mixin_summary = await persistence.get_mixin_compatibility_summary()
                 logger.info(
                     "Mixin learning accessible",
-                    metadata={"compatibility_records": len(mixin_summary) if mixin_summary else 0},
+                    metadata={
+                        "compatibility_records": (
+                            len(mixin_summary) if mixin_summary else 0
+                        )
+                    },
                 )
             except Exception as e:
-                logger.warning(f"Mixin learning query failed (expected if DB not setup): {e}")
+                logger.warning(
+                    f"Mixin learning query failed (expected if DB not setup): {e}"
+                )
 
             # Step 6: Test pattern feedback (Stream 5)
             logger.info("Testing pattern feedback")
@@ -217,10 +236,16 @@ class TestEndToEndIntegration:
                 pattern_analysis = await persistence.get_pattern_feedback_analysis()
                 logger.info(
                     "Pattern feedback accessible",
-                    metadata={"feedback_records": len(pattern_analysis) if pattern_analysis else 0},
+                    metadata={
+                        "feedback_records": (
+                            len(pattern_analysis) if pattern_analysis else 0
+                        )
+                    },
                 )
             except Exception as e:
-                logger.warning(f"Pattern feedback query failed (expected if DB not setup): {e}")
+                logger.warning(
+                    f"Pattern feedback query failed (expected if DB not setup): {e}"
+                )
 
             # Step 7: Test event processing (Stream 6)
             logger.info("Testing event processing")
@@ -229,10 +254,15 @@ class TestEndToEndIntegration:
             try:
                 event_health = await persistence.get_event_processing_health()
                 logger.info(
-                    "Event processing accessible", metadata={"health_records": len(event_health) if event_health else 0}
+                    "Event processing accessible",
+                    metadata={
+                        "health_records": len(event_health) if event_health else 0
+                    },
                 )
             except Exception as e:
-                logger.warning(f"Event processing query failed (expected if DB not setup): {e}")
+                logger.warning(
+                    f"Event processing query failed (expected if DB not setup): {e}"
+                )
 
             # Step 8: Test monitoring (Stream 7)
             logger.info("Testing monitoring system")
@@ -250,7 +280,8 @@ class TestEndToEndIntegration:
                 metrics = await collect_all_metrics(time_window_minutes=1)
                 assert metrics is not None, "Metrics collection should return data"
                 logger.info(
-                    "Monitoring system validated", metadata={"metric_categories": len(metrics) if metrics else 0}
+                    "Monitoring system validated",
+                    metadata={"metric_categories": len(metrics) if metrics else 0},
                 )
             else:
                 logger.info("Monitoring system not available, skipping")
@@ -259,7 +290,13 @@ class TestEndToEndIntegration:
             logger.info("Verifying structured logging")
 
             # Log with metadata
-            logger.info("Test log entry", metadata={"test_key": "test_value", "correlation_id": str(correlation_id)})
+            logger.info(
+                "Test log entry",
+                metadata={
+                    "test_key": "test_value",
+                    "correlation_id": str(correlation_id),
+                },
+            )
 
             # Verify correlation ID is in context
             # (In real test, we'd read log file and verify)
@@ -283,11 +320,13 @@ class TestEndToEndIntegration:
                 )
 
             # Assert reasonable execution time (<5 seconds for integration test)
-            assert duration_ms < 5000, f"Integration test should complete in <5s, took {duration_ms:.0f}ms"
+            assert (
+                duration_ms < 5000
+            ), f"Integration test should complete in <5s, took {duration_ms:.0f}ms"
 
 
 class TestCrossStreamDataFlow:
-    """Test data flow across Phase 7 streams."""
+    """Test data flow across framework streams."""
 
     @pytest.mark.asyncio
     async def test_database_to_monitoring_flow(self):
@@ -319,7 +358,9 @@ class TestCrossStreamDataFlow:
                 logger.info("Performance metric written to database")
 
                 # Query analytics view
-                summary = await persistence.get_performance_metrics_summary(time_window_minutes=1)
+                summary = await persistence.get_performance_metrics_summary(
+                    time_window_minutes=1
+                )
 
                 logger.info(
                     "Performance metrics queried from database",
@@ -327,7 +368,9 @@ class TestCrossStreamDataFlow:
                 )
 
             except Exception as e:
-                logger.warning(f"Database operation failed (expected if DB not setup): {e}")
+                logger.warning(
+                    f"Database operation failed (expected if DB not setup): {e}"
+                )
                 pytest.skip("Database not available for this test")
 
     @pytest.mark.asyncio
@@ -356,7 +399,10 @@ class TestCrossStreamDataFlow:
             stats = engine.get_cache_stats()
             logger.info(
                 "Template cache populated",
-                metadata={"template_count": len(templates), "cached_templates": stats.get("cached_templates", 0)},
+                metadata={
+                    "template_count": len(templates),
+                    "cached_templates": stats.get("cached_templates", 0),
+                },
             )
 
             # Verify cache is accessible
@@ -366,7 +412,7 @@ class TestCrossStreamDataFlow:
 
 
 class TestPerformanceBenchmarks:
-    """Performance benchmarking tests for Phase 7."""
+    """Performance benchmarking tests for agent framework."""
 
     @pytest.mark.asyncio
     async def test_template_cache_performance(self):
@@ -414,8 +460,12 @@ class TestPerformanceBenchmarks:
             )
 
             # Assert performance targets
-            assert hit_rate >= 0.80, f"Cache hit rate should be >80%, got {hit_rate:.1%}"
-            assert avg_load_time_ms < 1.0, f"Avg load time should be <1ms, got {avg_load_time_ms:.2f}ms"
+            assert (
+                hit_rate >= 0.80
+            ), f"Cache hit rate should be >80%, got {hit_rate:.1%}"
+            assert (
+                avg_load_time_ms < 1.0
+            ), f"Avg load time should be <1ms, got {avg_load_time_ms:.2f}ms"
 
     @pytest.mark.asyncio
     async def test_monitoring_performance(self):
@@ -442,7 +492,11 @@ class TestPerformanceBenchmarks:
             start_time = time.time()
 
             for i in range(iterations):
-                await record_metric(name=f"benchmark_metric_{i}", value=float(i), metric_type=MetricType.GAUGE)
+                await record_metric(
+                    name=f"benchmark_metric_{i}",
+                    value=float(i),
+                    metric_type=MetricType.GAUGE,
+                )
 
             collection_duration_ms = (time.time() - start_time) * 1000
             avg_collection_ms = collection_duration_ms / iterations
@@ -454,12 +508,19 @@ class TestPerformanceBenchmarks:
 
             logger.info(
                 "Monitoring benchmark completed",
-                metadata={"avg_collection_ms": avg_collection_ms, "query_duration_ms": query_duration_ms},
+                metadata={
+                    "avg_collection_ms": avg_collection_ms,
+                    "query_duration_ms": query_duration_ms,
+                },
             )
 
             # Assert performance targets
-            assert avg_collection_ms < 50, f"Metric collection should be <50ms, got {avg_collection_ms:.2f}ms"
-            assert query_duration_ms < 500, f"Dashboard query should be <500ms, got {query_duration_ms:.2f}ms"
+            assert (
+                avg_collection_ms < 50
+            ), f"Metric collection should be <50ms, got {avg_collection_ms:.2f}ms"
+            assert (
+                query_duration_ms < 500
+            ), f"Dashboard query should be <500ms, got {query_duration_ms:.2f}ms"
 
     @pytest.mark.asyncio
     async def test_structured_logging_performance(self):
@@ -497,11 +558,13 @@ class TestPerformanceBenchmarks:
             )
 
             # Assert performance targets
-            assert avg_log_time_ms < 1.0, f"Log overhead should be <1ms, got {avg_log_time_ms:.3f}ms"
+            assert (
+                avg_log_time_ms < 1.0
+            ), f"Log overhead should be <1ms, got {avg_log_time_ms:.3f}ms"
 
 
 class TestErrorHandlingAndRecovery:
-    """Test error handling and recovery across Phase 7 streams."""
+    """Test error handling and recovery across framework streams."""
 
     @pytest.mark.asyncio
     async def test_database_connection_failure_handling(self):
@@ -565,16 +628,21 @@ class TestErrorHandlingAndRecovery:
             # Reload templates
             templates_after = len(engine.templates)
 
-            assert templates_after == templates_before, "Template count should be same after invalidation and reload"
+            assert (
+                templates_after == templates_before
+            ), "Template count should be same after invalidation and reload"
 
             logger.info(
                 "Cache recovery validated",
-                metadata={"templates_before": templates_before, "templates_after": templates_after},
+                metadata={
+                    "templates_before": templates_before,
+                    "templates_after": templates_after,
+                },
             )
 
 
 class TestProductionReadiness:
-    """Test production readiness of Phase 7 implementation."""
+    """Test production readiness of framework implementation."""
 
     @pytest.mark.asyncio
     async def test_concurrent_request_handling(self):
@@ -611,7 +679,7 @@ class TestProductionReadiness:
         Test completeness of health checks.
 
         Validates that:
-        - All Phase 7 components have health checks
+        - All framework components have health checks
         - Health status is accurately reported
         - Overall health calculation is correct
         """
@@ -635,11 +703,15 @@ class TestProductionReadiness:
                 # Get overall health status
                 if get_overall_health_status:
                     overall = get_overall_health_status()
-                    logger.info("Overall health status", metadata={"status": str(overall)})
+                    logger.info(
+                        "Overall health status", metadata={"status": str(overall)}
+                    )
 
                 # At minimum, we should have checked some components
                 if health:
-                    assert len(health) > 0, "Health checks should cover multiple components"
+                    assert (
+                        len(health) > 0
+                    ), "Health checks should cover multiple components"
             else:
                 logger.info("Health check not available, skipping")
 
@@ -656,7 +728,7 @@ def test_stream_10_summary():
     4. ✅ Error handling and recovery
     5. ✅ Production readiness
 
-    All Phase 7 streams are integrated and tested:
+    All framework streams are integrated and tested:
     - Stream 1: Database Schema ✅
     - Stream 2: Template Caching ✅
     - Stream 3: Parallel Generation ✅

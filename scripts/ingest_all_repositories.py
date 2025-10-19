@@ -6,19 +6,24 @@ Ingests all Python files from multiple repositories into the Archon intelligence
 for comprehensive code analysis, pattern recognition, and search indexing.
 """
 
-import os
-import json
-import uuid
-import time
-import requests
-from pathlib import Path
-from typing import List, Dict, Any
 import concurrent.futures
+import json
+import os
+import time
+import uuid
+from pathlib import Path
 from threading import Lock
+from typing import Any, Dict, List
+
+import requests
 
 
 class MultiRepositoryIngester:
-    def __init__(self, base_url: str = "http://localhost:8053", search_url: str = "http://localhost:8055"):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8053",
+        search_url: str = "http://localhost:8055",
+    ):
         self.base_url = base_url
         self.search_url = search_url
         self.results = []
@@ -68,13 +73,22 @@ class MultiRepositoryIngester:
 
             response = requests.post(
                 f"{self.base_url}/assess/code",
-                json={"content": content, "language": "python", "source_path": str(file_path)},
+                json={
+                    "content": content,
+                    "language": "python",
+                    "source_path": str(file_path),
+                },
                 timeout=30,
             )
 
             if response.status_code == 200:
                 result = response.json()
-                return {"file_path": str(file_path), "project_id": project_id, "success": True, "analysis": result}
+                return {
+                    "file_path": str(file_path),
+                    "project_id": project_id,
+                    "success": True,
+                    "analysis": result,
+                }
             else:
                 return {
                     "file_path": str(file_path),
@@ -84,7 +98,12 @@ class MultiRepositoryIngester:
                 }
 
         except Exception as e:
-            return {"file_path": str(file_path), "project_id": project_id, "success": False, "error": str(e)}
+            return {
+                "file_path": str(file_path),
+                "project_id": project_id,
+                "success": False,
+                "error": str(e),
+            }
 
     def index_document(self, file_path: Path, project_id: str) -> Dict[str, Any]:
         """Index a file for search."""
@@ -128,7 +147,12 @@ class MultiRepositoryIngester:
 
             if response.status_code == 200:
                 result = response.json()
-                return {"file_path": str(file_path), "project_id": project_id, "success": True, "indexing": result}
+                return {
+                    "file_path": str(file_path),
+                    "project_id": project_id,
+                    "success": True,
+                    "indexing": result,
+                }
             else:
                 return {
                     "file_path": str(file_path),
@@ -138,7 +162,12 @@ class MultiRepositoryIngester:
                 }
 
         except Exception as e:
-            return {"file_path": str(file_path), "project_id": project_id, "success": False, "error": str(e)}
+            return {
+                "file_path": str(file_path),
+                "project_id": project_id,
+                "success": False,
+                "error": str(e),
+            }
 
     def process_file(self, file_path: Path, project_id: str) -> Dict[str, Any]:
         """Process a single file for both analysis and indexing."""
@@ -164,7 +193,9 @@ class MultiRepositoryIngester:
 
         return result
 
-    def ingest_repository(self, repo_name: str, repo_path: str, max_workers: int = 3, batch_size: int = 5):
+    def ingest_repository(
+        self, repo_name: str, repo_path: str, max_workers: int = 3, batch_size: int = 5
+    ):
         """Ingest a single repository."""
         print(f"\n🔍 Processing {repo_name}...")
         print(f"📁 Path: {repo_path}")
@@ -183,24 +214,39 @@ class MultiRepositoryIngester:
             batch = python_files[i : i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (len(python_files) + batch_size - 1) // batch_size
-            print(f"  Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
+            print(
+                f"  Processing batch {batch_num}/{total_batches} ({len(batch)} files)"
+            )
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [executor.submit(self.process_file, file_path, repo_name) for file_path in batch]
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
+                futures = [
+                    executor.submit(self.process_file, file_path, repo_name)
+                    for file_path in batch
+                ]
 
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         result = future.result()
                         if result["analysis"]["success"]:
                             analysis = result["analysis"]["analysis"]
-                            print(f"    ✅ {result['file_path']} - Quality: {analysis.get('quality_score', 0):.3f}")
+                            print(
+                                f"    ✅ {result['file_path']} - Quality: {analysis.get('quality_score', 0):.3f}"
+                            )
                         else:
-                            print(f"    ❌ {result['file_path']} - Analysis failed: {result['analysis']['error']}")
+                            print(
+                                f"    ❌ {result['file_path']} - Analysis failed: {result['analysis']['error']}"
+                            )
 
                         if result["indexing"]["success"]:
-                            print(f"    📚 {result['file_path']} - Indexed successfully")
+                            print(
+                                f"    📚 {result['file_path']} - Indexed successfully"
+                            )
                         else:
-                            print(f"    ❌ {result['file_path']} - Indexing failed: {result['indexing']['error']}")
+                            print(
+                                f"    ❌ {result['file_path']} - Indexing failed: {result['indexing']['error']}"
+                            )
 
                     except Exception as e:
                         print(f"    ❌ Error processing file: {e}")
@@ -259,7 +305,12 @@ class MultiRepositoryIngester:
         for result in self.results:
             repo = result["project_id"]
             if repo not in repo_stats:
-                repo_stats[repo] = {"total": 0, "analyzed": 0, "indexed": 0, "quality_scores": []}
+                repo_stats[repo] = {
+                    "total": 0,
+                    "analyzed": 0,
+                    "indexed": 0,
+                    "quality_scores": [],
+                }
 
             repo_stats[repo]["total"] += 1
             if result["analysis"]["success"]:
@@ -271,21 +322,37 @@ class MultiRepositoryIngester:
 
         print("\n📊 REPOSITORY BREAKDOWN")
         for repo, stats in repo_stats.items():
-            avg_quality = sum(stats["quality_scores"]) / len(stats["quality_scores"]) if stats["quality_scores"] else 0
+            avg_quality = (
+                sum(stats["quality_scores"]) / len(stats["quality_scores"])
+                if stats["quality_scores"]
+                else 0
+            )
             print(f"  {repo}:")
             print(f"    Files: {stats['total']}")
-            print(f"    Analyzed: {stats['analyzed']} ({stats['analyzed']/stats['total']*100:.1f}%)")
-            print(f"    Indexed: {stats['indexed']} ({stats['indexed']/stats['total']*100:.1f}%)")
+            print(
+                f"    Analyzed: {stats['analyzed']} ({stats['analyzed']/stats['total']*100:.1f}%)"
+            )
+            print(
+                f"    Indexed: {stats['indexed']} ({stats['indexed']/stats['total']*100:.1f}%)"
+            )
             print(f"    Avg Quality: {avg_quality:.3f}")
 
         if successful_analyses:
             # Overall quality analysis
-            quality_scores = [r["analysis"]["analysis"]["quality_score"] for r in successful_analyses]
+            quality_scores = [
+                r["analysis"]["analysis"]["quality_score"] for r in successful_analyses
+            ]
             avg_quality = sum(quality_scores) / len(quality_scores)
 
             # Find best and worst files across all repos
-            best_file = max(successful_analyses, key=lambda x: x["analysis"]["analysis"]["quality_score"])
-            worst_file = min(successful_analyses, key=lambda x: x["analysis"]["analysis"]["quality_score"])
+            best_file = max(
+                successful_analyses,
+                key=lambda x: x["analysis"]["analysis"]["quality_score"],
+            )
+            worst_file = min(
+                successful_analyses,
+                key=lambda x: x["analysis"]["analysis"]["quality_score"],
+            )
 
             print("\n🎯 OVERALL CODE QUALITY INSIGHTS")
             print(f"  Average Quality Score: {avg_quality:.3f}")
@@ -315,7 +382,9 @@ class MultiRepositoryIngester:
                 print(f"  Unique Pattern Types: {len(pattern_counts)}")
 
                 # Show top patterns
-                top_patterns = sorted(pattern_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+                top_patterns = sorted(
+                    pattern_counts.items(), key=lambda x: x[1], reverse=True
+                )[:15]
                 print("  Top Patterns Across All Repositories:")
                 for pattern, count in top_patterns:
                     print(f"    {pattern}: {count}")

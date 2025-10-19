@@ -5,21 +5,22 @@ OmniNode Template Engine
 Uses omnibase_core models and contracts to generate OmniNode implementations.
 """
 
-import re
 import logging
-from typing import Dict, Any, List, Optional, Set
-from pathlib import Path
+import re
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
+
+from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .template_cache import TemplateCache
+from .version_config import get_config
 
 # TODO: Add omnibase_spi imports when available
 # from omnibase_spi.validation.tool_metadata_validator import ToolMetadataValidator
 
-from .version_config import get_config
-from .simple_prd_analyzer import SimplePRDAnalysisResult
-from .template_cache import TemplateCache
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class OmniNodeTemplateEngine:
     - Template rendering uses immutable context dictionaries
     - File writes go to unique directories per node (domain/microservice/type)
     - Safe for concurrent use across multiple worker threads
-    - Template cache (Phase 7 Stream 2) provides thread-safe access
+    - Template cache (Agent Framework) provides thread-safe access
 
     Note: Each worker thread should create its own event loop but can share
     the template engine instance safely.
@@ -71,11 +72,14 @@ class OmniNodeTemplateEngine:
         # self.metadata_validator = ToolMetadataValidator()
         self.logger = logging.getLogger(__name__)
 
-        # Initialize template cache (Phase 7 Stream 2)
+        # Initialize template cache (Agent Framework)
         self.enable_cache = enable_cache
         if enable_cache:
             self.template_cache = TemplateCache(
-                max_templates=100, max_size_mb=50, ttl_seconds=3600, enable_persistence=True  # 1 hour
+                max_templates=100,
+                max_size_mb=50,
+                ttl_seconds=3600,
+                enable_persistence=True,  # 1 hour
             )
             self.logger.info("Template caching enabled")
         else:
@@ -93,7 +97,7 @@ class OmniNodeTemplateEngine:
         """
         Load node templates from filesystem with optional caching.
 
-        Uses template cache (Phase 7 Stream 2) for 50% performance improvement.
+        Uses template cache (Agent Framework) for 50% performance improvement.
         """
         templates = {}
 
@@ -139,9 +143,13 @@ class OmniNodeTemplateEngine:
             return
 
         template_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
-        self.logger.info(f"Warming up template cache for {len(template_types)} templates")
+        self.logger.info(
+            f"Warming up template cache for {len(template_types)} templates"
+        )
 
-        self.template_cache.warmup(templates_dir=self.templates_dir, template_types=template_types)
+        self.template_cache.warmup(
+            templates_dir=self.templates_dir, template_types=template_types
+        )
 
         # Log cache statistics after warmup
         stats = self.template_cache.get_stats()
@@ -213,7 +221,9 @@ class OmniNodeTemplateEngine:
                 )
 
             # Prepare context for template rendering
-            context = self._prepare_template_context(analysis_result, node_type, microservice_name, domain)
+            context = self._prepare_template_context(
+                analysis_result, node_type, microservice_name, domain
+            )
 
             # Generate node implementation
             node_content = template.render(context)
@@ -225,7 +235,9 @@ class OmniNodeTemplateEngine:
 
             # Create output directory structure
             output_path = Path(output_directory)
-            node_path = output_path / f"node_{domain}_{microservice_name}_{node_type.lower()}"
+            node_path = (
+                output_path / f"node_{domain}_{microservice_name}_{node_type.lower()}"
+            )
             node_path.mkdir(parents=True, exist_ok=True)
 
             # Write main node file
@@ -242,10 +254,14 @@ class OmniNodeTemplateEngine:
                     f.write(content)
 
             # Generate metadata
-            metadata = self._generate_node_metadata(node_type, microservice_name, domain, analysis_result)
+            metadata = self._generate_node_metadata(
+                node_type, microservice_name, domain, analysis_result
+            )
 
             # Build full file paths for generated_files
-            full_file_paths = [str(node_path / file_path) for file_path in generated_files.keys()]
+            full_file_paths = [
+                str(node_path / file_path) for file_path in generated_files.keys()
+            ]
 
             return {
                 "node_type": node_type,
@@ -269,11 +285,19 @@ class OmniNodeTemplateEngine:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Node generation failed: {str(e)}",
-                details={"node_type": node_type, "microservice_name": microservice_name, "domain": domain},
+                details={
+                    "node_type": node_type,
+                    "microservice_name": microservice_name,
+                    "domain": domain,
+                },
             )
 
     def _prepare_template_context(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str, microservice_name: str, domain: str
+        self,
+        analysis_result: SimplePRDAnalysisResult,
+        node_type: str,
+        microservice_name: str,
+        domain: str,
     ) -> Dict[str, Any]:
         """Prepare context variables for template rendering"""
 
@@ -311,7 +335,10 @@ class OmniNodeTemplateEngine:
 
     def _to_pascal_case(self, text: str) -> str:
         """Convert text to PascalCase"""
-        return "".join(word.capitalize() for word in text.replace("_", " ").replace("-", " ").split())
+        return "".join(
+            word.capitalize()
+            for word in text.replace("_", " ").replace("-", " ").split()
+        )
 
     def _generate_mixin_imports(self, mixins: List[str]) -> str:
         """Generate mixin import statements"""
@@ -338,10 +365,15 @@ class OmniNodeTemplateEngine:
         return ""
 
     def _generate_business_logic_stub(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str, microservice_name: str
+        self,
+        analysis_result: SimplePRDAnalysisResult,
+        node_type: str,
+        microservice_name: str,
     ) -> str:
         """Generate business logic stub based on analysis"""
-        stub = f"        # TODO: Implement {microservice_name} {node_type.lower()} logic\n"
+        stub = (
+            f"        # TODO: Implement {microservice_name} {node_type.lower()} logic\n"
+        )
         stub += "        # Based on requirements:\n"
 
         for req in analysis_result.parsed_prd.functional_requirements[:3]:
@@ -375,28 +407,32 @@ class OmniNodeTemplateEngine:
         files = {}
 
         # Generate input model
-        files["v1_0_0/models/model_{}_input.py".format(microservice_name)] = self._generate_input_model(
-            microservice_name, analysis_result
+        files["v1_0_0/models/model_{}_input.py".format(microservice_name)] = (
+            self._generate_input_model(microservice_name, analysis_result)
         )
 
         # Generate output model
-        files["v1_0_0/models/model_{}_output.py".format(microservice_name)] = self._generate_output_model(
-            microservice_name, analysis_result
+        files["v1_0_0/models/model_{}_output.py".format(microservice_name)] = (
+            self._generate_output_model(microservice_name, analysis_result)
         )
 
         # Generate config model
-        files["v1_0_0/models/model_{}_config.py".format(microservice_name)] = self._generate_config_model(
-            microservice_name, analysis_result
+        files["v1_0_0/models/model_{}_config.py".format(microservice_name)] = (
+            self._generate_config_model(microservice_name, analysis_result)
         )
 
         # Generate contract model (NEW: Phase 6 enhancement)
-        files["v1_0_0/models/model_{}_{}_contract.py".format(microservice_name, node_type.lower())] = (
-            self._generate_contract_model(microservice_name, node_type, domain, analysis_result, context)
+        files[
+            "v1_0_0/models/model_{}_{}_contract.py".format(
+                microservice_name, node_type.lower()
+            )
+        ] = self._generate_contract_model(
+            microservice_name, node_type, domain, analysis_result, context
         )
 
         # Generate enum
-        files["v1_0_0/enums/enum_{}_operation_type.py".format(microservice_name)] = self._generate_operation_enum(
-            microservice_name, analysis_result
+        files["v1_0_0/enums/enum_{}_operation_type.py".format(microservice_name)] = (
+            self._generate_operation_enum(microservice_name, analysis_result)
         )
 
         # Generate contract YAML (UPDATED: Phase 6 enhancement with full ONEX compliance)
@@ -416,12 +452,16 @@ class OmniNodeTemplateEngine:
 
         # Generate __init__.py files
         files["v1_0_0/__init__.py"] = self._generate_version_init()
-        files["v1_0_0/models/__init__.py"] = self._generate_models_init(microservice_name, node_type)
+        files["v1_0_0/models/__init__.py"] = self._generate_models_init(
+            microservice_name, node_type
+        )
         files["v1_0_0/enums/__init__.py"] = self._generate_enums_init(microservice_name)
 
         return files
 
-    def _generate_input_model(self, microservice_name: str, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _generate_input_model(
+        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Generate input model"""
         pascal_name = self._to_pascal_case(microservice_name)
 
@@ -437,14 +477,16 @@ from omnibase_core.core.node_effect import ModelEffectInput
 
 class Model{pascal_name}Input(ModelEffectInput):
     """Input envelope for {microservice_name} operations"""
-    
+
     # Add node-specific fields here
     operation_type: str = Field(..., description="Type of operation to perform")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Operation parameters")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 '''
 
-    def _generate_output_model(self, microservice_name: str, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _generate_output_model(
+        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Generate output model"""
         pascal_name = self._to_pascal_case(microservice_name)
 
@@ -460,14 +502,16 @@ from omnibase_core.core.node_effect import ModelEffectOutput
 
 class Model{pascal_name}Output(ModelEffectOutput):
     """Output envelope for {microservice_name} operations"""
-    
+
     # Add node-specific fields here
     result_data: Dict[str, Any] = Field(default_factory=dict, description="Operation result data")
     success: bool = Field(..., description="Operation success status")
     error_message: Optional[str] = Field(None, description="Error message if operation failed")
 '''
 
-    def _generate_config_model(self, microservice_name: str, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _generate_config_model(
+        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Generate config model"""
         pascal_name = self._to_pascal_case(microservice_name)
 
@@ -481,14 +525,16 @@ from pydantic import BaseModel, Field
 
 class Model{pascal_name}Config(BaseModel):
     """Configuration for {microservice_name} node"""
-    
+
     # Add configuration fields here
     timeout_seconds: int = Field(default=30, description="Operation timeout in seconds")
     retry_attempts: int = Field(default=3, description="Number of retry attempts")
     debug_mode: bool = Field(default=False, description="Enable debug logging")
 '''
 
-    def _generate_operation_enum(self, microservice_name: str, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _generate_operation_enum(
+        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Generate operation enum"""
         pascal_name = self._to_pascal_case(microservice_name)
 
@@ -501,7 +547,7 @@ from enum import Enum
 
 class Enum{pascal_name}OperationType(Enum):
     """Operation types for {microservice_name} node"""
-    
+
     # Add operation types here
     CREATE = "create"
     READ = "read"
@@ -510,7 +556,10 @@ class Enum{pascal_name}OperationType(Enum):
 '''
 
     def _generate_contract(
-        self, microservice_name: str, node_type: str, analysis_result: SimplePRDAnalysisResult
+        self,
+        microservice_name: str,
+        node_type: str,
+        analysis_result: SimplePRDAnalysisResult,
     ) -> str:
         """Generate YAML contract"""
         return f"""# {microservice_name} {node_type.lower()} contract
@@ -562,7 +611,9 @@ external_systems:
             requirements.append(f"  - {mixin}")
         return "\n".join(requirements)
 
-    def _generate_external_system_requirements(self, external_systems: List[str]) -> str:
+    def _generate_external_system_requirements(
+        self, external_systems: List[str]
+    ) -> str:
         """Generate external system requirements for contract"""
         if not external_systems:
             return "  - none"
@@ -584,7 +635,9 @@ from .models import *
 from .enums import *
 '''
 
-    def _generate_models_init(self, microservice_name: str, node_type: str = None) -> str:
+    def _generate_models_init(
+        self, microservice_name: str, node_type: str = None
+    ) -> str:
         """Generate models __init__.py"""
         base_imports = f'''#!/usr/bin/env python3
 """
@@ -629,7 +682,9 @@ from .enum_{microservice_name}_operation_type import *
         template_path = self.templates_dir / "contract_model_template.py"
         if not template_path.exists():
             # Fallback if template doesn't exist yet
-            return self._generate_contract_model_fallback(microservice_name, node_type, analysis_result)
+            return self._generate_contract_model_fallback(
+                microservice_name, node_type, analysis_result
+            )
 
         with open(template_path, "r") as f:
             template_content = f.read()
@@ -709,7 +764,10 @@ from .enum_{microservice_name}_operation_type import *
     )"""
 
     def _generate_contract_model_fallback(
-        self, microservice_name: str, node_type: str, analysis_result: SimplePRDAnalysisResult
+        self,
+        microservice_name: str,
+        node_type: str,
+        analysis_result: SimplePRDAnalysisResult,
     ) -> str:
         """Fallback contract model generation if template doesn't exist"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -783,7 +841,9 @@ class Model{pascal_name}{node_type_pascal}Contract(BaseModel):
         dependencies_list = self._build_dependencies_list(analysis_result)
 
         # Build subcontracts based on node type and mixins
-        subcontracts = self._build_subcontracts_list(node_type, analysis_result.recommended_mixins)
+        subcontracts = self._build_subcontracts_list(
+            node_type, analysis_result.recommended_mixins
+        )
 
         # Build algorithm section (required for COMPUTE nodes)
         algorithm_section = self._build_algorithm_section(node_type, microservice_name)
@@ -793,12 +853,16 @@ class Model{pascal_name}{node_type_pascal}Contract(BaseModel):
 
         # Determine service characteristics
         is_persistent = "true" if node_type in ["REDUCER", "ORCHESTRATOR"] else "false"
-        requires_external_deps = "true" if len(analysis_result.external_systems) > 0 else "false"
+        requires_external_deps = (
+            "true" if len(analysis_result.external_systems) > 0 else "false"
+        )
 
         # Build event configuration
         primary_events = self._build_primary_events(node_type, microservice_name)
         event_categories = f'["{domain}", "{node_type_lower}", "generated"]'
-        publish_events = "true" if node_type in ["EFFECT", "REDUCER", "ORCHESTRATOR"] else "false"
+        publish_events = (
+            "true" if node_type in ["EFFECT", "REDUCER", "ORCHESTRATOR"] else "false"
+        )
         subscribe_events = "true" if node_type in ["ORCHESTRATOR"] else "false"
 
         # Build service resolution
@@ -808,7 +872,9 @@ class Model{pascal_name}{node_type_pascal}Contract(BaseModel):
         infrastructure = self._build_infrastructure(analysis_result)
 
         # Build constraint definitions
-        constraint_definitions = self._build_constraint_definitions(microservice_name, node_type)
+        constraint_definitions = self._build_constraint_definitions(
+            microservice_name, node_type
+        )
 
         contract_yaml = f"""# {pascal_name} {node_type} - ONEX Contract
 # {node_type} node for {analysis_result.parsed_prd.description}
@@ -919,7 +985,9 @@ definitions:
 
         return contract_yaml
 
-    def _build_actions_list(self, analysis_result: SimplePRDAnalysisResult, node_type: str) -> str:
+    def _build_actions_list(
+        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+    ) -> str:
         """Build actions list for contract"""
         actions = []
 
@@ -1046,21 +1114,32 @@ algorithm:
         """Build primary events list"""
         events = []
         if node_type == "EFFECT":
-            events = [f"{microservice_name}_created", f"{microservice_name}_updated", f"{microservice_name}_deleted"]
+            events = [
+                f"{microservice_name}_created",
+                f"{microservice_name}_updated",
+                f"{microservice_name}_deleted",
+            ]
         elif node_type == "COMPUTE":
             events = [f"{microservice_name}_computed", f"{microservice_name}_validated"]
         elif node_type == "REDUCER":
             events = [f"{microservice_name}_aggregated", f"{microservice_name}_reduced"]
         elif node_type == "ORCHESTRATOR":
-            events = [f"{microservice_name}_workflow_started", f"{microservice_name}_workflow_completed"]
+            events = [
+                f"{microservice_name}_workflow_started",
+                f"{microservice_name}_workflow_completed",
+            ]
         else:
             events = [f"{microservice_name}_executed"]
 
         return f'["{events[0]}", "{events[1] if len(events) > 1 else events[0]}"]'
 
-    def _build_service_resolution(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_service_resolution(
+        self, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Build service resolution configuration"""
-        if "Kafka" in analysis_result.external_systems or "EventBus" in str(analysis_result.recommended_mixins):
+        if "Kafka" in analysis_result.external_systems or "EventBus" in str(
+            analysis_result.recommended_mixins
+        ):
             return '''  event_bus:
     protocol: "ProtocolEventBus"
     strategy: "hybrid"
@@ -1077,7 +1156,9 @@ algorithm:
         else:
             return "  # No special infrastructure requirements"
 
-    def _build_constraint_definitions(self, microservice_name: str, node_type: str) -> str:
+    def _build_constraint_definitions(
+        self, microservice_name: str, node_type: str
+    ) -> str:
         """Build constraint definitions"""
         return f'''    operation_type: "string type with values [create, read, update, delete]"
     input_data: "dict type required for {microservice_name} operations"
@@ -1092,8 +1173,8 @@ algorithm:
         context: Dict[str, Any],
     ) -> str:
         """Generate node.manifest.yaml file"""
-        from uuid import uuid4
         import hashlib
+        from uuid import uuid4
 
         pascal_name = self._to_pascal_case(microservice_name)
         node_type_lower = node_type.lower()
@@ -1101,7 +1182,9 @@ algorithm:
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         # Generate hash (placeholder - in production would hash actual content)
-        content_hash = hashlib.sha256(f"{microservice_name}_{node_type}_{now}".encode()).hexdigest()
+        content_hash = hashlib.sha256(
+            f"{microservice_name}_{node_type}_{now}".encode()
+        ).hexdigest()
 
         # Build capabilities
         capabilities = self._build_capabilities_list(analysis_result, node_type)
@@ -1113,7 +1196,9 @@ algorithm:
         dependencies_manifest = self._build_dependencies_manifest(analysis_result)
 
         # Build test cases
-        canonical_test_cases = self._build_canonical_test_cases(microservice_name, node_type)
+        canonical_test_cases = self._build_canonical_test_cases(
+            microservice_name, node_type
+        )
 
         # Build external endpoints
         external_endpoints = self._build_external_endpoints(analysis_result)
@@ -1132,7 +1217,9 @@ algorithm:
         min_coverage = 85.0
         processes_sensitive_data = "false"
         data_classification = "internal"
-        requires_network_access = "true" if analysis_result.external_systems else "false"
+        requires_network_access = (
+            "true" if analysis_result.external_systems else "false"
+        )
 
         manifest = f"""schema_version: {{major: 1, minor: 0, patch: 0}}
 name: "node_{domain}_{microservice_name}_{node_type_lower}"
@@ -1235,7 +1322,9 @@ tags:
 
         return manifest
 
-    def _build_capabilities_list(self, analysis_result: SimplePRDAnalysisResult, node_type: str) -> str:
+    def _build_capabilities_list(
+        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+    ) -> str:
         """Build capabilities list for manifest"""
         capabilities = []
 
@@ -1267,11 +1356,17 @@ tags:
         elif node_type == "REDUCER":
             protocols = ['"ProtocolNodeReducer"', '"ProtocolEventBus"']
         elif node_type == "ORCHESTRATOR":
-            protocols = ['"ProtocolNodeOrchestrator"', '"ProtocolEventBus"', '"ProtocolWorkflow"']
+            protocols = [
+                '"ProtocolNodeOrchestrator"',
+                '"ProtocolEventBus"',
+                '"ProtocolWorkflow"',
+            ]
 
         return "\n  - " + "\n  - ".join(protocols) if protocols else "  []"
 
-    def _build_dependencies_manifest(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_dependencies_manifest(
+        self, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Build dependencies list for node manifest"""
         if not analysis_result.external_systems:
             return "  []"
@@ -1283,9 +1378,7 @@ tags:
             # Proper URL scheme mapping with database name and config-based endpoints
             if "postgres" in system.lower() or "database" in system.lower():
                 # Include database name in PostgreSQL URL
-                target = (
-                    f"postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"
-                )
+                target = f"postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"
             elif "redis" in system.lower() or "cache" in system.lower():
                 target = f"redis://{self.config.redis_host}:{self.config.redis_port}"
             elif "kafka" in system.lower():
@@ -1309,7 +1402,9 @@ tags:
 
         return "\n".join(deps)
 
-    def _build_canonical_test_cases(self, microservice_name: str, node_type: str) -> str:
+    def _build_canonical_test_cases(
+        self, microservice_name: str, node_type: str
+    ) -> str:
         """Build canonical test cases list"""
         test_cases = [
             f'    - "test_{microservice_name}_{node_type.lower()}_basic"',
@@ -1318,7 +1413,9 @@ tags:
         ]
         return "\n".join(test_cases)
 
-    def _build_external_endpoints(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_external_endpoints(
+        self, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Build external endpoints list"""
         if not analysis_result.external_systems:
             return "    []"
@@ -1331,7 +1428,9 @@ tags:
                     f'    - "postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"'
                 )
             elif "redis" in system.lower() or "cache" in system.lower():
-                endpoints.append(f'    - "redis://{self.config.redis_host}:{self.config.redis_port}"')
+                endpoints.append(
+                    f'    - "redis://{self.config.redis_host}:{self.config.redis_port}"'
+                )
             elif "kafka" in system.lower():
                 # Handle kafka_bootstrap_servers that may already include scheme
                 kafka_servers = self.config.kafka_bootstrap_servers
@@ -1352,9 +1451,16 @@ tags:
         ]
         return "\n".join(events)
 
-    def _build_tags(self, domain: str, node_type: str, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_tags(
+        self, domain: str, node_type: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
         """Build tags list"""
-        tags = [f'  - "{domain}"', f'  - "{node_type.lower()}"', '  - "generated"', '  - "omniclaude"']
+        tags = [
+            f'  - "{domain}"',
+            f'  - "{node_type.lower()}"',
+            '  - "generated"',
+            '  - "omniclaude"',
+        ]
 
         # Add keywords from PRD
         for keyword in analysis_result.parsed_prd.extracted_keywords[:3]:
@@ -1393,7 +1499,9 @@ tags:
         min_memory_mb = 64
         max_memory_mb = 512
         cpu_cores = 2
-        event_bus_required = "true" if node_type in ["EFFECT", "REDUCER", "ORCHESTRATOR"] else "false"
+        event_bus_required = (
+            "true" if node_type in ["EFFECT", "REDUCER", "ORCHESTRATOR"] else "false"
+        )
         processes_sensitive_data = "false"
         code_coverage = 85
         cyclomatic_complexity = 10
@@ -1484,7 +1592,11 @@ quality_metrics:
         return manifest
 
     def _generate_node_metadata(
-        self, node_type: str, microservice_name: str, domain: str, analysis_result: SimplePRDAnalysisResult
+        self,
+        node_type: str,
+        microservice_name: str,
+        domain: str,
+        analysis_result: SimplePRDAnalysisResult,
     ) -> str:
         """Generate OmniNode Tool Metadata for generated node"""
         return f"""# === OmniNode:Tool_Metadata ===
@@ -1530,7 +1642,11 @@ classification:
 
     def __del__(self):
         """Destructor - warn if cache has pending tasks."""
-        if self.enable_cache and self.template_cache and hasattr(self.template_cache, "_background_tasks"):
+        if (
+            self.enable_cache
+            and self.template_cache
+            and hasattr(self.template_cache, "_background_tasks")
+        ):
             if self.template_cache._background_tasks:
                 self.logger.warning(
                     f"OmniNodeTemplateEngine destroyed with template cache having "

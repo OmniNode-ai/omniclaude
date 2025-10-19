@@ -12,18 +12,18 @@ Tests the interactive validation system components:
 
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import MagicMock, patch
 
+import pytest
 from interactive_validator import (
+    CheckpointResult,
+    CheckpointType,
+    Colors,
     InteractiveValidator,
     QuietValidator,
-    CheckpointType,
-    UserChoice,
-    CheckpointResult,
     SessionState,
+    UserChoice,
     create_validator,
-    Colors,
 )
 
 
@@ -60,7 +60,9 @@ class TestSessionState:
     def test_checkpoint_result_enum_conversion(self):
         """Test enum values are properly converted in serialization"""
         state = SessionState(session_id="test", workflow_name="test")
-        result = CheckpointResult(choice=UserChoice.EDIT, modified_output={"test": "data"})
+        result = CheckpointResult(
+            choice=UserChoice.EDIT, modified_output={"test": "data"}
+        )
         state.checkpoint_results["edit_test"] = result
 
         # Serialize

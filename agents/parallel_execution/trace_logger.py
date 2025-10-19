@@ -5,14 +5,15 @@ Provides file-based tracing for all agent operations with structured logging.
 Later can be migrated to database storage.
 """
 
+import asyncio
 import json
 import time
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from enum import Enum
-import asyncio
 
 
 class TraceLevel(str, Enum):
@@ -116,7 +117,10 @@ class TraceLogger:
         return f"{prefix}_{timestamp}_{id(self)}"
 
     async def start_coordinator_trace(
-        self, coordinator_type: str, total_agents: int, metadata: Optional[Dict[str, Any]] = None
+        self,
+        coordinator_type: str,
+        total_agents: int,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start a new coordinator trace."""
         async with self._lock:
@@ -145,15 +149,21 @@ class TraceLogger:
 
             return trace_id
 
-    async def end_coordinator_trace(self, trace_id: str, metadata: Optional[Dict[str, Any]] = None):
+    async def end_coordinator_trace(
+        self, trace_id: str, metadata: Optional[Dict[str, Any]] = None
+    ):
         """End coordinator trace and finalize."""
         async with self._lock:
-            if not self._current_coordinator_trace or self._current_coordinator_trace.trace_id != trace_id:
+            if (
+                not self._current_coordinator_trace
+                or self._current_coordinator_trace.trace_id != trace_id
+            ):
                 return
 
             self._current_coordinator_trace.end_time = time.time()
             self._current_coordinator_trace.duration_ms = (
-                self._current_coordinator_trace.end_time - self._current_coordinator_trace.start_time
+                self._current_coordinator_trace.end_time
+                - self._current_coordinator_trace.start_time
             ) * 1000
 
             # Log end event
@@ -174,12 +184,19 @@ class TraceLogger:
             # Write final trace
             await self._write_coordinator_trace()
 
-    async def start_agent_trace(self, agent_name: str, task_id: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+    async def start_agent_trace(
+        self, agent_name: str, task_id: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Start a new agent trace."""
         async with self._lock:
             trace_id = self._generate_trace_id(f"agent_{agent_name}")
 
-            agent_trace = AgentTrace(trace_id=trace_id, agent_name=agent_name, task_id=task_id, start_time=time.time())
+            agent_trace = AgentTrace(
+                trace_id=trace_id,
+                agent_name=agent_name,
+                task_id=task_id,
+                start_time=time.time(),
+            )
 
             # Log start event
             event = TraceEvent(
@@ -189,7 +206,11 @@ class TraceLogger:
                 task_id=task_id,
                 message=f"Agent started: {agent_name} for task {task_id}",
                 metadata=metadata or {},
-                parent_trace_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                parent_trace_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
             )
             agent_trace.events.append(event)
 
@@ -202,7 +223,11 @@ class TraceLogger:
             return trace_id
 
     async def end_agent_trace(
-        self, trace_id: str, status: str, result: Optional[Dict[str, Any]] = None, error: Optional[str] = None
+        self,
+        trace_id: str,
+        status: str,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
     ):
         """End agent trace with result or error."""
         async with self._lock:
@@ -211,13 +236,19 @@ class TraceLogger:
 
             agent_trace = self._agent_traces[trace_id]
             agent_trace.end_time = time.time()
-            agent_trace.duration_ms = (agent_trace.end_time - agent_trace.start_time) * 1000
+            agent_trace.duration_ms = (
+                agent_trace.end_time - agent_trace.start_time
+            ) * 1000
             agent_trace.status = status
             agent_trace.result = result
             agent_trace.error = error
 
             # Log end event
-            event_type = TraceEventType.AGENT_END if status == "completed" else TraceEventType.AGENT_ERROR
+            event_type = (
+                TraceEventType.AGENT_END
+                if status == "completed"
+                else TraceEventType.AGENT_ERROR
+            )
             level = TraceLevel.INFO if status == "completed" else TraceLevel.ERROR
 
             event = TraceEvent(
@@ -228,7 +259,11 @@ class TraceLogger:
                 message=f"Agent {status}: {agent_trace.agent_name} ({agent_trace.duration_ms:.2f}ms)",
                 duration_ms=agent_trace.duration_ms,
                 metadata={"result": result, "error": error},
-                parent_trace_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                parent_trace_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
             )
             agent_trace.events.append(event)
 
@@ -258,10 +293,18 @@ class TraceLogger:
                 level=level,
                 agent_name=agent_name,
                 task_id=task_id,
-                coordinator_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                coordinator_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
                 message=message,
                 metadata=metadata or {},
-                parent_trace_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                parent_trace_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
             )
 
             if self._current_coordinator_trace:
@@ -306,7 +349,9 @@ class TraceLogger:
                 "context": context or {},
                 "routing_time_ms": routing_time_ms,
                 "alternatives_count": len(alternatives),
-                "top_3_alternatives": alternatives[:3] if len(alternatives) > 3 else alternatives,
+                "top_3_alternatives": (
+                    alternatives[:3] if len(alternatives) > 3 else alternatives
+                ),
             }
 
             # Determine log level based on confidence
@@ -330,11 +375,19 @@ class TraceLogger:
                 level=level,
                 agent_name=selected_agent,
                 task_id=task_id,
-                coordinator_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                coordinator_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
                 message=message,
                 metadata=routing_metadata,
                 duration_ms=routing_time_ms,
-                parent_trace_id=self._current_coordinator_trace.trace_id if self._current_coordinator_trace else None,
+                parent_trace_id=(
+                    self._current_coordinator_trace.trace_id
+                    if self._current_coordinator_trace
+                    else None
+                ),
             )
 
             # Add to coordinator trace if active
@@ -352,7 +405,9 @@ class TraceLogger:
         routing_dir.mkdir(parents=True, exist_ok=True)
 
         # Create filename with timestamp
-        timestamp_str = datetime.fromtimestamp(event.timestamp).strftime("%Y%m%d_%H%M%S_%f")
+        timestamp_str = datetime.fromtimestamp(event.timestamp).strftime(
+            "%Y%m%d_%H%M%S_%f"
+        )
         filename = f"routing_{timestamp_str}.json"
         routing_file = routing_dir / filename
 
@@ -399,7 +454,11 @@ class TraceLogger:
 
     def list_traces(self, limit: int = 10) -> List[Path]:
         """List recent trace files."""
-        traces = sorted(self.trace_dir.glob("coord_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        traces = sorted(
+            self.trace_dir.glob("coord_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         return traces[:limit]
 
     async def print_trace_summary(self, trace_id: str):
@@ -415,15 +474,25 @@ class TraceLogger:
         print(f"{'='*80}")
         print(f"Trace ID: {trace.trace_id}")
         print(f"Type: {trace.coordinator_type}")
-        print(f"Duration: {trace.duration_ms:.2f}ms" if trace.duration_ms else "Duration: In progress")
-        print(f"Agents: {trace.completed_agents}/{trace.total_agents} completed, {trace.failed_agents} failed")
+        print(
+            f"Duration: {trace.duration_ms:.2f}ms"
+            if trace.duration_ms
+            else "Duration: In progress"
+        )
+        print(
+            f"Agents: {trace.completed_agents}/{trace.total_agents} completed, {trace.failed_agents} failed"
+        )
         print(f"\n{'='*80}")
         print("Agent Executions:")
         print(f"{'='*80}")
 
         for agent_trace in trace.agent_traces:
             status_emoji = "✅" if agent_trace.status == "completed" else "❌"
-            duration = f"{agent_trace.duration_ms:.2f}ms" if agent_trace.duration_ms else "In progress"
+            duration = (
+                f"{agent_trace.duration_ms:.2f}ms"
+                if agent_trace.duration_ms
+                else "In progress"
+            )
             print(f"{status_emoji} {agent_trace.agent_name} [{agent_trace.task_id}]")
             print(f"   Duration: {duration}")
             print(f"   Status: {agent_trace.status}")
@@ -435,7 +504,9 @@ class TraceLogger:
         print(f"{'='*80}")
 
         for event in trace.events[:20]:  # Show first 20 events
-            print(f"[{event.datetime_str}] {event.level.value:8s} {event.event_type.value:25s} {event.message}")
+            print(
+                f"[{event.datetime_str}] {event.level.value:8s} {event.event_type.value:25s} {event.message}"
+            )
 
         if len(trace.events) > 20:
             print(f"... and {len(trace.events) - 20} more events")
@@ -468,7 +539,11 @@ class TraceLogger:
             return []
 
         # Get all routing decision files
-        routing_files = sorted(routing_dir.glob("routing_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        routing_files = sorted(
+            routing_dir.glob("routing_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
 
         results = []
         for routing_file in routing_files:
@@ -484,11 +559,20 @@ class TraceLogger:
                 metadata = event.metadata
                 if agent_name and metadata.get("selected_agent") != agent_name:
                     continue
-                if min_confidence is not None and metadata.get("confidence_score", 0) < min_confidence:
+                if (
+                    min_confidence is not None
+                    and metadata.get("confidence_score", 0) < min_confidence
+                ):
                     continue
-                if max_confidence is not None and metadata.get("confidence_score", 1) > max_confidence:
+                if (
+                    max_confidence is not None
+                    and metadata.get("confidence_score", 1) > max_confidence
+                ):
                     continue
-                if routing_strategy and metadata.get("routing_strategy") != routing_strategy:
+                if (
+                    routing_strategy
+                    and metadata.get("routing_strategy") != routing_strategy
+                ):
                     continue
 
                 results.append(event)
@@ -502,7 +586,9 @@ class TraceLogger:
         """Get N most recent routing decisions."""
         return await self.query_routing_decisions(limit=limit)
 
-    async def get_routing_decisions_for_agent(self, agent_name: str, limit: int = 20) -> List[TraceEvent]:
+    async def get_routing_decisions_for_agent(
+        self, agent_name: str, limit: int = 20
+    ) -> List[TraceEvent]:
         """Get routing decisions for a specific agent."""
         return await self.query_routing_decisions(agent_name=agent_name, limit=limit)
 
@@ -510,7 +596,9 @@ class TraceLogger:
         self, confidence_threshold: float = 0.7, limit: int = 20
     ) -> List[TraceEvent]:
         """Get routing decisions with low confidence scores."""
-        return await self.query_routing_decisions(max_confidence=confidence_threshold, limit=limit)
+        return await self.query_routing_decisions(
+            max_confidence=confidence_threshold, limit=limit
+        )
 
     async def get_routing_statistics(self) -> Dict[str, Any]:
         """
@@ -540,7 +628,13 @@ class TraceLogger:
         # Collect statistics
         agents_selected = {}
         confidence_scores = []
-        confidence_distribution = {"0.0-0.3": 0, "0.3-0.5": 0, "0.5-0.7": 0, "0.7-0.9": 0, "0.9-1.0": 0}
+        confidence_distribution = {
+            "0.0-0.3": 0,
+            "0.3-0.5": 0,
+            "0.5-0.7": 0,
+            "0.7-0.9": 0,
+            "0.9-1.0": 0,
+        }
         routing_strategies = {}
         low_confidence_count = 0
 
@@ -577,11 +671,17 @@ class TraceLogger:
         return {
             "total_decisions": len(all_decisions),
             "agents_selected": agents_selected,
-            "avg_confidence": sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0,
+            "avg_confidence": (
+                sum(confidence_scores) / len(confidence_scores)
+                if confidence_scores
+                else 0.0
+            ),
             "confidence_distribution": confidence_distribution,
             "routing_strategies": routing_strategies,
             "low_confidence_count": low_confidence_count,
-            "low_confidence_rate": low_confidence_count / len(all_decisions) if all_decisions else 0.0,
+            "low_confidence_rate": (
+                low_confidence_count / len(all_decisions) if all_decisions else 0.0
+            ),
         }
 
     async def print_routing_statistics(self):
@@ -593,20 +693,32 @@ class TraceLogger:
         print(f"{'='*80}")
         print(f"Total Decisions: {stats['total_decisions']}")
         print(f"Average Confidence: {stats['avg_confidence']:.2%}")
-        print(f"Low Confidence Rate: {stats['low_confidence_rate']:.2%} ({stats['low_confidence_count']} decisions)")
+        print(
+            f"Low Confidence Rate: {stats['low_confidence_rate']:.2%} ({stats['low_confidence_count']} decisions)"
+        )
 
         print(f"\n{'='*80}")
         print("Agents Selected:")
         print(f"{'='*80}")
-        for agent, count in sorted(stats["agents_selected"].items(), key=lambda x: x[1], reverse=True):
-            percentage = (count / stats["total_decisions"]) * 100 if stats["total_decisions"] > 0 else 0
+        for agent, count in sorted(
+            stats["agents_selected"].items(), key=lambda x: x[1], reverse=True
+        ):
+            percentage = (
+                (count / stats["total_decisions"]) * 100
+                if stats["total_decisions"] > 0
+                else 0
+            )
             print(f"  {agent:40s} {count:5d} ({percentage:5.1f}%)")
 
         print(f"\n{'='*80}")
         print("Confidence Distribution:")
         print(f"{'='*80}")
         for range_label, count in stats["confidence_distribution"].items():
-            percentage = (count / stats["total_decisions"]) * 100 if stats["total_decisions"] > 0 else 0
+            percentage = (
+                (count / stats["total_decisions"]) * 100
+                if stats["total_decisions"] > 0
+                else 0
+            )
             bar_length = int(percentage / 2)
             bar = "█" * bar_length
             print(f"  {range_label:10s} {count:5d} ({percentage:5.1f}%) {bar}")
@@ -614,8 +726,14 @@ class TraceLogger:
         print(f"\n{'='*80}")
         print("Routing Strategies:")
         print(f"{'='*80}")
-        for strategy, count in sorted(stats["routing_strategies"].items(), key=lambda x: x[1], reverse=True):
-            percentage = (count / stats["total_decisions"]) * 100 if stats["total_decisions"] > 0 else 0
+        for strategy, count in sorted(
+            stats["routing_strategies"].items(), key=lambda x: x[1], reverse=True
+        ):
+            percentage = (
+                (count / stats["total_decisions"]) * 100
+                if stats["total_decisions"] > 0
+                else 0
+            )
             print(f"  {strategy:20s} {count:5d} ({percentage:5.1f}%)")
 
         print(f"{'='*80}\n")

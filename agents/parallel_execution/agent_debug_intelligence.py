@@ -6,17 +6,16 @@ pattern recognition, and root cause identification.
 """
 
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -50,11 +49,15 @@ class RootCauseAnalysis(BaseModel):
 
     primary_cause: str = Field(description="Primary root cause identified")
     contributing_factors: List[str] = Field(description="Secondary factors")
-    confidence_score: float = Field(description="Confidence score 0.0-1.0", ge=0.0, le=1.0)
+    confidence_score: float = Field(
+        description="Confidence score 0.0-1.0", ge=0.0, le=1.0
+    )
     confidence_level: str = Field(description="High/Medium/Low confidence")
     validation_method: str = Field(description="How confidence was determined")
     quality_correlation: bool = Field(description="Whether quality issues correlate")
-    pattern_matches: List[str] = Field(default_factory=list, description="Matching historical patterns")
+    pattern_matches: List[str] = Field(
+        default_factory=list, description="Matching historical patterns"
+    )
 
 
 class DebugSolution(BaseModel):
@@ -66,7 +69,9 @@ class DebugSolution(BaseModel):
     quality_improvements: List[str] = Field(description="Quality improvements made")
     tests_required: List[str] = Field(description="Tests needed for validation")
     prevention_measures: List[str] = Field(description="Measures to prevent recurrence")
-    estimated_quality_improvement: float = Field(description="Expected quality score improvement", ge=0.0, le=1.0)
+    estimated_quality_improvement: float = Field(
+        description="Expected quality score improvement", ge=0.0, le=1.0
+    )
 
 
 class DebugAnalysis(BaseModel):
@@ -76,8 +81,12 @@ class DebugAnalysis(BaseModel):
     bfros_analysis: BFROSAnalysis = Field(description="BFROS framework analysis")
     root_cause: RootCauseAnalysis = Field(description="Root cause determination")
     solution: DebugSolution = Field(description="Proposed solution")
-    intelligence_sources_used: int = Field(description="Number of intelligence sources consulted")
-    analysis_completeness: float = Field(description="Completeness score 0.0-1.0", ge=0.0, le=1.0)
+    intelligence_sources_used: int = Field(
+        description="Number of intelligence sources consulted"
+    )
+    analysis_completeness: float = Field(
+        description="Completeness score 0.0-1.0", ge=0.0, le=1.0
+    )
 
 
 # ============================================================================
@@ -163,8 +172,12 @@ async def get_code_quality_intelligence(ctx: RunContext[AgentDeps]) -> str:
     if "code_quality" in intelligence:
         quality = intelligence["code_quality"]
         quality_summary.append("**Code Quality Assessment:**")
-        quality_summary.append(f"- Quality Score: {quality.get('quality_score', 0.0):.2f}")
-        quality_summary.append(f"- Architectural Compliance: {quality.get('onex_compliance', 0.0):.2f}")
+        quality_summary.append(
+            f"- Quality Score: {quality.get('quality_score', 0.0):.2f}"
+        )
+        quality_summary.append(
+            f"- Architectural Compliance: {quality.get('onex_compliance', 0.0):.2f}"
+        )
 
         if "improvement_opportunities" in quality:
             quality_summary.append("- Improvement Opportunities:")
@@ -175,7 +188,9 @@ async def get_code_quality_intelligence(ctx: RunContext[AgentDeps]) -> str:
     if "anti_patterns" in intelligence:
         patterns = intelligence["anti_patterns"]
         quality_summary.append("\n**Anti-Patterns Detected:**")
-        pattern_list = patterns.get("patterns", []) if isinstance(patterns, dict) else []
+        pattern_list = (
+            patterns.get("patterns", []) if isinstance(patterns, dict) else []
+        )
         for pattern in pattern_list[:3]:
             quality_summary.append(f"- {pattern}")
 
@@ -183,14 +198,20 @@ async def get_code_quality_intelligence(ctx: RunContext[AgentDeps]) -> str:
     if "architectural_compliance" in intelligence:
         compliance = intelligence["architectural_compliance"]
         quality_summary.append("\n**Architectural Compliance:**")
-        quality_summary.append(f"- Compliance Score: {compliance.get('compliance_score', 0.0):.2f}")
+        quality_summary.append(
+            f"- Compliance Score: {compliance.get('compliance_score', 0.0):.2f}"
+        )
         violations = compliance.get("violations", [])
         if violations:
             quality_summary.append("- Violations:")
             for violation in violations[:3]:
                 quality_summary.append(f"  • {violation}")
 
-    return "\n".join(quality_summary) if quality_summary else "No quality intelligence available"
+    return (
+        "\n".join(quality_summary)
+        if quality_summary
+        else "No quality intelligence available"
+    )
 
 
 @debug_intelligence_agent.tool
@@ -269,9 +290,15 @@ async def get_debug_patterns(ctx: RunContext[AgentDeps]) -> str:
         perf = intelligence["performance_analysis"]
         patterns_summary.append("\n**Performance Patterns:**")
         if isinstance(perf, dict):
-            patterns_summary.append(f"- Optimization opportunities identified: {len(perf.get('opportunities', []))}")
+            patterns_summary.append(
+                f"- Optimization opportunities identified: {len(perf.get('opportunities', []))}"
+            )
 
-    return "\n".join(patterns_summary) if patterns_summary else "No historical patterns available"
+    return (
+        "\n".join(patterns_summary)
+        if patterns_summary
+        else "No historical patterns available"
+    )
 
 
 # ============================================================================
@@ -282,7 +309,12 @@ async def get_debug_patterns(ctx: RunContext[AgentDeps]) -> str:
 @register_agent(
     agent_name="debug",
     agent_type="debug",
-    capabilities=["debug_analysis", "root_cause_analysis", "bfros_analysis", "solution_generation"],
+    capabilities=[
+        "debug_analysis",
+        "root_cause_analysis",
+        "bfros_analysis",
+        "solution_generation",
+    ],
     description="Multi-dimensional debug intelligence agent",
 )
 class DebugIntelligenceAgent:
@@ -312,7 +344,9 @@ class DebugIntelligenceAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -333,7 +367,12 @@ class DebugIntelligenceAgent:
 
             # Gather intelligence
             intelligence = await self._gather_intelligence(
-                task, problematic_code, file_path, language, error_message, pre_gathered_context
+                task,
+                problematic_code,
+                file_path,
+                language,
+                error_message,
+                pre_gathered_context,
             )
 
             # Create agent dependencies
@@ -375,8 +414,12 @@ class DebugIntelligenceAgent:
                 "solution": debug_output.solution.model_dump(),
                 "intelligence_analysis": intelligence,
                 "quality_improvement": {
-                    "before": intelligence.get("code_quality", {}).get("quality_score", 0.0),
-                    "after": intelligence.get("code_quality", {}).get("quality_score", 0.0)
+                    "before": intelligence.get("code_quality", {}).get(
+                        "quality_score", 0.0
+                    ),
+                    "after": intelligence.get("code_quality", {}).get(
+                        "quality_score", 0.0
+                    )
                     + debug_output.solution.estimated_quality_improvement,
                     "delta": debug_output.solution.estimated_quality_improvement,
                 },
@@ -401,7 +444,9 @@ class DebugIntelligenceAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -418,7 +463,9 @@ class DebugIntelligenceAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Debug analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -458,7 +505,9 @@ class DebugIntelligenceAgent:
                 elif context_type == "pattern":
                     intelligence["anti_patterns"] = context_item.get("content", {})
                 elif context_type == "file":
-                    intelligence.setdefault("related_files", []).append(context_item.get("content", ""))
+                    intelligence.setdefault("related_files", []).append(
+                        context_item.get("content", "")
+                    )
 
         # Always assess the problematic code itself
         if self.config.archon_mcp_enabled and code:
@@ -471,7 +520,9 @@ class DebugIntelligenceAgent:
 
                 # Architectural compliance check
                 compliance_result = await self.mcp_client.call_tool(
-                    "check_architectural_compliance", content=code, architecture_type="onex"
+                    "check_architectural_compliance",
+                    content=code,
+                    architecture_type="onex",
                 )
                 intelligence["architectural_compliance"] = compliance_result
 
@@ -484,7 +535,9 @@ class DebugIntelligenceAgent:
                 # Historical patterns if not pre-gathered
                 if not pre_gathered_context:
                     domain_intel = await self.mcp_client.perform_rag_query(
-                        query=f"debugging {error} systematic root cause analysis", context="debugging", match_count=3
+                        query=f"debugging {error} systematic root cause analysis",
+                        context="debugging",
+                        match_count=3,
                     )
                     intelligence["domain_patterns"] = domain_intel
 

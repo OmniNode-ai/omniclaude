@@ -7,9 +7,9 @@ automatically opening the circuit when failure rates exceed thresholds.
 
 import asyncio
 import time
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
-from dataclasses import dataclass
 
 
 class CircuitState(Enum):
@@ -142,7 +142,9 @@ class CircuitBreaker:
         self.success_count = 0
         print(f"[CircuitBreaker] {self.name} circuit HALF-OPEN")
 
-    async def _execute_with_retry(self, func: Callable, *args, **kwargs) -> Tuple[bool, Any]:
+    async def _execute_with_retry(
+        self, func: Callable, *args, **kwargs
+    ) -> Tuple[bool, Any]:
         """Execute function with retry logic."""
         last_exception = None
 
@@ -162,12 +164,17 @@ class CircuitBreaker:
                 last_exception = e
 
                 # Check if this is a transient error that should be retried
-                if not self._is_transient_error(e) or attempt == self.config.max_retries:
+                if (
+                    not self._is_transient_error(e)
+                    or attempt == self.config.max_retries
+                ):
                     self._record_failure()
                     break
 
                 # Wait before retry with exponential backoff
-                delay = min(self.config.base_delay * (2**attempt), self.config.max_delay)
+                delay = min(
+                    self.config.base_delay * (2**attempt), self.config.max_delay
+                )
                 await asyncio.sleep(delay)
 
         # All retries failed
@@ -273,14 +280,21 @@ class CircuitBreakerManager:
     def __init__(self):
         self._breakers: Dict[str, CircuitBreaker] = {}
 
-    def get_breaker(self, name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
+    def get_breaker(
+        self, name: str, config: Optional[CircuitBreakerConfig] = None
+    ) -> CircuitBreaker:
         """Get or create a circuit breaker."""
         if name not in self._breakers:
             self._breakers[name] = CircuitBreaker(name, config)
         return self._breakers[name]
 
     async def call_with_breaker(
-        self, breaker_name: str, func: Callable, *args, config: Optional[CircuitBreakerConfig] = None, **kwargs
+        self,
+        breaker_name: str,
+        func: Callable,
+        *args,
+        config: Optional[CircuitBreakerConfig] = None,
+        **kwargs,
     ) -> Tuple[bool, Any]:
         """Execute function with circuit breaker protection."""
         breaker = self.get_breaker(breaker_name, config)
@@ -302,10 +316,16 @@ circuit_breaker_manager = CircuitBreakerManager()
 
 # Convenience functions
 async def call_with_breaker(
-    breaker_name: str, func: Callable, *args, config: Optional[CircuitBreakerConfig] = None, **kwargs
+    breaker_name: str,
+    func: Callable,
+    *args,
+    config: Optional[CircuitBreakerConfig] = None,
+    **kwargs,
 ) -> Tuple[bool, Any]:
     """Execute function with circuit breaker protection."""
-    return await circuit_breaker_manager.call_with_breaker(breaker_name, func, *args, config=config, **kwargs)
+    return await circuit_breaker_manager.call_with_breaker(
+        breaker_name, func, *args, config=config, **kwargs
+    )
 
 
 def get_breaker_stats(breaker_name: str) -> Optional[Dict[str, Any]]:

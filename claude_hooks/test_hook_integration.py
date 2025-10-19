@@ -9,16 +9,16 @@ Simulates a real hook execution to verify end-to-end integration:
 4. Output passthrough
 """
 
-import sys
 import json
+import sys
 import time
 from pathlib import Path
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from post_tool_metrics import collect_post_tool_metrics
 from hook_event_logger import HookEventLogger
+from post_tool_metrics import collect_post_tool_metrics
 
 
 def simulate_write_operation():
@@ -133,7 +133,9 @@ def divide(a, b):
         if collection_time_ms < 12.0:
             print(f"✅ Performance requirement met: {collection_time_ms:.2f}ms < 12ms")
         else:
-            print(f"⚠️  Performance requirement NOT met: {collection_time_ms:.2f}ms >= 12ms")
+            print(
+                f"⚠️  Performance requirement NOT met: {collection_time_ms:.2f}ms >= 12ms"
+            )
 
         return True
 
@@ -151,7 +153,11 @@ def simulate_failed_operation():
 
     tool_info = {
         "tool_name": "Edit",
-        "tool_input": {"file_path": "/test/nonexistent.py", "old_string": "foo", "new_string": "bar"},
+        "tool_input": {
+            "file_path": "/test/nonexistent.py",
+            "old_string": "foo",
+            "new_string": "bar",
+        },
         "tool_response": {"error": "File not found: /test/nonexistent.py"},
     }
 

@@ -10,21 +10,22 @@ Comprehensive test suite for parallel node generation including:
 - Stress tests for concurrent generation
 """
 
-import pytest
 import asyncio
-import time
 import tempfile
+import time
 from pathlib import Path
 from uuid import uuid4
 
-from agents.lib.parallel_generator import ParallelGenerator, GenerationJob
+import pytest
+
 from agents.lib.codegen_workflow import CodegenWorkflow
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.parallel_generator import GenerationJob, ParallelGenerator
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
     EFFECT_ANALYSIS_RESULT,
+    EFFECT_NODE_PRD,
 )
 
 
@@ -35,7 +36,9 @@ class TestParallelGeneratorUnit:
     async def test_parallel_generator_initialization(self):
         """Test that ParallelGenerator initializes correctly"""
         generator = ParallelGenerator(
-            max_workers=3, timeout_seconds=120, enable_metrics=False  # Disable metrics for unit tests
+            max_workers=3,
+            timeout_seconds=120,
+            enable_metrics=False,  # Disable metrics for unit tests
         )
 
         assert generator.max_workers == 3
@@ -75,7 +78,9 @@ class TestParallelGeneratorUnit:
                 output_directory=temp_dir,
             )
 
-            results = await generator.generate_nodes_parallel(jobs=[job], session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=[job], session_id=uuid4()
+            )
 
             assert len(results) == 1
             assert results[0].success is True
@@ -102,7 +107,9 @@ class TestParallelGeneratorUnit:
                 for i, node_type in enumerate(["EFFECT", "COMPUTE", "REDUCER"])
             ]
 
-            results = await generator.generate_nodes_parallel(jobs=jobs, session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=jobs, session_id=uuid4()
+            )
 
             assert len(results) == 3
             successful = [r for r in results if r.success]
@@ -113,7 +120,9 @@ class TestParallelGeneratorUnit:
     @pytest.mark.asyncio
     async def test_parallel_generation_error_handling(self):
         """Test error handling in parallel generation"""
-        generator = ParallelGenerator(max_workers=2, timeout_seconds=5, enable_metrics=False)
+        generator = ParallelGenerator(
+            max_workers=2, timeout_seconds=5, enable_metrics=False
+        )
 
         # Create a job with invalid node type (should fail gracefully)
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -142,7 +151,9 @@ class TestCodegenWorkflowParallel:
         workflow = CodegenWorkflow(enable_parallel=True, max_workers=3)
 
         # Should use parallel for 2+ node types
-        assert workflow._should_use_parallel(["EFFECT", "COMPUTE"], parallel=None) is True
+        assert (
+            workflow._should_use_parallel(["EFFECT", "COMPUTE"], parallel=None) is True
+        )
 
         # Should use sequential for single node
         assert workflow._should_use_parallel(["EFFECT"], parallel=None) is False
@@ -156,7 +167,10 @@ class TestCodegenWorkflowParallel:
         assert workflow._should_use_parallel(["EFFECT"], parallel=True) is True
 
         # Force sequential even for multiple nodes
-        assert workflow._should_use_parallel(["EFFECT", "COMPUTE"], parallel=False) is False
+        assert (
+            workflow._should_use_parallel(["EFFECT", "COMPUTE"], parallel=False)
+            is False
+        )
 
     @pytest.mark.asyncio
     async def test_workflow_parallel_generation_integration(self):
@@ -198,13 +212,15 @@ class TestParallelPerformance:
             sequential_workflow = CodegenWorkflow(enable_parallel=False)
             sequential_start = time.time()
 
-            seq_generated, seq_total_files = await sequential_workflow._generate_nodes_sequential(
-                session_id=uuid4(),
-                node_types=node_types[:3],  # 3 nodes
-                prd_analysis=analysis,
-                microservice_name="benchmark",
-                domain="test",
-                output_directory=temp_dir,
+            seq_generated, seq_total_files = (
+                await sequential_workflow._generate_nodes_sequential(
+                    session_id=uuid4(),
+                    node_types=node_types[:3],  # 3 nodes
+                    prd_analysis=analysis,
+                    microservice_name="benchmark",
+                    domain="test",
+                    output_directory=temp_dir,
+                )
             )
 
             sequential_time = time.time() - sequential_start
@@ -214,13 +230,15 @@ class TestParallelPerformance:
             parallel_workflow = CodegenWorkflow(enable_parallel=True, max_workers=3)
             parallel_start = time.time()
 
-            par_generated, par_total_files = await parallel_workflow._generate_nodes_parallel(
-                session_id=uuid4(),
-                node_types=node_types[:3],  # 3 nodes
-                prd_analysis=analysis,
-                microservice_name="benchmark",
-                domain="test",
-                output_directory=temp_dir,
+            par_generated, par_total_files = (
+                await parallel_workflow._generate_nodes_parallel(
+                    session_id=uuid4(),
+                    node_types=node_types[:3],  # 3 nodes
+                    prd_analysis=analysis,
+                    microservice_name="benchmark",
+                    domain="test",
+                    output_directory=temp_dir,
+                )
             )
 
             parallel_time = time.time() - parallel_start
@@ -229,7 +247,9 @@ class TestParallelPerformance:
         speedup = sequential_time / parallel_time if parallel_time > 0 else 0
 
         print("\n=== Parallel Generation Benchmark ===")
-        print(f"Sequential time: {sequential_time:.2f}s ({sequential_time/3:.2f}s per node)")
+        print(
+            f"Sequential time: {sequential_time:.2f}s ({sequential_time/3:.2f}s per node)"
+        )
         print(f"Parallel time: {parallel_time:.2f}s ({parallel_time/3:.2f}s per node)")
         print(f"Speedup: {speedup:.2f}x")
         print(f"Throughput improvement: {(speedup-1)*100:.1f}%")
@@ -262,7 +282,9 @@ class TestParallelPerformance:
             )
 
             start_time = time.time()
-            results = await generator.generate_nodes_parallel(jobs=[job], session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=[job], session_id=uuid4()
+            )
             total_time = time.time() - start_time
 
             assert len(results) == 1
@@ -274,7 +296,9 @@ class TestParallelPerformance:
             print(f"Per-node latency: {per_node_latency*1000:.0f}ms")
 
             # Very generous limit for test stability
-            assert per_node_latency < 10.0, f"Per-node latency too high: {per_node_latency:.2f}s"
+            assert (
+                per_node_latency < 10.0
+            ), f"Per-node latency too high: {per_node_latency:.2f}s"
 
         await generator.cleanup()
 
@@ -323,7 +347,9 @@ class TestThreadSafety:
                 for i in range(5)
             ]
 
-            results = await generator.generate_nodes_parallel(jobs=jobs, session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=jobs, session_id=uuid4()
+            )
 
             # All jobs should succeed
             successful = [r for r in results if r.success]
@@ -337,7 +363,9 @@ class TestThreadSafety:
 
                     # Verify file is not empty and has valid content
                     content = main_file.read_text()
-                    assert len(content) > 100, "Generated file should have substantial content"
+                    assert (
+                        len(content) > 100
+                    ), "Generated file should have substantial content"
                     assert "#!/usr/bin/env python3" in content or "class" in content
 
         await generator.cleanup()
@@ -349,7 +377,9 @@ class TestStressConditions:
     @pytest.mark.asyncio
     async def test_stress_many_concurrent_jobs(self):
         """Test parallel generation under high concurrency"""
-        generator = ParallelGenerator(max_workers=4, timeout_seconds=180, enable_metrics=False)
+        generator = ParallelGenerator(
+            max_workers=4, timeout_seconds=180, enable_metrics=False
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # 10 concurrent jobs
@@ -366,7 +396,9 @@ class TestStressConditions:
             ]
 
             start_time = time.time()
-            results = await generator.generate_nodes_parallel(jobs=jobs, session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=jobs, session_id=uuid4()
+            )
             total_time = time.time() - start_time
 
             # Should complete all jobs
@@ -376,19 +408,24 @@ class TestStressConditions:
             successful = [r for r in results if r.success]
             success_rate = len(successful) / len(results)
 
-            print(f"\nStress test: {len(successful)}/10 succeeded ({success_rate*100:.1f}%)")
+            print(
+                f"\nStress test: {len(successful)}/10 succeeded ({success_rate*100:.1f}%)"
+            )
             print(f"Total time: {total_time:.2f}s ({total_time/10:.2f}s per job avg)")
 
             # At least 80% should succeed
-            assert success_rate >= 0.8, f"Success rate too low under stress: {success_rate*100:.1f}%"
+            assert (
+                success_rate >= 0.8
+            ), f"Success rate too low under stress: {success_rate*100:.1f}%"
 
         await generator.cleanup()
 
     @pytest.mark.asyncio
     async def test_stress_resource_cleanup(self):
         """Test that resources are properly cleaned up after parallel generation"""
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_open_files = len(process.open_files())
@@ -424,7 +461,9 @@ class TestStressConditions:
         print(f"\nFile handle leak check: {file_handle_increase} handles remaining")
 
         # Allow some variance but should not leak many handles
-        assert file_handle_increase < 50, f"Potential file handle leak: {file_handle_increase} handles"
+        assert (
+            file_handle_increase < 50
+        ), f"Potential file handle leak: {file_handle_increase} handles"
 
 
 class TestEdgeCases:
@@ -459,7 +498,9 @@ class TestEdgeCases:
                 for i in range(2)
             ]
 
-            results = await generator.generate_nodes_parallel(jobs=jobs, session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=jobs, session_id=uuid4()
+            )
 
             # Should still work with single worker
             assert len(results) == 2
@@ -472,7 +513,9 @@ class TestEdgeCases:
     async def test_timeout_handling(self):
         """Test timeout handling in parallel generation"""
         # Very short timeout to trigger timeout
-        generator = ParallelGenerator(max_workers=2, timeout_seconds=0.001, enable_metrics=False)
+        generator = ParallelGenerator(
+            max_workers=2, timeout_seconds=0.001, enable_metrics=False
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             job = GenerationJob(
@@ -485,12 +528,17 @@ class TestEdgeCases:
             )
 
             # This should timeout
-            results = await generator.generate_nodes_parallel(jobs=[job], session_id=uuid4())
+            results = await generator.generate_nodes_parallel(
+                jobs=[job], session_id=uuid4()
+            )
 
             assert len(results) == 1
             # May timeout or succeed depending on timing
             if not results[0].success:
-                assert "timeout" in results[0].error.lower() or "timed out" in results[0].error.lower()
+                assert (
+                    "timeout" in results[0].error.lower()
+                    or "timed out" in results[0].error.lower()
+                )
 
         await generator.cleanup()
 

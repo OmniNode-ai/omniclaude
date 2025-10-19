@@ -4,16 +4,16 @@ Test Enhanced Metadata Extraction
 Validates performance (<15ms target) and accuracy
 """
 
+import json
 import sys
 import time
-import json
 from pathlib import Path
 
 # Add hooks lib to path
 sys.path.insert(0, str(Path.home() / ".claude" / "hooks" / "lib"))
 
-from metadata_extractor import MetadataExtractor
 from correlation_manager import CorrelationManager
+from metadata_extractor import MetadataExtractor
 
 
 def test_performance():
@@ -86,7 +86,9 @@ def test_workflow_classification():
         actual_stage = metadata["workflow_stage"]
 
         status = "✅" if actual_stage == expected_stage else "❌"
-        print(f"{status} {prompt[:40]:<40} -> {actual_stage:<20} (expected: {expected_stage})")
+        print(
+            f"{status} {prompt[:40]:<40} -> {actual_stage:<20} (expected: {expected_stage})"
+        )
 
         if actual_stage == expected_stage:
             passed += 1
@@ -131,7 +133,9 @@ def test_session_context():
     # Simulate multiple prompts
     for i in range(3):
         manager.set_correlation_id(
-            correlation_id=f"test-{i}", agent_name="agent-test", prompt_preview=f"Test prompt {i}"
+            correlation_id=f"test-{i}",
+            agent_name="agent-test",
+            prompt_preview=f"Test prompt {i}",
         )
 
         if i > 0:
@@ -140,12 +144,16 @@ def test_session_context():
         # Extract metadata
         extractor = MetadataExtractor()
         correlation_context = manager.get_correlation_context()
-        metadata = extractor.extract_all("Test prompt", correlation_context=correlation_context)
+        metadata = extractor.extract_all(
+            "Test prompt", correlation_context=correlation_context
+        )
 
         session_context = metadata["session_context"]
         print(f"\nPrompt {i + 1}:")
         print(f"  Prompts in session: {session_context['prompts_in_session']}")
-        print(f"  Time since last: {session_context['time_since_last_prompt_seconds']}s")
+        print(
+            f"  Time since last: {session_context['time_since_last_prompt_seconds']}s"
+        )
 
     manager.clear()
     print("\n✅ Session context tracking working")
@@ -194,7 +202,8 @@ def test_complete_metadata():
 
     extractor = MetadataExtractor()
     metadata = extractor.extract_all(
-        prompt="Implement a new authentication feature with tests", agent_name="agent-feature-developer"
+        prompt="Implement a new authentication feature with tests",
+        agent_name="agent-feature-developer",
     )
 
     print("\nComplete metadata:")

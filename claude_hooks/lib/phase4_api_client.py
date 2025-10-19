@@ -17,12 +17,13 @@ Key Features:
 Designed for Claude Code hooks and PatternTracker integration.
 """
 
-import httpx
 import asyncio
 import logging
 import sys
-from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,9 @@ class Phase4APIClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, headers=headers)
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url, timeout=self.timeout, headers=headers
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -105,7 +108,9 @@ class Phase4APIClient:
     # Core Retry Logic with Exponential Backoff
     # ========================================================================
 
-    async def _retry_request(self, request_func: Callable, operation_name: str) -> Dict[str, Any]:
+    async def _retry_request(
+        self, request_func: Callable, operation_name: str
+    ) -> Dict[str, Any]:
         """
         Execute request with retry logic and exponential backoff.
 
@@ -131,7 +136,7 @@ class Phase4APIClient:
                 response.raise_for_status()
                 return response.json()
 
-            except httpx.TimeoutException as e:
+            except httpx.TimeoutException:
                 last_error = f"Timeout after {self.timeout}s"
                 if attempt < self.max_retries - 1:
                     wait_time = 2**attempt  # Exponential: 1s, 2s, 4s
@@ -146,7 +151,9 @@ class Phase4APIClient:
                     )
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(f"{operation_name} failed after {self.max_retries} timeout attempts")
+                    logger.error(
+                        f"{operation_name} failed after {self.max_retries} timeout attempts"
+                    )
                     print(
                         f"❌ [Phase4API] {operation_name} failed after {self.max_retries} timeout attempts",
                         file=sys.stderr,
@@ -154,7 +161,10 @@ class Phase4APIClient:
 
             except httpx.HTTPStatusError as e:
                 # Don't retry on 4xx client errors (except 429 rate limit)
-                if 400 <= e.response.status_code < 500 and e.response.status_code != 429:
+                if (
+                    400 <= e.response.status_code < 500
+                    and e.response.status_code != 429
+                ):
                     print(
                         f"❌ [Phase4API] {operation_name} HTTP error {e.response.status_code}: {e.response.text[:100]}",
                         file=sys.stderr,
@@ -180,7 +190,9 @@ class Phase4APIClient:
                     )
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(f"{operation_name} failed after {self.max_retries} attempts: {last_error}")
+                    logger.error(
+                        f"{operation_name} failed after {self.max_retries} attempts: {last_error}"
+                    )
                     print(
                         f"❌ [Phase4API] {operation_name} failed after {self.max_retries} attempts: {last_error}",
                         file=sys.stderr,
@@ -202,7 +214,9 @@ class Phase4APIClient:
                     )
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(f"{operation_name} failed after {self.max_retries} connection attempts")
+                    logger.error(
+                        f"{operation_name} failed after {self.max_retries} connection attempts"
+                    )
                     print(
                         f"❌ [Phase4API] {operation_name} connection failed after {self.max_retries} attempts: {last_error}",
                         file=sys.stderr,
@@ -224,7 +238,9 @@ class Phase4APIClient:
                     )
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.error(f"{operation_name} failed after {self.max_retries} attempts: {last_error}")
+                    logger.error(
+                        f"{operation_name} failed after {self.max_retries} attempts: {last_error}"
+                    )
                     print(
                         f"❌ [Phase4API] {operation_name} failed after {self.max_retries} attempts: {last_error}",
                         file=sys.stderr,
@@ -241,7 +257,11 @@ class Phase4APIClient:
                 break  # Don't retry on unexpected errors
 
         # All retries exhausted or unexpected error
-        return {"success": False, "error": last_error or "Unknown error", "retries_exhausted": True}
+        return {
+            "success": False,
+            "error": last_error or "Unknown error",
+            "retries_exhausted": True,
+        }
 
     # ========================================================================
     # Endpoint 1: Track Lineage (POST /lineage/track)
@@ -317,7 +337,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         payload = {
             "event_type": event_type,
@@ -338,7 +361,9 @@ class Phase4APIClient:
             payload["metadata"] = metadata
 
         async def request():
-            return await self._client.post("/api/pattern-traceability/lineage/track", json=payload)
+            return await self._client.post(
+                "/api/pattern-traceability/lineage/track", json=payload
+            )
 
         return await self._retry_request(request, "track_lineage")
 
@@ -347,7 +372,10 @@ class Phase4APIClient:
     # ========================================================================
 
     async def query_lineage(
-        self, pattern_id: str, include_ancestors: bool = True, include_descendants: bool = True
+        self,
+        pattern_id: str,
+        include_ancestors: bool = True,
+        include_descendants: bool = True,
     ) -> Dict[str, Any]:
         """
         Query pattern lineage (ancestry or descendants).
@@ -386,7 +414,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         params = {
             "include_ancestors": str(include_ancestors).lower(),
@@ -394,7 +425,9 @@ class Phase4APIClient:
         }
 
         async def request():
-            return await self._client.get(f"/api/pattern-traceability/lineage/{pattern_id}", params=params)
+            return await self._client.get(
+                f"/api/pattern-traceability/lineage/{pattern_id}", params=params
+            )
 
         return await self._retry_request(request, "query_lineage")
 
@@ -460,7 +493,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         payload = {
             "pattern_id": pattern_id,
@@ -474,7 +510,9 @@ class Phase4APIClient:
             payload["metrics"] = metrics
 
         async def request():
-            return await self._client.post("/api/pattern-traceability/analytics/compute", json=payload)
+            return await self._client.post(
+                "/api/pattern-traceability/analytics/compute", json=payload
+            )
 
         return await self._retry_request(request, "compute_analytics")
 
@@ -503,12 +541,20 @@ class Phase4APIClient:
             Same structure as compute_analytics()
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
-        params = {"time_window": time_window, "include_trends": str(include_trends).lower()}
+        params = {
+            "time_window": time_window,
+            "include_trends": str(include_trends).lower(),
+        }
 
         async def request():
-            return await self._client.get(f"/api/pattern-traceability/analytics/{pattern_id}", params=params)
+            return await self._client.get(
+                f"/api/pattern-traceability/analytics/{pattern_id}", params=params
+            )
 
         return await self._retry_request(request, "get_analytics")
 
@@ -587,7 +633,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         payload = {
             "pattern_id": pattern_id,
@@ -600,7 +649,9 @@ class Phase4APIClient:
         }
 
         async def request():
-            return await self._client.post("/api/pattern-traceability/feedback/analyze", json=payload)
+            return await self._client.post(
+                "/api/pattern-traceability/feedback/analyze", json=payload
+            )
 
         return await self._retry_request(request, "analyze_feedback")
 
@@ -653,7 +704,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         payload = {"query": query, "limit": limit}
 
@@ -665,7 +719,9 @@ class Phase4APIClient:
             payload["time_window_days"] = time_window_days
 
         async def request():
-            return await self._client.post("/api/pattern-traceability/search", json=payload)
+            return await self._client.post(
+                "/api/pattern-traceability/search", json=payload
+            )
 
         return await self._retry_request(request, "search_patterns")
 
@@ -718,15 +774,24 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
-        payload = {"check_lineage": check_lineage, "check_analytics": check_analytics, "check_orphans": check_orphans}
+        payload = {
+            "check_lineage": check_lineage,
+            "check_analytics": check_analytics,
+            "check_orphans": check_orphans,
+        }
 
         if pattern_id:
             payload["pattern_id"] = pattern_id
 
         async def request():
-            return await self._client.post("/api/pattern-traceability/validate", json=payload)
+            return await self._client.post(
+                "/api/pattern-traceability/validate", json=payload
+            )
 
         return await self._retry_request(request, "validate_integrity")
 
@@ -758,7 +823,10 @@ class Phase4APIClient:
             }
         """
         if not self._client:
-            return {"success": False, "error": "Client not initialized - use 'async with' context manager"}
+            return {
+                "success": False,
+                "error": "Client not initialized - use 'async with' context manager",
+            }
 
         async def request():
             return await self._client.get("/api/pattern-traceability/health")
@@ -794,7 +862,11 @@ class Phase4APIClient:
         Returns:
             Same as track_lineage()
         """
-        pattern_data = {"code": code, "language": language, "created_at": datetime.utcnow().isoformat()}
+        pattern_data = {
+            "code": code,
+            "language": language,
+            "created_at": datetime.utcnow().isoformat(),
+        }
 
         if context:
             pattern_data["context"] = context
@@ -838,7 +910,11 @@ class Phase4APIClient:
         Returns:
             Same as track_lineage()
         """
-        pattern_data = {"code": code, "language": language, "modified_at": datetime.utcnow().isoformat()}
+        pattern_data = {
+            "code": code,
+            "language": language,
+            "modified_at": datetime.utcnow().isoformat(),
+        }
 
         return await self.track_lineage(
             event_type="pattern_modified",
@@ -855,7 +931,10 @@ class Phase4APIClient:
         )
 
     async def get_pattern_health(
-        self, pattern_id: str, include_analytics: bool = True, include_lineage: bool = True
+        self,
+        pattern_id: str,
+        include_analytics: bool = True,
+        include_lineage: bool = True,
     ) -> Dict[str, Any]:
         """
         Convenience method: Get comprehensive pattern health status.
@@ -907,8 +986,14 @@ class Phase4APIClient:
 
         # Calculate health score
         if result["analytics"]:
-            quality = result["analytics"].get("success_metrics", {}).get("avg_quality_score", 0)
-            success_rate = result["analytics"].get("success_metrics", {}).get("success_rate", 0)
+            quality = (
+                result["analytics"]
+                .get("success_metrics", {})
+                .get("avg_quality_score", 0)
+            )
+            success_rate = (
+                result["analytics"].get("success_metrics", {}).get("success_rate", 0)
+            )
             result["health_score"] = (quality + success_rate) / 2
 
             if result["health_score"] >= 0.8:

@@ -12,16 +12,17 @@ Features:
 - File-based persistence (database migration ready)
 """
 
+import asyncio
 import json
 import time
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from pydantic import BaseModel, Field
-from collections import defaultdict, Counter
-import asyncio
 
-from .trace_logger import TraceLogger, TraceEventType, TraceLevel, get_trace_logger
+from pydantic import BaseModel, Field
+
+from .trace_logger import TraceEventType, TraceLevel, TraceLogger, get_trace_logger
 
 
 class TransformationEvent(BaseModel):
@@ -110,7 +111,11 @@ class AgentTransformationTracker:
     # Performance threshold from performance-thresholds.yaml (CTX-002)
     TRANSFORMATION_THRESHOLD_MS = 50.0
 
-    def __init__(self, storage_dir: str = "traces/transformations", trace_logger: Optional[TraceLogger] = None):
+    def __init__(
+        self,
+        storage_dir: str = "traces/transformations",
+        trace_logger: Optional[TraceLogger] = None,
+    ):
         """
         Initialize transformation tracker.
 
@@ -130,7 +135,13 @@ class AgentTransformationTracker:
         self._cache_max_size = 1000  # Keep last 1000 transformations in memory
 
         # Statistics
-        self._stats = {"total_tracked": 0, "successful": 0, "failed": 0, "cache_hits": 0, "pattern_recognitions": 0}
+        self._stats = {
+            "total_tracked": 0,
+            "successful": 0,
+            "failed": 0,
+            "cache_hits": 0,
+            "pattern_recognitions": 0,
+        }
 
     async def track_transformation(
         self,
@@ -283,7 +294,10 @@ class AgentTransformationTracker:
             return event
 
     async def get_transformation_history(
-        self, source_identity: Optional[str] = None, target_identity: Optional[str] = None, limit: int = 100
+        self,
+        source_identity: Optional[str] = None,
+        target_identity: Optional[str] = None,
+        limit: int = 100,
     ) -> List[TransformationEvent]:
         """
         Get transformation history with optional filtering.
@@ -311,7 +325,9 @@ class AgentTransformationTracker:
 
             return events[:limit]
 
-    async def analyze_patterns(self, min_occurrences: int = 3) -> List[TransformationPattern]:
+    async def analyze_patterns(
+        self, min_occurrences: int = 3
+    ) -> List[TransformationPattern]:
         """
         Analyze transformation patterns from historical data.
 
@@ -325,7 +341,9 @@ class AgentTransformationTracker:
             patterns = []
 
             # Group by source-target pair
-            pair_groups: Dict[Tuple[str, str], List[TransformationEvent]] = defaultdict(list)
+            pair_groups: Dict[Tuple[str, str], List[TransformationEvent]] = defaultdict(
+                list
+            )
 
             for event in self._transformation_cache:
                 pair = (event.source_identity, event.target_identity)
@@ -340,8 +358,14 @@ class AgentTransformationTracker:
                 total_time = sum(e.transformation_overhead_ms or 0 for e in events)
                 avg_time = total_time / len(events)
 
-                confidences = [e.routing_confidence for e in events if e.routing_confidence is not None]
-                avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+                confidences = [
+                    e.routing_confidence
+                    for e in events
+                    if e.routing_confidence is not None
+                ]
+                avg_confidence = (
+                    sum(confidences) / len(confidences) if confidences else 0.0
+                )
 
                 successful = sum(1 for e in events if e.success)
                 success_rate = successful / len(events)
@@ -415,32 +439,57 @@ class AgentTransformationTracker:
                 if e.transformation_overhead_ms is not None
             ]
 
-            avg_overhead = sum(overhead_times) / len(overhead_times) if overhead_times else 0.0
+            avg_overhead = (
+                sum(overhead_times) / len(overhead_times) if overhead_times else 0.0
+            )
             sorted_times = sorted(overhead_times)
-            median_overhead = sorted_times[len(sorted_times) // 2] if sorted_times else 0.0
+            median_overhead = (
+                sorted_times[len(sorted_times) // 2] if sorted_times else 0.0
+            )
             max_overhead = max(overhead_times) if overhead_times else 0.0
 
             # Threshold compliance
-            under_threshold = sum(1 for t in overhead_times if t <= self.TRANSFORMATION_THRESHOLD_MS)
+            under_threshold = sum(
+                1 for t in overhead_times if t <= self.TRANSFORMATION_THRESHOLD_MS
+            )
             over_threshold = len(overhead_times) - under_threshold
-            compliance_rate = under_threshold / len(overhead_times) if overhead_times else 0.0
+            compliance_rate = (
+                under_threshold / len(overhead_times) if overhead_times else 0.0
+            )
 
             # Common patterns
-            source_counter = Counter(e.source_identity for e in self._transformation_cache)
-            target_counter = Counter(e.target_identity for e in self._transformation_cache)
-            pair_counter = Counter((e.source_identity, e.target_identity) for e in self._transformation_cache)
+            source_counter = Counter(
+                e.source_identity for e in self._transformation_cache
+            )
+            target_counter = Counter(
+                e.target_identity for e in self._transformation_cache
+            )
+            pair_counter = Counter(
+                (e.source_identity, e.target_identity)
+                for e in self._transformation_cache
+            )
 
-            most_common_source = source_counter.most_common(1)[0][0] if source_counter else "N/A"
-            most_common_target = target_counter.most_common(1)[0][0] if target_counter else "N/A"
-            most_common_pair = pair_counter.most_common(1)[0][0] if pair_counter else ("N/A", "N/A")
+            most_common_source = (
+                source_counter.most_common(1)[0][0] if source_counter else "N/A"
+            )
+            most_common_target = (
+                target_counter.most_common(1)[0][0] if target_counter else "N/A"
+            )
+            most_common_pair = (
+                pair_counter.most_common(1)[0][0] if pair_counter else ("N/A", "N/A")
+            )
 
             # Time-based analysis
             now = time.time()
             hour_ago = now - 3600
             day_ago = now - 86400
 
-            last_hour = sum(1 for e in self._transformation_cache if e.timestamp >= hour_ago)
-            last_day = sum(1 for e in self._transformation_cache if e.timestamp >= day_ago)
+            last_hour = sum(
+                1 for e in self._transformation_cache if e.timestamp >= hour_ago
+            )
+            last_day = sum(
+                1 for e in self._transformation_cache if e.timestamp >= day_ago
+            )
 
             # Calculate average per hour based on oldest event
             oldest_timestamp = min(e.timestamp for e in self._transformation_cache)
@@ -489,7 +538,9 @@ class AgentTransformationTracker:
         )
 
         if metrics.transformations_over_threshold > 0:
-            print(f"⚠️  {metrics.transformations_over_threshold} transformations exceeded threshold!")
+            print(
+                f"⚠️  {metrics.transformations_over_threshold} transformations exceeded threshold!"
+            )
 
         print(f"\n{'='*80}")
         print("Common Patterns:")
@@ -545,7 +596,10 @@ class AgentTransformationTracker:
         """Log transformation to TraceLogger."""
         # Determine log level based on performance
         level = TraceLevel.INFO
-        if event.transformation_overhead_ms and event.transformation_overhead_ms > self.TRANSFORMATION_THRESHOLD_MS:
+        if (
+            event.transformation_overhead_ms
+            and event.transformation_overhead_ms > self.TRANSFORMATION_THRESHOLD_MS
+        ):
             level = TraceLevel.WARNING
 
         # Create message
@@ -569,7 +623,9 @@ class AgentTransformationTracker:
             "transformation_overhead_ms": event.transformation_overhead_ms,
             "agent_definition_path": event.agent_definition_path,
             "user_request_preview": (
-                event.user_request[:100] + "..." if len(event.user_request) > 100 else event.user_request
+                event.user_request[:100] + "..."
+                if len(event.user_request) > 100
+                else event.user_request
             ),
         }
 

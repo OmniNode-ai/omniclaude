@@ -33,19 +33,22 @@ Usage:
     report = analytics.generate_report(days=7)
 """
 
+from .event_analytics import (
+    CorrectionEffectiveness,
+    EventAnalytics,
+    ViolationPattern,
+    WorkflowMetrics,
+)
 from .event_models import (
-    EventType,
-    WorkflowEvent,
-    Violation,
-    Correction,
     AIQuorumScore,
+    Correction,
+    EventType,
     IntentContextData,
+    Violation,
+    WorkflowEvent,
     WorkflowSummary,
 )
-
 from .event_store import EventStore
-
-from .event_analytics import EventAnalytics, CorrectionEffectiveness, ViolationPattern, WorkflowMetrics
 
 __all__ = [
     # Enums

@@ -6,15 +6,16 @@ Generates YAML contracts and subcontracts from PRD analysis results.
 Supports all 4 ONEX node types (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR).
 """
 
-import re
-import yaml
 import logging
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+import re
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .version_config import get_config
@@ -86,14 +87,20 @@ class ContractGenerator:
                     "half_open_max_calls": DEFAULT_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS,
                 },
             },
-            "MixinLogging": {"log_level": "INFO", "config": {"format": "json", "output": "stdout"}},
+            "MixinLogging": {
+                "log_level": "INFO",
+                "config": {"format": "json", "output": "stdout"},
+            },
             "MixinMetrics": {
                 "metrics_backend": "prometheus",
                 "config": {"port": DEFAULT_METRICS_PORT, "path": "/metrics"},
             },
             "MixinSecurity": {
                 "authentication": "jwt",
-                "config": {"token_expiry_seconds": DEFAULT_JWT_TOKEN_EXPIRY_SECONDS, "algorithm": "HS256"},
+                "config": {
+                    "token_expiry_seconds": DEFAULT_JWT_TOKEN_EXPIRY_SECONDS,
+                    "algorithm": "HS256",
+                },
             },
             "MixinValidation": {
                 "validation_mode": "strict",
@@ -126,18 +133,24 @@ class ContractGenerator:
             OnexError: If contract generation fails
         """
         try:
-            self.logger.info(f"Generating contract for {node_type} node: {microservice_name}")
+            self.logger.info(
+                f"Generating contract for {node_type} node: {microservice_name}"
+            )
 
             # Validate node type
             if node_type not in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
                 raise OnexError(
                     code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Invalid node type: {node_type}",
-                    details={"valid_types": ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]},
+                    details={
+                        "valid_types": ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+                    },
                 )
 
             # Infer contract fields from PRD analysis
-            contract_fields = await self.infer_contract_fields(analysis_result, node_type)
+            contract_fields = await self.infer_contract_fields(
+                analysis_result, node_type
+            )
 
             # Build contract structure
             contract = {
@@ -158,19 +171,25 @@ class ContractGenerator:
                 "metadata": {
                     "prd_session_id": str(analysis_result.session_id),
                     "analysis_timestamp": analysis_result.analysis_timestamp.isoformat(),
-                    "node_type_confidence": analysis_result.node_type_hints.get(node_type, 0.0),
+                    "node_type_confidence": analysis_result.node_type_hints.get(
+                        node_type, 0.0
+                    ),
                 },
             }
 
             # Generate subcontracts for mixins
-            subcontracts = await self.generate_subcontracts(analysis_result.recommended_mixins, contract_fields)
+            subcontracts = await self.generate_subcontracts(
+                analysis_result.recommended_mixins, contract_fields
+            )
             contract["subcontracts"] = subcontracts
 
             # Validate contract
             validation_result = await self.validate_contract(contract)
 
             # Convert to YAML
-            contract_yaml = yaml.dump(contract, default_flow_style=False, sort_keys=False)
+            contract_yaml = yaml.dump(
+                contract, default_flow_style=False, sort_keys=False
+            )
 
             # Write to file if output directory specified
             contract_file_path = None
@@ -185,7 +204,9 @@ class ContractGenerator:
             return {
                 "contract": contract,
                 "contract_yaml": contract_yaml,
-                "contract_file_path": str(contract_file_path) if contract_file_path else None,
+                "contract_file_path": (
+                    str(contract_file_path) if contract_file_path else None
+                ),
                 "validation_result": validation_result,
                 "subcontract_count": len(subcontracts),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -196,7 +217,11 @@ class ContractGenerator:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Contract generation failed: {str(e)}",
-                details={"node_type": node_type, "microservice_name": microservice_name, "domain": domain},
+                details={
+                    "node_type": node_type,
+                    "microservice_name": microservice_name,
+                    "domain": domain,
+                },
             )
 
     async def generate_subcontracts(
@@ -224,7 +249,9 @@ class ContractGenerator:
                     "version": "1.0.0",
                     "config": mixin_config.get("config", {}),
                     "required": True,
-                    "integration_points": self._extract_mixin_integration_points(mixin, contract_fields),
+                    "integration_points": self._extract_mixin_integration_points(
+                        mixin, contract_fields
+                    ),
                 }
 
                 # Add mixin-specific fields
@@ -237,11 +264,15 @@ class ContractGenerator:
             else:
                 self.logger.warning(f"No configuration template for mixin: {mixin}")
                 # Generate minimal subcontract
-                subcontracts.append({"mixin": mixin, "version": "1.0.0", "config": {}, "required": True})
+                subcontracts.append(
+                    {"mixin": mixin, "version": "1.0.0", "config": {}, "required": True}
+                )
 
         return subcontracts
 
-    async def infer_contract_fields(self, analysis_result: SimplePRDAnalysisResult, node_type: str) -> Dict[str, Any]:
+    async def infer_contract_fields(
+        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+    ) -> Dict[str, Any]:
         """
         Use semantic analysis to infer contract fields.
 
@@ -280,7 +311,9 @@ class ContractGenerator:
 
         return {
             "capabilities": capabilities,
-            "operations": [task["title"] for task in analysis_result.decomposition_result.tasks[:5]],
+            "operations": [
+                task["title"] for task in analysis_result.decomposition_result.tasks[:5]
+            ],
             "external_systems": analysis_result.external_systems,
         }
 
@@ -297,7 +330,14 @@ class ContractGenerator:
         validation_result = {"valid": True, "issues": [], "warnings": []}
 
         # Check required fields
-        required_fields = ["version", "node_type", "domain", "service_name", "capabilities", "dependencies"]
+        required_fields = [
+            "version",
+            "node_type",
+            "domain",
+            "service_name",
+            "capabilities",
+            "dependencies",
+        ]
 
         for field in required_fields:
             if field not in contract:
@@ -305,9 +345,16 @@ class ContractGenerator:
                 validation_result["issues"].append(f"Missing required field: {field}")
 
         # Validate node type
-        if contract.get("node_type") not in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
+        if contract.get("node_type") not in [
+            "EFFECT",
+            "COMPUTE",
+            "REDUCER",
+            "ORCHESTRATOR",
+        ]:
             validation_result["valid"] = False
-            validation_result["issues"].append(f"Invalid node type: {contract.get('node_type')}")
+            validation_result["issues"].append(
+                f"Invalid node type: {contract.get('node_type')}"
+            )
 
         # Validate service name format
         service_name = contract.get("service_name", "")
@@ -332,12 +379,16 @@ class ContractGenerator:
 
         for i, subcontract in enumerate(subcontracts):
             if not isinstance(subcontract, dict):
-                validation_result["issues"].append(f"Subcontract {i} is not a dictionary")
+                validation_result["issues"].append(
+                    f"Subcontract {i} is not a dictionary"
+                )
                 validation_result["valid"] = False
                 continue
 
             if "mixin" not in subcontract:
-                validation_result["issues"].append(f"Subcontract {i} missing 'mixin' field")
+                validation_result["issues"].append(
+                    f"Subcontract {i} missing 'mixin' field"
+                )
                 validation_result["valid"] = False
 
         # Validate dependencies
@@ -350,7 +401,9 @@ class ContractGenerator:
         required_mixins = dependencies.get("required_mixins", [])
         incompatible_mixins = self._check_mixin_compatibility(required_mixins)
         if incompatible_mixins:
-            validation_result["warnings"].append(f"Potential incompatible mixins detected: {incompatible_mixins}")
+            validation_result["warnings"].append(
+                f"Potential incompatible mixins detected: {incompatible_mixins}"
+            )
 
         self.logger.info(
             f"Contract validation: {'PASSED' if validation_result['valid'] else 'FAILED'} "
@@ -373,17 +426,27 @@ class ContractGenerator:
         # Check for specific patterns
         if any(keyword in req_lower for keyword in ["create", "insert", "add"]):
             return "create"
-        elif any(keyword in req_lower for keyword in ["read", "get", "fetch", "retrieve"]):
+        elif any(
+            keyword in req_lower for keyword in ["read", "get", "fetch", "retrieve"]
+        ):
             return "read"
-        elif any(keyword in req_lower for keyword in ["update", "modify", "change", "edit"]):
+        elif any(
+            keyword in req_lower for keyword in ["update", "modify", "change", "edit"]
+        ):
             return "update"
         elif any(keyword in req_lower for keyword in ["delete", "remove", "destroy"]):
             return "delete"
-        elif any(keyword in req_lower for keyword in ["process", "transform", "compute"]):
+        elif any(
+            keyword in req_lower for keyword in ["process", "transform", "compute"]
+        ):
             return "compute"
-        elif any(keyword in req_lower for keyword in ["aggregate", "summarize", "reduce"]):
+        elif any(
+            keyword in req_lower for keyword in ["aggregate", "summarize", "reduce"]
+        ):
             return "aggregate"
-        elif any(keyword in req_lower for keyword in ["orchestrate", "coordinate", "manage"]):
+        elif any(
+            keyword in req_lower for keyword in ["orchestrate", "coordinate", "manage"]
+        ):
             return "orchestrate"
         else:
             # Default based on node type
@@ -454,7 +517,9 @@ class ContractGenerator:
 
         return base_capabilities + node_specific.get(node_type, [])
 
-    def _extract_mixin_integration_points(self, mixin: str, contract_fields: Dict[str, Any]) -> List[str]:
+    def _extract_mixin_integration_points(
+        self, mixin: str, contract_fields: Dict[str, Any]
+    ) -> List[str]:
         """Extract integration points for a mixin"""
         integration_points = []
 
@@ -468,7 +533,9 @@ class ContractGenerator:
         elif mixin == "MixinRetry":
             integration_points.extend(["retry_operation"])
         elif mixin == "MixinCircuitBreaker":
-            integration_points.extend(["circuit_check", "circuit_open", "circuit_close"])
+            integration_points.extend(
+                ["circuit_check", "circuit_open", "circuit_close"]
+            )
         elif mixin == "MixinLogging":
             integration_points.extend(["log_debug", "log_info", "log_error"])
         elif mixin == "MixinMetrics":
@@ -495,7 +562,10 @@ class ContractGenerator:
         incompatible = []
         for i, mixin1 in enumerate(mixins):
             for mixin2 in mixins[i + 1 :]:
-                if (mixin1, mixin2) in incompatible_pairs or (mixin2, mixin1) in incompatible_pairs:
+                if (mixin1, mixin2) in incompatible_pairs or (
+                    mixin2,
+                    mixin1,
+                ) in incompatible_pairs:
                     incompatible.append(f"{mixin1} + {mixin2}")
 
         return incompatible

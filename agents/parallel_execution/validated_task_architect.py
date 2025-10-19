@@ -9,8 +9,9 @@ import asyncio
 import json
 import subprocess
 import sys
-from typing import Dict, Any, List
 from pathlib import Path
+from typing import Any, Dict, List
+
 from quorum_minimal import MinimalQuorum, ValidationDecision
 
 # Load environment variables from .env file
@@ -21,7 +22,9 @@ try:
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    print("Warning: python-dotenv not installed, relying on system environment variables")
+    print(
+        "Warning: python-dotenv not installed, relying on system environment variables"
+    )
 
 
 class ValidatedTaskArchitect:
@@ -55,7 +58,9 @@ class ValidatedTaskArchitect:
             print(f"{'='*60}")
 
             # Generate task breakdown
-            task_breakdown = await self._generate_breakdown(augmented_prompt, global_context)
+            task_breakdown = await self._generate_breakdown(
+                augmented_prompt, global_context
+            )
 
             # Store attempt
             attempt_history.append(
@@ -90,7 +95,9 @@ class ValidatedTaskArchitect:
                 print(f"\n✅ Validation PASSED on attempt {attempt + 1}")
 
                 # Add final validation task using agent-workflow-coordinator
-                enhanced_breakdown = self._add_final_validation_task(task_breakdown, user_prompt, global_context)
+                enhanced_breakdown = self._add_final_validation_task(
+                    task_breakdown, user_prompt, global_context
+                )
 
                 return {
                     "breakdown": enhanced_breakdown,
@@ -114,7 +121,9 @@ class ValidatedTaskArchitect:
                 if attempt < self.max_retries - 1:
                     print("\n🔄 Retrying with feedback...")
                     # Augment prompt with deficiency feedback
-                    augmented_prompt = self._augment_prompt(user_prompt, result.deficiencies, attempt + 1)
+                    augmented_prompt = self._augment_prompt(
+                        user_prompt, result.deficiencies, attempt + 1
+                    )
                 else:
                     print("\n❌ Max retries reached, returning best attempt")
                     return {
@@ -260,7 +269,9 @@ class ValidatedTaskArchitect:
                 "original_request": user_prompt,
                 "context_summary": {
                     "has_context": global_context is not None,
-                    "context_keys": list(global_context.keys()) if global_context else [],
+                    "context_keys": (
+                        list(global_context.keys()) if global_context else []
+                    ),
                 },
                 "validation_criteria": [
                     "Does output meet original requirements?",
@@ -313,7 +324,9 @@ class ValidatedTaskArchitect:
 
         feedback += f"\n{'='*60}\n"
         feedback += "Please correct ALL these issues in this attempt.\n"
-        feedback += "Ensure the task breakdown addresses each deficiency listed above.\n"
+        feedback += (
+            "Ensure the task breakdown addresses each deficiency listed above.\n"
+        )
         feedback += f"{'='*60}\n"
 
         return original_prompt + feedback
@@ -345,7 +358,9 @@ async def main():
 
     architect = ValidatedTaskArchitect()
 
-    result = await architect.breakdown_tasks_with_validation(user_prompt, global_context)
+    result = await architect.breakdown_tasks_with_validation(
+        user_prompt, global_context
+    )
 
     # Output result as JSON
     print("\n" + "=" * 60)

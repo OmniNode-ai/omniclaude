@@ -28,7 +28,7 @@
 
 ### 1. Hook Intelligence Architecture - Predictive Caching
 **Status**: Planning Complete, Not Started
-**Location**: `/docs/HOOK_INTELLIGENCE_*.md`, `/claude_hooks/lib/intelligence/rag_client.py`
+**Location**: `/docs/planning/HOOK_INTELLIGENCE_*.md`, `/claude_hooks/lib/intelligence/rag_client.py`
 **Priority**: Critical
 
 **Description**:

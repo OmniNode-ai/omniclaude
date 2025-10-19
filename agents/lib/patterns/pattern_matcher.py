@@ -5,14 +5,14 @@ Pattern Matcher for Phase 5 Code Generation
 Analyzes contract capabilities to identify applicable code generation patterns.
 Provides confidence scoring and pattern composition support.
 
-Phase 7 Enhancement: Integrates feedback learning for improved precision (≥90% target).
+Framework Enhancement: Integrates feedback learning for improved precision (≥90% target).
 """
 
-import re
 import logging
-from typing import Dict, Any, List, Optional
+import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class PatternMatcher:
     Uses keyword matching, verb analysis, and semantic patterns to determine
     which code generation patterns best fit a given capability.
 
-    Phase 7 Enhancement: Integrates with PatternFeedbackCollector for
+    Framework Enhancement: Integrates with PatternFeedbackCollector for
     continuous learning and adaptive threshold tuning to achieve ≥90% precision.
     """
 
@@ -162,7 +162,9 @@ class PatternMatcher:
         # Learned thresholds (loaded from feedback system)
         self._learned_thresholds: Dict[str, float] = {}
 
-    def match_patterns(self, capability: Dict[str, Any], max_matches: int = 3) -> List[PatternMatch]:
+    def match_patterns(
+        self, capability: Dict[str, Any], max_matches: int = 3
+    ) -> List[PatternMatch]:
         """
         Identify patterns that match the given capability.
 
@@ -185,9 +187,15 @@ class PatternMatcher:
 
         # Check each pattern type
         matches.extend(self._check_crud_pattern(capability_name, all_text, capability))
-        matches.extend(self._check_transformation_pattern(capability_name, all_text, capability))
-        matches.extend(self._check_aggregation_pattern(capability_name, all_text, capability))
-        matches.extend(self._check_orchestration_pattern(capability_name, all_text, capability))
+        matches.extend(
+            self._check_transformation_pattern(capability_name, all_text, capability)
+        )
+        matches.extend(
+            self._check_aggregation_pattern(capability_name, all_text, capability)
+        )
+        matches.extend(
+            self._check_orchestration_pattern(capability_name, all_text, capability)
+        )
 
         # Filter by learned thresholds if enabled
         if self.use_learned_thresholds:
@@ -197,7 +205,8 @@ class PatternMatcher:
         matches.sort(key=lambda m: m.confidence, reverse=True)
 
         self.logger.debug(
-            f"Found {len(matches)} pattern matches for capability '{capability_name}' " f"(returning top {max_matches})"
+            f"Found {len(matches)} pattern matches for capability '{capability_name}' "
+            f"(returning top {max_matches})"
         )
 
         return matches[:max_matches]
@@ -211,7 +220,9 @@ class PatternMatcher:
             threshold: Confidence threshold (0.0-1.0)
         """
         self._learned_thresholds[pattern_name] = threshold
-        self.logger.info(f"Updated learned threshold for '{pattern_name}': {threshold:.2f}")
+        self.logger.info(
+            f"Updated learned threshold for '{pattern_name}': {threshold:.2f}"
+        )
 
     def get_threshold(self, pattern_type: PatternType) -> float:
         """
@@ -233,7 +244,9 @@ class PatternMatcher:
         # Fall back to default
         return self._confidence_thresholds.get(pattern_type, 0.70)
 
-    def _apply_learned_thresholds(self, matches: List[PatternMatch]) -> List[PatternMatch]:
+    def _apply_learned_thresholds(
+        self, matches: List[PatternMatch]
+    ) -> List[PatternMatch]:
         """
         Filter matches by learned confidence thresholds.
 
@@ -258,7 +271,9 @@ class PatternMatcher:
 
         return filtered
 
-    def match_single_best_pattern(self, capability: Dict[str, Any]) -> Optional[PatternMatch]:
+    def match_single_best_pattern(
+        self, capability: Dict[str, Any]
+    ) -> Optional[PatternMatch]:
         """
         Find the single best pattern match for a capability.
 
@@ -271,7 +286,9 @@ class PatternMatcher:
         matches = self.match_patterns(capability, max_matches=1)
         return matches[0] if matches else None
 
-    def _check_crud_pattern(self, capability_name: str, text: str, capability: Dict[str, Any]) -> List[PatternMatch]:
+    def _check_crud_pattern(
+        self, capability_name: str, text: str, capability: Dict[str, Any]
+    ) -> List[PatternMatch]:
         """Check if capability matches CRUD pattern"""
         matched_keywords = [kw for kw in self.CRUD_KEYWORDS if kw in text]
 
@@ -279,7 +296,9 @@ class PatternMatcher:
             return []
 
         # Calculate confidence based on keyword matches and context
-        confidence = self._calculate_confidence(matched_keywords, self.CRUD_KEYWORDS, text, capability)
+        confidence = self._calculate_confidence(
+            matched_keywords, self.CRUD_KEYWORDS, text, capability
+        )
 
         # Determine CRUD operation type
         operation = self._determine_crud_operation(matched_keywords, text)
@@ -308,7 +327,9 @@ class PatternMatcher:
         if not matched_keywords:
             return []
 
-        confidence = self._calculate_confidence(matched_keywords, self.TRANSFORMATION_KEYWORDS, text, capability)
+        confidence = self._calculate_confidence(
+            matched_keywords, self.TRANSFORMATION_KEYWORDS, text, capability
+        )
 
         return [
             PatternMatch(
@@ -319,7 +340,9 @@ class PatternMatcher:
                 suggested_method_name=self._generate_method_name(capability_name),
                 context={
                     "pure_function": True,
-                    "streaming_capable": any(kw in text for kw in ["stream", "large", "batch"]),
+                    "streaming_capable": any(
+                        kw in text for kw in ["stream", "large", "batch"]
+                    ),
                     "capability_type": capability.get("type", "compute"),
                 },
             )
@@ -334,7 +357,9 @@ class PatternMatcher:
         if not matched_keywords:
             return []
 
-        confidence = self._calculate_confidence(matched_keywords, self.AGGREGATION_KEYWORDS, text, capability)
+        confidence = self._calculate_confidence(
+            matched_keywords, self.AGGREGATION_KEYWORDS, text, capability
+        )
 
         return [
             PatternMatch(
@@ -360,7 +385,9 @@ class PatternMatcher:
         if not matched_keywords:
             return []
 
-        confidence = self._calculate_confidence(matched_keywords, self.ORCHESTRATION_KEYWORDS, text, capability)
+        confidence = self._calculate_confidence(
+            matched_keywords, self.ORCHESTRATION_KEYWORDS, text, capability
+        )
 
         return [
             PatternMatch(
@@ -372,14 +399,20 @@ class PatternMatcher:
                 context={
                     "multi_step": True,
                     "parallel_capable": "parallel" in text,
-                    "compensation": any(kw in text for kw in ["rollback", "compensate", "undo"]),
+                    "compensation": any(
+                        kw in text for kw in ["rollback", "compensate", "undo"]
+                    ),
                     "capability_type": capability.get("type", "orchestrator"),
                 },
             )
         ]
 
     def _calculate_confidence(
-        self, matched_keywords: List[str], pattern_keywords: set, text: str, capability: Dict[str, Any]
+        self,
+        matched_keywords: List[str],
+        pattern_keywords: set,
+        text: str,
+        capability: Dict[str, Any],
     ) -> float:
         """
         Calculate confidence score for pattern match.
@@ -395,7 +428,9 @@ class PatternMatcher:
 
         # Exact match bonus: if capability type or name exactly matches a pattern keyword
         # This indicates an explicit, unambiguous match (e.g., type="create" for CRUD)
-        exact_match = capability_type in pattern_keywords or capability_name in pattern_keywords
+        exact_match = (
+            capability_type in pattern_keywords or capability_name in pattern_keywords
+        )
 
         if exact_match:
             # Exact matches get high base confidence (0.75)
@@ -418,7 +453,9 @@ class PatternMatcher:
         primary_bonus = 0.3 if first_word in matched_keywords else 0.0
 
         # Context alignment (capability type matches expected type)
-        context_score = 0.3 if any(kw in capability_type for kw in matched_keywords) else 0.15
+        context_score = (
+            0.3 if any(kw in capability_type for kw in matched_keywords) else 0.15
+        )
 
         total = (keyword_score * 0.4) + primary_bonus + context_score
 
@@ -431,7 +468,9 @@ class PatternMatcher:
             return "create"
         elif any(kw in matched_keywords for kw in ["read", "get", "fetch", "retrieve"]):
             return "read"
-        elif any(kw in matched_keywords for kw in ["update", "modify", "edit", "change"]):
+        elif any(
+            kw in matched_keywords for kw in ["update", "modify", "edit", "change"]
+        ):
             return "update"
         elif any(kw in matched_keywords for kw in ["delete", "remove", "destroy"]):
             return "delete"

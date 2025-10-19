@@ -9,19 +9,23 @@ Integration: Phase 2.5 of dispatch_runner workflow (between Task Architecture an
 """
 
 import asyncio
-import time
 import sys
+import time
 from typing import Any, Dict, Optional
 
 # Import from parallel_execution package
-from agents.parallel_execution.agent_model import AgentConfig, AgentTask, AgentResult
+from agents.parallel_execution.agent_model import AgentConfig, AgentResult, AgentTask
 from agents.parallel_execution.agent_registry import register_agent
-from agents.parallel_execution.trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from agents.parallel_execution.trace_logger import (
+    TraceEventType,
+    TraceLevel,
+    get_trace_logger,
+)
 
 # Import code generation components
 try:
-    from agents.lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
     from agents.lib.codegen_config import CodegenConfig
+    from agents.lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
 
     CODEGEN_AVAILABLE = True
 except ImportError as e:
@@ -37,7 +41,13 @@ except ImportError as e:
 @register_agent(
     agent_name="code-generator",
     agent_type="generator",
-    capabilities=["prd_analysis", "node_generation", "contract_generation", "model_generation", "quality_validation"],
+    capabilities=[
+        "prd_analysis",
+        "node_generation",
+        "contract_generation",
+        "model_generation",
+        "quality_validation",
+    ],
     description="Autonomous OmniNode code generation from PRD or specifications",
 )
 class CodeGeneratorAgent:
@@ -126,7 +136,9 @@ class CodeGeneratorAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_codegen_workflow": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_codegen_workflow": True},
         )
 
         try:
@@ -157,7 +169,9 @@ class CodeGeneratorAgent:
             # Calculate execution time
             execution_time_ms = (time.time() - start_time) * 1000
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="completed", result=result)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="completed", result=result
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.TASK_COMPLETED,
@@ -180,7 +194,9 @@ class CodeGeneratorAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Code generation failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -217,7 +233,13 @@ class CodeGeneratorAgent:
         """
         has_prd = "prd_content" in input_data
         has_node_spec = all(
-            key in input_data for key in ["node_type", "microservice_name", "domain", "business_description"]
+            key in input_data
+            for key in [
+                "node_type",
+                "microservice_name",
+                "domain",
+                "business_description",
+            ]
         )
 
         if has_prd:
@@ -231,7 +253,9 @@ class CodeGeneratorAgent:
                 "'node_type'/'microservice_name'/'domain'/'business_description' (single mode)"
             )
 
-    async def _generate_from_prd(self, task: AgentTask, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_from_prd(
+        self, task: AgentTask, input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Generate code from full PRD analysis.
 
@@ -256,8 +280,12 @@ class CodeGeneratorAgent:
         workspace_context = input_data.get("workspace_context")
 
         # Execute workflow
-        workflow_result: CodegenWorkflowResult = await self.codegen_workflow.generate_from_prd(
-            prd_content=prd_content, output_directory=output_directory, workspace_context=workspace_context
+        workflow_result: CodegenWorkflowResult = (
+            await self.codegen_workflow.generate_from_prd(
+                prd_content=prd_content,
+                output_directory=output_directory,
+                workspace_context=workspace_context,
+            )
         )
 
         if not workflow_result.success:
@@ -283,13 +311,20 @@ class CodeGeneratorAgent:
             "statistics": {
                 "nodes_generated": len(workflow_result.generated_nodes),
                 "total_files": workflow_result.total_files,
-                "node_types": list(set(node.get("node_type") for node in workflow_result.generated_nodes)),
+                "node_types": list(
+                    set(
+                        node.get("node_type")
+                        for node in workflow_result.generated_nodes
+                    )
+                ),
             },
         }
 
         return output_data
 
-    async def _generate_single_node(self, task: AgentTask, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_single_node(
+        self, task: AgentTask, input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Generate single node from specifications.
 

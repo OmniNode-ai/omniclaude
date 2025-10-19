@@ -11,19 +11,19 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
 import sys
 import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hybrid_agent_selector import HybridAgentSelector, SelectionMethod
 from agent_detector import AgentDetector
-
+from hybrid_agent_selector import HybridAgentSelector, SelectionMethod
 
 # ============================================================================
 # FIXTURES
@@ -45,7 +45,12 @@ def hybrid_selector():
 @pytest.fixture
 def hybrid_selector_with_ai():
     """Create HybridAgentSelector with AI enabled."""
-    return HybridAgentSelector(enable_ai=True, confidence_threshold=0.8, model_preference="5090", timeout_ms=3000)
+    return HybridAgentSelector(
+        enable_ai=True,
+        confidence_threshold=0.8,
+        model_preference="5090",
+        timeout_ms=3000,
+    )
 
 
 @pytest.fixture
@@ -68,7 +73,14 @@ def test_agent_config(tmp_path):
                 "name": "agent-testing",
                 "domain": "testing",
                 "purpose": "Testing specialist for comprehensive test strategy",
-                "activation_triggers": ["test", "testing", "pytest", "unittest", "test coverage", "test suite"],
+                "activation_triggers": [
+                    "test",
+                    "testing",
+                    "pytest",
+                    "unittest",
+                    "test coverage",
+                    "test suite",
+                ],
             }
         }
     }
@@ -82,7 +94,14 @@ def test_agent_config(tmp_path):
         "name": "agent-testing",
         "domain": "testing",
         "purpose": "Testing specialist for comprehensive test strategy",
-        "triggers": ["test", "testing", "pytest", "unittest", "test coverage", "test suite"],
+        "triggers": [
+            "test",
+            "testing",
+            "pytest",
+            "unittest",
+            "test coverage",
+            "test suite",
+        ],
         "domain_query": "comprehensive test strategy quality assurance",
         "implementation_query": "pytest testing patterns automation",
     }
@@ -303,7 +322,13 @@ class TestAISelection:
         """Test AI selection with mocked AI selector."""
         # Mock the AI selector's select_agent method to return expected structure
         hybrid_selector_with_ai.ai_selector.select_agent = Mock(
-            return_value=[("agent-debug-intelligence", 0.92, "Database performance requires debugging expertise")]
+            return_value=[
+                (
+                    "agent-debug-intelligence",
+                    0.92,
+                    "Database performance requires debugging expertise",
+                )
+            ]
         )
 
         prompt = "optimize database query performance"
@@ -320,7 +345,9 @@ class TestAISelection:
     @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_ai_confidence_threshold(self, mock_call):
         """Test AI selection respects confidence threshold."""
-        selector = HybridAgentSelector(enable_ai=True, confidence_threshold=0.9)  # High threshold
+        selector = HybridAgentSelector(
+            enable_ai=True, confidence_threshold=0.9
+        )  # High threshold
 
         # Mock low confidence response
         mock_call.return_value = {
@@ -338,7 +365,9 @@ class TestAISelection:
     @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_ai_selection_timeout(self, mock_call):
         """Test AI selection handles timeout gracefully."""
-        selector = HybridAgentSelector(enable_ai=True, timeout_ms=100)  # Very short timeout
+        selector = HybridAgentSelector(
+            enable_ai=True, timeout_ms=100
+        )  # Very short timeout
 
         # Mock slow response
         def slow_response(*args, **kwargs):
@@ -379,7 +408,9 @@ class TestAISelection:
     def test_ai_selection_error_handling(self, hybrid_selector_with_ai):
         """Test AI selection handles errors gracefully."""
         # Mock the AI selector to raise an exception
-        hybrid_selector_with_ai.ai_selector.select_agent = Mock(side_effect=Exception("vLLM server error"))
+        hybrid_selector_with_ai.ai_selector.select_agent = Mock(
+            side_effect=Exception("vLLM server error")
+        )
 
         prompt = "help with something"
         result = hybrid_selector_with_ai._stage_3_ai(prompt, None)
@@ -434,7 +465,9 @@ class TestHybridPipeline:
         # Mock AI response
         selector.ai_selector = Mock()
         selector.ai_selector.select_agent = Mock(
-            return_value=[("agent-debug-intelligence", 0.92, "Debugging expertise needed")]
+            return_value=[
+                ("agent-debug-intelligence", 0.92, "Debugging expertise needed")
+            ]
         )
 
         # No pattern or trigger
@@ -532,8 +565,8 @@ class TestCLIInterface:
 
     def test_cli_json_output(self, test_agent_config):
         """Test CLI JSON output mode."""
-        import subprocess
         import json
+        import subprocess
 
         result = subprocess.run(
             [
@@ -601,7 +634,12 @@ class TestPerformanceBenchmarks:
 
     def test_full_pipeline_benchmark(self, hybrid_selector, test_agent_config):
         """Benchmark full pipeline (without AI)."""
-        prompts = ["@agent-testing explicit pattern", "write pytest tests", "help me test this", "no agent here"]
+        prompts = [
+            "@agent-testing explicit pattern",
+            "write pytest tests",
+            "help me test this",
+            "no agent here",
+        ]
 
         iterations = 100
         start_time = time.time()

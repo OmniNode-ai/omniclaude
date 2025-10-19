@@ -69,7 +69,9 @@ and session management.
     print("Step 1: Analyzing PRD...")
     prd_analyzer = SimplePRDAnalyzer()
     analysis_result = await prd_analyzer.analyze_prd(sample_prd)
-    print(f"  ✓ PRD analyzed with confidence score: {analysis_result.confidence_score:.2f}")
+    print(
+        f"  ✓ PRD analyzed with confidence score: {analysis_result.confidence_score:.2f}"
+    )
     print(f"  ✓ Recommended mixins: {', '.join(analysis_result.recommended_mixins)}")
     print(f"  ✓ External systems: {', '.join(analysis_result.external_systems)}")
     print()
@@ -87,7 +89,9 @@ and session management.
     )
 
     print("  ✓ Contract generated successfully")
-    print(f"  ✓ Validation: {'PASSED' if result['validation_result']['valid'] else 'FAILED'}")
+    print(
+        f"  ✓ Validation: {'PASSED' if result['validation_result']['valid'] else 'FAILED'}"
+    )
     print(f"  ✓ Subcontracts: {result['subcontract_count']}")
     print(f"  ✓ Capabilities: {len(result['contract']['capabilities'])}")
     if result["contract_file_path"]:
@@ -139,7 +143,9 @@ and session management.
             microservice_name=f"test_{node_type.lower()}",
             domain="test",
         )
-        print(f"  ✓ {node_type} contract generated with {len(result['contract']['capabilities'])} capabilities")
+        print(
+            f"  ✓ {node_type} contract generated with {len(result['contract']['capabilities'])} capabilities"
+        )
 
     print()
     print("=" * 80)

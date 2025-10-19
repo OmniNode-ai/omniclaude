@@ -91,8 +91,12 @@ class DatabaseConfig(BaseModel):
             password=os.getenv("POSTGRES_PASSWORD", ""),  # Must be set via environment
             pool_min_size=int(os.getenv("POSTGRES_POOL_MIN_SIZE", "5")),
             pool_max_size=int(os.getenv("POSTGRES_POOL_MAX_SIZE", "20")),
-            pool_exhaustion_threshold=float(os.getenv("POSTGRES_POOL_EXHAUSTION_THRESHOLD", "80.0")),
-            max_queries_per_connection=int(os.getenv("POSTGRES_MAX_QUERIES_PER_CONNECTION", "10000")),
+            pool_exhaustion_threshold=float(
+                os.getenv("POSTGRES_POOL_EXHAUSTION_THRESHOLD", "80.0")
+            ),
+            max_queries_per_connection=int(
+                os.getenv("POSTGRES_MAX_QUERIES_PER_CONNECTION", "10000")
+            ),
             connection_max_age=int(os.getenv("POSTGRES_CONNECTION_MAX_AGE", "3600")),
             query_timeout=int(os.getenv("POSTGRES_QUERY_TIMEOUT", "30")),
             acquire_timeout=int(os.getenv("POSTGRES_ACQUIRE_TIMEOUT", "10")),
@@ -134,7 +138,8 @@ class BatchWriteBuffer:
 
             # Check if we should flush
             should_flush = (
-                len(self.buffer) >= self.max_size or (time.time() - self.last_flush) * 1000 >= self.timeout_ms
+                len(self.buffer) >= self.max_size
+                or (time.time() - self.last_flush) * 1000 >= self.timeout_ms
             )
 
             if should_flush:
@@ -155,7 +160,12 @@ class BatchWriteBuffer:
 class CircuitBreaker:
     """Circuit breaker for database failure handling."""
 
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60, half_open_attempts: int = 3):
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: int = 60,
+        half_open_attempts: int = 3,
+    ):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.half_open_attempts = half_open_attempts
@@ -172,8 +182,13 @@ class CircuitBreaker:
             # Check if circuit is open
             if self.state == CircuitState.OPEN:
                 # Check if recovery timeout has elapsed
-                if self.last_failure_time and time.time() - self.last_failure_time >= self.recovery_timeout:
-                    logger.info("Circuit breaker entering HALF_OPEN state for recovery test")
+                if (
+                    self.last_failure_time
+                    and time.time() - self.last_failure_time >= self.recovery_timeout
+                ):
+                    logger.info(
+                        "Circuit breaker entering HALF_OPEN state for recovery test"
+                    )
                     self.state = CircuitState.HALF_OPEN
                     self.half_open_successes = 0
                 else:
@@ -207,8 +222,13 @@ class CircuitBreaker:
                 if self.state == CircuitState.HALF_OPEN:
                     logger.warning("Circuit breaker re-opening - recovery failed")
                     self.state = CircuitState.OPEN
-                elif self.state == CircuitState.CLOSED and self.failure_count >= self.failure_threshold:
-                    logger.error(f"Circuit breaker opening - failure threshold reached ({self.failure_count} failures)")
+                elif (
+                    self.state == CircuitState.CLOSED
+                    and self.failure_count >= self.failure_threshold
+                ):
+                    logger.error(
+                        f"Circuit breaker opening - failure threshold reached ({self.failure_count} failures)"
+                    )
                     self.state = CircuitState.OPEN
 
             raise
@@ -278,7 +298,9 @@ class DatabaseIntegrationLayer:
         self.retention_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
 
-        logger.info(f"DatabaseIntegrationLayer initialized with config: {self.config.model_dump()}")
+        logger.info(
+            f"DatabaseIntegrationLayer initialized with config: {self.config.model_dump()}"
+        )
 
     async def initialize(self) -> bool:
         """
@@ -437,7 +459,16 @@ class DatabaseIntegrationLayer:
 
         import json
 
-        params = [trace_id, event_type, level, message, json.dumps(metadata or {}), agent_name, task_id, duration_ms]
+        params = [
+            trace_id,
+            event_type,
+            level,
+            message,
+            json.dumps(metadata or {}),
+            agent_name,
+            task_id,
+            duration_ms,
+        ]
 
         await self.trace_event_buffer.add(query, params)
 
@@ -492,7 +523,13 @@ class DatabaseIntegrationLayer:
 
         import json
 
-        params = [metric_name, metric_value, metric_type, component, json.dumps(metadata or {})]
+        params = [
+            metric_name,
+            metric_value,
+            metric_type,
+            component,
+            json.dumps(metadata or {}),
+        ]
 
         await self.performance_metrics_buffer.add(query, params)
 
@@ -551,7 +588,9 @@ class DatabaseIntegrationLayer:
             self._flush_buffer(self.trace_event_buffer, "trace_event"),
             self._flush_buffer(self.routing_decision_buffer, "routing_decision"),
             self._flush_buffer(self.performance_metrics_buffer, "performance_metrics"),
-            self._flush_buffer(self.transformation_event_buffer, "transformation_event"),
+            self._flush_buffer(
+                self.transformation_event_buffer, "transformation_event"
+            ),
             return_exceptions=True,
         )
 
@@ -715,9 +754,13 @@ class DatabaseIntegrationLayer:
 
         pool_size = self.pool.get_size()
         pool_free = self.pool.get_idle_size()
-        pool_utilization = ((pool_size - pool_free) / pool_size * 100) if pool_size > 0 else 0.0
+        pool_utilization = (
+            ((pool_size - pool_free) / pool_size * 100) if pool_size > 0 else 0.0
+        )
 
-        avg_query_time = sum(self.query_times) / len(self.query_times) if self.query_times else 0.0
+        avg_query_time = (
+            sum(self.query_times) / len(self.query_times) if self.query_times else 0.0
+        )
 
         # Determine health status
         if self.circuit_breaker.state == CircuitState.OPEN:
@@ -754,7 +797,9 @@ class DatabaseIntegrationLayer:
 
                 # Log health status
                 if metrics.status == DatabaseHealthStatus.UNHEALTHY:
-                    logger.error(f"Database health: {metrics.status.value} - Circuit: {metrics.circuit_state.value}")
+                    logger.error(
+                        f"Database health: {metrics.status.value} - Circuit: {metrics.circuit_state.value}"
+                    )
                 elif metrics.status == DatabaseHealthStatus.DEGRADED:
                     logger.warning(
                         f"Database health: {metrics.status.value} - "
@@ -768,7 +813,10 @@ class DatabaseIntegrationLayer:
                     )
 
                 # Alert on high pool utilization
-                if metrics.pool_utilization_pct >= self.config.pool_exhaustion_threshold:
+                if (
+                    metrics.pool_utilization_pct
+                    >= self.config.pool_exhaustion_threshold
+                ):
                     logger.warning(
                         f"Connection pool utilization high: {metrics.pool_utilization_pct:.1f}% "
                         f"({metrics.pool_size - metrics.pool_free}/{metrics.pool_size} connections in use)"
@@ -789,7 +837,9 @@ class DatabaseIntegrationLayer:
 
         try:
             # Archive and delete old trace events
-            cutoff_date = datetime.now() - timedelta(days=self.config.trace_events_retention_days)
+            cutoff_date = datetime.now() - timedelta(
+                days=self.config.trace_events_retention_days
+            )
             deleted = await self.execute_query(
                 """
                 DELETE FROM agent_observability.trace_events
@@ -798,10 +848,14 @@ class DatabaseIntegrationLayer:
                 cutoff_date,
                 fetch="val",
             )
-            logger.info(f"Deleted {deleted} trace events older than {self.config.trace_events_retention_days} days")
+            logger.info(
+                f"Deleted {deleted} trace events older than {self.config.trace_events_retention_days} days"
+            )
 
             # Archive and delete old routing decisions
-            cutoff_date = datetime.now() - timedelta(days=self.config.routing_decisions_retention_days)
+            cutoff_date = datetime.now() - timedelta(
+                days=self.config.routing_decisions_retention_days
+            )
             deleted = await self.execute_query(
                 """
                 DELETE FROM agent_observability.routing_decisions
@@ -815,7 +869,9 @@ class DatabaseIntegrationLayer:
             )
 
             # Archive and delete old performance metrics
-            cutoff_date = datetime.now() - timedelta(days=self.config.performance_metrics_retention_days)
+            cutoff_date = datetime.now() - timedelta(
+                days=self.config.performance_metrics_retention_days
+            )
             deleted = await self.execute_query(
                 """
                 DELETE FROM agent_observability.performance_metrics
@@ -829,7 +885,9 @@ class DatabaseIntegrationLayer:
             )
 
             # Archive and delete old transformation events
-            cutoff_date = datetime.now() - timedelta(days=self.config.transformation_events_retention_days)
+            cutoff_date = datetime.now() - timedelta(
+                days=self.config.transformation_events_retention_days
+            )
             deleted = await self.execute_query(
                 """
                 DELETE FROM agent_observability.transformation_events

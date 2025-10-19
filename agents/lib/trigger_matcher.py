@@ -10,9 +10,9 @@ Uses multiple matching strategies:
 - Capability matching
 """
 
-from typing import List, Dict, Tuple
 import re
 from difflib import SequenceMatcher
+from typing import Dict, List, Tuple
 
 
 class EnhancedTriggerMatcher:
@@ -88,12 +88,19 @@ class EnhancedTriggerMatcher:
             for trigger in triggers:
                 similarity = self._fuzzy_match(trigger.lower(), user_lower)
                 if similarity > 0.7:
-                    scores.append((similarity * 0.9, f"Fuzzy match: '{trigger}' ({similarity:.0%})"))
+                    scores.append(
+                        (
+                            similarity * 0.9,
+                            f"Fuzzy match: '{trigger}' ({similarity:.0%})",
+                        )
+                    )
 
             # 3. Keyword overlap
             keyword_score = self._keyword_overlap_score(keywords, triggers)
             if keyword_score > 0.5:
-                scores.append((keyword_score * 0.8, f"Keyword overlap ({keyword_score:.0%})"))
+                scores.append(
+                    (keyword_score * 0.8, f"Keyword overlap ({keyword_score:.0%})")
+                )
 
             # 4. Capability match
             capabilities = agent_data.get("capabilities", [])
@@ -238,7 +245,9 @@ class EnhancedTriggerMatcher:
 
         return overlap / len(keyword_set) if keyword_set else 0.0
 
-    def _capability_match_score(self, keywords: List[str], capabilities: List[str]) -> float:
+    def _capability_match_score(
+        self, keywords: List[str], capabilities: List[str]
+    ) -> float:
         """
         Calculate capability match score.
 
@@ -268,10 +277,13 @@ class EnhancedTriggerMatcher:
 
 # Standalone test
 if __name__ == "__main__":
-    import yaml
     from pathlib import Path
 
-    registry_path = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    import yaml
+
+    registry_path = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     if registry_path.exists():
         with open(registry_path) as f:

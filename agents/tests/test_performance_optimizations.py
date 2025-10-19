@@ -28,14 +28,18 @@ except Exception:
         "ContextManager dependencies unavailable (e.g., mcp_client); skipping performance optimization suite.",
         allow_module_level=True,
     )
-from agents.parallel_execution.quorum_validator import QuorumValidator
-from agents.lib.performance_optimization import PerformanceOptimizer
-from agents.lib.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, call_with_breaker
-from agents.lib.retry_manager import RetryManager, RetryConfig, execute_with_retry
-from agents.lib.performance_monitor import PerformanceMonitor
-from agents.lib.input_validator import InputValidator
-from agents.lib.context_optimizer import ContextOptimizer
 from agents.lib.agent_analytics import AgentAnalytics, track_agent_performance
+from agents.lib.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    call_with_breaker,
+)
+from agents.lib.context_optimizer import ContextOptimizer
+from agents.lib.input_validator import InputValidator
+from agents.lib.performance_monitor import PerformanceMonitor
+from agents.lib.performance_optimization import PerformanceOptimizer
+from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
+from agents.parallel_execution.quorum_validator import QuorumValidator
 
 
 class TestParallelRAGQueries:
@@ -92,13 +96,21 @@ class TestParallelModelCalls:
 
         # Mock task breakdown
         task_breakdown = {
-            "tasks": [{"id": "task1", "description": "Test task", "input_data": {"node_type": "code_generation"}}]
+            "tasks": [
+                {
+                    "id": "task1",
+                    "description": "Test task",
+                    "input_data": {"node_type": "code_generation"},
+                }
+            ]
         }
 
         start_time = time.time()
 
         # This should execute model calls in parallel
-        result = await quorum.validate_intent(user_prompt="Test prompt", task_breakdown=task_breakdown)
+        result = await quorum.validate_intent(
+            user_prompt="Test prompt", task_breakdown=task_breakdown
+        )
 
         end_time = time.time()
         duration = end_time - start_time
@@ -118,7 +130,10 @@ class TestBatchDatabaseOperations:
         PerformanceOptimizer()
 
         # Test data
-        test_data = [{"id": str(uuid.uuid4()), "name": f"test_{i}", "value": i} for i in range(10)]
+        test_data = [
+            {"id": str(uuid.uuid4()), "name": f"test_{i}", "value": i}
+            for i in range(10)
+        ]
 
         # Test batch insert
         start_time = time.time()
@@ -126,7 +141,9 @@ class TestBatchDatabaseOperations:
         # This would normally insert into a test table
         # For now, we'll just test the batch processing logic
         batch_size = 5
-        batches = [test_data[i : i + batch_size] for i in range(0, len(test_data), batch_size)]
+        batches = [
+            test_data[i : i + batch_size] for i in range(0, len(test_data), batch_size)
+        ]
 
         end_time = time.time()
         duration = end_time - start_time
@@ -140,7 +157,10 @@ class TestBatchDatabaseOperations:
         optimizer = PerformanceOptimizer()
 
         # Test data
-        test_data = [{"id": str(uuid.uuid4()), "metric": f"test_metric_{i}", "value": i * 10} for i in range(20)]
+        test_data = [
+            {"id": str(uuid.uuid4()), "metric": f"test_metric_{i}", "value": i * 10}
+            for i in range(20)
+        ]
 
         # Test batch write
         start_time = time.time()
@@ -163,7 +183,9 @@ class TestCircuitBreaker:
     @pytest.mark.asyncio
     async def test_circuit_breaker_closed_state(self):
         """Test circuit breaker in CLOSED state (normal operation)."""
-        config = CircuitBreakerConfig(failure_threshold=3, timeout_seconds=10.0, success_threshold=2)
+        config = CircuitBreakerConfig(
+            failure_threshold=3, timeout_seconds=10.0, success_threshold=2
+        )
 
         breaker = CircuitBreaker("test_breaker", config)
 
@@ -171,7 +193,9 @@ class TestCircuitBreaker:
         async def successful_operation():
             return "success"
 
-        result = await call_with_breaker(breaker_name="test_breaker", config=config, func=successful_operation)
+        result = await call_with_breaker(
+            breaker_name="test_breaker", config=config, func=successful_operation
+        )
 
         assert result == "success"
         assert breaker.state.value == "CLOSED"
@@ -179,7 +203,9 @@ class TestCircuitBreaker:
     @pytest.mark.asyncio
     async def test_circuit_breaker_failure_threshold(self):
         """Test circuit breaker opening after failure threshold."""
-        config = CircuitBreakerConfig(failure_threshold=2, timeout_seconds=1.0, success_threshold=1)
+        config = CircuitBreakerConfig(
+            failure_threshold=2, timeout_seconds=1.0, success_threshold=1
+        )
 
         breaker = CircuitBreaker("test_breaker_fail", config)
 
@@ -189,11 +215,15 @@ class TestCircuitBreaker:
 
         # First failure
         with pytest.raises(Exception):
-            await call_with_breaker(breaker_name="test_breaker_fail", config=config, func=failing_operation)
+            await call_with_breaker(
+                breaker_name="test_breaker_fail", config=config, func=failing_operation
+            )
 
         # Second failure should open the circuit
         with pytest.raises(Exception):
-            await call_with_breaker(breaker_name="test_breaker_fail", config=config, func=failing_operation)
+            await call_with_breaker(
+                breaker_name="test_breaker_fail", config=config, func=failing_operation
+            )
 
         # Circuit should be open now
         assert breaker.state.value == "OPEN"
@@ -202,7 +232,9 @@ class TestCircuitBreaker:
     async def test_circuit_breaker_timeout_recovery(self):
         """Test circuit breaker timeout and recovery."""
         config = CircuitBreakerConfig(
-            failure_threshold=1, timeout_seconds=0.1, success_threshold=1  # Very short timeout for testing
+            failure_threshold=1,
+            timeout_seconds=0.1,
+            success_threshold=1,  # Very short timeout for testing
         )
 
         breaker = CircuitBreaker("test_breaker_timeout", config)
@@ -212,7 +244,11 @@ class TestCircuitBreaker:
             raise Exception("Test failure")
 
         with pytest.raises(Exception):
-            await call_with_breaker(breaker_name="test_breaker_timeout", config=config, func=failing_operation)
+            await call_with_breaker(
+                breaker_name="test_breaker_timeout",
+                config=config,
+                func=failing_operation,
+            )
 
         assert breaker.state.value == "OPEN"
 
@@ -223,7 +259,11 @@ class TestCircuitBreaker:
         async def successful_operation():
             return "success"
 
-        result = await call_with_breaker(breaker_name="test_breaker_timeout", config=config, func=successful_operation)
+        result = await call_with_breaker(
+            breaker_name="test_breaker_timeout",
+            config=config,
+            func=successful_operation,
+        )
 
         assert result == "success"
         assert breaker.state.value == "CLOSED"
@@ -246,9 +286,13 @@ class TestRetryManager:
                 raise Exception(f"Attempt {attempt_count} failed")
             return f"Success on attempt {attempt_count}"
 
-        config = RetryConfig(max_retries=5, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0)
+        config = RetryConfig(
+            max_retries=5, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0
+        )
 
-        result = await execute_with_retry(retry_manager=retry_manager, config=config, func=flaky_operation)
+        result = await execute_with_retry(
+            retry_manager=retry_manager, config=config, func=flaky_operation
+        )
 
         assert result == "Success on attempt 3"
         assert attempt_count == 3
@@ -265,10 +309,16 @@ class TestRetryManager:
             attempt_count += 1
             raise Exception(f"Attempt {attempt_count} failed")
 
-        config = RetryConfig(max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0)
+        config = RetryConfig(
+            max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0
+        )
 
         with pytest.raises(Exception, match="Attempt 4 failed"):
-            await execute_with_retry(retry_manager=retry_manager, config=config, func=always_failing_operation)
+            await execute_with_retry(
+                retry_manager=retry_manager,
+                config=config,
+                func=always_failing_operation,
+            )
 
         assert attempt_count == 4  # 1 initial + 3 retries
 
@@ -283,12 +333,16 @@ class TestRetryManager:
             attempt_times.append(time.time())
             raise Exception("Always fails")
 
-        config = RetryConfig(max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0)
+        config = RetryConfig(
+            max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0
+        )
 
         time.time()
 
         with pytest.raises(Exception):
-            await execute_with_retry(retry_manager=retry_manager, config=config, func=failing_operation)
+            await execute_with_retry(
+                retry_manager=retry_manager, config=config, func=failing_operation
+            )
 
         # Check that delays are increasing exponentially
         if len(attempt_times) >= 3:
@@ -312,13 +366,17 @@ class TestPerformanceMonitor:
         phase = "test_phase"
 
         # Start tracking
-        await monitor.track_phase_performance(run_id=run_id, phase=phase, metadata={"test": True})
+        await monitor.track_phase_performance(
+            run_id=run_id, phase=phase, metadata={"test": True}
+        )
 
         # Simulate some work
         await asyncio.sleep(0.1)
 
         # End tracking
-        await monitor.track_phase_performance(run_id=run_id, phase=phase, metadata={"test": True, "completed": True})
+        await monitor.track_phase_performance(
+            run_id=run_id, phase=phase, metadata={"test": True, "completed": True}
+        )
 
         # Get metrics
         metrics = await monitor.get_performance_metrics(run_id=run_id)
@@ -337,7 +395,10 @@ class TestPerformanceMonitor:
 
         # Start tracking
         await monitor.track_agent_performance(
-            run_id=run_id, agent_id=agent_id, task_type="test_task", metadata={"test": True}
+            run_id=run_id,
+            agent_id=agent_id,
+            task_type="test_task",
+            metadata={"test": True},
         )
 
         # Simulate some work
@@ -345,7 +406,10 @@ class TestPerformanceMonitor:
 
         # End tracking
         await monitor.track_agent_performance(
-            run_id=run_id, agent_id=agent_id, task_type="test_task", metadata={"test": True, "completed": True}
+            run_id=run_id,
+            agent_id=agent_id,
+            task_type="test_task",
+            metadata={"test": True, "completed": True},
         )
 
         # Get metrics
@@ -375,7 +439,9 @@ class TestInputValidator:
             ]
         }
 
-        result = await validator.validate_and_sanitize(user_prompt=user_prompt, tasks_data=tasks_data)
+        result = await validator.validate_and_sanitize(
+            user_prompt=user_prompt, tasks_data=tasks_data
+        )
 
         assert result["is_valid"] is True
         assert result["sanitized_prompt"] == user_prompt
@@ -391,7 +457,9 @@ class TestInputValidator:
         user_prompt = ""
         tasks_data = {}
 
-        result = await validator.validate_and_sanitize(user_prompt=user_prompt, tasks_data=tasks_data)
+        result = await validator.validate_and_sanitize(
+            user_prompt=user_prompt, tasks_data=tasks_data
+        )
 
         assert result["is_valid"] is False
         assert len(result["deficiencies"]) > 0
@@ -414,11 +482,16 @@ class TestInputValidator:
             ]
         }
 
-        result = await validator.validate_and_sanitize(user_prompt=user_prompt, tasks_data=tasks_data)
+        result = await validator.validate_and_sanitize(
+            user_prompt=user_prompt, tasks_data=tasks_data
+        )
 
         assert result["is_valid"] is True
         assert result["sanitized_prompt"] == "Generate a Python function"
-        assert result["sanitized_tasks"]["tasks"][0]["description"] == "Create fibonacci function"
+        assert (
+            result["sanitized_tasks"]["tasks"][0]["description"]
+            == "Create fibonacci function"
+        )
 
 
 class TestContextOptimizer:
@@ -436,7 +509,10 @@ class TestContextOptimizer:
         avg_duration = 1500
 
         await optimizer.learn_from_success(
-            prompt=prompt, context_types=context_types, success_rate=success_rate, avg_duration=avg_duration
+            prompt=prompt,
+            context_types=context_types,
+            success_rate=success_rate,
+            avg_duration=avg_duration,
         )
 
         # Test prediction
@@ -567,7 +643,9 @@ class TestIntegrationScenarios:
         monitor = PerformanceMonitor()
         run_id = str(uuid.uuid4())
 
-        await monitor.track_phase_performance(run_id=run_id, phase="test_phase", metadata={"test": True})
+        await monitor.track_phase_performance(
+            run_id=run_id, phase="test_phase", metadata={"test": True}
+        )
 
         metrics = await monitor.get_performance_metrics(run_id=run_id)
         assert metrics is not None
@@ -576,9 +654,13 @@ class TestIntegrationScenarios:
     async def test_error_handling_and_recovery(self):
         """Test error handling and recovery with circuit breaker and retry."""
         # Test circuit breaker with retry
-        config = CircuitBreakerConfig(failure_threshold=2, timeout_seconds=1.0, success_threshold=1)
+        config = CircuitBreakerConfig(
+            failure_threshold=2, timeout_seconds=1.0, success_threshold=1
+        )
 
-        RetryConfig(max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0)
+        RetryConfig(
+            max_retries=3, base_delay=0.1, max_delay=1.0, backoff_multiplier=2.0
+        )
 
         attempt_count = 0
 
@@ -590,7 +672,9 @@ class TestIntegrationScenarios:
             return f"Success on attempt {attempt_count}"
 
         # Test with circuit breaker
-        result = await call_with_breaker(breaker_name="test_integration", config=config, func=flaky_operation)
+        result = await call_with_breaker(
+            breaker_name="test_integration", config=config, func=flaky_operation
+        )
 
         assert result == "Success on attempt 2"
         assert attempt_count == 2

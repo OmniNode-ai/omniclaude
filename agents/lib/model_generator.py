@@ -9,12 +9,12 @@ Supports input models, output models, configuration models, and field inference.
 import asyncio
 import logging
 import re
-from typing import Dict, Any, List, Optional, Tuple
-from uuid import UUID, uuid4
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
 
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,9 @@ class ModelGenerator:
         session_id = session_id or uuid4()
         correlation_id = correlation_id or uuid4()
 
-        self.logger.info(f"Starting model generation for {service_name} (session: {session_id})")
+        self.logger.info(
+            f"Starting model generation for {service_name} (session: {session_id})"
+        )
 
         try:
             # Generate all models concurrently
@@ -200,7 +202,9 @@ class ModelGenerator:
                 details={"service_name": service_name, "session_id": str(session_id)},
             )
 
-    async def generate_input_model(self, service_name: str, prd_analysis: Any) -> GeneratedModel:
+    async def generate_input_model(
+        self, service_name: str, prd_analysis: Any
+    ) -> GeneratedModel:
         """
         Generate Pydantic input model from PRD analysis.
 
@@ -299,7 +303,9 @@ class ModelGenerator:
 
         return model
 
-    async def generate_output_model(self, service_name: str, prd_analysis: Any) -> GeneratedModel:
+    async def generate_output_model(
+        self, service_name: str, prd_analysis: Any
+    ) -> GeneratedModel:
         """
         Generate Pydantic output model from PRD analysis.
 
@@ -314,13 +320,18 @@ class ModelGenerator:
 
         # Infer fields from success criteria
         inferred_fields = self.infer_model_fields(
-            prd_analysis.parsed_prd.success_criteria, prd_analysis.parsed_prd.features, model_type="output"
+            prd_analysis.parsed_prd.success_criteria,
+            prd_analysis.parsed_prd.features,
+            model_type="output",
         )
 
         # Standard output fields
         standard_fields = [
             ModelField(
-                name="success", type_hint="bool", description="Whether the operation succeeded", is_required=True
+                name="success",
+                type_hint="bool",
+                description="Whether the operation succeeded",
+                is_required=True,
             ),
             ModelField(
                 name="correlation_id",
@@ -394,7 +405,9 @@ class ModelGenerator:
 
         return model
 
-    async def generate_config_model(self, service_name: str, prd_analysis: Any) -> GeneratedModel:
+    async def generate_config_model(
+        self, service_name: str, prd_analysis: Any
+    ) -> GeneratedModel:
         """
         Generate Pydantic configuration model from PRD analysis.
 
@@ -408,7 +421,9 @@ class ModelGenerator:
         self.logger.info(f"Generating config model for {service_name}")
 
         # Infer fields from technical details
-        inferred_fields = self.infer_model_fields(prd_analysis.parsed_prd.technical_details, [], model_type="config")
+        inferred_fields = self.infer_model_fields(
+            prd_analysis.parsed_prd.technical_details, [], model_type="config"
+        )
 
         # Standard configuration fields
         standard_fields = [
@@ -452,7 +467,12 @@ class ModelGenerator:
 
         class_config = {
             "json_schema_extra": {
-                "example": {"timeout_seconds": 30, "retry_attempts": 3, "cache_enabled": True, "log_level": "INFO"}
+                "example": {
+                    "timeout_seconds": 30,
+                    "retry_attempts": 3,
+                    "cache_enabled": True,
+                    "log_level": "INFO",
+                }
             }
         }
 
@@ -493,13 +513,17 @@ class ModelGenerator:
             field_type = self._infer_field_type(candidate)
 
             # Determine if field is required (more strict for input)
-            is_required = model_type == "input" and not candidate.startswith("optional_")
+            is_required = model_type == "input" and not candidate.startswith(
+                "optional_"
+            )
 
             # Create field
             field = ModelField(
                 name=candidate,
                 type_hint=field_type,
-                default_value="None" if not is_required and "Optional" not in field_type else None,
+                default_value=(
+                    "None" if not is_required and "Optional" not in field_type else None
+                ),
                 description=f"{candidate.replace('_', ' ').title()}",
                 is_required=is_required,
             )
@@ -593,7 +617,9 @@ class ModelGenerator:
 
             # Build field definition
             if field.default_value:
-                field_def = f"    {field.name}: {field.type_hint} = {field.default_value}"
+                field_def = (
+                    f"    {field.name}: {field.type_hint} = {field.default_value}"
+                )
             else:
                 field_def = f"    {field.name}: {field.type_hint}"
 
@@ -626,20 +652,34 @@ class ModelGenerator:
         quality_score = 1.0
 
         # Check 1: No bare 'Any' types (should be Dict[str, Any] or List[Any])
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             # Look for ": Any" which indicates bare Any usage
             if re.search(r":\s*Any\s*(?:=|$)", code):
-                violations.append(f"{model_type} model uses bare 'Any' type (should use Dict[str, Any] or List[Any])")
+                violations.append(
+                    f"{model_type} model uses bare 'Any' type (should use Dict[str, Any] or List[Any])"
+                )
                 quality_score -= 0.15
 
         # Check 2: All models inherit from BaseModel
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if "class Model" not in code or "(BaseModel)" not in code:
                 violations.append(f"{model_type} model does not inherit from BaseModel")
                 quality_score -= 0.2
 
         # Check 3: Docstrings present
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if '"""' not in code:
                 violations.append(f"{model_type} model missing docstrings")
                 quality_score -= 0.1
@@ -654,7 +694,11 @@ class ModelGenerator:
             quality_score -= 0.1
 
         # Check 5: Imports are complete
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if "from pydantic import" not in code:
                 violations.append(f"{model_type} model missing pydantic imports")
                 quality_score -= 0.15

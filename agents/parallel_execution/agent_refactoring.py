@@ -5,16 +5,15 @@ Analyzes and improves code quality, structure, and maintainability.
 """
 
 import time
-from typing import Any, Dict, Optional, List
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from agent_model import AgentConfig, AgentResult, AgentTask
+from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
-from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -34,13 +33,19 @@ except ImportError:
 class RefactoringChange(BaseModel):
     """A single refactoring change recommendation."""
 
-    change_type: str = Field(description="Type of refactoring: extract_method, rename, simplify, optimize, etc.")
-    location: str = Field(description="Code location (function/class name, line numbers)")
+    change_type: str = Field(
+        description="Type of refactoring: extract_method, rename, simplify, optimize, etc."
+    )
+    location: str = Field(
+        description="Code location (function/class name, line numbers)"
+    )
     current_code: str = Field(description="Current code snippet")
     refactored_code: str = Field(description="Improved code")
     rationale: str = Field(description="Why this refactoring improves the code")
     impact: str = Field(description="Impact level: low, medium, high")
-    category: str = Field(description="Category: readability, performance, maintainability, design")
+    category: str = Field(
+        description="Category: readability, performance, maintainability, design"
+    )
 
 
 class RefactoringPlan(BaseModel):
@@ -50,7 +55,9 @@ class RefactoringPlan(BaseModel):
     quality_score: float = Field(description="Current code quality score (0-100)")
 
     # Refactoring changes
-    changes: List[RefactoringChange] = Field(description="List of refactoring recommendations")
+    changes: List[RefactoringChange] = Field(
+        description="List of refactoring recommendations"
+    )
 
     # Analysis
     code_smells: List[str] = Field(description="Detected code smells")
@@ -62,7 +69,9 @@ class RefactoringPlan(BaseModel):
     # Summary
     overall_assessment: str = Field(description="Overall code quality assessment")
     priority_actions: List[str] = Field(description="High-priority refactoring actions")
-    estimated_improvement: int = Field(description="Estimated quality score improvement (%)")
+    estimated_improvement: int = Field(
+        description="Estimated quality score improvement (%)"
+    )
 
 
 # ============================================================================
@@ -170,18 +179,26 @@ async def detect_code_smells(ctx: RunContext[AgentDeps], code_snippet: str) -> s
 
     # Long method
     if len(lines) > 20:
-        smells.append(f"⚠️ Long method ({len(lines)} lines) - Consider extracting smaller methods")
+        smells.append(
+            f"⚠️ Long method ({len(lines)} lines) - Consider extracting smaller methods"
+        )
 
     # Complex nesting
-    max_indent = max((len(line) - len(line.lstrip()) for line in lines if line.strip()), default=0)
+    max_indent = max(
+        (len(line) - len(line.lstrip()) for line in lines if line.strip()), default=0
+    )
     if max_indent > 12:
-        smells.append(f"⚠️ Deep nesting (indent level {max_indent//4}) - Simplify control flow")
+        smells.append(
+            f"⚠️ Deep nesting (indent level {max_indent//4}) - Simplify control flow"
+        )
 
     # Long parameter list
     if "def " in code_snippet:
         for line in lines:
             if "def " in line and line.count(",") > 3:
-                smells.append("⚠️ Long parameter list - Consider parameter object pattern")
+                smells.append(
+                    "⚠️ Long parameter list - Consider parameter object pattern"
+                )
                 break
 
     if not smells:
@@ -191,7 +208,9 @@ async def detect_code_smells(ctx: RunContext[AgentDeps], code_snippet: str) -> s
 
 
 @refactoring_agent.tool
-async def suggest_design_pattern(ctx: RunContext[AgentDeps], problem_description: str) -> str:
+async def suggest_design_pattern(
+    ctx: RunContext[AgentDeps], problem_description: str
+) -> str:
     """Suggest appropriate design pattern for given problem.
 
     Args:
@@ -275,7 +294,9 @@ class RefactoringAgent:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -351,7 +372,9 @@ class RefactoringAgent:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -368,7 +391,9 @@ class RefactoringAgent:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Refactoring analysis failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -387,7 +412,9 @@ class RefactoringAgent:
                 trace_id=self._current_trace_id,
             )
 
-    async def _gather_intelligence(self, task: AgentTask, pre_gathered_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _gather_intelligence(
+        self, task: AgentTask, pre_gathered_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Gather intelligence from context or MCP."""
         intelligence = {}
 
@@ -398,7 +425,9 @@ class RefactoringAgent:
         elif self.config.archon_mcp_enabled:
             try:
                 quality_intel = await self.mcp_client.perform_rag_query(
-                    query="code refactoring patterns clean code principles", context="quality", match_count=3
+                    query="code refactoring patterns clean code principles",
+                    context="quality",
+                    match_count=3,
                 )
                 intelligence["quality_patterns"] = quality_intel
             except Exception as e:
@@ -412,7 +441,9 @@ class RefactoringAgent:
 
         return intelligence
 
-    def _build_refactoring_prompt(self, task: AgentTask, file_path: str, code_content: str) -> str:
+    def _build_refactoring_prompt(
+        self, task: AgentTask, file_path: str, code_content: str
+    ) -> str:
         """Build detailed refactoring prompt for LLM."""
         return f"""Analyze the following code and provide comprehensive refactoring recommendations:
 

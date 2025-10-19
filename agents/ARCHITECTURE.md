@@ -137,8 +137,8 @@ The agent framework delivers a comprehensive refinement and optimization system 
 - Analytics views: Pre-aggregated for fast queries
 
 **Files**:
-- `agents/parallel_execution/migrations/006_phase7_schema_enhancements.sql` (16.2 KB)
-- `agents/lib/schema_phase7.py` (15 Pydantic models)
+- `agents/parallel_execution/migrations/006_agent_framework_schema_enhancements.sql` (16.2 KB)
+- `agents/lib/schema_agent_framework.py` (15 Pydantic models)
 - `agents/lib/persistence.py` (12 CRUD methods)
 
 ---

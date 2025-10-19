@@ -100,7 +100,9 @@ class NodeDatabasePoolEffect:
             return
 
         try:
-            logger.info(f"Initializing database pool: {self.config.host}:{self.config.port}/{self.config.database}")
+            logger.info(
+                f"Initializing database pool: {self.config.host}:{self.config.port}/{self.config.database}"
+            )
 
             self._pool = await asyncpg.create_pool(
                 host=self.config.host,
@@ -117,7 +119,9 @@ class NodeDatabasePoolEffect:
             )
 
             self._initialized = True
-            logger.info(f"Database pool initialized: min={self.config.min_size}, max={self.config.max_size}")
+            logger.info(
+                f"Database pool initialized: min={self.config.min_size}, max={self.config.max_size}"
+            )
 
             # Verify connection
             await self.health_check()
@@ -165,7 +169,9 @@ class NodeDatabasePoolEffect:
                 result = await conn.fetchrow("SELECT * FROM agent_definitions")
         """
         if not self._initialized or self._pool is None:
-            raise RuntimeError("Database pool not initialized. Call initialize() first.")
+            raise RuntimeError(
+                "Database pool not initialized. Call initialize() first."
+            )
 
         conn = None
         try:

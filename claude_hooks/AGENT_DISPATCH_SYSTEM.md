@@ -358,4 +358,4 @@ AI selection failed: unhashable type: 'slice'
 - [Hook Intelligence Guide](HOOK_INTELLIGENCE_GUIDE.md)
 - [Setup Guide](SETUP.md)
 - [Hook Dashboard](tools/hook_dashboard.py)
-- [Agent Workflow Coordinator](../agents/agent-workflow-coordinator.md)
+- [Agent Workflow Coordinator](../agents/AGENT-WORKFLOW-COORDINATOR.md)

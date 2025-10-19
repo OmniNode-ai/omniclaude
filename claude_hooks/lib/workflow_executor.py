@@ -13,11 +13,12 @@ Integrates with agent-workflow-coordinator to execute:
 
 import asyncio
 import json
+import os
 import sys
 import time
-from pathlib import Path
-from typing import Dict, Any, Optional, List
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Add agents directory to path (use environment variable or relative path)
 AGENTS_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
@@ -32,10 +33,10 @@ if AGENTS_PATH.exists():
     sys.path.insert(0, str(AGENTS_PATH))
 
 try:
-    from context_manager import ContextManager
-    from validated_task_architect import ValidatedTaskArchitect
     from agent_dispatcher import ParallelCoordinator
     from agent_model import AgentTask
+    from context_manager import ContextManager
+    from validated_task_architect import ValidatedTaskArchitect
 
     COMPONENTS_AVAILABLE = True
 except ImportError as e:
@@ -50,7 +51,12 @@ class WorkflowExecutor:
     Designed to be invoked from hooks when agent-workflow-coordinator is detected.
     """
 
-    def __init__(self, correlation_id: Optional[str] = None, workspace: Optional[str] = None, db_logging: bool = True):
+    def __init__(
+        self,
+        correlation_id: Optional[str] = None,
+        workspace: Optional[str] = None,
+        db_logging: bool = True,
+    ):
         """
         Initialize workflow executor.
 
@@ -96,7 +102,9 @@ class WorkflowExecutor:
 
             context_manager = ContextManager()
             global_context = await context_manager.gather_global_context(
-                user_prompt=user_prompt, workspace_path=self.workspace, max_rag_results=5
+                user_prompt=user_prompt,
+                workspace_path=self.workspace,
+                max_rag_results=5,
             )
 
             context_summary = context_manager.get_context_summary()
@@ -152,7 +160,9 @@ class WorkflowExecutor:
                 return {
                     "success": False,
                     "phase_failed": "task_decomposition",
-                    "error": breakdown_result.get("error", "Task decomposition validation failed"),
+                    "error": breakdown_result.get(
+                        "error", "Task decomposition validation failed"
+                    ),
                     "attempts": breakdown_result.get("attempts", 0),
                     "quorum_result": breakdown_result.get("quorum_result"),
                     "execution_time_ms": (time.time() - workflow_start) * 1000,
@@ -203,7 +213,10 @@ class WorkflowExecutor:
             self._log_phase(
                 "PHASE 2: Context Filtering",
                 "completed",
-                {"duration_ms": phase_time, "contexts_filtered": len(filtered_contexts)},
+                {
+                    "duration_ms": phase_time,
+                    "contexts_filtered": len(filtered_contexts),
+                },
             )
 
             # =================================================================
@@ -212,7 +225,9 @@ class WorkflowExecutor:
             phase_start = time.time()
             self._log_phase("PHASE 3: Parallel Agent Execution", "started")
 
-            coordinator = ParallelCoordinator(use_enhanced_router=True, router_confidence_threshold=0.6)
+            coordinator = ParallelCoordinator(
+                use_enhanced_router=True, router_confidence_threshold=0.6
+            )
             await coordinator.initialize()
 
             # Convert to AgentTask objects with filtered context
@@ -223,7 +238,9 @@ class WorkflowExecutor:
                     description=task_def["description"],
                     input_data={
                         **task_def.get("input_data", {}),
-                        "pre_gathered_context": filtered_contexts.get(task_def["task_id"], {}),
+                        "pre_gathered_context": filtered_contexts.get(
+                            task_def["task_id"], {}
+                        ),
                     },
                     dependencies=task_def.get("dependencies", []),
                 )
@@ -252,7 +269,9 @@ class WorkflowExecutor:
                         "phase": "parallel_execution",
                         "duration_ms": phase_time,
                         "total_tasks": len(results),
-                        "successful_tasks": sum(1 for r in results.values() if r.success),
+                        "successful_tasks": sum(
+                            1 for r in results.values() if r.success
+                        ),
                         "router_stats": coordinator.get_router_stats(),
                         "correlation_id": self.correlation_id,
                     },
@@ -289,11 +308,21 @@ class WorkflowExecutor:
                 "correlation_id": self.correlation_id,
                 "total_time_ms": total_workflow_time,
                 "phases": {
-                    "context_gathering": self.execution_trace[0] if len(self.execution_trace) > 0 else {},
-                    "task_decomposition": self.execution_trace[1] if len(self.execution_trace) > 1 else {},
-                    "context_filtering": self.execution_trace[2] if len(self.execution_trace) > 2 else {},
-                    "parallel_execution": self.execution_trace[3] if len(self.execution_trace) > 3 else {},
-                    "result_aggregation": self.execution_trace[4] if len(self.execution_trace) > 4 else {},
+                    "context_gathering": (
+                        self.execution_trace[0] if len(self.execution_trace) > 0 else {}
+                    ),
+                    "task_decomposition": (
+                        self.execution_trace[1] if len(self.execution_trace) > 1 else {}
+                    ),
+                    "context_filtering": (
+                        self.execution_trace[2] if len(self.execution_trace) > 2 else {}
+                    ),
+                    "parallel_execution": (
+                        self.execution_trace[3] if len(self.execution_trace) > 3 else {}
+                    ),
+                    "result_aggregation": (
+                        self.execution_trace[4] if len(self.execution_trace) > 4 else {}
+                    ),
                 },
                 "tasks": {
                     "total": len(tasks),
@@ -302,7 +331,8 @@ class WorkflowExecutor:
                 },
                 "quality": {
                     "average_score": aggregated.get("average_quality_score", 0),
-                    "validation_passed": aggregated.get("average_quality_score", 0) >= 0.7,
+                    "validation_passed": aggregated.get("average_quality_score", 0)
+                    >= 0.7,
                 },
                 "outputs": aggregated.get("outputs", {}),
                 "generated_code": aggregated.get("generated_code", {}),
@@ -315,7 +345,9 @@ class WorkflowExecutor:
                 {
                     "total_workflow_time_ms": total_workflow_time,
                     "overall_success": final_result["success"],
-                    "quality_validation_passed": final_result["quality"]["validation_passed"],
+                    "quality_validation_passed": final_result["quality"][
+                        "validation_passed"
+                    ],
                 },
             )
 
@@ -383,11 +415,15 @@ class WorkflowExecutor:
 
                 # Collect generated code
                 if "generated_code" in output_data:
-                    aggregated["generated_code"][task_id] = output_data["generated_code"]
+                    aggregated["generated_code"][task_id] = output_data[
+                        "generated_code"
+                    ]
 
                 # Collect quality metrics
                 if "quality_score" in output_data:
-                    aggregated["quality_metrics"][task_id] = output_data["quality_score"]
+                    aggregated["quality_metrics"][task_id] = output_data[
+                        "quality_score"
+                    ]
 
                 aggregated["outputs"][task_id] = {
                     "agent": result.agent_name,
@@ -397,14 +433,18 @@ class WorkflowExecutor:
 
         # Calculate overall quality
         if aggregated["quality_metrics"]:
-            avg_quality = sum(aggregated["quality_metrics"].values()) / len(aggregated["quality_metrics"])
+            avg_quality = sum(aggregated["quality_metrics"].values()) / len(
+                aggregated["quality_metrics"]
+            )
             aggregated["average_quality_score"] = avg_quality
         else:
             aggregated["average_quality_score"] = 0.0
 
         return aggregated
 
-    def _log_phase(self, phase_name: str, status: str, metadata: Optional[Dict[str, Any]] = None):
+    def _log_phase(
+        self, phase_name: str, status: str, metadata: Optional[Dict[str, Any]] = None
+    ):
         """Log phase execution to trace."""
 
         log_entry = {
@@ -433,7 +473,10 @@ class WorkflowExecutor:
                 action=event_type,
                 resource_id=self.correlation_id,
                 payload=payload,
-                metadata={"correlation_id": self.correlation_id, "workspace": self.workspace},
+                metadata={
+                    "correlation_id": self.correlation_id,
+                    "workspace": self.workspace,
+                },
             )
         except Exception as e:
             print(f"[WorkflowExecutor] Database logging failed: {e}", file=sys.stderr)
@@ -458,16 +501,22 @@ async def execute_from_hook(
         Workflow execution result
     """
 
-    executor = WorkflowExecutor(correlation_id=correlation_id, workspace=workspace, db_logging=True)
+    executor = WorkflowExecutor(
+        correlation_id=correlation_id, workspace=workspace, db_logging=True
+    )
 
-    return await executor.execute_workflow(user_prompt=user_prompt, agent_context=agent_context)
+    return await executor.execute_workflow(
+        user_prompt=user_prompt, agent_context=agent_context
+    )
 
 
 def main():
     """CLI entry point for testing."""
 
     if len(sys.argv) < 2:
-        print("Usage: workflow_executor.py '<user_prompt>' [correlation_id] [workspace]")
+        print(
+            "Usage: workflow_executor.py '<user_prompt>' [correlation_id] [workspace]"
+        )
         sys.exit(1)
 
     user_prompt = sys.argv[1]

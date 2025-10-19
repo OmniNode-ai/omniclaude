@@ -11,26 +11,25 @@ Comprehensive test suite verifying:
 - Thread-safe deduplication
 """
 
-import pytest
-import threading
-import time
-import sys
 import os
-from typing import List
+import sys
+import threading
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pattern_id_system import (
-    PatternIDSystem,
-    PatternVersion,
-    PatternLineageDetector,
-    PatternDeduplicator,
     ModificationType,
-    generate_pattern_id,
+    PatternDeduplicator,
+    PatternIDSystem,
+    PatternLineageDetector,
+    PatternVersion,
     detect_pattern_derivation,
-    register_pattern,
+    generate_pattern_id,
     get_global_deduplicator,
+    register_pattern,
 )
 
 
@@ -170,9 +169,15 @@ class TestPatternIDSystem:
         assert PatternIDSystem.validate_id("1234567890abcdef"), "Valid ID should pass"
         assert not PatternIDSystem.validate_id(""), "Empty ID should fail"
         assert not PatternIDSystem.validate_id("too_short"), "Short ID should fail"
-        assert not PatternIDSystem.validate_id("1234567890abcdefg"), "Long ID should fail"
-        assert not PatternIDSystem.validate_id("ABCDEFGHIJKLMNOP"), "Uppercase hex should fail"
-        assert not PatternIDSystem.validate_id("not-hexadecimal!"), "Non-hex should fail"
+        assert not PatternIDSystem.validate_id(
+            "1234567890abcdefg"
+        ), "Long ID should fail"
+        assert not PatternIDSystem.validate_id(
+            "ABCDEFGHIJKLMNOP"
+        ), "Uppercase hex should fail"
+        assert not PatternIDSystem.validate_id(
+            "not-hexadecimal!"
+        ), "Non-hex should fail"
 
 
 class TestPatternVersion:
@@ -272,7 +277,9 @@ class TestPatternLineageDetector:
 
         assert result["is_derived"], "Should be detected as derived"
         assert result["similarity_score"] >= 0.90, "Should be >=90% similar"
-        assert result["modification_type"] == ModificationType.PATCH, "Should be patch level"
+        assert (
+            result["modification_type"] == ModificationType.PATCH
+        ), "Should be patch level"
 
     def test_minor_level_modification(self):
         """Moderate changes should be classified as minor or major based on actual similarity"""
@@ -329,7 +336,10 @@ class TestPatternLineageDetector:
 
         result = PatternLineageDetector.detect_derivation(code1, code2)
 
-        assert not result["is_derived"] or result["modification_type"] == ModificationType.UNRELATED
+        assert (
+            not result["is_derived"]
+            or result["modification_type"] == ModificationType.UNRELATED
+        )
         assert result["similarity_score"] < 0.70, "Should be <70% similar"
 
     def test_suggested_version(self):
@@ -337,15 +347,21 @@ class TestPatternLineageDetector:
         base_version = PatternVersion(1, 2, 3)
 
         # Patch suggestion
-        patch_suggestion = PatternLineageDetector._suggest_version(ModificationType.PATCH, base_version)
+        patch_suggestion = PatternLineageDetector._suggest_version(
+            ModificationType.PATCH, base_version
+        )
         assert str(patch_suggestion) == "1.2.4"
 
         # Minor suggestion
-        minor_suggestion = PatternLineageDetector._suggest_version(ModificationType.MINOR, base_version)
+        minor_suggestion = PatternLineageDetector._suggest_version(
+            ModificationType.MINOR, base_version
+        )
         assert str(minor_suggestion) == "1.3.0"
 
         # Major suggestion
-        major_suggestion = PatternLineageDetector._suggest_version(ModificationType.MAJOR, base_version)
+        major_suggestion = PatternLineageDetector._suggest_version(
+            ModificationType.MAJOR, base_version
+        )
         assert str(major_suggestion) == "2.0.0"
 
     def test_lineage_chain_building(self):
@@ -478,7 +494,9 @@ class TestPatternDeduplicator:
                 results.append(meta.pattern_id)
 
         # Create multiple threads
-        threads = [threading.Thread(target=register_patterns, args=(i,)) for i in range(5)]
+        threads = [
+            threading.Thread(target=register_patterns, args=(i,)) for i in range(5)
+        ]
 
         # Start all threads
         for t in threads:

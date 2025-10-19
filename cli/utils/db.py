@@ -4,7 +4,6 @@ import os
 from contextlib import contextmanager
 from typing import Generator, Optional
 
-import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
@@ -30,7 +29,9 @@ class DatabasePool:
                 port=int(os.getenv("POSTGRES_PORT", "5436")),
                 database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
                 user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"),
+                password=os.getenv(
+                    "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
+                ),
             )
 
     @contextmanager

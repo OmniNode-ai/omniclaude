@@ -141,11 +141,15 @@ class CircuitBreaker:
 
         if self.state == CircuitState.HALF_OPEN:
             # Immediately reopen on failure in half-open state
-            self.logger.warning("Circuit breaker reopening due to failure in HALF_OPEN state")
+            self.logger.warning(
+                "Circuit breaker reopening due to failure in HALF_OPEN state"
+            )
             self.state = CircuitState.OPEN
         elif self.state == CircuitState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:
-                self.logger.error(f"Circuit breaker OPENING after {self.failure_count} failures")
+                self.logger.error(
+                    f"Circuit breaker OPENING after {self.failure_count} failures"
+                )
                 self.state = CircuitState.OPEN
 
 
@@ -177,13 +181,17 @@ class EventOptimizer:
         self.config = config or OptimizerConfig()
 
         # Initialize circuit breaker
-        self.circuit_breaker = CircuitBreaker(circuit_config or self.config.get_circuit_config())
+        self.circuit_breaker = CircuitBreaker(
+            circuit_config or self.config.get_circuit_config()
+        )
 
         # Store batch config
         self._batch_config = batch_config or self.config.get_batch_config()
 
         # Initialize persistence
-        self.persistence = persistence or (CodegenPersistence() if self.config.enable_metrics else None)
+        self.persistence = persistence or (
+            CodegenPersistence() if self.config.enable_metrics else None
+        )
 
         # Producer pool for connection reuse
         self._producer_pool: List[AIOKafkaProducer] = []
@@ -312,7 +320,9 @@ class EventOptimizer:
                     batch_size=len(events),
                 )
 
-            self.logger.debug(f"Published batch of {len(events)} events in {duration_ms:.0f}ms")
+            self.logger.debug(
+                f"Published batch of {len(events)} events in {duration_ms:.0f}ms"
+            )
 
         except Exception as e:
             duration_ms = (time.time() - start_time) * 1000
@@ -369,7 +379,9 @@ class EventOptimizer:
         """
         if self.batch_processor is None:
             self.batch_processor = BatchProcessor(
-                processor_func=self._publish_batch_internal, config=self._batch_config, persistence=self.persistence
+                processor_func=self._publish_batch_internal,
+                config=self._batch_config,
+                persistence=self.persistence,
             )
 
         return self.batch_processor

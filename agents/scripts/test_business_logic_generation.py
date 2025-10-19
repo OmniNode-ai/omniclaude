@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.lib.contract_generator import ContractGenerator
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_ANALYSIS_RESULT,
     COMPUTE_ANALYSIS_RESULT,
+    EFFECT_ANALYSIS_RESULT,
     SAMPLE_CONTRACT_WITH_CRUD,
 )
 
@@ -37,11 +37,17 @@ async def test_effect_generation():
 
     # Generate implementation
     code = await generator.generate_node_implementation(
-        contract_result["contract"], EFFECT_ANALYSIS_RESULT, "EFFECT", "user_management", "identity"
+        contract_result["contract"],
+        EFFECT_ANALYSIS_RESULT,
+        "EFFECT",
+        "user_management",
+        "identity",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
-    print(f"✓ Found class definition: {'class NodeUserManagementEffectService' in code}")
+    print(
+        f"✓ Found class definition: {'class NodeUserManagementEffectService' in code}"
+    )
     print(f"✓ Found execute_effect: {'async def execute_effect' in code}")
     print(f"✓ Found validation: {'async def _validate_input' in code}")
     print(f"✓ Found health check: {'async def get_health_status' in code}")
@@ -74,13 +80,21 @@ async def test_compute_generation():
 
     # Generate implementation
     code = await generator.generate_node_implementation(
-        contract_result["contract"], COMPUTE_ANALYSIS_RESULT, "COMPUTE", "csv_json_transformer", "data_processing"
+        contract_result["contract"],
+        COMPUTE_ANALYSIS_RESULT,
+        "COMPUTE",
+        "csv_json_transformer",
+        "data_processing",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
-    print(f"✓ Found class definition: {'class NodeCsvJsonTransformerComputeService' in code}")
+    print(
+        f"✓ Found class definition: {'class NodeCsvJsonTransformerComputeService' in code}"
+    )
     print(f"✓ Found execute_compute: {'async def execute_compute' in code}")
-    print(f"✓ Found COMPUTE hints: {'COMPUTE Node: Implement pure transformation logic' in code}")
+    print(
+        f"✓ Found COMPUTE hints: {'COMPUTE Node: Implement pure transformation logic' in code}"
+    )
 
     return code
 
@@ -95,7 +109,11 @@ async def test_crud_pattern_detection():
 
     # Generate implementation with CRUD contract
     code = await generator.generate_node_implementation(
-        SAMPLE_CONTRACT_WITH_CRUD, EFFECT_ANALYSIS_RESULT, "EFFECT", "user_service", "user_management"
+        SAMPLE_CONTRACT_WITH_CRUD,
+        EFFECT_ANALYSIS_RESULT,
+        "EFFECT",
+        "user_service",
+        "user_management",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
@@ -120,7 +138,11 @@ async def test_syntax_validation():
     generator = BusinessLogicGenerator()
 
     code = await generator.generate_node_implementation(
-        SAMPLE_CONTRACT_WITH_CRUD, EFFECT_ANALYSIS_RESULT, "EFFECT", "user_service", "user_management"
+        SAMPLE_CONTRACT_WITH_CRUD,
+        EFFECT_ANALYSIS_RESULT,
+        "EFFECT",
+        "user_service",
+        "user_management",
     )
 
     # Try to compile the code

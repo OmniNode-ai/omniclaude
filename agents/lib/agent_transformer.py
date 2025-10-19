@@ -6,10 +6,11 @@ Loads YAML agent configs and formats them for identity assumption.
 Enables agent-workflow-coordinator to transform into any agent.
 """
 
-import yaml
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
+
+import yaml
 
 
 @dataclass
@@ -32,7 +33,9 @@ class AgentIdentity:
         caps_formatted = "\n".join(f"  - {cap}" for cap in self.capabilities)
 
         # Format triggers
-        triggers_formatted = "\n".join(f"  - {trig}" for trig in self.triggers[:5])  # Top 5
+        triggers_formatted = "\n".join(
+            f"  - {trig}" for trig in self.triggers[:5]
+        )  # Top 5
 
         # Format success criteria if available
         success_formatted = ""
@@ -127,7 +130,8 @@ class AgentTransformer:
 
         if not config_path.exists():
             raise FileNotFoundError(
-                f"Agent config not found: {config_path}\n" f"Available agents: {self.list_agents()}"
+                f"Agent config not found: {config_path}\n"
+                f"Available agents: {self.list_agents()}"
             )
 
         # Load YAML
@@ -166,7 +170,9 @@ class AgentTransformer:
             name=agent_name,
             purpose=config.get("agent_purpose", "No purpose defined"),
             domain=config.get("agent_domain", "general"),
-            description=config.get("agent_description", config.get("agent_purpose", "")),
+            description=config.get(
+                "agent_description", config.get("agent_purpose", "")
+            ),
             capabilities=capabilities,
             triggers=config.get("triggers", []),
             intelligence_integration=intelligence,
@@ -193,8 +199,8 @@ class AgentTransformer:
 
 def main():
     """CLI interface for testing transformations."""
-    import sys
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description="Agent polymorphic transformer")
     parser.add_argument("agent_name", nargs="?", help="Agent to transform into")

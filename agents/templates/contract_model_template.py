@@ -22,13 +22,12 @@ ZERO TOLERANCE: No Any types allowed in implementation.
 
 from typing import ClassVar, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
 from omnibase_core.errors.model_onex_error import ModelOnexError
 from omnibase_core.models.common.model_error_context import ModelErrorContext
 from omnibase_core.models.common.model_schema_value import ModelSchemaValue
 from omnibase_core.primitives.model_semver import ModelSemVer
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Model{MICROSERVICE_NAME_PASCAL}{NODE_TYPE_PASCAL}Contract(BaseModel):

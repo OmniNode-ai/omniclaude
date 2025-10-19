@@ -31,7 +31,9 @@ async def main():
     print(f"   Capabilities Indexed: {stats['capabilities_indexed']}\n")
 
     # Show successful loads
-    successful = [name for name, agent in agents.items() if agent.status == AgentLoadStatus.LOADED]
+    successful = [
+        name for name, agent in agents.items() if agent.status == AgentLoadStatus.LOADED
+    ]
     if successful:
         print(f"✅ Successfully Loaded Agents ({len(successful)}):")
         for name in sorted(successful):
@@ -40,7 +42,11 @@ async def main():
         print()
 
     # Show failures
-    failed = {name: agent for name, agent in agents.items() if agent.status == AgentLoadStatus.FAILED}
+    failed = {
+        name: agent
+        for name, agent in agents.items()
+        if agent.status == AgentLoadStatus.FAILED
+    }
     if failed:
         print(f"❌ Failed Agents ({len(failed)}):")
         for name, agent in sorted(failed.items()):

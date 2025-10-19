@@ -3,9 +3,10 @@ Simple Pydantic models for agent configs and execution.
 Loads directly from YAML files in agents/configs/
 """
 
-import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+import yaml
 from pydantic import BaseModel, Field
 
 

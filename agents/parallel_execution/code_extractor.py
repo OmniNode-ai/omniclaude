@@ -8,10 +8,10 @@ Responsible for:
 - Handling different code generation patterns
 """
 
-import os
 import json
-from typing import Dict, Any, List
+import os
 from dataclasses import dataclass
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -45,11 +45,19 @@ class ExtractCode:
 
             # Determine what to generate based on task type
             if "consul-adapter-architecture" in task_id:
-                code_files.extend(self._extract_consul_adapter_code(task_id, agent_name, output_data))
+                code_files.extend(
+                    self._extract_consul_adapter_code(task_id, agent_name, output_data)
+                )
             elif "subcontracts-design" in task_id:
-                code_files.extend(self._extract_consul_contracts_code(task_id, agent_name, output_data))
+                code_files.extend(
+                    self._extract_consul_contracts_code(
+                        task_id, agent_name, output_data
+                    )
+                )
             elif "validation-schema" in task_id or "validation-engine" in task_id:
-                code_files.extend(self._extract_validation_code(task_id, agent_name, output_data))
+                code_files.extend(
+                    self._extract_validation_code(task_id, agent_name, output_data)
+                )
 
         return code_files
 
@@ -61,7 +69,9 @@ class ExtractCode:
         recommendations = output_data.get("recommendations", [])
 
         # Generate NodeConsulAdapterEffect
-        node_content = self._generate_consul_node_code(agent_name, task_id, recommendations)
+        node_content = self._generate_consul_node_code(
+            agent_name, task_id, recommendations
+        )
         code_files.append(
             CodeFile(
                 filename="NodeConsulAdapterEffect.py",
@@ -72,7 +82,9 @@ class ExtractCode:
         )
 
         # Generate Consul client adapter interface
-        interface_content = self._generate_consul_interface_code(agent_name, task_id, recommendations)
+        interface_content = self._generate_consul_interface_code(
+            agent_name, task_id, recommendations
+        )
         code_files.append(
             CodeFile(
                 filename="consul_client_adapter.py",
@@ -92,7 +104,9 @@ class ExtractCode:
         recommendations = output_data.get("recommendations", [])
 
         # Generate model contracts
-        contracts_content = self._generate_consul_contracts_code(agent_name, task_id, recommendations)
+        contracts_content = self._generate_consul_contracts_code(
+            agent_name, task_id, recommendations
+        )
         code_files.append(
             CodeFile(
                 filename="model_contract_consul.py",
@@ -104,14 +118,18 @@ class ExtractCode:
 
         return code_files
 
-    def _extract_validation_code(self, task_id: str, agent_name: str, output_data: Dict[str, Any]) -> List[CodeFile]:
+    def _extract_validation_code(
+        self, task_id: str, agent_name: str, output_data: Dict[str, Any]
+    ) -> List[CodeFile]:
         """Extract validation system code."""
         code_files = []
         recommendations = output_data.get("recommendations", [])
 
         # Generate validation node if it's an Effect node task
         if "effect" in task_id.lower():
-            validation_node_content = self._generate_validation_node_code(agent_name, task_id, recommendations)
+            validation_node_content = self._generate_validation_node_code(
+                agent_name, task_id, recommendations
+            )
             code_files.append(
                 CodeFile(
                     filename=self._get_validation_node_filename(task_id),
@@ -123,7 +141,9 @@ class ExtractCode:
 
         return code_files
 
-    def _generate_consul_node_code(self, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+    def _generate_consul_node_code(
+        self, agent_name: str, task_id: str, recommendations: List[Dict]
+    ) -> str:
         """Generate NodeConsulAdapterEffect code."""
 
         # Extract implementation details from recommendations
@@ -389,7 +409,9 @@ class NodeConsulAdapterEffect(NodeEffect):
         return self.services.get(service_id)
 '''
 
-    def _generate_consul_interface_code(self, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+    def _generate_consul_interface_code(
+        self, agent_name: str, task_id: str, recommendations: List[Dict]
+    ) -> str:
         """Generate Consul client adapter interface and implementation."""
 
         return f'''"""
@@ -616,7 +638,9 @@ class ConsulClientAdapter(IConsulClientAdapter):
             return False
 '''
 
-    def _generate_consul_contracts_code(self, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+    def _generate_consul_contracts_code(
+        self, agent_name: str, task_id: str, recommendations: List[Dict]
+    ) -> str:
         """Generate Consul model contracts code."""
 
         return f'''"""
@@ -881,7 +905,9 @@ class ConsulContractValidator:
             return ValidationResult(False, [f"Invalid contract structure: {{str(e)}}"])
 '''
 
-    def _generate_validation_node_code(self, agent_name: str, task_id: str, recommendations: List[Dict]) -> str:
+    def _generate_validation_node_code(
+        self, agent_name: str, task_id: str, recommendations: List[Dict]
+    ) -> str:
         """Generate validation node code based on task type."""
 
         # Determine node type from task
@@ -1221,7 +1247,11 @@ class DefaultValidationEngine(IValidationEngine):
                 if pattern in text and pattern not in patterns:
                     patterns.append(pattern)
 
-        return "\n".join(f"- {pattern.title()}" for pattern in patterns) if patterns else "- Standard ONEX Patterns"
+        return (
+            "\n".join(f"- {pattern.title()}" for pattern in patterns)
+            if patterns
+            else "- Standard ONEX Patterns"
+        )
 
     def write_code_files(self, code_files: List[CodeFile]) -> None:
         """Write code files to disk."""
@@ -1235,7 +1265,9 @@ class DefaultValidationEngine(IValidationEngine):
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(code_file.content)
 
-            print(f"[CodeExtractor] Generated: {code_file.filename} ({code_file.file_type})")
+            print(
+                f"[CodeExtractor] Generated: {code_file.filename} ({code_file.file_type})"
+            )
 
     def write_manifest(self, code_files: List[CodeFile]) -> None:
         """Write a manifest file with code generation details."""

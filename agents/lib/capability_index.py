@@ -15,9 +15,10 @@ Enables fast queries like:
 - "Which agents have both testing AND deployment capabilities?"
 """
 
-from typing import Dict, List, Set, Tuple
-import yaml
 from pathlib import Path
+from typing import Dict, List, Set, Tuple
+
+import yaml
 
 
 class CapabilityIndex:
@@ -122,7 +123,9 @@ class CapabilityIndex:
         """
         return self.agent_to_domain.get(agent_name, "general")
 
-    def find_agents_with_multiple_capabilities(self, capabilities: List[str]) -> List[Tuple[str, int]]:
+    def find_agents_with_multiple_capabilities(
+        self, capabilities: List[str]
+    ) -> List[Tuple[str, int]]:
         """
         Find agents with multiple capabilities.
 
@@ -197,7 +200,8 @@ class CapabilityIndex:
             "total_capabilities": len(self.capability_to_agents),
             "total_domains": len(self.domain_to_agents),
             "avg_capabilities_per_agent": (
-                sum(len(caps) for caps in self.agent_to_capabilities.values()) / len(self.agent_to_capabilities)
+                sum(len(caps) for caps in self.agent_to_capabilities.values())
+                / len(self.agent_to_capabilities)
                 if self.agent_to_capabilities
                 else 0
             ),
@@ -206,7 +210,9 @@ class CapabilityIndex:
 
 # Standalone test
 if __name__ == "__main__":
-    registry_path = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    registry_path = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     if registry_path.exists():
         index = CapabilityIndex(str(registry_path))

@@ -11,20 +11,19 @@ Tests:
 - Hook execution under load (concurrent operations)
 """
 
-import sys
-import time
-import uuid
-import statistics
-import psycopg2
-from psycopg2.extras import Json
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple
-
-
 # Database connection
 # Note: Set PGPASSWORD environment variable before running
 import os
+import statistics
+import sys
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from typing import List, Tuple
+
+import psycopg2
+from psycopg2.extras import Json
 
 DB_CONFIG = {
     "host": "localhost",
@@ -91,9 +90,13 @@ class PerformanceTest:
         try:
             with self.conn.cursor() as cur:
                 for correlation_id in correlation_ids:
-                    cur.execute("DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s", (correlation_id,))
                     cur.execute(
-                        "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s", (correlation_id,)
+                        "DELETE FROM hook_events WHERE metadata->>'correlation_id' = %s",
+                        (correlation_id,),
+                    )
+                    cur.execute(
+                        "DELETE FROM service_sessions WHERE metadata->>'correlation_id' = %s",
+                        (correlation_id,),
                     )
                 self.conn.commit()
         except Exception as e:
@@ -142,14 +145,18 @@ class PerformanceTest:
 
         # Validate thresholds
         if avg_time < THRESHOLDS["session_start_avg"]:
-            self.log_success(f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms)")
+            self.log_success(
+                f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms)"
+            )
         else:
             self.log_error(
                 f"SessionStart avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_start_avg']}ms) - EXCEEDED"
             )
 
         if p95_time < THRESHOLDS["session_start_p95"]:
-            self.log_success(f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms)")
+            self.log_success(
+                f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms)"
+            )
         else:
             self.log_error(
                 f"SessionStart p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_start_p95']}ms) - EXCEEDED"
@@ -183,7 +190,10 @@ class PerformanceTest:
                         %s
                     )
                 """,
-                    (session_id, Json({"correlation_id": correlation_id, "test": True})),
+                    (
+                        session_id,
+                        Json({"correlation_id": correlation_id, "test": True}),
+                    ),
                 )
                 self.conn.commit()
 
@@ -218,14 +228,22 @@ class PerformanceTest:
 
         # Validate thresholds
         if avg_time < THRESHOLDS["session_end_avg"]:
-            self.log_success(f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms)")
+            self.log_success(
+                f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms)"
+            )
         else:
-            self.log_error(f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms) - EXCEEDED")
+            self.log_error(
+                f"SessionEnd avg: {avg_time:.2f}ms (target <{THRESHOLDS['session_end_avg']}ms) - EXCEEDED"
+            )
 
         if p95_time < THRESHOLDS["session_end_p95"]:
-            self.log_success(f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms)")
+            self.log_success(
+                f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms)"
+            )
         else:
-            self.log_error(f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms) - EXCEEDED")
+            self.log_error(
+                f"SessionEnd p95: {p95_time:.2f}ms (target <{THRESHOLDS['session_end_p95']}ms) - EXCEEDED"
+            )
 
     def test_stop_hook_performance(self):
         """Test Stop hook performance."""
@@ -253,7 +271,10 @@ class PerformanceTest:
                             %s
                         )
                     """,
-                        (Json({"response_length": 1000}), Json({"correlation_id": correlation_id, "test": True})),
+                        (
+                            Json({"response_length": 1000}),
+                            Json({"correlation_id": correlation_id, "test": True}),
+                        ),
                     )
                     self.conn.commit()
 
@@ -271,14 +292,22 @@ class PerformanceTest:
 
         # Validate thresholds
         if avg_time < THRESHOLDS["stop_avg"]:
-            self.log_success(f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms)")
+            self.log_success(
+                f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms)"
+            )
         else:
-            self.log_error(f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms) - EXCEEDED")
+            self.log_error(
+                f"Stop hook avg: {avg_time:.2f}ms (target <{THRESHOLDS['stop_avg']}ms) - EXCEEDED"
+            )
 
         if p95_time < THRESHOLDS["stop_p95"]:
-            self.log_success(f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms)")
+            self.log_success(
+                f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms)"
+            )
         else:
-            self.log_error(f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms) - EXCEEDED")
+            self.log_error(
+                f"Stop hook p95: {p95_time:.2f}ms (target <{THRESHOLDS['stop_p95']}ms) - EXCEEDED"
+            )
 
     def test_metadata_overhead(self):
         """Test enhanced metadata overhead."""
@@ -410,7 +439,10 @@ class PerformanceTest:
         correlation_ids = []
 
         with ThreadPoolExecutor(max_workers=CONCURRENT_OPERATIONS) as executor:
-            futures = [executor.submit(insert_concurrent_event, i) for i in range(CONCURRENT_OPERATIONS * 5)]
+            futures = [
+                executor.submit(insert_concurrent_event, i)
+                for i in range(CONCURRENT_OPERATIONS * 5)
+            ]
 
             for future in as_completed(futures):
                 idx, elapsed_ms, correlation_id = future.result()

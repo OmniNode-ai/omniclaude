@@ -5,20 +5,19 @@ Expert validation for code, configuration, and output compliance with
 intelligent rule evaluation and quality reporting.
 """
 
-import time
-import json
 import datetime
-from typing import Any, Dict, Optional, List
+import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
@@ -82,7 +81,9 @@ class ComplianceReport(BaseModel):
     rules_evaluated: int = Field(description="Number of rules evaluated")
     violations_found: int = Field(description="Total violations found")
     critical_violations: int = Field(description="Critical violations count")
-    quality_score: float = Field(description="Overall compliance quality score 0.0-1.0", ge=0.0, le=1.0)
+    quality_score: float = Field(
+        description="Overall compliance quality score 0.0-1.0", ge=0.0, le=1.0
+    )
 
 
 # ============================================================================
@@ -179,7 +180,9 @@ async def evaluate_code_rules(ctx: RunContext[AgentDeps]) -> str:
     # Check for common patterns
     for rule in request.rules:
         if rule.pattern and rule.pattern in request.target_content:
-            findings.append(f"- Pattern '{rule.pattern}' found (Rule: {rule.id}, Severity: {rule.severity})")
+            findings.append(
+                f"- Pattern '{rule.pattern}' found (Rule: {rule.id}, Severity: {rule.severity})"
+            )
 
     return "\n".join(findings)
 
@@ -209,7 +212,9 @@ async def evaluate_config_rules(ctx: RunContext[AgentDeps]) -> str:
             if rule.pattern and rule.expected_value:
                 actual_value = config_dict.get(rule.pattern)
                 if actual_value != rule.expected_value:
-                    findings.append(f"- Key '{rule.pattern}': expected '{rule.expected_value}', got '{actual_value}'")
+                    findings.append(
+                        f"- Key '{rule.pattern}': expected '{rule.expected_value}', got '{actual_value}'"
+                    )
                 else:
                     findings.append(f"- Key '{rule.pattern}': compliant")
     except json.JSONDecodeError as e:
@@ -240,13 +245,17 @@ async def evaluate_output_rules(ctx: RunContext[AgentDeps]) -> str:
             if rule.pattern in request.target_content:
                 findings.append(f"- Required pattern '{rule.pattern}' present")
             else:
-                findings.append(f"- **Missing**: Required pattern '{rule.pattern}' (Rule: {rule.id})")
+                findings.append(
+                    f"- **Missing**: Required pattern '{rule.pattern}' (Rule: {rule.id})"
+                )
 
         if rule.expected_value:
             if str(rule.expected_value) in request.target_content:
                 findings.append(f"- Expected value '{rule.expected_value}' present")
             else:
-                findings.append(f"- **Missing**: Expected value '{rule.expected_value}' (Rule: {rule.id})")
+                findings.append(
+                    f"- **Missing**: Expected value '{rule.expected_value}' (Rule: {rule.id})"
+                )
 
     return "\n".join(findings)
 
@@ -299,7 +308,12 @@ async def get_validation_standards(ctx: RunContext[AgentDeps]) -> str:
 @register_agent(
     agent_name="validator",
     agent_type="validator",
-    capabilities=["code_validation", "config_validation", "output_validation", "compliance_reporting"],
+    capabilities=[
+        "code_validation",
+        "config_validation",
+        "output_validation",
+        "compliance_reporting",
+    ],
     description="Compliance and validation agent",
 )
 class AgentValidator:
@@ -338,7 +352,9 @@ class AgentValidator:
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
-            agent_name=self.config.agent_name, task_id=task.task_id, metadata={"using_pydantic_ai": True}
+            agent_name=self.config.agent_name,
+            task_id=task.task_id,
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -409,7 +425,9 @@ class AgentValidator:
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=agent_result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -426,7 +444,9 @@ class AgentValidator:
             execution_time_ms = (time.time() - start_time) * 1000
             error_msg = f"Validation failed: {str(e)}"
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             await self.trace_logger.log_event(
                 event_type=TraceEventType.AGENT_ERROR,
@@ -445,7 +465,9 @@ class AgentValidator:
                 trace_id=self._current_trace_id,
             )
 
-    async def process_validation_request(self, request: ValidationRequest) -> ComplianceReport:
+    async def process_validation_request(
+        self, request: ValidationRequest
+    ) -> ComplianceReport:
         """
         Process validation request directly (legacy compatibility method).
 
@@ -495,9 +517,14 @@ class AgentValidator:
         target_content = input_data.get("target_content", input_data.get("content", ""))
         rules_data = input_data.get("rules", [])
 
-        rules = [ValidationRule(**rule) if isinstance(rule, dict) else rule for rule in rules_data]
+        rules = [
+            ValidationRule(**rule) if isinstance(rule, dict) else rule
+            for rule in rules_data
+        ]
 
-        return ValidationRequest(target_type=target_type, target_content=target_content, rules=rules)
+        return ValidationRequest(
+            target_type=target_type, target_content=target_content, rules=rules
+        )
 
     def _build_validation_prompt(self, request: ValidationRequest) -> str:
         """Build detailed validation prompt for LLM."""

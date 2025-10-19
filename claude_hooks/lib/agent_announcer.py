@@ -5,8 +5,7 @@ Provides colored, emoji-enhanced announcements when agents are activated.
 """
 
 import sys
-from typing import Dict, Optional
-
+from typing import Optional
 
 # Agent emoji mappings
 AGENT_EMOJIS = {
@@ -84,7 +83,9 @@ def announce_agent(
 
     if agent_purpose:
         # Truncate long purpose descriptions
-        purpose_short = agent_purpose[:60] + "..." if len(agent_purpose) > 60 else agent_purpose
+        purpose_short = (
+            agent_purpose[:60] + "..." if len(agent_purpose) > 60 else agent_purpose
+        )
         lines.append(f"{color}├─ Purpose: {purpose_short}{RESET}")
 
     # Closing line
@@ -107,7 +108,9 @@ def announce_meta_trigger(original_prompt: str, file=sys.stderr) -> None:
     emoji = get_emoji("agent-workflow-coordinator")
 
     # Truncate prompt if too long
-    prompt_short = original_prompt[:50] + "..." if len(original_prompt) > 50 else original_prompt
+    prompt_short = (
+        original_prompt[:50] + "..." if len(original_prompt) > 50 else original_prompt
+    )
 
     announcement = f"""
 {color}{BOLD}{emoji} Meta-Trigger Detected!{RESET}
@@ -147,7 +150,9 @@ def announce_intelligence_gathering(
     elif status == "timeout":
         msg = f"{color}  └─ ⚠️  Intelligence gathering timed out (continuing without){RESET}"
     elif status == "error":
-        msg = f"{color}  └─ ⚠️  Intelligence gathering failed (continuing without){RESET}"
+        msg = (
+            f"{color}  └─ ⚠️  Intelligence gathering failed (continuing without){RESET}"
+        )
     else:
         msg = f"{color}  └─ {status}{RESET}"
 

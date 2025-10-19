@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Phase 7 Schema Tests
+Agent Framework Schema Tests
 
-Comprehensive tests for Phase 7 database schema enhancements:
+Comprehensive tests for agent framework database schema enhancements:
 - Migration (up and down)
 - Python model validation
 - CRUD operations
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.integration
 # Import after ensuring database setup
 try:
     from agents.lib.persistence import CodegenPersistence
-    from agents.lib.schema_phase7 import (
+    from agents.lib.schema_agent_framework import (
         EventProcessingCreate,
         EventProcessingMetrics,
         FeedbackType,
@@ -95,7 +95,7 @@ class TestMigration:
 
     @pytest.mark.asyncio
     async def test_migration_tables_exist(self, persistence):
-        """Verify all Phase 7 tables exist after migration"""
+        """Verify all framework tables exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
             tables = await conn.fetch(
@@ -124,7 +124,7 @@ class TestMigration:
 
     @pytest.mark.asyncio
     async def test_migration_views_exist(self, persistence):
-        """Verify all Phase 7 views exist after migration"""
+        """Verify all framework views exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
             views = await conn.fetch(
@@ -148,7 +148,7 @@ class TestMigration:
 
     @pytest.mark.asyncio
     async def test_migration_functions_exist(self, persistence):
-        """Verify all Phase 7 functions exist after migration"""
+        """Verify all framework functions exist after migration"""
         pool = await persistence._ensure_pool()
         async with pool.acquire() as conn:
             functions = await conn.fetch(
@@ -165,7 +165,9 @@ class TestMigration:
             )
 
             function_names = [row["routine_name"] for row in functions]
-            assert len(function_names) == 2, f"Expected 2 functions, found {len(function_names)}"
+            assert (
+                len(function_names) == 2
+            ), f"Expected 2 functions, found {len(function_names)}"
 
 
 # =============================================================================
@@ -214,7 +216,10 @@ class TestMixinCompatibility:
         """Test retrieving mixin compatibility record"""
         # First create a record
         await persistence.update_mixin_compatibility(
-            mixin_a="CacheMixin", mixin_b="LoggingMixin", node_type="REDUCER", success=True
+            mixin_a="CacheMixin",
+            mixin_b="LoggingMixin",
+            node_type="REDUCER",
+            success=True,
         )
 
         # Retrieve it
@@ -249,7 +254,9 @@ class TestPatternFeedback:
     """Test pattern feedback logging operations"""
 
     @pytest.mark.asyncio
-    async def test_record_pattern_feedback_correct(self, persistence, sample_session_id):
+    async def test_record_pattern_feedback_correct(
+        self, persistence, sample_session_id
+    ):
         """Test recording correct pattern feedback"""
         start_time = time.time()
 
@@ -270,7 +277,9 @@ class TestPatternFeedback:
         ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
-    async def test_record_pattern_feedback_incorrect(self, persistence, sample_session_id):
+    async def test_record_pattern_feedback_incorrect(
+        self, persistence, sample_session_id
+    ):
         """Test recording incorrect pattern feedback"""
         result_id = await persistence.record_pattern_feedback(
             session_id=sample_session_id,
@@ -328,10 +337,15 @@ class TestPerformanceMetrics:
         ), f"Performance target exceeded: {duration_ms:.2f}ms > {ADJUSTED_PERFORMANCE_TARGET_MS:.0f}ms (base: {PERFORMANCE_TARGET_MS}ms, multiplier: {PERFORMANCE_MULTIPLIER}x)"
 
     @pytest.mark.asyncio
-    async def test_insert_performance_metric_minimal(self, persistence, sample_session_id):
+    async def test_insert_performance_metric_minimal(
+        self, persistence, sample_session_id
+    ):
         """Test inserting minimal performance metric"""
         await persistence.insert_performance_metric(
-            session_id=sample_session_id, node_type="COMPUTE", phase="template_load", duration_ms=50
+            session_id=sample_session_id,
+            node_type="COMPUTE",
+            phase="template_load",
+            duration_ms=50,
         )
 
         # Should succeed with minimal required fields
@@ -391,7 +405,9 @@ class TestTemplateCacheMetadata:
         start_time = time.time()
 
         # Record cache hit
-        await persistence.update_cache_metrics(template_name="compute_node_template", cache_hit=True)
+        await persistence.update_cache_metrics(
+            template_name="compute_node_template", cache_hit=True
+        )
 
         duration_ms = (time.time() - start_time) * 1000
 
@@ -412,7 +428,9 @@ class TestTemplateCacheMetadata:
         )
 
         # Record cache miss
-        await persistence.update_cache_metrics(template_name="reducer_node_template", cache_hit=False, load_time_ms=120)
+        await persistence.update_cache_metrics(
+            template_name="reducer_node_template", cache_hit=False, load_time_ms=120
+        )
 
         # Should succeed
 
@@ -586,10 +604,16 @@ class TestIntegration:
 
     @pytest.mark.asyncio
     async def test_full_codegen_workflow(self, persistence, sample_session_id):
-        """Test complete code generation workflow with all Phase 7 metrics"""
+        """Test complete code generation workflow with all framework metrics"""
 
         # 1. Record performance metrics for each phase
-        phases = ["prd_analysis", "template_load", "code_gen", "validation", "persistence"]
+        phases = [
+            "prd_analysis",
+            "template_load",
+            "code_gen",
+            "validation",
+            "persistence",
+        ]
         for phase in phases:
             await persistence.insert_performance_metric(
                 session_id=sample_session_id,
@@ -601,7 +625,10 @@ class TestIntegration:
 
         # 2. Update mixin compatibility
         await persistence.update_mixin_compatibility(
-            mixin_a="TransactionMixin", mixin_b="ErrorHandlingMixin", node_type="EFFECT", success=True
+            mixin_a="TransactionMixin",
+            mixin_b="ErrorHandlingMixin",
+            node_type="EFFECT",
+            success=True,
         )
 
         # 3. Record pattern feedback
@@ -621,11 +648,16 @@ class TestIntegration:
             file_path="/templates/effect.py",
             file_hash="hash123",
         )
-        await persistence.update_cache_metrics(template_name="effect_template", cache_hit=True)
+        await persistence.update_cache_metrics(
+            template_name="effect_template", cache_hit=True
+        )
 
         # 5. Record event processing
         await persistence.insert_event_processing_metric(
-            event_type="generation_complete", event_source="CodegenWorkflow", processing_duration_ms=500, success=True
+            event_type="generation_complete",
+            event_source="CodegenWorkflow",
+            processing_duration_ms=500,
+            success=True,
         )
 
         # Verify all data persisted

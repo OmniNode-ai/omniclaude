@@ -7,10 +7,10 @@ Target: < 50ms per event for production use.
 """
 
 import sys
-import json
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 import psycopg2
 from psycopg2.extras import Json
 
@@ -30,7 +30,10 @@ class HookEventLogger:
 
             db_password = os.getenv("DB_PASSWORD", "")
             connection_string = (
-                "host=localhost port=5436 " "dbname=omninode_bridge " "user=postgres " f"password={db_password}"
+                "host=localhost port=5436 "
+                "dbname=omninode_bridge "
+                "user=postgres "
+                f"password={db_password}"
             )
 
         self.connection_string = connection_string
@@ -136,7 +139,11 @@ class HookEventLogger:
         """
         metadata = {"hook_type": "PreToolUse", "correlation_id": correlation_id}
 
-        payload = {"tool_name": tool_name, "tool_input": tool_input, "quality_check": quality_check_result}
+        payload = {
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+            "quality_check": quality_check_result,
+        }
 
         return self.log_event(
             source="PreToolUse",
@@ -271,7 +278,9 @@ def get_logger() -> HookEventLogger:
 
 
 # Convenience functions for quick logging
-def log_pretooluse(tool_name: str, tool_input: Dict[str, Any], **kwargs) -> Optional[str]:
+def log_pretooluse(
+    tool_name: str, tool_input: Dict[str, Any], **kwargs
+) -> Optional[str]:
     """Quick log PreToolUse event."""
     return get_logger().log_pretooluse(tool_name, tool_input, **kwargs)
 
@@ -295,7 +304,12 @@ def log_hook_event(
 ) -> Optional[str]:
     """Quick log generic hook event."""
     return get_logger().log_event(
-        source=source, action=action, resource="workflow", resource_id=resource_id, payload=payload, metadata=metadata
+        source=source,
+        action=action,
+        resource="workflow",
+        resource_id=resource_id,
+        payload=payload,
+        metadata=metadata,
     )
 
 

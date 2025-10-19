@@ -6,11 +6,11 @@ Based on agent-contract-driven-generator.yaml configuration.
 """
 
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 
 class CoderAgent:
@@ -46,7 +46,10 @@ class CoderAgent:
         self._current_trace_id = await self.trace_logger.start_agent_trace(
             agent_name=self.config.agent_name,
             task_id=task.task_id,
-            metadata={"domain": self.config.agent_domain, "input_data": task.input_data},
+            metadata={
+                "domain": self.config.agent_domain,
+                "input_data": task.input_data,
+            },
         )
 
         try:
@@ -84,11 +87,17 @@ class CoderAgent:
                 for key, context_item in pre_gathered_context.items():
                     context_type = context_item.get("type")
                     if context_type == "rag" and "domain" in key:
-                        intelligence["domain_patterns"] = context_item.get("content", {})
+                        intelligence["domain_patterns"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "pattern":
-                        intelligence["pattern_examples"] = context_item.get("content", {})
+                        intelligence["pattern_examples"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "file":
-                        intelligence.setdefault("context_files", []).append(context_item.get("content", ""))
+                        intelligence.setdefault("context_files", []).append(
+                            context_item.get("content", "")
+                        )
 
                 await self.trace_logger.log_event(
                     event_type=TraceEventType.AGENT_START,
@@ -111,7 +120,8 @@ class CoderAgent:
                 try:
                     # Gather domain-specific intelligence
                     domain_intel = await self.mcp_client.perform_rag_query(
-                        query=self.config.domain_query or "contract-driven development patterns",
+                        query=self.config.domain_query
+                        or "contract-driven development patterns",
                         context="api_development",
                         match_count=self.config.match_count,
                     )
@@ -119,7 +129,8 @@ class CoderAgent:
 
                     # Gather implementation intelligence
                     impl_intel = await self.mcp_client.perform_rag_query(
-                        query=self.config.implementation_query or "API contract validation",
+                        query=self.config.implementation_query
+                        or "API contract validation",
                         context="api_development",
                         match_count=self.config.match_count,
                     )
@@ -170,7 +181,9 @@ class CoderAgent:
                 try:
                     # Assess code quality
                     quality_result = await self.mcp_client.assess_code_quality(
-                        content=generated_code, source_path=f"generated_{node_type.lower()}.py", language=language
+                        content=generated_code,
+                        source_path=f"generated_{node_type.lower()}.py",
+                        language=language,
                     )
                     quality_metrics = quality_result
 
@@ -219,7 +232,9 @@ class CoderAgent:
 
             # End trace successfully
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="completed", result=result.model_dump()
+                trace_id=self._current_trace_id,
+                status="completed",
+                result=result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -246,7 +261,9 @@ class CoderAgent:
                 metadata={"error": str(e)},
             )
 
-            await self.trace_logger.end_agent_trace(trace_id=self._current_trace_id, status="failed", error=error_msg)
+            await self.trace_logger.end_agent_trace(
+                trace_id=self._current_trace_id, status="failed", error=error_msg
+            )
 
             return AgentResult(
                 task_id=task.task_id,
@@ -299,7 +316,9 @@ class CoderAgent:
             for field_name, field_spec in input_model.items():
                 field_type = field_spec.get("type", "Any")
                 field_desc = field_spec.get("description", "")
-                code_parts.append(f'    {field_name}: {field_type} = Field(description="{field_desc}")')
+                code_parts.append(
+                    f'    {field_name}: {field_type} = Field(description="{field_desc}")'
+                )
         else:
             code_parts.append("    pass")
 
@@ -312,7 +331,9 @@ class CoderAgent:
             for field_name, field_spec in output_model.items():
                 field_type = field_spec.get("type", "Any")
                 field_desc = field_spec.get("description", "")
-                code_parts.append(f'    {field_name}: {field_type} = Field(description="{field_desc}")')
+                code_parts.append(
+                    f'    {field_name}: {field_type} = Field(description="{field_desc}")'
+                )
         else:
             code_parts.append("    pass")
 
@@ -326,7 +347,9 @@ class CoderAgent:
         code_parts.append(f"    {description}")
         code_parts.append('    """')
         code_parts.append("")
-        code_parts.append(f"    async def execute(self, input_data: {contract_name}Input) -> {contract_name}Output:")
+        code_parts.append(
+            f"    async def execute(self, input_data: {contract_name}Input) -> {contract_name}Output:"
+        )
         code_parts.append('        """')
         code_parts.append(f"        Execute {node_type.lower()} operation.")
         code_parts.append("        ")
@@ -337,7 +360,9 @@ class CoderAgent:
         code_parts.append("            Validated output model")
         code_parts.append('        """')
         code_parts.append(f"        # TODO: Implement {node_type.lower()} logic")
-        code_parts.append(f"        # Intelligence gathered: {len(intelligence)} sources")
+        code_parts.append(
+            f"        # Intelligence gathered: {len(intelligence)} sources"
+        )
         code_parts.append("        ")
         code_parts.append("        # Placeholder implementation")
         code_parts.append(f"        return {contract_name}Output()")

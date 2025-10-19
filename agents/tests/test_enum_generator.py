@@ -5,14 +5,19 @@ Test Enum Generator
 Comprehensive tests for Phase 4 enum generation.
 """
 
-import pytest
 import json
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
+
+import pytest
+from omnibase_core.errors import OnexError
 
 from agents.lib.enum_generator import EnumGenerator, EnumValue, GeneratedEnum
-from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimpleParsedPRD, SimpleDecompositionResult
-from omnibase_core.errors import OnexError
+from agents.lib.simple_prd_analyzer import (
+    SimpleDecompositionResult,
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+)
 
 
 class TestEnumValue:
@@ -145,7 +150,9 @@ class TestEnumGenerator:
         assert "DELETE" in value_names
         assert "SEARCH" in value_names or "READ" in value_names
 
-    def test_generate_operation_type_enum_with_additional_operations(self, generator, sample_prd_analysis):
+    def test_generate_operation_type_enum_with_additional_operations(
+        self, generator, sample_prd_analysis
+    ):
         """Test operation type enum with additional operations"""
         result = generator.generate_operation_type_enum(
             prd_analysis=sample_prd_analysis,
@@ -175,16 +182,21 @@ class TestEnumGenerator:
         assert "COMPLETED" in value_names
         assert "FAILED" in value_names
 
-    def test_generate_status_enum_with_prd_analysis(self, generator, sample_prd_analysis):
+    def test_generate_status_enum_with_prd_analysis(
+        self, generator, sample_prd_analysis
+    ):
         """Test status enum generation with PRD analysis"""
-        result = generator.generate_status_enum(service_name="user_management", prd_analysis=sample_prd_analysis)
+        result = generator.generate_status_enum(
+            service_name="user_management", prd_analysis=sample_prd_analysis
+        )
 
         assert len(result.values) >= 5
 
     def test_generate_status_enum_with_additional_statuses(self, generator):
         """Test status enum with additional custom statuses"""
         result = generator.generate_status_enum(
-            service_name="user_management", additional_statuses=["approved", "rejected", "suspended"]
+            service_name="user_management",
+            additional_statuses=["approved", "rejected", "suspended"],
         )
 
         value_names = {v.name for v in result.values}
@@ -194,7 +206,9 @@ class TestEnumGenerator:
 
     def test_infer_operation_enum_values(self, generator, sample_prd_analysis):
         """Test operation enum value inference from PRD"""
-        values = generator.infer_enum_values(prd_analysis=sample_prd_analysis, enum_type="operation")
+        values = generator.infer_enum_values(
+            prd_analysis=sample_prd_analysis, enum_type="operation"
+        )
 
         assert len(values) > 0
         value_names = {v.name for v in values}
@@ -228,7 +242,9 @@ class TestEnumGenerator:
             word_count=50,
         )
 
-        decomposition_result = SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True)
+        decomposition_result = SimpleDecompositionResult(
+            tasks=[], total_tasks=0, verification_successful=True
+        )
 
         prd_analysis = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -244,7 +260,9 @@ class TestEnumGenerator:
             analysis_timestamp=datetime.utcnow(),
         )
 
-        values = generator.infer_enum_values(prd_analysis=prd_analysis, enum_type="status")
+        values = generator.infer_enum_values(
+            prd_analysis=prd_analysis, enum_type="status"
+        )
 
         value_names = {v.name for v in values}
         assert "PENDING" in value_names
@@ -479,7 +497,9 @@ class EnumTestOperationType(str, Enum):
                 word_count=50,
             )
 
-            decomposition_result = SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True)
+            decomposition_result = SimpleDecompositionResult(
+                tasks=[], total_tasks=0, verification_successful=True
+            )
 
             prd_analysis = SimplePRDAnalysisResult(
                 session_id=uuid4(),
@@ -525,7 +545,9 @@ class TestEnumGeneratorEdgeCases:
             word_count=0,
         )
 
-        decomposition_result = SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True)
+        decomposition_result = SimpleDecompositionResult(
+            tasks=[], total_tasks=0, verification_successful=True
+        )
 
         prd_analysis = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -542,7 +564,9 @@ class TestEnumGeneratorEdgeCases:
         )
 
         # Should still generate at least CRUD operations
-        result = generator.generate_operation_type_enum(prd_analysis=prd_analysis, service_name="minimal_service")
+        result = generator.generate_operation_type_enum(
+            prd_analysis=prd_analysis, service_name="minimal_service"
+        )
 
         assert len(result.values) >= 4  # At least CREATE, READ, UPDATE, DELETE
 
@@ -561,7 +585,9 @@ class TestEnumGeneratorEdgeCases:
             word_count=10,
         )
 
-        decomposition_result = SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True)
+        decomposition_result = SimpleDecompositionResult(
+            tasks=[], total_tasks=0, verification_successful=True
+        )
 
         prd_analysis = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -578,11 +604,15 @@ class TestEnumGeneratorEdgeCases:
         )
 
         # Test with hyphens
-        result = generator.generate_operation_type_enum(prd_analysis=prd_analysis, service_name="user-management")
+        result = generator.generate_operation_type_enum(
+            prd_analysis=prd_analysis, service_name="user-management"
+        )
         assert "UserManagement" in result.class_name
 
         # Test with mixed case
-        result = generator.generate_operation_type_enum(prd_analysis=prd_analysis, service_name="UserManagement")
+        result = generator.generate_operation_type_enum(
+            prd_analysis=prd_analysis, service_name="UserManagement"
+        )
         assert "UserManagement" in result.class_name
 
     def test_duplicate_enum_values_are_deduplicated(self, generator):
@@ -606,7 +636,9 @@ class TestEnumGeneratorEdgeCases:
             word_count=50,
         )
 
-        decomposition_result = SimpleDecompositionResult(tasks=[], total_tasks=0, verification_successful=True)
+        decomposition_result = SimpleDecompositionResult(
+            tasks=[], total_tasks=0, verification_successful=True
+        )
 
         prd_analysis = SimplePRDAnalysisResult(
             session_id=uuid4(),
@@ -622,7 +654,9 @@ class TestEnumGeneratorEdgeCases:
             analysis_timestamp=datetime.utcnow(),
         )
 
-        result = generator.generate_operation_type_enum(prd_analysis=prd_analysis, service_name="test_service")
+        result = generator.generate_operation_type_enum(
+            prd_analysis=prd_analysis, service_name="test_service"
+        )
 
         # Count occurrences of CREATE in values
         create_count = sum(1 for v in result.values if v.name == "CREATE")

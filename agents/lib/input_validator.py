@@ -5,12 +5,12 @@ Comprehensive input validation, sanitization, and security checks for
 user inputs to prevent malicious content and ensure data quality.
 """
 
-import re
 import html
 import json
-from typing import Any, Dict, List, Optional, Tuple, Union
+import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 class ValidationSeverity(Enum):
@@ -80,22 +80,37 @@ class InputValidator:
         """Setup default validation rules."""
         self.rules = {
             InputType.USER_PROMPT: [
-                ValidationRule(name="max_length", max_length=10000, description="User prompt too long"),
-                ValidationRule(name="min_length", min_length=1, description="User prompt too short"),
+                ValidationRule(
+                    name="max_length",
+                    max_length=10000,
+                    description="User prompt too long",
+                ),
+                ValidationRule(
+                    name="min_length", min_length=1, description="User prompt too short"
+                ),
                 ValidationRule(
                     name="no_script_tags",
-                    forbidden_patterns=[r"<script[^>]*>.*?</script>", r"<script[^>]*/>"],
+                    forbidden_patterns=[
+                        r"<script[^>]*>.*?</script>",
+                        r"<script[^>]*/>",
+                    ],
                     description="Script tags not allowed",
                 ),
                 ValidationRule(
                     name="no_executable_content",
-                    forbidden_patterns=[r"javascript:", r"data:text/html", r"vbscript:"],
+                    forbidden_patterns=[
+                        r"javascript:",
+                        r"data:text/html",
+                        r"vbscript:",
+                    ],
                     description="Executable content not allowed",
                 ),
             ],
             InputType.TASK_DATA: [
                 ValidationRule(name="valid_json", description="Must be valid JSON"),
-                ValidationRule(name="max_size", max_length=50000, description="Task data too large"),
+                ValidationRule(
+                    name="max_size", max_length=50000, description="Task data too large"
+                ),
             ],
             InputType.WORKSPACE_PATH: [
                 ValidationRule(
@@ -104,12 +119,18 @@ class InputValidator:
                     description="Path traversal not allowed",
                 ),
                 ValidationRule(
-                    name="valid_path", pattern=r"^[a-zA-Z0-9_\-/\\:\.]+$", description="Invalid path characters"
+                    name="valid_path",
+                    pattern=r"^[a-zA-Z0-9_\-/\\:\.]+$",
+                    description="Invalid path characters",
                 ),
             ],
             InputType.RAG_QUERY: [
-                ValidationRule(name="max_length", max_length=1000, description="RAG query too long"),
-                ValidationRule(name="min_length", min_length=3, description="RAG query too short"),
+                ValidationRule(
+                    name="max_length", max_length=1000, description="RAG query too long"
+                ),
+                ValidationRule(
+                    name="min_length", min_length=3, description="RAG query too short"
+                ),
                 ValidationRule(
                     name="no_sql_injection",
                     forbidden_patterns=[
@@ -170,7 +191,14 @@ class InputValidator:
                 r"(\b(UNION|OR|AND)\b.*\b(SELECT|INSERT|UPDATE|DELETE)\b)",
                 r"(\b(UNION|OR|AND)\b.*\b(SELECT|INSERT|UPDATE|DELETE)\b)",
             ],
-            "path_traversal": [r"\.\./", r"\.\.\\", r"//", r"\\\\", r"%2e%2e%2f", r"%2e%2e%5c"],
+            "path_traversal": [
+                r"\.\./",
+                r"\.\.\\",
+                r"//",
+                r"\\\\",
+                r"%2e%2e%2f",
+                r"%2e%2e%5c",
+            ],
             "command_injection": [
                 r"[;&|`$]",
                 r"(\b(rm|del|format|fdisk|mkfs)\b)",
@@ -178,11 +206,21 @@ class InputValidator:
                 r"(\b(wget|curl|nc|netcat)\b)",
                 r"(\b(python|perl|ruby|php|node)\b)",
             ],
-            "malicious_urls": [r"javascript:", r"data:", r"vbscript:", r"file:", r"ftp:", r"gopher:"],
+            "malicious_urls": [
+                r"javascript:",
+                r"data:",
+                r"vbscript:",
+                r"file:",
+                r"ftp:",
+                r"gopher:",
+            ],
         }
 
     async def validate_and_sanitize(
-        self, user_input: Union[str, Dict, List], input_type: InputType, strict_mode: bool = True
+        self,
+        user_input: Union[str, Dict, List],
+        input_type: InputType,
+        strict_mode: bool = True,
     ) -> ValidationResult:
         """
         Validate and sanitize user input.
@@ -200,7 +238,9 @@ class InputValidator:
         errors = []
         metadata = {
             "input_type": input_type.value,
-            "original_length": len(str(user_input)) if isinstance(user_input, str) else 0,
+            "original_length": (
+                len(str(user_input)) if isinstance(user_input, str) else 0
+            ),
             "validation_timestamp": None,
         }
 
@@ -295,7 +335,9 @@ class InputValidator:
 
         return threats
 
-    def _sanitize_input(self, user_input: Union[str, Dict, List], input_type: InputType) -> Any:
+    def _sanitize_input(
+        self, user_input: Union[str, Dict, List], input_type: InputType
+    ) -> Any:
         """Sanitize input based on type."""
         if isinstance(user_input, str):
             return self._sanitize_string(user_input, input_type)
@@ -320,7 +362,12 @@ class InputValidator:
         # Type-specific sanitization
         if input_type == InputType.USER_PROMPT:
             # Remove potential script tags
-            sanitized = re.sub(r"<script[^>]*>.*?</script>", "", sanitized, flags=re.IGNORECASE | re.DOTALL)
+            sanitized = re.sub(
+                r"<script[^>]*>.*?</script>",
+                "",
+                sanitized,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
             sanitized = re.sub(r"<script[^>]*/>", "", sanitized, flags=re.IGNORECASE)
 
         elif input_type == InputType.WORKSPACE_PATH:
@@ -332,7 +379,10 @@ class InputValidator:
         elif input_type == InputType.RAG_QUERY:
             # Remove SQL injection patterns
             sanitized = re.sub(
-                r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\b)", "", sanitized, flags=re.IGNORECASE
+                r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\b)",
+                "",
+                sanitized,
+                flags=re.IGNORECASE,
             )
             sanitized = re.sub(r"[;&|`$]", "", sanitized)
 
@@ -440,7 +490,9 @@ class InputValidator:
         """Get validation statistics."""
         return {
             "rules_configured": sum(len(rules) for rules in self.rules.values()),
-            "security_patterns": sum(len(patterns) for patterns in self.security_patterns.values()),
+            "security_patterns": sum(
+                len(patterns) for patterns in self.security_patterns.values()
+            ),
             "input_types_supported": len(self.rules),
             "threat_types_detected": len(self.security_patterns),
         }
@@ -455,7 +507,9 @@ async def validate_and_sanitize(
     user_input: Union[str, Dict, List], input_type: InputType, strict_mode: bool = True
 ) -> ValidationResult:
     """Validate and sanitize user input."""
-    return await input_validator.validate_and_sanitize(user_input, input_type, strict_mode)
+    return await input_validator.validate_and_sanitize(
+        user_input, input_type, strict_mode
+    )
 
 
 def sanitize_prompt(prompt: str) -> str:

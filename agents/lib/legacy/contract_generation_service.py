@@ -75,39 +75,75 @@ class GeneratedContract:
 class ModelContractGenerationRequest(BaseModel):
     """Request model for contract generation."""
 
-    task_title: str = Field(..., description="Title of the task for contract generation")
+    task_title: str = Field(
+        ..., description="Title of the task for contract generation"
+    )
     task_description: str = Field(..., description="Detailed description of the task")
-    node_type: str = Field(..., description="Target node type (COMPUTE, EFFECT, REDUCER, ORCHESTRATOR)")
-    dependencies: List[Dict[str, Any]] = Field(default_factory=list, description="Analyzed dependencies")
-    method_signatures: List[Dict[str, Any]] = Field(default_factory=list, description="Required method signatures")
-    infrastructure_context: Dict[str, Any] = Field(default_factory=dict, description="Infrastructure context")
-    project_context: Dict[str, Any] = Field(default_factory=dict, description="Project context")
+    node_type: str = Field(
+        ..., description="Target node type (COMPUTE, EFFECT, REDUCER, ORCHESTRATOR)"
+    )
+    dependencies: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Analyzed dependencies"
+    )
+    method_signatures: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Required method signatures"
+    )
+    infrastructure_context: Dict[str, Any] = Field(
+        default_factory=dict, description="Infrastructure context"
+    )
+    project_context: Dict[str, Any] = Field(
+        default_factory=dict, description="Project context"
+    )
     contract_types: List[str] = Field(
         default_factory=lambda: ["main_contract"],
         description="Types of contracts to generate",
     )
-    include_cli_interface: bool = Field(default=True, description="Whether to include CLI interface")
-    include_capabilities: bool = Field(default=True, description="Whether to include execution capabilities")
-    validation_level: str = Field(default="strict", description="Validation level: basic, standard, strict")
+    include_cli_interface: bool = Field(
+        default=True, description="Whether to include CLI interface"
+    )
+    include_capabilities: bool = Field(
+        default=True, description="Whether to include execution capabilities"
+    )
+    validation_level: str = Field(
+        default="strict", description="Validation level: basic, standard, strict"
+    )
 
 
 class ModelContractGenerationResponse(BaseModel):
     """Response model for contract generation."""
 
     success: bool = Field(..., description="Whether contract generation was successful")
-    contracts: List[Dict[str, Any]] = Field(default_factory=list, description="Generated contracts")
-    subcontracts: List[Dict[str, Any]] = Field(default_factory=list, description="Generated subcontracts")
+    contracts: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Generated contracts"
+    )
+    subcontracts: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Generated subcontracts"
+    )
     total_contracts: int = Field(0, description="Total number of contracts generated")
-    validation_results: Dict[str, Any] = Field(default_factory=dict, description="Contract validation results")
+    validation_results: Dict[str, Any] = Field(
+        default_factory=dict, description="Contract validation results"
+    )
     complexity_analysis: Dict[str, Any] = Field(
         default_factory=dict, description="Complexity analysis of generated contracts"
     )
-    schema_definitions: Dict[str, Any] = Field(default_factory=dict, description="Shared schema definitions")
-    error_codes: Dict[str, Any] = Field(default_factory=dict, description="Comprehensive error code definitions")
-    recommendations: List[str] = Field(default_factory=list, description="Implementation recommendations")
-    warnings: List[str] = Field(default_factory=list, description="Contract generation warnings")
-    error_message: Optional[str] = Field(None, description="Error message if generation failed")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Generation metadata")
+    schema_definitions: Dict[str, Any] = Field(
+        default_factory=dict, description="Shared schema definitions"
+    )
+    error_codes: Dict[str, Any] = Field(
+        default_factory=dict, description="Comprehensive error code definitions"
+    )
+    recommendations: List[str] = Field(
+        default_factory=list, description="Implementation recommendations"
+    )
+    warnings: List[str] = Field(
+        default_factory=list, description="Contract generation warnings"
+    )
+    error_message: Optional[str] = Field(
+        None, description="Error message if generation failed"
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Generation metadata"
+    )
 
 
 class ContractGenerationService:
@@ -127,7 +163,9 @@ class ContractGenerationService:
             self.responder_chain = SmartResponderChain()
         return self.responder_chain
 
-    async def generate_contracts(self, request: ModelContractGenerationRequest) -> ModelContractGenerationResponse:
+    async def generate_contracts(
+        self, request: ModelContractGenerationRequest
+    ) -> ModelContractGenerationResponse:
         """
         Generate comprehensive contracts and subcontracts for node implementation.
 
@@ -138,7 +176,9 @@ class ContractGenerationService:
             ModelContractGenerationResponse with generated contracts
         """
         try:
-            self.logger.info(f"Starting contract generation for task: {request.task_title}")
+            self.logger.info(
+                f"Starting contract generation for task: {request.task_title}"
+            )
 
             generation_context = ContractGenerationContext(
                 task_title=request.task_title,
@@ -151,22 +191,34 @@ class ContractGenerationService:
             )
 
             # Step 1: Generate main contract
-            main_contract = await self._generate_main_contract(generation_context, request)
+            main_contract = await self._generate_main_contract(
+                generation_context, request
+            )
 
             # Step 2: Generate subcontracts
-            subcontracts = await self._generate_subcontracts(generation_context, main_contract)
+            subcontracts = await self._generate_subcontracts(
+                generation_context, main_contract
+            )
 
             # Step 3: Generate shared schema definitions
-            schema_definitions = await self._generate_shared_schemas(generation_context, main_contract)
+            schema_definitions = await self._generate_shared_schemas(
+                generation_context, main_contract
+            )
 
             # Step 4: Generate comprehensive error codes
-            error_codes = await self._generate_error_codes(generation_context, main_contract)
+            error_codes = await self._generate_error_codes(
+                generation_context, main_contract
+            )
 
             # Step 5: Validate generated contracts
-            validation_results = await self._validate_contracts(main_contract, subcontracts)
+            validation_results = await self._validate_contracts(
+                main_contract, subcontracts
+            )
 
             # Step 6: Analyze complexity
-            complexity_analysis = await self._analyze_contract_complexity(main_contract, subcontracts)
+            complexity_analysis = await self._analyze_contract_complexity(
+                main_contract, subcontracts
+            )
 
             # Step 7: Generate recommendations
             recommendations = await self._generate_contract_recommendations(
@@ -174,7 +226,9 @@ class ContractGenerationService:
             )
 
             contracts = [self._serialize_contract(main_contract)]
-            serialized_subcontracts = [self._serialize_contract(sc) for sc in subcontracts]
+            serialized_subcontracts = [
+                self._serialize_contract(sc) for sc in subcontracts
+            ]
 
             response = ModelContractGenerationResponse(
                 success=True,
@@ -437,13 +491,17 @@ Focus on practical, implementable schemas that will support robust node developm
                 definitions=(
                     {
                         name: ModelContractSchema(**schema_data)
-                        for name, schema_data in contract_data.get("definitions", {}).items()
+                        for name, schema_data in contract_data.get(
+                            "definitions", {}
+                        ).items()
                     }
                     if contract_data.get("definitions")
                     else None
                 ),
                 cli_interface=(
-                    ModelContractCLI(**contract_data["cli_interface"]) if contract_data.get("cli_interface") else None
+                    ModelContractCLI(**contract_data["cli_interface"])
+                    if contract_data.get("cli_interface")
+                    else None
                 ),
                 execution_capabilities=(
                     ModelContractCapabilities(**contract_data["execution_capabilities"])
@@ -487,19 +545,26 @@ Focus on practical, implementable schemas that will support robust node developm
         complex_deps = [
             dep
             for dep in context.dependencies
-            if dep.get("criticality") == "critical" and dep.get("dependency_type") == "internal"
+            if dep.get("criticality") == "critical"
+            and dep.get("dependency_type") == "internal"
         ]
 
         for dep in complex_deps:
-            subcontract = await self._generate_dependency_subcontract(context, dep, main_contract)
+            subcontract = await self._generate_dependency_subcontract(
+                context, dep, main_contract
+            )
             if subcontract:
                 subcontracts.append(subcontract)
 
         # Generate interface subcontracts for async operations
-        async_methods = [sig for sig in context.method_signatures if sig.get("is_async", False)]
+        async_methods = [
+            sig for sig in context.method_signatures if sig.get("is_async", False)
+        ]
 
         if len(async_methods) > 3:  # Generate async interface contract
-            async_contract = await self._generate_async_interface_contract(context, async_methods)
+            async_contract = await self._generate_async_interface_contract(
+                context, async_methods
+            )
             if async_contract:
                 subcontracts.append(async_contract)
 
@@ -572,12 +637,16 @@ Focus on practical, implementable schemas that will support robust node developm
                 validation_passed=True,
                 generation_metadata={
                     "dependency_name": dependency["name"],
-                    "integration_pattern": dependency.get("integration_pattern", "unknown"),
+                    "integration_pattern": dependency.get(
+                        "integration_pattern", "unknown"
+                    ),
                 },
             )
 
         except Exception as e:
-            self.logger.error(f"Failed to generate subcontract for {dependency['name']}: {e}")
+            self.logger.error(
+                f"Failed to generate subcontract for {dependency['name']}: {e}"
+            )
             return None
 
     async def _generate_async_interface_contract(
@@ -787,9 +856,9 @@ Focus on practical, implementable schemas that will support robust node developm
             validation_results["subcontracts"].append(subcontract_validation)
 
         # Update overall validation status
-        validation_results["overall_passed"] = validation_results["main_contract"]["valid"] and all(
-            sc["valid"] for sc in validation_results["subcontracts"]
-        )
+        validation_results["overall_passed"] = validation_results["main_contract"][
+            "valid"
+        ] and all(sc["valid"] for sc in validation_results["subcontracts"])
 
         return validation_results
 
@@ -799,21 +868,32 @@ Focus on practical, implementable schemas that will support robust node developm
         """Analyze the complexity of generated contracts."""
 
         # Calculate complexity metrics
-        input_properties = len(main_contract.contract_content.input_state.properties or {})
-        output_properties = len(main_contract.contract_content.output_state.properties or {})
+        input_properties = len(
+            main_contract.contract_content.input_state.properties or {}
+        )
+        output_properties = len(
+            main_contract.contract_content.output_state.properties or {}
+        )
         error_codes = len(main_contract.contract_content.error_codes)
         subcontract_count = len(subcontracts)
 
         # Simple complexity scoring
         complexity_score = min(
             1.0,
-            (input_properties * 0.1 + output_properties * 0.1 + error_codes * 0.05 + subcontract_count * 0.2) / 10,
+            (
+                input_properties * 0.1
+                + output_properties * 0.1
+                + error_codes * 0.05
+                + subcontract_count * 0.2
+            )
+            / 10,
         )
 
         return {
             "overall_complexity": complexity_score,
             "main_contract_complexity": main_contract.complexity_score,
-            "subcontract_complexity": sum(sc.complexity_score for sc in subcontracts) / max(len(subcontracts), 1),
+            "subcontract_complexity": sum(sc.complexity_score for sc in subcontracts)
+            / max(len(subcontracts), 1),
             "metrics": {
                 "input_properties": input_properties,
                 "output_properties": output_properties,
@@ -847,13 +927,19 @@ Focus on practical, implementable schemas that will support robust node developm
 
         input_props = complexity_analysis["metrics"]["input_properties"]
         if input_props > 20:
-            recommendations.append("Complex input schema - consider using nested objects or optional parameter groups")
+            recommendations.append(
+                "Complex input schema - consider using nested objects or optional parameter groups"
+            )
 
         # Node type specific recommendations
         if context.node_type == "COMPUTE":
-            recommendations.append("Implement proper timeout handling and resource management for compute operations")
+            recommendations.append(
+                "Implement proper timeout handling and resource management for compute operations"
+            )
         elif context.node_type == "EFFECT":
-            recommendations.append("Ensure idempotent operations and proper rollback mechanisms for side effects")
+            recommendations.append(
+                "Ensure idempotent operations and proper rollback mechanisms for side effects"
+            )
 
         return recommendations
 
@@ -893,7 +979,9 @@ Focus on practical, implementable schemas that will support robust node developm
         else:
             return "highly_complex"
 
-    def _format_dependencies_for_prompt(self, dependencies: List[Dict[str, Any]]) -> str:
+    def _format_dependencies_for_prompt(
+        self, dependencies: List[Dict[str, Any]]
+    ) -> str:
         """Format dependencies for inclusion in prompts."""
         if not dependencies:
             return "No dependencies analyzed"
@@ -910,7 +998,9 @@ Focus on practical, implementable schemas that will support robust node developm
 
         return "\n".join(formatted)
 
-    def _format_method_signatures_for_prompt(self, signatures: List[Dict[str, Any]]) -> str:
+    def _format_method_signatures_for_prompt(
+        self, signatures: List[Dict[str, Any]]
+    ) -> str:
         """Format method signatures for inclusion in prompts."""
         if not signatures:
             return "No method signatures analyzed"
@@ -927,7 +1017,9 @@ Focus on practical, implementable schemas that will support robust node developm
 
         return "\n".join(formatted)
 
-    def _create_fallback_contract(self, context: ContractGenerationContext) -> GeneratedContract:
+    def _create_fallback_contract(
+        self, context: ContractGenerationContext
+    ) -> GeneratedContract:
         """Create a minimal fallback contract when generation fails."""
 
         # Create basic contract structure
@@ -939,7 +1031,9 @@ Focus on practical, implementable schemas that will support robust node developm
 
         input_schema = ModelContractSchema(
             type="object",
-            properties={"input": {"type": "object", "description": "Task input parameters"}},
+            properties={
+                "input": {"type": "object", "description": "Task input parameters"}
+            },
             required=["input"],
         )
 

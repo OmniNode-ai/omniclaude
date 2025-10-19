@@ -16,11 +16,23 @@ from ..utils.validators import (
 
 @click.command("performance")
 @click.option("--query", "-q", required=True, help="Query text that was routed")
-@click.option("--duration", "-d", type=int, required=True, help="Routing duration in milliseconds")
-@click.option("--cache-hit/--cache-miss", default=False, help="Whether result was from cache")
+@click.option(
+    "--duration", "-d", type=int, required=True, help="Routing duration in milliseconds"
+)
+@click.option(
+    "--cache-hit/--cache-miss", default=False, help="Whether result was from cache"
+)
 @click.option("--strategy", "-s", required=True, help="Trigger match strategy used")
-@click.option("--confidence-breakdown", "-c", type=str, default="{}", help="JSON object with confidence breakdown")
-@click.option("--candidates", "-n", type=int, default=1, help="Number of candidates evaluated")
+@click.option(
+    "--confidence-breakdown",
+    "-c",
+    type=str,
+    default="{}",
+    help="JSON object with confidence breakdown",
+)
+@click.option(
+    "--candidates", "-n", type=int, default=1, help="Number of candidates evaluated"
+)
 def performance(
     query: str,
     duration: int,
@@ -78,7 +90,9 @@ def performance(
         cache_status = "HIT" if cache_hit else "MISS"
         cache_color = "cyan" if cache_hit else "yellow"
 
-        click.secho("✓ Performance metrics recorded successfully", fg="green", bold=True)
+        click.secho(
+            "✓ Performance metrics recorded successfully", fg="green", bold=True
+        )
         click.echo(f"  ID: {result['id']}")
         click.echo(f"  Duration: {duration}ms")
         click.secho(f"  Cache: {cache_status}", fg=cache_color)
