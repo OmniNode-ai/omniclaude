@@ -19,24 +19,25 @@ Test Coverage:
 - Error handling and recovery
 """
 
-import pytest
-
-# Mark all tests in this module as integration tests (require database)
-pytestmark = pytest.mark.integration
 import tempfile
 import time
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 # Import all agent framework components
 from agents.lib.persistence import CodegenPersistence
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 
 try:
     from agents.lib.codegen_workflow import CodegenWorkflow
 except ImportError:
     CodegenWorkflow = None  # May not be available
 try:
-    from agents.lib.monitoring import Metric, MetricType, MonitoringSystem
+    from agents.lib.monitoring import MetricType, MonitoringSystem
 
     # Helper functions
     _monitoring_system = MonitoringSystem()
@@ -65,7 +66,7 @@ except ImportError:
     get_monitoring_system = None
 
 try:
-    from agents.lib.health_checker import HealthChecker, HealthStatus
+    from agents.lib.health_checker import HealthChecker
 
     _health_checker = HealthChecker()
 
@@ -79,9 +80,9 @@ except ImportError:
     check_system_health = None
     get_overall_health_status = None
 
-from agents.lib.log_context import async_log_context
-from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.structured_logger import get_logger
+from agents.lib.log_context import async_log_context  # noqa: E402
+from agents.lib.omninode_template_engine import OmniNodeTemplateEngine  # noqa: E402
+from agents.lib.structured_logger import get_logger  # noqa: E402
 
 
 # Test fixtures

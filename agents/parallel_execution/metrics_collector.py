@@ -795,7 +795,7 @@ class RouterMetricsCollector:
                     std = stdev(recent_values)
                     cv = std / current_mean if current_mean > 0 else 0
                     confidence *= max(0, 1 - cv)
-                except:
+                except Exception:
                     pass
 
             # Generate recommendations

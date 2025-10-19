@@ -27,7 +27,6 @@ sys.path.insert(0, str(HOOKS_LIB_PATH))
 
 try:
     from agent_invoker import AgentInvoker
-    from agent_pathway_detector import AgentPathwayDetector
 except ImportError as e:
     print(
         json.dumps(

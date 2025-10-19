@@ -25,20 +25,14 @@ pytestmark = pytest.mark.integration
 try:
     from agents.lib.persistence import CodegenPersistence
     from agents.lib.schema_agent_framework import (
-        EventProcessingCreate,
         EventProcessingMetrics,
         FeedbackType,
-        GenerationPerformanceCreate,
         GenerationPerformanceMetrics,
         GenerationPhase,
-        MixinCompatibilityCreate,
         MixinCompatibilityMatrix,
         NodeType,
-        PatternFeedbackCreate,
         PatternFeedbackLog,
-        TemplateCacheCreate,
         TemplateCacheMetadata,
-        TemplateCacheUpdate,
         TemplateType,
     )
 except ImportError:

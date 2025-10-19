@@ -15,13 +15,14 @@ Date: 2025-09-30
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add hooks lib to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-import pytest
-from correction.ast_corrector import apply_corrections_with_ast
-from correction.framework_detector import FrameworkMethodDetector
+from correction.ast_corrector import apply_corrections_with_ast  # noqa: E402
+from correction.framework_detector import FrameworkMethodDetector  # noqa: E402
 
 
 class TestFrameworkMethodPreservation:

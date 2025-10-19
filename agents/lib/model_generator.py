@@ -610,18 +610,16 @@ class ModelGenerator:
         lines.append("")
 
         # Add fields
-        for field in model.fields:
+        for model_field in model.fields:
             # Add field docstring as comment
-            if field.description:
-                lines.append(f"    # {field.description}")
+            if model_field.description:
+                lines.append(f"    # {model_field.description}")
 
             # Build field definition
-            if field.default_value:
-                field_def = (
-                    f"    {field.name}: {field.type_hint} = {field.default_value}"
-                )
+            if model_field.default_value:
+                field_def = f"    {model_field.name}: {model_field.type_hint} = {model_field.default_value}"
             else:
-                field_def = f"    {field.name}: {field.type_hint}"
+                field_def = f"    {model_field.name}: {model_field.type_hint}"
 
             lines.append(field_def)
 

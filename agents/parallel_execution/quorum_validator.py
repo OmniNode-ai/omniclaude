@@ -394,7 +394,7 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
 async def main():
     """Test the quorum with PostgreSQL adapter failure case"""
 
-    quorum = MinimalQuorum()
+    quorum = QuorumValidator()
 
     # Test case: The actual failure we experienced
     result = await quorum.validate_intent(

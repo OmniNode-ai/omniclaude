@@ -32,24 +32,6 @@ from typing import Any, Dict
 
 import requests
 
-# Import httpx for async requests
-try:
-    import httpx
-
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
-
-# Import pattern tracking components
-try:
-    from error_handling import PatternTrackingLogger, get_default_logger
-    from health_checks import Phase4HealthChecker, get_health_checker
-    from pattern_tracker import PatternTracker, PatternTrackerConfig, get_tracker
-
-    HAS_PATTERN_TRACKING = True
-except ImportError:
-    HAS_PATTERN_TRACKING = False
-
 
 def check_running_services() -> Dict[str, Any]:
     """Check which required services are running"""
@@ -73,7 +55,7 @@ def check_running_services() -> Dict[str, Any]:
                     "details": health_data,
                     "status": "healthy",
                 }
-            except:
+            except Exception:
                 services["intelligence_service"] = {
                     "running": True,
                     "details": result.stdout,
@@ -353,29 +335,21 @@ def check_python_environment() -> Dict[str, Any]:
     for package in required_packages:
         try:
             if package == "json":
-                import json
-
                 env_info["packages"][package] = {
                     "available": True,
                     "version": "builtin",
                 }
             elif package == "subprocess":
-                import subprocess
-
                 env_info["packages"][package] = {
                     "available": True,
                     "version": "builtin",
                 }
             elif package == "logging":
-                import logging
-
                 env_info["packages"][package] = {
                     "available": True,
                     "version": "builtin",
                 }
             elif package == "requests":
-                import requests
-
                 env_info["packages"][package] = {
                     "available": True,
                     "version": requests.__version__,
