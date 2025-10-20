@@ -22,14 +22,6 @@ from datetime import datetime
 
 import requests
 
-# Import httpx for async requests
-try:
-    import httpx
-
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
-
 # Test configuration
 PHASE4_BASE_URL = "http://localhost:8053"
 TIMEOUT_SECONDS = 5

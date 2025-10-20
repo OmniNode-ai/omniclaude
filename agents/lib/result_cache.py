@@ -227,7 +227,6 @@ class ResultCache:
 
 # Standalone test
 if __name__ == "__main__":
-
     cache = ResultCache(default_ttl_seconds=60)  # 1 minute for testing
 
     print("=== Testing Result Cache ===\n")

@@ -102,7 +102,7 @@ def unique_function_{i}(param1: str, param2: int = {i}) -> str:
                 )
                 if result:
                     cache_hits += 1
-            except:
+            except Exception:
                 pass
         cache_time = time.time() - start_time
 

@@ -5,6 +5,7 @@ Real-time view of Claude Code hook system activity
 """
 
 import json
+import os
 from typing import Any, Dict, List
 
 import psycopg2
@@ -13,10 +14,14 @@ import psycopg2
 class HookDashboard:
     """Simple dashboard for hook intelligence data"""
 
-    def __init__(self, db_password: str = "omninode-bridge-postgres-dev-2024"):
+    def __init__(self, db_password: str | None = None):
+        # Read from environment variable, fallback to dev default
+        password = db_password or os.getenv(
+            "DB_PASSWORD", "omninode-bridge-postgres-dev-2024"
+        )
         self.conn_string = (
             f"host=localhost port=5436 dbname=omninode_bridge "
-            f"user=postgres password={db_password}"
+            f"user=postgres password={password}"
         )
 
     def get_connection(self):

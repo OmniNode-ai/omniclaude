@@ -282,7 +282,7 @@ class ObservabilityReporter:
                                 report_lines.append(
                                     f"      - {alt['agent']}: {alt['confidence']:.4f}"
                                 )
-                    except:
+                    except Exception:
                         pass
                 report_lines.append("")
         else:

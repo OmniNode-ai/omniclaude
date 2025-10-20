@@ -212,15 +212,16 @@ class TestParallelPerformance:
             sequential_workflow = CodegenWorkflow(enable_parallel=False)
             sequential_start = time.time()
 
-            seq_generated, seq_total_files = (
-                await sequential_workflow._generate_nodes_sequential(
-                    session_id=uuid4(),
-                    node_types=node_types[:3],  # 3 nodes
-                    prd_analysis=analysis,
-                    microservice_name="benchmark",
-                    domain="test",
-                    output_directory=temp_dir,
-                )
+            (
+                seq_generated,
+                seq_total_files,
+            ) = await sequential_workflow._generate_nodes_sequential(
+                session_id=uuid4(),
+                node_types=node_types[:3],  # 3 nodes
+                prd_analysis=analysis,
+                microservice_name="benchmark",
+                domain="test",
+                output_directory=temp_dir,
             )
 
             sequential_time = time.time() - sequential_start
@@ -230,15 +231,16 @@ class TestParallelPerformance:
             parallel_workflow = CodegenWorkflow(enable_parallel=True, max_workers=3)
             parallel_start = time.time()
 
-            par_generated, par_total_files = (
-                await parallel_workflow._generate_nodes_parallel(
-                    session_id=uuid4(),
-                    node_types=node_types[:3],  # 3 nodes
-                    prd_analysis=analysis,
-                    microservice_name="benchmark",
-                    domain="test",
-                    output_directory=temp_dir,
-                )
+            (
+                par_generated,
+                par_total_files,
+            ) = await parallel_workflow._generate_nodes_parallel(
+                session_id=uuid4(),
+                node_types=node_types[:3],  # 3 nodes
+                prd_analysis=analysis,
+                microservice_name="benchmark",
+                domain="test",
+                output_directory=temp_dir,
             )
 
             parallel_time = time.time() - parallel_start

@@ -241,7 +241,7 @@ Be concise. Match user intent to agent domain and triggers."""
                         "endpoint": "http://192.168.86.201:8001",
                         "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
                     }
-            except:
+            except Exception:
                 pass
 
             # Fall back to Gemini (fast and reliable)

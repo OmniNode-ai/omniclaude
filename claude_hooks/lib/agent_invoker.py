@@ -40,7 +40,7 @@ if HOOKS_LIB_PATH.exists():
 
 try:
     from agent_dispatcher import ParallelCoordinator
-    from agent_model import AgentResult, AgentTask
+    from agent_model import AgentTask
     from agent_pathway_detector import AgentPathwayDetector, PathwayDetection
 except ImportError as e:
     print(f"ERROR: Failed to import agent framework: {e}", file=sys.stderr)

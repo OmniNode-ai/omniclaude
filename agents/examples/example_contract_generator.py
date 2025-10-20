@@ -14,8 +14,8 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
-from agents.lib.contract_generator import ContractGenerator
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.contract_generator import ContractGenerator  # noqa: E402
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer  # noqa: E402
 
 
 async def main():
