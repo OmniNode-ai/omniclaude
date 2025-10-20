@@ -228,7 +228,7 @@ Switch providers instantly with automatic configuration:
 ### Available Agent Types (52 Total)
 
 **Workflow Orchestration**:
-- `agent-workflow-coordinator` - Unified multi-agent coordination
+- `agent-polymorphic-agent` (aka Polly, agent-workflow-coordinator) - Unified multi-agent coordination with dynamic transformation
 - `agent-multi-step-framework` - Complex multi-step execution
 - `agent-onex-coordinator` - ONEX architecture coordination
 - `agent-parallel-execution` - Parallel task coordination
