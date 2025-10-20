@@ -21,6 +21,12 @@ class AgentDetector:
         r"use\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # use agent-name, use the agent-name
         r"invoke\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # invoke agent-name, invoke the agent-name
         r'subagent_type["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # subagent_type="agent-name"
+        # Polly patterns (dictation-friendly for agent-workflow-coordinator)
+        # Handles: poly, polly, pollys, pollies, etc (flexible for dictation errors)
+        r"dispatch\s+(?:for\s+|4\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "dispatch for Polly", "dispatch 4 poly"
+        r"@pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "@poly", "@polly", "@pollys"
+        r"use\s+(?:the\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "use poly", "use the polly"
+        r"invoke\s+(?:the\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "invoke poly", "invoke pollies"
         # Add flexible workflow coordinator patterns
         r"(?:use|invoke)\s+(?:the\s+)?agent\s+workflow\s+coordinator",  # "use agent workflow coordinator"
         r"(?:use|invoke)\s+(?:the\s+)?workflow\s+coordinator",  # "use workflow coordinator"
@@ -138,8 +144,11 @@ class AgentDetector:
                         agent_name = f"agent-{agent_name}"
                     return agent_name
                 else:
-                    # Handle workflow coordinator patterns that don't capture groups
-                    if "workflow" in pattern and "coordinator" in pattern:
+                    # Handle patterns that don't capture groups
+                    # Map to agent-workflow-coordinator for both "workflow" and "pol" patterns
+                    if (
+                        "workflow" in pattern and "coordinator" in pattern
+                    ) or "pol" in pattern:
                         return "agent-workflow-coordinator"
 
         # No pattern matched - return None
