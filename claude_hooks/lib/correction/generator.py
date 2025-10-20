@@ -3,6 +3,7 @@
 Correction Generator for AI Quality Enforcement System
 Generates correction suggestions using RAG intelligence from Archon MCP.
 """
+
 import re
 import sys
 from dataclasses import dataclass

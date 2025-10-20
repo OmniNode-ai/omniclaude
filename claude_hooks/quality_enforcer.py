@@ -12,6 +12,7 @@ This is the Phase 5 orchestrator that integrates all quality enforcement phases:
 
 Performance Budget: <2000ms total
 """
+
 import asyncio
 import json
 import os
@@ -447,7 +448,6 @@ class QualityEnforcer:
 
             try:
                 from correction.generator import CorrectionGenerator
-                from intelligence.rag_client import RAGIntelligenceClient
 
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})

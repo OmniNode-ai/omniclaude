@@ -22,8 +22,8 @@ import pytest
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from agent_detector import AgentDetector
-from hybrid_agent_selector import HybridAgentSelector, SelectionMethod
+from agent_detector import AgentDetector  # noqa: E402
+from hybrid_agent_selector import HybridAgentSelector, SelectionMethod  # noqa: E402
 
 # ============================================================================
 # FIXTURES

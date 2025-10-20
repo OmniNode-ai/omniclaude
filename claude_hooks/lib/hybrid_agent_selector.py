@@ -298,7 +298,9 @@ class HybridAgentSelector:
         try:
             # Call AI selector
             selections = self.ai_selector.select_agent(
-                prompt=prompt, context=context, top_n=3  # Get top 3 for alternatives
+                prompt=prompt,
+                context=context,
+                top_n=3,  # Get top 3 for alternatives
             )
 
             if selections and len(selections) > 0:

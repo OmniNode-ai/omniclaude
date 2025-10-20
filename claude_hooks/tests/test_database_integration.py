@@ -25,7 +25,7 @@ import pytest
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hook_event_logger import (
+from hook_event_logger import (  # noqa: E402
     HookEventLogger,
     log_posttooluse,
     log_pretooluse,

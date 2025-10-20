@@ -115,7 +115,7 @@ class HookEventLogger:
             try:
                 if self._conn:
                     self._conn.rollback()
-            except:
+            except Exception:
                 pass
             return None
 

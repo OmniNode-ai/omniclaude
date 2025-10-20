@@ -27,13 +27,13 @@ import pytest
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from correlation_manager import (
+from correlation_manager import (  # noqa: E402
     clear_correlation_context,
     get_correlation_context,
     set_correlation_id,
 )
-from hook_event_logger import HookEventLogger
-from metadata_extractor import MetadataExtractor
+from hook_event_logger import HookEventLogger  # noqa: E402
+from metadata_extractor import MetadataExtractor  # noqa: E402
 
 # ============================================================================
 # FIXTURES

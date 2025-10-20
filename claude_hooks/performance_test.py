@@ -27,7 +27,7 @@ except ImportError:
     PatternTrackerSync = None
 
 try:
-    from enhanced_pattern_tracker import EnhancedPatternTracker, get_enhanced_tracker
+    from enhanced_pattern_tracker import EnhancedPatternTracker
 
     ENHANCED_AVAILABLE = True
 except ImportError:

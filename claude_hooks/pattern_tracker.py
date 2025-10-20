@@ -42,7 +42,7 @@ if resilience_lib_path and Path(resilience_lib_path).exists():
 try:
     from debug_utils import ServiceMonitor
     from error_handling import CircuitBreaker, resilient_operation
-    from resilience import PatternCache, ResilientAPIClient
+    from resilience import PatternCache
 
     RESILIENCE_AVAILABLE = True
 except ImportError:

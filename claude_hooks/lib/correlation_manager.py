@@ -173,7 +173,6 @@ def clear_correlation_context():
 
 
 if __name__ == "__main__":
-
     # Test correlation manager
     print("Testing correlation manager...")
 

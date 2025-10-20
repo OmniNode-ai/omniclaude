@@ -23,14 +23,6 @@ import traceback
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-# Import httpx for async requests
-try:
-    import httpx
-
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
-
 import requests
 
 

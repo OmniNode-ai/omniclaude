@@ -17,9 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.lib.codegen_events import CodegenAnalysisRequest
-from agents.lib.kafka_codegen_client import KafkaCodegenClient
-from agents.lib.kafka_confluent_client import ConfluentKafkaClient
+from agents.lib.codegen_events import CodegenAnalysisRequest  # noqa: E402
+from agents.lib.kafka_codegen_client import KafkaCodegenClient  # noqa: E402
+from agents.lib.kafka_confluent_client import ConfluentKafkaClient  # noqa: E402
 
 
 async def main() -> None:

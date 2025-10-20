@@ -379,10 +379,12 @@ class TestONEXCompliance:
         output_code = model_generator._generate_model_code(output_model)
         config_code = model_generator._generate_model_code(config_model)
 
-        quality_score, onex_compliant, violations = (
-            await model_generator.validate_model_code(
-                input_code, output_code, config_code
-            )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(
+            input_code, output_code, config_code
         )
 
         assert quality_score >= 0.7
@@ -396,9 +398,11 @@ class TestONEXCompliance:
 class ModelTestInput:
     pass
 """
-        quality_score, onex_compliant, violations = (
-            await model_generator.validate_model_code(bad_code, bad_code, bad_code)
-        )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(bad_code, bad_code, bad_code)
 
         assert quality_score < 1.0
         assert any("BaseModel" in v for v in violations)
@@ -412,9 +416,11 @@ from pydantic import BaseModel
 class ModelTestInput(BaseModel):
     field: str
 """
-        quality_score, onex_compliant, violations = (
-            await model_generator.validate_model_code(bad_code, bad_code, bad_code)
-        )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(bad_code, bad_code, bad_code)
 
         assert any("docstring" in v.lower() for v in violations)
 
@@ -443,10 +449,12 @@ class ModelTestConfig(BaseModel):
     field: str
 """
 
-        quality_score, onex_compliant, violations = (
-            await model_generator.validate_model_code(
-                input_code, output_code, config_code
-            )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(
+            input_code, output_code, config_code
         )
 
         # Should detect missing correlation_id and success

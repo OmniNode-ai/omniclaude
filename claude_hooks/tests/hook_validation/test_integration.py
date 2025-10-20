@@ -579,7 +579,7 @@ class IntegrationTest:
         finally:
             try:
                 self.cleanup_test_data(correlation_id)
-            except:
+            except Exception:
                 pass
 
     def run_all_tests(self):

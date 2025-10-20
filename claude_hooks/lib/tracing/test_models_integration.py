@@ -19,14 +19,10 @@ try:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
     from hooks.lib.tracing.models import (
-        ExecutionTrace,
-        HookExecution,
         HookMetadata,
         TraceContext,
         create_new_hook_execution,
         create_new_trace,
-        generate_correlation_id,
-        parse_hook_from_row,
         parse_trace_from_row,
     )
     from hooks.lib.tracing.postgres_client import PostgresTracingClient
