@@ -40,6 +40,31 @@ repos:
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
         stages: [pre-commit]
 
+      - id: ruff-check
+        name: ruff (strict check - match CI)
+        entry: poetry run ruff check
+        language: system
+        types: [python]
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: bandit-security
+        name: bandit (security scanner - match CI)
+        entry: bash -c 'poetry run bandit -r agents/ claude_hooks/ --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/'
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: mypy-typecheck
+        name: mypy (type checking - match CI)
+        entry: bash -c 'poetry run mypy agents/ --ignore-missing-imports || true'
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
 # Configuration
 ci:
   autofix_commit_msg: |
