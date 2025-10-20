@@ -41,7 +41,8 @@ class AgentDetector:
         r"run\s+(?:automated\s+)?workflow",  # "run workflow", "run automated workflow"
     ]
 
-    AGENT_CONFIG_DIR = Path.home() / ".claude" / "agents" / "configs"
+    # Use agent-definitions/ (consolidated system)
+    AGENT_CONFIG_DIR = Path.home() / ".claude" / "agent-definitions"
     AGENT_REGISTRY_PATH = (
         Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
     )
@@ -173,14 +174,18 @@ class AgentDetector:
 
         try:
             with open(config_path, "r") as f:
-                # Use safe_load_all to handle files with multiple YAML documents
-                # Take the first document (agent config)
-                docs = list(yaml.safe_load_all(f))
-                if not docs:
-                    return None
-                config = docs[0]
+                content = f.read()
 
-                if not isinstance(config, dict):
+                # Handle files with YAML + Markdown content
+                # Only parse content before first '---' separator (if present after frontmatter)
+                # Split on '\n---\n' to separate YAML from markdown documentation
+                parts = content.split("\n---\n")
+                yaml_content = parts[0] if len(parts) > 1 else content
+
+                # Parse only the YAML portion
+                config = yaml.safe_load(yaml_content)
+
+                if not config or not isinstance(config, dict):
                     return None
 
                 return config
