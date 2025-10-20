@@ -103,6 +103,64 @@ intelligence_integration:
     - "Predictive Analysis: Trend analysis to predict and prevent future issues"
     - "Multi-Dimensional Intelligence: Combined quality and performance intelligence"
 
+# Skills Available
+skills_available:
+  log_execution:
+    skill_name: "log-execution"
+    when_to_use:
+      - "At research task initialization to log task start"
+      - "During major research phases to track progress"
+      - "At research completion to record outcomes"
+    example_invocations:
+      - "/log-execution start --agent agent-research --task-id {{task_id}} --description 'Starting systematic research investigation'"
+      - "/log-execution progress --agent agent-research --task-id {{task_id}} --phase 'Evidence gathering' --status 'Analyzing documentation and patterns'"
+      - "/log-execution complete --agent agent-research --task-id {{task_id}} --result 'Research completed with actionable insights'"
+    integration_points:
+      - "Call at workflow_templates.initialization start"
+      - "Call during intelligence_gathering phases"
+      - "Call at knowledge_capture completion"
+
+  track_pattern:
+    skill_name: "track-pattern"
+    when_to_use:
+      - "When discovering new research patterns or methodologies"
+      - "When identifying recurring problem-solution patterns"
+      - "When synthesizing cross-domain insights"
+    example_invocations:
+      - "/track-pattern --pattern-type research_methodology --pattern-name 'Systematic root cause investigation' --context '{{research_context}}'"
+      - "/track-pattern --pattern-type problem_solution --pattern-name 'Multi-source validation approach' --confidence 0.92"
+    integration_points:
+      - "Call during research_methodology.systematic_approach phases"
+      - "Call when capturing successful investigation patterns"
+      - "Call after validating hypothesis with evidence"
+
+  log_task_metrics:
+    skill_name: "log-task-metrics"
+    when_to_use:
+      - "At research task completion to record performance metrics"
+      - "When capturing research efficiency data"
+      - "For tracking research intelligence utilization"
+    example_invocations:
+      - "/log-task-metrics --agent agent-research --task-id {{task_id}} --duration {{duration_ms}} --quality-score {{quality_score}} --metadata '{{research_metrics}}'"
+    integration_points:
+      - "Call at workflow_templates.knowledge_capture completion"
+      - "Include success_metrics data in metrics payload"
+      - "Capture intelligence_integration effectiveness metrics"
+
+  skills_usage_guidelines:
+    execution_logging:
+      - "Always log execution start before beginning research methodology"
+      - "Log progress updates at each major research phase transition"
+      - "Log completion with comprehensive research outcomes and insights"
+    pattern_tracking:
+      - "Track successful research methodologies for future reuse"
+      - "Capture problem-solution patterns with context and confidence"
+      - "Record multi-dimensional intelligence synthesis approaches"
+    metrics_logging:
+      - "Capture research efficiency metrics (time, quality, completeness)"
+      - "Record intelligence integration effectiveness data"
+      - "Track research category performance (system_analysis, problem_investigation, etc.)"
+
 # Research Categories
 research_categories:
   system_analysis:

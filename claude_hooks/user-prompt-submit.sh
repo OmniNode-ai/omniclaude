@@ -26,7 +26,7 @@ b64() { printf %s "$1" | base64; }
 INPUT="$(cat)"
 log "UserPromptSubmit hook triggered"
 
-PROMPT="$(printf %s "$INPUT" | jq -r ".prompt // \"\"")"
+PROMPT="$(printf %s "$INPUT" | jq -r ".prompt // \"\"" 2>>"$LOG_FILE" || echo "")"
 if [[ -z "$PROMPT" ]]; then
   log "ERROR: No prompt in input"
   printf %s "$INPUT"
@@ -79,7 +79,7 @@ fi
 # -----------------------------
 # Parse selector output
 # -----------------------------
-field() { printf %s "$AGENT_DETECTION" | grep "$1" | cut -d: -f2-; }
+field() { printf %s "$AGENT_DETECTION" | grep "$1" | cut -d: -f2- || echo ""; }
 
 AGENT_NAME="$(field "AGENT_DETECTED:" | tr -d " ")"
 CONFIDENCE="$(field "CONFIDENCE:" | tr -d " ")"
@@ -138,16 +138,18 @@ fi
 # -----------------------------
 # Intent tracking
 # -----------------------------
-if [[ -n "${AGENT_NAME:-}" ]]; then
+if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_PURPOSE:-}" ]]; then
   log "Tracking intent for $AGENT_NAME"
-  printf %s "$PROMPT" | python3 "${HOOKS_LIB}/track_intent.py" \
-    --prompt - \
-    --agent "$AGENT_NAME" \
-    --domain "$AGENT_DOMAIN" \
-    --purpose "$AGENT_PURPOSE" \
-    --correlation-id "$CORRELATION_ID" \
-    --session-id "${SESSION_ID:-}" \
-    >> "$LOG_FILE" 2>&1 || log "Intent tracking failed (continuing)"
+  (
+    printf %s "$PROMPT" | timeout 3 python3 "${HOOKS_LIB}/track_intent.py" \
+      --prompt - \
+      --agent "$AGENT_NAME" \
+      --domain "$AGENT_DOMAIN" \
+      --purpose "$AGENT_PURPOSE" \
+      --correlation-id "$CORRELATION_ID" \
+      --session-id "${SESSION_ID:-}" \
+      >> "$LOG_FILE" 2>&1
+  ) || log "Intent tracking failed (continuing)"
 fi
 
 # -----------------------------
@@ -157,7 +159,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
   log "RAG domain query"
   (
     JSON="$(jq -n --arg q "$DOMAIN_QUERY" --arg ctx "general" --argjson n 5 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s -X POST "${ARCHON_MCP_URL}/api/rag/query" \
+    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
       -H "Content-Type: application/json" \
       --data-binary "$JSON" \
       > "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" 2>&1
@@ -168,7 +170,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
   log "RAG implementation query"
   (
     JSON="$(jq -n --arg q "$IMPL_QUERY" --arg ctx "general" --argjson n 3 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s -X POST "${ARCHON_MCP_URL}/api/rag/query" \
+    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
       -H "Content-Type: application/json" \
       --data-binary "$JSON" \
       > "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" 2>&1
@@ -286,4 +288,4 @@ FINAL_CONTEXT="${WORKFLOW_CONTEXT}${AGENT_CONTEXT}"
 # Output with injected context via hookSpecificOutput.additionalContext
 printf %s "$INPUT" | jq --arg ctx "$FINAL_CONTEXT" \
   '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-   .hookSpecificOutput.additionalContext = $ctx'
+   .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"
