@@ -167,10 +167,21 @@ class AgentDetector:
         Returns:
             Agent configuration dict or None if not found
         """
-        config_path = self.AGENT_CONFIG_DIR / f"{agent_name}.yaml"
+        # Strip 'agent-' prefix from agent name for file lookup
+        # Files are named 'research.yaml', 'performance.yaml', etc.
+        # but agent names are 'agent-research', 'agent-performance', etc.
+        file_name = (
+            agent_name.replace("agent-", "", 1)
+            if agent_name.startswith("agent-")
+            else agent_name
+        )
+        config_path = self.AGENT_CONFIG_DIR / f"{file_name}.yaml"
 
         if not config_path.exists():
-            return None
+            # Try with full agent name as fallback
+            config_path = self.AGENT_CONFIG_DIR / f"{agent_name}.yaml"
+            if not config_path.exists():
+                return None
 
         try:
             with open(config_path, "r") as f:
@@ -205,13 +216,47 @@ class AgentDetector:
         Returns:
             Dict with domain_query, implementation_query, and other metadata
         """
+        # Extract from nested YAML structure
+        domain_queries = agent_config.get("framework_integration", {}).get(
+            "domain_queries", {}
+        )
+        agent_identity = agent_config.get("agent_identity", {})
+        agent_philosophy = agent_config.get("agent_philosophy", {})
+
+        # Get domain and implementation queries
+        domain_query = (
+            domain_queries.get("domain", "") if isinstance(domain_queries, dict) else ""
+        )
+        implementation_query = (
+            domain_queries.get("implementation", "")
+            if isinstance(domain_queries, dict)
+            else ""
+        )
+
+        # Get agent domain from capabilities or identity
+        capabilities = agent_config.get("capabilities", {})
+        if isinstance(capabilities, dict):
+            primary_caps = capabilities.get("primary", [])
+            agent_domain = (
+                ", ".join(primary_caps[:2])
+                if primary_caps
+                else agent_identity.get("title", "")
+            )
+        else:
+            agent_domain = agent_identity.get("title", "")
+
+        # Get agent purpose from philosophy or identity
+        agent_purpose = agent_philosophy.get(
+            "core_responsibility", ""
+        ) or agent_identity.get("description", "")
+
         return {
-            "domain_query": agent_config.get("domain_query", ""),
-            "implementation_query": agent_config.get("implementation_query", ""),
-            "agent_context": agent_config.get("agent_context", "general"),
-            "match_count": agent_config.get("match_count", 5),
-            "agent_domain": agent_config.get("agent_domain", ""),
-            "agent_purpose": agent_config.get("agent_purpose", ""),
+            "domain_query": domain_query,
+            "implementation_query": implementation_query,
+            "agent_context": "general",
+            "match_count": 5,
+            "agent_domain": agent_domain,
+            "agent_purpose": agent_purpose,
         }
 
     def get_framework_references(self) -> list[str]:

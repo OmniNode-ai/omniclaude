@@ -257,10 +257,21 @@ class HybridAgentSelector:
         agent_name = self.pattern_detector._detect_by_triggers(prompt)
 
         if agent_name:
-            # Calculate confidence based on trigger matches
-            config = self.pattern_detector.load_agent_config(agent_name)
-            if config:
-                triggers = config.get("triggers", [])
+            # Calculate confidence based on trigger matches from registry
+            # Get triggers from registry (not individual config files)
+            triggers = []
+            if (
+                self.pattern_detector._registry
+                and "agents" in self.pattern_detector._registry
+            ):
+                for agent_key, agent_info in self.pattern_detector._registry[
+                    "agents"
+                ].items():
+                    if agent_info.get("name") == agent_name:
+                        triggers = agent_info.get("activation_triggers", [])
+                        break
+
+            if triggers:
                 prompt_lower = prompt.lower()
                 matches = sum(
                     1 for trigger in triggers if trigger.lower() in prompt_lower
