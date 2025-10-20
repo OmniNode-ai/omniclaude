@@ -44,7 +44,8 @@ class AIAgentSelector:
             model_preference: Which AI model to use for selection
             zen_mcp_available: Whether Zen MCP is available for model access
         """
-        self.config_dir = config_dir or Path.home() / ".claude" / "agents" / "configs"
+        # Use consolidated agent-definitions/ directory
+        self.config_dir = config_dir or Path.home() / ".claude" / "agent-definitions"
         self.model_preference = model_preference
         self.zen_mcp_available = zen_mcp_available
 
@@ -66,17 +67,25 @@ class AIAgentSelector:
         if not self.config_dir.exists():
             return agents
 
-        for yaml_file in self.config_dir.glob("agent-*.yaml"):
+        # Load from definitions/ directory (includes various naming patterns)
+        for yaml_file in self.config_dir.glob("*.yaml"):
+            # Skip registry file
+            if yaml_file.name == "agent-registry.yaml":
+                continue
+
             try:
                 with open(yaml_file, "r") as f:
-                    # Use safe_load_all to handle files with multiple YAML documents
-                    # Take the first document (agent config)
-                    docs = list(yaml.safe_load_all(f))
-                    if not docs:
-                        continue
-                    config = docs[0]
+                    content = f.read()
 
-                    if not isinstance(config, dict):
+                    # Handle files with YAML + Markdown content
+                    # Only parse content before first '---' separator (if present after frontmatter)
+                    parts = content.split("\n---\n")
+                    yaml_content = parts[0] if len(parts) > 1 else content
+
+                    # Parse only the YAML portion
+                    config = yaml.safe_load(yaml_content)
+
+                    if not config or not isinstance(config, dict):
                         continue
 
                     # Extract key metadata for AI selection
@@ -89,12 +98,25 @@ class AIAgentSelector:
                     else:
                         capabilities_list = []
 
+                    # Get triggers - handle both flat list and nested dict formats
+                    activation_triggers = config.get("activation_triggers", [])
+                    if isinstance(activation_triggers, dict):
+                        # Nested format: {primary: [...], secondary: [...], patterns: [...]}
+                        triggers = []
+                        for key in ["primary", "secondary", "patterns"]:
+                            triggers.extend(activation_triggers.get(key, []))
+                    elif isinstance(activation_triggers, list):
+                        # Flat list format
+                        triggers = activation_triggers
+                    else:
+                        triggers = []
+
                     agent_meta = {
                         "name": yaml_file.stem,
                         "domain": config.get("agent_domain", ""),
                         "purpose": config.get("agent_purpose", ""),
                         "description": config.get("agent_description", ""),
-                        "triggers": config.get("triggers", []),
+                        "triggers": triggers,
                         "capabilities": capabilities_list,
                     }
                     agents.append(agent_meta)
@@ -170,7 +192,11 @@ class AIAgentSelector:
 
         for agent in self.agents:
             # Ultra-compact format: name|domain|top-3-triggers
-            triggers_str = ",".join(agent["triggers"][:3])
+            # Defensive: ensure triggers is a list to prevent slice errors
+            triggers = agent.get("triggers", [])
+            if not isinstance(triggers, list):
+                triggers = []
+            triggers_str = ",".join(triggers[:3])
             lines.append(f"{agent['name']}|{agent['domain']}|{triggers_str}")
 
         return "\n".join(lines)
@@ -363,7 +389,12 @@ print("CLOUD_MODEL_PLACEHOLDER")
             reasons = []
 
             # Match against triggers
-            for trigger in agent["triggers"]:
+            # Defensive: ensure triggers is a list
+            triggers = agent.get("triggers", [])
+            if not isinstance(triggers, list):
+                triggers = []
+
+            for trigger in triggers:
                 if trigger.lower() in prompt_lower:
                     score += 0.3
                     reasons.append(f"trigger: {trigger}")
