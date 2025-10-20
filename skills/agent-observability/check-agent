@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""
+Agent Observability: Agent-Specific Analysis
+Target: <10 seconds execution
+
+Deep dive into specific agent performance:
+- Success rate vs baseline
+- Duration analysis
+- Error patterns
+- Usage trends
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+# Add shared utilities to path
+SKILLS_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(SKILLS_DIR / "_shared"))
+
+from db_helper import execute_query
+
+
+def get_agent_metrics(agent_name, time_range="24h"):
+    """Get agent-specific metrics."""
+    # Parse time range
+    interval_map = {"1h": "1 hour", "24h": "24 hours", "7d": "7 days"}
+    interval = interval_map.get(time_range, "24 hours")
+
+    # Agent summary
+    summary = execute_query(
+        """
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'success') as success,
+            COUNT(*) FILTER (WHERE status = 'error') as error,
+            COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress,
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration,
+            PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY duration_ms) as p50,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) as p95,
+            MIN(started_at) as first_execution,
+            MAX(started_at) as last_execution
+        FROM agent_execution_logs
+        WHERE agent_name = %s
+        AND started_at > NOW() - INTERVAL %s
+        """,
+        (agent_name, interval),
+        fetch=True,
+    )
+
+    # Compare to system baseline
+    baseline = execute_query(
+        """
+        SELECT
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration,
+            COUNT(*) FILTER (WHERE status = 'success')::float / COUNT(*) * 100 as success_rate
+        FROM agent_execution_logs
+        WHERE started_at > NOW() - INTERVAL %s
+        AND agent_name != %s
+        """,
+        (interval, agent_name),
+        fetch=True,
+    )
+
+    # Error details
+    errors = execute_query(
+        """
+        SELECT
+            error_type,
+            COUNT(*) as count,
+            MAX(started_at) as last_occurrence,
+            error_message
+        FROM agent_execution_logs
+        WHERE agent_name = %s
+        AND status = 'error'
+        AND started_at > NOW() - INTERVAL %s
+        GROUP BY error_type, error_message
+        ORDER BY count DESC
+        LIMIT 5
+        """,
+        (agent_name, interval),
+        fetch=True,
+    )
+
+    # Hourly trend
+    hourly_trend = execute_query(
+        """
+        SELECT
+            DATE_TRUNC('hour', started_at) as hour,
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'success') as success,
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration
+        FROM agent_execution_logs
+        WHERE agent_name = %s
+        AND started_at > NOW() - INTERVAL %s
+        GROUP BY hour
+        ORDER BY hour DESC
+        LIMIT 24
+        """,
+        (agent_name, interval),
+        fetch=True,
+    )
+
+    # Recent executions
+    recent = execute_query(
+        """
+        SELECT
+            execution_id,
+            status,
+            duration_ms,
+            started_at,
+            error_type
+        FROM agent_execution_logs
+        WHERE agent_name = %s
+        AND started_at > NOW() - INTERVAL %s
+        ORDER BY started_at DESC
+        LIMIT 10
+        """,
+        (agent_name, interval),
+        fetch=True,
+    )
+
+    return {
+        "summary": summary[0] if summary else None,
+        "baseline": baseline[0] if baseline else None,
+        "errors": errors or [],
+        "hourly_trend": hourly_trend or [],
+        "recent": recent or [],
+    }
+
+
+def format_output(metrics, agent_name, time_range):
+    """Format agent analysis."""
+    output = []
+    output.append(f"# 🔍 Agent Analysis: {agent_name}")
+    output.append("")
+    output.append(f"**Time Range**: {time_range}")
+    output.append("")
+
+    if not metrics["summary"] or metrics["summary"]["total"] == 0:
+        output.append("## ⚠️ No Data")
+        output.append("")
+        output.append(f"No executions found for {agent_name} in the last {time_range}")
+        return "\n".join(output)
+
+    s = metrics["summary"]
+    total = s["total"]
+    success_rate = (s["success"] / total * 100) if total > 0 else 0
+
+    # Health Status
+    status = (
+        "🟢 HEALTHY"
+        if success_rate >= 90
+        else "🟡 WARNING" if success_rate >= 80 else "🔴 NEEDS ATTENTION"
+    )
+
+    output.append(f"## Status: {status}")
+    output.append("")
+
+    # Summary Metrics
+    output.append("### Performance Summary")
+    output.append("")
+    output.append("| Metric | Value |")
+    output.append("|--------|-------|")
+    output.append(f"| Total Executions | {total} |")
+    output.append(f"| **Success Rate** | **{success_rate:.1f}%** |")
+    output.append(f"| Successful | {s['success']} |")
+    output.append(f"| Failed | {s['error']} |")
+    output.append(f"| In Progress | {s['in_progress']} |")
+    output.append(f"| Avg Duration | {s['avg_duration']:.0f}ms |")
+    output.append(f"| P50 Duration | {s['p50']:.0f}ms |")
+    output.append(f"| P95 Duration | {s['p95']:.0f}ms |")
+    output.append(
+        f"| First Execution | {s['first_execution'].strftime('%m-%d %H:%M')} |"
+    )
+    output.append(f"| Last Execution | {s['last_execution'].strftime('%m-%d %H:%M')} |")
+    output.append("")
+
+    # Comparison to Baseline
+    if metrics["baseline"]:
+        b = metrics["baseline"]
+        output.append("### Comparison to System Baseline")
+        output.append("")
+        output.append("| Metric | This Agent | System Avg | Difference |")
+        output.append("|--------|------------|------------|------------|")
+
+        # Success rate comparison
+        baseline_success = b["success_rate"]
+        success_diff = success_rate - baseline_success
+        success_indicator = "✅" if success_diff >= 0 else "⚠️"
+        output.append(
+            f"| Success Rate | {success_rate:.1f}% | {baseline_success:.1f}% | {success_indicator} {success_diff:+.1f}% |"
+        )
+
+        # Duration comparison
+        baseline_duration = b["avg_duration"]
+        duration_diff = s["avg_duration"] - baseline_duration
+        duration_diff_pct = (
+            (duration_diff / baseline_duration * 100) if baseline_duration > 0 else 0
+        )
+        duration_indicator = "✅" if duration_diff < 0 else "⚠️"
+        output.append(
+            f"| Avg Duration | {s['avg_duration']:.0f}ms | {baseline_duration:.0f}ms | {duration_indicator} {duration_diff:+.0f}ms ({duration_diff_pct:+.0f}%) |"
+        )
+        output.append("")
+
+    # Errors
+    if metrics["errors"]:
+        output.append("### Error Analysis")
+        output.append("")
+        output.append("| Error Type | Count | Last Occurrence |")
+        output.append("|------------|-------|-----------------|")
+        for row in metrics["errors"]:
+            error_type = row["error_type"] or "Unknown"
+            count = row["count"]
+            last = row["last_occurrence"].strftime("%m-%d %H:%M")
+            output.append(f"| {error_type[:50]} | {count} | {last} |")
+        output.append("")
+
+        # Sample error message
+        if metrics["errors"][0]["error_message"]:
+            output.append("**Sample Error Message:**")
+            output.append(f"```\n{metrics['errors'][0]['error_message'][:300]}\n```")
+            output.append("")
+
+    # Hourly Trend
+    if metrics["hourly_trend"]:
+        output.append("### Hourly Activity")
+        output.append("")
+        output.append("| Hour | Executions | Success Rate | Avg Duration |")
+        output.append("|------|------------|--------------|--------------|")
+        for row in metrics["hourly_trend"][:12]:
+            hour = row["hour"].strftime("%m-%d %H:%M")
+            total_h = row["total"]
+            success_h = row["success"]
+            rate = (success_h / total_h * 100) if total_h > 0 else 0
+            indicator = "🟢" if rate >= 90 else "🟡" if rate >= 80 else "🔴"
+            duration = f"{row['avg_duration']:.0f}ms"
+            output.append(
+                f"| {hour} | {total_h} | {indicator} {rate:.0f}% | {duration} |"
+            )
+        output.append("")
+
+    # Recent Executions
+    if metrics["recent"]:
+        output.append("### Recent Executions")
+        output.append("")
+        output.append("| Time | Status | Duration | Error Type |")
+        output.append("|------|--------|----------|------------|")
+        for row in metrics["recent"][:5]:
+            time = row["started_at"].strftime("%m-%d %H:%M:%S")
+            status = row["status"]
+            status_icon = (
+                "✅" if status == "success" else "🔴" if status == "error" else "⏳"
+            )
+            duration = f"{row['duration_ms']:.0f}ms" if row["duration_ms"] else "N/A"
+            error = row["error_type"] if row["error_type"] else "-"
+            output.append(f"| {time} | {status_icon} {status} | {duration} | {error} |")
+        output.append("")
+
+    # Insights
+    output.append("## 💡 Insights")
+    output.append("")
+
+    if success_rate < 80:
+        output.append(
+            f"- 🚨 **Critical**: Success rate ({success_rate:.1f}%) below acceptable threshold"
+        )
+        output.append("  - Recommend immediate investigation with diagnose-errors")
+
+    if s["p95"] > 60000:
+        output.append(
+            f"- ⚠️ **Performance**: P95 duration ({s['p95']:.0f}ms) exceeds target"
+        )
+        output.append("  - Consider performance optimization")
+
+    if metrics["baseline"]:
+        if success_rate < metrics["baseline"]["success_rate"]:
+            output.append(
+                "- 📉 Success rate below system average - agent may need attention"
+            )
+        else:
+            output.append("- 📈 Success rate above system average - performing well")
+
+    if not metrics["errors"]:
+        output.append("- ✅ No errors in selected time range - healthy execution")
+
+    output.append("")
+
+    return "\n".join(output)
+
+
+def main():
+    """Main execution."""
+    parser = argparse.ArgumentParser(description="Analyze specific agent performance")
+    parser.add_argument("--agent", required=True, help="Agent name to analyze")
+    parser.add_argument(
+        "--time-range",
+        default="24h",
+        choices=["1h", "24h", "7d"],
+        help="Time range for analysis",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        metrics = get_agent_metrics(args.agent, args.time_range)
+        output = format_output(metrics, args.agent, args.time_range)
+        print(output)
+        return 0
+    except Exception as e:
+        print(f"❌ Agent analysis failed: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

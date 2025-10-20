@@ -4,9 +4,9 @@
 # Integration: agent-workflow-coordinator dynamic transformation system
 
 schema_version: "1.0.0"
-total_agents: 49
+total_agents: 50
 registry_type: "dynamic_role_system"
-last_updated: "2025-01-09"
+last_updated: "2025-10-20"
 
 # Registry Metadata
 registry_info:
@@ -159,6 +159,20 @@ agents:
     priority: "high"
     capabilities: ["real_time_monitoring", "system_observability", "alerting_automation", "performance_analytics", "incident_detection", "sla_slo_monitoring"]
     activation_triggers: ["production", "monitor", "observability", "alerting", "metrics", "uptime", "monitoring", "incident response", "24/7", "system health"]
+    domain_context: "infrastructure"
+    specialization_level: "expert"
+
+  agent-observability:
+    name: "agent-observability"
+    title: "Agent Observability Specialist"
+    description: "Real-time monitoring and diagnostics for agent execution health, performance metrics, and system observability with comprehensive error analysis and actionable insights"
+    category: "infrastructure"
+    color: "purple"
+    task_agent_type: "observability"
+    definition_path: "agent-definitions/agent-observability.yaml"
+    priority: "high"
+    capabilities: ["agent_health_monitoring", "error_diagnostics", "performance_analytics", "execution_tracking", "routing_intelligence", "correlation_analysis"]
+    activation_triggers: ["observability", "agent health", "monitoring", "diagnostics", "metrics", "check status", "system health", "agent metrics", "error analysis", "performance", "what's the status"]
     domain_context: "infrastructure"
     specialization_level: "expert"
 
