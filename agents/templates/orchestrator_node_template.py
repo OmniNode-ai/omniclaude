@@ -100,9 +100,9 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
         """Validate input data for orchestration"""
         if not input_data.operation_type:
             raise ModelOnexError(
-                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else vars(input_data)}
+                context={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else vars(input_data)}
             )
 
         # Add orchestration-specific validation
@@ -112,7 +112,33 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input
     ) -> Dict[str, Any]:
-        """Execute the actual orchestration"""
+        """
+        Execute the actual orchestration.
+
+        ORCHESTRATOR Pattern:
+        - Coordinates multiple nodes (EFFECT, COMPUTE, REDUCER)
+        - Issues ModelAction with lease management
+        - Epoch-based versioning for workflow state
+        - Manages workflow dependencies and ordering
+
+        Example:
+            lease = await self._acquire_lease()
+            actions = [
+                ModelAction(
+                    lease_id=lease.lease_id,
+                    epoch=lease.epoch,
+                    target_node="compute_processor",
+                    payload={...}
+                ),
+                ModelAction(
+                    lease_id=lease.lease_id,
+                    epoch=lease.epoch,
+                    target_node="effect_writer",
+                    payload={...}
+                )
+            ]
+            return {"actions": actions, "workflow_state": {...}}
+        """
 
         # Orchestration logic stub
 {BUSINESS_LOGIC_STUB}
@@ -120,16 +146,53 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
         # TODO: Implement actual orchestration logic
         # This is a placeholder - replace with real implementation
 
+        # Step 1: Acquire lease for workflow coordination
+        # lease = await self._acquire_lease()
+        lease_id = "placeholder_lease_id"
+        epoch = 1
+
+        # Step 2: Define workflow steps
         operations = {OPERATIONS}
+        workflow_steps = [
+            {
+                "step": 1,
+                "node_type": "COMPUTE",
+                "operation": "process_data",
+                "status": "pending"
+            },
+            {
+                "step": 2,
+                "node_type": "EFFECT",
+                "operation": "write_results",
+                "status": "pending"
+            }
+        ]
+
+        # Step 3: Issue ModelAction for each step
+        # Actions are executed by target nodes
+        actions = []
+
+        # Example action issuance:
+        # for step in workflow_steps:
+        #     actions.append({
+        #         "lease_id": lease_id,
+        #         "epoch": epoch,
+        #         "target_node": step["node_type"],
+        #         "operation": step["operation"],
+        #         "payload": input_data.parameters
+        #     })
+
         result = {
             "operation_type": input_data.operation_type,
-            "orchestration_result": "placeholder_orchestration",
-            "workflow_steps": [],
+            "lease_id": lease_id,
+            "epoch": epoch,
+            "workflow_steps": workflow_steps,
+            "actions": actions,
             "parameters": input_data.parameters,
             "metadata": input_data.metadata,
             "operations": operations,
             "timestamp": datetime.utcnow().isoformat(),
-            "status": "completed"
+            "status": "orchestrating"
         }
 
         return result

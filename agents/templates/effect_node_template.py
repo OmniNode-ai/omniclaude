@@ -67,7 +67,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Effect(NodeEffect{MIXIN_INHERITANCE}):
             Model{MICROSERVICE_NAME_PASCAL}Output: Result of the operation
 
         Raises:
-            OnexError: If operation fails
+            ModelOnexError: If operation fails
         """
         try:
             self.logger.info(f"Processing {MICROSERVICE_NAME} effect operation: {input_data.operation_type}")
@@ -91,18 +91,18 @@ class Node{MICROSERVICE_NAME_PASCAL}Effect(NodeEffect{MIXIN_INHERITANCE}):
         except Exception as e:
             self.logger.error(f"{MICROSERVICE_NAME} effect operation failed: {str(e)}")
             raise ModelOnexError(
-                code=EnumCoreErrorCode.PROCESSING_ERROR,
+                error_code=EnumCoreErrorCode.PROCESSING_ERROR,
                 message=f"{MICROSERVICE_NAME} effect operation failed: {str(e)}",
-                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
-            )
+                context={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else str(input_data)}
+            ) from e
 
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data"""
         if not input_data.operation_type:
             raise ModelOnexError(
-                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
+                context={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else str(input_data)}
             )
 
         # Add more validation as needed

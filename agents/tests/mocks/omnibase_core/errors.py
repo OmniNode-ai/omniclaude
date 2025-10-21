@@ -43,3 +43,20 @@ class OnexError(Exception):
 
     def __repr__(self):
         return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
+
+
+class ModelOnexError(OnexError):
+    """Mock ModelOnexError for testing (alias for OnexError)"""
+
+    def __init__(
+        self, error_code: EnumCoreErrorCode, message: str, context: dict = None
+    ):
+        """
+        Initialize mock ModelOnexError.
+
+        Args:
+            error_code: Error code enum
+            message: Error message
+            context: Optional error context dictionary
+        """
+        super().__init__(code=error_code, message=message, details=context)
