@@ -7,10 +7,12 @@ from .intelligence_context import (
     get_default_intelligence,
 )
 from .prompt_parse_result import PromptParseResult
+from .quorum_config import QuorumConfig
 
 __all__ = [
     "PromptParseResult",
     "IntelligenceContext",
     "NodeTypeIntelligence",
     "get_default_intelligence",
+    "QuorumConfig",
 ]

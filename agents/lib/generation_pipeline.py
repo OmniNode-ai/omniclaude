@@ -2,16 +2,17 @@
 """
 Generation Pipeline - Autonomous Node Generation POC
 
-Orchestrates the 7-stage node generation pipeline with 15 validation gates:
+Orchestrates the 8-stage node generation pipeline with 15 validation gates:
 - Stage 1: Prompt Parsing (5s)
 - Stage 1.5: Intelligence Gathering (3s) - 1 warning gate
-- Stage 2: Pre-Generation Validation (2s) - 6 blocking gates
-- Stage 3: Code Generation (10-15s) - 2 warning gates
-- Stage 4: Post-Generation Validation (5s) - 4 blocking gates
-- Stage 5: File Writing (3s)
-- Stage 6: Compilation Testing (10s) - 2 warning gates
+- Stage 2: Contract Building (2s) - Quorum validation
+- Stage 3: Pre-Generation Validation (2s) - 6 blocking gates
+- Stage 4: Code Generation (10-15s) - 2 warning gates
+- Stage 5: Post-Generation Validation (5s) - 4 blocking gates
+- Stage 6: File Writing (3s)
+- Stage 7: Compilation Testing (10s) - 2 warning gates
 
-Total target: ~43 seconds for successful generation.
+Total target: ~48 seconds for successful generation.
 """
 
 import ast
@@ -29,6 +30,16 @@ from uuid import UUID, uuid4
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
+# Import interactive validation
+from ..parallel_execution.interactive_validator import (
+    CheckpointType,
+    UserChoice,
+    create_validator,
+)
+
+# Import contract building components
+from .generation.contract_builder_factory import ContractBuilderFactory
+
 # Import existing components
 from .intelligence_gatherer import IntelligenceGatherer
 from .models.intelligence_context import IntelligenceContext
@@ -41,9 +52,24 @@ from .models.pipeline_models import (
     StageStatus,
     ValidationGate,
 )
+from .models.quorum_config import QuorumConfig
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .prompt_parser import PromptParser
 from .simple_prd_analyzer import SimplePRDAnalysisResult, SimplePRDAnalyzer
+
+# Import quorum validation (optional dependency)
+try:
+    from ..parallel_execution.quorum_validator import (
+        QuorumValidator,
+        ValidationDecision,
+    )
+
+    QUORUM_AVAILABLE = True
+except ImportError as e:
+    QUORUM_AVAILABLE = False
+    QuorumValidator = None
+    ValidationDecision = None
+    logging.warning(f"Quorum validation not available: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +98,9 @@ class GenerationPipeline:
         template_engine: Optional[OmniNodeTemplateEngine] = None,
         enable_compilation_testing: bool = True,
         enable_intelligence_gathering: bool = True,
+        interactive_mode: bool = False,
+        session_file: Optional[Path] = None,
+        quorum_config: Optional[QuorumConfig] = None,
     ):
         """
         Initialize generation pipeline.
@@ -80,6 +109,9 @@ class GenerationPipeline:
             template_engine: Pre-configured template engine (optional)
             enable_compilation_testing: Enable Stage 6 compilation testing
             enable_intelligence_gathering: Enable Stage 1.5 intelligence gathering
+            interactive_mode: Enable interactive checkpoints for user validation
+            session_file: Path to session file for save/resume capability
+            quorum_config: Quorum validation configuration (optional, defaults to disabled)
         """
         self.logger = logging.getLogger(__name__)
         self.template_engine = template_engine or OmniNodeTemplateEngine(
@@ -89,9 +121,20 @@ class GenerationPipeline:
         self.prompt_parser = PromptParser()
         self.enable_compilation_testing = enable_compilation_testing
         self.enable_intelligence_gathering = enable_intelligence_gathering
+        self.interactive_mode = interactive_mode
+        self.quorum_config = quorum_config or QuorumConfig.disabled()
+
+        # Create validator (interactive or quiet based on mode)
+        self.validator = create_validator(
+            interactive=interactive_mode,
+            session_file=session_file,
+        )
 
         # Lazy-initialize intelligence gatherer (only if needed)
         self._intelligence_gatherer: Optional[IntelligenceGatherer] = None
+
+        # Lazy-initialize quorum validator (only if needed and available)
+        self._quorum_validator: Optional[QuorumValidator] = None
 
         # Track written files for rollback
         self.written_files: List[Path] = []
@@ -151,6 +194,43 @@ class GenerationPipeline:
             service_name = parsed_data["service_name"]
             domain = parsed_data["domain"]
 
+            # Interactive Checkpoint 1: Review PRD Analysis
+            if self.interactive_mode:
+                checkpoint_result = self.validator.checkpoint(
+                    checkpoint_id="prd_analysis",
+                    checkpoint_type=CheckpointType.CONTEXT_GATHERING,
+                    step_number=1,
+                    total_steps=2,
+                    step_name="PRD Analysis Review",
+                    output_data={
+                        "node_type": node_type,
+                        "service_name": service_name,
+                        "domain": domain,
+                        "description": parsed_data.get("description", ""),
+                        "operations": parsed_data.get("operations", []),
+                        "features": parsed_data.get("features", []),
+                        "confidence": parsed_data.get("confidence", 0.0),
+                    },
+                )
+
+                # Handle user choice
+                if checkpoint_result.choice == UserChoice.RETRY:
+                    self.logger.info(
+                        f"User requested retry with feedback: {checkpoint_result.user_feedback}"
+                    )
+                    raise OnexError(
+                        code=EnumCoreErrorCode.VALIDATION_ERROR,
+                        message=f"User requested retry: {checkpoint_result.user_feedback}",
+                    )
+                elif checkpoint_result.choice == UserChoice.EDIT:
+                    # Apply user edits to parsed_data
+                    if checkpoint_result.modified_output:
+                        self.logger.info("Applying user edits to parsed data")
+                        parsed_data.update(checkpoint_result.modified_output)
+                        node_type = parsed_data.get("node_type", node_type)
+                        service_name = parsed_data.get("service_name", service_name)
+                        domain = parsed_data.get("domain", domain)
+
             # Stage 1.5: Intelligence Gathering (Optional)
             intelligence_context = IntelligenceContext()  # Default empty context
             if self.enable_intelligence_gathering:
@@ -168,18 +248,30 @@ class GenerationPipeline:
                     )
                     intelligence_context = IntelligenceContext()
 
-            # Stage 2: Pre-Generation Validation
-            stage2 = await self._stage_2_pre_validation(parsed_data)
+            # Stage 2: Contract Building (with Quorum Validation)
+            stage2, contract = await self._stage_2_contract_building(
+                prompt, parsed_data, correlation_id
+            )
             stages.append(stage2)
 
             if stage2.status == StageStatus.FAILED:
                 raise OnexError(
                     code=EnumCoreErrorCode.VALIDATION_ERROR,
-                    message=f"Stage 2 failed: {stage2.error}",
+                    message=f"Stage 2 (Contract Building) failed: {stage2.error}",
                 )
 
-            # Stage 3: Code Generation (with intelligence context)
-            stage3, generation_result = await self._stage_3_generate_code(
+            # Stage 3: Pre-Generation Validation
+            stage3 = await self._stage_3_pre_validation(parsed_data)
+            stages.append(stage3)
+
+            if stage3.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Stage 3 failed: {stage3.error}",
+                )
+
+            # Stage 4: Code Generation (with intelligence context)
+            stage4, generation_result = await self._stage_4_generate_code(
                 analysis_result,
                 node_type,
                 service_name,
@@ -187,56 +279,111 @@ class GenerationPipeline:
                 output_directory,
                 intelligence_context,
             )
-            stages.append(stage3)
-
-            if stage3.status == StageStatus.FAILED:
-                raise OnexError(
-                    code=EnumCoreErrorCode.OPERATION_FAILED,
-                    message=f"Stage 3 failed: {stage3.error}",
-                )
-
-            # Stage 4: Post-Generation Validation
-            stage4 = await self._stage_4_post_validation(generation_result, node_type)
             stages.append(stage4)
 
             if stage4.status == StageStatus.FAILED:
                 raise OnexError(
-                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
                     message=f"Stage 4 failed: {stage4.error}",
                 )
 
-            validation_passed = stage4.status == StageStatus.COMPLETED
+            # Interactive Checkpoint 2: Review Generated Contract/Code
+            if self.interactive_mode:
+                # Read generated contract/code for review
+                main_file_path = Path(generation_result.get("main_file", ""))
+                contract_preview = "Contract generated successfully"
 
-            # Stage 5: File Writing
-            stage5, write_result = await self._stage_5_write_files(
-                generation_result, output_directory
-            )
+                if main_file_path.exists():
+                    # Read first 50 lines for preview
+                    with open(main_file_path, "r") as f:
+                        lines = f.readlines()[:50]
+                        contract_preview = "".join(lines)
+
+                checkpoint_result = self.validator.checkpoint(
+                    checkpoint_id="contract_review",
+                    checkpoint_type=CheckpointType.TASK_BREAKDOWN,
+                    step_number=2,
+                    total_steps=2,
+                    step_name="Contract/Code Generation Review",
+                    output_data={
+                        "node_type": node_type,
+                        "service_name": service_name,
+                        "files_generated": generation_result.get("generated_files", []),
+                        "main_file": str(main_file_path),
+                        "contract_preview": contract_preview,
+                    },
+                )
+
+                # Handle user choice
+                if checkpoint_result.choice == UserChoice.RETRY:
+                    self.logger.info(
+                        f"User requested retry with feedback: {checkpoint_result.user_feedback}"
+                    )
+                    raise OnexError(
+                        code=EnumCoreErrorCode.VALIDATION_ERROR,
+                        message=f"User requested retry: {checkpoint_result.user_feedback}",
+                    )
+                elif checkpoint_result.choice == UserChoice.EDIT:
+                    # User edited the generated code
+                    if checkpoint_result.modified_output:
+                        self.logger.info("User edited generated code")
+                        # If user edited contract_preview, write it back
+                        if "contract_preview" in checkpoint_result.modified_output:
+                            try:
+                                with open(main_file_path, "w") as f:
+                                    f.write(
+                                        checkpoint_result.modified_output[
+                                            "contract_preview"
+                                        ]
+                                    )
+                                self.logger.info(
+                                    f"Updated {main_file_path} with user edits"
+                                )
+                            except Exception as e:
+                                self.logger.error(f"Failed to apply user edits: {e}")
+
+            # Stage 5: Post-Generation Validation
+            stage5 = await self._stage_5_post_validation(generation_result, node_type)
             stages.append(stage5)
 
             if stage5.status == StageStatus.FAILED:
                 raise OnexError(
-                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Stage 5 failed: {stage5.error}",
+                )
+
+            validation_passed = stage5.status == StageStatus.COMPLETED
+
+            # Stage 6: File Writing
+            stage6, write_result = await self._stage_6_write_files(
+                generation_result, output_directory
+            )
+            stages.append(stage6)
+
+            if stage6.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message=f"Stage 6 failed: {stage6.error}",
                 )
 
             output_path = write_result["output_path"]
             generated_files = write_result["generated_files"]
 
-            # Stage 6: Compilation Testing (Optional)
+            # Stage 7: Compilation Testing (Optional)
             if self.enable_compilation_testing:
-                stage6, compile_result = await self._stage_6_compile_test(
+                stage7, compile_result = await self._stage_7_compile_test(
                     output_path, node_type, service_name
                 )
-                stages.append(stage6)
+                stages.append(stage7)
                 compilation_passed = compile_result.get("passed", False)
             else:
-                # Skip stage 6
-                stage6 = PipelineStage(
+                # Skip stage 7
+                stage7 = PipelineStage(
                     stage_name="compilation_testing",
                     status=StageStatus.SKIPPED,
                     metadata={"reason": "Compilation testing disabled"},
                 )
-                stages.append(stage6)
+                stages.append(stage7)
                 compilation_passed = True  # Assume passed if skipped
 
             # Pipeline succeeded
@@ -420,11 +567,207 @@ class GenerationPipeline:
         finally:
             stage.duration_ms = int((time() - start_ms) * 1000)
 
-    async def _stage_2_pre_validation(
+    async def _stage_2_contract_building(
+        self, prompt: str, parsed_data: Dict[str, Any], correlation_id: UUID
+    ) -> Tuple[PipelineStage, Any]:
+        """
+        Stage 2: Contract building with quorum validation.
+
+        Builds ONEX contract from parsed data and validates with AI quorum
+        for correctness and alignment with user intent.
+
+        Validation: Q1 - Quorum contract validation (if enabled)
+
+        Args:
+            prompt: Original user prompt
+            parsed_data: Parsed prompt data from Stage 1
+            correlation_id: Pipeline correlation ID
+
+        Returns:
+            Tuple of (PipelineStage, contract) where contract is the built contract model
+        """
+        stage = PipelineStage(
+            stage_name="contract_building", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+        contract = None
+
+        try:
+            # Build contract using factory
+            node_type = parsed_data["node_type"]
+            builder = ContractBuilderFactory.create(node_type, correlation_id)
+            contract = builder.build(parsed_data)
+
+            self.logger.info(
+                f"Built {node_type} contract: {contract.name} v{contract.version}"
+            )
+
+            # Quorum validation (if enabled and available)
+            if self.quorum_config.validate_contract and QUORUM_AVAILABLE:
+                max_retries = (
+                    self.quorum_config.max_retries_per_stage
+                    if self.quorum_config.retry_on_fail
+                    else 0
+                )
+
+                for retry_attempt in range(max_retries + 1):
+                    # Initialize quorum validator lazily
+                    if not self._quorum_validator:
+                        try:
+                            self._quorum_validator = QuorumValidator()
+                            self.logger.info("Initialized QuorumValidator")
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Failed to initialize QuorumValidator: {e}"
+                            )
+                            # Continue without quorum validation
+                            break
+
+                    # Prepare task breakdown for validation
+                    task_breakdown = {
+                        "node_type": (
+                            contract.node_type.value
+                            if hasattr(contract.node_type, "value")
+                            else str(contract.node_type)
+                        ),
+                        "name": contract.name,
+                        "description": contract.description,
+                        "version": str(contract.version),
+                        "tasks": [
+                            {
+                                "task_name": "contract_generation",
+                                "input_data": {
+                                    "node_type": parsed_data["node_type"],
+                                    "service_name": parsed_data["service_name"],
+                                    "domain": parsed_data["domain"],
+                                },
+                            }
+                        ],
+                    }
+
+                    # Validate with quorum
+                    try:
+                        quorum_result = await self._quorum_validator.validate_intent(
+                            user_prompt=prompt,
+                            task_breakdown=task_breakdown,
+                        )
+
+                        # Log quorum decision
+                        self.logger.info(
+                            f"Quorum validation: {quorum_result.decision.value} "
+                            f"(confidence: {quorum_result.confidence:.2f})"
+                        )
+
+                        # Create validation gate for quorum
+                        gate_q1 = ValidationGate(
+                            gate_id="Q1",
+                            name="Quorum Contract Validation",
+                            status=(
+                                "pass"
+                                if quorum_result.decision == ValidationDecision.PASS
+                                else (
+                                    "warning"
+                                    if quorum_result.decision
+                                    == ValidationDecision.RETRY
+                                    else "fail"
+                                )
+                            ),
+                            gate_type=GateType.BLOCKING,
+                            message=f"Quorum {quorum_result.decision.value}: {len(quorum_result.deficiencies)} deficiencies, confidence {quorum_result.confidence:.0%}",
+                            duration_ms=int((time() - start_ms) * 1000),
+                        )
+                        stage.validation_gates.append(gate_q1)
+
+                        # Handle quorum decision
+                        if quorum_result.decision == ValidationDecision.PASS:
+                            # Success! Continue with contract
+                            stage.metadata = {
+                                "contract_name": contract.name,
+                                "contract_version": str(contract.version),
+                                "quorum_confidence": quorum_result.confidence,
+                                "quorum_decision": "PASS",
+                            }
+                            break
+
+                        elif quorum_result.decision == ValidationDecision.RETRY:
+                            # Retry needed
+                            if retry_attempt < max_retries:
+                                self.logger.warning(
+                                    f"Quorum RETRY (attempt {retry_attempt + 1}/{max_retries + 1}). "
+                                    f"Deficiencies: {quorum_result.deficiencies}"
+                                )
+                                # Rebuild contract with deficiency feedback
+                                # For now, we'll use the same data but log the deficiencies
+                                # Future: Incorporate feedback into contract building
+                                continue
+                            else:
+                                # Max retries exceeded
+                                stage.status = StageStatus.FAILED
+                                stage.error = (
+                                    f"Quorum validation failed after {max_retries + 1} attempts. "
+                                    f"Deficiencies: {', '.join(quorum_result.deficiencies[:3])}"
+                                )
+                                return stage, contract
+
+                        else:  # FAIL
+                            # Quorum failed contract
+                            stage.status = StageStatus.FAILED
+                            stage.error = (
+                                f"Quorum validation FAIL. "
+                                f"Deficiencies: {', '.join(quorum_result.deficiencies[:3])}"
+                            )
+                            return stage, contract
+
+                    except Exception as e:
+                        self.logger.error(
+                            f"Quorum validation error: {e}", exc_info=True
+                        )
+                        # Continue without quorum validation on error
+                        gate_q1_error = ValidationGate(
+                            gate_id="Q1",
+                            name="Quorum Contract Validation",
+                            status="warning",
+                            gate_type=GateType.WARNING,
+                            message=f"Quorum validation error: {str(e)[:100]}",
+                            duration_ms=int((time() - start_ms) * 1000),
+                        )
+                        stage.validation_gates.append(gate_q1_error)
+                        break
+
+            else:
+                # Quorum disabled or not available
+                self.logger.debug(
+                    f"Quorum validation skipped (enabled: {self.quorum_config.validate_contract}, "
+                    f"available: {QUORUM_AVAILABLE})"
+                )
+
+            # Stage completed successfully
+            stage.status = StageStatus.COMPLETED
+            if not stage.metadata:
+                stage.metadata = {
+                    "contract_name": contract.name,
+                    "contract_version": str(contract.version),
+                    "quorum_validation": "disabled",
+                }
+
+            return stage, contract
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            self.logger.error(f"Contract building failed: {e}", exc_info=True)
+            return stage, None
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_3_pre_validation(
         self, parsed_data: Dict[str, Any]
     ) -> PipelineStage:
         """
-        Stage 2: Pre-generation validation.
+        Stage 3: Pre-generation validation.
 
         Validation Gates (BLOCKING):
         - G1: Prompt completeness
@@ -510,7 +853,7 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
-    async def _stage_3_generate_code(
+    async def _stage_4_generate_code(
         self,
         analysis_result: SimplePRDAnalysisResult,
         node_type: str,
@@ -520,7 +863,7 @@ class GenerationPipeline:
         intelligence_context: IntelligenceContext,
     ) -> Tuple[PipelineStage, Dict]:
         """
-        Stage 3: Generate node code from templates with intelligence.
+        Stage 4: Generate node code from templates with intelligence.
 
         No blocking validation gates (G7-G8 are warnings in Stage 1).
         """
@@ -556,11 +899,11 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
-    async def _stage_4_post_validation(
+    async def _stage_5_post_validation(
         self, generated_files: Dict[str, Any], node_type: str
     ) -> PipelineStage:
         """
-        Stage 4: Post-generation validation.
+        Stage 5: Post-generation validation.
 
         Validation Gates (BLOCKING):
         - G9: Python syntax valid
@@ -638,11 +981,11 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
-    async def _stage_5_write_files(
+    async def _stage_6_write_files(
         self, generation_result: Dict[str, Any], output_directory: str
     ) -> Tuple[PipelineStage, Dict]:
         """
-        Stage 5: Write generated files to filesystem.
+        Stage 6: Write generated files to filesystem.
 
         Files are already written by template engine, this stage verifies.
         """
@@ -692,11 +1035,11 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
-    async def _stage_6_compile_test(
+    async def _stage_7_compile_test(
         self, output_path: str, node_type: str, service_name: str
     ) -> Tuple[PipelineStage, Dict]:
         """
-        Stage 6: Compilation testing (OPTIONAL).
+        Stage 7: Compilation testing (OPTIONAL).
 
         Validation Gates (WARNING):
         - G13: MyPy type checking

@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 # Phase 1: Import GenerationPipeline directly
 from agents.lib.generation_pipeline import GenerationPipeline
 from agents.lib.models.pipeline_models import PipelineResult
+from agents.lib.models.quorum_config import QuorumConfig
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +33,29 @@ class CLIHandler:
     implementation for Phase 1 (direct calls) vs Phase 4 (event bus).
     """
 
-    def __init__(self, enable_compilation_testing: bool = True):
+    def __init__(
+        self,
+        enable_compilation_testing: bool = True,
+        quorum_config: Optional[QuorumConfig] = None,
+        interactive_mode: bool = False,
+    ):
         """
         Initialize CLI handler.
 
         Args:
             enable_compilation_testing: Enable Stage 6 compilation testing
+            quorum_config: Optional quorum validation configuration
+            interactive_mode: Enable interactive checkpoints for user validation
         """
         self.logger = logging.getLogger(__name__)
+        self.quorum_config = quorum_config
+        self.interactive_mode = interactive_mode
 
         # Phase 1: Direct pipeline instantiation
         self.pipeline = GenerationPipeline(
-            enable_compilation_testing=enable_compilation_testing
+            enable_compilation_testing=enable_compilation_testing,
+            quorum_config=quorum_config,
+            interactive_mode=interactive_mode,
         )
 
         # Phase 4: Event bus client (commented for POC)
@@ -55,6 +67,8 @@ class CLIHandler:
         prompt: str,
         output_directory: str,
         correlation_id: Optional[UUID] = None,
+        quorum_config: Optional[QuorumConfig] = None,
+        interactive_mode: Optional[bool] = None,
     ) -> PipelineResult:
         """
         Generate ONEX node from natural language prompt.
@@ -66,6 +80,8 @@ class CLIHandler:
             prompt: Natural language description of node to generate
             output_directory: Target directory for generated files
             correlation_id: Optional correlation ID for tracking
+            quorum_config: Optional quorum validation configuration (overrides instance config)
+            interactive_mode: Optional interactive mode flag (overrides instance config)
 
         Returns:
             PipelineResult with comprehensive execution metadata
@@ -75,12 +91,39 @@ class CLIHandler:
         """
         correlation_id = correlation_id or uuid4()
 
+        # Use method-level configs if provided, otherwise fall back to instance configs
+        effective_quorum_config = (
+            quorum_config if quorum_config is not None else self.quorum_config
+        )
+        effective_interactive_mode = (
+            interactive_mode if interactive_mode is not None else self.interactive_mode
+        )
+
         self.logger.info(f"Starting node generation (correlation_id={correlation_id})")
+
+        # Determine which pipeline to use
+        # If method-level configs differ from instance, create temporary pipeline
+        pipeline = self.pipeline
+        needs_temp_pipeline = (
+            effective_interactive_mode != self.interactive_mode
+            or effective_quorum_config != self.quorum_config
+        )
+
+        if needs_temp_pipeline:
+            self.logger.debug(
+                f"Creating temporary pipeline with interactive_mode={effective_interactive_mode}, "
+                f"quorum_config={effective_quorum_config}"
+            )
+            pipeline = GenerationPipeline(
+                enable_compilation_testing=self.pipeline.enable_compilation_testing,
+                quorum_config=effective_quorum_config,
+                interactive_mode=effective_interactive_mode,
+            )
 
         # =====================================================================
         # Phase 1 (POC): Direct synchronous call
         # =====================================================================
-        result = await self.pipeline.execute(
+        result = await pipeline.execute(
             prompt=prompt,
             output_directory=output_directory,
             correlation_id=correlation_id,
