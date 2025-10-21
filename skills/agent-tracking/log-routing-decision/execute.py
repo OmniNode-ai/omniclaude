@@ -55,6 +55,9 @@ def log_routing_decision(args):
         else {}
     )
 
+    # Add correlation_id to context
+    context["correlation_id"] = correlation_id
+
     # Validate confidence score
     confidence = float(args.confidence)
     if confidence < 0.0 or confidence > 1.0:
