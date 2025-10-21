@@ -173,6 +173,36 @@ Proceed with generation? [Y/n]: y
 
 ## Examples
 
+### Enhanced Generation with Intelligence
+
+```bash
+# Generate with intelligence gathering (default)
+poetry run python cli/generate_node.py \
+    "Create EFFECT node called PostgresCRUD for database operations with connection pooling"
+
+# Generated code will include:
+# - Connection pooling patterns (detected from "database")
+# - Prepared statement best practices
+# - Transaction support
+# - Circuit breaker patterns
+# - All from intelligence gathering!
+```
+
+### Service Name Casing (Fixed!)
+
+Service names now preserve casing correctly:
+```bash
+# Input: PostgresCRUD
+poetry run python cli/generate_node.py "Create PostgresCRUD EFFECT node"
+
+# ✅ Generates: ModelPostgresCRUDInput (correct!)
+# ❌ Old: ModelPostgrescrudInput (incorrect)
+```
+
+**Acronyms preserved**: CRUD, API, SQL, HTTP, REST, JSON, XML, UUID, URI, URL, etc.
+
+---
+
 ### Example 1: PostgreSQL Database Writer
 
 ```bash

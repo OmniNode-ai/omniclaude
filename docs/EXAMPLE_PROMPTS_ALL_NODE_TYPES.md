@@ -6,6 +6,30 @@ This document provides example prompts for generating each of the 4 ONEX node ty
 
 **Characteristics**: External I/O, APIs, side effects, database writes, API calls
 
+### EFFECT Node with Intelligence Gathering
+
+**Prompt**:
+```
+Create EFFECT node called PostgresCRUD for PostgreSQL database with
+connection pooling, prepared statements, and transaction support
+```
+
+**Intelligence Detected**:
+- ✅ Connection pooling (from "database" + "connection pooling")
+- ✅ Prepared statements (from "PostgreSQL")
+- ✅ Transaction support (from "transaction support")
+- ✅ Circuit breaker (from EFFECT + database best practices)
+
+**Generated Code Includes**:
+```python
+# TODO: Implement connection pool acquisition
+# TODO: Use prepared statements for SQL injection prevention
+# TODO: Wrap operations in transaction
+# TODO: Apply circuit breaker for resilience
+```
+
+---
+
 ### Example 1: Database Writer
 ```
 Create an EFFECT node called DatabaseWriter that writes customer records to PostgreSQL.

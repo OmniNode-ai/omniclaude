@@ -14,8 +14,18 @@ from typing import Any, Dict, List, Optional, Set
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
+from .models.intelligence_context import IntelligenceContext, get_default_intelligence
 from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .template_cache import TemplateCache
+from .template_helpers import (
+    format_best_practices,
+    format_domain_patterns,
+    format_error_scenarios,
+    format_performance_targets,
+    generate_pattern_code_blocks,
+    generate_security_section,
+    generate_testing_section,
+)
 from .version_config import get_config
 
 # TODO: Add omnibase_spi imports when available
@@ -191,9 +201,10 @@ class OmniNodeTemplateEngine:
         microservice_name: str,
         domain: str,
         output_directory: str,
+        intelligence: Optional[IntelligenceContext] = None,
     ) -> Dict[str, Any]:
         """
-        Generate OmniNode implementation from PRD analysis.
+        Generate OmniNode implementation from PRD analysis with intelligence context.
 
         Args:
             analysis_result: PRD analysis result
@@ -201,6 +212,7 @@ class OmniNodeTemplateEngine:
             microservice_name: Name of the microservice
             domain: Domain of the microservice
             output_directory: Directory to write generated files
+            intelligence: Optional intelligence context for enhanced generation
 
         Returns:
             Dictionary with generated files and metadata
@@ -211,6 +223,11 @@ class OmniNodeTemplateEngine:
         try:
             self.logger.info(f"Generating {node_type} node: {microservice_name}")
 
+            # Use default intelligence if not provided
+            if intelligence is None:
+                self.logger.info(f"Using default intelligence for {node_type} node")
+                intelligence = get_default_intelligence(node_type)
+
             # Get template for node type
             template = self.templates.get(node_type)
             if not template:
@@ -220,9 +237,9 @@ class OmniNodeTemplateEngine:
                     context={"available_templates": list(self.templates.keys())},
                 )
 
-            # Prepare context for template rendering
+            # Prepare context for template rendering with intelligence
             context = self._prepare_template_context(
-                analysis_result, node_type, microservice_name, domain
+                analysis_result, node_type, microservice_name, domain, intelligence
             )
 
             # Generate node implementation
@@ -298,8 +315,9 @@ class OmniNodeTemplateEngine:
         node_type: str,
         microservice_name: str,
         domain: str,
+        intelligence: Optional[IntelligenceContext] = None,
     ) -> Dict[str, Any]:
-        """Prepare context variables for template rendering"""
+        """Prepare context variables for template rendering with intelligence"""
 
         # Basic context
         context = {
@@ -311,6 +329,65 @@ class OmniNodeTemplateEngine:
             "BUSINESS_DESCRIPTION": analysis_result.parsed_prd.description,
             "REPOSITORY_NAME": "omniclaude",  # Default for now
         }
+
+        # Add intelligence-driven context (NEW!)
+        if intelligence:
+            context["BEST_PRACTICES"] = intelligence.node_type_patterns
+            context["COMMON_OPERATIONS"] = intelligence.common_operations
+            context["REQUIRED_MIXINS"] = intelligence.required_mixins
+            context["PERFORMANCE_TARGETS"] = intelligence.performance_targets
+            context["ERROR_SCENARIOS"] = intelligence.error_scenarios
+            context["DOMAIN_PATTERNS"] = intelligence.domain_best_practices
+            context["ANTI_PATTERNS"] = intelligence.anti_patterns
+            context["TESTING_RECOMMENDATIONS"] = intelligence.testing_recommendations
+            context["SECURITY_CONSIDERATIONS"] = intelligence.security_considerations
+            context["INTELLIGENCE_CONFIDENCE"] = intelligence.confidence_score
+
+            # Add formatted versions for template use
+            context["BEST_PRACTICES_FORMATTED"] = format_best_practices(
+                intelligence.node_type_patterns
+            )
+            context["ERROR_SCENARIOS_FORMATTED"] = format_error_scenarios(
+                intelligence.error_scenarios
+            )
+            context["PERFORMANCE_TARGETS_FORMATTED"] = format_performance_targets(
+                intelligence.performance_targets
+            )
+            context["DOMAIN_PATTERNS_FORMATTED"] = format_domain_patterns(
+                intelligence.domain_best_practices
+            )
+            context["PATTERN_CODE_BLOCKS"] = generate_pattern_code_blocks(
+                intelligence.node_type_patterns, node_type
+            )
+            context["TESTING_SECTION"] = generate_testing_section(
+                intelligence.testing_recommendations, node_type
+            )
+            context["SECURITY_SECTION"] = generate_security_section(
+                intelligence.security_considerations, node_type
+            )
+        else:
+            # Defaults if no intelligence provided
+            context["BEST_PRACTICES"] = []
+            context["COMMON_OPERATIONS"] = []
+            context["REQUIRED_MIXINS"] = []
+            context["PERFORMANCE_TARGETS"] = {}
+            context["ERROR_SCENARIOS"] = []
+            context["DOMAIN_PATTERNS"] = []
+            context["ANTI_PATTERNS"] = []
+            context["TESTING_RECOMMENDATIONS"] = []
+            context["SECURITY_CONSIDERATIONS"] = []
+            context["INTELLIGENCE_CONFIDENCE"] = 0.0
+
+            # Add empty formatted versions
+            context["BEST_PRACTICES_FORMATTED"] = "    - Standard ONEX patterns"
+            context["ERROR_SCENARIOS_FORMATTED"] = "    - Standard error handling"
+            context["PERFORMANCE_TARGETS_FORMATTED"] = (
+                "    - Standard performance requirements"
+            )
+            context["DOMAIN_PATTERNS_FORMATTED"] = "    - Standard domain patterns"
+            context["PATTERN_CODE_BLOCKS"] = ""
+            context["TESTING_SECTION"] = generate_testing_section([], node_type)
+            context["SECURITY_SECTION"] = generate_security_section([], node_type)
 
         # Add mixin information
         mixins = analysis_result.recommended_mixins
@@ -334,11 +411,73 @@ class OmniNodeTemplateEngine:
         return context
 
     def _to_pascal_case(self, text: str) -> str:
-        """Convert text to PascalCase"""
-        return "".join(
-            word.capitalize()
-            for word in text.replace("_", " ").replace("-", " ").split()
-        )
+        """
+        Convert text to PascalCase while preserving acronyms.
+
+        Examples:
+            "postgres_crud" -> "PostgresCRUD"
+            "rest_api" -> "RestAPI"
+            "http_client" -> "HttpClient"
+            "sql_connector" -> "SQLConnector"
+            "PostgresCRUD" -> "PostgresCRUD" (preserved)
+        """
+        # Core acronyms that should ALWAYS be uppercase (even as first word)
+        CORE_ACRONYMS = {
+            "CRUD",
+            "API",
+            "SQL",
+            "JSON",
+            "XML",
+            "UUID",
+            "URI",
+            "URL",
+            "JWT",
+            "CSS",
+            "HTML",
+        }
+
+        # Protocol/tech acronyms that should be uppercase only when NOT first word
+        PROTOCOL_ACRONYMS = {
+            "HTTP",
+            "REST",
+            "SMTP",
+            "FTP",
+            "SSH",
+            "SSL",
+            "TLS",
+            "TCP",
+            "UDP",
+            "IP",
+            "OAUTH",
+        }
+
+        # If already has mixed case (PascalCase), preserve it
+        if any(c.isupper() for c in text) and any(c.islower() for c in text):
+            # Already in PascalCase format, return as-is
+            return text
+
+        # Convert from snake_case or kebab-case
+        words = text.replace("_", " ").replace("-", " ").split()
+        result_parts = []
+
+        for idx, word in enumerate(words):
+            word_upper = word.upper()
+
+            if word_upper in CORE_ACRONYMS:
+                # Core acronyms always uppercase
+                result_parts.append(word_upper)
+            elif word_upper in PROTOCOL_ACRONYMS:
+                if idx == 0:
+                    # First word: capitalize first letter only (e.g., "rest" -> "Rest", "http" -> "Http")
+                    result_parts.append(word.capitalize())
+                else:
+                    # Subsequent words: keep uppercase (e.g., "http" -> "HTTP")
+                    result_parts.append(word_upper)
+            else:
+                # Capitalize normally
+                result_parts.append(word.capitalize())
+
+        return "".join(result_parts)
 
     def _generate_mixin_imports(self, mixins: List[str]) -> str:
         """Generate mixin import statements"""

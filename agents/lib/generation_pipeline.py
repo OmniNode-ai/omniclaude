@@ -2,15 +2,16 @@
 """
 Generation Pipeline - Autonomous Node Generation POC
 
-Orchestrates the 6-stage node generation pipeline with 14 validation gates:
+Orchestrates the 7-stage node generation pipeline with 15 validation gates:
 - Stage 1: Prompt Parsing (5s)
+- Stage 1.5: Intelligence Gathering (3s) - 1 warning gate
 - Stage 2: Pre-Generation Validation (2s) - 6 blocking gates
 - Stage 3: Code Generation (10-15s) - 2 warning gates
 - Stage 4: Post-Generation Validation (5s) - 4 blocking gates
 - Stage 5: File Writing (3s)
 - Stage 6: Compilation Testing (10s) - 2 warning gates
 
-Total target: ~40 seconds for successful generation.
+Total target: ~43 seconds for successful generation.
 """
 
 import ast
@@ -28,6 +29,10 @@ from uuid import UUID, uuid4
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
+# Import existing components
+from .intelligence_gatherer import IntelligenceGatherer
+from .models.intelligence_context import IntelligenceContext
+
 # Import pipeline models
 from .models.pipeline_models import (
     GateType,
@@ -36,8 +41,6 @@ from .models.pipeline_models import (
     StageStatus,
     ValidationGate,
 )
-
-# Import existing components
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .prompt_parser import PromptParser
 from .simple_prd_analyzer import SimplePRDAnalysisResult, SimplePRDAnalyzer
@@ -68,6 +71,7 @@ class GenerationPipeline:
         self,
         template_engine: Optional[OmniNodeTemplateEngine] = None,
         enable_compilation_testing: bool = True,
+        enable_intelligence_gathering: bool = True,
     ):
         """
         Initialize generation pipeline.
@@ -75,6 +79,7 @@ class GenerationPipeline:
         Args:
             template_engine: Pre-configured template engine (optional)
             enable_compilation_testing: Enable Stage 6 compilation testing
+            enable_intelligence_gathering: Enable Stage 1.5 intelligence gathering
         """
         self.logger = logging.getLogger(__name__)
         self.template_engine = template_engine or OmniNodeTemplateEngine(
@@ -83,6 +88,10 @@ class GenerationPipeline:
         self.prd_analyzer = SimplePRDAnalyzer(enable_ml_recommendations=False)
         self.prompt_parser = PromptParser()
         self.enable_compilation_testing = enable_compilation_testing
+        self.enable_intelligence_gathering = enable_intelligence_gathering
+
+        # Lazy-initialize intelligence gatherer (only if needed)
+        self._intelligence_gatherer: Optional[IntelligenceGatherer] = None
 
         # Track written files for rollback
         self.written_files: List[Path] = []
@@ -142,6 +151,23 @@ class GenerationPipeline:
             service_name = parsed_data["service_name"]
             domain = parsed_data["domain"]
 
+            # Stage 1.5: Intelligence Gathering (Optional)
+            intelligence_context = IntelligenceContext()  # Default empty context
+            if self.enable_intelligence_gathering:
+                stage1_5, intelligence_context = (
+                    await self._stage_1_5_gather_intelligence(
+                        parsed_data, analysis_result
+                    )
+                )
+                stages.append(stage1_5)
+
+                if stage1_5.status == StageStatus.FAILED:
+                    # Graceful degradation: continue with empty intelligence
+                    self.logger.warning(
+                        "Intelligence gathering failed, continuing with defaults"
+                    )
+                    intelligence_context = IntelligenceContext()
+
             # Stage 2: Pre-Generation Validation
             stage2 = await self._stage_2_pre_validation(parsed_data)
             stages.append(stage2)
@@ -152,9 +178,14 @@ class GenerationPipeline:
                     message=f"Stage 2 failed: {stage2.error}",
                 )
 
-            # Stage 3: Code Generation
+            # Stage 3: Code Generation (with intelligence context)
             stage3, generation_result = await self._stage_3_generate_code(
-                analysis_result, node_type, service_name, domain, output_directory
+                analysis_result,
+                node_type,
+                service_name,
+                domain,
+                output_directory,
+                intelligence_context,
             )
             stages.append(stage3)
 
@@ -328,6 +359,67 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
+    async def _stage_1_5_gather_intelligence(
+        self, parsed_data: Dict[str, Any], analysis_result: SimplePRDAnalysisResult
+    ) -> Tuple[PipelineStage, IntelligenceContext]:
+        """
+        Stage 1.5: Gather intelligence for enhanced generation.
+
+        This stage gathers best practices, patterns, and production examples
+        to enhance code generation quality.
+
+        Validation Gates:
+        - I1: Intelligence completeness (WARNING)
+        """
+        stage = PipelineStage(
+            stage_name="intelligence_gathering", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # Lazy-initialize intelligence gatherer
+            if not self._intelligence_gatherer:
+                self._intelligence_gatherer = IntelligenceGatherer()
+                self.logger.debug("Initialized IntelligenceGatherer")
+
+            # Gather intelligence
+            intelligence = await self._intelligence_gatherer.gather_intelligence(
+                node_type=parsed_data["node_type"],
+                domain=parsed_data["domain"],
+                service_name=parsed_data["service_name"],
+                operations=parsed_data.get("operations", []),
+                prompt=analysis_result.prd_content,  # Fixed: use prd_content not original_prompt
+            )
+
+            # I1: Validate intelligence completeness
+            gate_i1 = self._gate_i1_intelligence_completeness(intelligence)
+            stage.validation_gates.append(gate_i1)
+
+            # Add metadata
+            stage.metadata = {
+                "patterns_found": len(intelligence.node_type_patterns),
+                "code_examples": len(intelligence.code_examples),
+                "rag_sources": intelligence.rag_sources,
+                "recommended_mixins": intelligence.required_mixins,
+                "confidence_score": intelligence.confidence_score,
+            }
+
+            stage.status = StageStatus.COMPLETED
+            stage.end_time = datetime.utcnow()
+
+            return stage, intelligence
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            stage.end_time = datetime.utcnow()
+            self.logger.error(f"Intelligence gathering failed: {e}")
+            return stage, IntelligenceContext()  # Return empty context
+
+        finally:
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
     async def _stage_2_pre_validation(
         self, parsed_data: Dict[str, Any]
     ) -> PipelineStage:
@@ -425,9 +517,10 @@ class GenerationPipeline:
         service_name: str,
         domain: str,
         output_directory: str,
+        intelligence_context: IntelligenceContext,
     ) -> Tuple[PipelineStage, Dict]:
         """
-        Stage 3: Generate node code from templates.
+        Stage 3: Generate node code from templates with intelligence.
 
         No blocking validation gates (G7-G8 are warnings in Stage 1).
         """
@@ -436,13 +529,14 @@ class GenerationPipeline:
         start_ms = time()
 
         try:
-            # Generate node using template engine
+            # Generate node using template engine with intelligence
             generation_result = await self.template_engine.generate_node(
                 analysis_result=analysis_result,
                 node_type=node_type,
                 microservice_name=service_name,
                 domain=domain,
                 output_directory=output_directory,
+                intelligence=intelligence_context,  # Fixed: parameter name is 'intelligence' not 'intelligence_context'
             )
 
             stage.status = StageStatus.COMPLETED
@@ -862,6 +956,45 @@ class GenerationPipeline:
             duration_ms=int((time() - start_ms) * 1000),
         )
 
+    def _gate_i1_intelligence_completeness(
+        self, intelligence: IntelligenceContext
+    ) -> ValidationGate:
+        """I1: Verify intelligence gathering completeness (WARNING)."""
+        start_ms = time()
+
+        # Check if we have meaningful intelligence
+        has_patterns = len(intelligence.node_type_patterns) > 0
+        has_best_practices = len(intelligence.domain_best_practices) > 0
+
+        if not has_patterns:
+            return ValidationGate(
+                gate_id="I1",
+                name="Intelligence Completeness",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message="No node type patterns found - using template defaults",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        if not has_best_practices:
+            return ValidationGate(
+                gate_id="I1",
+                name="Intelligence Completeness",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message="No domain best practices found - limited enhancement",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="I1",
+            name="Intelligence Completeness",
+            status="pass",
+            gate_type=GateType.WARNING,
+            message=f"Intelligence gathered: {len(intelligence.node_type_patterns)} patterns from {len(intelligence.rag_sources)} sources (confidence: {intelligence.confidence_score:.2f})",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
     def _gate_g9_python_syntax_valid(self, code: str, file_path: str) -> ValidationGate:
         """G9: Generated code has valid Python syntax (AST parsing)."""
         start_ms = time()
@@ -1137,6 +1270,21 @@ class GenerationPipeline:
     # Helper Methods
     # -------------------------------------------------------------------------
 
+    def _to_snake_case(self, text: str) -> str:
+        """
+        Convert PascalCase/camelCase to snake_case while preserving acronyms.
+
+        Examples:
+            "PostgresCRUD" -> "postgres_crud"
+            "RestAPI" -> "rest_api"
+            "HttpClient" -> "http_client"
+        """
+        # Insert underscore before uppercase letters that follow lowercase letters
+        # or before uppercase letters that are followed by lowercase letters
+        result = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
+        result = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", result)
+        return result.lower()
+
     def _prompt_to_prd(self, prompt: str) -> str:
         """Convert prompt to simple PRD format."""
         return f"""# Node Generation Request
@@ -1176,6 +1324,7 @@ class GenerationPipeline:
     ) -> str:
         """Extract service name from prompt."""
         # Strategy 1: Explicit name patterns (similar to PromptParser logic)
+        # IMPORTANT: Preserve exact casing from input (including acronyms like CRUD, API, etc.)
         patterns = [
             r"(?:called|named)\s+([A-Z][A-Za-z0-9_]+)",  # "called DatabaseWriter"
             r"(?:name|Name):\s*([A-Z][A-Za-z0-9_]+)",  # "Name: DatabaseWriter"
@@ -1196,7 +1345,9 @@ class GenerationPipeline:
                     and name[0].isupper()
                     and name.upper() not in node_type_keywords
                 ):
-                    return name.lower()
+                    # PRESERVE EXACT CASING - return as-is for template engine to convert
+                    # Template engine will use _to_pascal_case which preserves acronyms
+                    return self._to_snake_case(name)
 
         # Strategy 2: Extract from "for XXX" pattern
         match = re.search(r"for\s+(\w+)", prompt, re.IGNORECASE)
