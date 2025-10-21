@@ -27,35 +27,43 @@ from time import time
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
-# Import from omnibase_core
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
+# Load environment variables from .env file
+from dotenv import load_dotenv
 
-# Import interactive validation
-from ..parallel_execution.interactive_validator import (
+load_dotenv()  # Load .env file automatically
+
+# Import from omnibase_core  # noqa: E402 (must load .env first)
+from omnibase_core.errors import EnumCoreErrorCode, OnexError  # noqa: E402
+
+# Import interactive validation  # noqa: E402
+from ..parallel_execution.interactive_validator import (  # noqa: E402
     CheckpointType,
     UserChoice,
     create_validator,
 )
 
-# Import contract building components
-from .generation.contract_builder_factory import ContractBuilderFactory
+# Import contract building components  # noqa: E402
+from .generation.contract_builder_factory import ContractBuilderFactory  # noqa: E402
 
-# Import existing components
-from .intelligence_gatherer import IntelligenceGatherer
-from .models.intelligence_context import IntelligenceContext
+# Import existing components  # noqa: E402
+from .intelligence_gatherer import IntelligenceGatherer  # noqa: E402
+from .models.intelligence_context import IntelligenceContext  # noqa: E402
 
-# Import pipeline models
-from .models.pipeline_models import (
+# Import pipeline models  # noqa: E402
+from .models.pipeline_models import (  # noqa: E402
     GateType,
     PipelineResult,
     PipelineStage,
     StageStatus,
     ValidationGate,
 )
-from .models.quorum_config import QuorumConfig
-from .omninode_template_engine import OmniNodeTemplateEngine
-from .prompt_parser import PromptParser
-from .simple_prd_analyzer import SimplePRDAnalysisResult, SimplePRDAnalyzer
+from .models.quorum_config import QuorumConfig  # noqa: E402
+from .omninode_template_engine import OmniNodeTemplateEngine  # noqa: E402
+from .prompt_parser import PromptParser  # noqa: E402
+from .simple_prd_analyzer import (  # noqa: E402
+    SimplePRDAnalysisResult,
+    SimplePRDAnalyzer,
+)
 
 # Import quorum validation (optional dependency)
 try:
