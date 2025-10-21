@@ -54,12 +54,17 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env file before any other imports
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.lib.models.pipeline_models import PipelineResult
-from agents.lib.models.quorum_config import QuorumConfig
-from cli.lib import CLIHandler
+from agents.lib.models.pipeline_models import PipelineResult  # noqa: E402
+from agents.lib.models.quorum_config import QuorumConfig  # noqa: E402
+from cli.lib import CLIHandler  # noqa: E402
 
 
 def setup_logging(debug: bool = False) -> None:
