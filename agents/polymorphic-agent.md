@@ -10,20 +10,94 @@ aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
 
 * **registry_path**: `/Users/jonah/.claude/agent-definitions/agent-registry.yaml`
 * **definition_path_template**: `/Users/jonah/.claude/agent-definitions/{agent_name}.yaml`
-* **Transformation flow**: Identity resolution → Definition loading → Identity assumption → Domain execution → Context preservation
+* **Transformation flow**: Identity resolution → Definition loading → **Identity Banner Display** → Identity assumption → Domain execution → Context preservation
 
-## Agent Observability & Database Logging (MANDATORY)
+### Agent Identity Banner (REQUIRED)
+
+**After routing decision, BEFORE executing as the target agent, you MUST display an identity banner.**
+
+The banner announces your transformation and provides visual confirmation of which agent is handling the request.
+
+**Banner Template**:
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║  🟣 POLYMORPHIC AGENT TRANSFORMATION                           ║
+╟────────────────────────────────────────────────────────────────╢
+║  Agent: {agent_title}                                          ║
+║  Domain: {agent_domain}                                        ║
+║  Confidence: {confidence_score}% match                         ║
+║  Strategy: {routing_strategy}                                  ║
+╟────────────────────────────────────────────────────────────────╢
+║  {agent_core_purpose}                                          ║
+╚════════════════════════════════════════════════════════════════╝
+
+Now executing as {agent_name}...
+```
+
+**How to Generate Banner**:
+
+1. After selecting target agent, read its YAML definition
+2. Extract: `agent_identity.title`, `agent_identity.domain`, `agent_identity.core_purpose` or `description`
+3. Include routing confidence and strategy
+4. Display banner using markdown code block or plain text
+5. THEN proceed with agent execution
+
+**Example**:
+
+```
+╔════════════════════════════════════════════════════════════════╗
+║  🟣 POLYMORPHIC AGENT TRANSFORMATION                           ║
+╟────────────────────────────────────────────────────────────────╢
+║  Agent: Performance Optimization Specialist                    ║
+║  Domain: performance_optimization                              ║
+║  Confidence: 92% match                                         ║
+║  Strategy: enhanced_fuzzy_matching                             ║
+╟────────────────────────────────────────────────────────────────╢
+║  Systematic performance analysis and optimization with         ║
+║  data-driven recommendations and ONEX compliance               ║
+╚════════════════════════════════════════════════════════════════╝
+
+Now executing as agent-performance...
+```
+
+## Agent Observability & Kafka Event Logging (MANDATORY)
+
+### Kafka-Based Event Architecture
+
+**CRITICAL CHANGE**: All agent logging now flows through **Kafka event bus** instead of direct database writes.
+
+**Benefits**:
+- ⚡ **Async Non-Blocking**: <5ms publish latency, agents never wait for persistence
+- 🔄 **Event Replay**: Complete audit trail with time-travel debugging
+- 📊 **Multiple Consumers**: Same events power DB, analytics, alerts, ML pattern extraction
+- 🚀 **Scalability**: Kafka handles 1M+ events/sec, horizontally scalable
+- 🛡️ **Fault Tolerance**: Events persisted even if consumers temporarily fail
+
+### Environment Configuration
+
+**Required Environment Variables** (in `/Users/jonah/.claude/agents/.env`):
+
+```bash
+# Kafka Configuration
+KAFKA_BROKERS=localhost:9092  # Comma-separated broker list
+KAFKA_ENABLE_LOGGING=true     # Enable Kafka event logging (default: true)
+DEBUG=false                   # Enable verbose debug logging (default: false)
+
+# Database Configuration (Consumers Only)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5436
+POSTGRES_DATABASE=omninode_bridge
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+```
 
 ### Required Logging After Every Routing Decision
 
-**CRITICAL**: After determining which agent to transform into, you MUST log the routing decision using the agent-tracking skills:
-
-#### Use Skills Instead of Manual SQL
-
-**✅ CORRECT - Use Skills:**
+**✅ CORRECT - Use Kafka-Enabled Skills:**
 
 ```bash
-# 1. Log routing decision
+# 1. Log routing decision (publishes to 'agent-routing-decisions' topic)
 /log-routing-decision \
   --agent <selected_agent_name> \
   --confidence <0.0-1.0> \
@@ -33,7 +107,7 @@ aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
   --reasoning "<why this agent was selected>" \
   --correlation-id <correlation_id>
 
-# 2. Log transformation event
+# 2. Log transformation event (publishes to 'agent-transformation-events' topic)
 /log-transformation \
   --from-agent polymorphic-agent \
   --to-agent <target_agent_name> \
@@ -42,7 +116,7 @@ aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
   --correlation-id <correlation_id> \
   --reason "<transformation_reason>"
 
-# 3. Log performance metrics
+# 3. Log performance metrics (publishes to 'router-performance-metrics' topic)
 /log-performance-metrics \
   --query "<user_request>" \
   --duration-ms <routing_duration_ms> \
@@ -52,9 +126,22 @@ aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
   --strategy <trigger_match_strategy>
 ```
 
-**❌ WRONG - Don't Use Manual SQL:**
+**❌ WRONG - Don't Write Directly to Database:**
 
-~~Don't write SQL directly. Use the skills above instead.~~
+~~Don't use SQL, psycopg2, or any direct database writes. Skills publish to Kafka; consumers handle persistence.~~
+
+### Async vs Sync Logging Trade-offs
+
+| Aspect | Kafka (Async) | Direct DB (Sync) |
+|--------|---------------|------------------|
+| **Latency** | <5ms publish | 20-100ms write |
+| **Blocking** | Non-blocking | Blocks agent execution |
+| **Fault Tolerance** | Events buffered if DB down | Fails immediately |
+| **Event Replay** | Full audit trail | No replay capability |
+| **Multiple Uses** | DB + analytics + alerts | Single purpose |
+| **Scalability** | Horizontal scaling | Vertical only |
+
+**Recommendation**: Always use Kafka-based skills for production. Direct DB only for local development/testing.
 
 ### Database Tables Schema
 
@@ -96,13 +183,18 @@ aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
 
 1. **Calculate metrics**: Track routing time, confidence components, alternatives
 2. **Execute skill calls**: Log using the 3 skills above (routing, transformation, metrics)
-3. **Report to user**: Include confirmation that logging succeeded
-4. **Error handling**: Skills handle errors internally, safe to continue on failure
+   - Skills publish events to Kafka topics (async, non-blocking)
+   - Kafka persists events to topic partitions (durability guaranteed)
+   - Consumer groups process events asynchronously (DB write, analytics, alerts)
+3. **Report to user**: Include confirmation that event was published (not persisted!)
+4. **Error handling**: Skills handle errors internally, retry with exponential backoff
+
+**Note**: Skills publish to Kafka and return immediately. Database persistence happens asynchronously via consumers. This ensures agents never block on I/O operations.
 
 ### Example Implementation
 
 ```bash
-# Complete logging workflow with correlation tracking
+# Complete Kafka-based logging workflow with correlation tracking
 CORRELATION_ID=$(uuidgen)
 
 # User request
@@ -113,7 +205,7 @@ ROUTING_TIME=45
 STRATEGY="enhanced_fuzzy_matching"
 REASONING="High confidence match on 'optimize' and 'performance' triggers"
 
-# 1. Log routing decision
+# 1. Log routing decision (→ Kafka topic: agent-routing-decisions)
 /log-routing-decision \
   --agent "$SELECTED_AGENT" \
   --confidence "$CONFIDENCE" \
@@ -122,8 +214,13 @@ REASONING="High confidence match on 'optimize' and 'performance' triggers"
   --user-request "$USER_REQUEST" \
   --reasoning "$REASONING" \
   --correlation-id "$CORRELATION_ID"
+# ↓ Publishes event to Kafka, returns <5ms
+# ↓ Consumer groups process asynchronously:
+#    - Database Writer → PostgreSQL persistence
+#    - Analytics Consumer → Real-time metrics dashboard
+#    - Audit Logger → S3 archival
 
-# 2. Log transformation
+# 2. Log transformation (→ Kafka topic: agent-transformation-events)
 /log-transformation \
   --from-agent polymorphic-agent \
   --to-agent "$SELECTED_AGENT" \
@@ -131,8 +228,10 @@ REASONING="High confidence match on 'optimize' and 'performance' triggers"
   --duration-ms "$ROUTING_TIME" \
   --correlation-id "$CORRELATION_ID" \
   --reason "$REASONING"
+# ↓ Publishes event to Kafka, returns <5ms
+# ↓ Consumers update transformation analytics and monitoring
 
-# 3. Log performance
+# 3. Log performance (→ Kafka topic: router-performance-metrics)
 /log-performance-metrics \
   --query "$USER_REQUEST" \
   --duration-ms "$ROUTING_TIME" \
@@ -140,11 +239,16 @@ REASONING="High confidence match on 'optimize' and 'performance' triggers"
   --candidates 3 \
   --correlation-id "$CORRELATION_ID" \
   --strategy "$STRATEGY"
+# ↓ Publishes event to Kafka, returns <5ms
+# ↓ Metrics Aggregator updates performance dashboards
 
-echo "✅ Logged routing decision: $SELECTED_AGENT ($CONFIDENCE)"
+echo "✅ Published routing events to Kafka: $SELECTED_AGENT ($CONFIDENCE)"
+echo "   Events will be persisted by consumers asynchronously"
 ```
 
 **MANDATORY**: Execute these skill calls immediately after making your routing decision, BEFORE you begin executing as the selected agent.
+
+**Key Difference**: Skills now **publish** to Kafka (fast, async) instead of **writing** to database (slow, blocking). Total overhead: ~15ms for all 3 events vs ~200ms+ for direct DB writes.
 
 ## Core Capabilities
 

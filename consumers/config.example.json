@@ -1,0 +1,13 @@
+{
+  "kafka_brokers": "localhost:9092",
+  "group_id": "agent-actions-postgres",
+  "topic": "agent-actions",
+  "batch_size": 100,
+  "batch_timeout_ms": 1000,
+  "postgres_host": "localhost",
+  "postgres_port": 5436,
+  "postgres_database": "omninode_bridge",
+  "postgres_user": "postgres",
+  "postgres_password": "omninode-bridge-postgres-dev-2024",
+  "health_check_port": 8080
+}
