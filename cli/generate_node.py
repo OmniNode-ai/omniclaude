@@ -9,7 +9,7 @@ language prompts.
 **Phase 4 (Future)**: Event bus publish/subscribe pattern
 
 Usage:
-    # Direct prompt
+    # Direct prompt (default balanced mode)
     poetry run python cli/generate_node.py "Create EFFECT node for database writes"
 
     # Interactive mode
@@ -21,15 +21,27 @@ Usage:
     # Debug mode with verbose logging
     poetry run python cli/generate_node.py --prompt "..." --debug
 
+    # Fast mode (no validation, ~0.7s)
+    poetry run python cli/generate_node.py --mode fast "Create EFFECT node..."
+
+    # Strict mode (all validation, ~18s)
+    poetry run python cli/generate_node.py --mode strict "Create EFFECT node..."
+
 Examples:
-    # Generate PostgreSQL writer node
+    # Generate PostgreSQL writer node (default balanced mode: 7s, 85% confidence)
     poetry run python cli/generate_node.py \\
         "Create EFFECT node for PostgreSQL database write operations"
 
-    # Generate with custom output
+    # Generate with strict validation for production (18s, 97% confidence)
     poetry run python cli/generate_node.py \\
+        --mode strict \\
         --prompt "Create EFFECT node for Redis cache operations" \\
         --output ./generated_nodes
+
+    # Fast development iteration (0.7s, 70% confidence)
+    poetry run python cli/generate_node.py \\
+        --mode fast \\
+        "Create COMPUTE node for price calculation"
 
     # Interactive mode for guided generation
     poetry run python cli/generate_node.py --interactive
@@ -46,6 +58,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.models.pipeline_models import PipelineResult
+from agents.lib.models.quorum_config import QuorumConfig
 from cli.lib import CLIHandler
 
 
@@ -299,6 +312,24 @@ Examples:
         action="store_true",
         help="Skip compilation testing (Stage 6)",
     )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        choices=["fast", "balanced", "standard", "strict"],
+        default="balanced",
+        help=(
+            "Execution mode (speed vs quality tradeoff). "
+            "fast: No validation (0.7s, 70%% confidence), "
+            "balanced: PRD + Contract validation (7s, 85%% confidence) [DEFAULT], "
+            "standard: Most stages validated (10s, 92%% confidence), "
+            "strict: All stages validated (18s, 97%% confidence)"
+        ),
+    )
+    parser.add_argument(
+        "--interactive-checkpoints",
+        action="store_true",
+        help="Enable interactive checkpoints during pipeline execution",
+    )
 
     args = parser.parse_args()
 
@@ -315,8 +346,32 @@ Examples:
         print("\n❌ Error: Either provide a prompt or use --interactive mode")
         return 1
 
+    # Create quorum config from execution mode
+    quorum_config = QuorumConfig.from_mode(args.mode)
+
+    # Show mode info
+    print(f"\n⚙️  Execution Mode: {args.mode}")
+    print("   Validation stages: ", end="")
+    stages = []
+    if quorum_config.validate_prd_analysis:
+        stages.append("PRD")
+    if quorum_config.validate_intelligence:
+        stages.append("Intelligence")
+    if quorum_config.validate_contract:
+        stages.append("Contract")
+    if quorum_config.validate_node_code:
+        stages.append("Node Code")
+    print(", ".join(stages) if stages else "None (fast mode)")
+    if args.interactive_checkpoints:
+        print("   Interactive checkpoints: ENABLED")
+    print()
+
     # Initialize CLI handler with async context manager for proper cleanup
-    async with CLIHandler(enable_compilation_testing=not args.no_compile) as handler:
+    async with CLIHandler(
+        enable_compilation_testing=not args.no_compile,
+        quorum_config=quorum_config,
+        interactive_mode=args.interactive_checkpoints,
+    ) as handler:
         try:
             # Validate output directory
             handler.validate_output_directory(args.output)
