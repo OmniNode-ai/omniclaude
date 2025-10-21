@@ -8,12 +8,11 @@ Responsible for:
 - Backup and cleanup operations
 """
 
-import os
 import json
+import os
 import shutil
 import time
-from typing import Dict, Any, Optional, List
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class FileUtils:
@@ -34,7 +33,7 @@ class FileUtils:
         except OSError as e:
             raise OSError(f"Failed to create directory {full_path}: {e}")
 
-    def write_file(self, file_path: str, content: str, encoding: str = 'utf-8') -> None:
+    def write_file(self, file_path: str, content: str, encoding: str = "utf-8") -> None:
         """Write content to file with proper encoding."""
         full_path = self._resolve_path(file_path)
 
@@ -44,7 +43,7 @@ class FileUtils:
             self.ensure_directory(parent_dir)
 
         try:
-            with open(full_path, 'w', encoding=encoding) as f:
+            with open(full_path, "w", encoding=encoding) as f:
                 f.write(content)
         except OSError as e:
             raise OSError(f"Failed to write file {full_path}: {e}")
@@ -57,7 +56,7 @@ class FileUtils:
         except (TypeError, ValueError) as e:
             raise ValueError(f"Failed to serialize data to JSON for {file_path}: {e}")
 
-    def read_file(self, file_path: str, encoding: str = 'utf-8') -> str:
+    def read_file(self, file_path: str, encoding: str = "utf-8") -> str:
         """Read content from file."""
         full_path = self._resolve_path(file_path)
 
@@ -65,7 +64,7 @@ class FileUtils:
             raise FileNotFoundError(f"File not found: {full_path}")
 
         try:
-            with open(full_path, 'r', encoding=encoding) as f:
+            with open(full_path, "r", encoding=encoding) as f:
                 return f.read()
         except OSError as e:
             raise OSError(f"Failed to read file {full_path}: {e}")
@@ -145,7 +144,9 @@ class FileUtils:
         self.copy_file(file_path, backup_path)
         return backup_path
 
-    def list_files(self, directory_path: str, pattern: str = "*", recursive: bool = False) -> List[str]:
+    def list_files(
+        self, directory_path: str, pattern: str = "*", recursive: bool = False
+    ) -> List[str]:
         """List files in directory matching pattern."""
         full_path = self._resolve_path(directory_path)
 
@@ -158,13 +159,17 @@ class FileUtils:
             for root, dirs, filenames in os.walk(full_path):
                 for filename in filenames:
                     if self._matches_pattern(filename, pattern):
-                        rel_path = os.path.relpath(os.path.join(root, filename), self.base_path)
+                        rel_path = os.path.relpath(
+                            os.path.join(root, filename), self.base_path
+                        )
                         files.append(rel_path)
         else:
             try:
                 for filename in os.listdir(full_path):
                     file_full_path = os.path.join(full_path, filename)
-                    if os.path.isfile(file_full_path) and self._matches_pattern(filename, pattern):
+                    if os.path.isfile(file_full_path) and self._matches_pattern(
+                        filename, pattern
+                    ):
                         rel_path = os.path.relpath(file_full_path, self.base_path)
                         files.append(rel_path)
             except OSError:
@@ -192,17 +197,17 @@ class FileUtils:
         stat_info = os.stat(full_path)
 
         return {
-            'path': full_path,
-            'size': stat_info.st_size,
-            'modified': stat_info.st_mtime,
-            'created': stat_info.st_ctime,
-            'is_file': os.path.isfile(full_path),
-            'is_directory': os.path.isdir(full_path),
-            'is_symlink': os.path.islink(full_path),
-            'permissions': oct(stat_info.st_mode)[-3:],
-            'extension': os.path.splitext(full_path)[1].lower(),
-            'basename': os.path.basename(full_path),
-            'dirname': os.path.dirname(full_path)
+            "path": full_path,
+            "size": stat_info.st_size,
+            "modified": stat_info.st_mtime,
+            "created": stat_info.st_ctime,
+            "is_file": os.path.isfile(full_path),
+            "is_directory": os.path.isdir(full_path),
+            "is_symlink": os.path.islink(full_path),
+            "permissions": oct(stat_info.st_mode)[-3:],
+            "extension": os.path.splitext(full_path)[1].lower(),
+            "basename": os.path.basename(full_path),
+            "dirname": os.path.dirname(full_path),
         }
 
     def clean_directory(self, directory_path: str, keep_pattern: str = None) -> int:
@@ -241,7 +246,9 @@ class FileUtils:
 
         return deleted_count
 
-    def archive_directory(self, directory_path: str, archive_path: str, format: str = 'zip') -> str:
+    def archive_directory(
+        self, directory_path: str, archive_path: str, format: str = "zip"
+    ) -> str:
         """Archive directory into specified format."""
         full_path = self._resolve_path(directory_path)
         archive_full_path = self._resolve_path(archive_path)
@@ -253,10 +260,13 @@ class FileUtils:
         archive_dir = os.path.dirname(archive_full_path)
         self.ensure_directory(archive_dir)
 
-        if format.lower() == 'zip':
+        if format.lower() == "zip":
             try:
                 import zipfile
-                with zipfile.ZipFile(archive_full_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+
+                with zipfile.ZipFile(
+                    archive_full_path, "w", zipfile.ZIP_DEFLATED
+                ) as zipf:
                     for root, dirs, files in os.walk(full_path):
                         for file in files:
                             file_path = os.path.join(root, file)
@@ -269,7 +279,9 @@ class FileUtils:
 
         return archive_full_path
 
-    def extract_archive(self, archive_path: str, extract_path: str, format: str = 'zip') -> None:
+    def extract_archive(
+        self, archive_path: str, extract_path: str, format: str = "zip"
+    ) -> None:
         """Extract archive into specified directory."""
         archive_full_path = self._resolve_path(archive_path)
         extract_full_path = self._resolve_path(extract_path)
@@ -279,10 +291,11 @@ class FileUtils:
 
         self.ensure_directory(extract_full_path)
 
-        if format.lower() == 'zip':
+        if format.lower() == "zip":
             try:
                 import zipfile
-                with zipfile.ZipFile(archive_full_path, 'r') as zipf:
+
+                with zipfile.ZipFile(archive_full_path, "r") as zipf:
                     zipf.extractall(extract_full_path)
             except ImportError:
                 raise ImportError("zipfile module not available")
@@ -298,6 +311,7 @@ class FileUtils:
     def _matches_pattern(self, filename: str, pattern: str) -> bool:
         """Check if filename matches pattern (supports * and ? wildcards)."""
         import fnmatch
+
         return fnmatch.fnmatch(filename, pattern)
 
 
@@ -333,7 +347,7 @@ class BackupManager:
             "timestamp": timestamp,
             "description": description,
             "file_size": self.file_utils.get_file_size(file_path),
-            "created_at": time.time()
+            "created_at": time.time(),
         }
 
         metadata_filename = f"{backup_filename}.meta"
@@ -348,8 +362,7 @@ class BackupManager:
     def _rotate_backups(self, file_basename: str) -> None:
         """Rotate backups to maintain maximum count."""
         backup_files = self.file_utils.list_files(
-            self.backup_dir,
-            pattern=f"{file_basename}.*.bak"
+            self.backup_dir, pattern=f"{file_basename}.*.bak"
         )
 
         if len(backup_files) > self.max_backups:
@@ -374,8 +387,7 @@ class BackupManager:
     def list_backups(self, file_basename: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available backups with metadata."""
         backup_files = self.file_utils.list_files(
-            self.backup_dir,
-            pattern=f"{file_basename or '*'}.*.bak"
+            self.backup_dir, pattern=f"{file_basename or '*'}.*.bak"
         )
 
         backups = []
@@ -395,11 +407,13 @@ class BackupManager:
             backups.append(backup_info)
 
         # Sort by timestamp (newest first)
-        backups.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        backups.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
         return backups
 
-    def restore_backup(self, backup_path: str, target_path: Optional[str] = None) -> str:
+    def restore_backup(
+        self, backup_path: str, target_path: Optional[str] = None
+    ) -> str:
         """Restore file from backup."""
         backup_full_path = self.file_utils._resolve_path(backup_path)
 
@@ -411,7 +425,7 @@ class BackupManager:
             metadata_path = backup_full_path + ".meta"
             if os.path.exists(metadata_path):
                 metadata = self.file_utils.read_json(metadata_path)
-                target_path = metadata.get('original_path')
+                target_path = metadata.get("original_path")
 
             if target_path is None:
                 raise ValueError("Cannot determine restore target path")

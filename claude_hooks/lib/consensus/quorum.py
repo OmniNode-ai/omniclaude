@@ -11,11 +11,12 @@ import asyncio
 import json
 import os
 import sys
-import yaml
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
 
 try:
     import httpx
@@ -145,7 +146,9 @@ class AIQuorum:
             self.stub_mode = True
             self.enable_ai_scoring = False
 
-    def _load_models_from_config(self, config_path: Optional[Path] = None) -> List[ModelConfig]:
+    def _load_models_from_config(
+        self, config_path: Optional[Path] = None
+    ) -> List[ModelConfig]:
         """
         Load model configurations from config.yaml.
 
@@ -159,7 +162,9 @@ class AIQuorum:
             config_path = Path.home() / ".claude" / "hooks" / "config.yaml"
 
         if not config_path.exists():
-            print(f"Config file not found: {config_path}, using defaults", file=sys.stderr)
+            print(
+                f"Config file not found: {config_path}, using defaults", file=sys.stderr
+            )
             return self.DEFAULT_MODELS
 
         try:
@@ -182,7 +187,10 @@ class AIQuorum:
                 try:
                     provider = ModelProvider(provider_str)
                 except ValueError:
-                    print(f"Unknown provider type: {provider_str}, skipping {model_name}", file=sys.stderr)
+                    print(
+                        f"Unknown provider type: {provider_str}, skipping {model_name}",
+                        file=sys.stderr,
+                    )
                     continue
 
                 # Build endpoint based on provider
@@ -195,7 +203,9 @@ class AIQuorum:
                         endpoint = model_data["base_url"]
                     else:
                         ollama_config = quorum_config.get("ollama", {})
-                        endpoint = ollama_config.get("base_url", "http://localhost:11434")
+                        endpoint = ollama_config.get(
+                            "base_url", "http://localhost:11434"
+                        )
 
                 model_config = ModelConfig(
                     name=model_data.get("name", model_name),
@@ -208,7 +218,10 @@ class AIQuorum:
                 models.append(model_config)
 
             if models:
-                print(f"Loaded {len(models)} models from config: {[m.name for m in models]}", file=sys.stderr)
+                print(
+                    f"Loaded {len(models)} models from config: {[m.name for m in models]}",
+                    file=sys.stderr,
+                )
                 return models
             else:
                 print("No enabled models in config, using defaults", file=sys.stderr)
@@ -573,12 +586,9 @@ Provide your evaluation:"""
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert code reviewer evaluating naming convention corrections. Respond in JSON format."
+                    "content": "You are an expert code reviewer evaluating naming convention corrections. Respond in JSON format.",
                 },
-                {
-                    "role": "user",
-                    "content": scoring_prompt
-                }
+                {"role": "user", "content": scoring_prompt},
             ],
             "temperature": 0.3,
             "max_tokens": 500,
@@ -594,7 +604,11 @@ Provide your evaluation:"""
                 response.raise_for_status()
 
                 result = response.json()
-                response_text = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                response_text = (
+                    result.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "{}")
+                )
 
                 # Parse JSON response - handle markdown code blocks
                 try:
@@ -602,13 +616,13 @@ Provide your evaluation:"""
                     cleaned_text = response_text.strip()
                     if cleaned_text.startswith("```"):
                         # Extract JSON from markdown code block
-                        lines = cleaned_text.split('\n')
+                        lines = cleaned_text.split("\n")
                         # Remove first line (```json) and last line (```)
-                        json_lines = [l for l in lines[1:-1] if l.strip()]
-                        cleaned_text = '\n'.join(json_lines)
+                        json_lines = [line for line in lines[1:-1] if line.strip()]
+                        cleaned_text = "\n".join(json_lines)
 
                     score_data = json.loads(cleaned_text)
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     # Try to extract score from text if JSON parsing fails
                     score_data = {
                         "score": 0.5,
@@ -670,7 +684,9 @@ Provide your evaluation:"""
         # Enforce MIN_MODEL_PARTICIPATION threshold
         total_models = len(self.models)
         participating_models = len(valid_scores)
-        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+        participation_rate = (
+            participating_models / total_models if total_models > 0 else 0.0
+        )
 
         if participation_rate < MIN_MODEL_PARTICIPATION:
             return QuorumScore(
@@ -680,7 +696,7 @@ Provide your evaluation:"""
                 model_reasoning={
                     **model_reasoning,
                     "quorum_error": f"Insufficient model participation: {participating_models}/{total_models} "
-                                   f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required"
+                    f"({participation_rate:.0%}) responded, minimum {MIN_MODEL_PARTICIPATION:.0%} required",
                 },
                 recommendation="FAIL_PARTICIPATION",
                 requires_human_review=True,
@@ -748,7 +764,7 @@ async def main():
     # Phase 1: Use stub mode
     quorum = AIQuorum(stub_mode=True, enable_ai_scoring=False)
 
-    print(f"AI Quorum System (Phase 1 - Stub Mode)")
+    print("AI Quorum System (Phase 1 - Stub Mode)")
     print(f"Original: {original_prompt}")
     print(f"Corrected: {corrected_prompt}")
     print(f"Correction Type: {correction_type}")

@@ -4,9 +4,6 @@ Tests complete workflow scenarios with real agent execution
 """
 
 import pytest
-import asyncio
-from datetime import datetime
-from typing import Dict, List, Optional
 
 
 class TestSingleAgentWorkflow:

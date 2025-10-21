@@ -23,7 +23,9 @@ def bootstrap() -> None:
     driver = GraphDatabase.driver(uri, auth=auth)
 
     def _create(tx):
-        tx.run("CREATE INDEX entity_type_id IF NOT EXISTS FOR (e:Entity) ON (e.type, e.id)")
+        tx.run(
+            "CREATE INDEX entity_type_id IF NOT EXISTS FOR (e:Entity) ON (e.type, e.id)"
+        )
 
     with driver.session() as session:
         session.execute_write(_create)
@@ -33,5 +35,3 @@ def bootstrap() -> None:
 
 if __name__ == "__main__":
     bootstrap()
-
-

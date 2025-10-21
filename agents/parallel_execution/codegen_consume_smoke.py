@@ -15,14 +15,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.lib.kafka_codegen_client import KafkaCodegenClient
+from agents.lib.kafka_codegen_client import KafkaCodegenClient  # noqa: E402
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bootstrap", type=str, default=None)
     parser.add_argument("--correlation-id", type=str, default=None)
-    parser.add_argument("--rpk", action="store_true", help="Consume via rpk inside container")
+    parser.add_argument(
+        "--rpk", action="store_true", help="Consume via rpk inside container"
+    )
     args = parser.parse_args()
 
     topic = "dev.omniclaude.codegen.analyze.response.v1"
@@ -33,11 +35,14 @@ async def main() -> None:
         return True
 
     if args.rpk:
-        import subprocess, json
+        import json
+        import subprocess
+
         # Use rpk inside the container; read a single message and filter client-side
         cmd = [
-            "bash", "-lc",
-            "docker exec omninode-bridge-redpanda bash -lc 'rpk topic consume dev.omniclaude.codegen.analyze.response.v1 -n 1 -f \"{{.message.value}}\" --brokers localhost:9092'"
+            "bash",
+            "-lc",
+            "docker exec omninode-bridge-redpanda bash -lc 'rpk topic consume dev.omniclaude.codegen.analyze.response.v1 -n 1 -f \"{{.message.value}}\" --brokers localhost:9092'",
         ]
         try:
             out = subprocess.check_output(cmd, text=True)
@@ -59,11 +64,10 @@ async def main() -> None:
             print("No message received within timeout")
         else:
             import json
+
             print(json.dumps(msg, indent=2))
         await client.stop_consumer()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-

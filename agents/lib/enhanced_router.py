@@ -19,23 +19,24 @@ Performance Targets:
 - Cache miss: <100ms
 """
 
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
-import yaml
 import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 # Use absolute imports to avoid relative import issues
 try:
-    from trigger_matcher import EnhancedTriggerMatcher
-    from confidence_scorer import ConfidenceScorer, ConfidenceScore
     from capability_index import CapabilityIndex
+    from confidence_scorer import ConfidenceScore, ConfidenceScorer
     from result_cache import ResultCache
+    from trigger_matcher import EnhancedTriggerMatcher
 except ImportError:
     # Fallback to relative imports if used as a package
-    from .trigger_matcher import EnhancedTriggerMatcher
-    from .confidence_scorer import ConfidenceScorer, ConfidenceScore
     from .capability_index import CapabilityIndex
+    from .confidence_scorer import ConfidenceScore, ConfidenceScorer
     from .result_cache import ResultCache
+    from .trigger_matcher import EnhancedTriggerMatcher
 
 
 @dataclass
@@ -50,6 +51,7 @@ class AgentRecommendation:
         reason: Primary match reason
         definition_path: Path to agent definition file
     """
+
     agent_name: str
     agent_title: str
     confidence: ConfidenceScore
@@ -68,7 +70,7 @@ class EnhancedAgentRouter:
     def __init__(
         self,
         registry_path: str = "/Users/jonah/.claude/agent-definitions/agent-registry.yaml",
-        cache_ttl: int = 3600
+        cache_ttl: int = 3600,
     ):
         """
         Initialize enhanced router.
@@ -89,18 +91,18 @@ class EnhancedAgentRouter:
 
         # Track routing stats
         self.routing_stats = {
-            'total_routes': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'explicit_requests': 0,
-            'fuzzy_matches': 0
+            "total_routes": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "explicit_requests": 0,
+            "fuzzy_matches": 0,
         }
 
     def route(
         self,
         user_request: str,
         context: Optional[Dict[str, Any]] = None,
-        max_recommendations: int = 5
+        max_recommendations: int = 5,
     ) -> List[AgentRecommendation]:
         """
         Route user request to best agent(s).
@@ -113,21 +115,21 @@ class EnhancedAgentRouter:
         Returns:
             List of agent recommendations sorted by confidence (highest first)
         """
-        self.routing_stats['total_routes'] += 1
+        self.routing_stats["total_routes"] += 1
         context = context or {}
 
         # 1. Check cache
         cached = self.cache.get(user_request, context)
         if cached is not None:
-            self.routing_stats['cache_hits'] += 1
+            self.routing_stats["cache_hits"] += 1
             return cached
 
-        self.routing_stats['cache_misses'] += 1
+        self.routing_stats["cache_misses"] += 1
 
         # 2. Check for explicit agent request
         explicit_agent = self._extract_explicit_agent(user_request)
         if explicit_agent:
-            self.routing_stats['explicit_requests'] += 1
+            self.routing_stats["explicit_requests"] += 1
             recommendation = self._create_explicit_recommendation(explicit_agent)
             if recommendation:
                 result = [recommendation]
@@ -135,13 +137,13 @@ class EnhancedAgentRouter:
                 return result
 
         # 3. Trigger-based matching with scoring
-        self.routing_stats['fuzzy_matches'] += 1
+        self.routing_stats["fuzzy_matches"] += 1
         trigger_matches = self.trigger_matcher.match(user_request)
 
         # 4. Score each match
         recommendations = []
         for agent_name, trigger_score, match_reason in trigger_matches:
-            agent_data = self.registry['agents'][agent_name]
+            agent_data = self.registry["agents"][agent_name]
 
             # Calculate comprehensive confidence
             confidence = self.confidence_scorer.score(
@@ -149,15 +151,15 @@ class EnhancedAgentRouter:
                 agent_data=agent_data,
                 user_request=user_request,
                 context=context,
-                trigger_score=trigger_score
+                trigger_score=trigger_score,
             )
 
             recommendation = AgentRecommendation(
                 agent_name=agent_name,
-                agent_title=agent_data['title'],
+                agent_title=agent_data["title"],
                 confidence=confidence,
                 reason=match_reason,
-                definition_path=agent_data['definition_path']
+                definition_path=agent_data["definition_path"],
             )
 
             recommendations.append(recommendation)
@@ -192,9 +194,9 @@ class EnhancedAgentRouter:
 
         # Patterns for explicit agent requests
         patterns = [
-            r'use\s+(agent-[\w-]+)',
-            r'@(agent-[\w-]+)',
-            r'^(agent-[\w-]+)',
+            r"use\s+(agent-[\w-]+)",
+            r"@(agent-[\w-]+)",
+            r"^(agent-[\w-]+)",
         ]
 
         for pattern in patterns:
@@ -202,12 +204,14 @@ class EnhancedAgentRouter:
             if match:
                 agent_name = match.group(1)
                 # Verify agent exists in registry
-                if agent_name in self.registry['agents']:
+                if agent_name in self.registry["agents"]:
                     return agent_name
 
         return None
 
-    def _create_explicit_recommendation(self, agent_name: str) -> Optional[AgentRecommendation]:
+    def _create_explicit_recommendation(
+        self, agent_name: str
+    ) -> Optional[AgentRecommendation]:
         """
         Create recommendation for explicitly requested agent.
 
@@ -217,23 +221,23 @@ class EnhancedAgentRouter:
         Returns:
             AgentRecommendation with 100% confidence, or None if agent not found
         """
-        agent_data = self.registry['agents'].get(agent_name)
+        agent_data = self.registry["agents"].get(agent_name)
         if not agent_data:
             return None
 
         return AgentRecommendation(
             agent_name=agent_name,
-            agent_title=agent_data['title'],
+            agent_title=agent_data["title"],
             confidence=ConfidenceScore(
                 total=1.0,
                 trigger_score=1.0,
                 context_score=1.0,
                 capability_score=1.0,
                 historical_score=1.0,
-                explanation="Explicit agent request"
+                explanation="Explicit agent request",
             ),
             reason="Explicitly requested by user",
-            definition_path=agent_data['definition_path']
+            definition_path=agent_data["definition_path"],
         )
 
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -244,9 +248,10 @@ class EnhancedAgentRouter:
             Dictionary with cache performance metrics
         """
         cache_stats = self.cache.stats()
-        cache_stats['cache_hit_rate'] = (
-            self.routing_stats['cache_hits'] / self.routing_stats['total_routes']
-            if self.routing_stats['total_routes'] > 0 else 0.0
+        cache_stats["cache_hit_rate"] = (
+            self.routing_stats["cache_hits"] / self.routing_stats["total_routes"]
+            if self.routing_stats["total_routes"] > 0
+            else 0.0
         )
         return cache_stats
 
@@ -260,11 +265,11 @@ class EnhancedAgentRouter:
         stats = self.routing_stats.copy()
 
         # Calculate rates
-        total = stats['total_routes']
+        total = stats["total_routes"]
         if total > 0:
-            stats['cache_hit_rate'] = stats['cache_hits'] / total
-            stats['explicit_request_rate'] = stats['explicit_requests'] / total
-            stats['fuzzy_match_rate'] = stats['fuzzy_matches'] / total
+            stats["cache_hit_rate"] = stats["cache_hits"] / total
+            stats["explicit_request_rate"] = stats["explicit_requests"] / total
+            stats["fuzzy_match_rate"] = stats["fuzzy_matches"] / total
 
         return stats
 
@@ -281,7 +286,10 @@ class EnhancedAgentRouter:
         Args:
             registry_path: Path to registry file (uses default if None)
         """
-        path = registry_path or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        path = (
+            registry_path
+            or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        )
 
         with open(path) as f:
             self.registry = yaml.safe_load(f)
@@ -298,7 +306,9 @@ class EnhancedAgentRouter:
 if __name__ == "__main__":
     from pathlib import Path
 
-    registry_path = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    registry_path = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     if not registry_path.exists():
         print(f"Registry not found at: {registry_path}")
@@ -312,13 +322,13 @@ if __name__ == "__main__":
         "@agent-debug-intelligence analyze error",
         "optimize my database queries",
         "review security of authentication",
-        "create CI/CD pipeline for deployment"
+        "create CI/CD pipeline for deployment",
     ]
 
     for query in test_queries:
         print(f"\n{'='*70}")
         print(f"Query: {query}")
-        print('='*70)
+        print("=" * 70)
 
         recommendations = router.route(query, max_recommendations=3)
 
@@ -330,7 +340,7 @@ if __name__ == "__main__":
             print(f"\n{i}. {rec.agent_title}")
             print(f"   Agent: {rec.agent_name}")
             print(f"   Confidence: {rec.confidence.total:.2%}")
-            print(f"   Breakdown:")
+            print("   Breakdown:")
             print(f"     - Trigger:     {rec.confidence.trigger_score:.2%}")
             print(f"     - Context:     {rec.confidence.context_score:.2%}")
             print(f"     - Capability:  {rec.confidence.capability_score:.2%}")
@@ -341,7 +351,7 @@ if __name__ == "__main__":
     # Show statistics
     print(f"\n{'='*70}")
     print("ROUTING STATISTICS")
-    print('='*70)
+    print("=" * 70)
 
     routing_stats = router.get_routing_stats()
     for key, value in routing_stats.items():
@@ -352,11 +362,11 @@ if __name__ == "__main__":
 
     print(f"\n{'='*70}")
     print("CACHE STATISTICS")
-    print('='*70)
+    print("=" * 70)
 
     cache_stats = router.get_cache_stats()
     for key, value in cache_stats.items():
-        if isinstance(value, float) and 'rate' in key:
+        if isinstance(value, float) and "rate" in key:
             print(f"{key}: {value:.2%}")
         elif isinstance(value, float):
             print(f"{key}: {value:.1f}")

@@ -1,14 +1,16 @@
 """Integration tests for the quality enforcement system."""
-import pytest
+
+import sys
 import tempfile
 import time
 from pathlib import Path
-import sys
+
+import pytest
 
 # Add parent directory to path to import lib modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.validators.naming_validator import NamingValidator, Violation
+from lib.validators.naming_validator import NamingValidator
 
 
 class TestEndToEndPython:

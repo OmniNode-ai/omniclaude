@@ -11,8 +11,8 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 from pathlib import Path
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -41,13 +41,13 @@ class IntentContext:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'primary_intent': self.primary_intent,
-            'confidence': self.confidence,
-            'suggested_agents': self.suggested_agents,
-            'validators': self.validators,
-            'onex_rules': self.onex_rules,
-            'secondary_intents': self.secondary_intents,
-            'metadata': self.metadata
+            "primary_intent": self.primary_intent,
+            "confidence": self.confidence,
+            "suggested_agents": self.suggested_agents,
+            "validators": self.validators,
+            "onex_rules": self.onex_rules,
+            "secondary_intents": self.secondary_intents,
+            "metadata": self.metadata,
         }
 
 
@@ -64,98 +64,98 @@ class IntentClassifier:
 
     # Intent pattern definitions (class constant - keep UPPERCASE)
     INTENT_PATTERNS = {
-        'file_modification': {
-            'triggers': ['Edit', 'Write', 'replace_', 'modify', 'update'],
-            'agents': ['agent-code-quality-analyzer', 'agent-onex-compliance'],
-            'validators': ['naming_validator', 'structure_validator'],
-            'onex_rules': ['naming_conventions', 'file_structure'],
-            'weight': 1.0
+        "file_modification": {
+            "triggers": ["Edit", "Write", "replace_", "modify", "update"],
+            "agents": ["agent-code-quality-analyzer", "agent-onex-compliance"],
+            "validators": ["naming_validator", "structure_validator"],
+            "onex_rules": ["naming_conventions", "file_structure"],
+            "weight": 1.0,
         },
-        'api_design': {
-            'triggers': ['api', 'endpoint', 'route', 'rest', 'graphql', 'handler'],
-            'agents': ['agent-api-architect', 'agent-python-fastapi-expert'],
-            'validators': ['api_compliance_validator', 'parameter_validator'],
-            'onex_rules': ['api_naming', 'response_structure', 'error_handling'],
-            'weight': 1.5
+        "api_design": {
+            "triggers": ["api", "endpoint", "route", "rest", "graphql", "handler"],
+            "agents": ["agent-api-architect", "agent-python-fastapi-expert"],
+            "validators": ["api_compliance_validator", "parameter_validator"],
+            "onex_rules": ["api_naming", "response_structure", "error_handling"],
+            "weight": 1.5,
         },
-        'test_creation': {
-            'triggers': ['test_', 'spec', 'pytest', 'unittest', 'jest', 'mocha'],
-            'agents': ['agent-testing', 'agent-onex-test-generator'],
-            'validators': ['test_coverage_validator', 'assertion_validator'],
-            'onex_rules': ['test_naming', 'fixture_usage', 'mock_patterns'],
-            'weight': 1.3
+        "test_creation": {
+            "triggers": ["test_", "spec", "pytest", "unittest", "jest", "mocha"],
+            "agents": ["agent-testing", "agent-onex-test-generator"],
+            "validators": ["test_coverage_validator", "assertion_validator"],
+            "onex_rules": ["test_naming", "fixture_usage", "mock_patterns"],
+            "weight": 1.3,
         },
-        'database_operations': {
-            'triggers': ['database', 'db', 'sql', 'query', 'migration', 'schema'],
-            'agents': ['agent-debug-database', 'agent-performance'],
-            'validators': ['sql_validator', 'index_validator'],
-            'onex_rules': ['query_optimization', 'transaction_handling'],
-            'weight': 1.4
+        "database_operations": {
+            "triggers": ["database", "db", "sql", "query", "migration", "schema"],
+            "agents": ["agent-debug-database", "agent-performance"],
+            "validators": ["sql_validator", "index_validator"],
+            "onex_rules": ["query_optimization", "transaction_handling"],
+            "weight": 1.4,
         },
-        'component_creation': {
-            'triggers': ['component', 'ui', 'frontend', 'react', 'vue', 'angular'],
-            'agents': ['agent-ui-testing', 'agent-react-specialist'],
-            'validators': ['component_validator', 'accessibility_validator'],
-            'onex_rules': ['component_naming', 'props_validation', 'hooks_usage'],
-            'weight': 1.2
+        "component_creation": {
+            "triggers": ["component", "ui", "frontend", "react", "vue", "angular"],
+            "agents": ["agent-ui-testing", "agent-react-specialist"],
+            "validators": ["component_validator", "accessibility_validator"],
+            "onex_rules": ["component_naming", "props_validation", "hooks_usage"],
+            "weight": 1.2,
         },
-        'documentation': {
-            'triggers': ['doc', 'readme', 'comment', 'docstring', 'markdown'],
-            'agents': ['agent-documentation-architect'],
-            'validators': ['documentation_validator'],
-            'onex_rules': ['docstring_format', 'example_coverage'],
-            'weight': 0.8
+        "documentation": {
+            "triggers": ["doc", "readme", "comment", "docstring", "markdown"],
+            "agents": ["agent-documentation-architect"],
+            "validators": ["documentation_validator"],
+            "onex_rules": ["docstring_format", "example_coverage"],
+            "weight": 0.8,
         },
-        'refactoring': {
-            'triggers': ['refactor', 'reorganize', 'restructure', 'extract', 'cleanup'],
-            'agents': ['agent-code-quality-analyzer', 'agent-ast-generator'],
-            'validators': ['structure_validator', 'dependency_validator'],
-            'onex_rules': ['circular_dependencies', 'cohesion_metrics'],
-            'weight': 1.1
+        "refactoring": {
+            "triggers": ["refactor", "reorganize", "restructure", "extract", "cleanup"],
+            "agents": ["agent-code-quality-analyzer", "agent-ast-generator"],
+            "validators": ["structure_validator", "dependency_validator"],
+            "onex_rules": ["circular_dependencies", "cohesion_metrics"],
+            "weight": 1.1,
         },
-        'debugging': {
-            'triggers': ['debug', 'fix', 'error', 'bug', 'issue', 'crash'],
-            'agents': ['agent-debug-intelligence', 'agent-debug'],
-            'validators': ['error_handling_validator'],
-            'onex_rules': ['error_propagation', 'logging_patterns'],
-            'weight': 1.3
+        "debugging": {
+            "triggers": ["debug", "fix", "error", "bug", "issue", "crash"],
+            "agents": ["agent-debug-intelligence", "agent-debug"],
+            "validators": ["error_handling_validator"],
+            "onex_rules": ["error_propagation", "logging_patterns"],
+            "weight": 1.3,
         },
-        'performance_optimization': {
-            'triggers': ['optimize', 'performance', 'speed', 'cache', 'efficient'],
-            'agents': ['agent-performance', 'agent-devops-infrastructure'],
-            'validators': ['performance_validator'],
-            'onex_rules': ['caching_strategy', 'async_patterns'],
-            'weight': 1.2
+        "performance_optimization": {
+            "triggers": ["optimize", "performance", "speed", "cache", "efficient"],
+            "agents": ["agent-performance", "agent-devops-infrastructure"],
+            "validators": ["performance_validator"],
+            "onex_rules": ["caching_strategy", "async_patterns"],
+            "weight": 1.2,
         },
-        'infrastructure': {
-            'triggers': ['docker', 'kubernetes', 'deploy', 'ci', 'cd', 'pipeline'],
-            'agents': ['agent-devops-infrastructure', 'agent-production-monitor'],
-            'validators': ['infrastructure_validator'],
-            'onex_rules': ['container_naming', 'env_variables', 'secrets_management'],
-            'weight': 1.0
-        }
+        "infrastructure": {
+            "triggers": ["docker", "kubernetes", "deploy", "ci", "cd", "pipeline"],
+            "agents": ["agent-devops-infrastructure", "agent-production-monitor"],
+            "validators": ["infrastructure_validator"],
+            "onex_rules": ["container_naming", "env_variables", "secrets_management"],
+            "weight": 1.0,
+        },
     }
 
     # File extension to language mapping (class constant - keep UPPERCASE)
     LANGUAGE_MAP = {
-        '.py': 'python',
-        '.ts': 'typescript',
-        '.tsx': 'typescript',
-        '.js': 'javascript',
-        '.jsx': 'javascript',
-        '.go': 'go',
-        '.rs': 'rust',
-        '.java': 'java',
-        '.cpp': 'cpp',
-        '.c': 'c',
-        '.rb': 'ruby',
-        '.php': 'php',
-        '.vue': 'vue',
-        '.sql': 'sql',
-        '.yaml': 'yaml',
-        '.yml': 'yaml',
-        '.json': 'json',
-        '.md': 'markdown',
+        ".py": "python",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".go": "go",
+        ".rs": "rust",
+        ".java": "java",
+        ".cpp": "cpp",
+        ".c": "c",
+        ".rb": "ruby",
+        ".php": "php",
+        ".vue": "vue",
+        ".sql": "sql",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".json": "json",
+        ".md": "markdown",
     }
 
     def __init__(self, confidence_threshold: float = 0.7):
@@ -179,7 +179,7 @@ class IntentClassifier:
             IntentContext with classification results
         """
         # Extract key information
-        file_path = arguments.get('file_path', '')
+        file_path = arguments.get("file_path", "")
         content = self._extract_content(arguments)
 
         # Multi-factor scoring
@@ -188,7 +188,7 @@ class IntentClassifier:
         # Factor 1: Tool name pattern matching
         for intent, pattern in self.INTENT_PATTERNS.items():
             score = self._score_tool_name(tool_name, pattern)
-            scores[intent] = score * pattern['weight']
+            scores[intent] = score * pattern["weight"]
 
         # Factor 2: File path analysis
         if file_path:
@@ -207,7 +207,7 @@ class IntentClassifier:
         if max_score > 0:
             normalized_scores = {k: v / max_score for k, v in scores.items()}
         else:
-            normalized_scores = {'file_modification': 0.5}  # Default fallback
+            normalized_scores = {"file_modification": 0.5}  # Default fallback
 
         # Get primary intent
         primary_intent = max(normalized_scores, key=normalized_scores.get)
@@ -215,7 +215,8 @@ class IntentClassifier:
 
         # Get secondary intents (score >= 0.5)
         secondary_intents = [
-            intent for intent, score in normalized_scores.items()
+            intent
+            for intent, score in normalized_scores.items()
             if intent != primary_intent and score >= 0.5
         ]
 
@@ -225,16 +226,16 @@ class IntentClassifier:
         return IntentContext(
             primary_intent=primary_intent,
             confidence=confidence,
-            suggested_agents=pattern['agents'],
-            validators=pattern['validators'],
-            onex_rules=pattern['onex_rules'],
+            suggested_agents=pattern["agents"],
+            validators=pattern["validators"],
+            onex_rules=pattern["onex_rules"],
             secondary_intents=secondary_intents,
             metadata={
-                'tool_name': tool_name,
-                'file_path': file_path,
-                'language': self._detect_language(file_path),
-                'all_scores': normalized_scores
-            }
+                "tool_name": tool_name,
+                "file_path": file_path,
+                "language": self._detect_language(file_path),
+                "all_scores": normalized_scores,
+            },
         )
 
     def _score_tool_name(self, tool_name: str, pattern: dict) -> float:
@@ -247,7 +248,7 @@ class IntentClassifier:
         tool_lower = tool_name.lower()
         matches = 0
 
-        for trigger in pattern['triggers']:
+        for trigger in pattern["triggers"]:
             # Check if trigger pattern matches tool name
             if trigger.lower() in tool_lower:
                 matches += 1
@@ -256,7 +257,7 @@ class IntentClassifier:
                 matches += 1
 
         # Normalize by number of triggers
-        return min(matches / max(len(pattern['triggers']), 1), 1.0)
+        return min(matches / max(len(pattern["triggers"]), 1), 1.0)
 
     def _score_file_path(self, file_path: str) -> dict:
         """
@@ -270,28 +271,33 @@ class IntentClassifier:
         path_obj = Path(file_path)
 
         # Check for test files
-        if 'test' in path_lower or 'spec' in path_lower:
-            scores['test_creation'] = 1.0
+        if "test" in path_lower or "spec" in path_lower:
+            scores["test_creation"] = 1.0
 
         # Check for API-related paths
-        if any(x in path_lower for x in ['api', 'endpoint', 'route', 'handler']):
-            scores['api_design'] = 0.8
+        if any(x in path_lower for x in ["api", "endpoint", "route", "handler"]):
+            scores["api_design"] = 0.8
 
         # Check for component paths
-        if any(x in path_lower for x in ['component', 'ui', 'widget', 'view']):
-            scores['component_creation'] = 0.8
+        if any(x in path_lower for x in ["component", "ui", "widget", "view"]):
+            scores["component_creation"] = 0.8
 
         # Check for infrastructure files
-        if path_obj.name in ['Dockerfile', 'docker-compose.yml', '.gitlab-ci.yml', '.github']:
-            scores['infrastructure'] = 1.0
+        if path_obj.name in [
+            "Dockerfile",
+            "docker-compose.yml",
+            ".gitlab-ci.yml",
+            ".github",
+        ]:
+            scores["infrastructure"] = 1.0
 
         # Check for documentation
-        if path_obj.suffix in ['.md', '.rst', '.txt']:
-            scores['documentation'] = 0.9
+        if path_obj.suffix in [".md", ".rst", ".txt"]:
+            scores["documentation"] = 0.9
 
         # Check for database files
-        if any(x in path_lower for x in ['migration', 'schema', 'database', 'db']):
-            scores['database_operations'] = 0.8
+        if any(x in path_lower for x in ["migration", "schema", "database", "db"]):
+            scores["database_operations"] = 0.8
 
         return scores
 
@@ -306,43 +312,52 @@ class IntentClassifier:
         content_lower = content.lower()
 
         # API-related keywords
-        api_keywords = ['@app.route', '@router', 'async def', 'fastapi', 'flask', 'endpoint']
+        api_keywords = [
+            "@app.route",
+            "@router",
+            "async def",
+            "fastapi",
+            "flask",
+            "endpoint",
+        ]
         if any(kw in content_lower for kw in api_keywords):
-            scores['api_design'] = 0.6
+            scores["api_design"] = 0.6
 
         # Test-related keywords
-        test_keywords = ['def test_', 'async def test_', 'pytest', 'unittest', 'assert']
+        test_keywords = ["def test_", "async def test_", "pytest", "unittest", "assert"]
         if any(kw in content_lower for kw in test_keywords):
-            scores['test_creation'] = 0.7
+            scores["test_creation"] = 0.7
 
         # Database-related keywords
-        db_keywords = ['select ', 'insert ', 'update ', 'delete ', 'create table']
+        db_keywords = ["select ", "insert ", "update ", "delete ", "create table"]
         if any(kw in content_lower for kw in db_keywords):
-            scores['database_operations'] = 0.6
+            scores["database_operations"] = 0.6
 
         # Performance-related keywords
-        perf_keywords = ['cache', 'optimize', 'performance', 'async', 'await']
+        perf_keywords = ["cache", "optimize", "performance", "async", "await"]
         if any(kw in content_lower for kw in perf_keywords):
-            scores['performance_optimization'] = 0.5
+            scores["performance_optimization"] = 0.5
 
         # Debugging-related keywords
-        debug_keywords = ['try:', 'except:', 'raise', 'logger', 'log.error']
+        debug_keywords = ["try:", "except:", "raise", "logger", "log.error"]
         if any(kw in content_lower for kw in debug_keywords):
-            scores['debugging'] = 0.4
+            scores["debugging"] = 0.4
 
         return scores
 
     def _extract_content(self, arguments: dict) -> str:
         """Extract content from tool arguments."""
         # Handle different tool argument structures
-        if 'content' in arguments:
-            return arguments['content']
-        elif 'new_string' in arguments:
-            return arguments['new_string']
-        elif 'edits' in arguments:
+        if "content" in arguments:
+            return arguments["content"]
+        elif "new_string" in arguments:
+            return arguments["new_string"]
+        elif "edits" in arguments:
             # MultiEdit case
-            return '\n'.join(edit.get('new_string', '') for edit in arguments.get('edits', []))
-        return ''
+            return "\n".join(
+                edit.get("new_string", "") for edit in arguments.get("edits", [])
+            )
+        return ""
 
     def _detect_language(self, file_path: str) -> Optional[str]:
         """Detect programming language from file extension."""

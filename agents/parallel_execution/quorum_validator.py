@@ -8,20 +8,24 @@ Uses Gemini (direct API) and local Ollama models for voting.
 import asyncio
 import json
 import os
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any, Dict, List
+
 import httpx
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     # Load .env from the same directory as this script
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    print("Warning: python-dotenv not installed, relying on system environment variables")
+    print(
+        "Warning: python-dotenv not installed, relying on system environment variables"
+    )
 
 
 class ValidationDecision(Enum):
@@ -184,13 +188,11 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         url = f"{config['endpoint']}?key={self.gemini_api_key}"
 
         payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
                 "maxOutputTokens": 2048,
-            }
+            },
         }
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -225,20 +227,20 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         headers = {
             "x-api-key": self.zai_api_key,
             "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+            "content-type": "application/json",
         }
 
         payload = {
             "model": config["model"],
             "max_tokens": 2048,
             "temperature": 0.1,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
+            "messages": [{"role": "user", "content": prompt}],
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(config["endpoint"], headers=headers, json=payload)
+            response = await client.post(
+                config["endpoint"], headers=headers, json=payload
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -261,9 +263,7 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
             # Extract JSON from response
             return self._parse_model_response(model_name, text)
 
-    def _parse_model_response(
-        self, model_name: str, text: str
-    ) -> Dict[str, Any]:
+    def _parse_model_response(self, model_name: str, text: str) -> Dict[str, Any]:
         """Parse JSON response from model"""
 
         try:
@@ -299,15 +299,12 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 "recommendation": "RETRY",
             }
 
-    def _calculate_consensus(
-        self, results: List[Dict[str, Any]]
-    ) -> QuorumResult:
+    def _calculate_consensus(self, results: List[Dict[str, Any]]) -> QuorumResult:
         """Calculate weighted consensus"""
 
         # Filter valid results
         valid_results = [
-            r for r in results
-            if isinstance(r, dict) and "recommendation" in r
+            r for r in results if isinstance(r, dict) and "recommendation" in r
         ]
 
         if not valid_results:
@@ -322,7 +319,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
         # Enforce MIN_MODEL_PARTICIPATION threshold
         total_models = len(self.models)
         participating_models = len(valid_results)
-        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+        participation_rate = (
+            participating_models / total_models if total_models > 0 else 0.0
+        )
 
         if participation_rate < MIN_MODEL_PARTICIPATION:
             return QuorumResult(
@@ -395,7 +394,7 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
 async def main():
     """Test the quorum with PostgreSQL adapter failure case"""
 
-    quorum = MinimalQuorum()
+    quorum = QuorumValidator()
 
     # Test case: The actual failure we experienced
     result = await quorum.validate_intent(
@@ -411,27 +410,27 @@ async def main():
         },
     )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("QUORUM VALIDATION RESULT")
-    print("="*60)
+    print("=" * 60)
     print(f"Decision: {result.decision.value}")
     print(f"Confidence: {result.confidence:.1%}")
     print(f"Deficiencies: {result.deficiencies}")
-    print(f"\nScores:")
+    print("\nScores:")
     for key, value in result.scores.items():
         if isinstance(value, float):
             print(f"  {key}: {value:.1f}")
         else:
             print(f"  {key}: {value}")
 
-    print(f"\nModel Responses:")
+    print("\nModel Responses:")
     for response in result.model_responses:
         model = response.get("model", "unknown")
         recommendation = response.get("recommendation", "unknown")
         score = response.get("alignment_score", 0)
         print(f"  {model}: {recommendation} (score: {score})")
 
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

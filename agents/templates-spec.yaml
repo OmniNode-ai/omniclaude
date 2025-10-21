@@ -4,7 +4,7 @@
 
 schema_version: "1.0.0"
 total_templates: 5
-categories: 3
+total_categories: 3
 instantiation_overhead_ms: 100
 
 # Template Categories

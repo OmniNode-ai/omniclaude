@@ -4,9 +4,6 @@ Validates all performance thresholds from performance-thresholds.yaml
 """
 
 import pytest
-import asyncio
-from datetime import datetime
-from typing import Dict, List, Optional
 
 
 class TestIntelligenceThresholds:

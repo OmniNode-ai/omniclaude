@@ -3,9 +3,10 @@ Simple Pydantic models for agent configs and execution.
 Loads directly from YAML files in agents/configs/
 """
 
-import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+import yaml
 from pydantic import BaseModel, Field
 
 
@@ -41,7 +42,7 @@ class AgentConfig(BaseModel):
             domain_query=data.get("domain_query"),
             implementation_query=data.get("implementation_query"),
             match_count=data.get("match_count", 5),
-            instructions=data.get("instructions", "")
+            instructions=data.get("instructions", ""),
         )
 
     @classmethod

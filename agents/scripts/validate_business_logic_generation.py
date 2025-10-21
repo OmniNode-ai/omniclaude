@@ -6,9 +6,9 @@ Validates the code structure without executing it.
 """
 
 import ast
-import re
 import sys
 from pathlib import Path
+
 
 def validate_business_logic_generator():
     """Validate the business logic generator file"""
@@ -19,7 +19,7 @@ def validate_business_logic_generator():
     print("VALIDATING BUSINESS LOGIC GENERATOR")
     print("=" * 80)
 
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         code = f.read()
 
     # Test 1: Valid Python syntax
@@ -35,7 +35,7 @@ def validate_business_logic_generator():
     print("\n2. Checking required classes...")
     classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
 
-    required_classes = ['BusinessLogicGenerator', 'CodegenConfig']
+    required_classes = ["BusinessLogicGenerator", "CodegenConfig"]
     for cls in required_classes:
         if cls in classes:
             print(f"   ✓ Found class: {cls}")
@@ -49,7 +49,7 @@ def validate_business_logic_generator():
     # Find BusinessLogicGenerator class
     blg_class = None
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == 'BusinessLogicGenerator':
+        if isinstance(node, ast.ClassDef) and node.name == "BusinessLogicGenerator":
             blg_class = node
             break
 
@@ -57,20 +57,24 @@ def validate_business_logic_generator():
         print("   ✗ BusinessLogicGenerator class not found")
         return False
 
-    methods = [node.name for node in blg_class.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    methods = [
+        node.name
+        for node in blg_class.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
 
     required_methods = [
-        '__init__',
-        'generate_node_implementation',
-        '_generate_class_definition',
-        '_generate_init_method',
-        '_generate_primary_method',
-        '_generate_validation_method',
-        '_generate_health_check',
-        '_generate_mixin_methods',
-        '_generate_capability_methods',
-        '_detect_pattern_type',
-        '_infer_method_logic_hints'
+        "__init__",
+        "generate_node_implementation",
+        "_generate_class_definition",
+        "_generate_init_method",
+        "_generate_primary_method",
+        "_generate_validation_method",
+        "_generate_health_check",
+        "_generate_mixin_methods",
+        "_generate_capability_methods",
+        "_detect_pattern_type",
+        "_infer_method_logic_hints",
     ]
 
     for method in required_methods:
@@ -82,7 +86,7 @@ def validate_business_logic_generator():
 
     # Test 4: Node type mappings
     print("\n4. Checking node type mappings...")
-    node_types = ['EFFECT', 'COMPUTE', 'REDUCER', 'ORCHESTRATOR']
+    node_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
     for node_type in node_types:
         if f'"{node_type}"' in code:
             print(f"   ✓ Found node type: {node_type}")
@@ -92,8 +96,15 @@ def validate_business_logic_generator():
 
     # Test 5: Pattern detection
     print("\n5. Checking pattern detection...")
-    patterns = ['CRUD_CREATE', 'CRUD_READ', 'CRUD_UPDATE', 'CRUD_DELETE',
-                'AGGREGATION', 'TRANSFORMATION', 'VALIDATION']
+    patterns = [
+        "CRUD_CREATE",
+        "CRUD_READ",
+        "CRUD_UPDATE",
+        "CRUD_DELETE",
+        "AGGREGATION",
+        "TRANSFORMATION",
+        "VALIDATION",
+    ]
     for pattern in patterns:
         if pattern in code:
             print(f"   ✓ Found pattern: {pattern}")
@@ -103,7 +114,7 @@ def validate_business_logic_generator():
 
     # Test 6: Type hints
     print("\n6. Checking type hints...")
-    type_hints = ['Dict[str, Any]', 'Optional[UUID]', 'List[str]']
+    type_hints = ["Dict[str, Any]", "Optional[UUID]", "List[str]"]
     found_hints = []
     for hint in type_hints:
         if hint in code:
@@ -117,7 +128,7 @@ def validate_business_logic_generator():
 
     # Test 7: Error handling
     print("\n7. Checking error handling...")
-    if 'OnexError' in code:
+    if "OnexError" in code:
         print("   ✓ Uses OnexError")
     else:
         print("   ✗ OnexError not used")
@@ -125,7 +136,7 @@ def validate_business_logic_generator():
 
     # Test 8: Correlation tracking
     print("\n8. Checking correlation tracking...")
-    if 'correlation_id' in code and 'UUID' in code:
+    if "correlation_id" in code and "UUID" in code:
         print("   ✓ Correlation ID tracking present")
     else:
         print("   ✗ Correlation ID tracking missing")
@@ -147,7 +158,7 @@ def validate_business_logic_generator():
 
     # Test 10: File stats
     print("\n10. File statistics...")
-    lines = code.split('\n')
+    lines = code.split("\n")
     print(f"   ✓ Total lines: {len(lines)}")
     print(f"   ✓ Total characters: {len(code)}")
     print(f"   ✓ Total classes: {len(classes)}")
@@ -172,6 +183,7 @@ def main():
     except Exception as e:
         print(f"\n✗ Validation error: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

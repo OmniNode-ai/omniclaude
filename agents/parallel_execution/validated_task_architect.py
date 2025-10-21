@@ -9,18 +9,22 @@ import asyncio
 import json
 import subprocess
 import sys
-from typing import Dict, Any, List
 from pathlib import Path
+from typing import Any, Dict, List
+
 from quorum_minimal import MinimalQuorum, ValidationDecision
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     # Load .env from the same directory as this script
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    print("Warning: python-dotenv not installed, relying on system environment variables")
+    print(
+        "Warning: python-dotenv not installed, relying on system environment variables"
+    )
 
 
 class ValidatedTaskArchitect:
@@ -59,14 +63,16 @@ class ValidatedTaskArchitect:
             )
 
             # Store attempt
-            attempt_history.append({
-                "attempt": attempt + 1,
-                "prompt": augmented_prompt,
-                "breakdown": task_breakdown,
-            })
+            attempt_history.append(
+                {
+                    "attempt": attempt + 1,
+                    "prompt": augmented_prompt,
+                    "breakdown": task_breakdown,
+                }
+            )
 
             # Validate with quorum
-            print(f"\n🔍 Validating with quorum...")
+            print("\n🔍 Validating with quorum...")
             result = await self.quorum.validate_intent(user_prompt, task_breakdown)
 
             print(f"\n📊 Quorum Decision: {result.decision.value}")
@@ -74,23 +80,23 @@ class ValidatedTaskArchitect:
             print(f"   Deficiencies: {len(result.deficiencies)}")
 
             # Show detailed model responses
-            print(f"\n📋 Model Responses:")
+            print("\n📋 Model Responses:")
             for response in result.model_responses:
                 model = response.get("model", "unknown")
                 recommendation = response.get("recommendation", "unknown")
                 score = response.get("alignment_score", 0)
                 correct_type = response.get("correct_node_type", None)
                 expected_type = response.get("expected_node_type", "unknown")
-                print(f"   {model}: {recommendation} (score: {score}, correct_type: {correct_type}, expected: {expected_type})")
+                print(
+                    f"   {model}: {recommendation} (score: {score}, correct_type: {correct_type}, expected: {expected_type})"
+                )
 
             if result.decision == ValidationDecision.PASS:
                 print(f"\n✅ Validation PASSED on attempt {attempt + 1}")
 
                 # Add final validation task using agent-workflow-coordinator
                 enhanced_breakdown = self._add_final_validation_task(
-                    task_breakdown,
-                    user_prompt,
-                    global_context
+                    task_breakdown, user_prompt, global_context
                 )
 
                 return {
@@ -106,20 +112,20 @@ class ValidatedTaskArchitect:
                 }
 
             elif result.decision == ValidationDecision.RETRY:
-                print(f"\n⚠️  Validation requires RETRY:")
+                print("\n⚠️  Validation requires RETRY:")
                 print(f"   Confidence: {result.confidence:.1%}")
-                print(f"   Issues found:")
+                print("   Issues found:")
                 for deficiency in result.deficiencies:
                     print(f"     - {deficiency}")
 
                 if attempt < self.max_retries - 1:
-                    print(f"\n🔄 Retrying with feedback...")
+                    print("\n🔄 Retrying with feedback...")
                     # Augment prompt with deficiency feedback
                     augmented_prompt = self._augment_prompt(
                         user_prompt, result.deficiencies, attempt + 1
                     )
                 else:
-                    print(f"\n❌ Max retries reached, returning best attempt")
+                    print("\n❌ Max retries reached, returning best attempt")
                     return {
                         "breakdown": task_breakdown,
                         "validated": False,
@@ -135,7 +141,7 @@ class ValidatedTaskArchitect:
                     }
 
             else:  # FAIL
-                print(f"\n❌ Validation FAILED critically:")
+                print("\n❌ Validation FAILED critically:")
                 for deficiency in result.deficiencies:
                     print(f"     - {deficiency}")
 
@@ -192,7 +198,7 @@ class ValidatedTaskArchitect:
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=str(Path(__file__).parent)  # Set working directory
+                cwd=str(Path(__file__).parent),  # Set working directory
             )
 
             if result.returncode != 0:
@@ -205,7 +211,7 @@ class ValidatedTaskArchitect:
             return output
 
         except subprocess.TimeoutExpired:
-            print(f"⚠️  task_architect.py timed out")
+            print("⚠️  task_architect.py timed out")
             return self._generate_fallback_breakdown(user_prompt)
 
         except json.JSONDecodeError as e:
@@ -263,7 +269,9 @@ class ValidatedTaskArchitect:
                 "original_request": user_prompt,
                 "context_summary": {
                     "has_context": global_context is not None,
-                    "context_keys": list(global_context.keys()) if global_context else []
+                    "context_keys": (
+                        list(global_context.keys()) if global_context else []
+                    ),
                 },
                 "validation_criteria": [
                     "Does output meet original requirements?",
@@ -271,25 +279,21 @@ class ValidatedTaskArchitect:
                     "Are all requested features implemented?",
                     "Does implementation follow best practices?",
                     "Are there any missing error handlers?",
-                    "Is documentation complete?"
-                ]
+                    "Is documentation complete?",
+                ],
             },
             "context_requirements": [
                 "rag:validation-patterns",
-                "previous-task-outputs"  # Special marker for outputs from dependencies
+                "previous-task-outputs",  # Special marker for outputs from dependencies
             ],
-            "dependencies": all_task_ids  # Depends on all previous tasks
+            "dependencies": all_task_ids,  # Depends on all previous tasks
         }
 
         # Append validation task
         enhanced_tasks = tasks + [validation_task]
 
         # Return enhanced breakdown
-        return {
-            **task_breakdown,
-            "tasks": enhanced_tasks,
-            "has_validation_task": True
-        }
+        return {**task_breakdown, "tasks": enhanced_tasks, "has_validation_task": True}
 
     def _augment_prompt(
         self,
@@ -320,7 +324,9 @@ class ValidatedTaskArchitect:
 
         feedback += f"\n{'='*60}\n"
         feedback += "Please correct ALL these issues in this attempt.\n"
-        feedback += "Ensure the task breakdown addresses each deficiency listed above.\n"
+        feedback += (
+            "Ensure the task breakdown addresses each deficiency listed above.\n"
+        )
         feedback += f"{'='*60}\n"
 
         return original_prompt + feedback
@@ -357,9 +363,9 @@ async def main():
     )
 
     # Output result as JSON
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("FINAL RESULT")
-    print("="*60)
+    print("=" * 60)
     print(json.dumps(result, indent=2))
 
 

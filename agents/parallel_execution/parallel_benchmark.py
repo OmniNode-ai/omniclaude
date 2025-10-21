@@ -6,14 +6,14 @@ Demonstrates 3x+ throughput improvement with parallel node generation.
 """
 
 import asyncio
-import time
-import tempfile
-from pathlib import Path
-from uuid import uuid4
-from typing import List
 
 # Add parent directory to path
 import sys
+import tempfile
+import time
+from pathlib import Path
+from uuid import uuid4
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.codegen_workflow import CodegenWorkflow
@@ -52,7 +52,7 @@ async def benchmark_sequential_generation(num_nodes: int = 6) -> float:
             prd_analysis=analysis,
             microservice_name="benchmark",
             domain="perf_test",
-            output_directory=temp_dir
+            output_directory=temp_dir,
         )
 
         total_time = time.time() - start_time
@@ -64,7 +64,9 @@ async def benchmark_sequential_generation(num_nodes: int = 6) -> float:
     return total_time
 
 
-async def benchmark_parallel_generation(num_nodes: int = 6, max_workers: int = 3) -> float:
+async def benchmark_parallel_generation(
+    num_nodes: int = 6, max_workers: int = 3
+) -> float:
     """
     Benchmark parallel node generation.
 
@@ -75,7 +77,9 @@ async def benchmark_parallel_generation(num_nodes: int = 6, max_workers: int = 3
     Returns:
         Total time in seconds
     """
-    print(f"\n=== Parallel Generation Benchmark ({num_nodes} nodes, {max_workers} workers) ===")
+    print(
+        f"\n=== Parallel Generation Benchmark ({num_nodes} nodes, {max_workers} workers) ==="
+    )
 
     workflow = CodegenWorkflow(enable_parallel=True, max_workers=max_workers)
     analyzer = SimplePRDAnalyzer()
@@ -96,7 +100,7 @@ async def benchmark_parallel_generation(num_nodes: int = 6, max_workers: int = 3
             prd_analysis=analysis,
             microservice_name="benchmark",
             domain="perf_test",
-            output_directory=temp_dir
+            output_directory=temp_dir,
         )
 
         total_time = time.time() - start_time
@@ -149,13 +153,17 @@ async def run_comprehensive_benchmark():
             "sequential_time": sequential_time,
             "parallel_time": parallel_time,
             "speedup": speedup,
-            "throughput_improvement": throughput_improvement
+            "throughput_improvement": throughput_improvement,
         }
         results.append(result)
 
         print(f"\n--- Results for {config['name']} ---")
-        print(f"Sequential: {sequential_time:.2f}s ({sequential_time/num_nodes:.2f}s per node)")
-        print(f"Parallel:   {parallel_time:.2f}s ({parallel_time/num_nodes:.2f}s per node)")
+        print(
+            f"Sequential: {sequential_time:.2f}s ({sequential_time/num_nodes:.2f}s per node)"
+        )
+        print(
+            f"Parallel:   {parallel_time:.2f}s ({parallel_time/num_nodes:.2f}s per node)"
+        )
         print(f"Speedup:    {speedup:.2f}x")
         print(f"Throughput: {throughput_improvement:+.1f}%")
 
@@ -163,11 +171,15 @@ async def run_comprehensive_benchmark():
     print("\n\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"{'Configuration':<20} {'Nodes':<8} {'Workers':<10} {'Speedup':<10} {'Improvement':<15}")
+    print(
+        f"{'Configuration':<20} {'Nodes':<8} {'Workers':<10} {'Speedup':<10} {'Improvement':<15}"
+    )
     print("-" * 60)
 
     for r in results:
-        print(f"{r['config']:<20} {r['nodes']:<8} {r['workers']:<10} {r['speedup']:.2f}x{'':<6} {r['throughput_improvement']:+.1f}%")
+        print(
+            f"{r['config']:<20} {r['nodes']:<8} {r['workers']:<10} {r['speedup']:.2f}x{'':<6} {r['throughput_improvement']:+.1f}%"
+        )
 
     # Target achievement check
     print("\n" + "=" * 60)
@@ -179,15 +191,23 @@ async def run_comprehensive_benchmark():
     avg_speedup = sum(r["speedup"] for r in results) / len(results)
 
     print(f"Target Speedup:  {target_speedup:.1f}x")
-    print(f"Best Speedup:    {best_speedup:.2f}x {'✓' if best_speedup >= target_speedup else '✗'}")
-    print(f"Average Speedup: {avg_speedup:.2f}x {'✓' if avg_speedup >= target_speedup else '✗'}")
+    print(
+        f"Best Speedup:    {best_speedup:.2f}x {'✓' if best_speedup >= target_speedup else '✗'}"
+    )
+    print(
+        f"Average Speedup: {avg_speedup:.2f}x {'✓' if avg_speedup >= target_speedup else '✗'}"
+    )
 
     if best_speedup >= target_speedup:
         print(f"\n✓ SUCCESS: Achieved {target_speedup:.1f}x+ speedup target!")
     elif best_speedup >= 2.0:
-        print(f"\n⚠ PARTIAL: Achieved {best_speedup:.2f}x speedup (target: {target_speedup:.1f}x)")
+        print(
+            f"\n⚠ PARTIAL: Achieved {best_speedup:.2f}x speedup (target: {target_speedup:.1f}x)"
+        )
     else:
-        print(f"\n✗ BELOW TARGET: Only {best_speedup:.2f}x speedup (target: {target_speedup:.1f}x)")
+        print(
+            f"\n✗ BELOW TARGET: Only {best_speedup:.2f}x speedup (target: {target_speedup:.1f}x)"
+        )
 
     print("\n" + "=" * 60)
 

@@ -1,0 +1,2 @@
+# Template files with placeholder syntax that are not valid Python
+agents/templates/*.py

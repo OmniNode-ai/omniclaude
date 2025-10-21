@@ -10,7 +10,7 @@ Defines data structures for phase-by-phase workflow control including:
 
 import json
 import sys
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 class ExecutionPhase(Enum):
     """Workflow execution phases with numeric ordering."""
+
     CONTEXT_GATHERING = 0
     QUORUM_VALIDATION = 1
     TASK_PLANNING = 2
@@ -87,7 +88,7 @@ class PhaseResult:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = asdict(self)
-        result['phase'] = self.phase.name
+        result["phase"] = self.phase.name
         return result
 
 
@@ -104,48 +105,48 @@ class PhaseState:
 
     def save(self, path: Path) -> None:
         """Save state to JSON file."""
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             data = {
-                'phases_executed': [p.to_dict() for p in self.phases_executed],
-                'current_phase': self.current_phase,
-                'global_context': self.global_context,
-                'quorum_result': self.quorum_result,
-                'tasks_data': self.tasks_data,
-                'user_prompt': self.user_prompt,
-                'saved_at': datetime.now().isoformat()
+                "phases_executed": [p.to_dict() for p in self.phases_executed],
+                "current_phase": self.current_phase,
+                "global_context": self.global_context,
+                "quorum_result": self.quorum_result,
+                "tasks_data": self.tasks_data,
+                "user_prompt": self.user_prompt,
+                "saved_at": datetime.now().isoformat(),
             }
             json.dump(data, f, indent=2)
         print(f"[DispatchRunner] Phase state saved to: {path}", file=sys.stderr)
 
     @classmethod
-    def load(cls, path: Path) -> 'PhaseState':
+    def load(cls, path: Path) -> "PhaseState":
         """Load state from JSON file."""
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = json.load(f)
 
         # Reconstruct PhaseResult objects
         phases_executed = []
-        for p in data.get('phases_executed', []):
+        for p in data.get("phases_executed", []):
             phase_result = PhaseResult(
-                phase=ExecutionPhase[p['phase']],
-                phase_name=p['phase_name'],
-                success=p['success'],
-                duration_ms=p['duration_ms'],
-                started_at=p['started_at'],
-                completed_at=p['completed_at'],
-                output_data=p.get('output_data', {}),
-                error=p.get('error'),
-                skipped=p.get('skipped', False),
-                retry_count=p.get('retry_count', 0)
+                phase=ExecutionPhase[p["phase"]],
+                phase_name=p["phase_name"],
+                success=p["success"],
+                duration_ms=p["duration_ms"],
+                started_at=p["started_at"],
+                completed_at=p["completed_at"],
+                output_data=p.get("output_data", {}),
+                error=p.get("error"),
+                skipped=p.get("skipped", False),
+                retry_count=p.get("retry_count", 0),
             )
             phases_executed.append(phase_result)
 
         print(f"[DispatchRunner] Phase state loaded from: {path}", file=sys.stderr)
         return cls(
             phases_executed=phases_executed,
-            current_phase=data.get('current_phase'),
-            global_context=data.get('global_context'),
-            quorum_result=data.get('quorum_result'),
-            tasks_data=data.get('tasks_data', []),
-            user_prompt=data.get('user_prompt', '')
+            current_phase=data.get("current_phase"),
+            global_context=data.get("global_context"),
+            quorum_result=data.get("quorum_result"),
+            tasks_data=data.get("tasks_data", []),
+            user_prompt=data.get("user_prompt", ""),
         )

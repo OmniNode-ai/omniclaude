@@ -7,28 +7,26 @@ execution traces and hook executions using Pydantic models.
 
 import asyncio
 import os
-from uuid import uuid4
 from datetime import datetime, timezone
+from uuid import uuid4
 
 # Test imports
 try:
     import sys
     from pathlib import Path
+
     # Add parent directory to path for imports
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
     from hooks.lib.tracing.models import (
-        ExecutionTrace,
-        HookExecution,
-        TraceContext,
         HookMetadata,
-        generate_correlation_id,
-        create_new_trace,
+        TraceContext,
         create_new_hook_execution,
+        create_new_trace,
         parse_trace_from_row,
-        parse_hook_from_row
     )
     from hooks.lib.tracing.postgres_client import PostgresTracingClient
+
     IMPORTS_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -45,7 +43,7 @@ async def test_basic_model_creation():
         source="test_suite",
         session_id=session_id,
         prompt_text="Test prompt for validation",
-        tags=["test", "validation", "integration"]
+        tags=["test", "validation", "integration"],
     )
 
     assert trace.status == "in_progress"
@@ -60,7 +58,7 @@ async def test_basic_model_creation():
         hook_name="test_hook",
         execution_order=1,
         tool_name="Write",
-        file_path="/test/file.py"
+        file_path="/test/file.py",
     )
 
     assert hook.hook_type == "PreToolUse"
@@ -104,10 +102,17 @@ async def test_model_validation():
         trace_id=trace.correlation_id,
         hook_type="PreToolUse",
         hook_name="test",
-        execution_order=1
+        execution_order=1,
     )
 
-    valid_types = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionStart", "SessionEnd"]
+    valid_types = [
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+        "SessionStart",
+        "SessionEnd",
+    ]
     for hook_type in valid_types:
         hook.hook_type = hook_type
     print(f"✓ All valid hook types accepted ({len(valid_types)} types)")
@@ -131,7 +136,7 @@ async def test_serialization():
         prompt_text="Test prompt",
         user_id="test_user_123",
         context={"env": "test", "version": "1.0"},
-        tags=["test", "serialization"]
+        tags=["test", "serialization"],
     )
 
     # Test to_db_dict
@@ -166,7 +171,7 @@ async def test_serialization():
         "context": {"test": "data"},
         "tags": ["test"],
         "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc)
+        "updated_at": datetime.now(timezone.utc),
     }
 
     parsed_trace = parse_trace_from_row(row_data)
@@ -204,7 +209,7 @@ async def test_hook_metadata():
         quality_score=0.87,
         rag_matches=10,
         rag_confidence=0.92,
-        processing_time_ms=245
+        processing_time_ms=245,
     )
 
     assert metadata.quality_score == 0.87
@@ -242,7 +247,7 @@ async def test_database_integration():
             source="integration_test",
             session_id=session_id,
             prompt_text="Integration test prompt",
-            tags=["integration", "test"]
+            tags=["integration", "test"],
         )
 
         trace_id = await client.insert_trace(trace)
@@ -258,7 +263,7 @@ async def test_database_integration():
             hook_type="PreToolUse",
             hook_name="integration_test_hook",
             execution_order=1,
-            tool_name="Write"
+            tool_name="Write",
         )
         hook.rag_query_performed = True
         hook.rag_results = {"matches": 5, "confidence": 0.89}
@@ -279,7 +284,9 @@ async def test_database_integration():
         # Retrieve trace as model
         retrieved_trace = await client.get_trace_model(trace.correlation_id)
         if retrieved_trace:
-            print(f"✓ Retrieved trace: status={retrieved_trace.status}, duration={retrieved_trace.duration_ms}ms")
+            print(
+                f"✓ Retrieved trace: status={retrieved_trace.status}, duration={retrieved_trace.duration_ms}ms"
+            )
             assert retrieved_trace.correlation_id == trace.correlation_id
             assert retrieved_trace.status == "completed"
         else:
@@ -310,7 +317,7 @@ async def test_complete_workflow():
         session_id=session_id,
         prompt_text="Complete workflow test",
         user_id="test_user",
-        tags=["workflow", "end-to-end"]
+        tags=["workflow", "end-to-end"],
     )
     print(f"✓ Step 1: Created trace {trace.correlation_id}")
 
@@ -321,8 +328,8 @@ async def test_complete_workflow():
             trace_id=trace.correlation_id,
             hook_type="PreToolUse" if i == 0 else "PostToolUse",
             hook_name=f"hook_{i+1}",
-            execution_order=i+1,
-            tool_name="Write" if i < 2 else "Edit"
+            execution_order=i + 1,
+            tool_name="Write" if i < 2 else "Edit",
         )
 
         # Simulate hook execution
@@ -381,6 +388,7 @@ async def run_all_tests():
             print(f"\n✗ Test failed: {test.__name__}")
             print(f"  Error: {e}")
             import traceback
+
             traceback.print_exc()
 
     print("\n" + "=" * 60)

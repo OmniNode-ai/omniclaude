@@ -8,13 +8,12 @@ the need for directory scanning and import validation.
 Legacy scanning functionality is still available but deprecated.
 """
 
-import logging
-import os
 import importlib.util
 import inspect
+import logging
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Callable, Any, TypeVar
-from functools import lru_cache, wraps
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 # Configure logging for agent registry
 logger = logging.getLogger(__name__)
@@ -23,14 +22,11 @@ logger = logging.getLogger(__name__)
 _AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 # Type variable for decorator
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def register_agent(
-    agent_name: str,
-    agent_type: str,
-    capabilities: List[str],
-    description: str = ""
+    agent_name: str, agent_type: str, capabilities: List[str], description: str = ""
 ) -> Callable[[T], T]:
     """
     Decorator for agent self-registration.
@@ -70,6 +66,7 @@ def register_agent(
         ... def execute(task):
         ...     pass
     """
+
     def decorator(cls_or_func: T) -> T:
         """Inner decorator that performs the registration."""
         # Log registration start
@@ -218,8 +215,12 @@ class AgentRegistry:
             spec.loader.exec_module(module)
 
             # Check for required execute() function or agent attribute
-            has_execute = hasattr(module, "execute") and callable(getattr(module, "execute"))
-            has_agent = hasattr(module, "agent")  # Pydantic AI agents have 'agent' attribute
+            has_execute = hasattr(module, "execute") and callable(
+                getattr(module, "execute")
+            )
+            has_agent = hasattr(
+                module, "agent"
+            )  # Pydantic AI agents have 'agent' attribute
 
             return has_execute or has_agent
 

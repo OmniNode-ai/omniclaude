@@ -8,7 +8,7 @@ Typical for REDUCER nodes.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,22 @@ class AggregationPattern:
             Confidence score (0.0 to 1.0)
         """
         aggregation_keywords = {
-            'aggregate', 'reduce', 'sum', 'count', 'average', 'mean',
-            'group', 'batch', 'collect', 'accumulate', 'merge'
+            "aggregate",
+            "reduce",
+            "sum",
+            "count",
+            "average",
+            "mean",
+            "group",
+            "batch",
+            "collect",
+            "accumulate",
+            "merge",
         }
 
-        text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        text = (
+            f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        )
         matched = sum(1 for kw in aggregation_keywords if kw in text)
 
         return min(matched / 2.5, 1.0)  # 2-3 matches = 100% confidence
@@ -71,9 +82,13 @@ class AggregationPattern:
         elif agg_type == "group_by":
             return self._generate_group_by_method(method_name, description, context)
         elif agg_type == "windowed":
-            return self._generate_windowed_aggregation(method_name, description, context)
+            return self._generate_windowed_aggregation(
+                method_name, description, context
+            )
         elif agg_type == "stateful":
-            return self._generate_stateful_aggregation(method_name, description, context)
+            return self._generate_stateful_aggregation(
+                method_name, description, context
+            )
         else:
             return self._generate_generic_aggregation(method_name, description, context)
 
@@ -95,10 +110,7 @@ class AggregationPattern:
         ]
 
     def _generate_reduce_method(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, context: Dict[str, Any]
     ) -> str:
         """Generate reduce aggregation method"""
         return f'''
@@ -177,10 +189,7 @@ class AggregationPattern:
 '''
 
     def _generate_group_by_method(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, context: Dict[str, Any]
     ) -> str:
         """Generate group by aggregation method"""
         return f'''
@@ -275,10 +284,7 @@ class AggregationPattern:
 '''
 
     def _generate_windowed_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, context: Dict[str, Any]
     ) -> str:
         """Generate windowed aggregation method"""
         return f'''
@@ -366,10 +372,7 @@ class AggregationPattern:
 '''
 
     def _generate_stateful_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, context: Dict[str, Any]
     ) -> str:
         """Generate stateful aggregation method"""
         return f'''
@@ -457,10 +460,7 @@ class AggregationPattern:
 '''
 
     def _generate_generic_aggregation(
-        self,
-        method_name: str,
-        description: str,
-        context: Dict[str, Any]
+        self, method_name: str, description: str, context: Dict[str, Any]
     ) -> str:
         """Generate generic aggregation method"""
         return f'''
@@ -508,25 +508,26 @@ class AggregationPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "aggregate_data"
+
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "aggregate_data"
 
     def _detect_aggregation_type(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
+        self, capability: Dict[str, Any], context: Dict[str, Any]
     ) -> str:
         """Detect specific aggregation type"""
-        text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        text = (
+            f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        )
 
-        if any(kw in text for kw in ['reduce', 'sum', 'count', 'average']):
+        if any(kw in text for kw in ["reduce", "sum", "count", "average"]):
             return "reduce"
-        elif any(kw in text for kw in ['group', 'group by', 'groupby']):
+        elif any(kw in text for kw in ["group", "group by", "groupby"]):
             return "group_by"
-        elif any(kw in text for kw in ['window', 'sliding', 'tumbling']):
+        elif any(kw in text for kw in ["window", "sliding", "tumbling"]):
             return "windowed"
-        elif any(kw in text for kw in ['state', 'stateful', 'incremental']):
+        elif any(kw in text for kw in ["state", "stateful", "incremental"]):
             return "stateful"
         else:
             return "generic"

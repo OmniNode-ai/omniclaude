@@ -3,11 +3,12 @@
 Correction Generator for AI Quality Enforcement System
 Generates correction suggestions using RAG intelligence from Archon MCP.
 """
+
 import re
 import sys
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Import from sibling modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -146,16 +147,6 @@ class CorrectionGenerator:
             return self._cache[cache_key]
 
         # Build intelligent query for RAG
-        query = f"""
-        {language} naming conventions for {violation_type}.
-        Violation name: {violation_name}
-
-        Provide:
-        1. Correct naming pattern for {violation_type} in {language}
-        2. Examples of correct usage
-        3. Common mistakes to avoid
-        4. Rationale for the convention
-        """
 
         # Execute RAG query with domain standards context
         task_context = {
@@ -343,7 +334,6 @@ class CorrectionGenerator:
 # Example usage and testing
 async def main():
     """Example usage of the CorrectionGenerator."""
-    import asyncio
 
     # Example violations
     violations = [
@@ -400,7 +390,7 @@ SOME_CONSTANT = 42
         print(f"  New name: {correction['new_name']}")
         print(f"  Confidence: {correction['confidence']:.2f}")
         print(f"  Explanation: {correction['explanation']}")
-        print(f"\n  Code context:")
+        print("\n  Code context:")
         for line in correction["code_context"].split("\n"):
             print(f"    {line}")
         print()

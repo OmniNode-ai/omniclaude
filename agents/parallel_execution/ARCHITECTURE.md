@@ -642,7 +642,7 @@ Task A ──┤              ├──→ Task C ──→ Results
 2. Add to AgentRouter
 3. Define input schema
 4. Update task_schema.py
-5. Document in agent-parallel-dispatcher.md
+5. Document in AGENT-PARALLEL-DISPATCHER.md
 
 ### Custom Workflows
 

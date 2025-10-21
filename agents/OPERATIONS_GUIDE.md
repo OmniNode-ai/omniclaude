@@ -1,4 +1,4 @@
-# Phase 7 Operations Guide
+# Agent Framework Operations Guide
 
 **Version**: 1.0
 **Status**: Production Ready
@@ -52,7 +52,7 @@ export PGPASSWORD="your-secure-password"
 # Create database (if not exists)
 psql -h localhost -p 5432 -U postgres -c "CREATE DATABASE omninode_bridge;"
 
-# Apply Phase 7 migration
+# Apply framework migration
 psql -h localhost -p 5432 -U postgres -d omninode_bridge \
   -f agents/parallel_execution/migrations/006_phase7_schema_enhancements.sql
 
@@ -63,7 +63,7 @@ psql -h localhost -p 5432 -U postgres -d omninode_bridge \
 # Expected output:
 # version |                                description
 #---------+---------------------------------------------------------------------------
-#       6 | Phase 7: Add mixin learning, pattern feedback, performance metrics...
+#       6 | Add mixin learning, pattern feedback, performance metrics...
 ```
 
 #### 2. Configuration Files
@@ -161,7 +161,7 @@ psql -h localhost -p 5432 -U postgres -d omninode_bridge \
 python -m pytest tests/test_phase7_schema.py -v
 # Expected: 26 passed
 
-# 6. Run all Phase 7 tests
+# 6. Run all framework tests
 python -m pytest tests/test_template_cache.py -v  # 22 passed
 python -m pytest tests/test_monitoring.py -v      # 30 passed
 python -m pytest tests/test_structured_logging.py -v  # 27 passed
@@ -863,7 +863,7 @@ configure_global_rotation(
 #### Vacuum and Analyze
 
 ```bash
-# Vacuum all Phase 7 tables
+# Vacuum all framework tables
 psql -h localhost -p 5432 -U postgres -d omninode_bridge << EOF
 VACUUM ANALYZE mixin_compatibility_matrix;
 VACUUM ANALYZE pattern_feedback_log;
@@ -1095,7 +1095,7 @@ crontab -e
 pg_dump -h localhost -p 5432 -U postgres omninode_bridge \
   -f omninode_bridge_backup.sql
 
-# Phase 7 tables only
+# Framework tables only
 pg_dump -h localhost -p 5432 -U postgres omninode_bridge \
   -t mixin_compatibility_matrix \
   -t pattern_feedback_log \

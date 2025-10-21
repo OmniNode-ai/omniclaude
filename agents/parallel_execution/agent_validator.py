@@ -5,25 +5,24 @@ Expert validation for code, configuration, and output compliance with
 intelligent rule evaluation and quality reporting.
 """
 
-import asyncio
-import time
-import json
 import datetime
-from typing import Any, Dict, Optional, List
+import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, ValidationError
-from pydantic_ai import Agent, RunContext
-
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
@@ -34,8 +33,10 @@ except ImportError:
 # Pydantic Models for Structured Outputs
 # ============================================================================
 
+
 class ValidationRule(BaseModel):
     """Rule for validation checking."""
+
     id: str
     name: str
     description: str
@@ -46,6 +47,7 @@ class ValidationRule(BaseModel):
 
 class Violation(BaseModel):
     """Validation violation found."""
+
     rule_id: str
     message: str
     location: Optional[str] = None  # e.g., file:line, config_path
@@ -54,6 +56,7 @@ class Violation(BaseModel):
 
 class ValidationResult(BaseModel):
     """Result of validation check."""
+
     is_compliant: bool
     violations: List[Violation] = Field(default_factory=list)
     summary: str
@@ -61,6 +64,7 @@ class ValidationResult(BaseModel):
 
 class ValidationRequest(BaseModel):
     """Request for validation."""
+
     target_type: str  # e.g., 'code', 'configuration', 'output'
     target_content: str  # The actual code, config (as JSON string), or output
     rules: List[ValidationRule]
@@ -68,6 +72,7 @@ class ValidationRequest(BaseModel):
 
 class ComplianceReport(BaseModel):
     """Complete compliance report output."""
+
     report_id: str
     timestamp: str
     overall_status: str  # e.g., 'COMPLIANT', 'NON_COMPLIANT'
@@ -76,16 +81,20 @@ class ComplianceReport(BaseModel):
     rules_evaluated: int = Field(description="Number of rules evaluated")
     violations_found: int = Field(description="Total violations found")
     critical_violations: int = Field(description="Critical violations count")
-    quality_score: float = Field(description="Overall compliance quality score 0.0-1.0", ge=0.0, le=1.0)
+    quality_score: float = Field(
+        description="Overall compliance quality score 0.0-1.0", ge=0.0, le=1.0
+    )
 
 
 # ============================================================================
 # Dependencies for Pydantic AI Agent
 # ============================================================================
 
+
 @dataclass
 class AgentDeps:
     """Dependencies passed to agent tools."""
+
     task: AgentTask
     config: AgentConfig
     mcp_client: ArchonMCPClient
@@ -136,16 +145,17 @@ Validate thoroughly and generate complete compliance report."""
 
 # Create the Pydantic AI agent
 validation_agent = Agent[AgentDeps, ComplianceReport](
-    'google-gla:gemini-2.5-flash',  # Latest Gemini Flash model
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=ComplianceReport,
-    system_prompt=VALIDATION_SYSTEM_PROMPT
+    system_prompt=VALIDATION_SYSTEM_PROMPT,
 )
 
 
 # ============================================================================
 # Agent Tools
 # ============================================================================
+
 
 @validation_agent.tool
 async def evaluate_code_rules(ctx: RunContext[AgentDeps]) -> str:
@@ -156,7 +166,7 @@ async def evaluate_code_rules(ctx: RunContext[AgentDeps]) -> str:
     deps = ctx.deps
     request = deps.validation_request
 
-    if request.target_type != 'code':
+    if request.target_type != "code":
         return "Not a code validation request"
 
     findings = []
@@ -164,13 +174,15 @@ async def evaluate_code_rules(ctx: RunContext[AgentDeps]) -> str:
     findings.append(f"- Total rules to evaluate: {len(request.rules)}")
 
     # Analyze code structure
-    code_lines = request.target_content.split('\n')
+    code_lines = request.target_content.split("\n")
     findings.append(f"- Code lines: {len(code_lines)}")
 
     # Check for common patterns
     for rule in request.rules:
         if rule.pattern and rule.pattern in request.target_content:
-            findings.append(f"- Pattern '{rule.pattern}' found (Rule: {rule.id}, Severity: {rule.severity})")
+            findings.append(
+                f"- Pattern '{rule.pattern}' found (Rule: {rule.id}, Severity: {rule.severity})"
+            )
 
     return "\n".join(findings)
 
@@ -184,7 +196,7 @@ async def evaluate_config_rules(ctx: RunContext[AgentDeps]) -> str:
     deps = ctx.deps
     request = deps.validation_request
 
-    if request.target_type != 'configuration':
+    if request.target_type != "configuration":
         return "Not a configuration validation request"
 
     findings = []
@@ -200,7 +212,9 @@ async def evaluate_config_rules(ctx: RunContext[AgentDeps]) -> str:
             if rule.pattern and rule.expected_value:
                 actual_value = config_dict.get(rule.pattern)
                 if actual_value != rule.expected_value:
-                    findings.append(f"- Key '{rule.pattern}': expected '{rule.expected_value}', got '{actual_value}'")
+                    findings.append(
+                        f"- Key '{rule.pattern}': expected '{rule.expected_value}', got '{actual_value}'"
+                    )
                 else:
                     findings.append(f"- Key '{rule.pattern}': compliant")
     except json.JSONDecodeError as e:
@@ -218,7 +232,7 @@ async def evaluate_output_rules(ctx: RunContext[AgentDeps]) -> str:
     deps = ctx.deps
     request = deps.validation_request
 
-    if request.target_type != 'output':
+    if request.target_type != "output":
         return "Not an output validation request"
 
     findings = []
@@ -231,13 +245,17 @@ async def evaluate_output_rules(ctx: RunContext[AgentDeps]) -> str:
             if rule.pattern in request.target_content:
                 findings.append(f"- Required pattern '{rule.pattern}' present")
             else:
-                findings.append(f"- **Missing**: Required pattern '{rule.pattern}' (Rule: {rule.id})")
+                findings.append(
+                    f"- **Missing**: Required pattern '{rule.pattern}' (Rule: {rule.id})"
+                )
 
         if rule.expected_value:
             if str(rule.expected_value) in request.target_content:
                 findings.append(f"- Expected value '{rule.expected_value}' present")
             else:
-                findings.append(f"- **Missing**: Expected value '{rule.expected_value}' (Rule: {rule.id})")
+                findings.append(
+                    f"- **Missing**: Expected value '{rule.expected_value}' (Rule: {rule.id})"
+                )
 
     return "\n".join(findings)
 
@@ -286,11 +304,17 @@ async def get_validation_standards(ctx: RunContext[AgentDeps]) -> str:
 # Wrapper Class for Compatibility
 # ============================================================================
 
+
 @register_agent(
     agent_name="validator",
     agent_type="validator",
-    capabilities=["code_validation", "config_validation", "output_validation", "compliance_reporting"],
-    description="Compliance and validation agent"
+    capabilities=[
+        "code_validation",
+        "config_validation",
+        "output_validation",
+        "compliance_reporting",
+    ],
+    description="Compliance and validation agent",
 )
 class AgentValidator:
     """
@@ -308,7 +332,7 @@ class AgentValidator:
             self.config = AgentConfig(
                 agent_name="agent-validator",
                 agent_domain="validation_compliance",
-                agent_purpose="Validate code, configuration, and output compliance"
+                agent_purpose="Validate code, configuration, and output compliance",
             )
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
@@ -330,7 +354,7 @@ class AgentValidator:
         self._current_trace_id = await self.trace_logger.start_agent_trace(
             agent_name=self.config.agent_name,
             task_id=task.task_id,
-            metadata={"using_pydantic_ai": True}
+            metadata={"using_pydantic_ai": True},
         )
 
         try:
@@ -342,7 +366,7 @@ class AgentValidator:
                 message=f"Validating {validation_request.target_type}: {len(validation_request.rules)} rules",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Create agent dependencies
@@ -352,7 +376,7 @@ class AgentValidator:
                 mcp_client=self.mcp_client,
                 trace_logger=self.trace_logger,
                 trace_id=self._current_trace_id,
-                validation_request=validation_request
+                validation_request=validation_request,
             )
 
             # Build validation prompt
@@ -364,7 +388,7 @@ class AgentValidator:
                 message="Invoking Pydantic AI validation agent",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             result = await validation_agent.run(prompt, deps=deps)
@@ -381,13 +405,13 @@ class AgentValidator:
                     "violations_found": compliance_report.violations_found,
                     "critical_violations": compliance_report.critical_violations,
                     "quality_score": compliance_report.quality_score,
-                    "overall_status": compliance_report.overall_status
+                    "overall_status": compliance_report.overall_status,
                 },
                 "pydantic_ai_metadata": {
                     "model_used": "gemini-2.5-flash",
                     "structured_output": True,
-                    "tools_available": 4
-                }
+                    "tools_available": 4,
+                },
             }
 
             # Create result
@@ -397,13 +421,13 @@ class AgentValidator:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             await self.trace_logger.end_agent_trace(
                 trace_id=self._current_trace_id,
                 status="completed",
-                result=agent_result.model_dump()
+                result=agent_result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -411,7 +435,7 @@ class AgentValidator:
                 message=f"Validation complete: {compliance_report.overall_status}, quality={compliance_report.quality_score:.2f}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return agent_result
@@ -421,9 +445,7 @@ class AgentValidator:
             error_msg = f"Validation failed: {str(e)}"
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
+                trace_id=self._current_trace_id, status="failed", error=error_msg
             )
 
             await self.trace_logger.log_event(
@@ -431,7 +453,7 @@ class AgentValidator:
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -440,10 +462,12 @@ class AgentValidator:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
-    async def process_validation_request(self, request: ValidationRequest) -> ComplianceReport:
+    async def process_validation_request(
+        self, request: ValidationRequest
+    ) -> ComplianceReport:
         """
         Process validation request directly (legacy compatibility method).
 
@@ -457,9 +481,7 @@ class AgentValidator:
         task = AgentTask(
             task_id=f"validation-{datetime.datetime.now().isoformat()}",
             description=f"Validate {request.target_type}",
-            input_data={
-                "validation_request": request.model_dump()
-            }
+            input_data={"validation_request": request.model_dump()},
         )
 
         # Execute via agent
@@ -478,7 +500,7 @@ class AgentValidator:
                 violations_found=0,
                 critical_violations=0,
                 quality_score=0.0,
-                details={"error": result.error}
+                details={"error": result.error},
             )
 
     def _extract_validation_request(self, task: AgentTask) -> ValidationRequest:
@@ -495,12 +517,13 @@ class AgentValidator:
         target_content = input_data.get("target_content", input_data.get("content", ""))
         rules_data = input_data.get("rules", [])
 
-        rules = [ValidationRule(**rule) if isinstance(rule, dict) else rule for rule in rules_data]
+        rules = [
+            ValidationRule(**rule) if isinstance(rule, dict) else rule
+            for rule in rules_data
+        ]
 
         return ValidationRequest(
-            target_type=target_type,
-            target_content=target_content,
-            rules=rules
+            target_type=target_type, target_content=target_content, rules=rules
         )
 
     def _build_validation_prompt(self, request: ValidationRequest) -> str:
@@ -559,5 +582,5 @@ Provide complete compliance report with all violations documented."""
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp_client, 'close'):
+        if hasattr(self.mcp_client, "close"):
             await self.mcp_client.close()

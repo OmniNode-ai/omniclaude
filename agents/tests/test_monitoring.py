@@ -1,5 +1,5 @@
 """
-Comprehensive Tests for Phase 7 Monitoring Infrastructure
+Comprehensive Tests for Agent Framework Monitoring Infrastructure
 
 Tests for:
 - Monitoring system (metrics, alerts, thresholds)
@@ -13,39 +13,29 @@ Performance Validation: Ensures <200ms response times
 """
 
 import asyncio
-import json
-import pytest
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from lib.monitoring import (
-    MonitoringSystem,
-    MonitoringThresholds,
-    Metric,
-    MetricType,
-    AlertSeverity,
-    MonitoringAlert,
-    get_monitoring_system,
-    record_metric,
-    collect_all_metrics
-)
-from lib.health_checker import (
-    HealthChecker,
-    HealthCheckConfig,
-    HealthCheckStatus,
-    HealthCheckResult,
-    get_health_checker,
-    check_system_health
-)
+import pytest
 from lib.alert_manager import (
+    AlertChannel,
     AlertManager,
     AlertRule,
-    AlertChannel,
-    EscalationPolicy,
     AlertStatus,
-    get_alert_manager
+    EscalationPolicy,
+)
+from lib.health_checker import (
+    HealthCheckConfig,
+    HealthChecker,
+    HealthCheckResult,
+    HealthCheckStatus,
+)
+from lib.monitoring import (
+    AlertSeverity,
+    MetricType,
+    MonitoringAlert,
+    MonitoringSystem,
+    MonitoringThresholds,
 )
 
 
@@ -59,7 +49,7 @@ class TestMonitoringSystem:
             template_load_ms_warning=50.0,
             template_load_ms_critical=100.0,
             cache_hit_rate_warning=0.70,
-            cache_hit_rate_critical=0.60
+            cache_hit_rate_critical=0.60,
         )
         return MonitoringSystem(thresholds)
 
@@ -70,7 +60,7 @@ class TestMonitoringSystem:
             name="test_metric",
             value=42.0,
             metric_type=MetricType.GAUGE,
-            labels={"component": "test"}
+            labels={"component": "test"},
         )
 
         assert "test_metric" in monitoring_system.metrics
@@ -88,9 +78,7 @@ class TestMonitoringSystem:
         # Record more than max history
         for i in range(1500):
             await monitoring_system.record_metric(
-                name="test_metric",
-                value=float(i),
-                metric_type=MetricType.COUNTER
+                name="test_metric", value=float(i), metric_type=MetricType.COUNTER
             )
 
         # Should only keep last 1000
@@ -107,14 +95,15 @@ class TestMonitoringSystem:
         await monitoring_system.record_metric(
             name="template_load_duration_ms",
             value=75.0,  # Above warning (50) but below critical (100)
-            metric_type=MetricType.GAUGE
+            metric_type=MetricType.GAUGE,
         )
 
         # Should have one warning alert
         await asyncio.sleep(0.1)  # Give async alerts time to process
 
         warning_alerts = [
-            a for a in monitoring_system.active_alerts.values()
+            a
+            for a in monitoring_system.active_alerts.values()
             if a.severity == AlertSeverity.WARNING
         ]
         assert len(warning_alerts) >= 0  # May be 0 or 1 depending on timing
@@ -125,14 +114,15 @@ class TestMonitoringSystem:
         # Record metric above critical threshold
         await monitoring_system.record_metric(
             name="template_load_duration_ms",
-            value=150.0,  # Above critical (100)
-            metric_type=MetricType.GAUGE
+            value=150.0,
+            metric_type=MetricType.GAUGE,  # Above critical (100)
         )
 
         await asyncio.sleep(0.1)
 
         critical_alerts = [
-            a for a in monitoring_system.active_alerts.values()
+            a
+            for a in monitoring_system.active_alerts.values()
             if a.severity == AlertSeverity.CRITICAL
         ]
         assert len(critical_alerts) >= 0  # May be created
@@ -145,21 +135,21 @@ class TestMonitoringSystem:
         # Create alert
         await monitoring_system.record_metric(
             name="cache_hit_rate",
-            value=0.50,  # Below critical (0.60)
+            value=0.50,
             metric_type=MetricType.GAUGE,
-            labels=labels
+            labels=labels,  # Below critical (0.60)
         )
 
         await asyncio.sleep(0.1)
 
-        initial_alert_count = len(monitoring_system.active_alerts)
+        len(monitoring_system.active_alerts)
 
         # Record normal metric
         await monitoring_system.record_metric(
             name="cache_hit_rate",
-            value=0.85,  # Above warning (0.70)
+            value=0.85,
             metric_type=MetricType.GAUGE,
-            labels=labels
+            labels=labels,  # Above warning (0.70)
         )
 
         await asyncio.sleep(0.1)
@@ -176,7 +166,7 @@ class TestMonitoringSystem:
             value=100.0,
             metric_type=MetricType.COUNTER,
             labels={"service": "test"},
-            help_text="Test counter metric"
+            help_text="Test counter metric",
         )
 
         prometheus_output = await monitoring_system.export_prometheus_metrics()
@@ -190,9 +180,7 @@ class TestMonitoringSystem:
         """Test monitoring summary generation."""
         # Add some metrics and alerts
         await monitoring_system.record_metric(
-            name="test_metric",
-            value=42.0,
-            metric_type=MetricType.GAUGE
+            name="test_metric", value=42.0, metric_type=MetricType.GAUGE
         )
 
         summary = monitoring_system.get_monitoring_summary()
@@ -211,7 +199,7 @@ class TestMonitoringSystem:
             component="test_component",
             healthy=True,
             status="healthy",
-            metadata={"test": "value"}
+            metadata={"test": "value"},
         )
 
         assert "test_component" in monitoring_system.health_statuses
@@ -225,9 +213,7 @@ class TestMonitoringSystem:
     async def test_clear_metrics(self, monitoring_system):
         """Test metrics clearing."""
         await monitoring_system.record_metric(
-            name="test_metric",
-            value=42.0,
-            metric_type=MetricType.GAUGE
+            name="test_metric", value=42.0, metric_type=MetricType.GAUGE
         )
 
         assert len(monitoring_system.metrics) > 0
@@ -244,16 +230,13 @@ class TestHealthChecker:
     @pytest.fixture
     def health_checker(self):
         """Create fresh health checker for each test."""
-        config = HealthCheckConfig(
-            check_timeout_ms=1000,
-            database_max_latency_ms=100.0
-        )
+        config = HealthCheckConfig(check_timeout_ms=1000, database_max_latency_ms=100.0)
         return HealthChecker(config)
 
     @pytest.mark.asyncio
     async def test_database_health_check_success(self, health_checker):
         """Test successful database health check."""
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             # Mock successful database connection
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
@@ -274,13 +257,16 @@ class TestHealthChecker:
 
             assert result.component == "database"
             assert result.healthy is True
-            assert result.status in [HealthCheckStatus.HEALTHY, HealthCheckStatus.DEGRADED]
+            assert result.status in [
+                HealthCheckStatus.HEALTHY,
+                HealthCheckStatus.DEGRADED,
+            ]
             assert result.check_duration_ms >= 0
 
     @pytest.mark.asyncio
     async def test_database_health_check_failure(self, health_checker):
         """Test database health check failure."""
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             # Mock database connection failure
             mock_pool.return_value = None
 
@@ -293,13 +279,15 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_template_cache_health_check(self, health_checker):
         """Test template cache health check."""
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
-            mock_conn.fetchrow = AsyncMock(return_value={
-                'total_hits': 800,
-                'total_misses': 200,
-                'avg_load_time': 45.0
-            })
+            mock_conn.fetchrow = AsyncMock(
+                return_value={
+                    "total_hits": 800,
+                    "total_misses": 200,
+                    "avg_load_time": 45.0,
+                }
+            )
 
             # Create async context manager mock
             mock_acquire = MagicMock()
@@ -320,29 +308,30 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_system_health_check(self, health_checker):
         """Test full system health check."""
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             # Mock database available
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
-            mock_conn.fetchrow = AsyncMock(return_value={
-                'total_hits': 800,
-                'total_misses': 200,
-                'avg_load_time': 45.0,
-                'total_generations': 100,
-                'avg_duration_ms': 2500,
-                'success_count': 95,
-                'total_combinations': 50,
-                'avg_score': 0.92,
-                'total_successes': 450,
-                'total_failures': 50,
-                'total_feedback': 100,
-                'correct_count': 90,
-                'incorrect_count': 10,
-                'avg_confidence': 0.88,
-                'total_events': 1000,
-                'success_count': 980,
-                'p95_latency': 150.0
-            })
+            mock_conn.fetchrow = AsyncMock(
+                return_value={
+                    "total_hits": 800,
+                    "total_misses": 200,
+                    "avg_load_time": 45.0,
+                    "total_generations": 100,
+                    "avg_duration_ms": 2500,
+                    "success_count": 95,
+                    "total_combinations": 50,
+                    "avg_score": 0.92,
+                    "total_successes": 450,
+                    "total_failures": 50,
+                    "total_feedback": 100,
+                    "correct_count": 90,
+                    "incorrect_count": 10,
+                    "avg_confidence": 0.88,
+                    "total_events": 1000,
+                    "p95_latency": 150.0,
+                }
+            )
 
             mock_pool_instance = AsyncMock()
             mock_pool_instance.acquire.return_value.__aenter__.return_value = mock_conn
@@ -359,7 +348,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_health_check_performance(self, health_checker):
         """Test that health checks complete within performance target."""
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
 
@@ -386,7 +375,7 @@ class TestHealthChecker:
             status=HealthCheckStatus.HEALTHY,
             healthy=True,
             message="OK",
-            check_duration_ms=10.0
+            check_duration_ms=10.0,
         )
 
         assert health_checker.get_overall_health_status() == HealthCheckStatus.HEALTHY
@@ -397,7 +386,7 @@ class TestHealthChecker:
             status=HealthCheckStatus.DEGRADED,
             healthy=False,
             message="Degraded",
-            check_duration_ms=10.0
+            check_duration_ms=10.0,
         )
 
         assert health_checker.get_overall_health_status() == HealthCheckStatus.DEGRADED
@@ -408,7 +397,7 @@ class TestHealthChecker:
             status=HealthCheckStatus.CRITICAL,
             healthy=False,
             message="Critical",
-            check_duration_ms=10.0
+            check_duration_ms=10.0,
         )
 
         assert health_checker.get_overall_health_status() == HealthCheckStatus.CRITICAL
@@ -432,7 +421,7 @@ class TestAlertManager:
             threshold=50.0,
             actual_value=75.0,
             message="Test alert message",
-            component="test_component"
+            component="test_component",
         )
 
     def test_add_alert_rule(self, alert_manager):
@@ -442,7 +431,7 @@ class TestAlertManager:
             metric_name="test_metric",
             threshold=100.0,
             severity=AlertSeverity.CRITICAL,
-            comparison="greater_than"
+            comparison="greater_than",
         )
 
         alert_manager.add_rule(rule)
@@ -457,7 +446,7 @@ class TestAlertManager:
             metric_name="test_metric",
             threshold=100.0,
             severity=AlertSeverity.CRITICAL,
-            comparison="greater_than"
+            comparison="greater_than",
         )
 
         alert_manager.add_rule(rule)
@@ -470,9 +459,7 @@ class TestAlertManager:
     def test_add_channel(self, alert_manager):
         """Test adding notification channel."""
         channel = AlertChannel(
-            name="test_channel",
-            channel_type="log",
-            config={"log_level": "info"}
+            name="test_channel", channel_type="log", config={"log_level": "info"}
         )
 
         alert_manager.add_channel(channel)
@@ -484,9 +471,7 @@ class TestAlertManager:
         policy = EscalationPolicy(
             name="test_policy",
             initial_delay_seconds=300,
-            escalation_levels=[
-                {"level": 1, "channels": ["log"]}
-            ]
+            escalation_levels=[{"level": 1, "channels": ["log"]}],
         )
 
         alert_manager.add_escalation_policy(policy)
@@ -513,7 +498,7 @@ class TestAlertManager:
             actual_value=75.0,
             message="Test alert",
             component="test",
-            labels={"env": "test"}
+            labels={"env": "test"},
         )
 
         alert2 = MonitoringAlert(
@@ -524,7 +509,7 @@ class TestAlertManager:
             actual_value=80.0,
             message="Test alert",
             component="test",
-            labels={"env": "test"}
+            labels={"env": "test"},
         )
 
         managed1 = await alert_manager.process_alert(alert1)
@@ -542,7 +527,7 @@ class TestAlertManager:
         acknowledged = await alert_manager.acknowledge_alert(
             alert_id=sample_alert.alert_id,
             acknowledged_by="test_user",
-            note="Investigating"
+            note="Investigating",
         )
 
         assert acknowledged is True
@@ -553,11 +538,10 @@ class TestAlertManager:
     @pytest.mark.asyncio
     async def test_resolve_alert(self, alert_manager, sample_alert):
         """Test alert resolution."""
-        managed = await alert_manager.process_alert(sample_alert)
+        await alert_manager.process_alert(sample_alert)
 
         resolved = await alert_manager.resolve_alert(
-            alert_id=sample_alert.alert_id,
-            resolution_note="Fixed"
+            alert_id=sample_alert.alert_id, resolution_note="Fixed"
         )
 
         assert resolved is True
@@ -570,9 +554,7 @@ class TestAlertManager:
         managed = await alert_manager.process_alert(sample_alert)
 
         suppressed = await alert_manager.suppress_alert(
-            alert_id=sample_alert.alert_id,
-            duration_minutes=60,
-            reason="Maintenance"
+            alert_id=sample_alert.alert_id, duration_minutes=60, reason="Maintenance"
         )
 
         assert suppressed is True
@@ -604,7 +586,7 @@ class TestAlertManager:
             metric_name="test_metric",
             threshold=100.0,
             severity=AlertSeverity.CRITICAL,
-            comparison="greater_than"
+            comparison="greater_than",
         )
         alert_manager.add_rule(rule)
 
@@ -625,8 +607,7 @@ class TestIntegration:
         # Create monitoring system with custom thresholds
         monitoring = MonitoringSystem(
             MonitoringThresholds(
-                template_load_ms_warning=50.0,
-                template_load_ms_critical=100.0
+                template_load_ms_warning=50.0, template_load_ms_critical=100.0
             )
         )
 
@@ -635,7 +616,7 @@ class TestIntegration:
             name="template_load_duration_ms",
             value=150.0,
             metric_type=MetricType.GAUGE,
-            labels={"template": "test"}
+            labels={"template": "test"},
         )
 
         # Should generate critical alert
@@ -652,14 +633,16 @@ class TestIntegration:
         checker = HealthChecker()
 
         # Mock database for health check
-        with patch('lib.health_checker.get_pg_pool') as mock_pool:
+        with patch("lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
-            mock_conn.fetchrow = AsyncMock(return_value={
-                'total_hits': 800,
-                'total_misses': 200,
-                'avg_load_time': 45.0
-            })
+            mock_conn.fetchrow = AsyncMock(
+                return_value={
+                    "total_hits": 800,
+                    "total_misses": 200,
+                    "avg_load_time": 45.0,
+                }
+            )
 
             mock_pool_instance = AsyncMock()
             mock_pool_instance.acquire.return_value.__aenter__.return_value = mock_conn
@@ -680,11 +663,7 @@ class TestIntegration:
         manager = AlertManager()
 
         # Add channel
-        channel = AlertChannel(
-            name="test_log",
-            channel_type="log",
-            enabled=True
-        )
+        channel = AlertChannel(name="test_log", channel_type="log", enabled=True)
         manager.add_channel(channel)
 
         # Create and process alert
@@ -695,7 +674,7 @@ class TestIntegration:
             threshold=100.0,
             actual_value=150.0,
             message="Test critical alert",
-            component="test"
+            component="test",
         )
 
         managed = await manager.process_alert(alert)

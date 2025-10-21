@@ -11,8 +11,8 @@ Confidence Components (weighted):
 4. Historical Score (10%) - Past success rates
 """
 
-from typing import Dict, Any
 from dataclasses import dataclass
+from typing import Any, Dict
 
 
 @dataclass
@@ -28,6 +28,7 @@ class ConfidenceScore:
         historical_score: Historical success score (0.0-1.0)
         explanation: Human-readable explanation
     """
+
     total: float  # 0.0-1.0
     trigger_score: float
     context_score: float
@@ -65,7 +66,7 @@ class ConfidenceScorer:
         agent_data: Dict[str, Any],
         user_request: str,
         context: Dict[str, Any],
-        trigger_score: float
+        trigger_score: float,
     ) -> ConfidenceScore:
         """
         Calculate comprehensive confidence score.
@@ -97,15 +98,16 @@ class ConfidenceScorer:
         weighted_historical = historical_score * self.WEIGHT_HISTORICAL
 
         # Total score
-        total = weighted_trigger + weighted_context + weighted_capability + weighted_historical
+        total = (
+            weighted_trigger
+            + weighted_context
+            + weighted_capability
+            + weighted_historical
+        )
 
         # Generate explanation
         explanation = self._generate_explanation(
-            agent_name,
-            trigger_score,
-            context_score,
-            capability_score,
-            historical_score
+            agent_name, trigger_score, context_score, capability_score, historical_score
         )
 
         return ConfidenceScore(
@@ -114,7 +116,7 @@ class ConfidenceScorer:
             context_score=context_score,
             capability_score=capability_score,
             historical_score=historical_score,
-            explanation=explanation
+            explanation=explanation,
         )
 
     def _calculate_context_score(self, agent_data: Dict, context: Dict) -> float:
@@ -130,15 +132,15 @@ class ConfidenceScorer:
         Returns:
             Context alignment score (0.0-1.0)
         """
-        agent_context = agent_data.get('domain_context', 'general')
+        agent_context = agent_data.get("domain_context", "general")
 
         # Check if context matches
-        current_context = context.get('domain', 'general')
+        current_context = context.get("domain", "general")
 
         if agent_context == current_context:
             # Perfect domain match
             return 1.0
-        elif agent_context == 'general' or current_context == 'general':
+        elif agent_context == "general" or current_context == "general":
             # General agents work in any domain
             return 0.7
         else:
@@ -158,7 +160,7 @@ class ConfidenceScorer:
         Returns:
             Capability match score (0.0-1.0)
         """
-        capabilities = agent_data.get('capabilities', [])
+        capabilities = agent_data.get("capabilities", [])
 
         if not capabilities:
             # No capabilities defined - neutral score
@@ -191,7 +193,7 @@ class ConfidenceScorer:
         if agent_name not in self.historical_success:
             return 0.5
 
-        return self.historical_success[agent_name].get('overall', 0.5)
+        return self.historical_success[agent_name].get("overall", 0.5)
 
     def _generate_explanation(
         self,
@@ -199,7 +201,7 @@ class ConfidenceScorer:
         trigger_score: float,
         context_score: float,
         capability_score: float,
-        historical_score: float
+        historical_score: float,
     ) -> str:
         """
         Generate human-readable explanation.
@@ -255,7 +257,7 @@ class ConfidenceScorer:
         if agent_name not in self.historical_success:
             self.historical_success[agent_name] = {}
 
-        self.historical_success[agent_name]['overall'] = success_rate
+        self.historical_success[agent_name]["overall"] = success_rate
 
 
 # Standalone test
@@ -264,25 +266,23 @@ if __name__ == "__main__":
 
     # Test scoring
     test_agent_data = {
-        'title': 'Debug Intelligence Agent',
-        'domain_context': 'debugging',
-        'capabilities': ['error_analysis', 'root_cause', 'debugging']
+        "title": "Debug Intelligence Agent",
+        "domain_context": "debugging",
+        "capabilities": ["error_analysis", "root_cause", "debugging"],
     }
 
-    test_context = {
-        'domain': 'debugging'
-    }
+    test_context = {"domain": "debugging"}
 
     result = scorer.score(
-        agent_name='agent-debug-intelligence',
+        agent_name="agent-debug-intelligence",
         agent_data=test_agent_data,
-        user_request='debug this performance error',
+        user_request="debug this performance error",
         context=test_context,
-        trigger_score=0.85
+        trigger_score=0.85,
     )
 
     print(f"Total Confidence: {result.total:.2f}")
-    print(f"Breakdown:")
+    print("Breakdown:")
     print(f"  Trigger:    {result.trigger_score:.2f}")
     print(f"  Context:    {result.context_score:.2f}")
     print(f"  Capability: {result.capability_score:.2f}")

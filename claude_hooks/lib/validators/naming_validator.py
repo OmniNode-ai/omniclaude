@@ -218,24 +218,24 @@ class NamingValidator:
         path_lower = file_path.lower()
 
         # Check for Archon repo (explicit exclusion)
-        if 'archon' in path_lower:
+        if "archon" in path_lower:
             return False
 
         # Check for omninode_bridge repo (explicit exclusion - uses standard PEP 8)
-        if 'omninode_bridge' in path_lower:
+        if "omninode_bridge" in path_lower:
             return False
 
         # Check for omniagent-main repo (explicit exclusion - uses standard PEP 8)
-        if 'omniagent-main' in path_lower:
+        if "omniagent-main" in path_lower:
             return False
 
         # Check for omnibase_ pattern
-        if 'omnibase_' in path_lower:
+        if "omnibase_" in path_lower:
             return True
 
         # Check for /omni followed by lowercase letter (omniauth, omnitools, etc.)
         # This pattern avoids false positives like "omni" in the middle of words
-        if re.search(r'/omni[a-z]', file_path):
+        if re.search(r"/omni[a-z]", file_path):
             return True
 
         return False
@@ -285,7 +285,7 @@ class NamingValidator:
                     self._validate_python_pep8(file_path, content)
             elif lang in ["typescript", "javascript"]:
                 self._validate_typescript_javascript(file_path, content)
-        except Exception as e:
+        except Exception:
             # Gracefully handle syntax errors and other issues
             pass
 
@@ -317,7 +317,7 @@ class NamingValidator:
             elif suffix in [".ts", ".tsx", ".js", ".jsx"]:
                 self._validate_typescript_javascript(file_path, content)
 
-        except Exception as e:
+        except Exception:
             # Gracefully handle syntax errors and other issues
             # Invalid code should pass through without failing the validator
             pass
@@ -638,11 +638,11 @@ class NamingValidator:
             if isinstance(node, ast.ClassDef):
                 # Check base classes
                 base_names = [
-                    base.id
-                    if isinstance(base, ast.Name)
-                    else base.attr
-                    if isinstance(base, ast.Attribute)
-                    else None
+                    (
+                        base.id
+                        if isinstance(base, ast.Name)
+                        else base.attr if isinstance(base, ast.Attribute) else None
+                    )
                     for base in node.bases
                 ]
 
@@ -679,7 +679,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="model_*.py or model_*_subcontract.py",
-                        message=f"Omninode files with Model classes should use 'model_*.py' naming (93% adherence in codebase)",
+                        message="Omninode files with Model classes should use 'model_*.py' naming (93% adherence in codebase)",
                     )
                 )
         elif has_typeddict_class:
@@ -693,7 +693,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="typed_dict_*.py",
-                        message=f"Omninode files with TypedDict classes should use 'typed_dict_*.py' naming (100% adherence in codebase)",
+                        message="Omninode files with TypedDict classes should use 'typed_dict_*.py' naming (100% adherence in codebase)",
                     )
                 )
         elif has_node_service_class:
@@ -707,7 +707,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="node_<type>_service.py",
-                        message=f"Omninode files with Node service classes should use 'node_<type>_service.py' naming",
+                        message="Omninode files with Node service classes should use 'node_<type>_service.py' naming",
                     )
                 )
         elif has_protocol_class:
@@ -725,7 +725,7 @@ class NamingValidator:
                         name=filename,
                         violation_type="file",
                         expected_format="enum_*.py",
-                        message=f"Omninode files with Enum classes should use 'enum_*.py' naming (99% adherence in codebase)",
+                        message="Omninode files with Enum classes should use 'enum_*.py' naming (99% adherence in codebase)",
                     )
                 )
 
@@ -828,7 +828,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="Node<Type>Service (PascalCase)",
-                        message=f"Omninode Node service classes should match 'Node<Type>Service' pattern",
+                        message="Omninode Node service classes should match 'Node<Type>Service' pattern",
                     )
                 )
 
@@ -854,7 +854,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="PascalCase (optionally with Protocol prefix for complex protocols)",
-                        message=f"Omninode Protocol classes should use PascalCase. Simple capability names (Serializable, Configurable) or Protocol prefix for complex protocols",
+                        message="Omninode Protocol classes should use PascalCase. Simple capability names (Serializable, Configurable) or Protocol prefix for complex protocols",
                     )
                 )
 
@@ -869,7 +869,7 @@ class NamingValidator:
                         name=class_name,
                         violation_type="class",
                         expected_format="Model<Type>Subcontract (PascalCase with Model prefix)",
-                        message=f"Omninode Subcontract classes should match 'Model<Type>Subcontract' pattern",
+                        message="Omninode Subcontract classes should match 'Model<Type>Subcontract' pattern",
                     )
                 )
 

@@ -9,12 +9,12 @@ Supports input models, output models, configuration models, and field inference.
 import asyncio
 import logging
 import re
-from typing import Dict, Any, List, Optional, Tuple
-from uuid import UUID, uuid4
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
 
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelField:
     """Represents a field in a Pydantic model"""
+
     name: str
     type_hint: str
     default_value: Optional[str] = None
@@ -33,6 +34,7 @@ class ModelField:
 @dataclass
 class GeneratedModel:
     """Represents a generated Pydantic model"""
+
     model_name: str
     model_type: str  # 'input', 'output', 'config'
     fields: List[ModelField]
@@ -44,6 +46,7 @@ class GeneratedModel:
 @dataclass
 class ModelGenerationResult:
     """Result of model generation"""
+
     session_id: UUID
     correlation_id: UUID
     service_name: str
@@ -74,60 +77,53 @@ class ModelGenerator:
         # ORDER MATTERS: More specific patterns first, then general patterns
         self.type_inference_map = {
             # IDs and identifiers (specific before general)
-            r'.*_id$': 'UUID',
-            r'^id$': 'UUID',
-            r'correlation_id': 'UUID',
-            r'session_id': 'UUID',
-
+            r".*_id$": "UUID",
+            r"^id$": "UUID",
+            r"correlation_id": "UUID",
+            r"session_id": "UUID",
             # Timestamps (specific before general)
-            r'.*_at$': 'datetime',
-            r'timestamp': 'datetime',
-            r'created': 'datetime',
-            r'updated': 'datetime',
-
+            r".*_at$": "datetime",
+            r"timestamp": "datetime",
+            r"created": "datetime",
+            r"updated": "datetime",
             # Scores and rates (must come before bool patterns to catch success_rate)
-            r'.*_score$': 'float',
-            r'.*_rate$': 'float',
-            r'.*_ratio$': 'float',
-            r'confidence': 'float',
-
+            r".*_score$": "float",
+            r".*_rate$": "float",
+            r".*_ratio$": "float",
+            r"confidence": "float",
             # Boolean flags (after numeric patterns to avoid false matches)
-            r'^is_.*': 'bool',
-            r'^has_.*': 'bool',
-            r'^can_.*': 'bool',
-            r'^should_.*': 'bool',
-            r'.*_enabled$': 'bool',
-            r'^success$': 'bool',  # Changed to match exactly "success" only
-
+            r"^is_.*": "bool",
+            r"^has_.*": "bool",
+            r"^can_.*": "bool",
+            r"^should_.*": "bool",
+            r".*_enabled$": "bool",
+            r"^success$": "bool",  # Changed to match exactly "success" only
             # Counts and numbers
-            r'.*_count$': 'int',
-            r'.*_number$': 'int',
-            r'.*_size$': 'int',
-            r'.*_limit$': 'int',
-            r'.*_timeout$': 'int',
-            r'.*_seconds$': 'int',
-            r'port': 'int',
-
+            r".*_count$": "int",
+            r".*_number$": "int",
+            r".*_size$": "int",
+            r".*_limit$": "int",
+            r".*_timeout$": "int",
+            r".*_seconds$": "int",
+            r"port": "int",
             # Collections
-            r'.*_list$': 'List[str]',
-            r'.*_items$': 'List[Dict[str, Any]]',
-            r'tags': 'List[str]',
-            r'errors': 'List[str]',
-            r'warnings': 'List[str]',
-
+            r".*_list$": "List[str]",
+            r".*_items$": "List[Dict[str, Any]]",
+            r"tags": "List[str]",
+            r"errors": "List[str]",
+            r"warnings": "List[str]",
             # Metadata and data
-            r'metadata': 'Dict[str, str]',
-            r'.*_data$': 'Dict[str, Any]',
-            r'result_data': 'Dict[str, Any]',
-            r'request_data': 'Dict[str, Any]',
-
+            r"metadata": "Dict[str, str]",
+            r".*_data$": "Dict[str, Any]",
+            r"result_data": "Dict[str, Any]",
+            r"request_data": "Dict[str, Any]",
             # String defaults
-            r'.*_type$': 'str',
-            r'.*_name$': 'str',
-            r'.*_url$': 'str',
-            r'message': 'str',
-            r'error': 'str',
-            r'description': 'str',
+            r".*_type$": "str",
+            r".*_name$": "str",
+            r".*_url$": "str",
+            r"message": "str",
+            r"error": "str",
+            r"description": "str",
         }
 
     async def generate_all_models(
@@ -135,7 +131,7 @@ class ModelGenerator:
         service_name: str,
         prd_analysis: Any,  # SimplePRDAnalysisResult
         session_id: Optional[UUID] = None,
-        correlation_id: Optional[UUID] = None
+        correlation_id: Optional[UUID] = None,
     ) -> ModelGenerationResult:
         """
         Generate all models (input, output, config) concurrently.
@@ -152,7 +148,9 @@ class ModelGenerator:
         session_id = session_id or uuid4()
         correlation_id = correlation_id or uuid4()
 
-        self.logger.info(f"Starting model generation for {service_name} (session: {session_id})")
+        self.logger.info(
+            f"Starting model generation for {service_name} (session: {session_id})"
+        )
 
         try:
             # Generate all models concurrently
@@ -161,9 +159,7 @@ class ModelGenerator:
             config_model_task = self.generate_config_model(service_name, prd_analysis)
 
             input_model, output_model, config_model = await asyncio.gather(
-                input_model_task,
-                output_model_task,
-                config_model_task
+                input_model_task, output_model_task, config_model_task
             )
 
             # Generate code from models
@@ -188,7 +184,7 @@ class ModelGenerator:
                 config_model_code=config_code,
                 quality_score=quality_score,
                 onex_compliant=onex_compliant,
-                violations=violations
+                violations=violations,
             )
 
             self.logger.info(
@@ -203,13 +199,11 @@ class ModelGenerator:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Model generation failed: {str(e)}",
-                details={"service_name": service_name, "session_id": str(session_id)}
+                details={"service_name": service_name, "session_id": str(session_id)},
             )
 
     async def generate_input_model(
-        self,
-        service_name: str,
-        prd_analysis: Any
+        self, service_name: str, prd_analysis: Any
     ) -> GeneratedModel:
         """
         Generate Pydantic input model from PRD analysis.
@@ -227,30 +221,30 @@ class ModelGenerator:
         inferred_fields = self.infer_model_fields(
             prd_analysis.parsed_prd.functional_requirements,
             prd_analysis.parsed_prd.technical_details,
-            model_type='input'
+            model_type="input",
         )
 
         # Always include standard input fields
         standard_fields = [
             ModelField(
                 name="operation_type",
-                type_hint=f"str",  # Will reference enum
+                type_hint="str",  # Will reference enum
                 description=f"Type of {service_name} operation to perform",
-                is_required=True
+                is_required=True,
             ),
             ModelField(
                 name="correlation_id",
                 type_hint="UUID",
                 default_value="Field(default_factory=uuid4)",
                 description="Unique identifier for request correlation",
-                is_required=False
+                is_required=False,
             ),
             ModelField(
                 name="session_id",
                 type_hint="Optional[UUID]",
                 default_value="None",
                 description="Optional session identifier",
-                is_required=False
+                is_required=False,
             ),
         ]
 
@@ -264,7 +258,7 @@ class ModelGenerator:
                 type_hint="Optional[Dict[str, str]]",
                 default_value="None",
                 description="Optional metadata for the request",
-                is_required=False
+                is_required=False,
             )
         )
 
@@ -275,7 +269,7 @@ class ModelGenerator:
                 type_hint="datetime",
                 default_value="Field(default_factory=lambda: datetime.now(timezone.utc))",
                 description="Timestamp when the request was created",
-                is_required=False
+                is_required=False,
             )
         )
 
@@ -294,7 +288,7 @@ class ModelGenerator:
                     "operation_type": "create",
                     "correlation_id": "123e4567-e89b-12d3-a456-426614174000",
                     "session_id": "123e4567-e89b-12d3-a456-426614174001",
-                    "metadata": {"source": "api", "version": "1.0"}
+                    "metadata": {"source": "api", "version": "1.0"},
                 }
             }
         }
@@ -304,15 +298,13 @@ class ModelGenerator:
             model_type="input",
             fields=all_fields,
             imports=imports,
-            class_config=class_config
+            class_config=class_config,
         )
 
         return model
 
     async def generate_output_model(
-        self,
-        service_name: str,
-        prd_analysis: Any
+        self, service_name: str, prd_analysis: Any
     ) -> GeneratedModel:
         """
         Generate Pydantic output model from PRD analysis.
@@ -330,7 +322,7 @@ class ModelGenerator:
         inferred_fields = self.infer_model_fields(
             prd_analysis.parsed_prd.success_criteria,
             prd_analysis.parsed_prd.features,
-            model_type='output'
+            model_type="output",
         )
 
         # Standard output fields
@@ -339,13 +331,13 @@ class ModelGenerator:
                 name="success",
                 type_hint="bool",
                 description="Whether the operation succeeded",
-                is_required=True
+                is_required=True,
             ),
             ModelField(
                 name="correlation_id",
                 type_hint="UUID",
                 description="Correlation identifier from input",
-                is_required=True
+                is_required=True,
             ),
         ]
 
@@ -359,7 +351,7 @@ class ModelGenerator:
                 type_hint="Optional[str]",
                 default_value="None",
                 description="Error message if operation failed",
-                is_required=False
+                is_required=False,
             )
         )
 
@@ -370,7 +362,7 @@ class ModelGenerator:
                 type_hint="Optional[Dict[str, str]]",
                 default_value="None",
                 description="Optional metadata for the response",
-                is_required=False
+                is_required=False,
             )
         )
 
@@ -381,7 +373,7 @@ class ModelGenerator:
                 type_hint="datetime",
                 default_value="Field(default_factory=lambda: datetime.now(timezone.utc))",
                 description="Timestamp when the operation completed",
-                is_required=False
+                is_required=False,
             )
         )
 
@@ -398,7 +390,7 @@ class ModelGenerator:
                     "success": True,
                     "correlation_id": "123e4567-e89b-12d3-a456-426614174000",
                     "result_data": {"status": "completed"},
-                    "metadata": {"processing_time_ms": 150}
+                    "metadata": {"processing_time_ms": 150},
                 }
             }
         }
@@ -408,15 +400,13 @@ class ModelGenerator:
             model_type="output",
             fields=all_fields,
             imports=imports,
-            class_config=class_config
+            class_config=class_config,
         )
 
         return model
 
     async def generate_config_model(
-        self,
-        service_name: str,
-        prd_analysis: Any
+        self, service_name: str, prd_analysis: Any
     ) -> GeneratedModel:
         """
         Generate Pydantic configuration model from PRD analysis.
@@ -432,9 +422,7 @@ class ModelGenerator:
 
         # Infer fields from technical details
         inferred_fields = self.infer_model_fields(
-            prd_analysis.parsed_prd.technical_details,
-            [],
-            model_type='config'
+            prd_analysis.parsed_prd.technical_details, [], model_type="config"
         )
 
         # Standard configuration fields
@@ -444,28 +432,28 @@ class ModelGenerator:
                 type_hint="int",
                 default_value="30",
                 description="Operation timeout in seconds",
-                is_required=False
+                is_required=False,
             ),
             ModelField(
                 name="retry_attempts",
                 type_hint="int",
                 default_value="3",
                 description="Number of retry attempts on failure",
-                is_required=False
+                is_required=False,
             ),
             ModelField(
                 name="cache_enabled",
                 type_hint="bool",
                 default_value="True",
                 description="Whether caching is enabled",
-                is_required=False
+                is_required=False,
             ),
             ModelField(
                 name="log_level",
                 type_hint="str",
                 default_value='"INFO"',
                 description="Logging level for the service",
-                is_required=False
+                is_required=False,
             ),
         ]
 
@@ -483,7 +471,7 @@ class ModelGenerator:
                     "timeout_seconds": 30,
                     "retry_attempts": 3,
                     "cache_enabled": True,
-                    "log_level": "INFO"
+                    "log_level": "INFO",
                 }
             }
         }
@@ -493,16 +481,13 @@ class ModelGenerator:
             model_type="config",
             fields=all_fields,
             imports=imports,
-            class_config=class_config
+            class_config=class_config,
         )
 
         return model
 
     def infer_model_fields(
-        self,
-        requirements: List[str],
-        additional_context: List[str],
-        model_type: str
+        self, requirements: List[str], additional_context: List[str], model_type: str
     ) -> List[ModelField]:
         """
         Infer model fields from PRD requirements using pattern matching.
@@ -528,15 +513,19 @@ class ModelGenerator:
             field_type = self._infer_field_type(candidate)
 
             # Determine if field is required (more strict for input)
-            is_required = model_type == 'input' and not candidate.startswith('optional_')
+            is_required = model_type == "input" and not candidate.startswith(
+                "optional_"
+            )
 
             # Create field
             field = ModelField(
                 name=candidate,
                 type_hint=field_type,
-                default_value="None" if not is_required and "Optional" not in field_type else None,
+                default_value=(
+                    "None" if not is_required and "Optional" not in field_type else None
+                ),
                 description=f"{candidate.replace('_', ' ').title()}",
-                is_required=is_required
+                is_required=is_required,
             )
 
             fields.append(field)
@@ -549,14 +538,14 @@ class ModelGenerator:
 
         # Common patterns for different model types
         patterns = [
-            r'\b(user_id|username|email|password)\b',
-            r'\b(api_key|token|secret)\b',
-            r'\b(data|payload|body)\b',
-            r'\b(status|state|result)\b',
-            r'\b(message|error|warning)\b',
-            r'\b(limit|offset|page_size)\b',
-            r'\b(filter|query|search)\b',
-            r'\b(url|endpoint|path)\b',
+            r"\b(user_id|username|email|password)\b",
+            r"\b(api_key|token|secret)\b",
+            r"\b(data|payload|body)\b",
+            r"\b(status|state|result)\b",
+            r"\b(message|error|warning)\b",
+            r"\b(limit|offset|page_size)\b",
+            r"\b(filter|query|search)\b",
+            r"\b(url|endpoint|path)\b",
         ]
 
         for pattern in patterns:
@@ -615,22 +604,22 @@ class ModelGenerator:
 
         # Add class definition
         lines.append(f"class {model.model_name}(BaseModel):")
-        lines.append(f'    """')
-        lines.append(f'    {model.model_type.title()} model for operations.')
-        lines.append(f'    """')
+        lines.append('    """')
+        lines.append(f"    {model.model_type.title()} model for operations.")
+        lines.append('    """')
         lines.append("")
 
         # Add fields
-        for field in model.fields:
+        for model_field in model.fields:
             # Add field docstring as comment
-            if field.description:
-                lines.append(f"    # {field.description}")
+            if model_field.description:
+                lines.append(f"    # {model_field.description}")
 
             # Build field definition
-            if field.default_value:
-                field_def = f"    {field.name}: {field.type_hint} = {field.default_value}"
+            if model_field.default_value:
+                field_def = f"    {model_field.name}: {model_field.type_hint} = {model_field.default_value}"
             else:
-                field_def = f"    {field.name}: {field.type_hint}"
+                field_def = f"    {model_field.name}: {model_field.type_hint}"
 
             lines.append(field_def)
 
@@ -644,10 +633,7 @@ class ModelGenerator:
         return "\n".join(lines)
 
     async def validate_model_code(
-        self,
-        input_code: str,
-        output_code: str,
-        config_code: str
+        self, input_code: str, output_code: str, config_code: str
     ) -> Tuple[float, bool, List[str]]:
         """
         Validate generated model code for ONEX compliance.
@@ -664,20 +650,34 @@ class ModelGenerator:
         quality_score = 1.0
 
         # Check 1: No bare 'Any' types (should be Dict[str, Any] or List[Any])
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             # Look for ": Any" which indicates bare Any usage
-            if re.search(r':\s*Any\s*(?:=|$)', code):
-                violations.append(f"{model_type} model uses bare 'Any' type (should use Dict[str, Any] or List[Any])")
+            if re.search(r":\s*Any\s*(?:=|$)", code):
+                violations.append(
+                    f"{model_type} model uses bare 'Any' type (should use Dict[str, Any] or List[Any])"
+                )
                 quality_score -= 0.15
 
         # Check 2: All models inherit from BaseModel
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if "class Model" not in code or "(BaseModel)" not in code:
                 violations.append(f"{model_type} model does not inherit from BaseModel")
                 quality_score -= 0.2
 
         # Check 3: Docstrings present
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if '"""' not in code:
                 violations.append(f"{model_type} model missing docstrings")
                 quality_score -= 0.1
@@ -692,7 +692,11 @@ class ModelGenerator:
             quality_score -= 0.1
 
         # Check 5: Imports are complete
-        for code, model_type in [(input_code, "input"), (output_code, "output"), (config_code, "config")]:
+        for code, model_type in [
+            (input_code, "input"),
+            (output_code, "output"),
+            (config_code, "config"),
+        ]:
             if "from pydantic import" not in code:
                 violations.append(f"{model_type} model missing pydantic imports")
                 quality_score -= 0.15

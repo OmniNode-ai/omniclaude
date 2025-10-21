@@ -1,0 +1,104 @@
+# Docker ignore file for OmniClaude
+# Excludes unnecessary files from Docker build context for faster builds and smaller images
+
+# Git and version control
+.git/
+.gitignore
+.gitattributes
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.cursor/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+
+# Documentation
+*.md
+!README.md
+docs/
+*.rst
+
+# Environment and secrets (CRITICAL - never include in images)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+secrets/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker files (no need to include in build context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Benchmarks and test data
+.benchmarks/
+test_data/
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Node modules (if any)
+node_modules/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Project-specific
+agents/tests/
+CLEANUP_*.md
+DEBUG_*.md
+GIT_HISTORY_CLEANUP_PLAN.md

@@ -5,7 +5,7 @@ Kafka Client for Codegen Events
 Lightweight wrapper around aiokafka for publishing/subscribing codegen events.
 Follows resilience patterns similar to omninode_bridge Kafka client.
 
-Phase 7 Enhancements:
+Framework Enhancements:
 - Event optimizer integration for batch processing
 - Circuit breaker for failure resilience
 - Connection pooling for better performance
@@ -17,9 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Callable, Optional, Dict, List
+from typing import AsyncIterator, Dict, List, Optional
 
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from .codegen_events import BaseEvent
 from .version_config import get_config
@@ -58,7 +58,7 @@ class KafkaCodegenClient:
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
 
-        # Phase 7: Event optimizer integration
+        # Framework: Event optimizer integration
         self._optimizer: Optional[EventOptimizer] = None
         self._enable_optimizer = enable_optimizer and EventOptimizer is not None
         self._optimizer_config = optimizer_config
@@ -81,6 +81,8 @@ class KafkaCodegenClient:
                 compression_type="gzip",
                 linger_ms=20,
                 acks="all",
+                api_version="auto",  # Auto-detect broker API version
+                request_timeout_ms=30000,  # Increase timeout to 30s
             )
             await self._producer.start()
 
@@ -116,8 +118,7 @@ class KafkaCodegenClient:
         if self._optimizer is None:
             bs = self._rewrite_bootstrap(self.bootstrap_servers)
             self._optimizer = EventOptimizer(
-                bootstrap_servers=bs,
-                config=self._optimizer_config
+                bootstrap_servers=bs, config=self._optimizer_config
             )
         return self._optimizer
 
@@ -125,7 +126,7 @@ class KafkaCodegenClient:
         """
         Publish single event.
 
-        Phase 7: Uses event optimizer if enabled for better performance.
+        Framework: Uses event optimizer if enabled for better performance.
         Falls back to direct publishing if optimizer unavailable.
         """
         # Try optimizer first if enabled
@@ -135,42 +136,53 @@ class KafkaCodegenClient:
                 await optimizer.publish_event(event)
                 return
             except Exception as e:
-                self.logger.warning(f"Optimizer publish failed, falling back to direct: {e}")
+                self.logger.warning(
+                    f"Optimizer publish failed, falling back to direct: {e}"
+                )
 
         # Fallback to direct publishing
         try:
             await self.start_producer()
             assert self._producer is not None
             topic = event.to_kafka_topic()
-            payload = json.dumps({
-                "id": str(event.id),
-                "service": event.service,
-                "timestamp": event.timestamp,
-                "correlation_id": str(event.correlation_id),
-                "metadata": event.metadata,
-                "payload": event.payload,
-            }).encode("utf-8")
+            payload = json.dumps(
+                {
+                    "id": str(event.id),
+                    "service": event.service,
+                    "timestamp": event.timestamp,
+                    "correlation_id": str(event.correlation_id),
+                    "metadata": event.metadata,
+                    "payload": event.payload,
+                }
+            ).encode("utf-8")
             await self._producer.send_and_wait(topic, payload)
         except Exception as e:
             # Fallback to confluent client if available
-            self.logger.warning(f"aiokafka publish failed, attempting confluent fallback: {e}")
+            self.logger.warning(
+                f"aiokafka publish failed, attempting confluent fallback: {e}"
+            )
             if ConfluentKafkaClient is None:
                 raise
-            client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers))
-            client.publish(event.to_kafka_topic(), {
-                "id": str(event.id),
-                "service": event.service,
-                "timestamp": event.timestamp,
-                "correlation_id": str(event.correlation_id),
-                "metadata": event.metadata,
-                "payload": event.payload,
-            })
+            client = ConfluentKafkaClient(
+                self._rewrite_bootstrap(self.bootstrap_servers)
+            )
+            client.publish(
+                event.to_kafka_topic(),
+                {
+                    "id": str(event.id),
+                    "service": event.service,
+                    "timestamp": event.timestamp,
+                    "correlation_id": str(event.correlation_id),
+                    "metadata": event.metadata,
+                    "payload": event.payload,
+                },
+            )
 
     async def publish_batch(self, events: List[BaseEvent]) -> None:
         """
         Publish batch of events efficiently.
 
-        Phase 7: Uses event optimizer for optimized batch processing.
+        Framework: Uses event optimizer for optimized batch processing.
         Performance target: p95 latency ≤200ms
 
         Args:
@@ -186,7 +198,9 @@ class KafkaCodegenClient:
                 await optimizer.publish_batch(events)
                 return
             except Exception as e:
-                self.logger.warning(f"Batch publish via optimizer failed, falling back: {e}")
+                self.logger.warning(
+                    f"Batch publish via optimizer failed, falling back: {e}"
+                )
 
         # Fallback: publish individually
         for event in events:
@@ -203,20 +217,27 @@ class KafkaCodegenClient:
                     # Skip malformed messages
                     continue
         except Exception as e:
-            self.logger.warning(f"aiokafka consume failed, attempting confluent fallback: {e}")
+            self.logger.warning(
+                f"aiokafka consume failed, attempting confluent fallback: {e}"
+            )
             if ConfluentKafkaClient is None:
                 raise
             # Confluent client does not support async iteration; yield one and return
-            client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers), self.group_id)
+            client = ConfluentKafkaClient(
+                self._rewrite_bootstrap(self.bootstrap_servers), self.group_id
+            )
             payload = client.consume_one(topic, timeout_sec=10.0)
             if payload is not None:
                 yield payload
 
-    async def consume_until(self, topic: str, predicate, timeout_seconds: float = 30.0) -> Optional[dict]:
+    async def consume_until(
+        self, topic: str, predicate, timeout_seconds: float = 30.0
+    ) -> Optional[dict]:
         """Consume messages until predicate(payload) is True or timeout expires."""
         try:
             await self.start_consumer(topic)
             assert self._consumer is not None
+
             async def _wait():
                 async for msg in self._consumer:
                     try:
@@ -226,12 +247,17 @@ class KafkaCodegenClient:
                     if predicate(payload):
                         return payload
                 return None
+
             return await asyncio.wait_for(_wait(), timeout=timeout_seconds)
         except Exception as e:
-            self.logger.warning(f"aiokafka consume_until failed, attempting confluent fallback: {e}")
+            self.logger.warning(
+                f"aiokafka consume_until failed, attempting confluent fallback: {e}"
+            )
             if ConfluentKafkaClient is None:
                 raise
-            client = ConfluentKafkaClient(self._rewrite_bootstrap(self.bootstrap_servers), self.group_id)
+            client = ConfluentKafkaClient(
+                self._rewrite_bootstrap(self.bootstrap_servers), self.group_id
+            )
             # Poll in small intervals until timeout
             end = asyncio.get_event_loop().time() + timeout_seconds
             while asyncio.get_event_loop().time() < end:
@@ -239,5 +265,3 @@ class KafkaCodegenClient:
                 if payload and predicate(payload):
                     return payload
             return None
-
-

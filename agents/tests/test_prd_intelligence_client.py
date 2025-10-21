@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
-from uuid import uuid4
 
 import pytest
 
@@ -49,15 +47,18 @@ async def test_analyze_roundtrip_success(monkeypatch):
 
     # After publish, provide a response that matches the correlation id
     async def fake_consume_until(topic, predicate, timeout_seconds=0.1):
-        payload = {"correlation_id": captured.get("correlation_id"), "analysis": {"node_type_hints": {"EFFECT": 0.9}}}
+        payload = {
+            "correlation_id": captured.get("correlation_id"),
+            "analysis": {"node_type_hints": {"EFFECT": 0.9}},
+        }
         if predicate(payload):
             return payload
         return None
 
     monkeypatch.setattr(dummy, "consume_until", fake_consume_until)
 
-    resp = await client.analyze("# PRD", workspace_context={"k": "v"}, timeout_seconds=0.1)
+    resp = await client.analyze(
+        "# PRD", workspace_context={"k": "v"}, timeout_seconds=0.1
+    )
     assert resp is not None
     assert resp.get("analysis") is not None
-
-

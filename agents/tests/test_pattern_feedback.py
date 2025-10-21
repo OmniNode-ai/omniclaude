@@ -1,40 +1,33 @@
 #!/usr/bin/env python3
 """
-Tests for Pattern Feedback System (Phase 7 Stream 5)
+Tests for Pattern Feedback System (Agent Framework)
 
 Tests the pattern feedback collection, analysis, and tuning system
 to ensure ≥90% precision target is achievable.
 """
 
-import pytest
-import asyncio
-from uuid import uuid4
-from typing import Dict, Any, List
-from datetime import datetime, timezone
-
-# Import the modules we're testing
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List
+from uuid import uuid4
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.pattern_feedback import (
-    PatternFeedback,
-    PatternAnalysis,
-    PatternFeedbackCollector
-)
-from lib.pattern_tuner import (
-    PatternTuner,
-    ThresholdConfig,
-    TuningStrategy,
-    TuningResult,
-    ABTestConfig
-)
+from lib.pattern_feedback import PatternFeedback, PatternFeedbackCollector
+from lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
 from lib.patterns.pattern_matcher import PatternMatcher, PatternType
+
+# Mark all tests in this module as integration tests (require database)
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 def mock_persistence():
     """Mock persistence for testing"""
+
     class MockPersistence:
         def __init__(self):
             self.feedback_records: List[Dict[str, Any]] = []
@@ -51,8 +44,9 @@ def mock_persistence():
                     if "WHERE pattern_name = $1" in query:
                         pattern_name = args[0] if args else None
                         return [
-                            r for r in self.parent.feedback_records
-                            if r.get('pattern_name') == pattern_name
+                            r
+                            for r in self.parent.feedback_records
+                            if r.get("pattern_name") == pattern_name
                         ]
                     return self.parent.feedback_records
 
@@ -94,21 +88,21 @@ def mock_persistence():
             actual_pattern,
             feedback_type,
             user_provided=False,
-            contract_json=None
+            contract_json=None,
         ):
             feedback_id = uuid4()
             record = {
-                'id': feedback_id,
-                'session_id': session_id,
-                'pattern_name': pattern_name,
-                'detected_confidence': detected_confidence,
-                'actual_pattern': actual_pattern,
-                'feedback_type': feedback_type,
-                'user_provided': user_provided,
-                'contract_json': contract_json,
-                'false_positives': [],
-                'false_negatives': [],
-                'created_at': datetime.now(timezone.utc)
+                "id": feedback_id,
+                "session_id": session_id,
+                "pattern_name": pattern_name,
+                "detected_confidence": detected_confidence,
+                "actual_pattern": actual_pattern,
+                "feedback_type": feedback_type,
+                "user_provided": user_provided,
+                "contract_json": contract_json,
+                "false_positives": [],
+                "false_negatives": [],
+                "created_at": datetime.now(timezone.utc),
             }
 
             self.feedback_records.append(record)
@@ -124,20 +118,22 @@ def mock_persistence():
             if pattern_name:
                 return [
                     {
-                        'pattern_name': pattern_name,
-                        'feedback_type': 'correct',
-                        'feedback_count': len(self.pattern_feedbacks.get(pattern_name, [])),
-                        'avg_confidence': 0.85
+                        "pattern_name": pattern_name,
+                        "feedback_type": "correct",
+                        "feedback_count": len(
+                            self.pattern_feedbacks.get(pattern_name, [])
+                        ),
+                        "avg_confidence": 0.85,
                     }
                 ]
             else:
                 # Return all patterns
                 return [
                     {
-                        'pattern_name': p,
-                        'feedback_type': 'correct',
-                        'feedback_count': len(records),
-                        'avg_confidence': 0.85
+                        "pattern_name": p,
+                        "feedback_type": "correct",
+                        "feedback_count": len(records),
+                        "avg_confidence": 0.85,
                     }
                     for p, records in self.pattern_feedbacks.items()
                 ]
@@ -174,7 +170,7 @@ class TestPatternFeedbackCollector:
             feedback_type="correct",
             capabilities_matched=["create_user", "update_user"],
             false_positives=[],
-            false_negatives=[]
+            false_negatives=[],
         )
 
         feedback_id = await feedback_collector.record_feedback(feedback)
@@ -193,14 +189,14 @@ class TestPatternFeedbackCollector:
             feedback_type="partial",
             capabilities_matched=["transform_data"],
             false_positives=["validate_input"],
-            false_negatives=["convert_format"]
+            false_negatives=["convert_format"],
         )
 
         feedback_id = await feedback_collector.record_feedback(feedback)
 
         assert feedback_id is not None
         record = feedback_collector.persistence.feedback_records[0]
-        assert record['feedback_type'] == 'partial'
+        assert record["feedback_type"] == "partial"
 
     @pytest.mark.asyncio
     async def test_analyze_feedback_insufficient_data(self, feedback_collector):
@@ -212,7 +208,7 @@ class TestPatternFeedbackCollector:
                 detected_pattern="CRUD",
                 detected_confidence=0.80,
                 actual_pattern="CRUD",
-                feedback_type="correct"
+                feedback_type="correct",
             )
             await feedback_collector.record_feedback(feedback)
 
@@ -231,7 +227,7 @@ class TestPatternFeedbackCollector:
                 detected_pattern="CRUD",
                 detected_confidence=0.80,
                 actual_pattern="CRUD",
-                feedback_type="correct" if i < 20 else "incorrect"
+                feedback_type="correct" if i < 20 else "incorrect",
             )
             await feedback_collector.record_feedback(feedback)
 
@@ -253,11 +249,13 @@ class TestPatternFeedbackCollector:
                 detected_pattern="TRANSFORMATION",
                 detected_confidence=0.85,
                 actual_pattern="TRANSFORMATION",
-                feedback_type="correct" if i < 24 else "incorrect"
+                feedback_type="correct" if i < 24 else "incorrect",
             )
             await feedback_collector.record_feedback(feedback)
 
-        analysis = await feedback_collector.analyze_feedback("TRANSFORMATION", min_samples=20)
+        analysis = await feedback_collector.analyze_feedback(
+            "TRANSFORMATION", min_samples=20
+        )
 
         assert analysis.sufficient_data
         assert analysis.precision >= 0.90  # Should be 96% (24/25)
@@ -274,13 +272,12 @@ class TestPatternFeedbackCollector:
                 detected_pattern="AGGREGATION",
                 detected_confidence=0.90,
                 actual_pattern="AGGREGATION",
-                feedback_type="correct" if i < 29 else "incorrect"
+                feedback_type="correct" if i < 29 else "incorrect",
             )
             await feedback_collector.record_feedback(feedback)
 
         threshold = await feedback_collector.tune_pattern_threshold(
-            "AGGREGATION",
-            target_precision=0.90
+            "AGGREGATION", target_precision=0.90
         )
 
         # High precision should suggest lower threshold to increase recall
@@ -297,13 +294,12 @@ class TestPatternFeedbackCollector:
                 detected_pattern="ORCHESTRATION",
                 detected_confidence=0.70,
                 actual_pattern="ORCHESTRATION",
-                feedback_type="correct" if i < 20 else "incorrect"
+                feedback_type="correct" if i < 20 else "incorrect",
             )
             await feedback_collector.record_feedback(feedback)
 
         threshold = await feedback_collector.tune_pattern_threshold(
-            "ORCHESTRATION",
-            target_precision=0.90
+            "ORCHESTRATION", target_precision=0.90
         )
 
         # Low precision should suggest higher threshold
@@ -323,15 +319,15 @@ class TestPatternFeedbackCollector:
                     detected_pattern=pattern,
                     detected_confidence=0.80,
                     actual_pattern=pattern,
-                    feedback_type="correct" if i < 22 else "incorrect"
+                    feedback_type="correct" if i < 22 else "incorrect",
                 )
                 await feedback_collector.record_feedback(feedback)
 
         metrics = await feedback_collector.get_global_precision_metrics()
 
-        assert metrics['patterns_analyzed'] > 0
-        assert 0.0 <= metrics['overall_precision'] <= 1.0
-        assert metrics['target_precision'] == 0.90
+        assert metrics["patterns_analyzed"] > 0
+        assert 0.0 <= metrics["overall_precision"] <= 1.0
+        assert metrics["target_precision"] == 0.90
 
 
 class TestPatternTuner:
@@ -348,13 +344,11 @@ class TestPatternTuner:
                 detected_confidence=0.75,
                 actual_pattern="CRUD",
                 feedback_type="correct" if i < 24 else "incorrect",
-                user_provided=False
+                user_provided=False,
             )
 
         result = await pattern_tuner.tune_pattern(
-            "CRUD",
-            strategy=TuningStrategy.PRECISION_FIRST,
-            min_samples=20
+            "CRUD", strategy=TuningStrategy.PRECISION_FIRST, min_samples=20
         )
 
         assert result.pattern_name == "CRUD"
@@ -372,13 +366,11 @@ class TestPatternTuner:
                 pattern_name="TRANSFORMATION",
                 detected_confidence=0.80,
                 actual_pattern="TRANSFORMATION",
-                feedback_type="correct" if i < 20 else "incorrect"
+                feedback_type="correct" if i < 20 else "incorrect",
             )
 
         result = await pattern_tuner.tune_pattern(
-            "TRANSFORMATION",
-            strategy=TuningStrategy.BALANCED,
-            min_samples=20
+            "TRANSFORMATION", strategy=TuningStrategy.BALANCED, min_samples=20
         )
 
         assert result.strategy_used == TuningStrategy.BALANCED
@@ -397,13 +389,11 @@ class TestPatternTuner:
             improvement=0.07,
             confidence=0.85,
             strategy_used=TuningStrategy.BALANCED,
-            recommendations=["Raise threshold slightly"]
+            recommendations=["Raise threshold slightly"],
         )
 
         success = await pattern_tuner.apply_tuning(
-            tuning_result,
-            create_ab_test=False,
-            min_confidence=0.70
+            tuning_result, create_ab_test=False, min_confidence=0.70
         )
 
         assert success
@@ -421,13 +411,11 @@ class TestPatternTuner:
             improvement=0.07,
             confidence=0.50,  # Low confidence
             strategy_used=TuningStrategy.PRECISION_FIRST,
-            recommendations=[]
+            recommendations=[],
         )
 
         success = await pattern_tuner.apply_tuning(
-            tuning_result,
-            create_ab_test=False,
-            min_confidence=0.70
+            tuning_result, create_ab_test=False, min_confidence=0.70
         )
 
         # Should fail due to low confidence
@@ -441,7 +429,7 @@ class TestPatternTuner:
             threshold_a=0.70,
             threshold_b=0.80,
             traffic_split=0.5,
-            min_samples=100
+            min_samples=100,
         )
 
         assert test_config.pattern_name == "TRANSFORMATION"
@@ -458,7 +446,7 @@ class TestPatternTuner:
             threshold_a=0.70,
             threshold_b=0.80,
             traffic_split=0.5,
-            min_samples=20
+            min_samples=20,
         )
 
         # Add sufficient feedback
@@ -468,12 +456,12 @@ class TestPatternTuner:
                 pattern_name="CRUD",
                 detected_confidence=0.75,
                 actual_pattern="CRUD",
-                feedback_type="correct" if i < 22 else "incorrect"
+                feedback_type="correct" if i < 22 else "incorrect",
             )
 
         winner = await pattern_tuner.evaluate_ab_test(test_config.test_id)
 
-        assert winner in ['a', 'b']
+        assert winner in ["a", "b"]
         assert test_config.status == "completed"
 
     @pytest.mark.asyncio
@@ -487,7 +475,9 @@ class TestPatternTuner:
 
         assert success
         # Should be back to default
-        assert pattern_tuner._threshold_configs["AGGREGATION"].confidence_threshold == 0.70
+        assert (
+            pattern_tuner._threshold_configs["AGGREGATION"].confidence_threshold == 0.70
+        )
 
 
 class TestPatternMatcherIntegration:
@@ -519,7 +509,7 @@ class TestPatternMatcherIntegration:
         capability = {
             "name": "Create User Record",
             "type": "create",
-            "description": "Creates a new user record in database"
+            "description": "Creates a new user record in database",
         }
 
         matches = matcher.match_patterns(capability)
@@ -546,16 +536,19 @@ class TestPrecisionTargets:
                 detected_pattern=pattern_name,
                 detected_confidence=0.85,
                 actual_pattern=pattern_name,
-                feedback_type="correct" if i < 92 else "incorrect"
+                feedback_type="correct" if i < 92 else "incorrect",
             )
             await feedback_collector.record_feedback(feedback)
 
         # Analyze
-        analysis = await feedback_collector.analyze_feedback(pattern_name, min_samples=20)
+        analysis = await feedback_collector.analyze_feedback(
+            pattern_name, min_samples=20
+        )
 
         # Should exceed 90% target
-        assert analysis.precision >= 0.90, \
-            f"Precision {analysis.precision:.1%} below 90% target"
+        assert (
+            analysis.precision >= 0.90
+        ), f"Precision {analysis.precision:.1%} below 90% target"
 
     @pytest.mark.asyncio
     async def test_tuning_improves_precision(self, pattern_tuner, mock_persistence):
@@ -567,14 +560,14 @@ class TestPrecisionTargets:
                 pattern_name="ORCHESTRATION",
                 detected_confidence=0.65,
                 actual_pattern="ORCHESTRATION",
-                feedback_type="correct" if i < 30 else "incorrect"
+                feedback_type="correct" if i < 30 else "incorrect",
             )
 
         result = await pattern_tuner.tune_pattern(
             "ORCHESTRATION",
             strategy=TuningStrategy.PRECISION_FIRST,
             min_samples=20,
-            target_precision=0.90
+            target_precision=0.90,
         )
 
         # Should suggest higher threshold

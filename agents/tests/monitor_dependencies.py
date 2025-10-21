@@ -6,9 +6,8 @@ Monitors Archon task completion status for streams 1-7
 
 import asyncio
 import sys
-from typing import Dict, List, Optional
 from datetime import datetime
-import json
+from typing import Dict, Optional
 
 
 class DependencyMonitor:
@@ -21,7 +20,7 @@ class DependencyMonitor:
         "Stream 4": "Routing Decision Logger",
         "Stream 5": "Agent Transformation Event Tracker",
         "Stream 6": "Performance Metrics Collector",
-        "Stream 7": "Database Integration Layer"
+        "Stream 7": "Database Integration Layer",
     }
 
     PROJECT_ID = "c189230b-fe3c-4053-bb6d-a13441db1010"
@@ -50,7 +49,7 @@ class DependencyMonitor:
             "last_check": self.last_check.isoformat(),
             "streams": {},
             "all_complete": False,
-            "ready_for_testing": False
+            "ready_for_testing": False,
         }
 
         # Mock stream statuses
@@ -62,7 +61,7 @@ class DependencyMonitor:
             "Stream 4": "doing",
             "Stream 5": "todo",
             "Stream 6": "todo",
-            "Stream 7": "todo"
+            "Stream 7": "todo",
         }
 
         for stream_name, description in self.REQUIRED_STREAMS.items():
@@ -70,32 +69,33 @@ class DependencyMonitor:
             status["streams"][stream_name] = {
                 "description": description,
                 "status": stream_status,
-                "complete": stream_status in ["done", "review"]
+                "complete": stream_status in ["done", "review"],
             }
 
         # Check if all dependencies are complete
-        complete_count = sum(
-            1 for s in status["streams"].values()
-            if s["complete"]
-        )
+        complete_count = sum(1 for s in status["streams"].values() if s["complete"])
 
         status["all_complete"] = complete_count == len(self.REQUIRED_STREAMS)
         status["ready_for_testing"] = status["all_complete"]
         status["complete_count"] = complete_count
         status["total_count"] = len(self.REQUIRED_STREAMS)
-        status["completion_percentage"] = (complete_count / len(self.REQUIRED_STREAMS)) * 100
+        status["completion_percentage"] = (
+            complete_count / len(self.REQUIRED_STREAMS)
+        ) * 100
 
         return status
 
     def print_status(self, status: Dict[str, any]):
         """Print formatted status report"""
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("DEPENDENCY STATUS CHECK")
-        print("="*70)
+        print("=" * 70)
         print(f"Check #{status['check_count']} - {status['last_check']}")
-        print(f"Progress: {status['complete_count']}/{status['total_count']} "
-              f"({status['completion_percentage']:.1f}%)")
-        print("-"*70)
+        print(
+            f"Progress: {status['complete_count']}/{status['total_count']} "
+            f"({status['completion_percentage']:.1f}%)"
+        )
+        print("-" * 70)
 
         for stream_name, stream_info in status["streams"].items():
             status_icon = "✅" if stream_info["complete"] else "❌"
@@ -105,20 +105,20 @@ class DependencyMonitor:
             print(f"{status_icon} {stream_name}: {stream_info['status']}")
             print(f"   {stream_info['description']}")
 
-        print("-"*70)
+        print("-" * 70)
 
         if status["all_complete"]:
             print("✅ ALL DEPENDENCIES COMPLETE - READY FOR INTEGRATION TESTING")
         else:
-            print(f"⏸️  WAITING FOR {len(self.REQUIRED_STREAMS) - status['complete_count']} "
-                  f"STREAMS TO COMPLETE")
+            print(
+                f"⏸️  WAITING FOR {len(self.REQUIRED_STREAMS) - status['complete_count']} "
+                f"STREAMS TO COMPLETE"
+            )
 
-        print("="*70 + "\n")
+        print("=" * 70 + "\n")
 
     async def wait_for_completion(
-        self,
-        check_interval: int = 60,
-        max_checks: Optional[int] = None
+        self, check_interval: int = 60, max_checks: Optional[int] = None
     ):
         """
         Wait for all dependencies to complete
@@ -128,7 +128,7 @@ class DependencyMonitor:
             max_checks: Maximum number of checks (None for unlimited)
         """
         print(f"\n🔍 Monitoring dependencies every {check_interval} seconds...")
-        print(f"Press Ctrl+C to stop monitoring\n")
+        print("Press Ctrl+C to stop monitoring\n")
 
         try:
             while True:
@@ -140,7 +140,9 @@ class DependencyMonitor:
                     return True
 
                 if max_checks and self.check_count >= max_checks:
-                    print(f"⚠️  Maximum checks ({max_checks}) reached. Stopping monitor.")
+                    print(
+                        f"⚠️  Maximum checks ({max_checks}) reached. Stopping monitor."
+                    )
                     return False
 
                 print(f"Next check in {check_interval} seconds...\n")

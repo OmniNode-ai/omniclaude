@@ -11,7 +11,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-
 # ============================================================================
 # Core Trace Models
 # ============================================================================
@@ -29,39 +28,75 @@ class ExecutionTrace(BaseModel):
 
     # Primary identification
     id: Optional[UUID] = Field(default=None, description="Primary key, auto-generated")
-    correlation_id: UUID = Field(description="Unique identifier for this execution chain")
+    correlation_id: UUID = Field(
+        description="Unique identifier for this execution chain"
+    )
     root_id: UUID = Field(description="Points to the root trace in a nested execution")
-    parent_id: Optional[UUID] = Field(default=None, description="Parent execution for nested/delegated executions")
+    parent_id: Optional[UUID] = Field(
+        default=None, description="Parent execution for nested/delegated executions"
+    )
 
     # Session context
     session_id: UUID = Field(description="Session identifier for this execution")
-    user_id: Optional[str] = Field(default=None, description="User identifier if available")
+    user_id: Optional[str] = Field(
+        default=None, description="User identifier if available"
+    )
 
     # Source information
-    source: str = Field(description="Source of the execution (e.g., 'claude_code', 'api', 'webhook')")
-    prompt_text: Optional[str] = Field(default=None, description="Original user prompt or request text")
+    source: str = Field(
+        description="Source of the execution (e.g., 'claude_code', 'api', 'webhook')"
+    )
+    prompt_text: Optional[str] = Field(
+        default=None, description="Original user prompt or request text"
+    )
 
     # Execution metadata
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When execution started")
-    completed_at: Optional[datetime] = Field(default=None, description="When execution completed")
-    duration_ms: Optional[int] = Field(default=None, ge=0, description="Execution duration in milliseconds")
-    status: str = Field(default="in_progress", description="in_progress, completed, failed, cancelled")
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When execution started",
+    )
+    completed_at: Optional[datetime] = Field(
+        default=None, description="When execution completed"
+    )
+    duration_ms: Optional[int] = Field(
+        default=None, ge=0, description="Execution duration in milliseconds"
+    )
+    status: str = Field(
+        default="in_progress", description="in_progress, completed, failed, cancelled"
+    )
 
     # Outcome tracking
-    success: Optional[bool] = Field(default=None, description="Whether execution was successful")
-    error_message: Optional[str] = Field(default=None, description="Error message if execution failed")
-    error_type: Optional[str] = Field(default=None, description="Type/category of error")
+    success: Optional[bool] = Field(
+        default=None, description="Whether execution was successful"
+    )
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if execution failed"
+    )
+    error_type: Optional[str] = Field(
+        default=None, description="Type/category of error"
+    )
 
     # Context and metadata
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Additional context as JSON")
-    tags: Optional[List[str]] = Field(default=None, description="Tags for categorization and filtering")
+    context: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional context as JSON"
+    )
+    tags: Optional[List[str]] = Field(
+        default=None, description="Tags for categorization and filtering"
+    )
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Record creation timestamp",
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Record update timestamp",
+    )
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -70,7 +105,7 @@ class ExecutionTrace(BaseModel):
                 "source": "claude_code",
                 "prompt_text": "Implement user authentication",
                 "status": "in_progress",
-                "tags": ["authentication", "security"]
+                "tags": ["authentication", "security"],
             }
         }
 
@@ -113,7 +148,9 @@ class ExecutionTrace(BaseModel):
 
         return data
 
-    def mark_completed(self, success: bool = True, error_message: Optional[str] = None) -> None:
+    def mark_completed(
+        self, success: bool = True, error_message: Optional[str] = None
+    ) -> None:
         """
         Mark the trace as completed.
 
@@ -149,43 +186,89 @@ class HookExecution(BaseModel):
     trace_id: UUID = Field(description="Foreign key to execution_traces")
 
     # Hook identification
-    hook_type: str = Field(description="UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionStart, SessionEnd")
+    hook_type: str = Field(
+        description="UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionStart, SessionEnd"
+    )
     hook_name: str = Field(description="Specific hook name/identifier")
-    execution_order: int = Field(ge=1, description="Order of execution within the trace (1, 2, 3...)")
+    execution_order: int = Field(
+        ge=1, description="Order of execution within the trace (1, 2, 3...)"
+    )
 
     # Execution details
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When hook started")
-    completed_at: Optional[datetime] = Field(default=None, description="When hook completed")
-    duration_ms: Optional[int] = Field(default=None, ge=0, description="Hook execution duration in milliseconds")
-    status: str = Field(default="in_progress", description="in_progress, completed, failed")
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When hook started",
+    )
+    completed_at: Optional[datetime] = Field(
+        default=None, description="When hook completed"
+    )
+    duration_ms: Optional[int] = Field(
+        default=None, ge=0, description="Hook execution duration in milliseconds"
+    )
+    status: str = Field(
+        default="in_progress", description="in_progress, completed, failed"
+    )
 
     # Input/Output
-    input_data: Optional[Dict[str, Any]] = Field(default=None, description="Hook input data as JSON")
-    output_data: Optional[Dict[str, Any]] = Field(default=None, description="Hook output data as JSON")
-    modifications_made: Optional[Dict[str, Any]] = Field(default=None, description="Any file modifications or actions taken")
+    input_data: Optional[Dict[str, Any]] = Field(
+        default=None, description="Hook input data as JSON"
+    )
+    output_data: Optional[Dict[str, Any]] = Field(
+        default=None, description="Hook output data as JSON"
+    )
+    modifications_made: Optional[Dict[str, Any]] = Field(
+        default=None, description="Any file modifications or actions taken"
+    )
 
     # Intelligence integration
-    rag_query_performed: bool = Field(default=False, description="Whether RAG query was performed")
-    rag_results: Optional[Dict[str, Any]] = Field(default=None, description="RAG query results as JSON")
-    quality_check_performed: bool = Field(default=False, description="Whether quality check was performed")
-    quality_results: Optional[Dict[str, Any]] = Field(default=None, description="Quality check results as JSON")
+    rag_query_performed: bool = Field(
+        default=False, description="Whether RAG query was performed"
+    )
+    rag_results: Optional[Dict[str, Any]] = Field(
+        default=None, description="RAG query results as JSON"
+    )
+    quality_check_performed: bool = Field(
+        default=False, description="Whether quality check was performed"
+    )
+    quality_results: Optional[Dict[str, Any]] = Field(
+        default=None, description="Quality check results as JSON"
+    )
 
     # Error tracking
-    error_message: Optional[str] = Field(default=None, description="Error message if hook failed")
-    error_type: Optional[str] = Field(default=None, description="Type/category of error")
-    error_stack: Optional[str] = Field(default=None, description="Full error stack trace")
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if hook failed"
+    )
+    error_type: Optional[str] = Field(
+        default=None, description="Type/category of error"
+    )
+    error_stack: Optional[str] = Field(
+        default=None, description="Full error stack trace"
+    )
 
     # Metadata
-    tool_name: Optional[str] = Field(default=None, description="Tool being used (e.g., 'Write', 'Edit', 'Read')")
-    file_path: Optional[str] = Field(default=None, description="File path being operated on")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata as JSON")
+    tool_name: Optional[str] = Field(
+        default=None, description="Tool being used (e.g., 'Write', 'Edit', 'Read')"
+    )
+    file_path: Optional[str] = Field(
+        default=None, description="File path being operated on"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional metadata as JSON"
+    )
 
     # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record creation timestamp")
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Record update timestamp")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Record creation timestamp",
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Record update timestamp",
+    )
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "trace_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -195,7 +278,7 @@ class HookExecution(BaseModel):
                 "tool_name": "Write",
                 "file_path": "/path/to/file.py",
                 "rag_query_performed": True,
-                "quality_check_performed": True
+                "quality_check_performed": True,
             }
         }
 
@@ -209,7 +292,7 @@ class HookExecution(BaseModel):
             "PostToolUse",
             "Stop",
             "SessionStart",
-            "SessionEnd"
+            "SessionEnd",
         }
         if v not in allowed:
             raise ValueError(f"Hook type must be one of {allowed}, got '{v}'")
@@ -250,7 +333,9 @@ class HookExecution(BaseModel):
 
         return data
 
-    def mark_completed(self, success: bool = True, error_message: Optional[str] = None) -> None:
+    def mark_completed(
+        self, success: bool = True, error_message: Optional[str] = None
+    ) -> None:
         """
         Mark the hook execution as completed.
 
@@ -283,18 +368,23 @@ class TraceContext(BaseModel):
     without carrying the full ExecutionTrace model.
     """
 
-    correlation_id: UUID = Field(description="Unique identifier for this execution chain")
+    correlation_id: UUID = Field(
+        description="Unique identifier for this execution chain"
+    )
     root_id: UUID = Field(description="Root trace identifier")
-    parent_id: Optional[UUID] = Field(default=None, description="Parent trace identifier")
+    parent_id: Optional[UUID] = Field(
+        default=None, description="Parent trace identifier"
+    )
     session_id: UUID = Field(description="Session identifier")
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
                 "root_id": "550e8400-e29b-41d4-a716-446655440000",
-                "session_id": "660e8400-e29b-41d4-a716-446655440001"
+                "session_id": "660e8400-e29b-41d4-a716-446655440001",
             }
         }
 
@@ -305,7 +395,7 @@ class TraceContext(BaseModel):
             correlation_id=trace.correlation_id,
             root_id=trace.root_id,
             parent_id=trace.parent_id,
-            session_id=trace.session_id
+            session_id=trace.session_id,
         )
 
     def to_dict(self) -> Dict[str, str]:
@@ -314,7 +404,7 @@ class TraceContext(BaseModel):
             "correlation_id": str(self.correlation_id),
             "root_id": str(self.root_id),
             "parent_id": str(self.parent_id) if self.parent_id else None,
-            "session_id": str(self.session_id)
+            "session_id": str(self.session_id),
         }
 
 
@@ -327,25 +417,42 @@ class HookMetadata(BaseModel):
     """
 
     # Quality and compliance
-    violations_found: Optional[int] = Field(default=None, ge=0, description="Number of violations found")
-    corrections_applied: Optional[int] = Field(default=None, ge=0, description="Number of corrections applied")
-    quality_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Quality score (0.0-1.0)")
+    violations_found: Optional[int] = Field(
+        default=None, ge=0, description="Number of violations found"
+    )
+    corrections_applied: Optional[int] = Field(
+        default=None, ge=0, description="Number of corrections applied"
+    )
+    quality_score: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Quality score (0.0-1.0)"
+    )
 
     # Tool and execution info
-    tool_info: Optional[Dict[str, Any]] = Field(default=None, description="Tool-specific information")
+    tool_info: Optional[Dict[str, Any]] = Field(
+        default=None, description="Tool-specific information"
+    )
 
     # Intelligence results
-    rag_matches: Optional[int] = Field(default=None, ge=0, description="Number of RAG matches found")
-    rag_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="RAG confidence score")
+    rag_matches: Optional[int] = Field(
+        default=None, ge=0, description="Number of RAG matches found"
+    )
+    rag_confidence: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="RAG confidence score"
+    )
 
     # Performance metrics
-    processing_time_ms: Optional[int] = Field(default=None, ge=0, description="Processing time in milliseconds")
+    processing_time_ms: Optional[int] = Field(
+        default=None, ge=0, description="Processing time in milliseconds"
+    )
 
     # Additional context
-    notes: Optional[str] = Field(default=None, description="Additional notes or context")
+    notes: Optional[str] = Field(
+        default=None, description="Additional notes or context"
+    )
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "violations_found": 3,
@@ -353,7 +460,7 @@ class HookMetadata(BaseModel):
                 "quality_score": 0.85,
                 "rag_matches": 5,
                 "rag_confidence": 0.92,
-                "processing_time_ms": 150
+                "processing_time_ms": 150,
             }
         }
 
@@ -381,6 +488,7 @@ class HookExecutionSummary(BaseModel):
 
     class Config:
         """Pydantic configuration"""
+
         json_schema_extra = {
             "example": {
                 "hook_name": "quality_validation_hook",
@@ -389,7 +497,7 @@ class HookExecutionSummary(BaseModel):
                 "status": "completed",
                 "success": True,
                 "rag_query_performed": True,
-                "quality_check_performed": True
+                "quality_check_performed": True,
             }
         }
 
@@ -404,7 +512,7 @@ class HookExecutionSummary(BaseModel):
             success=hook.status == "completed" and hook.error_message is None,
             rag_query_performed=hook.rag_query_performed,
             quality_check_performed=hook.quality_check_performed,
-            error_message=hook.error_message
+            error_message=hook.error_message,
         )
 
 
@@ -501,7 +609,7 @@ def create_trace_context(
     correlation_id: Optional[UUID] = None,
     root_id: Optional[UUID] = None,
     parent_id: Optional[UUID] = None,
-    session_id: Optional[UUID] = None
+    session_id: Optional[UUID] = None,
 ) -> TraceContext:
     """
     Create a new TraceContext with optional parameters.
@@ -536,7 +644,7 @@ def create_trace_context(
         correlation_id=correlation_id,
         root_id=root_id,
         parent_id=parent_id,
-        session_id=session_id
+        session_id=session_id,
     )
 
 
@@ -547,7 +655,7 @@ def create_new_trace(
     user_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-    parent_trace: Optional[ExecutionTrace] = None
+    parent_trace: Optional[ExecutionTrace] = None,
 ) -> ExecutionTrace:
     """
     Create a new ExecutionTrace with proper defaults.
@@ -592,7 +700,7 @@ def create_new_trace(
         source=source,
         prompt_text=prompt_text,
         context=context,
-        tags=tags
+        tags=tags,
     )
 
 
@@ -603,7 +711,7 @@ def create_new_hook_execution(
     execution_order: int,
     tool_name: Optional[str] = None,
     file_path: Optional[str] = None,
-    input_data: Optional[Dict[str, Any]] = None
+    input_data: Optional[Dict[str, Any]] = None,
 ) -> HookExecution:
     """
     Create a new HookExecution with proper defaults.
@@ -637,5 +745,5 @@ def create_new_hook_execution(
         execution_order=execution_order,
         tool_name=tool_name,
         file_path=file_path,
-        input_data=input_data
+        input_data=input_data,
     )

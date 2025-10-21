@@ -13,30 +13,34 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
 import sys
-import uuid
 import time
-import json
+import uuid
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hook_event_logger import HookEventLogger, log_userprompt, log_pretooluse, log_posttooluse
-
+from hook_event_logger import (  # noqa: E402
+    HookEventLogger,
+    log_posttooluse,
+    log_pretooluse,
+    log_userprompt,
+)
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
 
+
 @pytest.fixture
 def mock_db_connection():
     """Mock database connection for testing."""
-    with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+    with patch("hook_event_logger.psycopg2.connect") as mock_connect:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
 
@@ -48,11 +52,7 @@ def mock_db_connection():
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
 
-        yield {
-            "connect": mock_connect,
-            "conn": mock_conn,
-            "cursor": mock_cursor
-        }
+        yield {"connect": mock_connect, "conn": mock_conn, "cursor": mock_cursor}
 
 
 @pytest.fixture
@@ -73,18 +73,19 @@ def sample_event_data():
             "agent_name": "agent-testing",
             "agent_domain": "testing",
             "confidence": 0.95,
-            "method": "pattern"
+            "method": "pattern",
         },
         "metadata": {
             "correlation_id": str(uuid.uuid4()),
-            "agent_name": "agent-testing"
-        }
+            "agent_name": "agent-testing",
+        },
     }
 
 
 # ============================================================================
 # CONNECTION MANAGEMENT TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestConnectionManagement:
@@ -99,12 +100,9 @@ class TestConnectionManagement:
 
     def test_connection_retry_on_failure(self):
         """Test connection retry logic on failure."""
-        with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+        with patch("hook_event_logger.psycopg2.connect") as mock_connect:
             # First call fails, second succeeds
-            mock_connect.side_effect = [
-                Exception("Connection failed"),
-                MagicMock()
-            ]
+            mock_connect.side_effect = [Exception("Connection failed"), MagicMock()]
 
             logger = HookEventLogger()
 
@@ -115,11 +113,13 @@ class TestConnectionManagement:
                     action="test",
                     resource="test",
                     resource_id="test-id",
-                    payload={}
+                    payload={},
                 )
                 # Should handle gracefully
-                assert result is not None or result is None  # Either outcome is acceptable
-            except Exception as e:
+                assert (
+                    result is not None or result is None
+                )  # Either outcome is acceptable
+            except Exception:
                 # Graceful degradation is acceptable
                 pass
 
@@ -134,7 +134,7 @@ class TestConnectionManagement:
                 action=f"action_{i}",
                 resource="test",
                 resource_id=f"test-{i}",
-                payload={}
+                payload={},
             )
 
         # Should reuse connections (not create 10 new ones)
@@ -142,19 +142,19 @@ class TestConnectionManagement:
 
     def test_graceful_degradation(self):
         """Test system continues when database unavailable."""
-        with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+        with patch("hook_event_logger.psycopg2.connect") as mock_connect:
             mock_connect.side_effect = Exception("Database unavailable")
 
             logger = HookEventLogger()
 
             # Should not crash, just log warning
             try:
-                result = logger.log_event(
+                logger.log_event(
                     source="Test",
                     action="test",
                     resource="test",
                     resource_id="test-id",
-                    payload={}
+                    payload={},
                 )
                 # Graceful degradation - returns None or continues
                 assert True
@@ -166,6 +166,7 @@ class TestConnectionManagement:
 # ============================================================================
 # EVENT LOGGING TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestEventLogging:
@@ -180,12 +181,9 @@ class TestEventLogging:
             correlation_id=correlation_id,
             intelligence_queries={
                 "domain": "testing patterns",
-                "implementation": "pytest examples"
+                "implementation": "pytest examples",
             },
-            metadata={
-                "prompt_length": 18,
-                "working_dir": "/test"
-            }
+            metadata={"prompt_length": 18, "working_dir": "/test"},
         )
 
         # Verify database insert was called
@@ -201,15 +199,9 @@ class TestEventLogging:
         """Test logging PreToolUse event."""
         log_pretooluse(
             tool_name="Write",
-            tool_input={
-                "file_path": "/test/file.py",
-                "content": "def test(): pass"
-            },
+            tool_input={"file_path": "/test/file.py", "content": "def test(): pass"},
             correlation_id=correlation_id,
-            quality_check_result={
-                "passed": True,
-                "violations": []
-            }
+            quality_check_result={"passed": True, "violations": []},
         )
 
         # Verify database insert was called
@@ -223,10 +215,7 @@ class TestEventLogging:
             file_path="/test/file.py",
             correlation_id=correlation_id,
             auto_fix_applied=False,
-            metrics={
-                "quality_score": 0.95,
-                "execution_time_ms": 123
-            }
+            metrics={"quality_score": 0.95, "execution_time_ms": 123},
         )
 
         # Verify database insert was called
@@ -237,14 +226,11 @@ class TestEventLogging:
         logger = HookEventLogger()
 
         complex_payload = {
-            "nested": {
-                "data": [1, 2, 3],
-                "map": {"key": "value"}
-            },
+            "nested": {"data": [1, 2, 3], "map": {"key": "value"}},
             "list": ["a", "b", "c"],
             "number": 42,
             "bool": True,
-            "null": None
+            "null": None,
         }
 
         logger.log_event(
@@ -252,7 +238,7 @@ class TestEventLogging:
             action="complex_data",
             resource="test",
             resource_id="test-id",
-            payload=complex_payload
+            payload=complex_payload,
         )
 
         # Should serialize to JSON without error
@@ -268,7 +254,7 @@ class TestEventLogging:
             "agent_domain": "testing",
             "confidence": 0.95,
             "method": "pattern",
-            "custom_field": "custom_value"
+            "custom_field": "custom_value",
         }
 
         logger.log_event(
@@ -277,7 +263,7 @@ class TestEventLogging:
             resource="agent",
             resource_id="agent-testing",
             payload={},
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Verify metadata is passed correctly
@@ -287,6 +273,7 @@ class TestEventLogging:
 # ============================================================================
 # CORRELATION ID TRACKING TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestCorrelationTracking:
@@ -298,21 +285,21 @@ class TestCorrelationTracking:
         log_userprompt(
             prompt="test prompt",
             agent_detected="agent-testing",
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         # Log PreToolUse with same correlation ID
         log_pretooluse(
             tool_name="Write",
             tool_input={"file_path": "/test"},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         # Log PostToolUse with same correlation ID
         log_posttooluse(
             tool_name="Write",
             tool_output={"success": True},
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         # All three should use same correlation ID
@@ -333,7 +320,7 @@ class TestCorrelationTracking:
                 resource="test",
                 resource_id=f"test-{i}",
                 payload={},
-                metadata={"correlation_id": correlation_id}
+                metadata={"correlation_id": correlation_id},
             )
 
         # Query should be fast (would need actual DB)
@@ -344,6 +331,7 @@ class TestCorrelationTracking:
 # ============================================================================
 # QUERY PERFORMANCE TESTS
 # ============================================================================
+
 
 @pytest.mark.performance
 class TestQueryPerformance:
@@ -362,7 +350,7 @@ class TestQueryPerformance:
                 action=f"action_{i}",
                 resource="test",
                 resource_id=f"test-{i}",
-                payload={"data": "test"}
+                payload={"data": "test"},
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
@@ -385,7 +373,7 @@ class TestQueryPerformance:
                 action=f"concurrent_{i}",
                 resource="test",
                 resource_id=f"test-{i}",
-                payload={}
+                payload={},
             )
 
         start_time = time.time()
@@ -404,13 +392,14 @@ class TestQueryPerformance:
 # ERROR HANDLING TESTS
 # ============================================================================
 
+
 @pytest.mark.integration
 class TestErrorHandling:
     """Test error handling and resilience."""
 
     def test_database_connection_failure(self):
         """Test handling of database connection failure."""
-        with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+        with patch("hook_event_logger.psycopg2.connect") as mock_connect:
             mock_connect.side_effect = Exception("Connection refused")
 
             logger = HookEventLogger()
@@ -422,7 +411,7 @@ class TestErrorHandling:
                     action="test",
                     resource="test",
                     resource_id="test-id",
-                    payload={}
+                    payload={},
                 )
                 assert True  # Graceful handling
             except Exception:
@@ -441,7 +430,7 @@ class TestErrorHandling:
                 action="test",
                 resource="test",
                 resource_id="test-id",
-                payload={}
+                payload={},
             )
             assert True  # Graceful handling
         except Exception:
@@ -461,7 +450,7 @@ class TestErrorHandling:
                 action="test",
                 resource="test",
                 resource_id="test-id",
-                payload={"obj": NonSerializable()}
+                payload={"obj": NonSerializable()},
             )
             # Should handle gracefully
         except Exception:
@@ -469,7 +458,8 @@ class TestErrorHandling:
 
     def test_connection_timeout(self):
         """Test handling of connection timeout."""
-        with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+        with patch("hook_event_logger.psycopg2.connect") as mock_connect:
+
             def slow_connect(*args, **kwargs):
                 time.sleep(5)  # Simulate slow connection
                 raise Exception("Connection timeout")
@@ -485,7 +475,7 @@ class TestErrorHandling:
                     action="test",
                     resource="test",
                     resource_id="test-id",
-                    payload={}
+                    payload={},
                 )
             except Exception:
                 pass  # Acceptable
@@ -494,6 +484,7 @@ class TestErrorHandling:
 # ============================================================================
 # SCHEMA VALIDATION TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestSchemaValidation:
@@ -512,7 +503,7 @@ class TestSchemaValidation:
             resource="agent",
             resource_id="agent-testing",
             payload={},
-            metadata={}
+            metadata={},
         )
 
         # Verify SQL contains expected columns
@@ -527,13 +518,7 @@ class TestSchemaValidation:
         logger = HookEventLogger()
 
         # Test with complex nested JSON
-        complex_data = {
-            "level1": {
-                "level2": {
-                    "level3": ["a", "b", "c"]
-                }
-            }
-        }
+        complex_data = {"level1": {"level2": {"level3": ["a", "b", "c"]}}}
 
         logger.log_event(
             source="Test",
@@ -541,7 +526,7 @@ class TestSchemaValidation:
             resource="test",
             resource_id="test-id",
             payload=complex_data,
-            metadata=complex_data
+            metadata=complex_data,
         )
 
         # Should serialize correctly
@@ -551,6 +536,7 @@ class TestSchemaValidation:
 # ============================================================================
 # STATISTICS AND METRICS TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestStatisticsMetrics:
@@ -567,7 +553,7 @@ class TestStatisticsMetrics:
                 action=f"action_{i}",
                 resource="test",
                 resource_id=f"test-{i}",
-                payload={}
+                payload={},
             )
 
         # Should have logged 50 events
@@ -587,7 +573,7 @@ class TestStatisticsMetrics:
             action="perf_test",
             resource="test",
             resource_id="test-id",
-            payload={}
+            payload={},
         )
 
         elapsed_ms = (time.time() - start_time) * 1000

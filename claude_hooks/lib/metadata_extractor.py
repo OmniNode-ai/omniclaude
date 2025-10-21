@@ -4,12 +4,11 @@ Enhanced Metadata Extractor - Rich context capture for user prompts
 Performance target: <15ms overhead
 """
 
-import re
 import os
 import time
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class MetadataExtractor:
@@ -17,9 +16,32 @@ class MetadataExtractor:
 
     # Workflow stage keywords
     WORKFLOW_KEYWORDS = {
-        "debugging": ["debug", "error", "fix", "bug", "issue", "problem", "crash", "fail"],
-        "feature_development": ["implement", "add", "create", "new", "build", "develop"],
-        "refactoring": ["refactor", "improve", "optimize", "clean", "restructure", "reorganize"],
+        "debugging": [
+            "debug",
+            "error",
+            "fix",
+            "bug",
+            "issue",
+            "problem",
+            "crash",
+            "fail",
+        ],
+        "feature_development": [
+            "implement",
+            "add",
+            "create",
+            "new",
+            "build",
+            "develop",
+        ],
+        "refactoring": [
+            "refactor",
+            "improve",
+            "optimize",
+            "clean",
+            "restructure",
+            "reorganize",
+        ],
         "testing": ["test", "verify", "check", "validate", "coverage", "unit test"],
         "documentation": ["document", "docs", "readme", "comment", "explain"],
         "review": ["review", "analyze", "inspect", "evaluate", "assess"],
@@ -27,19 +49,53 @@ class MetadataExtractor:
 
     # Command words indicating action
     COMMAND_WORDS = [
-        "implement", "add", "create", "build", "develop",
-        "fix", "debug", "resolve", "solve",
-        "refactor", "improve", "optimize", "clean",
-        "test", "verify", "validate", "check",
-        "document", "explain", "describe",
-        "update", "modify", "change", "edit",
-        "remove", "delete", "drop",
-        "deploy", "release", "ship"
+        "implement",
+        "add",
+        "create",
+        "build",
+        "develop",
+        "fix",
+        "debug",
+        "resolve",
+        "solve",
+        "refactor",
+        "improve",
+        "optimize",
+        "clean",
+        "test",
+        "verify",
+        "validate",
+        "check",
+        "document",
+        "explain",
+        "describe",
+        "update",
+        "modify",
+        "change",
+        "edit",
+        "remove",
+        "delete",
+        "drop",
+        "deploy",
+        "release",
+        "ship",
     ]
 
     # File type classifications
     FILE_TYPE_MAP = {
-        "source": [".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cpp", ".c", ".go", ".rs", ".rb"],
+        "source": [
+            ".py",
+            ".js",
+            ".ts",
+            ".tsx",
+            ".jsx",
+            ".java",
+            ".cpp",
+            ".c",
+            ".go",
+            ".rs",
+            ".rb",
+        ],
         "test": ["_test.py", "_test.js", ".test.ts", ".spec.js", ".test.tsx", "test_"],
         "config": [".yaml", ".yml", ".json", ".toml", ".ini", ".conf", ".cfg"],
         "doc": [".md", ".rst", ".txt", ".adoc"],
@@ -58,7 +114,7 @@ class MetadataExtractor:
         self,
         prompt: str,
         agent_name: Optional[str] = None,
-        correlation_context: Optional[Dict[str, Any]] = None
+        correlation_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Extract all metadata from prompt and environment.
 
@@ -78,7 +134,7 @@ class MetadataExtractor:
             "editor_context": self._extract_editor_context(),
             "session_context": self._extract_session_context(correlation_context),
             "prompt_characteristics": self._extract_prompt_characteristics(prompt),
-            "extraction_time_ms": 0  # Will be updated at end
+            "extraction_time_ms": 0,  # Will be updated at end
         }
 
         # Calculate extraction time
@@ -139,7 +195,7 @@ class MetadataExtractor:
             "working_directory": str(self.working_dir),
             "active_file": None,
             "language": None,
-            "file_type": None
+            "file_type": None,
         }
 
         # Try to detect most recently modified file
@@ -148,8 +204,10 @@ class MetadataExtractor:
             recent_files = sorted(
                 [f for f in self.working_dir.rglob("*") if f.is_file()],
                 key=lambda f: f.stat().st_mtime,
-                reverse=True
-            )[:5]  # Top 5 most recent
+                reverse=True,
+            )[
+                :5
+            ]  # Top 5 most recent
 
             if recent_files:
                 # Use most recent file
@@ -224,8 +282,7 @@ class MetadataExtractor:
         return "other"
 
     def _extract_session_context(
-        self,
-        correlation_context: Optional[Dict[str, Any]]
+        self, correlation_context: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Extract session-level context.
 
@@ -236,9 +293,9 @@ class MetadataExtractor:
             Session context
         """
         context = {
-            "prompts_in_session": 1,  # Default: first prompt
-            "time_since_last_prompt_seconds": None
-        }
+            "prompts_in_session": 1,
+            "time_since_last_prompt_seconds": None,
+        }  # Default: first prompt
 
         if correlation_context:
             # Get prompt count from correlation context
@@ -247,7 +304,9 @@ class MetadataExtractor:
             # Calculate time since last prompt
             if "last_accessed" in correlation_context:
                 try:
-                    last_accessed = datetime.fromisoformat(correlation_context["last_accessed"])
+                    last_accessed = datetime.fromisoformat(
+                        correlation_context["last_accessed"]
+                    )
                     now = datetime.now(last_accessed.tzinfo)
                     delta = (now - last_accessed).total_seconds()
                     context["time_since_last_prompt_seconds"] = round(delta, 1)
@@ -269,7 +328,7 @@ class MetadataExtractor:
             "length_chars": len(prompt),
             "has_code_block": self._has_code_block(prompt),
             "question_count": self._count_questions(prompt),
-            "command_words": self._extract_command_words(prompt)
+            "command_words": self._extract_command_words(prompt),
         }
 
         return characteristics
@@ -318,9 +377,7 @@ class MetadataExtractor:
 
 # Convenience function for CLI usage
 def extract_metadata(
-    prompt: str,
-    agent_name: Optional[str] = None,
-    working_dir: Optional[str] = None
+    prompt: str, agent_name: Optional[str] = None, working_dir: Optional[str] = None
 ) -> Dict[str, Any]:
     """Extract metadata from prompt.
 
@@ -337,8 +394,8 @@ def extract_metadata(
 
 
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     # Test metadata extraction
     if len(sys.argv) < 2:

@@ -9,9 +9,9 @@ Follows patterns from omninode_bridge event models.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
-from datetime import datetime, timezone
 
 
 def _now_iso() -> str:
@@ -36,7 +36,7 @@ class CodegenAnalysisRequest(BaseEvent):
     event: str = "codegen.request.analyze"
 
     def to_kafka_topic(self) -> str:
-        return f"dev.omniclaude.codegen.analyze.request.v1"
+        return "dev.omniclaude.codegen.analyze.request.v1"
 
 
 @dataclass
@@ -44,7 +44,7 @@ class CodegenAnalysisResponse(BaseEvent):
     event: str = "codegen.response.analyze"
 
     def to_kafka_topic(self) -> str:
-        return f"dev.omniclaude.codegen.analyze.response.v1"
+        return "dev.omniclaude.codegen.analyze.response.v1"
 
 
 @dataclass
@@ -52,7 +52,7 @@ class CodegenGenerationRequest(BaseEvent):
     event: str = "codegen.request.generate"
 
     def to_kafka_topic(self) -> str:
-        return f"dev.omniclaude.codegen.generate.request.v1"
+        return "dev.omniclaude.codegen.generate.request.v1"
 
 
 @dataclass
@@ -60,7 +60,7 @@ class CodegenValidationRequest(BaseEvent):
     event: str = "codegen.request.validate"
 
     def to_kafka_topic(self) -> str:
-        return f"dev.omniclaude.codegen.validate.request.v1"
+        return "dev.omniclaude.codegen.validate.request.v1"
 
 
 @dataclass
@@ -68,7 +68,7 @@ class CodegenValidationResponse(BaseEvent):
     event: str = "codegen.response.validate"
 
     def to_kafka_topic(self) -> str:
-        return f"dev.omniclaude.codegen.validate.response.v1"
+        return "dev.omniclaude.codegen.validate.response.v1"
 
 
 @dataclass
@@ -90,5 +90,3 @@ __all__ = [
     "CodegenValidationResponse",
     "CodegenStatusEvent",
 ]
-
-

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pattern Threshold Tuner for Phase 7
+Pattern Threshold Tuner - Agent Framework
 
 Automatically tunes pattern matching thresholds and provides A/B testing
 framework for pattern matching strategies to achieve optimal precision/recall.
@@ -9,14 +9,13 @@ framework for pattern matching strategies to achieve optimal precision/recall.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-from uuid import UUID, uuid4
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-import asyncio
+from typing import Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
 
-from .pattern_feedback import PatternFeedbackCollector, PatternAnalysis
+from .pattern_feedback import PatternAnalysis, PatternFeedbackCollector
 from .persistence import CodegenPersistence
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 class TuningStrategy(str, Enum):
     """Pattern tuning strategies"""
+
     PRECISION_FIRST = "precision_first"  # Optimize for precision
     RECALL_FIRST = "recall_first"  # Optimize for recall
     BALANCED = "balanced"  # Balance precision and recall
@@ -37,6 +37,7 @@ class ThresholdConfig:
 
     Defines confidence thresholds and weights for pattern matching.
     """
+
     pattern_name: str
     confidence_threshold: float  # 0.0-1.0
     keyword_weight: float = 0.4  # Weight for keyword matching
@@ -55,6 +56,7 @@ class ABTestConfig:
 
     Allows testing different threshold configurations to find optimal settings.
     """
+
     test_id: UUID
     pattern_name: str
     variant_a: ThresholdConfig
@@ -74,6 +76,7 @@ class TuningResult:
 
     Provides before/after metrics and recommended configuration.
     """
+
     pattern_name: str
     original_threshold: float
     tuned_threshold: float
@@ -102,7 +105,7 @@ class PatternTuner:
     def __init__(
         self,
         feedback_collector: Optional[PatternFeedbackCollector] = None,
-        persistence: Optional[CodegenPersistence] = None
+        persistence: Optional[CodegenPersistence] = None,
     ):
         """
         Initialize pattern tuner.
@@ -128,7 +131,7 @@ class PatternTuner:
             TuningStrategy.PRECISION_FIRST: 0.80,
             TuningStrategy.RECALL_FIRST: 0.60,
             TuningStrategy.BALANCED: 0.70,
-            TuningStrategy.ADAPTIVE: 0.70
+            TuningStrategy.ADAPTIVE: 0.70,
         }
 
     async def tune_pattern(
@@ -136,7 +139,7 @@ class PatternTuner:
         pattern_name: str,
         strategy: TuningStrategy = TuningStrategy.BALANCED,
         min_samples: int = 20,
-        target_precision: float = 0.90
+        target_precision: float = 0.90,
     ) -> TuningResult:
         """
         Tune pattern threshold based on feedback data.
@@ -166,8 +169,7 @@ class PatternTuner:
 
         # Analyze current performance
         analysis = await self.feedback_collector.analyze_feedback(
-            pattern_name,
-            min_samples
+            pattern_name, min_samples
         )
 
         if not analysis.sufficient_data:
@@ -178,9 +180,7 @@ class PatternTuner:
 
         # Calculate optimal threshold based on strategy
         tuned_threshold, estimated_precision = self._calculate_optimal_threshold(
-            analysis,
-            strategy,
-            target_precision
+            analysis, strategy, target_precision
         )
 
         # Calculate improvement
@@ -188,17 +188,12 @@ class PatternTuner:
 
         # Generate recommendations
         recommendations = self._generate_tuning_recommendations(
-            analysis,
-            original_threshold,
-            tuned_threshold,
-            strategy
+            analysis, original_threshold, tuned_threshold, strategy
         )
 
         # Calculate confidence in tuning
         confidence = self._calculate_tuning_confidence(
-            analysis.sample_count,
-            min_samples,
-            abs(improvement)
+            analysis.sample_count, min_samples, abs(improvement)
         )
 
         result = TuningResult(
@@ -210,7 +205,7 @@ class PatternTuner:
             improvement=improvement,
             confidence=confidence,
             strategy_used=strategy,
-            recommendations=recommendations
+            recommendations=recommendations,
         )
 
         self.logger.info(
@@ -226,7 +221,7 @@ class PatternTuner:
         self,
         tuning_result: TuningResult,
         create_ab_test: bool = False,
-        min_confidence: float = 0.70
+        min_confidence: float = 0.70,
     ) -> bool:
         """
         Apply tuning result to pattern configuration.
@@ -253,8 +248,7 @@ class PatternTuner:
         else:
             # Apply directly
             self._update_threshold_config(
-                tuning_result.pattern_name,
-                tuning_result.tuned_threshold
+                tuning_result.pattern_name, tuning_result.tuned_threshold
             )
 
             self.logger.info(
@@ -269,7 +263,7 @@ class PatternTuner:
         threshold_a: float,
         threshold_b: float,
         traffic_split: float = 0.5,
-        min_samples: int = 100
+        min_samples: int = 100,
     ) -> ABTestConfig:
         """
         Create A/B test for pattern threshold comparison.
@@ -290,13 +284,13 @@ class PatternTuner:
         variant_a = ThresholdConfig(
             pattern_name=pattern_name,
             confidence_threshold=threshold_a,
-            version=f"test_{test_id}_a"
+            version=f"test_{test_id}_a",
         )
 
         variant_b = ThresholdConfig(
             pattern_name=pattern_name,
             confidence_threshold=threshold_b,
-            version=f"test_{test_id}_b"
+            version=f"test_{test_id}_b",
         )
 
         # Create test config
@@ -306,7 +300,7 @@ class PatternTuner:
             variant_a=variant_a,
             variant_b=variant_b,
             traffic_split=traffic_split,
-            min_samples=min_samples
+            min_samples=min_samples,
         )
 
         self._active_tests[test_id] = test_config
@@ -320,9 +314,7 @@ class PatternTuner:
         return test_config
 
     async def evaluate_ab_test(
-        self,
-        test_id: UUID,
-        auto_apply_winner: bool = False
+        self, test_id: UUID, auto_apply_winner: bool = False
     ) -> Optional[str]:
         """
         Evaluate A/B test results and determine winner.
@@ -344,8 +336,7 @@ class PatternTuner:
         # For now, use simplified evaluation based on current analysis
 
         analysis = await self.feedback_collector.analyze_feedback(
-            test_config.pattern_name,
-            min_samples=test_config.min_samples
+            test_config.pattern_name, min_samples=test_config.min_samples
         )
 
         if not analysis.sufficient_data:
@@ -360,13 +351,24 @@ class PatternTuner:
         # For now, choose based on threshold relative to suggested threshold
 
         if analysis.suggested_threshold is not None:
-            diff_a = abs(test_config.variant_a.confidence_threshold - analysis.suggested_threshold)
-            diff_b = abs(test_config.variant_b.confidence_threshold - analysis.suggested_threshold)
+            diff_a = abs(
+                test_config.variant_a.confidence_threshold
+                - analysis.suggested_threshold
+            )
+            diff_b = abs(
+                test_config.variant_b.confidence_threshold
+                - analysis.suggested_threshold
+            )
 
-            winner = 'a' if diff_a < diff_b else 'b'
+            winner = "a" if diff_a < diff_b else "b"
         else:
             # Fallback: choose higher threshold for better precision
-            winner = 'a' if test_config.variant_a.confidence_threshold > test_config.variant_b.confidence_threshold else 'b'
+            winner = (
+                "a"
+                if test_config.variant_a.confidence_threshold
+                > test_config.variant_b.confidence_threshold
+                else "b"
+            )
 
         # Update test config
         test_config.winner = winner
@@ -381,19 +383,18 @@ class PatternTuner:
 
         # Apply winner if requested
         if auto_apply_winner:
-            winning_config = test_config.variant_a if winner == 'a' else test_config.variant_b
+            winning_config = (
+                test_config.variant_a if winner == "a" else test_config.variant_b
+            )
             self._update_threshold_config(
-                test_config.pattern_name,
-                winning_config.confidence_threshold
+                test_config.pattern_name, winning_config.confidence_threshold
             )
             self.logger.info(f"Applied winning variant {winner} to production")
 
         return winner
 
     async def rollback_pattern(
-        self,
-        pattern_name: str,
-        to_version: Optional[str] = None
+        self, pattern_name: str, to_version: Optional[str] = None
     ) -> bool:
         """
         Rollback pattern configuration to previous version.
@@ -422,7 +423,7 @@ class PatternTuner:
         strategy: TuningStrategy = TuningStrategy.BALANCED,
         min_samples: int = 20,
         target_precision: float = 0.90,
-        auto_apply: bool = False
+        auto_apply: bool = False,
     ) -> Dict[str, TuningResult]:
         """
         Tune all patterns with sufficient feedback data.
@@ -448,10 +449,7 @@ class PatternTuner:
         for analysis in all_analyses:
             try:
                 result = await self.tune_pattern(
-                    analysis.pattern_name,
-                    strategy,
-                    min_samples,
-                    target_precision
+                    analysis.pattern_name, strategy, min_samples, target_precision
                 )
 
                 results[analysis.pattern_name] = result
@@ -465,9 +463,7 @@ class PatternTuner:
                     f"Failed to tune pattern '{analysis.pattern_name}': {str(e)}"
                 )
 
-        self.logger.info(
-            f"Bulk tuning complete: {len(results)} patterns tuned"
-        )
+        self.logger.info(f"Bulk tuning complete: {len(results)} patterns tuned")
 
         return results
 
@@ -475,7 +471,7 @@ class PatternTuner:
         self,
         analysis: PatternAnalysis,
         strategy: TuningStrategy,
-        target_precision: float
+        target_precision: float,
     ) -> Tuple[float, float]:
         """
         Calculate optimal threshold based on strategy.
@@ -528,7 +524,7 @@ class PatternTuner:
         analysis: PatternAnalysis,
         original_threshold: float,
         tuned_threshold: float,
-        strategy: TuningStrategy
+        strategy: TuningStrategy,
     ) -> List[str]:
         """Generate tuning recommendations."""
         recommendations = []
@@ -564,10 +560,7 @@ class PatternTuner:
         return recommendations
 
     def _calculate_tuning_confidence(
-        self,
-        sample_count: int,
-        min_samples: int,
-        improvement: float
+        self, sample_count: int, min_samples: int, improvement: float
     ) -> float:
         """
         Calculate confidence in tuning recommendation.
@@ -590,17 +583,12 @@ class PatternTuner:
         if pattern_name not in self._threshold_configs:
             # Create default config
             self._threshold_configs[pattern_name] = ThresholdConfig(
-                pattern_name=pattern_name,
-                confidence_threshold=0.70
+                pattern_name=pattern_name, confidence_threshold=0.70
             )
 
         return self._threshold_configs[pattern_name]
 
-    def _update_threshold_config(
-        self,
-        pattern_name: str,
-        threshold: float
-    ) -> None:
+    def _update_threshold_config(self, pattern_name: str, threshold: float) -> None:
         """Update threshold configuration."""
         config = self._get_threshold_config(pattern_name)
         config.confidence_threshold = threshold
@@ -615,7 +603,7 @@ class PatternTuner:
             threshold_a=tuning_result.original_threshold,
             threshold_b=tuning_result.tuned_threshold,
             traffic_split=0.5,
-            min_samples=100
+            min_samples=100,
         )
 
     async def cleanup(self) -> None:

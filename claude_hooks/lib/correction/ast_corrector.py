@@ -16,10 +16,10 @@ Date: 2025-09-30
 
 import ast
 import logging
-from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
-from .framework_detector import FrameworkMethodDetector, FrameworkPattern
+from .framework_detector import FrameworkMethodDetector
 
 logger = logging.getLogger(__name__)
 
@@ -104,13 +104,13 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             old_name = original_node.name.value
 
             # Check if this name should be corrected
-            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
+            new_name = self._check_correction(
+                pos.start.line, pos.start.column, old_name
+            )
             if new_name:
                 logger.debug(f"Renaming class '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
-                updated_node = updated_node.with_changes(
-                    name=cst.Name(value=new_name)
-                )
+                updated_node = updated_node.with_changes(name=cst.Name(value=new_name))
         except Exception as e:
             logger.error(f"Error during class renaming: {e}")
 
@@ -151,13 +151,13 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
                     break
 
             # Check if this function should be renamed
-            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
+            new_name = self._check_correction(
+                pos.start.line, pos.start.column, old_name
+            )
             if new_name:
                 logger.debug(f"Renaming function '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
-                updated_node = updated_node.with_changes(
-                    name=cst.Name(value=new_name)
-                )
+                updated_node = updated_node.with_changes(name=cst.Name(value=new_name))
         except Exception as e:
             logger.error(f"Error during function renaming: {e}")
 
@@ -175,7 +175,9 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             old_name = original_node.value
 
             # Check if this name should be corrected
-            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
+            new_name = self._check_correction(
+                pos.start.line, pos.start.column, old_name
+            )
             if new_name:
                 logger.debug(f"Renaming identifier '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
@@ -383,7 +385,9 @@ def apply_corrections_with_ast(
         )
 
 
-def _fallback_regex_correction(content: str, corrections: List[Dict]) -> CorrectionResult:
+def _fallback_regex_correction(
+    content: str, corrections: List[Dict]
+) -> CorrectionResult:
     """
     Fallback to regex-based correction when libcst is not available.
 
@@ -428,7 +432,9 @@ def _fallback_regex_correction(content: str, corrections: List[Dict]) -> Correct
 
 
 def apply_single_correction(
-    content: str, correction: Dict, framework_detector: Optional[FrameworkMethodDetector] = None
+    content: str,
+    correction: Dict,
+    framework_detector: Optional[FrameworkMethodDetector] = None,
 ) -> Optional[str]:
     """
     Apply a single correction using AST-based approach.

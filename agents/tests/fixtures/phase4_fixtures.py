@@ -5,15 +5,15 @@ Phase 4 Test Fixtures - Sample PRDs and Expected Outputs
 Comprehensive fixtures for testing contract, model, and enum generators.
 """
 
-from typing import Dict, Any, List
-from uuid import uuid4
 from datetime import datetime, timezone
-from agents.lib.simple_prd_analyzer import (
-    SimpleParsedPRD,
-    SimpleDecompositionResult,
-    SimplePRDAnalysisResult
-)
+from typing import List
+from uuid import uuid4
 
+from agents.lib.simple_prd_analyzer import (
+    SimpleDecompositionResult,
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+)
 
 # ============================================================================
 # SAMPLE PRDs FOR EACH NODE TYPE
@@ -208,20 +208,22 @@ across distributed operations.
 # MOCK ANALYSIS RESULTS
 # ============================================================================
 
+
 def create_mock_analysis_result(
     prd_content: str,
     node_type: str,
     mixins: List[str] = None,
-    external_systems: List[str] = None
+    external_systems: List[str] = None,
 ) -> SimplePRDAnalysisResult:
     """Create a mock SimplePRDAnalysisResult for testing"""
 
     # Parse the PRD content
     from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
-    analyzer = SimplePRDAnalyzer()
+
+    SimplePRDAnalyzer()
 
     # Extract basic info for parsed PRD
-    title_line = prd_content.split('\n')[0].strip('# ')
+    title_line = prd_content.split("\n")[0].strip("# ")
 
     # Create basic parsed PRD
     parsed_prd = SimpleParsedPRD(
@@ -234,7 +236,7 @@ def create_mock_analysis_result(
         dependencies=external_systems or ["database"],
         extracted_keywords=["test", "node", node_type.lower()],
         sections=["Overview", "Requirements", "Features"],
-        word_count=len(prd_content.split())
+        word_count=len(prd_content.split()),
     )
 
     # Create decomposition
@@ -245,18 +247,18 @@ def create_mock_analysis_result(
                 "title": "Implement core functionality",
                 "description": f"Implement core {node_type} logic",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_2",
                 "title": "Add validation",
                 "description": "Add input validation",
                 "priority": "medium",
-                "complexity": "low"
-            }
+                "complexity": "low",
+            },
         ],
         total_tasks=2,
-        verification_successful=True
+        verification_successful=True,
     )
 
     # Set node type hints
@@ -264,7 +266,7 @@ def create_mock_analysis_result(
         "EFFECT": 0.0,
         "COMPUTE": 0.0,
         "REDUCER": 0.0,
-        "ORCHESTRATOR": 0.0
+        "ORCHESTRATOR": 0.0,
     }
     node_type_hints[node_type] = 0.9
 
@@ -279,7 +281,7 @@ def create_mock_analysis_result(
         external_systems=external_systems or ["PostgreSQL", "Redis"],
         quality_baseline=0.85,
         confidence_score=0.90,
-        analysis_timestamp=datetime.now(timezone.utc)
+        analysis_timestamp=datetime.now(timezone.utc),
     )
 
 
@@ -288,28 +290,28 @@ EFFECT_ANALYSIS_RESULT = create_mock_analysis_result(
     EFFECT_NODE_PRD,
     "EFFECT",
     mixins=["MixinEventBus", "MixinHealthCheck", "MixinCaching"],
-    external_systems=["PostgreSQL", "Redis", "Kafka"]
+    external_systems=["PostgreSQL", "Redis", "Kafka"],
 )
 
 COMPUTE_ANALYSIS_RESULT = create_mock_analysis_result(
     COMPUTE_NODE_PRD,
     "COMPUTE",
     mixins=["MixinValidation", "MixinMetrics"],
-    external_systems=[]
+    external_systems=[],
 )
 
 REDUCER_ANALYSIS_RESULT = create_mock_analysis_result(
     REDUCER_NODE_PRD,
     "REDUCER",
     mixins=["MixinEventBus", "MixinCaching", "MixinMetrics"],
-    external_systems=["PostgreSQL", "Redis"]
+    external_systems=["PostgreSQL", "Redis"],
 )
 
 ORCHESTRATOR_ANALYSIS_RESULT = create_mock_analysis_result(
     ORCHESTRATOR_NODE_PRD,
     "ORCHESTRATOR",
     mixins=["MixinEventBus", "MixinHealthCheck", "MixinCircuitBreaker", "MixinRetry"],
-    external_systems=["Kafka", "PostgreSQL", "Redis"]
+    external_systems=["Kafka", "PostgreSQL", "Redis"],
 )
 
 
@@ -490,29 +492,29 @@ NODE_TYPE_FIXTURES = {
         "analysis": EFFECT_ANALYSIS_RESULT,
         "expected_contract": EXPECTED_EFFECT_CONTRACT_YAML,
         "microservice_name": "user_management",
-        "domain": "identity"
+        "domain": "identity",
     },
     "COMPUTE": {
         "prd": COMPUTE_NODE_PRD,
         "analysis": COMPUTE_ANALYSIS_RESULT,
         "expected_contract": EXPECTED_COMPUTE_CONTRACT_YAML,
         "microservice_name": "csv_json_transformer",
-        "domain": "data_processing"
+        "domain": "data_processing",
     },
     "REDUCER": {
         "prd": REDUCER_NODE_PRD,
         "analysis": REDUCER_ANALYSIS_RESULT,
         "expected_contract": None,  # To be defined
         "microservice_name": "analytics_aggregator",
-        "domain": "analytics"
+        "domain": "analytics",
     },
     "ORCHESTRATOR": {
         "prd": ORCHESTRATOR_NODE_PRD,
         "analysis": ORCHESTRATOR_ANALYSIS_RESULT,
         "expected_contract": None,  # To be defined
         "microservice_name": "workflow_coordinator",
-        "domain": "orchestration"
-    }
+        "domain": "orchestration",
+    },
 }
 
 
@@ -559,16 +561,27 @@ PERFORMANCE_EXPECTATIONS = {
     "total_pipeline_ms": 5000,  # 5 seconds max for full pipeline
 }
 
-LARGE_PRD_CONTENT = """# Large Enterprise System
+LARGE_PRD_CONTENT = (
+    """# Large Enterprise System
 
 ## Overview
-""" + "\n".join([f"- Feature {i}: Description of feature {i}" for i in range(100)]) + """
+"""
+    + "\n".join([f"- Feature {i}: Description of feature {i}" for i in range(100)])
+    + """
 
 ## Functional Requirements
-""" + "\n".join([f"- Requirement {i}: Detailed requirement description {i}" for i in range(50)]) + """
+"""
+    + "\n".join(
+        [f"- Requirement {i}: Detailed requirement description {i}" for i in range(50)]
+    )
+    + """
 
 ## Technical Details
-""" + "\n".join([f"- Technical detail {i}: Implementation detail {i}" for i in range(50)])
+"""
+    + "\n".join(
+        [f"- Technical detail {i}: Implementation detail {i}" for i in range(50)]
+    )
+)
 
 
 # ============================================================================
@@ -711,13 +724,9 @@ VALID_CODE_QUALITY_RESULT = {
         "onex_naming": True,
         "type_safety": True,
         "error_handling": True,
-        "contract_conformance": True
+        "contract_conformance": True,
     },
-    "metrics": {
-        "num_classes": 1,
-        "num_methods": 3,
-        "coverage_score": 0.95
-    }
+    "metrics": {"num_classes": 1, "num_methods": 3, "coverage_score": 0.95},
 }
 
 INVALID_CODE_QUALITY_RESULT = {
@@ -727,20 +736,16 @@ INVALID_CODE_QUALITY_RESULT = {
         "Syntax error at line 12: invalid syntax",
         "Missing type annotations in method 'process'",
         "Uses bare 'Any' type (ONEX violation)",
-        "Missing error handling with OnexError"
+        "Missing error handling with OnexError",
     ],
     "checks_passed": {
         "syntax_valid": False,
         "onex_naming": True,
         "type_safety": False,
         "error_handling": False,
-        "contract_conformance": False
+        "contract_conformance": False,
     },
-    "metrics": {
-        "num_classes": 1,
-        "num_methods": 2,
-        "coverage_score": 0.45
-    }
+    "metrics": {"num_classes": 1, "num_methods": 2, "coverage_score": 0.45},
 }
 
 
@@ -753,14 +758,14 @@ CRUD_PATTERN_CONTRACT = {
         {"name": "create_user", "type": "create", "required": True},
         {"name": "read_user", "type": "read", "required": True},
         {"name": "update_user", "type": "update", "required": True},
-        {"name": "delete_user", "type": "delete", "required": True}
+        {"name": "delete_user", "type": "delete", "required": True},
     ]
 }
 
 TRANSFORMATION_PATTERN_CONTRACT = {
     "capabilities": [
         {"name": "transform_csv_to_json", "type": "transform", "required": True},
-        {"name": "validate_data", "type": "validate", "required": True}
+        {"name": "validate_data", "type": "validate", "required": True},
     ]
 }
 
@@ -768,7 +773,7 @@ AGGREGATION_PATTERN_CONTRACT = {
     "capabilities": [
         {"name": "aggregate_metrics", "type": "aggregate", "required": True},
         {"name": "compute_statistics", "type": "compute", "required": True},
-        {"name": "persist_results", "type": "persist", "required": True}
+        {"name": "persist_results", "type": "persist", "required": True},
     ]
 }
 
@@ -776,7 +781,7 @@ ORCHESTRATION_PATTERN_CONTRACT = {
     "capabilities": [
         {"name": "coordinate_workflow", "type": "orchestrate", "required": True},
         {"name": "handle_failures", "type": "error_handling", "required": True},
-        {"name": "track_state", "type": "state_management", "required": True}
+        {"name": "track_state", "type": "state_management", "required": True},
     ]
 }
 
@@ -785,26 +790,26 @@ PATTERN_DETECTION_CASES = [
         "contract": CRUD_PATTERN_CONTRACT,
         "expected_pattern": "CRUD",
         "expected_confidence": 0.95,
-        "expected_methods": ["create", "read", "update", "delete"]
+        "expected_methods": ["create", "read", "update", "delete"],
     },
     {
         "contract": TRANSFORMATION_PATTERN_CONTRACT,
         "expected_pattern": "Transformation",
         "expected_confidence": 0.90,
-        "expected_methods": ["transform", "validate"]
+        "expected_methods": ["transform", "validate"],
     },
     {
         "contract": AGGREGATION_PATTERN_CONTRACT,
         "expected_pattern": "Aggregation",
         "expected_confidence": 0.88,
-        "expected_methods": ["aggregate", "reduce", "persist"]
+        "expected_methods": ["aggregate", "reduce", "persist"],
     },
     {
         "contract": ORCHESTRATION_PATTERN_CONTRACT,
         "expected_pattern": "Orchestration",
         "expected_confidence": 0.92,
-        "expected_methods": ["coordinate", "handle_failure", "track_state"]
-    }
+        "expected_methods": ["coordinate", "handle_failure", "track_state"],
+    },
 ]
 
 
@@ -824,7 +829,7 @@ SAMPLE_CONTRACT_WITH_CRUD = {
             "type": "create",
             "required": True,
             "input": {"username": "str", "email": "str", "password": "str"},
-            "output": {"user_id": "UUID", "status": "str"}
+            "output": {"user_id": "UUID", "status": "str"},
         },
         {
             "name": "get_user",
@@ -832,7 +837,7 @@ SAMPLE_CONTRACT_WITH_CRUD = {
             "type": "read",
             "required": True,
             "input": {"user_id": "UUID"},
-            "output": {"user": "Dict[str, str]"}
+            "output": {"user": "Dict[str, str]"},
         },
         {
             "name": "update_user",
@@ -840,7 +845,7 @@ SAMPLE_CONTRACT_WITH_CRUD = {
             "type": "update",
             "required": True,
             "input": {"user_id": "UUID", "updates": "Dict[str, str]"},
-            "output": {"success": "bool"}
+            "output": {"success": "bool"},
         },
         {
             "name": "delete_user",
@@ -848,15 +853,12 @@ SAMPLE_CONTRACT_WITH_CRUD = {
             "type": "delete",
             "required": True,
             "input": {"user_id": "UUID"},
-            "output": {"success": "bool"}
-        }
+            "output": {"success": "bool"},
+        },
     ],
     "subcontracts": [
-        {
-            "mixin": "MixinEventBus",
-            "config": {"bootstrap_servers": "localhost:9092"}
-        }
-    ]
+        {"mixin": "MixinEventBus", "config": {"bootstrap_servers": "localhost:9092"}}
+    ],
 }
 
 SAMPLE_CONTRACT_WITH_TRANSFORMATION = {
@@ -871,7 +873,7 @@ SAMPLE_CONTRACT_WITH_TRANSFORMATION = {
             "type": "transform",
             "required": True,
             "input": {"csv_data": "str"},
-            "output": {"json_data": "List[Dict[str, str]]"}
+            "output": {"json_data": "List[Dict[str, str]]"},
         },
         {
             "name": "validate_schema",
@@ -879,10 +881,10 @@ SAMPLE_CONTRACT_WITH_TRANSFORMATION = {
             "type": "validate",
             "required": True,
             "input": {"data": "Dict[str, str]", "schema": "Dict[str, str]"},
-            "output": {"valid": "bool", "errors": "List[str]"}
-        }
+            "output": {"valid": "bool", "errors": "List[str]"},
+        },
     ],
-    "subcontracts": []
+    "subcontracts": [],
 }
 
 
@@ -943,62 +945,50 @@ __all__ = [
     "COMPUTE_NODE_PRD",
     "REDUCER_NODE_PRD",
     "ORCHESTRATOR_NODE_PRD",
-
     # Analysis Results
     "EFFECT_ANALYSIS_RESULT",
     "COMPUTE_ANALYSIS_RESULT",
     "REDUCER_ANALYSIS_RESULT",
     "ORCHESTRATOR_ANALYSIS_RESULT",
-
     # Expected Outputs
     "EXPECTED_EFFECT_CONTRACT_YAML",
     "EXPECTED_COMPUTE_CONTRACT_YAML",
     "EXPECTED_INPUT_MODEL_TEMPLATE",
     "EXPECTED_OUTPUT_MODEL_TEMPLATE",
     "EXPECTED_OPERATION_ENUM_TEMPLATE",
-
     # Organized Fixtures
     "NODE_TYPE_FIXTURES",
-
     # Validation Data
     "ONEX_NAMING_VIOLATIONS",
     "ONEX_NAMING_VALID",
     "TYPE_SAFETY_VIOLATIONS",
     "TYPE_SAFETY_VALID",
-
     # Performance Data
     "PERFORMANCE_EXPECTATIONS",
     "LARGE_PRD_CONTENT",
-
     # Error Cases
     "EMPTY_PRD",
     "MALFORMED_PRD",
     "MINIMAL_PRD",
-
     # Helper Functions
     "create_mock_analysis_result",
-
     # Phase 5: Generated Code Samples
     "VALID_EFFECT_NODE_CODE",
     "INVALID_SYNTAX_CODE",
     "ONEX_VIOLATION_CODE",
     "MISSING_ERROR_HANDLING_CODE",
-
     # Phase 5: Validation Results
     "VALID_CODE_QUALITY_RESULT",
     "INVALID_CODE_QUALITY_RESULT",
-
     # Phase 5: Pattern Test Cases
     "CRUD_PATTERN_CONTRACT",
     "TRANSFORMATION_PATTERN_CONTRACT",
     "AGGREGATION_PATTERN_CONTRACT",
     "ORCHESTRATION_PATTERN_CONTRACT",
     "PATTERN_DETECTION_CASES",
-
     # Phase 5: Sample Contracts
     "SAMPLE_CONTRACT_WITH_CRUD",
     "SAMPLE_CONTRACT_WITH_TRANSFORMATION",
-
     # Phase 5: Expected Code Patterns
     "EXPECTED_CRUD_METHOD_STUBS",
 ]

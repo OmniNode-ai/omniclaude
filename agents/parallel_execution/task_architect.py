@@ -8,11 +8,11 @@ for parallel agent execution.
 Uses LLM to analyze user requests and plan optimal task breakdown.
 """
 
-import sys
-import json
 import asyncio
-from typing import Dict, List, Any, Optional
+import json
+import sys
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -29,9 +29,7 @@ class TaskArchitect:
         self.mcp = ArchonMCPClient()
 
     async def analyze_prompt(
-        self,
-        user_prompt: str,
-        global_context: Optional[Dict[str, Any]] = None
+        self, user_prompt: str, global_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Analyze user prompt and generate task breakdown.
@@ -103,8 +101,7 @@ Return ONLY valid JSON in this exact format:
         try:
             # Use RAG query to get intelligent task planning
             result = await self.mcp.perform_rag_query(
-                query=analysis_prompt,
-                match_count=3
+                query=analysis_prompt, match_count=3
             )
 
             # Ensure result is a dictionary
@@ -122,6 +119,7 @@ Return ONLY valid JSON in this exact format:
 
         except Exception as e:
             import traceback
+
             print(f"Error in task planning: {e}", file=sys.stderr)
             print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
             # Fallback on error
@@ -203,7 +201,7 @@ Return ONLY valid JSON in this exact format:
             input_data = {
                 "description": user_prompt,
                 "language": "python",
-                "context": user_prompt
+                "context": user_prompt,
             }
 
             # Only add ONEX-specific fields if explicitly requested
@@ -211,7 +209,7 @@ Return ONLY valid JSON in this exact format:
                 input_data["contract"] = {
                     "name": "UserRequest",
                     "description": user_prompt,
-                    "type": "application"
+                    "type": "application",
                 }
                 input_data["node_type"] = "Compute"
 
@@ -221,14 +219,16 @@ Return ONLY valid JSON in this exact format:
                 context_reqs.append("pattern:onex-architecture")
 
             # Code generation task
-            tasks.append({
-                "task_id": "gen-1",
-                "description": f"Generate code for: {user_prompt}",
-                "agent": "coder",
-                "input_data": input_data,
-                "context_requirements": context_reqs,
-                "dependencies": []
-            })
+            tasks.append(
+                {
+                    "task_id": "gen-1",
+                    "description": f"Generate code for: {user_prompt}",
+                    "agent": "coder",
+                    "input_data": input_data,
+                    "context_requirements": context_reqs,
+                    "dependencies": [],
+                }
+            )
 
         if is_debug:
             # Build context requirements for debug
@@ -237,51 +237,50 @@ Return ONLY valid JSON in this exact format:
                 debug_context_reqs.append("pattern:onex-architecture")
 
             # Debug task
-            tasks.append({
-                "task_id": "debug-1",
-                "description": f"Debug issue: {user_prompt}",
-                "agent": "debug",
-                "input_data": {
-                    "code": "# Code to be provided by user",
-                    "issue_description": user_prompt,
-                    "file_path": "unknown.py",
-                    "language": "python"
-                },
-                "context_requirements": debug_context_reqs,
-                "dependencies": []
-            })
+            tasks.append(
+                {
+                    "task_id": "debug-1",
+                    "description": f"Debug issue: {user_prompt}",
+                    "agent": "debug",
+                    "input_data": {
+                        "code": "# Code to be provided by user",
+                        "issue_description": user_prompt,
+                        "file_path": "unknown.py",
+                        "language": "python",
+                    },
+                    "context_requirements": debug_context_reqs,
+                    "dependencies": [],
+                }
+            )
 
         if not tasks:
             # Default to generation
-            input_data = {
-                "description": user_prompt,
-                "language": "python"
-            }
+            input_data = {"description": user_prompt, "language": "python"}
 
             # Only add ONEX fields if detected
             if is_onex:
                 input_data["contract"] = user_prompt
                 input_data["node_type"] = "Compute"
 
-            tasks.append({
-                "task_id": "gen-1",
-                "description": f"Generate: {user_prompt}",
-                "agent": "coder",
-                "input_data": input_data,
-                "context_requirements": [
-                    "rag:domain-patterns"
-                ],
-                "dependencies": []
-            })
+            tasks.append(
+                {
+                    "task_id": "gen-1",
+                    "description": f"Generate: {user_prompt}",
+                    "agent": "coder",
+                    "input_data": input_data,
+                    "context_requirements": ["rag:domain-patterns"],
+                    "dependencies": [],
+                }
+            )
 
         return {
             "analysis": f"Interpreted as {'generation' if is_generation else 'debug' if is_debug else 'generation'} task",
-            "tasks": tasks
+            "tasks": tasks,
         }
 
     async def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.mcp, 'cleanup'):
+        if hasattr(self.mcp, "cleanup"):
             await self.mcp.cleanup()
 
 
@@ -299,12 +298,7 @@ async def main():
         input_str = sys.stdin.read().strip()
 
     if not input_str:
-        print(
-            json.dumps({
-                "success": False,
-                "error": "No input provided"
-            })
-        )
+        print(json.dumps({"success": False, "error": "No input provided"}))
         sys.exit(1)
 
     # Try to parse as JSON (with global_context)
@@ -321,12 +315,7 @@ async def main():
         user_prompt = input_str
 
     if not user_prompt:
-        print(
-            json.dumps({
-                "success": False,
-                "error": "No prompt provided"
-            })
-        )
+        print(json.dumps({"success": False, "error": "No prompt provided"}))
         sys.exit(1)
 
     architect = TaskArchitect()
@@ -337,7 +326,9 @@ async def main():
 
         # Debug: Check type
         if not isinstance(task_plan, dict):
-            raise RuntimeError(f"Task plan is not a dict, got: {type(task_plan)}, value: {task_plan}")
+            raise RuntimeError(
+                f"Task plan is not a dict, got: {type(task_plan)}, value: {task_plan}"
+            )
 
         # Output as JSON
         output = {
@@ -345,19 +336,13 @@ async def main():
             "prompt": user_prompt,
             "analysis": task_plan.get("analysis", "Task plan generated"),
             "tasks": task_plan.get("tasks", []),
-            "context_enabled": global_context is not None
+            "context_enabled": global_context is not None,
         }
 
         print(json.dumps(output, indent=2))
 
     except Exception as e:
-        print(
-            json.dumps({
-                "success": False,
-                "error": str(e)
-            }),
-            file=sys.stderr
-        )
+        print(json.dumps({"success": False, "error": str(e)}), file=sys.stderr)
         sys.exit(1)
 
     finally:

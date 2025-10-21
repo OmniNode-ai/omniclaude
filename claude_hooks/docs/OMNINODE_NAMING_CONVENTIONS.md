@@ -1415,8 +1415,8 @@ Key benefits:
 
 ## References
 
-- **Documentation Analysis**: `/claude-hooks-backup/docs/omninode-conventions-documentation.md`
-- **Code Analysis**: `/claude-hooks-backup/docs/omninode-conventions-codeanalysis.md`
+- **Documentation Analysis**: `/claude-hooks-backup/docs/OMNINODE-CONVENTIONS-DOCUMENTATION.md`
+- **Code Analysis**: `/claude-hooks-backup/docs/OMNINODE-CONVENTIONS-CODEANALYSIS.md`
 - **Validator Implementation**: `/claude-hooks-backup/lib/validators/naming_validator.py`
 
 ---

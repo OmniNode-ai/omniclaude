@@ -5,8 +5,8 @@ Test script for PatternTracker integration.
 Tests the pattern tracker in isolation to verify API communication.
 """
 
-import sys
 import asyncio
+import sys
 from pathlib import Path
 
 # Add current directory to path
@@ -51,7 +51,7 @@ def calculate_sum(numbers):
         if pattern_id:
             print(f"   ✓ Pattern tracked successfully: {pattern_id[:16]}...")
         else:
-            print(f"   ⚠ Pattern tracking returned None (API may be unavailable)")
+            print("   ⚠ Pattern tracking returned None (API may be unavailable)")
     except Exception as e:
         print(f"   ✗ Pattern tracking failed: {e}")
 
@@ -61,15 +61,17 @@ def calculate_sum(numbers):
         **context,
         "violations_found": 3,
         "quality_score": 0.7,
-        "reason": "Code with naming violations"
+        "reason": "Code with naming violations",
     }
 
     try:
-        pattern_id = await tracker.track_pattern_creation(sample_code, context_with_quality)
+        pattern_id = await tracker.track_pattern_creation(
+            sample_code, context_with_quality
+        )
         if pattern_id:
             print(f"   ✓ Pattern with quality metrics tracked: {pattern_id[:16]}...")
         else:
-            print(f"   ⚠ Pattern tracking returned None (API may be unavailable)")
+            print("   ⚠ Pattern tracking returned None (API may be unavailable)")
     except Exception as e:
         print(f"   ✗ Pattern tracking failed: {e}")
 
@@ -106,7 +108,7 @@ def test_sync():
         if pattern_id:
             print(f"   ✓ Sync pattern tracking: {pattern_id[:16]}...")
         else:
-            print(f"   ⚠ Sync pattern tracking returned None (API may be unavailable)")
+            print("   ⚠ Sync pattern tracking returned None (API may be unavailable)")
     except Exception as e:
         print(f"   ✗ Sync pattern tracking failed: {e}")
 

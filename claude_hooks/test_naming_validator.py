@@ -766,14 +766,22 @@ class User(BaseModel):
 """
         # In Django/Standard repo - should be valid (just PascalCase)
         validator_pep8 = NamingValidator(validation_mode="pep8")
-        violations_pep8 = validator_pep8.validate_content(code, "/path/to/django/models.py")
-        class_violations_pep8 = [v for v in violations_pep8 if v.violation_type == "class"]
+        violations_pep8 = validator_pep8.validate_content(
+            code, "/path/to/django/models.py"
+        )
+        class_violations_pep8 = [
+            v for v in violations_pep8 if v.violation_type == "class"
+        ]
         assert len(class_violations_pep8) == 0
 
         # In Omninode repo - should be invalid (needs Model prefix)
         validator_omninode = NamingValidator(validation_mode="omninode")
-        violations_omninode = validator_omninode.validate_content(code, "/path/to/omnibase_core/models.py")
-        class_violations_omninode = [v for v in violations_omninode if v.violation_type == "class"]
+        violations_omninode = validator_omninode.validate_content(
+            code, "/path/to/omnibase_core/models.py"
+        )
+        class_violations_omninode = [
+            v for v in violations_omninode if v.violation_type == "class"
+        ]
         assert len(class_violations_omninode) == 1
         assert "Model" in class_violations_omninode[0].message
 
@@ -787,14 +795,22 @@ class ModelUser(BaseModel):
 """
         # In Omninode repo - should be valid
         validator_omninode = NamingValidator(validation_mode="omninode")
-        violations_omninode = validator_omninode.validate_content(code, "/path/to/omnibase_core/models.py")
-        class_violations_omninode = [v for v in violations_omninode if v.violation_type == "class"]
+        violations_omninode = validator_omninode.validate_content(
+            code, "/path/to/omnibase_core/models.py"
+        )
+        class_violations_omninode = [
+            v for v in violations_omninode if v.violation_type == "class"
+        ]
         assert len(class_violations_omninode) == 0
 
         # In Django/Standard repo - should be valid (just PascalCase)
         validator_pep8 = NamingValidator(validation_mode="pep8")
-        violations_pep8 = validator_pep8.validate_content(code, "/path/to/django/models.py")
-        class_violations_pep8 = [v for v in violations_pep8 if v.violation_type == "class"]
+        violations_pep8 = validator_pep8.validate_content(
+            code, "/path/to/django/models.py"
+        )
+        class_violations_pep8 = [
+            v for v in violations_pep8 if v.violation_type == "class"
+        ]
         assert len(class_violations_pep8) == 0
 
     def test_auto_detection_omninode_path(self):
@@ -806,7 +822,9 @@ class User(BaseModel):
     username: str
 """
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/path/to/omnibase_core/models.py")
+        violations = validator.validate_content(
+            code, "/path/to/omnibase_core/models.py"
+        )
 
         class_violations = [v for v in violations if v.violation_type == "class"]
         assert len(class_violations) == 1
@@ -840,7 +858,9 @@ class BlogPost(models.Model):
     title = models.CharField(max_length=200)
 """
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/home/projects/my-blog/models.py")
+        violations = validator.validate_content(
+            code, "/home/projects/my-blog/models.py"
+        )
 
         # Should have no violations - both classes are valid PascalCase
         class_violations = [v for v in violations if v.violation_type == "class"]
@@ -849,9 +869,15 @@ class BlogPost(models.Model):
     def test_omninode_bridge_excluded(self):
         """omninode_bridge repository should use PEP 8, not Omninode conventions."""
         # Verify omninode_bridge is NOT detected as Omninode repo
-        assert not NamingValidator.is_omninode_repo("/path/to/omninode_bridge/models.py")
-        assert not NamingValidator.is_omninode_repo("/home/user/omninode_bridge/sync.py")
-        assert not NamingValidator.is_omninode_repo("/code/omninode_bridge/api/endpoints.py")
+        assert not NamingValidator.is_omninode_repo(
+            "/path/to/omninode_bridge/models.py"
+        )
+        assert not NamingValidator.is_omninode_repo(
+            "/home/user/omninode_bridge/sync.py"
+        )
+        assert not NamingValidator.is_omninode_repo(
+            "/code/omninode_bridge/api/endpoints.py"
+        )
 
     def test_omninode_bridge_does_not_trigger_model_prefix(self):
         """User class (without Model prefix) should be valid in omninode_bridge."""
@@ -868,7 +894,9 @@ class SyncStatus(BaseModel):
 """
         # In omninode_bridge - should use standard PEP 8 (no Model prefix required)
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/path/to/omninode_bridge/models.py")
+        violations = validator.validate_content(
+            code, "/path/to/omninode_bridge/models.py"
+        )
 
         # Should have no violations - User and SyncStatus are valid PascalCase
         class_violations = [v for v in violations if v.violation_type == "class"]
@@ -887,7 +915,9 @@ def InvalidCamelCase():  # This should fail
     pass
 """
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/path/to/omninode_bridge/sync.py")
+        violations = validator.validate_content(
+            code, "/path/to/omninode_bridge/sync.py"
+        )
 
         # Should have one violation for InvalidCamelCase (PascalCase function name)
         function_violations = [v for v in violations if v.violation_type == "function"]
@@ -904,7 +934,9 @@ class User(BaseModel):
 """
         # Test omnibase_core - should require Model prefix
         validator = NamingValidator(validation_mode="auto")
-        violations = validator.validate_content(code, "/path/to/omnibase_core/models.py")
+        violations = validator.validate_content(
+            code, "/path/to/omnibase_core/models.py"
+        )
         class_violations = [v for v in violations if v.violation_type == "class"]
         assert len(class_violations) == 1
         assert "Model" in class_violations[0].message

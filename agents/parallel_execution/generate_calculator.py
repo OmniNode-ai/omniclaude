@@ -6,14 +6,14 @@ Generate ONEX-compliant calculator using agent_coder via parallel dispatcher.
 import asyncio
 import json
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-import agent_model
 import agent_dispatcher
+import agent_model
 import trace_logger
 
 AgentTask = agent_model.AgentTask
@@ -30,32 +30,29 @@ CALCULATOR_CONTRACT = {
         "operation": {
             "type": "str",
             "description": "Arithmetic operation: 'add', 'subtract', 'multiply', 'divide'",
-            "required": True
+            "required": True,
         },
         "operand_a": {
             "type": "float",
             "description": "First operand for calculation",
-            "required": True
+            "required": True,
         },
         "operand_b": {
             "type": "float",
             "description": "Second operand for calculation",
-            "required": True
-        }
+            "required": True,
+        },
     },
     "output_model": {
-        "result": {
-            "type": "float",
-            "description": "Calculated result"
-        },
+        "result": {"type": "float", "description": "Calculated result"},
         "operation_performed": {
             "type": "str",
-            "description": "Operation that was executed"
+            "description": "Operation that was executed",
         },
         "error": {
             "type": "str | None",
-            "description": "Error message if operation failed (e.g., division by zero)"
-        }
+            "description": "Error message if operation failed (e.g., division by zero)",
+        },
     },
     "requirements": [
         "Pure transformation function (no side effects)",
@@ -64,15 +61,15 @@ CALCULATOR_CONTRACT = {
         "Return structured result with operation details",
         "Follow ONEX naming convention: NodeCalculatorCompute",
         "Include proper type hints and validation",
-        "Include docstrings with examples"
+        "Include docstrings with examples",
     ],
     "quality_requirements": {
         "type_safety": "Full type hints required",
         "error_handling": "OnexError for all error cases",
         "validation": "Input validation with clear error messages",
         "documentation": "Complete docstrings with usage examples",
-        "testing": "Include example test cases in docstring"
-    }
+        "testing": "Include example test cases in docstring",
+    },
 }
 
 
@@ -86,7 +83,7 @@ async def generate_calculator():
 
     # Create coordinator
     coordinator = ParallelCoordinator()
-    trace = get_trace_logger()
+    get_trace_logger()
 
     try:
         # Create task for agent_coder
@@ -97,18 +94,18 @@ async def generate_calculator():
                 "contract": CALCULATOR_CONTRACT,
                 "target_type": "Compute",
                 "context": "Generate a pure transformation calculator following ONEX architecture. "
-                          "Must be a Compute node (no I/O, no side effects). "
-                          "Include comprehensive error handling and validation."
-            }
+                "Must be a Compute node (no I/O, no side effects). "
+                "Include comprehensive error handling and validation.",
+            },
         )
 
         print(f"Task: {task.task_id}")
         print(f"Description: {task.description}")
-        print(f"Target Type: Compute")
+        print("Target Type: Compute")
         print()
         print("Contract Summary:")
         print(f"  Name: {CALCULATOR_CONTRACT['name']}")
-        print(f"  Operations: add, subtract, multiply, divide")
+        print("  Operations: add, subtract, multiply, divide")
         print(f"  Architecture: {CALCULATOR_CONTRACT['architecture']}")
         print()
 
@@ -142,19 +139,31 @@ async def generate_calculator():
             print("Quality Metrics:")
             print(f"  Lines Generated: {output.get('lines_generated', 0)}")
             print(f"  Quality Score: {output.get('quality_score', 0):.2f}/100")
-            print(f"  Validation Passed: {'✅' if output.get('validation_passed', False) else '❌'}")
+            print(
+                f"  Validation Passed: {'✅' if output.get('validation_passed', False) else '❌'}"
+            )
             print(f"  Node Type: {output.get('node_type', 'Unknown')}")
-            print(f"  ONEX Compliant: {'✅' if output.get('onex_compliant', False) else '❌'}")
+            print(
+                f"  ONEX Compliant: {'✅' if output.get('onex_compliant', False) else '❌'}"
+            )
             print()
 
             # Show validation results if available
             if "validation_results" in output:
                 validation = output["validation_results"]
                 print("Validation Details:")
-                print(f"  Type Safety: {'✅' if validation.get('type_safety', False) else '❌'}")
-                print(f"  Error Handling: {'✅' if validation.get('error_handling', False) else '❌'}")
-                print(f"  Documentation: {'✅' if validation.get('documentation', False) else '❌'}")
-                print(f"  ONEX Naming: {'✅' if validation.get('onex_naming', False) else '❌'}")
+                print(
+                    f"  Type Safety: {'✅' if validation.get('type_safety', False) else '❌'}"
+                )
+                print(
+                    f"  Error Handling: {'✅' if validation.get('error_handling', False) else '❌'}"
+                )
+                print(
+                    f"  Documentation: {'✅' if validation.get('documentation', False) else '❌'}"
+                )
+                print(
+                    f"  ONEX Naming: {'✅' if validation.get('onex_naming', False) else '❌'}"
+                )
                 print()
 
             # Show intelligence sources used
@@ -178,7 +187,7 @@ async def generate_calculator():
                 with open(output_file, "w") as f:
                     f.write(code)
 
-                print(f"✅ Generated code saved to:")
+                print("✅ Generated code saved to:")
                 print(f"   {output_file}")
                 print()
 
@@ -188,7 +197,7 @@ async def generate_calculator():
                 print("=" * 80)
                 print()
 
-                lines = code.split('\n')
+                lines = code.split("\n")
                 preview_lines = min(50, len(lines))
 
                 for i, line in enumerate(lines[:preview_lines], 1):
@@ -202,7 +211,7 @@ async def generate_calculator():
                 print()
 
         else:
-            print(f"❌ Generation Failed:")
+            print("❌ Generation Failed:")
             print(f"   {result.error}")
             print()
 
@@ -213,7 +222,11 @@ async def generate_calculator():
         print()
 
         if coordinator._coordinator_trace_id:
-            trace_file = Path(__file__).parent / "traces" / f"{coordinator._coordinator_trace_id}.json"
+            trace_file = (
+                Path(__file__).parent
+                / "traces"
+                / f"{coordinator._coordinator_trace_id}.json"
+            )
             print(f"Trace File: {trace_file}")
 
             if trace_file.exists():
@@ -224,15 +237,17 @@ async def generate_calculator():
                 print(f"Started: {trace_data.get('started_at')}")
                 print(f"Total Duration: {trace_data.get('total_duration_ms', 0):.2f}ms")
 
-                agents = trace_data.get('agents', {})
+                agents = trace_data.get("agents", {})
                 print(f"Agents Executed: {len(agents)}")
 
                 for agent_id, agent_data in agents.items():
                     print(f"  - {agent_data.get('agent_name', agent_id)}")
                     print(f"    Status: {agent_data.get('status', 'unknown')}")
-                    print(f"    Duration: {agent_data.get('execution_time_ms', 0):.2f}ms")
+                    print(
+                        f"    Duration: {agent_data.get('execution_time_ms', 0):.2f}ms"
+                    )
 
-                    if agent_data.get('mcp_calls'):
+                    if agent_data.get("mcp_calls"):
                         print(f"    MCP Calls: {len(agent_data['mcp_calls'])}")
 
         print()
@@ -240,6 +255,7 @@ async def generate_calculator():
     except Exception as e:
         print(f"❌ Generation failed: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
     finally:

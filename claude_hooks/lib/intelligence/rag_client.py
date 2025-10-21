@@ -9,8 +9,9 @@ Target: <500ms query time with graceful degradation
 
 import hashlib
 import time
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 import httpx
 
 
@@ -529,12 +530,12 @@ interface UserRepository {
         return {
             "size": len(self._cache),
             "ttl_seconds": self._cache_ttl,
-            "oldest_entry": min(self._cache_timestamps.values())
-            if self._cache_timestamps
-            else None,
-            "newest_entry": max(self._cache_timestamps.values())
-            if self._cache_timestamps
-            else None,
+            "oldest_entry": (
+                min(self._cache_timestamps.values()) if self._cache_timestamps else None
+            ),
+            "newest_entry": (
+                max(self._cache_timestamps.values()) if self._cache_timestamps else None
+            ),
         }
 
 

@@ -6,21 +6,20 @@ Coordinates multiple node generations using a worker pool for 3x+ throughput imp
 Handles resource management, error recovery, and progress tracking.
 """
 
-from typing import List, Dict, Any, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
-import time
 import logging
-from dataclasses import dataclass
-from uuid import UUID, uuid4
-from datetime import datetime, timezone
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+from uuid import UUID
 
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .omninode_template_engine import OmniNodeTemplateEngine
-from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .persistence import CodegenPersistence
+from .simple_prd_analyzer import SimplePRDAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GenerationJob:
     """Single node generation job"""
+
     job_id: UUID
     node_type: str
     microservice_name: str
@@ -39,6 +39,7 @@ class GenerationJob:
 @dataclass
 class GenerationResult:
     """Result of parallel generation"""
+
     job_id: UUID
     success: bool
     node_result: Optional[Dict[str, Any]]
@@ -68,7 +69,7 @@ class ParallelGenerator:
         self,
         max_workers: int = 3,
         timeout_seconds: int = 120,
-        enable_metrics: bool = True
+        enable_metrics: bool = True,
     ):
         """
         Initialize parallel generator.
@@ -84,8 +85,7 @@ class ParallelGenerator:
 
         # Worker pool (thread-based for I/O bound operations)
         self.executor = ThreadPoolExecutor(
-            max_workers=max_workers,
-            thread_name_prefix="codegen_worker"
+            max_workers=max_workers, thread_name_prefix="codegen_worker"
         )
 
         # Template engine (shared, thread-safe)
@@ -115,9 +115,7 @@ class ParallelGenerator:
         return self._template_engine
 
     async def generate_nodes_parallel(
-        self,
-        jobs: List[GenerationJob],
-        session_id: UUID
+        self, jobs: List[GenerationJob], session_id: UUID
     ) -> List[GenerationResult]:
         """
         Generate multiple nodes in parallel.
@@ -146,11 +144,7 @@ class ParallelGenerator:
 
         # Submit all jobs to worker pool
         future_to_job = {
-            self.executor.submit(
-                self._generate_node_sync,
-                job
-            ): job
-            for job in jobs
+            self.executor.submit(self._generate_node_sync, job): job for job in jobs
         }
 
         # Collect results as they complete
@@ -182,31 +176,34 @@ class ParallelGenerator:
                 self.logger.error(
                     f"Job {job.job_id} ({job.node_type}) timed out after {self.timeout_seconds}s"
                 )
-                results.append(GenerationResult(
-                    job_id=job.job_id,
-                    success=False,
-                    node_result=None,
-                    error=f"Generation timed out after {self.timeout_seconds}s",
-                    duration_ms=self.timeout_seconds * 1000,
-                    node_type=job.node_type,
-                    microservice_name=job.microservice_name
-                ))
+                results.append(
+                    GenerationResult(
+                        job_id=job.job_id,
+                        success=False,
+                        node_result=None,
+                        error=f"Generation timed out after {self.timeout_seconds}s",
+                        duration_ms=self.timeout_seconds * 1000,
+                        node_type=job.node_type,
+                        microservice_name=job.microservice_name,
+                    )
+                )
 
             except Exception as e:
                 failed_results += 1
                 self.logger.error(
-                    f"Job {job.job_id} ({job.node_type}) error: {str(e)}",
-                    exc_info=True
+                    f"Job {job.job_id} ({job.node_type}) error: {str(e)}", exc_info=True
                 )
-                results.append(GenerationResult(
-                    job_id=job.job_id,
-                    success=False,
-                    node_result=None,
-                    error=str(e),
-                    duration_ms=0,
-                    node_type=job.node_type,
-                    microservice_name=job.microservice_name
-                ))
+                results.append(
+                    GenerationResult(
+                        job_id=job.job_id,
+                        success=False,
+                        node_result=None,
+                        error=str(e),
+                        duration_ms=0,
+                        node_type=job.node_type,
+                        microservice_name=job.microservice_name,
+                    )
+                )
 
             # Update progress
             with self._progress_lock:
@@ -227,13 +224,17 @@ class ParallelGenerator:
                 successful_jobs=successful_results,
                 failed_jobs=failed_results,
                 total_duration_ms=total_duration_ms,
-                worker_count=self.max_workers
+                worker_count=self.max_workers,
             )
 
         # Calculate throughput metrics
         avg_time_per_job = total_duration_ms / len(jobs) if jobs else 0
         estimated_sequential_time = sum(r.duration_ms for r in results if r.success)
-        speedup = estimated_sequential_time / total_duration_ms if total_duration_ms > 0 else 1.0
+        speedup = (
+            estimated_sequential_time / total_duration_ms
+            if total_duration_ms > 0
+            else 1.0
+        )
 
         self.logger.info(
             f"Parallel generation complete: "
@@ -252,8 +253,8 @@ class ParallelGenerator:
                 details={
                     "total_jobs": len(jobs),
                     "failed_jobs": failed_results,
-                    "errors": [r.error for r in results if r.error]
-                }
+                    "errors": [r.error for r in results if r.error],
+                },
             )
 
         return results
@@ -286,7 +287,7 @@ class ParallelGenerator:
                         node_type=job.node_type,
                         microservice_name=job.microservice_name,
                         domain=job.domain,
-                        output_directory=job.output_directory
+                        output_directory=job.output_directory,
                     )
                 )
 
@@ -299,7 +300,7 @@ class ParallelGenerator:
                     error=None,
                     duration_ms=duration_ms,
                     node_type=job.node_type,
-                    microservice_name=job.microservice_name
+                    microservice_name=job.microservice_name,
                 )
 
             finally:
@@ -310,7 +311,7 @@ class ParallelGenerator:
 
             self.logger.error(
                 f"Node generation failed for {job.node_type}/{job.microservice_name}: {str(e)}",
-                exc_info=True
+                exc_info=True,
             )
 
             return GenerationResult(
@@ -320,7 +321,7 @@ class ParallelGenerator:
                 error=str(e),
                 duration_ms=duration_ms,
                 node_type=job.node_type,
-                microservice_name=job.microservice_name
+                microservice_name=job.microservice_name,
             )
 
     async def _track_parallel_metrics(
@@ -330,7 +331,7 @@ class ParallelGenerator:
         successful_jobs: int,
         failed_jobs: int,
         total_duration_ms: float,
-        worker_count: int
+        worker_count: int,
     ):
         """Track parallel generation metrics to database"""
         if not self.persistence:
@@ -348,9 +349,13 @@ class ParallelGenerator:
                     "total_jobs": total_jobs,
                     "successful_jobs": successful_jobs,
                     "failed_jobs": failed_jobs,
-                    "success_rate": successful_jobs / total_jobs if total_jobs > 0 else 0.0,
-                    "avg_duration_ms": total_duration_ms / total_jobs if total_jobs > 0 else 0
-                }
+                    "success_rate": (
+                        successful_jobs / total_jobs if total_jobs > 0 else 0.0
+                    ),
+                    "avg_duration_ms": (
+                        total_duration_ms / total_jobs if total_jobs > 0 else 0
+                    ),
+                },
             )
             self.logger.debug(
                 f"Tracked parallel metrics: {successful_jobs}/{total_jobs} succeeded "
@@ -370,9 +375,12 @@ class ParallelGenerator:
             return {
                 "completed_jobs": self._completed_jobs,
                 "total_jobs": self._total_jobs,
-                "progress_percent": (self._completed_jobs / self._total_jobs * 100)
-                if self._total_jobs > 0 else 0,
-                "remaining_jobs": self._total_jobs - self._completed_jobs
+                "progress_percent": (
+                    (self._completed_jobs / self._total_jobs * 100)
+                    if self._total_jobs > 0
+                    else 0
+                ),
+                "remaining_jobs": self._total_jobs - self._completed_jobs,
             }
 
     async def cleanup(self):

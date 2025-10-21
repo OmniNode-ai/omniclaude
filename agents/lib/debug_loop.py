@@ -1,5 +1,5 @@
-from typing import Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 from .db import get_pg_pool
 
@@ -27,9 +27,17 @@ async def record_workflow_step(
         return
     async with pool.acquire() as conn:
         # Convert string timestamps to datetime objects
-        started_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00')) if isinstance(started_at, str) else started_at
-        completed_dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00')) if isinstance(completed_at, str) else completed_at
-        
+        started_dt = (
+            datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if isinstance(started_at, str)
+            else started_at
+        )
+        completed_dt = (
+            datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+            if isinstance(completed_at, str)
+            else completed_at
+        )
+
         await conn.execute(
             """
             INSERT INTO workflow_steps (
@@ -50,5 +58,3 @@ async def record_workflow_step(
             success,
             error,
         )
-
-

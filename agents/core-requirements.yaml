@@ -4,7 +4,7 @@
 
 schema_version: "1.0.0"
 total_functions: 47
-categories: 11
+total_categories: 11
 compliance_level: "mandatory"
 
 # Function Categories

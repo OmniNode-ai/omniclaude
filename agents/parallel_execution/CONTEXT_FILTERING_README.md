@@ -147,7 +147,7 @@ Review available context and declare requirements:
 
 1. Read **CONTEXT_FILTERING_IMPLEMENTATION.md** for full details
 2. Run **test_context_filtering.sh** to see it in action
-3. Review **agent-parallel-dispatcher.md** for workflow details
+3. Review **AGENT-PARALLEL-DISPATCHER.md** for workflow details
 4. Integrate into your agents following examples in **agent_coder.py** and **agent_debug_intelligence.py**
 
 ## Architecture

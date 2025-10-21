@@ -13,33 +13,32 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
-import sys
 import json
-import time
 import subprocess
-import tempfile
+import sys
+import time
 import uuid
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hook_event_logger import HookEventLogger, log_userprompt, log_pretooluse, log_posttooluse
-from correlation_manager import (
-    set_correlation_id,
+from correlation_manager import (  # noqa: E402
+    clear_correlation_context,
     get_correlation_context,
-    clear_correlation_context
+    set_correlation_id,
 )
-from metadata_extractor import MetadataExtractor
-
+from hook_event_logger import HookEventLogger  # noqa: E402
+from metadata_extractor import MetadataExtractor  # noqa: E402
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def temp_hooks_dir(tmp_path):
@@ -70,17 +69,13 @@ def correlation_id():
 @pytest.fixture
 def mock_database():
     """Mock database connection for testing."""
-    with patch('hook_event_logger.psycopg2.connect') as mock_connect:
+    with patch("hook_event_logger.psycopg2.connect") as mock_connect:
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
 
-        yield {
-            "connect": mock_connect,
-            "conn": mock_conn,
-            "cursor": mock_cursor
-        }
+        yield {"connect": mock_connect, "conn": mock_conn, "cursor": mock_cursor}
 
 
 @pytest.fixture
@@ -91,13 +86,14 @@ def sample_prompts():
         "trigger_match": "help me write pytest tests for coverage",
         "ai_required": "optimize database query performance",
         "no_agent": "what's the weather today",
-        "quality_issue": "write a function without type annotations"
+        "quality_issue": "write a function without type annotations",
     }
 
 
 # ============================================================================
 # USER PROMPT SUBMIT HOOK TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestUserPromptSubmitHook:
@@ -106,12 +102,7 @@ class TestUserPromptSubmitHook:
     def test_hook_input_parsing(self, sample_prompts):
         """Test hook correctly parses JSON input."""
         prompt = sample_prompts["explicit_agent"]
-        hook_input = {
-            "prompt": prompt,
-            "metadata": {
-                "session_id": "test-session"
-            }
-        }
+        hook_input = {"prompt": prompt, "metadata": {"session_id": "test-session"}}
 
         json_input = json.dumps(hook_input)
 
@@ -121,10 +112,7 @@ class TestUserPromptSubmitHook:
             input=json_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         # Hook should succeed
@@ -148,10 +136,7 @@ class TestUserPromptSubmitHook:
             input=hook_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         assert result.returncode == 0
@@ -159,10 +144,13 @@ class TestUserPromptSubmitHook:
         # Check logs for agent detection
         log_file = HOOKS_DIR / "hook-enhanced.log"
         if log_file.exists():
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 log_content = f.read()
                 # Should log agent detection
-                assert "agent-testing" in log_content.lower() or "agent detected" in log_content.lower()
+                assert (
+                    "agent-testing" in log_content.lower()
+                    or "agent detected" in log_content.lower()
+                )
 
     def test_context_injection(self, sample_prompts):
         """Test hook injects agent context."""
@@ -174,17 +162,16 @@ class TestUserPromptSubmitHook:
             input=hook_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         output = result.stdout
 
         # Should inject agent context
         if "@agent-testing" in prompt:
-            assert "Agent Framework Context" in output or "agent-testing" in output.lower()
+            assert (
+                "Agent Framework Context" in output or "agent-testing" in output.lower()
+            )
 
     def test_correlation_id_generation(self):
         """Test hook generates correlation ID."""
@@ -196,17 +183,15 @@ class TestUserPromptSubmitHook:
             input=hook_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         output = result.stdout
 
         # Should contain correlation ID (UUID format)
         import re
-        uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+        uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
         assert re.search(uuid_pattern, output.lower())
 
     def test_no_agent_passthrough(self, sample_prompts):
@@ -219,10 +204,7 @@ class TestUserPromptSubmitHook:
             input=hook_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         assert result.returncode == 0
@@ -238,6 +220,7 @@ class TestUserPromptSubmitHook:
 # CORRELATION MANAGER TESTS
 # ============================================================================
 
+
 @pytest.mark.unit
 class TestCorrelationManager:
     """Test correlation ID management."""
@@ -248,7 +231,7 @@ class TestCorrelationManager:
             correlation_id=correlation_id,
             agent_name="agent-testing",
             agent_domain="testing",
-            prompt_preview="write tests"
+            prompt_preview="write tests",
         )
 
         context = get_correlation_context()
@@ -261,10 +244,7 @@ class TestCorrelationManager:
 
     def test_context_persistence(self, correlation_id):
         """Test correlation context persists across calls."""
-        set_correlation_id(
-            correlation_id=correlation_id,
-            agent_name="agent-testing"
-        )
+        set_correlation_id(correlation_id=correlation_id, agent_name="agent-testing")
 
         # Get context multiple times
         context1 = get_correlation_context()
@@ -305,6 +285,7 @@ class TestCorrelationManager:
 # METADATA EXTRACTOR TESTS
 # ============================================================================
 
+
 @pytest.mark.unit
 class TestMetadataExtractor:
     """Test metadata extraction."""
@@ -314,8 +295,7 @@ class TestMetadataExtractor:
         extractor = MetadataExtractor(working_dir="/test")
 
         metadata = extractor.extract_all(
-            prompt="write pytest tests for the API",
-            agent_name="agent-testing"
+            prompt="write pytest tests for the API", agent_name="agent-testing"
         )
 
         assert isinstance(metadata, dict)
@@ -362,8 +342,7 @@ class TestMetadataExtractor:
 
         corr_context = get_correlation_context()
         metadata = extractor.extract_all(
-            prompt="write tests",
-            correlation_context=corr_context
+            prompt="write tests", correlation_context=corr_context
         )
 
         assert isinstance(metadata, dict)
@@ -373,16 +352,14 @@ class TestMetadataExtractor:
 # PRETOOLUSE HOOK TESTS
 # ============================================================================
 
+
 @pytest.mark.integration
 class TestPreToolUseHook:
     """Test PreToolUse quality enforcement hook."""
 
     def test_hook_passes_non_target_tools(self):
         """Test hook passes through non-Write/Edit/MultiEdit tools."""
-        tool_info = {
-            "tool_name": "Read",
-            "tool_input": {"file_path": "/test/file.py"}
-        }
+        tool_info = {"tool_name": "Read", "tool_input": {"file_path": "/test/file.py"}}
 
         json_input = json.dumps(tool_info)
 
@@ -390,7 +367,7 @@ class TestPreToolUseHook:
             [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
             input=json_input,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # Should pass through immediately
@@ -404,8 +381,8 @@ class TestPreToolUseHook:
             "tool_name": "Write",
             "tool_input": {
                 "file_path": "/test/model_test.py",
-                "content": "def test_function():\n    pass\n"
-            }
+                "content": "def test_function():\n    pass\n",
+            },
         }
 
         json_input = json.dumps(tool_info)
@@ -414,7 +391,7 @@ class TestPreToolUseHook:
             [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
             input=json_input,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # Should intercept (exit 0 or 2)
@@ -427,10 +404,7 @@ class TestPreToolUseHook:
 
         tool_info = {
             "tool_name": "Write",
-            "tool_input": {
-                "file_path": "/test/file.py",
-                "content": "pass"
-            }
+            "tool_input": {"file_path": "/test/file.py", "content": "pass"},
         }
 
         json_input = json.dumps(tool_info)
@@ -440,10 +414,7 @@ class TestPreToolUseHook:
             input=json_input,
             capture_output=True,
             text=True,
-            env={
-                "CORRELATION_ID": correlation_id,
-                **dict(subprocess.os.environ)
-            }
+            env={"CORRELATION_ID": correlation_id, **dict(subprocess.os.environ)},
         )
 
         # Check logs for correlation ID
@@ -454,6 +425,7 @@ class TestPreToolUseHook:
 # ============================================================================
 # POSTTOOLUSE HOOK TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestPostToolUseHook:
@@ -468,7 +440,7 @@ class TestPostToolUseHook:
         tool_info = {
             "tool_name": "Write",
             "tool_input": {"file_path": str(test_file)},
-            "tool_response": {"success": True}
+            "tool_response": {"success": True},
         }
 
         json_input = json.dumps(tool_info)
@@ -477,7 +449,7 @@ class TestPostToolUseHook:
             [str(HOOKS_DIR / "post-tool-use-quality.sh")],
             input=json_input,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # Should always pass through (exit 0)
@@ -489,10 +461,7 @@ class TestPostToolUseHook:
 
     def test_hook_passes_read_tool(self):
         """Test hook passes through Read tool."""
-        tool_info = {
-            "tool_name": "Read",
-            "tool_response": {"content": "file content"}
-        }
+        tool_info = {"tool_name": "Read", "tool_response": {"content": "file content"}}
 
         json_input = json.dumps(tool_info)
 
@@ -500,7 +469,7 @@ class TestPostToolUseHook:
             [str(HOOKS_DIR / "post-tool-use-quality.sh")],
             input=json_input,
             capture_output=True,
-            text=True
+            text=True,
         )
 
         assert result.returncode == 0
@@ -511,6 +480,7 @@ class TestPostToolUseHook:
 # ============================================================================
 # DATABASE INTEGRATION TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestDatabaseIntegration:
@@ -532,13 +502,8 @@ class TestDatabaseIntegration:
             action="agent_detected",
             resource="agent",
             resource_id="agent-testing",
-            payload={
-                "agent_name": "agent-testing",
-                "confidence": 0.95
-            },
-            metadata={
-                "correlation_id": correlation_id
-            }
+            payload={"agent_name": "agent-testing", "confidence": 0.95},
+            metadata={"correlation_id": correlation_id},
         )
 
         # Should return event ID
@@ -560,7 +525,7 @@ class TestDatabaseIntegration:
                 action="test_action",
                 resource="test",
                 resource_id="test-id",
-                payload={}
+                payload={},
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
@@ -572,6 +537,7 @@ class TestDatabaseIntegration:
 # ============================================================================
 # END-TO-END WORKFLOW TESTS
 # ============================================================================
+
 
 @pytest.mark.e2e
 class TestEndToEndWorkflow:
@@ -588,10 +554,7 @@ class TestEndToEndWorkflow:
             input=hook_input,
             capture_output=True,
             text=True,
-            env={
-                "ENABLE_AI_AGENT_SELECTION": "false",
-                **dict(subprocess.os.environ)
-            }
+            env={"ENABLE_AI_AGENT_SELECTION": "false", **dict(subprocess.os.environ)},
         )
 
         assert result1.returncode == 0
@@ -602,15 +565,15 @@ class TestEndToEndWorkflow:
             "tool_name": "Write",
             "tool_input": {
                 "file_path": str(test_file),
-                "content": "def test_example():\n    pass\n"
-            }
+                "content": "def test_example():\n    pass\n",
+            },
         }
 
         result2 = subprocess.run(
             [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
             input=json.dumps(tool_info),
             capture_output=True,
-            text=True
+            text=True,
         )
 
         assert result2.returncode in [0, 2]
@@ -621,14 +584,14 @@ class TestEndToEndWorkflow:
         post_tool_info = {
             "tool_name": "Write",
             "tool_input": {"file_path": str(test_file)},
-            "tool_response": {"success": True}
+            "tool_response": {"success": True},
         }
 
         result3 = subprocess.run(
             [str(HOOKS_DIR / "post-tool-use-quality.sh")],
             input=json.dumps(post_tool_info),
             capture_output=True,
-            text=True
+            text=True,
         )
 
         assert result3.returncode == 0
@@ -657,6 +620,7 @@ class TestEndToEndWorkflow:
 # PERFORMANCE TESTS
 # ============================================================================
 
+
 @pytest.mark.performance
 class TestHookPerformance:
     """Test hook performance benchmarks."""
@@ -677,8 +641,8 @@ class TestHookPerformance:
                 text=True,
                 env={
                     "ENABLE_AI_AGENT_SELECTION": "false",
-                    **dict(subprocess.os.environ)
-                }
+                    **dict(subprocess.os.environ),
+                },
             )
 
         elapsed_ms = (time.time() - start_time) * 1000
@@ -691,10 +655,7 @@ class TestHookPerformance:
         """Test PreToolUse hook overhead."""
         tool_info = {
             "tool_name": "Write",
-            "tool_input": {
-                "file_path": str(tmp_path / "test.py"),
-                "content": "pass"
-            }
+            "tool_input": {"file_path": str(tmp_path / "test.py"), "content": "pass"},
         }
 
         json_input = json.dumps(tool_info)
@@ -707,7 +668,7 @@ class TestHookPerformance:
                 [str(HOOKS_DIR / "pre-tool-use-quality.sh")],
                 input=json_input,
                 capture_output=True,
-                text=True
+                text=True,
             )
 
         elapsed_ms = (time.time() - start_time) * 1000

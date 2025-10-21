@@ -1,0 +1,75 @@
+# Docker Compose Override Example for Local Development
+# Copy this file to docker-compose.override.yml and customize for your local setup
+# docker-compose.override.yml is automatically loaded and gitignored
+
+version: '3.9'
+
+services:
+  app:
+    # Override for development: mount source code for hot reload
+    volumes:
+      - ./agents:/app/agents
+      - ./claude_hooks:/app/claude_hooks
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./poetry.lock:/app/poetry.lock
+
+    # Development environment variables
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=debug
+      - PYTHONDONTWRITEBYTECODE=1
+      - WATCHFILES_FORCE_POLLING=true  # For file watching in containers
+
+    # Development command with auto-reload
+    command: >
+      poetry run uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --log-level debug
+
+    # Expose debugger port
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "5678:5678"  # Python debugger
+
+  postgres:
+    # Expose PostgreSQL port for local development tools
+    ports:
+      - "5432:5432"
+
+    # Development database with more verbose logging
+    environment:
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    command: >
+      postgres
+      -c log_statement=all
+      -c log_duration=on
+      -c log_connections=on
+      -c log_disconnections=on
+
+  redis:
+    # Expose Redis port for local development tools
+    ports:
+      - "6379:6379"
+
+  # Optional: Add pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: omniclaude_pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@omniclaude.local
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - app_network
+
+volumes:
+  pgadmin_data:
+    driver: local

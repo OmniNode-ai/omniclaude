@@ -7,12 +7,13 @@ Provides pattern lookup, caching, and priority ordering.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
-from .pattern_matcher import PatternType, PatternMatch
-from .crud_pattern import CRUDPattern
-from .transformation_pattern import TransformationPattern
+from typing import Any, Dict, List, Optional
+
 from .aggregation_pattern import AggregationPattern
+from .crud_pattern import CRUDPattern
 from .orchestration_pattern import OrchestrationPattern
+from .pattern_matcher import PatternMatch, PatternType
+from .transformation_pattern import TransformationPattern
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class PatternRegistry:
         self,
         pattern_match: PatternMatch,
         capability: Dict[str, Any],
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> Optional[str]:
         """
         Generate code using the matched pattern.
@@ -114,10 +115,7 @@ class PatternRegistry:
             )
             return None
 
-    def get_required_imports_for_pattern(
-        self,
-        pattern_type: PatternType
-    ) -> List[str]:
+    def get_required_imports_for_pattern(self, pattern_type: PatternType) -> List[str]:
         """
         Get required imports for a pattern.
 
@@ -134,10 +132,7 @@ class PatternRegistry:
 
         return pattern.get_required_imports()
 
-    def get_required_mixins_for_pattern(
-        self,
-        pattern_type: PatternType
-    ) -> List[str]:
+    def get_required_mixins_for_pattern(self, pattern_type: PatternType) -> List[str]:
         """
         Get required mixins for a pattern.
 
@@ -155,9 +150,7 @@ class PatternRegistry:
         return pattern.get_required_mixins()
 
     def matches_capability(
-        self,
-        pattern_type: PatternType,
-        capability: Dict[str, Any]
+        self, pattern_type: PatternType, capability: Dict[str, Any]
     ) -> float:
         """
         Check if pattern matches capability.
@@ -223,9 +216,7 @@ class PatternRegistry:
         }
 
     def can_compose_patterns(
-        self,
-        pattern1: PatternType,
-        pattern2: PatternType
+        self, pattern1: PatternType, pattern2: PatternType
     ) -> bool:
         """
         Check if two patterns can be composed together.
@@ -255,5 +246,5 @@ class PatternRegistry:
         return {
             "cache_size": len(self._pattern_cache),
             "pattern_count": len(self._patterns),
-            "patterns_registered": list(self._patterns.keys())
+            "patterns_registered": list(self._patterns.keys()),
         }

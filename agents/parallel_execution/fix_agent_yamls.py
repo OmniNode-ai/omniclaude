@@ -4,7 +4,6 @@ Fix agent YAML configuration files to match expected schema.
 Fixes intelligence_integration string → null conversions.
 """
 
-import yaml
 import sys
 from pathlib import Path
 
@@ -35,7 +34,7 @@ def fix_intelligence_integration(agent_name: str) -> bool:
 
     try:
         # Read the file
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             lines = f.readlines()
 
         # Find the intelligence_integration line
@@ -46,7 +45,7 @@ def fix_intelligence_integration(agent_name: str) -> bool:
                 break
 
         if intel_line_idx is None:
-            print(f"  ℹ️  No intelligence_integration field found")
+            print("  ℹ️  No intelligence_integration field found")
             return True
 
         # Check if it's a multi-line string (|) or a file reference
@@ -55,7 +54,11 @@ def fix_intelligence_integration(agent_name: str) -> bool:
             end_idx = len(lines)
             for i in range(intel_line_idx + 1, len(lines)):
                 # Check if line starts with a top-level key (no indentation)
-                if lines[i].strip() and not lines[i].startswith(" ") and not lines[i].startswith("\t"):
+                if (
+                    lines[i].strip()
+                    and not lines[i].startswith(" ")
+                    and not lines[i].startswith("\t")
+                ):
                     if ":" in lines[i]:
                         end_idx = i
                         break
@@ -73,11 +76,11 @@ def fix_intelligence_integration(agent_name: str) -> bool:
             new_lines[intel_line_idx] = "intelligence_integration: null\n"
 
         else:
-            print(f"  ℹ️  intelligence_integration is not a string")
+            print("  ℹ️  intelligence_integration is not a string")
             return True
 
         # Write back
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             f.writelines(new_lines)
 
         print(f"  ✅ Fixed {agent_name}")

@@ -38,14 +38,14 @@ load_dotenv()
 async def run_migrations():
     dsn = f'postgresql://{os.getenv(\"POSTGRES_USER\")}:{os.getenv(\"POSTGRES_PASSWORD\")}@{os.getenv(\"POSTGRES_HOST\")}:{os.getenv(\"POSTGRES_PORT\")}/{os.getenv(\"POSTGRES_DB\")}'
     conn = await asyncpg.connect(dsn)
-    
+
     # Run migrations
     with open('agents/migrations/001_core.sql', 'r') as f:
         await conn.execute(f.read())
-    
+
     with open('agents/migrations/002_performance_optimization.sql', 'r') as f:
         await conn.execute(f.read())
-    
+
     await conn.close()
     print('Migrations applied successfully')
 
@@ -358,14 +358,14 @@ async def optimized_workflow(user_prompt, tasks_data):
         user_prompt=user_prompt,
         tasks_data=tasks_data
     )
-    
+
     if not validation_result["is_valid"]:
         return {"error": "Invalid input", "deficiencies": validation_result["deficiencies"]}
-    
+
     # Use sanitized inputs
     sanitized_prompt = validation_result["sanitized_prompt"]
     sanitized_tasks = validation_result["sanitized_tasks"]
-    
+
     # Track performance
     run_id = str(uuid.uuid4())
     await performance_monitor.track_phase_performance(
@@ -373,7 +373,7 @@ async def optimized_workflow(user_prompt, tasks_data):
         phase="input_validation",
         metadata={"validation": "success"}
     )
-    
+
     # Context gathering with optimization
     context_items = await context_manager.gather_global_context(
         user_prompt=sanitized_prompt,
@@ -381,7 +381,7 @@ async def optimized_workflow(user_prompt, tasks_data):
         max_rag_results=5,
         enable_optimization=True
     )
-    
+
     # Quorum validation with circuit breaker
     try:
         quorum_result = await call_with_breaker(
@@ -392,7 +392,7 @@ async def optimized_workflow(user_prompt, tasks_data):
     except Exception as e:
         # Handle circuit breaker open
         return {"error": "Quorum validation failed", "details": str(e)}
-    
+
     # Execute with retry
     try:
         result = await execute_with_retry(
@@ -402,7 +402,7 @@ async def optimized_workflow(user_prompt, tasks_data):
         )
     except Exception as e:
         return {"error": "Workflow execution failed", "details": str(e)}
-    
+
     return result
 ```
 

@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.lib.contract_generator import ContractGenerator
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_ANALYSIS_RESULT,
     COMPUTE_ANALYSIS_RESULT,
-    SAMPLE_CONTRACT_WITH_CRUD
+    EFFECT_ANALYSIS_RESULT,
+    SAMPLE_CONTRACT_WITH_CRUD,
 )
 
 
@@ -32,10 +32,7 @@ async def test_effect_generation():
 
     # Generate contract
     contract_result = await contract_gen.generate_contract_yaml(
-        EFFECT_ANALYSIS_RESULT,
-        "EFFECT",
-        "user_management",
-        "identity"
+        EFFECT_ANALYSIS_RESULT, "EFFECT", "user_management", "identity"
     )
 
     # Generate implementation
@@ -44,11 +41,13 @@ async def test_effect_generation():
         EFFECT_ANALYSIS_RESULT,
         "EFFECT",
         "user_management",
-        "identity"
+        "identity",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
-    print(f"✓ Found class definition: {'class NodeUserManagementEffectService' in code}")
+    print(
+        f"✓ Found class definition: {'class NodeUserManagementEffectService' in code}"
+    )
     print(f"✓ Found execute_effect: {'async def execute_effect' in code}")
     print(f"✓ Found validation: {'async def _validate_input' in code}")
     print(f"✓ Found health check: {'async def get_health_status' in code}")
@@ -76,10 +75,7 @@ async def test_compute_generation():
 
     # Generate contract
     contract_result = await contract_gen.generate_contract_yaml(
-        COMPUTE_ANALYSIS_RESULT,
-        "COMPUTE",
-        "csv_json_transformer",
-        "data_processing"
+        COMPUTE_ANALYSIS_RESULT, "COMPUTE", "csv_json_transformer", "data_processing"
     )
 
     # Generate implementation
@@ -88,13 +84,17 @@ async def test_compute_generation():
         COMPUTE_ANALYSIS_RESULT,
         "COMPUTE",
         "csv_json_transformer",
-        "data_processing"
+        "data_processing",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
-    print(f"✓ Found class definition: {'class NodeCsvJsonTransformerComputeService' in code}")
+    print(
+        f"✓ Found class definition: {'class NodeCsvJsonTransformerComputeService' in code}"
+    )
     print(f"✓ Found execute_compute: {'async def execute_compute' in code}")
-    print(f"✓ Found COMPUTE hints: {'COMPUTE Node: Implement pure transformation logic' in code}")
+    print(
+        f"✓ Found COMPUTE hints: {'COMPUTE Node: Implement pure transformation logic' in code}"
+    )
 
     return code
 
@@ -113,7 +113,7 @@ async def test_crud_pattern_detection():
         EFFECT_ANALYSIS_RESULT,
         "EFFECT",
         "user_service",
-        "user_management"
+        "user_management",
     )
 
     print(f"\n✓ Generated {len(code)} characters of code")
@@ -142,12 +142,12 @@ async def test_syntax_validation():
         EFFECT_ANALYSIS_RESULT,
         "EFFECT",
         "user_service",
-        "user_management"
+        "user_management",
     )
 
     # Try to compile the code
     try:
-        compile(code, '<generated>', 'exec')
+        compile(code, "<generated>", "exec")
         print("\n✓ Generated code has valid Python syntax")
         return True
     except SyntaxError as e:
@@ -173,7 +173,7 @@ async def main():
         await test_crud_pattern_detection()
 
         # Test syntax validation
-        syntax_valid = await test_syntax_validation()
+        await test_syntax_validation()
 
         print("\n" + "=" * 80)
         print("ALL TESTS PASSED ✓")
@@ -184,6 +184,7 @@ async def main():
     except Exception as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

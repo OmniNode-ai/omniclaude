@@ -13,23 +13,19 @@ Run tests:
     python -m pytest lib/test_resilience.py -v
 """
 
-import pytest
 import asyncio
-import time
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from lib.resilience import (
-    ResilientExecutor,
     CircuitBreaker,
     PatternCache,
     Phase4HealthChecker,
-    graceful_tracking,
     ResilientAPIClient,
-    CachedPatternEvent
+    ResilientExecutor,
+    graceful_tracking,
 )
-
 
 # ============================================================================
 # ResilientExecutor Tests
@@ -48,7 +44,7 @@ async def test_fire_and_forget_success():
         return "done"
 
     # Fire and forget
-    task = executor.fire_and_forget(successful_task())
+    executor.fire_and_forget(successful_task())
 
     # Should not block
     assert len(result_holder) == 0
@@ -74,7 +70,7 @@ async def test_fire_and_forget_error_handling():
         raise ValueError("Task failed")
 
     # Should not raise
-    task = executor.fire_and_forget(failing_task())
+    executor.fire_and_forget(failing_task())
 
     # Wait for completion
     await asyncio.sleep(0.05)
@@ -217,7 +213,7 @@ async def test_cache_pattern_event(tmp_path):
     event = {
         "event_type": "pattern_created",
         "pattern_id": "test-001",
-        "pattern_data": {"code": "function test() {}"}
+        "pattern_data": {"code": "function test() {}"},
     }
 
     event_id = await cache.cache_pattern_event(event)
@@ -243,11 +239,13 @@ async def test_cache_sync_events(tmp_path):
 
     # Create cached events
     for i in range(3):
-        await cache.cache_pattern_event({
-            "event_type": "pattern_created",
-            "pattern_id": f"test-{i:03d}",
-            "pattern_data": {}
-        })
+        await cache.cache_pattern_event(
+            {
+                "event_type": "pattern_created",
+                "pattern_id": f"test-{i:03d}",
+                "pattern_data": {},
+            }
+        )
 
     # Mock API client
     api_client = MagicMock()
@@ -271,17 +269,13 @@ async def test_cache_sync_with_failures(tmp_path):
     cache = PatternCache(cache_dir=tmp_path / "test_cache")
 
     # Create cached events
-    await cache.cache_pattern_event({
-        "event_type": "pattern_created",
-        "pattern_id": "test-001",
-        "pattern_data": {}
-    })
+    await cache.cache_pattern_event(
+        {"event_type": "pattern_created", "pattern_id": "test-001", "pattern_data": {}}
+    )
 
     # Mock API client that fails
     api_client = MagicMock()
-    api_client.track_lineage = AsyncMock(
-        side_effect=ConnectionError("API unavailable")
-    )
+    api_client.track_lineage = AsyncMock(side_effect=ConnectionError("API unavailable"))
 
     # Sync should handle failure
     stats = await cache.sync_cached_events(api_client)
@@ -301,11 +295,9 @@ async def test_cache_cleanup_old_events(tmp_path):
     cache = PatternCache(cache_dir=tmp_path / "test_cache", max_age_days=1)
 
     # Create an old event (mock timestamp)
-    event_id = await cache.cache_pattern_event({
-        "event_type": "pattern_created",
-        "pattern_id": "old-001",
-        "pattern_data": {}
-    })
+    await cache.cache_pattern_event(
+        {"event_type": "pattern_created", "pattern_id": "old-001", "pattern_data": {}}
+    )
 
     # Manually modify timestamp to make it old
     cache_files = list(cache.cache_dir.glob("pending_*.json"))
@@ -316,10 +308,11 @@ async def test_cache_cleanup_old_events(tmp_path):
 
     # Set old timestamp (2 days ago)
     from datetime import datetime, timedelta
+
     old_time = datetime.utcnow() - timedelta(days=2)
     event_data["timestamp"] = old_time.isoformat()
 
-    with open(cache_files[0], 'w') as f:
+    with open(cache_files[0], "w") as f:
         json.dump(event_data, f)
 
     # Run cleanup
@@ -340,7 +333,7 @@ async def test_cache_cleanup_old_events(tmp_path):
 @pytest.mark.asyncio
 async def test_health_checker_healthy_api():
     """Test health checker with healthy API"""
-    with patch('httpx.AsyncClient') as mock_client:
+    with patch("httpx.AsyncClient") as mock_client:
         # Mock successful health check
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -361,7 +354,7 @@ async def test_health_checker_healthy_api():
 @pytest.mark.asyncio
 async def test_health_checker_unhealthy_api():
     """Test health checker with unhealthy API"""
-    with patch('httpx.AsyncClient') as mock_client:
+    with patch("httpx.AsyncClient") as mock_client:
         # Mock failed health check
         mock_client.return_value.__aenter__.return_value.get = AsyncMock(
             side_effect=ConnectionError("Connection refused")
@@ -378,7 +371,7 @@ async def test_health_checker_unhealthy_api():
 @pytest.mark.asyncio
 async def test_health_checker_caching():
     """Test health check result caching"""
-    with patch('httpx.AsyncClient') as mock_client:
+    with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"status": "healthy"}
@@ -387,8 +380,7 @@ async def test_health_checker_caching():
         mock_client.return_value.__aenter__.return_value.get = mock_get
 
         checker = Phase4HealthChecker(
-            base_url="http://localhost:8053",
-            check_interval=60
+            base_url="http://localhost:8053", check_interval=60
         )
 
         # First check
@@ -451,7 +443,7 @@ async def test_graceful_tracking_custom_fallback():
 @pytest.mark.asyncio
 async def test_resilient_client_successful_tracking(tmp_path):
     """Test resilient client with successful API call"""
-    with patch('httpx.AsyncClient') as mock_http:
+    with patch("httpx.AsyncClient") as mock_http:
         # Mock health check
         health_response = MagicMock()
         health_response.status_code = 200
@@ -462,7 +454,7 @@ async def test_resilient_client_successful_tracking(tmp_path):
         track_response.status_code = 200
         track_response.json.return_value = {
             "success": True,
-            "data": {"node_id": "node-123"}
+            "data": {"node_id": "node-123"},
         }
 
         async def mock_request(url, **kwargs):
@@ -485,7 +477,7 @@ async def test_resilient_client_successful_tracking(tmp_path):
         result = await client.track_pattern_resilient(
             event_type="pattern_created",
             pattern_id="test-001",
-            pattern_data={"code": "test"}
+            pattern_data={"code": "test"},
         )
 
         assert result["success"] is True
@@ -495,7 +487,7 @@ async def test_resilient_client_successful_tracking(tmp_path):
 @pytest.mark.asyncio
 async def test_resilient_client_caches_when_api_down(tmp_path):
     """Test resilient client caches events when API is down"""
-    with patch('httpx.AsyncClient') as mock_http:
+    with patch("httpx.AsyncClient") as mock_http:
         # Mock failed health check
         mock_http.return_value.__aenter__.return_value.get = AsyncMock(
             side_effect=ConnectionError("Connection refused")
@@ -509,7 +501,7 @@ async def test_resilient_client_caches_when_api_down(tmp_path):
         result = await client.track_pattern_resilient(
             event_type="pattern_created",
             pattern_id="test-001",
-            pattern_data={"code": "test"}
+            pattern_data={"code": "test"},
         )
 
         assert result["success"] is False
@@ -542,7 +534,7 @@ async def test_resilient_client_stats():
 @pytest.mark.asyncio
 async def test_complete_resilience_workflow(tmp_path):
     """Test complete resilience workflow from cache to sync"""
-    with patch('httpx.AsyncClient') as mock_http:
+    with patch("httpx.AsyncClient") as mock_http:
         # Stage 1: API is down - events get cached
         mock_http.return_value.__aenter__.return_value.get = AsyncMock(
             side_effect=ConnectionError("Connection refused")
@@ -556,7 +548,7 @@ async def test_complete_resilience_workflow(tmp_path):
             result = await client.track_pattern_resilient(
                 event_type="pattern_created",
                 pattern_id=f"test-{i:03d}",
-                pattern_data={"code": f"test {i}"}
+                pattern_data={"code": f"test {i}"},
             )
             assert result["cached"] is True
 

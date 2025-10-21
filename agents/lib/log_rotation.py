@@ -27,14 +27,11 @@ Usage:
 """
 
 import logging
-import os
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
-from typing import Optional, Literal
-from datetime import timedelta
+from typing import Literal, Optional
 
-from .structured_logger import StructuredLogger, JSONFormatter
-
+from .structured_logger import JSONFormatter, StructuredLogger
 
 LogRotationType = Literal["size", "time"]
 
@@ -63,7 +60,7 @@ class LogRotationConfig:
         when: str = "midnight",
         interval: int = 1,
         encoding: str = "utf-8",
-        compression: bool = False
+        compression: bool = False,
     ):
         self.log_dir = log_dir
         self.rotation_type = rotation_type
@@ -82,7 +79,7 @@ class LogRotationConfig:
             rotation_type="size",
             max_bytes=10 * 1024 * 1024,  # 10MB
             backup_count=5,
-            compression=False
+            compression=False,
         )
 
     @classmethod
@@ -93,11 +90,13 @@ class LogRotationConfig:
             rotation_type="size",
             max_bytes=100 * 1024 * 1024,  # 100MB
             backup_count=30,
-            compression=True
+            compression=True,
         )
 
     @classmethod
-    def daily_rotation(cls, log_dir: str = "./logs", retention_days: int = 30) -> "LogRotationConfig":
+    def daily_rotation(
+        cls, log_dir: str = "./logs", retention_days: int = 30
+    ) -> "LogRotationConfig":
         """Daily rotation configuration"""
         return cls(
             log_dir=log_dir,
@@ -105,7 +104,7 @@ class LogRotationConfig:
             when="midnight",
             interval=1,
             backup_count=retention_days,
-            compression=True
+            compression=True,
         )
 
 
@@ -115,7 +114,7 @@ def configure_file_rotation(
     log_dir: Optional[str] = None,
     max_bytes: Optional[int] = None,
     backup_count: Optional[int] = None,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ):
     """
     Configure file rotation for a structured logger.
@@ -142,7 +141,7 @@ def configure_file_rotation(
         config = LogRotationConfig(
             log_dir=log_dir or "./logs",
             max_bytes=max_bytes or 100 * 1024 * 1024,
-            backup_count=backup_count or 30
+            backup_count=backup_count or 30,
         )
 
     # Create log directory if it doesn't exist
@@ -160,7 +159,7 @@ def configure_file_rotation(
             filename=str(log_file),
             maxBytes=config.max_bytes,
             backupCount=config.backup_count,
-            encoding=config.encoding
+            encoding=config.encoding,
         )
     else:  # time-based rotation
         handler = TimedRotatingFileHandler(
@@ -168,7 +167,7 @@ def configure_file_rotation(
             when=config.when,
             interval=config.interval,
             backupCount=config.backup_count,
-            encoding=config.encoding
+            encoding=config.encoding,
         )
 
     # Set JSON formatter
@@ -180,7 +179,7 @@ def configure_file_rotation(
 
 def configure_global_rotation(
     config: Optional[LogRotationConfig] = None,
-    environment: Literal["development", "production"] = "development"
+    environment: Literal["development", "production"] = "development",
 ):
     """
     Configure rotation for all loggers globally.
@@ -228,7 +227,7 @@ def configure_global_rotation(
             filename=str(log_path / "agent_framework.log"),
             maxBytes=config.max_bytes,
             backupCount=config.backup_count,
-            encoding=config.encoding
+            encoding=config.encoding,
         )
     else:  # time-based rotation
         handler = TimedRotatingFileHandler(
@@ -236,7 +235,7 @@ def configure_global_rotation(
             when=config.when,
             interval=config.interval,
             backupCount=config.backup_count,
-            encoding=config.encoding
+            encoding=config.encoding,
         )
 
     # Set JSON formatter
@@ -300,7 +299,7 @@ def get_log_stats(log_dir: str) -> dict:
             "total_size_bytes": 0,
             "total_size_mb": 0.0,
             "oldest_file": None,
-            "newest_file": None
+            "newest_file": None,
         }
 
     log_files = list(log_path.glob("*.log*"))
@@ -310,7 +309,7 @@ def get_log_stats(log_dir: str) -> dict:
             "total_size_bytes": 0,
             "total_size_mb": 0.0,
             "oldest_file": None,
-            "newest_file": None
+            "newest_file": None,
         }
 
     total_size = sum(f.stat().st_size for f in log_files)
@@ -322,5 +321,5 @@ def get_log_stats(log_dir: str) -> dict:
         "total_size_bytes": total_size,
         "total_size_mb": total_size / (1024 * 1024),
         "oldest_file": str(oldest_file),
-        "newest_file": str(newest_file)
+        "newest_file": str(newest_file),
     }

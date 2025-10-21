@@ -10,14 +10,15 @@ This module provides decision intelligence for PreToolUse hooks without AI infer
 
 import os
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class ToolSelectionReasoning:
     """Captured reasoning for tool selection."""
+
     tool_chosen: str
     selection_reason: str
     alternative_tools_considered: List[Dict[str, str]] = field(default_factory=list)
@@ -31,6 +32,7 @@ class ToolSelectionReasoning:
 @dataclass
 class QualityCheckMetadata:
     """Quality check metadata for enhanced logging."""
+
     checks_passed: List[str] = field(default_factory=list)
     checks_warnings: List[str] = field(default_factory=list)
     checks_failed: List[str] = field(default_factory=list)
@@ -85,9 +87,7 @@ class ToolSelectionIntelligence:
         self.start_time = None
 
     def analyze_tool_selection(
-        self,
-        tool_name: str,
-        tool_input: Dict[str, Any]
+        self, tool_name: str, tool_input: Dict[str, Any]
     ) -> ToolSelectionReasoning:
         """
         Analyze tool selection and generate reasoning metadata.
@@ -130,10 +130,12 @@ class ToolSelectionIntelligence:
             expected_execution_path=execution_path,
             estimated_time_ms=estimated_time,
             expected_side_effects=side_effects,
-            analysis_time_ms=analysis_time_ms
+            analysis_time_ms=analysis_time_ms,
         )
 
-    def _infer_selection_reason(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
+    def _infer_selection_reason(
+        self, tool_name: str, tool_input: Dict[str, Any]
+    ) -> str:
         """
         Infer why this tool was selected using heuristics.
 
@@ -172,9 +174,7 @@ class ToolSelectionIntelligence:
         return base_reason
 
     def _gather_context_info(
-        self,
-        tool_name: str,
-        tool_input: Dict[str, Any]
+        self, tool_name: str, tool_input: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Gather context information about the operation.
@@ -198,14 +198,20 @@ class ToolSelectionIntelligence:
                 try:
                     path = Path(file_path)
                     context["file_exists"] = path.exists()
-                    context["file_writable"] = os.access(path.parent, os.W_OK) if not path.exists() else os.access(path, os.W_OK)
+                    context["file_writable"] = (
+                        os.access(path.parent, os.W_OK)
+                        if not path.exists()
+                        else os.access(path, os.W_OK)
+                    )
                     context["directory_exists"] = path.parent.exists()
 
                     if path.exists():
                         context["file_size_bytes"] = path.stat().st_size
                         context["file_extension"] = path.suffix
                     else:
-                        context["file_extension"] = path.suffix if path.suffix else "unknown"
+                        context["file_extension"] = (
+                            path.suffix if path.suffix else "unknown"
+                        )
 
                 except Exception:
                     # Fast fail - don't block on context gathering
@@ -222,7 +228,9 @@ class ToolSelectionIntelligence:
         # Search tools - extract search scope
         elif tool_name in ("Glob", "Grep"):
             pattern = tool_input.get("pattern", "")
-            context["pattern_complexity"] = "complex" if "*" in pattern or "?" in pattern else "simple"
+            context["pattern_complexity"] = (
+                "complex" if "*" in pattern or "?" in pattern else "simple"
+            )
             context["search_scope"] = tool_input.get("path", "current_directory")
 
         return context
@@ -253,10 +261,7 @@ class ToolSelectionIntelligence:
         return any(pattern in command for pattern in destructive_patterns)
 
     def _get_alternative_tools(
-        self,
-        tool_name: str,
-        context: Dict[str, Any],
-        tool_input: Dict[str, Any]
+        self, tool_name: str, context: Dict[str, Any], tool_input: Dict[str, Any]
     ) -> List[Dict[str, str]]:
         """
         Determine alternative tools that could have been used.
@@ -276,71 +281,74 @@ class ToolSelectionIntelligence:
         if tool_name == "Write":
             # Write could have been Edit if file exists
             if context.get("file_exists", False):
-                alternatives.append({
-                    "tool": "Edit",
-                    "reason_not_used": "full_rewrite_preferred_over_partial_edit"
-                })
+                alternatives.append(
+                    {
+                        "tool": "Edit",
+                        "reason_not_used": "full_rewrite_preferred_over_partial_edit",
+                    }
+                )
 
         elif tool_name == "Edit":
             # Edit could have been Write for full rewrites
             if context.get("file_exists", True):
-                alternatives.append({
-                    "tool": "Write",
-                    "reason_not_used": "targeted_edit_preferred_over_full_rewrite"
-                })
+                alternatives.append(
+                    {
+                        "tool": "Write",
+                        "reason_not_used": "targeted_edit_preferred_over_full_rewrite",
+                    }
+                )
 
         elif tool_name == "Bash":
             command = tool_input.get("command", "")
 
             # Bash for reading could have been Read
             if command.startswith("cat "):
-                alternatives.append({
-                    "tool": "Read",
-                    "reason_not_used": "command_output_needed_not_raw_file"
-                })
+                alternatives.append(
+                    {
+                        "tool": "Read",
+                        "reason_not_used": "command_output_needed_not_raw_file",
+                    }
+                )
 
             # Bash for finding could have been Glob
             if command.startswith("find "):
-                alternatives.append({
-                    "tool": "Glob",
-                    "reason_not_used": "complex_find_logic_required"
-                })
+                alternatives.append(
+                    {"tool": "Glob", "reason_not_used": "complex_find_logic_required"}
+                )
 
             # Bash for searching could have been Grep
             if command.startswith("grep "):
-                alternatives.append({
-                    "tool": "Grep",
-                    "reason_not_used": "command_line_grep_preferred"
-                })
+                alternatives.append(
+                    {"tool": "Grep", "reason_not_used": "command_line_grep_preferred"}
+                )
 
         elif tool_name == "Read":
             # Read could have been Bash cat
-            alternatives.append({
-                "tool": "Bash",
-                "reason_not_used": "direct_read_more_efficient_than_cat"
-            })
+            alternatives.append(
+                {
+                    "tool": "Bash",
+                    "reason_not_used": "direct_read_more_efficient_than_cat",
+                }
+            )
 
         elif tool_name == "Glob":
             # Glob could have been Bash find
-            alternatives.append({
-                "tool": "Bash",
-                "reason_not_used": "glob_pattern_simpler_than_find"
-            })
+            alternatives.append(
+                {"tool": "Bash", "reason_not_used": "glob_pattern_simpler_than_find"}
+            )
 
         elif tool_name == "Grep":
             # Grep could have been Bash grep
-            alternatives.append({
-                "tool": "Bash",
-                "reason_not_used": "structured_grep_preferred_over_command"
-            })
+            alternatives.append(
+                {
+                    "tool": "Bash",
+                    "reason_not_used": "structured_grep_preferred_over_command",
+                }
+            )
 
         return alternatives
 
-    def _predict_execution_path(
-        self,
-        tool_name: str,
-        context: Dict[str, Any]
-    ) -> str:
+    def _predict_execution_path(self, tool_name: str, context: Dict[str, Any]) -> str:
         """
         Predict execution path based on tool and context.
 
@@ -384,7 +392,7 @@ class ToolSelectionIntelligence:
 def create_enhanced_metadata(
     tool_name: str,
     tool_input: Dict[str, Any],
-    quality_checks: Optional[QualityCheckMetadata] = None
+    quality_checks: Optional[QualityCheckMetadata] = None,
 ) -> Dict[str, Any]:
     """
     Create enhanced metadata for PreToolUse logging.
@@ -417,9 +425,7 @@ def create_enhanced_metadata(
             "estimated_time_ms": reasoning.estimated_time_ms,
             "expected_side_effects": reasoning.expected_side_effects,
         },
-        "performance": {
-            "analysis_time_ms": round(reasoning.analysis_time_ms, 2)
-        }
+        "performance": {"analysis_time_ms": round(reasoning.analysis_time_ms, 2)},
     }
 
     # Add quality check results if available
@@ -449,8 +455,8 @@ if __name__ == "__main__":
             "tool_name": "Write",
             "tool_input": {
                 "file_path": "/tmp/test_new_file.py",
-                "content": "# Test content"
-            }
+                "content": "# Test content",
+            },
         },
         {
             "name": "Edit (existing file)",
@@ -458,22 +464,18 @@ if __name__ == "__main__":
             "tool_input": {
                 "file_path": "/etc/hosts",
                 "old_string": "localhost",
-                "new_string": "127.0.0.1"
-            }
+                "new_string": "127.0.0.1",
+            },
         },
         {
             "name": "Bash (git command)",
             "tool_name": "Bash",
-            "tool_input": {
-                "command": "git status"
-            }
+            "tool_input": {"command": "git status"},
         },
         {
             "name": "Read",
             "tool_name": "Read",
-            "tool_input": {
-                "file_path": "/etc/hosts"
-            }
+            "tool_input": {"file_path": "/etc/hosts"},
         },
     ]
 
@@ -487,14 +489,14 @@ if __name__ == "__main__":
             checks_warnings=["missing_docstring"],
             violations_found=3,
             corrections_suggested=2,
-            enforcement_mode="warn"
+            enforcement_mode="warn",
         )
 
         # Generate enhanced metadata
         metadata = create_enhanced_metadata(
             tool_name=test_case["tool_name"],
             tool_input=test_case["tool_input"],
-            quality_checks=quality_checks
+            quality_checks=quality_checks,
         )
 
         print(json.dumps(metadata, indent=2))

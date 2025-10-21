@@ -8,6 +8,7 @@ from enum import Enum
 
 class EnumNodeType(str, Enum):
     """Mock node type enum for testing"""
+
     EFFECT = "EFFECT"
     COMPUTE = "COMPUTE"
     REDUCER = "REDUCER"

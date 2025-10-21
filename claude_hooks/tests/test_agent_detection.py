@@ -11,28 +11,24 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import pytest
 import sys
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
-from hybrid_agent_selector import (
-    HybridAgentSelector,
-    AgentSelection,
-    SelectionMethod
-)
-from agent_detector import AgentDetector
-from ai_agent_selector import AIAgentSelector
-
+from agent_detector import AgentDetector  # noqa: E402
+from hybrid_agent_selector import HybridAgentSelector, SelectionMethod  # noqa: E402
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def agent_detector():
@@ -43,10 +39,7 @@ def agent_detector():
 @pytest.fixture
 def hybrid_selector():
     """Create HybridAgentSelector with AI disabled for fast testing."""
-    return HybridAgentSelector(
-        enable_ai=False,
-        confidence_threshold=0.8
-    )
+    return HybridAgentSelector(enable_ai=False, confidence_threshold=0.8)
 
 
 @pytest.fixture
@@ -56,7 +49,7 @@ def hybrid_selector_with_ai():
         enable_ai=True,
         confidence_threshold=0.8,
         model_preference="5090",
-        timeout_ms=3000
+        timeout_ms=3000,
     )
 
 
@@ -86,14 +79,14 @@ def test_agent_config(tmp_path):
                     "pytest",
                     "unittest",
                     "test coverage",
-                    "test suite"
-                ]
+                    "test suite",
+                ],
             }
         }
     }
 
     registry_file = registry_dir / "agent-registry.yaml"
-    with open(registry_file, 'w') as f:
+    with open(registry_file, "w") as f:
         yaml.dump(registry, f)
 
     # Create agent config file
@@ -107,25 +100,28 @@ def test_agent_config(tmp_path):
             "pytest",
             "unittest",
             "test coverage",
-            "test suite"
+            "test suite",
         ],
         "domain_query": "comprehensive test strategy quality assurance",
-        "implementation_query": "pytest testing patterns automation"
+        "implementation_query": "pytest testing patterns automation",
     }
 
     config_file = config_dir / "agent-testing.yaml"
-    with open(config_file, 'w') as f:
+    with open(config_file, "w") as f:
         yaml.dump(agent_config, f)
 
     # Patch both registry and config paths
-    with patch.object(AgentDetector, 'AGENT_REGISTRY_PATH', registry_file), \
-         patch.object(AgentDetector, 'AGENT_CONFIG_DIR', config_dir):
+    with (
+        patch.object(AgentDetector, "AGENT_REGISTRY_PATH", registry_file),
+        patch.object(AgentDetector, "AGENT_CONFIG_DIR", config_dir),
+    ):
         yield config_file
 
 
 # ============================================================================
 # STAGE 1: PATTERN DETECTION TESTS
 # ============================================================================
+
 
 @pytest.mark.unit
 class TestPatternDetection:
@@ -174,10 +170,10 @@ class TestPatternDetection:
         """Test malformed patterns don't match."""
         malformed_prompts = [
             "@ agent-testing",  # Space after @
-            "@agent testing",   # Space in name
-            "@agent_testing",   # Underscore instead of hyphen
-            "use agent testing", # Space in name
-            "agentesting",      # No separator
+            "@agent testing",  # Space in name
+            "@agent_testing",  # Underscore instead of hyphen
+            "use agent testing",  # Space in name
+            "agentesting",  # No separator
         ]
 
         for prompt in malformed_prompts:
@@ -202,7 +198,7 @@ class TestPatternDetection:
             "help me write some tests",
             "what's the weather today",
             "explain how agents work",
-            "testing without agent reference"
+            "testing without agent reference",
         ]
 
         for prompt in prompts:
@@ -212,6 +208,7 @@ class TestPatternDetection:
 # ============================================================================
 # STAGE 2: TRIGGER MATCHING TESTS
 # ============================================================================
+
 
 @pytest.mark.unit
 class TestTriggerMatching:
@@ -264,11 +261,7 @@ class TestTriggerMatching:
         # Create selector after config is patched
         selector = HybridAgentSelector(enable_ai=False)
 
-        prompts = [
-            "write PYTEST tests",
-            "Write Pytest Tests",
-            "WRITE pytest TESTS"
-        ]
+        prompts = ["write PYTEST tests", "Write Pytest Tests", "WRITE pytest TESTS"]
 
         for prompt in prompts:
             result = selector._stage_2_triggers(prompt)
@@ -320,6 +313,7 @@ class TestTriggerMatching:
 # STAGE 3: AI SELECTION TESTS
 # ============================================================================
 
+
 @pytest.mark.unit
 class TestAISelection:
     """Test Stage 3: AI Selection (~2.5s)."""
@@ -327,9 +321,15 @@ class TestAISelection:
     def test_ai_selection_with_mock(self, hybrid_selector_with_ai):
         """Test AI selection with mocked AI selector."""
         # Mock the AI selector's select_agent method to return expected structure
-        hybrid_selector_with_ai.ai_selector.select_agent = Mock(return_value=[
-            ("agent-debug-intelligence", 0.92, "Database performance requires debugging expertise")
-        ])
+        hybrid_selector_with_ai.ai_selector.select_agent = Mock(
+            return_value=[
+                (
+                    "agent-debug-intelligence",
+                    0.92,
+                    "Database performance requires debugging expertise",
+                )
+            ]
+        )
 
         prompt = "optimize database query performance"
         context = {"working_dir": "/test"}
@@ -342,19 +342,18 @@ class TestAISelection:
         assert result.method == SelectionMethod.AI
         assert "debugging" in result.reasoning.lower()
 
-    @patch('ai_agent_selector.AIAgentSelector._call_local_model')
+    @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_ai_confidence_threshold(self, mock_call):
         """Test AI selection respects confidence threshold."""
         selector = HybridAgentSelector(
-            enable_ai=True,
-            confidence_threshold=0.9  # High threshold
-        )
+            enable_ai=True, confidence_threshold=0.9
+        )  # High threshold
 
         # Mock low confidence response
         mock_call.return_value = {
             "agent": "agent-testing",
             "confidence": 0.75,  # Below threshold
-            "reasoning": "Might be testing related"
+            "reasoning": "Might be testing related",
         }
 
         prompt = "help with something"
@@ -363,13 +362,12 @@ class TestAISelection:
         # Should still return result, but select_agent will filter it
         assert result.confidence < 0.9
 
-    @patch('ai_agent_selector.AIAgentSelector._call_local_model')
+    @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_ai_selection_timeout(self, mock_call):
         """Test AI selection handles timeout gracefully."""
         selector = HybridAgentSelector(
-            enable_ai=True,
-            timeout_ms=100  # Very short timeout
-        )
+            enable_ai=True, timeout_ms=100
+        )  # Very short timeout
 
         # Mock slow response
         def slow_response(*args, **kwargs):
@@ -387,15 +385,17 @@ class TestAISelection:
         except Exception:
             pass  # Timeout is acceptable
 
-    @patch('ai_agent_selector.AIAgentSelector._call_local_model')
+    @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_ai_selection_alternatives(self, mock_call, hybrid_selector_with_ai):
         """Test AI selection returns alternative agents."""
         # Mock multiple selections
-        hybrid_selector_with_ai.ai_selector.select_agent = Mock(return_value=[
-            ("agent-testing", 0.95, "Best match for testing"),
-            ("agent-debug-intelligence", 0.85, "Alternative for debugging"),
-            ("agent-parallel-dispatcher", 0.70, "Could coordinate parallel work")
-        ])
+        hybrid_selector_with_ai.ai_selector.select_agent = Mock(
+            return_value=[
+                ("agent-testing", 0.95, "Best match for testing"),
+                ("agent-debug-intelligence", 0.85, "Alternative for debugging"),
+                ("agent-parallel-dispatcher", 0.70, "Could coordinate parallel work"),
+            ]
+        )
 
         prompt = "write comprehensive tests"
         result = hybrid_selector_with_ai._stage_3_ai(prompt, None)
@@ -422,6 +422,7 @@ class TestAISelection:
 # ============================================================================
 # INTEGRATION: 3-STAGE PIPELINE TESTS
 # ============================================================================
+
 
 @pytest.mark.integration
 class TestHybridPipeline:
@@ -456,16 +457,18 @@ class TestHybridPipeline:
         assert 0.7 <= result.confidence <= 0.95
         assert result.latency_ms < 15.0
 
-    @patch('ai_agent_selector.AIAgentSelector._call_local_model')
+    @patch("ai_agent_selector.AIAgentSelector._call_local_model")
     def test_stage3_ai_fallback(self, mock_call):
         """Test Stage 3 AI selection when no pattern or trigger."""
         selector = HybridAgentSelector(enable_ai=True, confidence_threshold=0.8)
 
         # Mock AI response
         selector.ai_selector = Mock()
-        selector.ai_selector.select_agent = Mock(return_value=[
-            ("agent-debug-intelligence", 0.92, "Debugging expertise needed")
-        ])
+        selector.ai_selector.select_agent = Mock(
+            return_value=[
+                ("agent-debug-intelligence", 0.92, "Debugging expertise needed")
+            ]
+        )
 
         # No pattern or trigger
         prompt = "optimize database query performance"
@@ -497,7 +500,7 @@ class TestHybridPipeline:
             "@agent-testing explicit pattern",  # Pattern
             "write pytest tests",  # Trigger
             "help me test",  # Trigger
-            "what's the weather"  # No match
+            "what's the weather",  # No match
         ]
 
         for prompt in prompts:
@@ -530,6 +533,7 @@ class TestHybridPipeline:
 # CLI INTERFACE TESTS
 # ============================================================================
 
+
 @pytest.mark.integration
 class TestCLIInterface:
     """Test command-line interface."""
@@ -543,10 +547,11 @@ class TestCLIInterface:
                 "python3",
                 str(HOOKS_DIR / "lib" / "hybrid_agent_selector.py"),
                 "write pytest tests",
-                "--enable-ai", "false"
+                "--enable-ai",
+                "false",
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         output = result.stdout
@@ -560,19 +565,20 @@ class TestCLIInterface:
 
     def test_cli_json_output(self, test_agent_config):
         """Test CLI JSON output mode."""
-        import subprocess
         import json
+        import subprocess
 
         result = subprocess.run(
             [
                 "python3",
                 str(HOOKS_DIR / "lib" / "hybrid_agent_selector.py"),
                 "write pytest tests",
-                "--enable-ai", "false",
-                "--json"
+                "--enable-ai",
+                "false",
+                "--json",
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         if result.returncode == 0:
@@ -588,6 +594,7 @@ class TestCLIInterface:
 # ============================================================================
 # PERFORMANCE BENCHMARKS
 # ============================================================================
+
 
 @pytest.mark.performance
 class TestPerformanceBenchmarks:
@@ -631,7 +638,7 @@ class TestPerformanceBenchmarks:
             "@agent-testing explicit pattern",
             "write pytest tests",
             "help me test this",
-            "no agent here"
+            "no agent here",
         ]
 
         iterations = 100

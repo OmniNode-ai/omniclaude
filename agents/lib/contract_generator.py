@@ -6,17 +6,16 @@ Generates YAML contracts and subcontracts from PRD analysis results.
 Supports all 4 ONEX node types (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR).
 """
 
-import re
-import yaml
 import logging
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+import re
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 # Import from omnibase_core
-from omnibase_core.errors import OnexError, EnumCoreErrorCode
-from omnibase_core.enums.enum_node_type import EnumNodeType
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .version_config import get_config
@@ -54,23 +53,23 @@ class ContractGenerator:
                 "event_patterns": ["publish", "subscribe"],
                 "config": {
                     "bootstrap_servers": "omninode-bridge-redpanda:9092",
-                    "consumer_group": "default-consumer-group"
-                }
+                    "consumer_group": "default-consumer-group",
+                },
             },
             "MixinCaching": {
                 "cache_type": "redis",
                 "config": {
                     "ttl_seconds": DEFAULT_CACHE_TTL_SECONDS,
                     "max_size": DEFAULT_CACHE_MAX_SIZE,
-                    "eviction_policy": "lru"
-                }
+                    "eviction_policy": "lru",
+                },
             },
             "MixinHealthCheck": {
                 "health_endpoints": ["/health", "/ready"],
                 "config": {
                     "check_interval_seconds": DEFAULT_HEALTH_CHECK_INTERVAL_SECONDS,
-                    "timeout_seconds": DEFAULT_HEALTH_CHECK_TIMEOUT_SECONDS
-                }
+                    "timeout_seconds": DEFAULT_HEALTH_CHECK_TIMEOUT_SECONDS,
+                },
             },
             "MixinRetry": {
                 "retry_strategy": "exponential_backoff",
@@ -78,44 +77,35 @@ class ContractGenerator:
                     "max_retries": DEFAULT_MAX_RETRIES,
                     "initial_delay_ms": DEFAULT_INITIAL_RETRY_DELAY_MS,
                     "max_delay_ms": DEFAULT_MAX_RETRY_DELAY_MS,
-                    "backoff_multiplier": DEFAULT_RETRY_BACKOFF_MULTIPLIER
-                }
+                    "backoff_multiplier": DEFAULT_RETRY_BACKOFF_MULTIPLIER,
+                },
             },
             "MixinCircuitBreaker": {
                 "failure_threshold": DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
                 "config": {
                     "timeout_seconds": DEFAULT_CIRCUIT_BREAKER_TIMEOUT_SECONDS,
-                    "half_open_max_calls": DEFAULT_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS
-                }
+                    "half_open_max_calls": DEFAULT_CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS,
+                },
             },
             "MixinLogging": {
                 "log_level": "INFO",
-                "config": {
-                    "format": "json",
-                    "output": "stdout"
-                }
+                "config": {"format": "json", "output": "stdout"},
             },
             "MixinMetrics": {
                 "metrics_backend": "prometheus",
-                "config": {
-                    "port": DEFAULT_METRICS_PORT,
-                    "path": "/metrics"
-                }
+                "config": {"port": DEFAULT_METRICS_PORT, "path": "/metrics"},
             },
             "MixinSecurity": {
                 "authentication": "jwt",
                 "config": {
                     "token_expiry_seconds": DEFAULT_JWT_TOKEN_EXPIRY_SECONDS,
-                    "algorithm": "HS256"
-                }
+                    "algorithm": "HS256",
+                },
             },
             "MixinValidation": {
                 "validation_mode": "strict",
-                "config": {
-                    "fail_fast": True,
-                    "collect_all_errors": False
-                }
-            }
+                "config": {"fail_fast": True, "collect_all_errors": False},
+            },
         }
 
     async def generate_contract_yaml(
@@ -124,7 +114,7 @@ class ContractGenerator:
         node_type: str,
         microservice_name: str,
         domain: str,
-        output_directory: Optional[str] = None
+        output_directory: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate YAML contract from PRD analysis result.
@@ -143,18 +133,24 @@ class ContractGenerator:
             OnexError: If contract generation fails
         """
         try:
-            self.logger.info(f"Generating contract for {node_type} node: {microservice_name}")
+            self.logger.info(
+                f"Generating contract for {node_type} node: {microservice_name}"
+            )
 
             # Validate node type
             if node_type not in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
                 raise OnexError(
                     code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Invalid node type: {node_type}",
-                    details={"valid_types": ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]}
+                    details={
+                        "valid_types": ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+                    },
                 )
 
             # Infer contract fields from PRD analysis
-            contract_fields = await self.infer_contract_fields(analysis_result, node_type)
+            contract_fields = await self.infer_contract_fields(
+                analysis_result, node_type
+            )
 
             # Build contract structure
             contract = {
@@ -170,19 +166,20 @@ class ContractGenerator:
                 "subcontracts": [],
                 "dependencies": {
                     "external_systems": analysis_result.external_systems,
-                    "required_mixins": analysis_result.recommended_mixins
+                    "required_mixins": analysis_result.recommended_mixins,
                 },
                 "metadata": {
                     "prd_session_id": str(analysis_result.session_id),
                     "analysis_timestamp": analysis_result.analysis_timestamp.isoformat(),
-                    "node_type_confidence": analysis_result.node_type_hints.get(node_type, 0.0)
-                }
+                    "node_type_confidence": analysis_result.node_type_hints.get(
+                        node_type, 0.0
+                    ),
+                },
             }
 
             # Generate subcontracts for mixins
             subcontracts = await self.generate_subcontracts(
-                analysis_result.recommended_mixins,
-                contract_fields
+                analysis_result.recommended_mixins, contract_fields
             )
             contract["subcontracts"] = subcontracts
 
@@ -190,7 +187,9 @@ class ContractGenerator:
             validation_result = await self.validate_contract(contract)
 
             # Convert to YAML
-            contract_yaml = yaml.dump(contract, default_flow_style=False, sort_keys=False)
+            contract_yaml = yaml.dump(
+                contract, default_flow_style=False, sort_keys=False
+            )
 
             # Write to file if output directory specified
             contract_file_path = None
@@ -198,17 +197,19 @@ class ContractGenerator:
                 output_path = Path(output_directory)
                 output_path.mkdir(parents=True, exist_ok=True)
                 contract_file_path = output_path / f"contract_{microservice_name}.yaml"
-                with open(contract_file_path, 'w') as f:
+                with open(contract_file_path, "w") as f:
                     f.write(contract_yaml)
                 self.logger.info(f"Contract written to {contract_file_path}")
 
             return {
                 "contract": contract,
                 "contract_yaml": contract_yaml,
-                "contract_file_path": str(contract_file_path) if contract_file_path else None,
+                "contract_file_path": (
+                    str(contract_file_path) if contract_file_path else None
+                ),
                 "validation_result": validation_result,
                 "subcontract_count": len(subcontracts),
-                "generated_at": datetime.now(timezone.utc).isoformat()
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -219,14 +220,12 @@ class ContractGenerator:
                 details={
                     "node_type": node_type,
                     "microservice_name": microservice_name,
-                    "domain": domain
-                }
+                    "domain": domain,
+                },
             )
 
     async def generate_subcontracts(
-        self,
-        recommended_mixins: List[str],
-        contract_fields: Dict[str, Any]
+        self, recommended_mixins: List[str], contract_fields: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
         Generate mixin-specific subcontracts.
@@ -252,7 +251,7 @@ class ContractGenerator:
                     "required": True,
                     "integration_points": self._extract_mixin_integration_points(
                         mixin, contract_fields
-                    )
+                    ),
                 }
 
                 # Add mixin-specific fields
@@ -265,19 +264,14 @@ class ContractGenerator:
             else:
                 self.logger.warning(f"No configuration template for mixin: {mixin}")
                 # Generate minimal subcontract
-                subcontracts.append({
-                    "mixin": mixin,
-                    "version": "1.0.0",
-                    "config": {},
-                    "required": True
-                })
+                subcontracts.append(
+                    {"mixin": mixin, "version": "1.0.0", "config": {}, "required": True}
+                )
 
         return subcontracts
 
     async def infer_contract_fields(
-        self,
-        analysis_result: SimplePRDAnalysisResult,
-        node_type: str
+        self, analysis_result: SimplePRDAnalysisResult, node_type: str
     ) -> Dict[str, Any]:
         """
         Use semantic analysis to infer contract fields.
@@ -297,7 +291,7 @@ class ContractGenerator:
                 "name": self._sanitize_capability_name(req),
                 "type": self._infer_capability_type(req, node_type),
                 "required": self._is_capability_required(req),
-                "description": req
+                "description": req,
             }
             capabilities.append(capability)
 
@@ -307,7 +301,7 @@ class ContractGenerator:
                 "name": self._sanitize_capability_name(feature),
                 "type": "feature",
                 "required": False,
-                "description": feature
+                "description": feature,
             }
             capabilities.append(capability)
 
@@ -317,8 +311,10 @@ class ContractGenerator:
 
         return {
             "capabilities": capabilities,
-            "operations": [task["title"] for task in analysis_result.decomposition_result.tasks[:5]],
-            "external_systems": analysis_result.external_systems
+            "operations": [
+                task["title"] for task in analysis_result.decomposition_result.tasks[:5]
+            ],
+            "external_systems": analysis_result.external_systems,
         }
 
     async def validate_contract(self, contract: Dict[str, Any]) -> Dict[str, Any]:
@@ -331,16 +327,16 @@ class ContractGenerator:
         Returns:
             Validation result with status and issues
         """
-        validation_result = {
-            "valid": True,
-            "issues": [],
-            "warnings": []
-        }
+        validation_result = {"valid": True, "issues": [], "warnings": []}
 
         # Check required fields
         required_fields = [
-            "version", "node_type", "domain", "service_name",
-            "capabilities", "dependencies"
+            "version",
+            "node_type",
+            "domain",
+            "service_name",
+            "capabilities",
+            "dependencies",
         ]
 
         for field in required_fields:
@@ -349,9 +345,16 @@ class ContractGenerator:
                 validation_result["issues"].append(f"Missing required field: {field}")
 
         # Validate node type
-        if contract.get("node_type") not in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
+        if contract.get("node_type") not in [
+            "EFFECT",
+            "COMPUTE",
+            "REDUCER",
+            "ORCHESTRATOR",
+        ]:
             validation_result["valid"] = False
-            validation_result["issues"].append(f"Invalid node type: {contract.get('node_type')}")
+            validation_result["issues"].append(
+                f"Invalid node type: {contract.get('node_type')}"
+            )
 
         # Validate service name format
         service_name = contract.get("service_name", "")
@@ -376,12 +379,16 @@ class ContractGenerator:
 
         for i, subcontract in enumerate(subcontracts):
             if not isinstance(subcontract, dict):
-                validation_result["issues"].append(f"Subcontract {i} is not a dictionary")
+                validation_result["issues"].append(
+                    f"Subcontract {i} is not a dictionary"
+                )
                 validation_result["valid"] = False
                 continue
 
             if "mixin" not in subcontract:
-                validation_result["issues"].append(f"Subcontract {i} missing 'mixin' field")
+                validation_result["issues"].append(
+                    f"Subcontract {i} missing 'mixin' field"
+                )
                 validation_result["valid"] = False
 
         # Validate dependencies
@@ -408,8 +415,8 @@ class ContractGenerator:
     def _sanitize_capability_name(self, text: str) -> str:
         """Convert text to valid capability name"""
         # Remove special characters and convert to snake_case
-        name = re.sub(r'[^\w\s-]', '', text.lower())
-        name = re.sub(r'[-\s]+', '_', name)
+        name = re.sub(r"[^\w\s-]", "", text.lower())
+        name = re.sub(r"[-\s]+", "_", name)
         return name[:MAX_CAPABILITY_NAME_LENGTH]
 
     def _infer_capability_type(self, requirement: str, node_type: str) -> str:
@@ -419,17 +426,27 @@ class ContractGenerator:
         # Check for specific patterns
         if any(keyword in req_lower for keyword in ["create", "insert", "add"]):
             return "create"
-        elif any(keyword in req_lower for keyword in ["read", "get", "fetch", "retrieve"]):
+        elif any(
+            keyword in req_lower for keyword in ["read", "get", "fetch", "retrieve"]
+        ):
             return "read"
-        elif any(keyword in req_lower for keyword in ["update", "modify", "change", "edit"]):
+        elif any(
+            keyword in req_lower for keyword in ["update", "modify", "change", "edit"]
+        ):
             return "update"
         elif any(keyword in req_lower for keyword in ["delete", "remove", "destroy"]):
             return "delete"
-        elif any(keyword in req_lower for keyword in ["process", "transform", "compute"]):
+        elif any(
+            keyword in req_lower for keyword in ["process", "transform", "compute"]
+        ):
             return "compute"
-        elif any(keyword in req_lower for keyword in ["aggregate", "summarize", "reduce"]):
+        elif any(
+            keyword in req_lower for keyword in ["aggregate", "summarize", "reduce"]
+        ):
             return "aggregate"
-        elif any(keyword in req_lower for keyword in ["orchestrate", "coordinate", "manage"]):
+        elif any(
+            keyword in req_lower for keyword in ["orchestrate", "coordinate", "manage"]
+        ):
             return "orchestrate"
         else:
             # Default based on node type
@@ -437,7 +454,7 @@ class ContractGenerator:
                 "EFFECT": "side_effect",
                 "COMPUTE": "computation",
                 "REDUCER": "aggregation",
-                "ORCHESTRATOR": "coordination"
+                "ORCHESTRATOR": "coordination",
             }.get(node_type, "operation")
 
     def _is_capability_required(self, requirement: str) -> bool:
@@ -453,14 +470,14 @@ class ContractGenerator:
                 "name": "health_check",
                 "type": "system",
                 "required": True,
-                "description": "Health check endpoint for node status"
+                "description": "Health check endpoint for node status",
             },
             {
                 "name": "metrics_reporting",
                 "type": "system",
                 "required": False,
-                "description": "Metrics reporting capability"
-            }
+                "description": "Metrics reporting capability",
+            },
         ]
 
         node_specific = {
@@ -469,7 +486,7 @@ class ContractGenerator:
                     "name": "external_interaction",
                     "type": "effect",
                     "required": True,
-                    "description": "Interact with external systems"
+                    "description": "Interact with external systems",
                 }
             ],
             "COMPUTE": [
@@ -477,7 +494,7 @@ class ContractGenerator:
                     "name": "data_transformation",
                     "type": "compute",
                     "required": True,
-                    "description": "Transform input data"
+                    "description": "Transform input data",
                 }
             ],
             "REDUCER": [
@@ -485,7 +502,7 @@ class ContractGenerator:
                     "name": "data_aggregation",
                     "type": "reducer",
                     "required": True,
-                    "description": "Aggregate data from multiple sources"
+                    "description": "Aggregate data from multiple sources",
                 }
             ],
             "ORCHESTRATOR": [
@@ -493,17 +510,15 @@ class ContractGenerator:
                     "name": "workflow_coordination",
                     "type": "orchestrator",
                     "required": True,
-                    "description": "Coordinate multi-step workflows"
+                    "description": "Coordinate multi-step workflows",
                 }
-            ]
+            ],
         }
 
         return base_capabilities + node_specific.get(node_type, [])
 
     def _extract_mixin_integration_points(
-        self,
-        mixin: str,
-        contract_fields: Dict[str, Any]
+        self, mixin: str, contract_fields: Dict[str, Any]
     ) -> List[str]:
         """Extract integration points for a mixin"""
         integration_points = []
@@ -518,7 +533,9 @@ class ContractGenerator:
         elif mixin == "MixinRetry":
             integration_points.extend(["retry_operation"])
         elif mixin == "MixinCircuitBreaker":
-            integration_points.extend(["circuit_check", "circuit_open", "circuit_close"])
+            integration_points.extend(
+                ["circuit_check", "circuit_open", "circuit_close"]
+            )
         elif mixin == "MixinLogging":
             integration_points.extend(["log_debug", "log_info", "log_error"])
         elif mixin == "MixinMetrics":
@@ -544,8 +561,11 @@ class ContractGenerator:
 
         incompatible = []
         for i, mixin1 in enumerate(mixins):
-            for mixin2 in mixins[i+1:]:
-                if (mixin1, mixin2) in incompatible_pairs or (mixin2, mixin1) in incompatible_pairs:
+            for mixin2 in mixins[i + 1 :]:
+                if (mixin1, mixin2) in incompatible_pairs or (
+                    mixin2,
+                    mixin1,
+                ) in incompatible_pairs:
                     incompatible.append(f"{mixin1} + {mixin2}")
 
         return incompatible

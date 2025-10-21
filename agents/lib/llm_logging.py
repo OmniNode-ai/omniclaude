@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Optional, Dict, Any
+import json
+from typing import Any, Dict, Optional
 
 from .db import get_pg_pool
-import json
 
 
 async def _get_active_price_row(model: str, provider: str) -> Optional[Dict[str, Any]]:
@@ -54,14 +53,29 @@ async def log_llm_call(
     # Fetch active price
     price_row = await _get_active_price_row(model, provider)
     # Values may come back as Decimal; convert to float for computation
-    eff_in = float(price_row.get("input_per_1k")) if price_row and price_row.get("input_per_1k") is not None else None
-    eff_out = float(price_row.get("output_per_1k")) if price_row and price_row.get("output_per_1k") is not None else None
+    eff_in = (
+        float(price_row.get("input_per_1k"))
+        if price_row and price_row.get("input_per_1k") is not None
+        else None
+    )
+    eff_out = (
+        float(price_row.get("output_per_1k"))
+        if price_row and price_row.get("output_per_1k") is not None
+        else None
+    )
     price_id = price_row.get("id") if price_row else None
 
     # Compute cost
     computed_cost = None
-    if eff_in is not None and eff_out is not None and input_tokens is not None and output_tokens is not None:
-        computed_cost = (eff_in * (input_tokens / 1000.0)) + (eff_out * (output_tokens / 1000.0))
+    if (
+        eff_in is not None
+        and eff_out is not None
+        and input_tokens is not None
+        and output_tokens is not None
+    ):
+        computed_cost = (eff_in * (input_tokens / 1000.0)) + (
+            eff_out * (output_tokens / 1000.0)
+        )
 
     async with pool.acquire() as conn:
         await conn.execute(
@@ -95,5 +109,3 @@ async def log_llm_call(
             json.dumps(request or {}),
             json.dumps(response or {}),
         )
-
-

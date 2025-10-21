@@ -18,7 +18,7 @@ output_model: "Model{MICROSERVICE_NAME_PASCAL}Output"
 
 # === MODEL SPECIFICATIONS ===
 
-{ALGORITHM_SECTION}
+# {ALGORITHM_SECTION}
 
 tool_specification:
   tool_name: "node_{DOMAIN}_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
@@ -53,16 +53,16 @@ output_state:
   optional: {OUTPUT_OPTIONAL_FIELDS}
 
 # === ACTIONS ===
-actions:
-{ACTIONS_LIST}
+actions: []
+# {ACTIONS_LIST}
 
 # === DEPENDENCIES ===
-dependencies:
-{DEPENDENCIES_LIST}
+dependencies: []
+# {DEPENDENCIES_LIST}
 
 # === PERFORMANCE ===
-performance:
-{PERFORMANCE_REQUIREMENTS}
+performance: {}
+# {PERFORMANCE_REQUIREMENTS}
 
 # === EVENT TYPE CONFIGURATION ===
 event_type:
@@ -73,11 +73,11 @@ event_type:
   event_routing: "{DOMAIN}"
 
 # === SERVICE RESOLUTION ===
-service_resolution:
-{SERVICE_RESOLUTION}
+service_resolution: {}
+# {SERVICE_RESOLUTION}
 
-infrastructure:
-{INFRASTRUCTURE}
+infrastructure: {}
+# {INFRASTRUCTURE}
 
 # === ONEX COMPLIANCE ===
 contract_driven: true
@@ -91,12 +91,12 @@ validation_rules:
   input_validation_enabled: true
   output_validation_enabled: true
   performance_validation_enabled: true
-  constraint_definitions:
-{CONSTRAINT_DEFINITIONS}
+  constraint_definitions: {}
+  # {CONSTRAINT_DEFINITIONS}
 
 # === SUBCONTRACTS ===
-subcontracts:
-{SUBCONTRACTS}
+subcontracts: {}
+# {SUBCONTRACTS}
 
 # === DEFINITIONS (Required by ModelContractContent) ===
 definitions:

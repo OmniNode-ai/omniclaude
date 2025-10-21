@@ -33,45 +33,40 @@ Usage:
     report = analytics.generate_report(days=7)
 """
 
-from .event_models import (
-    EventType,
-    WorkflowEvent,
-    Violation,
-    Correction,
-    AIQuorumScore,
-    IntentContextData,
-    WorkflowSummary
-)
-
-from .event_store import EventStore
-
 from .event_analytics import (
-    EventAnalytics,
     CorrectionEffectiveness,
+    EventAnalytics,
     ViolationPattern,
-    WorkflowMetrics
+    WorkflowMetrics,
 )
+from .event_models import (
+    AIQuorumScore,
+    Correction,
+    EventType,
+    IntentContextData,
+    Violation,
+    WorkflowEvent,
+    WorkflowSummary,
+)
+from .event_store import EventStore
 
 __all__ = [
     # Enums
-    'EventType',
-
+    "EventType",
     # Models
-    'WorkflowEvent',
-    'Violation',
-    'Correction',
-    'AIQuorumScore',
-    'IntentContextData',
-    'WorkflowSummary',
-
+    "WorkflowEvent",
+    "Violation",
+    "Correction",
+    "AIQuorumScore",
+    "IntentContextData",
+    "WorkflowSummary",
     # Storage
-    'EventStore',
-
+    "EventStore",
     # Analytics
-    'EventAnalytics',
-    'CorrectionEffectiveness',
-    'ViolationPattern',
-    'WorkflowMetrics',
+    "EventAnalytics",
+    "CorrectionEffectiveness",
+    "ViolationPattern",
+    "WorkflowMetrics",
 ]
 
-__version__ = '1.2.0'
+__version__ = "1.2.0"
