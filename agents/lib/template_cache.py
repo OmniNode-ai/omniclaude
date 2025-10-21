@@ -113,6 +113,10 @@ class TemplateCache:
         # Background task tracking
         self._background_tasks: Set[asyncio.Task] = set()
 
+        # Persistence instance (cached to avoid repeated checks)
+        self._persistence_instance = None
+        self._persistence_checked = False
+
         # Metrics
         self.hits = 0
         self.misses = 0
@@ -386,6 +390,46 @@ class TemplateCache:
             logger.error(f"Failed to compute hash for {file_path}: {e}")
             return ""
 
+    async def _get_or_create_persistence(self):
+        """
+        Get or create cached persistence instance.
+
+        Returns:
+            CodegenPersistence instance or None if disabled
+        """
+        if not self.enable_persistence:
+            return None
+
+        # Check if we've already determined persistence is disabled
+        if self._persistence_checked and self._persistence_instance is None:
+            return None
+
+        # Create persistence instance if not already created
+        if self._persistence_instance is None:
+            try:
+                # Import here to avoid circular dependencies
+                from .persistence import CodegenPersistence
+
+                persistence = CodegenPersistence()
+
+                # Check if persistence is actually enabled (database available)
+                if not persistence._persistence_enabled:
+                    # Mark as checked to avoid repeated checks
+                    self._persistence_checked = True
+                    self._persistence_instance = None
+                    return None
+
+                self._persistence_instance = persistence
+                self._persistence_checked = True
+            except Exception as e:
+                # Log at debug level to avoid spamming
+                logger.debug(f"Persistence initialization failed: {e}")
+                self._persistence_checked = True
+                self._persistence_instance = None
+                return None
+
+        return self._persistence_instance
+
     async def _update_cache_metrics_async(
         self,
         template_name: str,
@@ -408,71 +452,76 @@ class TemplateCache:
             file_hash: File hash (for misses)
             size_bytes: Template size (for misses)
         """
-        if not self.enable_persistence:
+        persistence = await self._get_or_create_persistence()
+        if persistence is None:
+            # Persistence disabled - silently skip
             return
 
         try:
-            # Import here to avoid circular dependencies
-            from .persistence import CodegenPersistence
-
-            persistence = CodegenPersistence()
-            try:
-                if not cache_hit:
-                    # For cache misses, upsert the template metadata first
-                    await persistence.upsert_template_cache_metadata(
-                        template_name=template_name,
-                        template_type=template_type,
-                        cache_key=template_name,  # Simple key for now
-                        file_path=file_path,
-                        file_hash=file_hash or "",
-                        size_bytes=size_bytes,
-                        load_time_ms=int(load_time_ms),
-                    )
-
-                # Update hit/miss counters
-                await persistence.update_cache_metrics(
+            if not cache_hit:
+                # For cache misses, upsert the template metadata first
+                await persistence.upsert_template_cache_metadata(
                     template_name=template_name,
-                    cache_hit=cache_hit,
-                    load_time_ms=int(load_time_ms) if not cache_hit else None,
+                    template_type=template_type,
+                    cache_key=template_name,  # Simple key for now
+                    file_path=file_path,
+                    file_hash=file_hash or "",
+                    size_bytes=size_bytes,
+                    load_time_ms=int(load_time_ms),
                 )
-            finally:
-                await persistence.close()
+
+            # Update hit/miss counters
+            await persistence.update_cache_metrics(
+                template_name=template_name,
+                cache_hit=cache_hit,
+                load_time_ms=int(load_time_ms) if not cache_hit else None,
+            )
         except Exception as e:
             # Don't fail cache operations due to persistence errors
-            logger.warning(f"Failed to update cache metrics: {e}")
+            # Log at debug level to avoid spamming warnings
+            logger.debug(f"Cache metrics update skipped (database unavailable): {e}")
 
     async def cleanup_async(self, timeout: float = 5.0):
         """
-        Cleanup all pending background tasks.
+        Cleanup all pending background tasks and close persistence.
 
         Args:
             timeout: Maximum time to wait for tasks to complete (seconds)
         """
-        if not self._background_tasks:
-            return
+        # Cleanup background tasks
+        if self._background_tasks:
+            logger.debug(f"Cleaning up {len(self._background_tasks)} background tasks")
 
-        logger.debug(f"Cleaning up {len(self._background_tasks)} background tasks")
+            # Wait for all tasks to complete with timeout
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._background_tasks, return_exceptions=True),
+                    timeout=timeout,
+                )
+                logger.debug("All background tasks completed successfully")
+            except asyncio.TimeoutError:
+                # Cancel remaining tasks
+                logger.warning(
+                    f"Task cleanup timeout after {timeout}s, cancelling remaining tasks"
+                )
+                for task in self._background_tasks:
+                    if not task.done():
+                        task.cancel()
 
-        # Wait for all tasks to complete with timeout
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*self._background_tasks, return_exceptions=True),
-                timeout=timeout,
-            )
-            logger.debug("All background tasks completed successfully")
-        except asyncio.TimeoutError:
-            # Cancel remaining tasks
-            logger.warning(
-                f"Task cleanup timeout after {timeout}s, cancelling remaining tasks"
-            )
-            for task in self._background_tasks:
-                if not task.done():
-                    task.cancel()
+                # Wait for cancellations to complete
+                await asyncio.gather(*self._background_tasks, return_exceptions=True)
 
-            # Wait for cancellations to complete
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            self._background_tasks.clear()
 
-        self._background_tasks.clear()
+        # Close persistence instance if created
+        if self._persistence_instance is not None:
+            try:
+                await self._persistence_instance.close()
+                logger.debug("Persistence connection closed")
+            except Exception as e:
+                logger.debug(f"Error closing persistence: {e}")
+            finally:
+                self._persistence_instance = None
 
     def cleanup_sync(self, timeout: float = 5.0):
         """

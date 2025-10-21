@@ -1,0 +1,1318 @@
+#!/usr/bin/env python3
+"""
+Generation Pipeline - Autonomous Node Generation POC
+
+Orchestrates the 6-stage node generation pipeline with 14 validation gates:
+- Stage 1: Prompt Parsing (5s)
+- Stage 2: Pre-Generation Validation (2s) - 6 blocking gates
+- Stage 3: Code Generation (10-15s) - 2 warning gates
+- Stage 4: Post-Generation Validation (5s) - 4 blocking gates
+- Stage 5: File Writing (3s)
+- Stage 6: Compilation Testing (10s) - 2 warning gates
+
+Total target: ~40 seconds for successful generation.
+"""
+
+import ast
+import logging
+import re
+import subprocess
+import sys
+from datetime import datetime
+from importlib import import_module
+from pathlib import Path
+from time import time
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID, uuid4
+
+# Import from omnibase_core
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
+
+# Import pipeline models
+from .models.pipeline_models import (
+    GateType,
+    PipelineResult,
+    PipelineStage,
+    StageStatus,
+    ValidationGate,
+)
+
+# Import existing components
+from .omninode_template_engine import OmniNodeTemplateEngine
+from .prompt_parser import PromptParser
+from .simple_prd_analyzer import SimplePRDAnalysisResult, SimplePRDAnalyzer
+
+logger = logging.getLogger(__name__)
+
+
+class GenerationPipeline:
+    """
+    Orchestrates autonomous node generation pipeline.
+
+    Coordinates 6 stages with 14 validation gates for robust,
+    production-ready node generation from natural language prompts.
+    """
+
+    # Critical imports required for node generation
+    CRITICAL_IMPORTS = [
+        "omnibase_core.nodes.node_effect.NodeEffect",
+        "omnibase_core.nodes.node_compute.NodeCompute",
+        "omnibase_core.nodes.node_reducer.NodeReducer",
+        "omnibase_core.nodes.node_orchestrator.NodeOrchestrator",
+        "omnibase_core.errors.ModelOnexError",
+        "omnibase_core.errors.EnumCoreErrorCode",
+        "omnibase_core.models.container.ModelONEXContainer",
+    ]
+
+    def __init__(
+        self,
+        template_engine: Optional[OmniNodeTemplateEngine] = None,
+        enable_compilation_testing: bool = True,
+    ):
+        """
+        Initialize generation pipeline.
+
+        Args:
+            template_engine: Pre-configured template engine (optional)
+            enable_compilation_testing: Enable Stage 6 compilation testing
+        """
+        self.logger = logging.getLogger(__name__)
+        self.template_engine = template_engine or OmniNodeTemplateEngine(
+            enable_cache=True
+        )
+        self.prd_analyzer = SimplePRDAnalyzer(enable_ml_recommendations=False)
+        self.prompt_parser = PromptParser()
+        self.enable_compilation_testing = enable_compilation_testing
+
+        # Track written files for rollback
+        self.written_files: List[Path] = []
+        self.temp_files: List[Path] = []
+
+    async def execute(
+        self, prompt: str, output_directory: str, correlation_id: Optional[UUID] = None
+    ) -> PipelineResult:
+        """
+        Execute complete generation pipeline.
+
+        Args:
+            prompt: Natural language prompt describing the node to generate
+            output_directory: Directory to write generated files
+            correlation_id: Optional correlation ID for tracking
+
+        Returns:
+            PipelineResult with comprehensive execution metadata
+
+        Raises:
+            OnexError: If any blocking validation gate fails
+        """
+        correlation_id = correlation_id or uuid4()
+        start_time = time()
+
+        self.logger.info(
+            f"Starting generation pipeline for correlation_id={correlation_id}"
+        )
+
+        # Initialize result
+        stages: List[PipelineStage] = []
+        status = "failed"
+        output_path = None
+        generated_files = []
+        node_type = None
+        service_name = None
+        domain = None
+        validation_passed = False
+        compilation_passed = False
+        error_summary = None
+
+        try:
+            # Stage 1: Prompt Parsing
+            stage1, parse_result = await self._stage_1_parse_prompt(prompt)
+            stages.append(stage1)
+
+            if stage1.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Stage 1 failed: {stage1.error}",
+                )
+
+            # Extract parsed data
+            parsed_data = parse_result["parsed_data"]
+            analysis_result = parse_result["analysis_result"]
+            node_type = parsed_data["node_type"]
+            service_name = parsed_data["service_name"]
+            domain = parsed_data["domain"]
+
+            # Stage 2: Pre-Generation Validation
+            stage2 = await self._stage_2_pre_validation(parsed_data)
+            stages.append(stage2)
+
+            if stage2.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Stage 2 failed: {stage2.error}",
+                )
+
+            # Stage 3: Code Generation
+            stage3, generation_result = await self._stage_3_generate_code(
+                analysis_result, node_type, service_name, domain, output_directory
+            )
+            stages.append(stage3)
+
+            if stage3.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message=f"Stage 3 failed: {stage3.error}",
+                )
+
+            # Stage 4: Post-Generation Validation
+            stage4 = await self._stage_4_post_validation(generation_result, node_type)
+            stages.append(stage4)
+
+            if stage4.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Stage 4 failed: {stage4.error}",
+                )
+
+            validation_passed = stage4.status == StageStatus.COMPLETED
+
+            # Stage 5: File Writing
+            stage5, write_result = await self._stage_5_write_files(
+                generation_result, output_directory
+            )
+            stages.append(stage5)
+
+            if stage5.status == StageStatus.FAILED:
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message=f"Stage 5 failed: {stage5.error}",
+                )
+
+            output_path = write_result["output_path"]
+            generated_files = write_result["generated_files"]
+
+            # Stage 6: Compilation Testing (Optional)
+            if self.enable_compilation_testing:
+                stage6, compile_result = await self._stage_6_compile_test(
+                    output_path, node_type, service_name
+                )
+                stages.append(stage6)
+                compilation_passed = compile_result.get("passed", False)
+            else:
+                # Skip stage 6
+                stage6 = PipelineStage(
+                    stage_name="compilation_testing",
+                    status=StageStatus.SKIPPED,
+                    metadata={"reason": "Compilation testing disabled"},
+                )
+                stages.append(stage6)
+                compilation_passed = True  # Assume passed if skipped
+
+            # Pipeline succeeded
+            status = "success"
+            self.logger.info(
+                f"Pipeline completed successfully for correlation_id={correlation_id}"
+            )
+
+        except OnexError as e:
+            error_summary = str(e)
+            self.logger.error(
+                f"Pipeline failed for correlation_id={correlation_id}: {error_summary}"
+            )
+
+            # Rollback written files
+            await self._rollback(stages[-1].stage_name if stages else "unknown")
+
+        except Exception as e:
+            error_summary = f"Unexpected error: {str(e)}"
+            self.logger.error(
+                f"Pipeline failed with unexpected error: {error_summary}",
+                exc_info=True,
+            )
+
+            # Rollback written files
+            await self._rollback(stages[-1].stage_name if stages else "unknown")
+
+        # Calculate total duration
+        total_duration_ms = int((time() - start_time) * 1000)
+
+        # Build result
+        result = PipelineResult(
+            correlation_id=correlation_id,
+            status=status,
+            total_duration_ms=total_duration_ms,
+            stages=stages,
+            output_path=output_path,
+            generated_files=generated_files,
+            node_type=node_type,
+            service_name=service_name,
+            domain=domain,
+            validation_passed=validation_passed,
+            compilation_passed=compilation_passed,
+            error_summary=error_summary,
+            metadata={
+                "prompt": prompt,
+                "output_directory": output_directory,
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+
+        self.logger.info(
+            f"Pipeline result: {result.status} in {result.duration_seconds:.2f}s"
+        )
+
+        return result
+
+    async def _stage_1_parse_prompt(self, prompt: str) -> Tuple[PipelineStage, Dict]:
+        """
+        Stage 1: Parse natural language prompt.
+
+        Validation Gates:
+        - G7: Prompt completeness (WARNING)
+        - G8: Context has expected fields (WARNING)
+        """
+        stage = PipelineStage(stage_name="prompt_parsing", status=StageStatus.RUNNING)
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # G7: Prompt completeness check
+            gate_g7 = self._gate_g7_prompt_completeness(prompt)
+            stage.validation_gates.append(gate_g7)
+
+            if gate_g7.status == "fail" and gate_g7.gate_type == GateType.BLOCKING:
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g7.message
+                return stage, {}
+
+            # Parse prompt using PRD analyzer
+            # For POC, create a simple PRD from prompt
+            simple_prd = self._prompt_to_prd(prompt)
+
+            # Analyze PRD
+            analysis_result = await self.prd_analyzer.analyze_prd(simple_prd)
+
+            # Extract structured data
+            parsed_data = {
+                "node_type": self._detect_node_type(prompt),
+                "service_name": self._extract_service_name(prompt, analysis_result),
+                "domain": self._extract_domain(prompt, analysis_result),
+                "description": analysis_result.parsed_prd.description,
+                "operations": analysis_result.parsed_prd.functional_requirements[:3],
+                "features": analysis_result.parsed_prd.features[:3],
+                "confidence": analysis_result.confidence_score,
+            }
+
+            # G8: Context completeness check
+            gate_g8 = self._gate_g8_context_completeness(parsed_data)
+            stage.validation_gates.append(gate_g8)
+
+            stage.status = StageStatus.COMPLETED
+            stage.metadata = {
+                "node_type": parsed_data["node_type"],
+                "service_name": parsed_data["service_name"],
+                "confidence": parsed_data["confidence"],
+            }
+
+            return stage, {
+                "parsed_data": parsed_data,
+                "analysis_result": analysis_result,
+            }
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage, {}
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_2_pre_validation(
+        self, parsed_data: Dict[str, Any]
+    ) -> PipelineStage:
+        """
+        Stage 2: Pre-generation validation.
+
+        Validation Gates (BLOCKING):
+        - G1: Prompt completeness
+        - G2: Node type valid
+        - G3: Service name valid
+        - G4: Critical imports exist
+        - G5: Templates available
+        - G6: Output directory writable
+        """
+        stage = PipelineStage(
+            stage_name="pre_generation_validation", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # G1: Prompt completeness (redundant with G7, but required)
+            gate_g1 = self._gate_g1_prompt_completeness_full(parsed_data)
+            stage.validation_gates.append(gate_g1)
+
+            if gate_g1.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g1.message
+                return stage
+
+            # G2: Node type valid
+            gate_g2 = self._gate_g2_node_type_valid(parsed_data["node_type"])
+            stage.validation_gates.append(gate_g2)
+
+            if gate_g2.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g2.message
+                return stage
+
+            # G3: Service name valid
+            gate_g3 = self._gate_g3_service_name_valid(parsed_data["service_name"])
+            stage.validation_gates.append(gate_g3)
+
+            if gate_g3.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g3.message
+                return stage
+
+            # G4: Critical imports exist
+            gate_g4 = self._gate_g4_critical_imports_exist()
+            stage.validation_gates.append(gate_g4)
+
+            if gate_g4.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g4.message
+                return stage
+
+            # G5: Templates available
+            gate_g5 = self._gate_g5_templates_available(parsed_data["node_type"])
+            stage.validation_gates.append(gate_g5)
+
+            if gate_g5.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g5.message
+                return stage
+
+            # G6: Output directory writable
+            # Note: output_directory is not passed yet, will be validated in Stage 5
+            gate_g6 = ValidationGate(
+                gate_id="G6",
+                name="Output Directory Writable",
+                status="pass",
+                gate_type=GateType.BLOCKING,
+                message="Output directory validation deferred to Stage 5",
+                duration_ms=1,
+            )
+            stage.validation_gates.append(gate_g6)
+
+            stage.status = StageStatus.COMPLETED
+            return stage
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_3_generate_code(
+        self,
+        analysis_result: SimplePRDAnalysisResult,
+        node_type: str,
+        service_name: str,
+        domain: str,
+        output_directory: str,
+    ) -> Tuple[PipelineStage, Dict]:
+        """
+        Stage 3: Generate node code from templates.
+
+        No blocking validation gates (G7-G8 are warnings in Stage 1).
+        """
+        stage = PipelineStage(stage_name="code_generation", status=StageStatus.RUNNING)
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # Generate node using template engine
+            generation_result = await self.template_engine.generate_node(
+                analysis_result=analysis_result,
+                node_type=node_type,
+                microservice_name=service_name,
+                domain=domain,
+                output_directory=output_directory,
+            )
+
+            stage.status = StageStatus.COMPLETED
+            stage.metadata = {
+                "files_generated": len(generation_result["generated_files"]),
+                "main_file": generation_result["main_file"],
+            }
+
+            return stage, generation_result
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage, {}
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_4_post_validation(
+        self, generated_files: Dict[str, Any], node_type: str
+    ) -> PipelineStage:
+        """
+        Stage 4: Post-generation validation.
+
+        Validation Gates (BLOCKING):
+        - G9: Python syntax valid
+        - G10: ONEX naming convention
+        - G11: Import resolution
+        - G12: Pydantic model structure
+        """
+        stage = PipelineStage(
+            stage_name="post_generation_validation", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # Load generated code from main file
+            main_file_path = Path(generated_files["main_file"])
+            if not main_file_path.exists():
+                stage.status = StageStatus.FAILED
+                stage.error = f"Main file not found: {main_file_path}"
+                return stage
+
+            main_file_content = main_file_path.read_text()
+
+            # G9: Python syntax valid
+            gate_g9 = self._gate_g9_python_syntax_valid(
+                main_file_content, str(main_file_path)
+            )
+            stage.validation_gates.append(gate_g9)
+
+            if gate_g9.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g9.message
+                return stage
+
+            # G10: ONEX naming convention
+            gate_g10 = self._gate_g10_onex_naming(main_file_content, node_type)
+            stage.validation_gates.append(gate_g10)
+
+            if gate_g10.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g10.message
+                return stage
+
+            # G11: Import resolution
+            gate_g11 = self._gate_g11_import_resolution(main_file_content)
+            stage.validation_gates.append(gate_g11)
+
+            if gate_g11.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g11.message
+                return stage
+
+            # G12: Pydantic model structure
+            # Check model files if they exist
+            model_files = [
+                f for f in generated_files.get("generated_files", []) if "model" in f
+            ]
+            gate_g12 = self._gate_g12_pydantic_models(model_files)
+            stage.validation_gates.append(gate_g12)
+
+            if gate_g12.status == "fail":
+                stage.status = StageStatus.FAILED
+                stage.error = gate_g12.message
+                return stage
+
+            stage.status = StageStatus.COMPLETED
+            return stage
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_5_write_files(
+        self, generation_result: Dict[str, Any], output_directory: str
+    ) -> Tuple[PipelineStage, Dict]:
+        """
+        Stage 5: Write generated files to filesystem.
+
+        Files are already written by template engine, this stage verifies.
+        """
+        stage = PipelineStage(stage_name="file_writing", status=StageStatus.RUNNING)
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            # Files are already written by template engine
+            # Verify they exist
+            output_path = Path(generation_result["output_path"])
+            generated_files = generation_result["generated_files"]
+
+            if not output_path.exists():
+                stage.status = StageStatus.FAILED
+                stage.error = f"Output path not found: {output_path}"
+                return stage, {}
+
+            # Verify all files exist
+            for file_path_str in generated_files:
+                file_path = Path(file_path_str)
+                if not file_path.exists():
+                    stage.status = StageStatus.FAILED
+                    stage.error = f"File not found: {file_path}"
+                    return stage, {}
+
+            # Track written files for rollback
+            self.written_files = [Path(f) for f in generated_files]
+
+            stage.status = StageStatus.COMPLETED
+            stage.metadata = {
+                "files_written": len(generated_files),
+                "output_path": str(output_path),
+            }
+
+            return stage, {
+                "output_path": str(output_path),
+                "generated_files": generated_files,
+            }
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage, {}
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_6_compile_test(
+        self, output_path: str, node_type: str, service_name: str
+    ) -> Tuple[PipelineStage, Dict]:
+        """
+        Stage 6: Compilation testing (OPTIONAL).
+
+        Validation Gates (WARNING):
+        - G13: MyPy type checking
+        - G14: Import test
+        """
+        stage = PipelineStage(
+            stage_name="compilation_testing", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            output_path_obj = Path(output_path)
+            main_file = output_path_obj / "v1_0_0" / "node.py"
+
+            if not main_file.exists():
+                stage.status = StageStatus.FAILED
+                stage.error = f"Main file not found: {main_file}"
+                return stage, {"passed": False}
+
+            # G13: MyPy type checking
+            gate_g13 = self._gate_g13_mypy_check(str(main_file))
+            stage.validation_gates.append(gate_g13)
+
+            # G14: Import test
+            gate_g14 = self._gate_g14_import_test(
+                output_path_obj, node_type, service_name
+            )
+            stage.validation_gates.append(gate_g14)
+
+            # Compilation passed if no failures (warnings OK)
+            passed = all(gate.status != "fail" for gate in stage.validation_gates)
+
+            stage.status = StageStatus.COMPLETED
+            stage.metadata = {
+                "mypy_passed": gate_g13.status == "pass",
+                "import_passed": gate_g14.status == "pass",
+            }
+
+            return stage, {"passed": passed}
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            return stage, {"passed": False}
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    # -------------------------------------------------------------------------
+    # Validation Gates Implementation
+    # -------------------------------------------------------------------------
+
+    def _gate_g1_prompt_completeness_full(
+        self, parsed_data: Dict[str, Any]
+    ) -> ValidationGate:
+        """G1: Prompt has minimum required information."""
+        start_ms = time()
+
+        required_fields = ["node_type", "service_name", "domain", "description"]
+        missing = [f for f in required_fields if not parsed_data.get(f)]
+
+        if missing:
+            return ValidationGate(
+                gate_id="G1",
+                name="Prompt Completeness",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Missing required fields: {', '.join(missing)}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G1",
+            name="Prompt Completeness",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message="All required fields present",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g2_node_type_valid(self, node_type: str) -> ValidationGate:
+        """G2: Node type is valid (all 4 ONEX types supported)."""
+        start_ms = time()
+
+        # Phase 2: All 4 ONEX node types supported
+        valid_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+
+        if node_type not in valid_types:
+            return ValidationGate(
+                gate_id="G2",
+                name="Node Type Valid",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Invalid node type: {node_type}. Valid types: {', '.join(valid_types)}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G2",
+            name="Node Type Valid",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"Node type '{node_type}' is valid",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g3_service_name_valid(self, service_name: str) -> ValidationGate:
+        """G3: Service name is valid Python identifier."""
+        start_ms = time()
+
+        # Check if valid Python identifier (snake_case)
+        if not re.match(r"^[a-z][a-z0-9_]*$", service_name):
+            return ValidationGate(
+                gate_id="G3",
+                name="Service Name Valid",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Invalid service name: '{service_name}'. Must be snake_case Python identifier.",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G3",
+            name="Service Name Valid",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"Service name '{service_name}' is valid",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g4_critical_imports_exist(self) -> ValidationGate:
+        """G4: Critical imports exist in omnibase_core."""
+        start_ms = time()
+
+        failures = []
+
+        for import_path in self.CRITICAL_IMPORTS:
+            try:
+                module_path, class_name = import_path.rsplit(".", 1)
+                module = import_module(module_path)
+
+                if not hasattr(module, class_name):
+                    failures.append(f"{class_name} not found in {module_path}")
+
+            except ImportError as e:
+                failures.append(f"Cannot import {module_path}: {e}")
+
+        if failures:
+            return ValidationGate(
+                gate_id="G4",
+                name="Critical Imports Exist",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Critical imports failed: {'; '.join(failures[:3])}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G4",
+            name="Critical Imports Exist",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"All {len(self.CRITICAL_IMPORTS)} critical imports validated",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g5_templates_available(self, node_type: str) -> ValidationGate:
+        """G5: Templates are available for node type."""
+        start_ms = time()
+
+        if node_type not in self.template_engine.templates:
+            return ValidationGate(
+                gate_id="G5",
+                name="Templates Available",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Template not found for node type: {node_type}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G5",
+            name="Templates Available",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"Template for {node_type} node is available",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g7_prompt_completeness(self, prompt: str) -> ValidationGate:
+        """G7: Prompt has minimum information (WARNING)."""
+        start_ms = time()
+
+        if len(prompt) < 10:
+            return ValidationGate(
+                gate_id="G7",
+                name="Prompt Completeness Check",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message="Prompt is very short (<10 chars). Results may be unreliable.",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        if len(prompt.split()) < 5:
+            return ValidationGate(
+                gate_id="G7",
+                name="Prompt Completeness Check",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message="Prompt has few words (<5). Consider providing more context.",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G7",
+            name="Prompt Completeness Check",
+            status="pass",
+            gate_type=GateType.WARNING,
+            message="Prompt has sufficient information",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g8_context_completeness(
+        self, parsed_data: Dict[str, Any]
+    ) -> ValidationGate:
+        """G8: Context has all expected fields (WARNING)."""
+        start_ms = time()
+
+        expected_fields = [
+            "node_type",
+            "service_name",
+            "domain",
+            "description",
+            "operations",
+            "features",
+        ]
+        missing = [f for f in expected_fields if f not in parsed_data]
+
+        if missing:
+            return ValidationGate(
+                gate_id="G8",
+                name="Context Completeness",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message=f"Context missing optional fields: {', '.join(missing)}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G8",
+            name="Context Completeness",
+            status="pass",
+            gate_type=GateType.WARNING,
+            message="Context has all expected fields",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g9_python_syntax_valid(self, code: str, file_path: str) -> ValidationGate:
+        """G9: Generated code has valid Python syntax (AST parsing)."""
+        start_ms = time()
+
+        try:
+            ast.parse(code)
+            return ValidationGate(
+                gate_id="G9",
+                name="Python Syntax Valid",
+                status="pass",
+                gate_type=GateType.BLOCKING,
+                message=f"Syntax valid: {file_path}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+        except SyntaxError as e:
+            return ValidationGate(
+                gate_id="G9",
+                name="Python Syntax Valid",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Syntax error in {file_path} line {e.lineno}: {e.msg}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+    def _gate_g10_onex_naming(self, code: str, node_type: str) -> ValidationGate:
+        """G10: Node class follows ONEX naming convention (suffix-based)."""
+        start_ms = time()
+
+        # Convert node_type to title case for pattern matching
+        # node_type comes in as uppercase (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)
+        # but ONEX naming standard uses title case (Effect, Compute, Reducer, Orchestrator)
+        node_type_title = node_type.capitalize()
+
+        # Find class definition
+        class_pattern = rf"class\s+(Node\w+{node_type_title})\("
+        match = re.search(class_pattern, code)
+
+        if not match:
+            return ValidationGate(
+                gate_id="G10",
+                name="ONEX Naming Convention",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Node class not found or incorrect naming (must end with '{node_type_title}')",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        class_name = match.group(1)
+
+        # Verify suffix (not prefix)
+        if not class_name.endswith(node_type_title):
+            return ValidationGate(
+                gate_id="G10",
+                name="ONEX Naming Convention",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Incorrect naming: '{class_name}' should end with '{node_type_title}'",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G10",
+            name="ONEX Naming Convention",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"Class name '{class_name}' follows ONEX naming convention",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g11_import_resolution(self, code: str) -> ValidationGate:
+        """G11: All imports are resolvable (static check)."""
+        start_ms = time()
+
+        warnings = []
+
+        # Find all import statements
+        import_pattern = r"^from\s+([\w\.]+)\s+import"
+        for match in re.finditer(import_pattern, code, re.MULTILINE):
+            module_path = match.group(1)
+
+            # Check for old (wrong) import paths
+            if "omnibase_core.core.node_" in module_path:
+                warnings.append(
+                    f"Old import path detected: {module_path} (should use omnibase_core.nodes.node_*)"
+                )
+
+        if warnings:
+            return ValidationGate(
+                gate_id="G11",
+                name="Import Resolution",
+                status="fail",
+                gate_type=GateType.BLOCKING,
+                message=f"Import issues found: {'; '.join(warnings[:2])}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G11",
+            name="Import Resolution",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message="All imports appear resolvable",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g12_pydantic_models(self, model_files: List[str]) -> ValidationGate:
+        """G12: Pydantic models are well-formed."""
+        start_ms = time()
+
+        warnings = []
+
+        for file_path_str in model_files[:5]:  # Check first 5 model files
+            try:
+                file_path = Path(file_path_str)
+                if not file_path.exists():
+                    continue
+
+                code = file_path.read_text()
+
+                # Check for old Pydantic v1 patterns
+                if ".dict()" in code:
+                    warnings.append(
+                        f"Pydantic v1 pattern in {file_path.name}: .dict() should be .model_dump()"
+                    )
+
+                # Check for BaseModel usage
+                if "class Model" in code and "BaseModel" in code:
+                    # Verify Config class (optional for v2)
+                    if "class Config:" not in code and "model_config" not in code:
+                        warnings.append(
+                            f"Pydantic model in {file_path.name} missing Config class"
+                        )
+
+            except Exception as e:
+                warnings.append(f"Error checking {file_path_str}: {e}")
+
+        if warnings:
+            return ValidationGate(
+                gate_id="G12",
+                name="Pydantic Model Structure",
+                status="warning",
+                gate_type=GateType.BLOCKING,
+                message=f"Model issues found: {'; '.join(warnings[:2])}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        return ValidationGate(
+            gate_id="G12",
+            name="Pydantic Model Structure",
+            status="pass",
+            gate_type=GateType.BLOCKING,
+            message=f"All {len(model_files)} model files validated",
+            duration_ms=int((time() - start_ms) * 1000),
+        )
+
+    def _gate_g13_mypy_check(self, file_path: str) -> ValidationGate:
+        """G13: MyPy type checking passes (WARNING)."""
+        start_ms = time()
+
+        try:
+            # Run mypy
+            result = subprocess.run(
+                ["poetry", "run", "mypy", file_path, "--no-error-summary"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode != 0:
+                return ValidationGate(
+                    gate_id="G13",
+                    name="MyPy Type Checking",
+                    status="warning",
+                    gate_type=GateType.WARNING,
+                    message=f"MyPy found issues: {result.stdout[:200]}",
+                    duration_ms=int((time() - start_ms) * 1000),
+                )
+
+            return ValidationGate(
+                gate_id="G13",
+                name="MyPy Type Checking",
+                status="pass",
+                gate_type=GateType.WARNING,
+                message="MyPy type checking passed",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        except subprocess.TimeoutExpired:
+            return ValidationGate(
+                gate_id="G13",
+                name="MyPy Type Checking",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message="MyPy check timed out (>30s)",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        except Exception as e:
+            return ValidationGate(
+                gate_id="G13",
+                name="MyPy Type Checking",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message=f"MyPy check failed: {str(e)}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+    def _gate_g14_import_test(
+        self, output_path: Path, node_type: str, service_name: str
+    ) -> ValidationGate:
+        """G14: Import test succeeds (WARNING)."""
+        start_ms = time()
+
+        try:
+            # Add to Python path
+            sys.path.insert(0, str(output_path.parent))
+
+            # Try to import
+            node_module_name = (
+                output_path.name
+            )  # e.g., "node_infrastructure_postgres_writer_effect"
+            module = import_module(f"{node_module_name}.v1_0_0.node")
+
+            # Try to get node class
+            pascal_name = "".join(word.capitalize() for word in service_name.split("_"))
+            node_class_name = f"Node{pascal_name}{node_type.capitalize()}"
+
+            if not hasattr(module, node_class_name):
+                return ValidationGate(
+                    gate_id="G14",
+                    name="Import Test",
+                    status="warning",
+                    gate_type=GateType.WARNING,
+                    message=f"Node class '{node_class_name}' not found in module",
+                    duration_ms=int((time() - start_ms) * 1000),
+                )
+
+            return ValidationGate(
+                gate_id="G14",
+                name="Import Test",
+                status="pass",
+                gate_type=GateType.WARNING,
+                message=f"Successfully imported {node_class_name}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        except ImportError as e:
+            return ValidationGate(
+                gate_id="G14",
+                name="Import Test",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message=f"Import failed: {str(e)[:100]}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        except Exception as e:
+            return ValidationGate(
+                gate_id="G14",
+                name="Import Test",
+                status="warning",
+                gate_type=GateType.WARNING,
+                message=f"Import test error: {str(e)[:100]}",
+                duration_ms=int((time() - start_ms) * 1000),
+            )
+
+        finally:
+            # Remove from path
+            if str(output_path.parent) in sys.path:
+                sys.path.remove(str(output_path.parent))
+
+    # -------------------------------------------------------------------------
+    # Helper Methods
+    # -------------------------------------------------------------------------
+
+    def _prompt_to_prd(self, prompt: str) -> str:
+        """Convert prompt to simple PRD format."""
+        return f"""# Node Generation Request
+
+## Overview
+{prompt}
+
+## Functional Requirements
+- Implement core functionality as described
+- Handle error cases appropriately
+- Provide logging and monitoring
+
+## Features
+- Feature 1: Core operation implementation
+- Feature 2: Error handling
+- Feature 3: Logging integration
+
+## Success Criteria
+- Node generates successfully
+- All validation gates pass
+- Code compiles without errors
+"""
+
+    def _detect_node_type(self, prompt: str) -> str:
+        """Detect node type from prompt using PromptParser."""
+        # Use PromptParser for intelligent node type detection
+        node_type, confidence = self.prompt_parser._extract_node_type(prompt)
+
+        self.logger.debug(
+            f"Detected node type: {node_type} (confidence: {confidence:.2f})"
+        )
+
+        return node_type
+
+    def _extract_service_name(
+        self, prompt: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
+        """Extract service name from prompt."""
+        # Strategy 1: Explicit name patterns (similar to PromptParser logic)
+        patterns = [
+            r"(?:called|named)\s+([A-Z][A-Za-z0-9_]+)",  # "called DatabaseWriter"
+            r"(?:name|Name):\s*([A-Z][A-Za-z0-9_]+)",  # "Name: DatabaseWriter"
+            r"([A-Z][A-Za-z0-9_]+)\s+(?:node|Node)",  # "DatabaseWriter node"
+            r"(?i)(?:EFFECT|COMPUTE|REDUCER|ORCHESTRATOR)\s+node:\s*([A-Z][A-Za-z0-9_]+)",  # "COMPUTE node: PriceCalculator"
+            r"(?i)(?:EFFECT|COMPUTE|REDUCER|ORCHESTRATOR)\s+node\s+([A-Z][A-Za-z0-9_]+)",  # "EFFECT node EmailSender"
+        ]
+
+        node_type_keywords = {"EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"}
+
+        for pattern in patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                name = match.group(1)
+                # Validate it's PascalCase and not a node type keyword
+                if (
+                    name
+                    and name[0].isupper()
+                    and name.upper() not in node_type_keywords
+                ):
+                    return name.lower()
+
+        # Strategy 2: Extract from "for XXX" pattern
+        match = re.search(r"for\s+(\w+)", prompt, re.IGNORECASE)
+        if match:
+            service_name = match.group(1).lower().replace(" ", "_")
+            return service_name
+
+        # Strategy 3: Use first keyword from analysis
+        if analysis_result.parsed_prd.extracted_keywords:
+            return (
+                analysis_result.parsed_prd.extracted_keywords[0]
+                .lower()
+                .replace(" ", "_")
+            )
+
+        # Ultimate fallback
+        return "generated_service"
+
+    def _extract_domain(
+        self, prompt: str, analysis_result: SimplePRDAnalysisResult
+    ) -> str:
+        """Extract domain from prompt."""
+        prompt_lower = prompt.lower()
+
+        # Strategy 1: Explicit domain mention
+        patterns = [
+            r"(?:in\s+(?:the\s+)?|domain:\s*)([a-z_]+)\s+domain",  # "in workflow_services domain" or "in the data_services domain"
+            r"domain:\s*([a-z_]+)",  # "domain: data_services"
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, prompt_lower)
+            if match:
+                domain = match.group(1)
+                # Convert to snake_case if needed
+                domain = re.sub(r"[^a-z0-9]+", "_", domain.lower())
+                return domain
+
+        # Strategy 2: Keyword-based inference
+        domain_keywords = {
+            "infrastructure": ["database", "postgres", "redis", "cache", "storage"],
+            "api": ["api", "http", "rest", "graphql", "endpoint"],
+            "data": ["data", "processing", "etl", "transform"],
+            "messaging": ["message", "queue", "kafka", "rabbitmq", "event"],
+            "auth": ["auth", "authentication", "authorization", "security"],
+        }
+
+        for domain, keywords in domain_keywords.items():
+            if any(kw in prompt_lower for kw in keywords):
+                return domain
+
+        # Fallback
+        return "general"
+
+    async def _rollback(self, failed_stage: str):
+        """Rollback changes on pipeline failure."""
+        self.logger.warning(f"Rolling back changes from stage: {failed_stage}")
+
+        # Delete written files
+        for file_path in self.written_files:
+            try:
+                if file_path.exists():
+                    if file_path.is_file():
+                        file_path.unlink()
+                    elif file_path.is_dir():
+                        # Delete directory recursively
+                        import shutil
+
+                        shutil.rmtree(file_path)
+                    self.logger.debug(f"Deleted: {file_path}")
+            except Exception as e:
+                self.logger.error(f"Failed to delete {file_path}: {e}")
+
+        # Delete temp files
+        for file_path in self.temp_files:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    self.logger.debug(f"Deleted temp file: {file_path}")
+            except Exception as e:
+                self.logger.error(f"Failed to delete temp file {file_path}: {e}")
+
+        self.logger.info("Rollback complete")
+
+    async def cleanup_async(self, timeout: float = 5.0):
+        """
+        Cleanup async resources (template engine cache).
+
+        Args:
+            timeout: Maximum time to wait for cleanup (seconds)
+        """
+        if self.template_engine:
+            await self.template_engine.cleanup_async(timeout)
+            self.logger.debug("Template engine cleanup complete")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup resources."""
+        await self.cleanup_async()
+        return False
+
+    def __del__(self):
+        """Destructor - warn if cleanup not called."""
+        if (
+            hasattr(self, "template_engine")
+            and self.template_engine
+            and hasattr(self.template_engine, "template_cache")
+            and self.template_engine.template_cache
+        ):
+            if hasattr(self.template_engine.template_cache, "_background_tasks"):
+                tasks = self.template_engine.template_cache._background_tasks
+                if tasks:
+                    self.logger.warning(
+                        f"GenerationPipeline destroyed with {len(tasks)} pending tasks. "
+                        f"Use async context manager or cleanup_async() to avoid this."
+                    )

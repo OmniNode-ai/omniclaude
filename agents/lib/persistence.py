@@ -19,23 +19,41 @@ from .version_config import get_config
 
 class CodegenPersistence:
     def __init__(self, dsn: Optional[str] = None) -> None:
+        self._persistence_enabled = True
+
         if dsn:
             self.dsn = dsn
         else:
             # Build DSN from configuration with URL encoding for credentials
             config = get_config()
             if not config.postgres_password:
-                raise ValueError(
-                    "POSTGRES_PASSWORD environment variable is required. "
-                    "Please set it in your environment or .env file."
+                # Gracefully disable persistence if password not configured
+                self._persistence_enabled = False
+                self.dsn = None
+                import logging
+
+                logging.getLogger(__name__).info(
+                    "POSTGRES_PASSWORD not configured - database persistence disabled. "
+                    "Cache metrics will be in-memory only. "
+                    "Set POSTGRES_PASSWORD environment variable to enable persistence."
                 )
-            # URL-encode credentials to handle special characters
-            user = quote_plus(config.postgres_user)
-            password = quote_plus(config.postgres_password)
-            self.dsn = f"postgresql://{user}:{password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
+            else:
+                # URL-encode credentials to handle special characters
+                user = quote_plus(config.postgres_user)
+                password = quote_plus(config.postgres_password)
+                self.dsn = f"postgresql://{user}:{password}@{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
         self._pool: Optional[asyncpg.Pool] = None
 
-    async def _ensure_pool(self) -> asyncpg.Pool:
+    async def _ensure_pool(self) -> Optional[asyncpg.Pool]:
+        """
+        Ensure database connection pool is initialized.
+
+        Returns:
+            Pool if persistence is enabled, None otherwise
+        """
+        if not self._persistence_enabled:
+            return None
+
         if self._pool is None:
             self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=5)
         return self._pool
@@ -370,7 +388,13 @@ class CodegenPersistence:
             size_bytes: Optional file size
             load_time_ms: Optional load time
         """
+        if not self._persistence_enabled:
+            return  # Gracefully skip if persistence disabled
+
         pool = await self._ensure_pool()
+        if pool is None:
+            return  # Pool creation failed, skip
+
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -406,7 +430,13 @@ class CodegenPersistence:
             cache_hit: Whether this was a cache hit
             load_time_ms: Optional load time (for misses)
         """
+        if not self._persistence_enabled:
+            return  # Gracefully skip if persistence disabled
+
         pool = await self._ensure_pool()
+        if pool is None:
+            return  # Pool creation failed, skip
+
         async with pool.acquire() as conn:
             if cache_hit:
                 await conn.execute(

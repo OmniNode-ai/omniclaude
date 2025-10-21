@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 # Import from omnibase_core
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
+from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
 from .simple_prd_analyzer import SimplePRDAnalysisResult
 from .template_cache import TemplateCache
@@ -206,7 +206,7 @@ class OmniNodeTemplateEngine:
             Dictionary with generated files and metadata
 
         Raises:
-            OnexError: If generation fails
+            ModelOnexError: If generation fails
         """
         try:
             self.logger.info(f"Generating {node_type} node: {microservice_name}")
@@ -214,10 +214,10 @@ class OmniNodeTemplateEngine:
             # Get template for node type
             template = self.templates.get(node_type)
             if not template:
-                raise OnexError(
-                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                raise ModelOnexError(
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"No template found for node type: {node_type}",
-                    details={"available_templates": list(self.templates.keys())},
+                    context={"available_templates": list(self.templates.keys())},
                 )
 
             # Prepare context for template rendering
@@ -282,15 +282,15 @@ class OmniNodeTemplateEngine:
 
         except Exception as e:
             self.logger.error(f"Node generation failed: {str(e)}")
-            raise OnexError(
-                code=EnumCoreErrorCode.OPERATION_FAILED,
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Node generation failed: {str(e)}",
-                details={
+                context={
                     "node_type": node_type,
                     "microservice_name": microservice_name,
                     "domain": domain,
                 },
-            )
+            ) from e
 
     def _prepare_template_context(
         self,
@@ -345,18 +345,25 @@ class OmniNodeTemplateEngine:
         if not mixins:
             return ""
 
-        imports = []
-        for mixin in mixins:
-            imports.append(f"from omnibase_core.mixins.{mixin.lower()} import {mixin}")
+        # TODO: Re-enable when omnibase_core supports mixins
+        # Temporarily disabled to avoid importing non-existent modules
+        return ""
 
-        return "\n".join(imports)
+        # imports = []
+        # for mixin in mixins:
+        #     imports.append(f"from omnibase_core.mixins.{mixin.lower()} import {mixin}")
+        # return "\n".join(imports)
 
     def _generate_mixin_inheritance(self, mixins: List[str]) -> str:
         """Generate mixin inheritance chain"""
         if not mixins:
             return ""
 
-        return ", " + ", ".join(mixins)
+        # TODO: Re-enable when omnibase_core supports mixins
+        # Temporarily disabled to avoid using non-existent mixin classes
+        return ""
+
+        # return ", " + ", ".join(mixins)
 
     def _generate_mixin_initialization(self, mixins: List[str]) -> str:
         """Generate mixin initialization code"""
@@ -473,9 +480,8 @@ Input model for {microservice_name} node
 from typing import Dict, Any, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
-from omnibase_core.core.node_effect import ModelEffectInput
 
-class Model{pascal_name}Input(ModelEffectInput):
+class Model{pascal_name}Input(BaseModel):
     """Input envelope for {microservice_name} operations"""
 
     # Add node-specific fields here
@@ -498,9 +504,8 @@ Output model for {microservice_name} node
 from typing import Dict, Any, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
-from omnibase_core.core.node_effect import ModelEffectOutput
 
-class Model{pascal_name}Output(ModelEffectOutput):
+class Model{pascal_name}Output(BaseModel):
     """Output envelope for {microservice_name} operations"""
 
     # Add node-specific fields here
@@ -705,8 +710,8 @@ from .enum_{microservice_name}_operation_type import *
             NODE_TYPE_LOWER=node_type_lower,
             BUSINESS_DESCRIPTION=analysis_result.parsed_prd.description,
             PERFORMANCE_FIELDS=performance_fields,
-            IS_PERSISTENT_SERVICE=str(is_persistent).lower(),
-            REQUIRES_EXTERNAL_DEPS=str(requires_external_deps).lower(),
+            IS_PERSISTENT_SERVICE=str(is_persistent).capitalize(),
+            REQUIRES_EXTERNAL_DEPS=str(requires_external_deps).capitalize(),
         )
 
         return rendered
