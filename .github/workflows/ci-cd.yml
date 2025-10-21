@@ -79,7 +79,7 @@ jobs:
       - name: Run type checking (mypy)
         run: |
           poetry run pip install mypy types-PyYAML
-          poetry run mypy agents/ --ignore-missing-imports || true
+          poetry run mypy agents/ --ignore-missing-imports
 
   # ============================================================================
   # Security Scanning - Python Dependencies
@@ -112,7 +112,7 @@ jobs:
       - name: Run Safety (dependency vulnerability check)
         run: |
           pip install safety
-          safety check --file requirements.txt --output text || true
+          safety check --file requirements.txt --output text
 
       - name: Run Bandit (security linter for Python)
         run: |
@@ -120,7 +120,7 @@ jobs:
           # Explicitly exclude template directories to avoid false positives
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
-            -f json -o bandit-report.json || true
+            -f json -o bandit-report.json
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
             -f txt
