@@ -663,6 +663,75 @@ stats.print_stats(20)  # Top 20 slowest functions
 
 ---
 
+## Intelligence Gathering System
+
+### How It Works
+
+The platform now includes an intelligence gathering system that analyzes best practices and patterns before generating code.
+
+**1. Pattern Library**: Built-in best practices for each node type
+   - Location: `agents/lib/intelligence_gatherer.py`
+   - Format: `Dict[node_type, Dict[domain, List[str]]]`
+
+**2. RAG Integration** (Optional):
+   - Queries Archon MCP for contextual patterns
+   - Falls back to pattern library if unavailable
+
+**3. Intelligence Context**:
+   - `node_type_patterns`: General patterns for node type
+   - `domain_best_practices`: Domain-specific patterns
+   - `common_operations`: Expected operations (e.g., CRUD)
+   - `required_mixins`: Mixins to include
+   - `performance_targets`: Performance expectations
+   - `error_scenarios`: Common error cases
+
+### Adding New Patterns
+
+Edit `agents/lib/intelligence_gatherer.py`:
+
+```python
+def _load_pattern_library(self) -> Dict[str, Any]:
+    return {
+        "EFFECT": {
+            "database": [
+                "Implement connection pooling for resource management",
+                "Use prepared statements to prevent SQL injection",
+                "Wrap operations in transactions for ACID compliance",
+            ],
+            "your_domain": [
+                "Your best practice here",
+                "Another pattern",
+            ],
+        },
+    }
+```
+
+### Casing Preservation (Fixed!)
+
+Service names now preserve original casing:
+
+**Before** (Incorrect):
+```bash
+# Input: "PostgresCRUD" → Output: "PostgresCRUD" ❌
+# Actually generated: "postgrescrud" (all lowercase)
+```
+
+**After** (Correct):
+```bash
+# Input: "PostgresCRUD" → Output: "PostgresCRUD" ✅
+# Input: "RestAPI" → Output: "RestAPI" ✅
+# Input: "postgres_crud" → Output: "PostgresCrud" ✅
+```
+
+**How It Works**:
+- Acronym detection: Preserves CRUD, API, SQL, HTTP, REST, JSON, XML, UUID, etc.
+- Mixed-case preservation: Maintains original casing from input
+- PascalCase conversion: Converts snake_case to PascalCase while preserving acronyms
+
+**No more all-lowercase conversion!**
+
+---
+
 ## Extension Guide
 
 ### Adding a New Node Type

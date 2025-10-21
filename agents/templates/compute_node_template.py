@@ -41,6 +41,24 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
 
     Features:
 {FEATURES}
+
+    Best Practices Applied (Intelligence-Driven):
+{BEST_PRACTICES_FORMATTED}
+
+    Performance Targets:
+{PERFORMANCE_TARGETS_FORMATTED}
+
+    Error Scenarios Handled:
+{ERROR_SCENARIOS_FORMATTED}
+
+    Domain-Specific Patterns:
+{DOMAIN_PATTERNS_FORMATTED}
+
+    Testing Recommendations:
+{TESTING_SECTION}
+
+    Security Considerations:
+{SECURITY_SECTION}
     """
 
     def __init__(self, container: ModelONEXContainer):
@@ -74,6 +92,8 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
 
             # Validate input
             await self._validate_input(input_data)
+
+{PATTERN_CODE_BLOCKS}
 
             # Execute computation
             result_data = await self._execute_computation(input_data)

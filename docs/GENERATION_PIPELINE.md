@@ -145,6 +145,64 @@ PipelineResult (success/failure + metadata)
 
 ---
 
+### Stage 1.5: Intelligence Gathering (NEW!)
+
+**Duration**: ~3-5 seconds
+**Purpose**: Analyze and gather best practices for the node being generated
+
+The pipeline now includes an intelligence gathering stage that analyzes:
+- **Best practices** for the node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)
+- **Domain-specific patterns** (database, API, file, etc.)
+- **Common operations** and error scenarios
+- **Performance targets** and optimization strategies
+
+**Intelligence Sources**:
+1. **Built-in Pattern Library**: Curated best practices for each node type
+2. **RAG Integration** (optional): Query Archon MCP for contextual patterns
+3. **Codebase Analysis**: Learn from existing production nodes
+
+**Results Injected Into Generated Code**:
+- ✅ Production-ready best practices in docstrings
+- ✅ Pattern-specific code stubs (connection pooling, circuit breaker, etc.)
+- ✅ Domain-appropriate error handling
+- ✅ Performance optimization TODOs
+
+**Intelligence Context Structure**:
+```python
+{
+    "node_type_patterns": List[str],        # General patterns for node type
+    "domain_best_practices": List[str],     # Domain-specific patterns
+    "common_operations": List[str],         # Expected operations (e.g., CRUD)
+    "required_mixins": List[str],           # Mixins to include
+    "performance_targets": Dict[str, Any],  # Performance expectations
+    "error_scenarios": List[str]            # Common error cases
+}
+```
+
+**Example Intelligence for Database EFFECT Node**:
+```python
+intelligence_context = {
+    "node_type_patterns": [
+        "Implement connection pooling for resource management",
+        "Use circuit breaker pattern for resilience",
+        "Apply retry logic with exponential backoff"
+    ],
+    "domain_best_practices": [
+        "Use prepared statements to prevent SQL injection",
+        "Wrap operations in transactions for ACID compliance",
+        "Implement connection timeout and health checks"
+    ],
+    "common_operations": ["create", "read", "update", "delete"],
+    "required_mixins": ["MixinRetry", "MixinCircuitBreaker"],
+    "performance_targets": {"max_latency_ms": 100},
+    "error_scenarios": ["connection_timeout", "deadlock", "constraint_violation"]
+}
+```
+
+**No Validation Gates** (intelligence gathering is informational only)
+
+---
+
 ### Stage 2: Pre-Generation Validation
 
 **Duration**: ~2 seconds

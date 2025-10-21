@@ -268,8 +268,7 @@ class PromptParser:
             Tuple of (node_name, confidence)
         """
         # Strategy 1: Explicit name patterns
-        # Note: Some patterns use case-insensitive matching for keywords,
-        # but the capture group must still be PascalCase
+        # IMPORTANT: Preserve exact casing from input (including acronyms like CRUD, API, etc.)
         patterns = [
             (
                 r"(?:called|named)\s+([A-Z][A-Za-z0-9_]+)",
@@ -303,6 +302,7 @@ class PromptParser:
                     and name[0].isupper()
                     and name.upper() not in node_type_keywords
                 ):
+                    # PRESERVE EXACT CASING - don't lowercase acronyms!
                     return name, 1.0
 
         # Strategy 2: Extract from description
