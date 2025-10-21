@@ -8,6 +8,12 @@ packages = [{include = "parallel_execution", from = "agents"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+
+# ONEX dependencies - Using main branch
+omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main"}
+omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch = "main"}
+
+# Core dependencies
 pydantic = "^2.0.0"
 pyyaml = "^6.0"
 httpx = "^0.28.1"
@@ -20,10 +26,11 @@ python-dotenv = "^1.1.1"
 asyncpg = "^0.29.0"
 watchdog = "^6.0.0"
 numpy = "^2.3.3"
-omnibase-core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", rev = "main"}
 aiokafka = "^0.10.0"
-omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", rev = "main"}
 scikit-learn = "^1.7.2"
+fastapi = "^0.115.0"
+uvicorn = "^0.34.0"
+psycopg2-binary = "^2.9.10"
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"
@@ -33,6 +40,8 @@ pytest = "^8.0.0"
 pytest-asyncio = "^0.23.0"
 black = "^24.0.0"
 ruff = "^0.3.0"
+mypy = "^1.11.0"
+bandit = "^1.8.0"
 google-generativeai = "^0.8.5"
 jsonschema = "^4.23.0"
 pyyaml = "^6.0.3"
@@ -40,22 +49,49 @@ neo4j = "^6.0.2"
 asyncpg = "^0.29.0"
 pytest-cov = "^7.0.0"
 psutil = "^6.1.0"
+isort = "^7.0.0"
+pre-commit = "^4.3.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-line-length = 120
+line-length = 88
 target-version = ['py312']
 
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+
 [tool.ruff]
-line-length = 120
+line-length = 88
 target-version = "py312"
+exclude = [
+    "agents/templates/*.py",  # Template files with placeholder syntax
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["agents/tests"]
 markers = [
     "integration: integration tests that may hit external services",
+]
+
+[tool.bandit]
+# Bandit security scanner configuration - matches CI workflow
+exclude_dirs = [
+    "agents/templates",
+    "agents/parallel_execution/templates",
+    "agents/tests",
+    "claude_hooks/tests",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
+skips = [
+    # Skip test files - they often have intentional security issues for testing
+    "B101",  # assert_used - common in tests
 ]

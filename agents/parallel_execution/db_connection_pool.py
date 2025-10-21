@@ -169,7 +169,9 @@ class NodeDatabasePoolEffect:
                 result = await conn.fetchrow("SELECT * FROM agent_definitions")
         """
         if not self._initialized or self._pool is None:
-            raise RuntimeError("Database pool not initialized. Call initialize() first.")
+            raise RuntimeError(
+                "Database pool not initialized. Call initialize() first."
+            )
 
         conn = None
         try:

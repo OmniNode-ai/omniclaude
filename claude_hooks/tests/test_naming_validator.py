@@ -1,13 +1,15 @@
 """Unit tests for the naming validator."""
-import pytest
+
+import sys
 import tempfile
 from pathlib import Path
-import sys
+
+import pytest
 
 # Add parent directory to path to import lib modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.validators.naming_validator import NamingValidator, Violation
+from lib.validators.naming_validator import NamingValidator
 
 
 class TestPythonNaming:
@@ -348,22 +350,38 @@ class TestOmninodeRepoDetection:
     def test_all_actual_repos_detection(self):
         """Verify auto-detection for all actual repos."""
         # Include repos (should enforce Omninode conventions)
-        assert NamingValidator.is_omninode_repo("/workspace/omniagent/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omniagent-main/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omnibase_core/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omnibase_infra/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omnibase_spi/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omnimcp/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omnimemory/test.py") == True
-        assert NamingValidator.is_omninode_repo("/workspace/omniplan/test.py") == True
+        assert NamingValidator.is_omninode_repo("/workspace/omniagent/test.py") is True
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/omniagent-main/test.py")
+            is True
+        )
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/omnibase_core/test.py") is True
+        )
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/omnibase_infra/test.py")
+            is True
+        )
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/omnibase_spi/test.py") is True
+        )
+        assert NamingValidator.is_omninode_repo("/workspace/omnimcp/test.py") is True
+        assert NamingValidator.is_omninode_repo("/workspace/omnimemory/test.py") is True
+        assert NamingValidator.is_omninode_repo("/workspace/omniplan/test.py") is True
 
         # Exclude repos (should use PEP 8)
-        assert NamingValidator.is_omninode_repo("/workspace/omninode_bridge/test.py") == False
-        assert NamingValidator.is_omninode_repo("/workspace/Archon/test.py") == False
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/omninode_bridge/test.py")
+            is False
+        )
+        assert NamingValidator.is_omninode_repo("/workspace/Archon/test.py") is False
 
         # Additional edge cases
-        assert NamingValidator.is_omninode_repo("/some/other/repo/test.py") == False
-        assert NamingValidator.is_omninode_repo("/workspace/random_project/test.py") == False
+        assert NamingValidator.is_omninode_repo("/some/other/repo/test.py") is False
+        assert (
+            NamingValidator.is_omninode_repo("/workspace/random_project/test.py")
+            is False
+        )
 
     def test_omninode_conventions_applied_correctly(self):
         """Verify Omninode repos get Omninode-specific validation."""
@@ -380,8 +398,12 @@ class User(BaseModel):  # Should be ModelUser
         violations = validator.validate_content(code, omninode_path)
 
         # Should detect violation for missing Model prefix
-        assert len(violations) > 0, "Should detect Model prefix violation in Omninode repo"
-        assert any("Model" in str(v.message) for v in violations), "Should mention Model prefix requirement"
+        assert (
+            len(violations) > 0
+        ), "Should detect Model prefix violation in Omninode repo"
+        assert any(
+            "Model" in str(v.message) for v in violations
+        ), "Should mention Model prefix requirement"
 
     def test_pep8_conventions_for_excluded_repos(self):
         """Verify excluded repos get standard PEP 8 validation."""
@@ -399,7 +421,9 @@ class User(BaseModel):  # Should be allowed (standard PEP 8)
 
         # Should NOT detect Model prefix violation in Archon
         model_violations = [v for v in violations if "Model" in str(v.message)]
-        assert len(model_violations) == 0, "Should not require Model prefix in Archon repo"
+        assert (
+            len(model_violations) == 0
+        ), "Should not require Model prefix in Archon repo"
 
 
 if __name__ == "__main__":

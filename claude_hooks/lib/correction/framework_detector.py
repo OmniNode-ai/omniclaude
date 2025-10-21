@@ -15,9 +15,9 @@ Date: 2025-09-30
 """
 
 import ast
-from dataclasses import dataclass
-from typing import Set, Optional, List
 import logging
+from dataclasses import dataclass
+from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +107,29 @@ class FrameworkMethodDetector:
             "refresh_from_db",
         },
         # Django view methods
-        "View": {"get", "post", "put", "patch", "delete", "head", "options", "dispatch"},
+        "View": {
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "head",
+            "options",
+            "dispatch",
+        },
         # Django REST framework
-        "APIView": {"get", "post", "put", "patch", "delete", "list", "create", "retrieve", "update", "destroy"},
+        "APIView": {
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+            "list",
+            "create",
+            "retrieve",
+            "update",
+            "destroy",
+        },
         # unittest
         "unittest.TestCase": {
             "setUp",

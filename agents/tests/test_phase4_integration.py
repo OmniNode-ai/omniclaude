@@ -5,28 +5,24 @@ Phase 4 Integration Tests - Full Generation Pipeline
 Tests the complete code generation pipeline from PRD to contracts, models, and enums.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
-from uuid import uuid4
-from datetime import datetime
 
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer, SimplePRDAnalysisResult
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
-    EFFECT_NODE_PRD,
     COMPUTE_NODE_PRD,
-    REDUCER_NODE_PRD,
-    ORCHESTRATOR_NODE_PRD,
-    NODE_TYPE_FIXTURES,
     EFFECT_ANALYSIS_RESULT,
+    EFFECT_NODE_PRD,
+    ORCHESTRATOR_NODE_PRD,
+    REDUCER_NODE_PRD,
     create_mock_analysis_result,
 )
 from agents.tests.utils.generation_test_helpers import (
-    parse_generated_yaml,
     parse_generated_python,
     validate_onex_naming,
-    check_type_annotations,
 )
 
 
@@ -55,7 +51,7 @@ class TestPhase4Integration:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # 3. Validate generated output
@@ -75,7 +71,7 @@ class TestPhase4Integration:
                 pytest.skip(f"Node naming validation not enforced yet: {error}")
 
             # 6. Validate Python syntax
-            with open(main_file, 'r') as f:
+            with open(main_file, "r") as f:
                 content = f.read()
                 tree, errors = parse_generated_python(content)
                 assert tree is not None, f"Syntax errors: {errors}"
@@ -100,7 +96,7 @@ class TestPhase4Integration:
                 node_type="COMPUTE",
                 microservice_name="csv_json_transformer",
                 domain="data_processing",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # 3. Validate output
@@ -122,11 +118,11 @@ class TestPhase4Integration:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Read generated content
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # Verify mixins from analysis are in generated code
@@ -149,7 +145,12 @@ class TestPhase4Integration:
             ("EFFECT", "user_management", "identity", EFFECT_NODE_PRD),
             ("COMPUTE", "data_transformer", "processing", COMPUTE_NODE_PRD),
             ("REDUCER", "analytics_aggregator", "analytics", REDUCER_NODE_PRD),
-            ("ORCHESTRATOR", "workflow_coordinator", "orchestration", ORCHESTRATOR_NODE_PRD),
+            (
+                "ORCHESTRATOR",
+                "workflow_coordinator",
+                "orchestration",
+                ORCHESTRATOR_NODE_PRD,
+            ),
         ]
 
         analyzer = SimplePRDAnalyzer()
@@ -165,7 +166,7 @@ class TestPhase4Integration:
                     node_type=node_type,
                     microservice_name=microservice_name,
                     domain=domain,
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
 
                 results.append(result)
@@ -179,7 +180,9 @@ class TestPhase4Integration:
 
             # Verify no file conflicts
             main_files = [r["main_file"] for r in results]
-            assert len(main_files) == len(set(main_files)), "Duplicate file names detected"
+            assert len(main_files) == len(
+                set(main_files)
+            ), "Duplicate file names detected"
 
     @pytest.mark.asyncio
     async def test_generation_with_minimal_prd(self):
@@ -208,7 +211,7 @@ A basic service with minimal requirements.
                 node_type="EFFECT",
                 microservice_name="minimal_service",
                 domain="basic",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             assert result is not None
@@ -236,18 +239,18 @@ A basic service with minimal requirements.
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Parse generated code
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, errors = parse_generated_python(content)
             assert tree is not None, f"Syntax errors: {errors}"
 
             # Check for expected class
-            classes = [node.name for node in tree.body if hasattr(node, 'name')]
+            classes = [node.name for node in tree.body if hasattr(node, "name")]
             assert any("Effect" in cls for cls in classes), "No Effect class found"
 
     @pytest.mark.asyncio
@@ -258,7 +261,7 @@ A basic service with minimal requirements.
             EFFECT_NODE_PRD,
             "EFFECT",
             mixins=["MixinEventBus", "MixinCaching", "MixinHealthCheck"],
-            external_systems=["PostgreSQL"]
+            external_systems=["PostgreSQL"],
         )
 
         engine = OmniNodeTemplateEngine()
@@ -269,10 +272,10 @@ A basic service with minimal requirements.
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # Verify mixin imports
@@ -292,7 +295,7 @@ A basic service with minimal requirements.
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Check metadata in result
@@ -316,7 +319,7 @@ A basic service with minimal requirements.
                     node_type=node_type,
                     microservice_name=name,
                     domain=domain,
-                    output_directory=temp_dir
+                    output_directory=temp_dir,
                 )
 
         # Generate multiple nodes concurrently
@@ -349,7 +352,7 @@ class TestGenerationArtifacts:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             output_path = Path(result["output_path"])
@@ -368,7 +371,7 @@ class TestGenerationArtifacts:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Check generated_files list
@@ -377,7 +380,9 @@ class TestGenerationArtifacts:
 
             # Verify all listed files exist
             for file_path in generated_files:
-                assert Path(file_path).exists(), f"Listed file does not exist: {file_path}"
+                assert Path(
+                    file_path
+                ).exists(), f"Listed file does not exist: {file_path}"
 
     @pytest.mark.asyncio
     async def test_init_file_generation(self):
@@ -391,7 +396,7 @@ class TestGenerationArtifacts:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Check for __init__.py in output directory

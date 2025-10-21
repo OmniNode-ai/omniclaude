@@ -5,13 +5,13 @@ Performance Test Script for Pattern Tracking
 This script validates the performance improvements made to the pattern tracking system.
 """
 
-import sys
-import time
 import asyncio
 import json
-from pathlib import Path
+import sys
+import time
 from datetime import datetime
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict
 
 # Add lib to path
 SCRIPT_DIR = Path(__file__).parent
@@ -20,13 +20,15 @@ sys.path.insert(0, str(SCRIPT_DIR / "lib"))
 # Import both trackers for comparison
 try:
     from pattern_tracker_sync import PatternTrackerSync
+
     SYNC_AVAILABLE = True
 except ImportError:
     SYNC_AVAILABLE = False
     PatternTrackerSync = None
 
 try:
-    from enhanced_pattern_tracker import EnhancedPatternTracker, get_enhanced_tracker
+    from enhanced_pattern_tracker import EnhancedPatternTracker
+
     ENHANCED_AVAILABLE = True
 except ImportError:
     ENHANCED_AVAILABLE = False
@@ -41,7 +43,7 @@ class PerformanceTestSuite:
             "test_timestamp": datetime.now().isoformat(),
             "sync_tracker": {},
             "enhanced_tracker": {},
-            "comparison": {}
+            "comparison": {},
         }
 
     def test_sync_tracker(self) -> Dict[str, Any]:
@@ -60,7 +62,11 @@ def example_function(param1: str, param2: int = 42) -> str:
 """
 
         test_contexts = [
-            {"event_type": "pattern_created", "file_path": f"/test/file_{i}.py", "language": "python"}
+            {
+                "event_type": "pattern_created",
+                "file_path": f"/test/file_{i}.py",
+                "language": "python",
+            }
             for i in range(20)
         ]
 
@@ -94,11 +100,13 @@ def example_function(param1: str, param2: int = 42) -> str:
             "operations_per_second": 10 / multi_op_time,
             "cache_test_time": cache_time,
             "cache_operations_per_second": 10 / cache_time,
-            "metrics": metrics
+            "metrics": metrics,
         }
 
         print(f"✅ Sync Tracker: {result['operations_per_second']:.1f} ops/sec")
-        print(f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec")
+        print(
+            f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec"
+        )
 
         return result
 
@@ -118,7 +126,11 @@ def example_function(param1: str, param2: int = 42) -> str:
 """
 
         test_contexts = [
-            {"event_type": "pattern_created", "file_path": f"/test/file_{i}.py", "language": "python"}
+            {
+                "event_type": "pattern_created",
+                "file_path": f"/test/file_{i}.py",
+                "language": "python",
+            }
             for i in range(20)
         ]
 
@@ -138,7 +150,7 @@ def example_function(param1: str, param2: int = 42) -> str:
         # Test 3: Batch processing
         start_time = time.time()
         batch_patterns = [(test_code, context, None) for context in test_contexts[:10]]
-        batch_pattern_ids = await tracker.track_pattern_creation_batch(batch_patterns)
+        await tracker.track_pattern_creation_batch(batch_patterns)
         batch_time = time.time() - start_time
 
         # Test 4: Cache effectiveness
@@ -163,12 +175,16 @@ def example_function(param1: str, param2: int = 42) -> str:
             "batch_operations_per_second": 10 / batch_time,
             "cache_test_time": cache_time,
             "cache_operations_per_second": 10 / cache_time,
-            "metrics": metrics
+            "metrics": metrics,
         }
 
         print(f"✅ Enhanced Tracker: {result['operations_per_second']:.1f} ops/sec")
-        print(f"✅ Batch Processing: {result['batch_operations_per_second']:.1f} ops/sec")
-        print(f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec")
+        print(
+            f"✅ Batch Processing: {result['batch_operations_per_second']:.1f} ops/sec"
+        )
+        print(
+            f"✅ Cache Performance: {result['cache_operations_per_second']:.1f} ops/sec"
+        )
 
         return result
 
@@ -212,8 +228,12 @@ def example_function(param1: str, param2: int = 42) -> str:
             enhanced_ops_per_sec = enhanced_result["operations_per_second"]
             batch_ops_per_sec = enhanced_result["batch_operations_per_second"]
 
-            improvement_over_sync = ((enhanced_ops_per_sec - sync_ops_per_sec) / sync_ops_per_sec) * 100
-            batch_improvement = ((batch_ops_per_sec - sync_ops_per_sec) / sync_ops_per_sec) * 100
+            improvement_over_sync = (
+                (enhanced_ops_per_sec - sync_ops_per_sec) / sync_ops_per_sec
+            ) * 100
+            batch_improvement = (
+                (batch_ops_per_sec - sync_ops_per_sec) / sync_ops_per_sec
+            ) * 100
 
             self.results["comparison"] = {
                 "sync_vs_enhanced_improvement_percent": improvement_over_sync,
@@ -221,14 +241,20 @@ def example_function(param1: str, param2: int = 42) -> str:
                 "sync_ops_per_second": sync_ops_per_sec,
                 "enhanced_ops_per_second": enhanced_ops_per_sec,
                 "batch_ops_per_second": batch_ops_per_sec,
-                "performance_tier": self._get_performance_tier(batch_ops_per_sec)
+                "performance_tier": self._get_performance_tier(batch_ops_per_sec),
             }
 
-            print(f"📊 Performance Comparison:")
+            print("📊 Performance Comparison:")
             print(f"   Sync Tracker: {sync_ops_per_sec:.1f} ops/sec")
-            print(f"   Enhanced Tracker: {enhanced_ops_per_sec:.1f} ops/sec ({improvement_over_sync:+.1f}%)")
-            print(f"   Batch Processing: {batch_ops_per_sec:.1f} ops/sec ({batch_improvement:+.1f}%)")
-            print(f"   Performance Tier: {self.results['comparison']['performance_tier']}")
+            print(
+                f"   Enhanced Tracker: {enhanced_ops_per_sec:.1f} ops/sec ({improvement_over_sync:+.1f}%)"
+            )
+            print(
+                f"   Batch Processing: {batch_ops_per_sec:.1f} ops/sec ({batch_improvement:+.1f}%)"
+            )
+            print(
+                f"   Performance Tier: {self.results['comparison']['performance_tier']}"
+            )
 
     def _get_performance_tier(self, ops_per_second: float) -> str:
         """Determine performance tier based on operations per second."""
@@ -248,7 +274,7 @@ def example_function(param1: str, param2: int = 42) -> str:
         report_path = Path.home() / ".claude" / "hooks" / "logs" / filename
         report_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(report_path, 'w') as f:
+        with open(report_path, "w") as f:
             json.dump(self.results, f, indent=2)
 
         print(f"📄 Report saved to: {report_path}")
@@ -261,9 +287,13 @@ def main():
     print("=" * 60)
 
     # Check tracker availability
-    print(f"📋 System Status:")
-    print(f"   Sync Tracker: {'✅ Available' if SYNC_AVAILABLE else '❌ Not Available'}")
-    print(f"   Enhanced Tracker: {'✅ Available' if ENHANCED_AVAILABLE else '❌ Not Available'}")
+    print("📋 System Status:")
+    print(
+        f"   Sync Tracker: {'✅ Available' if SYNC_AVAILABLE else '❌ Not Available'}"
+    )
+    print(
+        f"   Enhanced Tracker: {'✅ Available' if ENHANCED_AVAILABLE else '❌ Not Available'}"
+    )
     print()
 
     # Run performance tests
@@ -274,12 +304,14 @@ def main():
     report_path = test_suite.save_report()
 
     # Print summary
-    print(f"\n📈 Test Summary:")
+    print("\n📈 Test Summary:")
     if "comparison" in results:
         comparison = results["comparison"]
         print(f"   Best Performance: {comparison['batch_ops_per_second']:.1f} ops/sec")
         print(f"   Performance Tier: {comparison['performance_tier']}")
-        print(f"   Improvement over sync: {comparison['sync_vs_batch_improvement_percent']:+.1f}%")
+        print(
+            f"   Improvement over sync: {comparison['sync_vs_batch_improvement_percent']:+.1f}%"
+        )
 
     print(f"\n📄 Full report: {report_path}")
     print("🔗 Open the performance dashboard for real-time monitoring")

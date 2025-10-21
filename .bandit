@@ -1,0 +1,15 @@
+exclude_dirs:
+  - agents/templates
+  - agents/parallel_execution/templates
+  - .venv
+  - .git
+  - __pycache__
+skips:
+  - B101  # Skip assert_used check
+  - B110  # Skip try_except_pass (acceptable in test cleanup)
+  - B108  # Skip hardcoded_tmp_directory (acceptable in tests/examples)
+  - B603  # Skip subprocess_without_shell (acceptable in integration tests)
+  - B607  # Skip start_process_with_partial_path (acceptable in tests)
+  - B104  # Skip hardcoded_bind_all_interfaces (acceptable in dev dashboards)
+  - B605  # Skip start_process_with_a_shell (acceptable in test utilities)
+# IMPORTANT: Keep B105, B106, B107 (password checks) active everywhere!

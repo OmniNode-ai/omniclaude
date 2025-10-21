@@ -17,9 +17,9 @@ Target Performance:
 - Hit rate: >60% after warmup
 """
 
-from typing import Optional, Any, Dict
-import time
 import hashlib
+import time
+from typing import Any, Dict, Optional
 
 
 class ResultCache:
@@ -82,23 +82,23 @@ class ResultCache:
         entry = self.cache[key]
 
         # Check TTL
-        if time.time() > entry['expires_at']:
+        if time.time() > entry["expires_at"]:
             # Expired - remove and return None
             del self.cache[key]
             return None
 
         # Update access tracking
-        entry['hits'] += 1
-        entry['last_accessed'] = time.time()
+        entry["hits"] += 1
+        entry["last_accessed"] = time.time()
 
-        return entry['value']
+        return entry["value"]
 
     def set(
         self,
         query: str,
         value: Any,
         context: Optional[Dict] = None,
-        ttl_seconds: Optional[int] = None
+        ttl_seconds: Optional[int] = None,
     ):
         """
         Cache result with TTL.
@@ -114,11 +114,11 @@ class ResultCache:
 
         current_time = time.time()
         self.cache[key] = {
-            'value': value,
-            'created_at': current_time,
-            'expires_at': current_time + ttl,
-            'last_accessed': current_time,
-            'hits': 0  # Number of times accessed after creation
+            "value": value,
+            "created_at": current_time,
+            "expires_at": current_time + ttl,
+            "last_accessed": current_time,
+            "hits": 0,  # Number of times accessed after creation
         }
 
     def invalidate(self, query: str, context: Optional[Dict] = None):
@@ -148,8 +148,9 @@ class ResultCache:
         """
         current_time = time.time()
         expired_keys = [
-            key for key, entry in self.cache.items()
-            if current_time > entry['expires_at']
+            key
+            for key, entry in self.cache.items()
+            if current_time > entry["expires_at"]
         ]
 
         for key in expired_keys:
@@ -166,27 +167,27 @@ class ResultCache:
         """
         if not self.cache:
             return {
-                'entries': 0,
-                'total_hits': 0,
-                'avg_hits_per_entry': 0.0,
-                'oldest_entry_age_seconds': 0.0,
-                'cache_size_bytes': 0
+                "entries": 0,
+                "total_hits": 0,
+                "avg_hits_per_entry": 0.0,
+                "oldest_entry_age_seconds": 0.0,
+                "cache_size_bytes": 0,
             }
 
         current_time = time.time()
-        total_hits = sum(entry['hits'] for entry in self.cache.values())
+        total_hits = sum(entry["hits"] for entry in self.cache.values())
         total_entries = len(self.cache)
 
         # Find oldest entry
-        oldest_created = min(entry['created_at'] for entry in self.cache.values())
+        oldest_created = min(entry["created_at"] for entry in self.cache.values())
         oldest_age = current_time - oldest_created
 
         return {
-            'entries': total_entries,
-            'total_hits': total_hits,
-            'avg_hits_per_entry': total_hits / total_entries if total_entries else 0,
-            'oldest_entry_age_seconds': oldest_age,
-            'cache_size_bytes': len(str(self.cache))  # Approximate size
+            "entries": total_entries,
+            "total_hits": total_hits,
+            "avg_hits_per_entry": total_hits / total_entries if total_entries else 0,
+            "oldest_entry_age_seconds": oldest_age,
+            "cache_size_bytes": len(str(self.cache)),  # Approximate size
         }
 
     def get_detailed_stats(self) -> Dict[str, Any]:
@@ -199,29 +200,26 @@ class ResultCache:
         stats = self.stats()
 
         if not self.cache:
-            stats['hit_distribution'] = {}
-            stats['ttl_distribution'] = {}
+            stats["hit_distribution"] = {}
+            stats["ttl_distribution"] = {}
             return stats
 
         current_time = time.time()
 
         # Hit distribution
-        hit_counts = [entry['hits'] for entry in self.cache.values()]
-        stats['hit_distribution'] = {
-            'min_hits': min(hit_counts),
-            'max_hits': max(hit_counts),
-            'median_hits': sorted(hit_counts)[len(hit_counts) // 2]
+        hit_counts = [entry["hits"] for entry in self.cache.values()]
+        stats["hit_distribution"] = {
+            "min_hits": min(hit_counts),
+            "max_hits": max(hit_counts),
+            "median_hits": sorted(hit_counts)[len(hit_counts) // 2],
         }
 
         # TTL distribution
-        ttls = [
-            entry['expires_at'] - current_time
-            for entry in self.cache.values()
-        ]
-        stats['ttl_distribution'] = {
-            'min_ttl_seconds': min(ttls),
-            'max_ttl_seconds': max(ttls),
-            'avg_ttl_seconds': sum(ttls) / len(ttls)
+        ttls = [entry["expires_at"] - current_time for entry in self.cache.values()]
+        stats["ttl_distribution"] = {
+            "min_ttl_seconds": min(ttls),
+            "max_ttl_seconds": max(ttls),
+            "avg_ttl_seconds": sum(ttls) / len(ttls),
         }
 
         return stats
@@ -229,8 +227,6 @@ class ResultCache:
 
 # Standalone test
 if __name__ == "__main__":
-    import random
-
     cache = ResultCache(default_ttl_seconds=60)  # 1 minute for testing
 
     print("=== Testing Result Cache ===\n")
@@ -248,12 +244,12 @@ if __name__ == "__main__":
 
     # Test with context
     print("\n3. With Context:")
-    cache.set("query", ["agent-3"], context={'domain': 'api'})
-    result = cache.get("query", context={'domain': 'api'})
+    cache.set("query", ["agent-3"], context={"domain": "api"})
+    result = cache.get("query", context={"domain": "api"})
     print(f"   Cached: {result}")
 
     # Different context = different cache entry
-    result = cache.get("query", context={'domain': 'debug'})
+    result = cache.get("query", context={"domain": "debug"})
     print(f"   Different context: {result}")
 
     # Test hit tracking

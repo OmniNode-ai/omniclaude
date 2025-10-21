@@ -11,17 +11,16 @@ Usage:
 import asyncio
 import logging
 from datetime import datetime, timedelta
+
 from database_integration import (
-    DatabaseIntegrationLayer,
     DatabaseConfig,
     DatabaseHealthStatus,
-    CircuitState
+    DatabaseIntegrationLayer,
 )
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ async def test_batch_writes():
                 metadata={"test_id": i, "batch": i // 100},
                 agent_name="test-agent",
                 task_id=f"task_{i}",
-                duration_ms=float(i % 100)
+                duration_ms=float(i % 100),
             )
 
         # Force flush
@@ -99,7 +98,9 @@ async def test_batch_writes():
         if throughput >= 1000:
             logger.info("✅ Throughput target met (1000+ events/second)")
         else:
-            logger.warning(f"⚠️  Throughput below target: {throughput:.1f} events/second")
+            logger.warning(
+                f"⚠️  Throughput below target: {throughput:.1f} events/second"
+            )
 
         # Write routing decisions
         logger.info("Writing 100 routing decisions...")
@@ -110,12 +111,12 @@ async def test_batch_writes():
                 confidence_score=0.8 + (i % 20) * 0.01,
                 alternatives=[
                     {"agent": "alt-agent-1", "confidence": 0.6},
-                    {"agent": "alt-agent-2", "confidence": 0.5}
+                    {"agent": "alt-agent-2", "confidence": 0.5},
                 ],
                 reasoning=f"Test reasoning {i}",
                 routing_strategy="enhanced",
                 context={"test_id": i},
-                routing_time_ms=float(10 + i % 50)
+                routing_time_ms=float(10 + i % 50),
             )
 
         await db._flush_all_buffers()
@@ -149,10 +150,7 @@ async def test_query_api():
         logger.info("Querying trace events...")
         start_time = datetime.now()
 
-        events = await db.query_trace_events(
-            agent_name="test-agent",
-            limit=10
-        )
+        events = await db.query_trace_events(agent_name="test-agent", limit=10)
 
         elapsed = (datetime.now() - start_time).total_seconds() * 1000
         logger.info(f"✅ Query completed in {elapsed:.2f}ms")
@@ -166,9 +164,7 @@ async def test_query_api():
         # Query routing decisions
         logger.info("Querying routing decisions...")
         decisions = await db.query_routing_decisions(
-            selected_agent="test-agent",
-            min_confidence=0.7,
-            limit=10
+            selected_agent="test-agent", min_confidence=0.7, limit=10
         )
         logger.info(f"✅ Found {len(decisions)} routing decisions")
 
@@ -177,7 +173,7 @@ async def test_query_api():
         recent_events = await db.query_trace_events(
             start_time=datetime.now() - timedelta(hours=1),
             end_time=datetime.now(),
-            limit=100
+            limit=100,
         )
         logger.info(f"✅ Found {len(recent_events)} recent events")
 
@@ -252,7 +248,9 @@ async def test_circuit_breaker():
 
     # Initialize will fail
     success = await db.initialize()
-    logger.info(f"✅ Expected initialization failure: {'SUCCESS' if not success else 'FAILED'}")
+    logger.info(
+        f"✅ Expected initialization failure: {'SUCCESS' if not success else 'FAILED'}"
+    )
 
     # Circuit should be in expected state
     logger.info(f"   Circuit State: {db.circuit_breaker.state.value}")
@@ -292,8 +290,12 @@ async def test_retention_policy():
 
     try:
         logger.info("Testing retention policy...")
-        logger.info(f"  Trace events retention: {config.trace_events_retention_days} days")
-        logger.info(f"  Routing decisions retention: {config.routing_decisions_retention_days} days")
+        logger.info(
+            f"  Trace events retention: {config.trace_events_retention_days} days"
+        )
+        logger.info(
+            f"  Routing decisions retention: {config.routing_decisions_retention_days} days"
+        )
 
         # Apply retention policy
         await db.apply_retention_policy()

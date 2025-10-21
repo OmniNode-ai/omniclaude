@@ -9,20 +9,24 @@ Integration: Phase 2.5 of dispatch_runner workflow (between Task Architecture an
 """
 
 import asyncio
-import time
 import sys
+import time
 from typing import Any, Dict, Optional
-from pathlib import Path
 
 # Import from parallel_execution package
-from agents.parallel_execution.agent_model import AgentConfig, AgentTask, AgentResult
+from agents.parallel_execution.agent_model import AgentConfig, AgentResult, AgentTask
 from agents.parallel_execution.agent_registry import register_agent
-from agents.parallel_execution.trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from agents.parallel_execution.trace_logger import (
+    TraceEventType,
+    TraceLevel,
+    get_trace_logger,
+)
 
 # Import code generation components
 try:
-    from agents.lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
     from agents.lib.codegen_config import CodegenConfig
+    from agents.lib.codegen_workflow import CodegenWorkflow, CodegenWorkflowResult
+
     CODEGEN_AVAILABLE = True
 except ImportError as e:
     CODEGEN_AVAILABLE = False
@@ -33,11 +37,18 @@ except ImportError as e:
 # Agent Implementation
 # ============================================================================
 
+
 @register_agent(
     agent_name="code-generator",
     agent_type="generator",
-    capabilities=["prd_analysis", "node_generation", "contract_generation", "model_generation", "quality_validation"],
-    description="Autonomous OmniNode code generation from PRD or specifications"
+    capabilities=[
+        "prd_analysis",
+        "node_generation",
+        "contract_generation",
+        "model_generation",
+        "quality_validation",
+    ],
+    description="Autonomous OmniNode code generation from PRD or specifications",
 )
 class CodeGeneratorAgent:
     """
@@ -64,7 +75,7 @@ class CodeGeneratorAgent:
             self.config = AgentConfig(
                 agent_name="agent-code-generator",
                 agent_domain="code_generation",
-                agent_purpose="Generate OmniNode implementations from PRD or specifications"
+                agent_purpose="Generate OmniNode implementations from PRD or specifications",
             )
 
         self.trace_logger = get_trace_logger()
@@ -120,14 +131,14 @@ class CodeGeneratorAgent:
                 agent_name=self.config.agent_name,
                 success=False,
                 error="Code generation components unavailable (missing dependencies)",
-                execution_time_ms=0
+                execution_time_ms=0,
             )
 
         # Start agent trace
         self._current_trace_id = await self.trace_logger.start_agent_trace(
             agent_name=self.config.agent_name,
             task_id=task.task_id,
-            metadata={"using_codegen_workflow": True}
+            metadata={"using_codegen_workflow": True},
         )
 
         try:
@@ -140,7 +151,7 @@ class CodeGeneratorAgent:
                 message=f"Code generation task assigned (mode: {generation_mode})",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Detect generation mode if auto
@@ -159,9 +170,7 @@ class CodeGeneratorAgent:
             execution_time_ms = (time.time() - start_time) * 1000
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="completed",
-                result=result
+                trace_id=self._current_trace_id, status="completed", result=result
             )
 
             await self.trace_logger.log_event(
@@ -169,7 +178,7 @@ class CodeGeneratorAgent:
                 message=f"Code generation complete: {result.get('summary', 'N/A')}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -178,7 +187,7 @@ class CodeGeneratorAgent:
                 success=True,
                 output_data=result,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
         except Exception as e:
@@ -186,9 +195,7 @@ class CodeGeneratorAgent:
             error_msg = f"Code generation failed: {str(e)}"
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
+                trace_id=self._current_trace_id, status="failed", error=error_msg
             )
 
             await self.trace_logger.log_event(
@@ -196,7 +203,7 @@ class CodeGeneratorAgent:
                 message=error_msg,
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             return AgentResult(
@@ -205,7 +212,7 @@ class CodeGeneratorAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     def _detect_generation_mode(self, input_data: Dict[str, Any]) -> str:
@@ -227,7 +234,12 @@ class CodeGeneratorAgent:
         has_prd = "prd_content" in input_data
         has_node_spec = all(
             key in input_data
-            for key in ["node_type", "microservice_name", "domain", "business_description"]
+            for key in [
+                "node_type",
+                "microservice_name",
+                "domain",
+                "business_description",
+            ]
         )
 
         if has_prd:
@@ -242,9 +254,7 @@ class CodeGeneratorAgent:
             )
 
     async def _generate_from_prd(
-        self,
-        task: AgentTask,
-        input_data: Dict[str, Any]
+        self, task: AgentTask, input_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Generate code from full PRD analysis.
@@ -261,7 +271,7 @@ class CodeGeneratorAgent:
             message="Starting PRD-based code generation",
             level=TraceLevel.INFO,
             agent_name=self.config.agent_name,
-            task_id=task.task_id
+            task_id=task.task_id,
         )
 
         # Extract parameters
@@ -270,10 +280,12 @@ class CodeGeneratorAgent:
         workspace_context = input_data.get("workspace_context")
 
         # Execute workflow
-        workflow_result: CodegenWorkflowResult = await self.codegen_workflow.generate_from_prd(
-            prd_content=prd_content,
-            output_directory=output_directory,
-            workspace_context=workspace_context
+        workflow_result: CodegenWorkflowResult = (
+            await self.codegen_workflow.generate_from_prd(
+                prd_content=prd_content,
+                output_directory=output_directory,
+                workspace_context=workspace_context,
+            )
         )
 
         if not workflow_result.success:
@@ -294,21 +306,24 @@ class CodeGeneratorAgent:
                 "node_type_hints": workflow_result.prd_analysis.node_type_hints,
                 "recommended_mixins": workflow_result.prd_analysis.recommended_mixins,
                 "confidence_score": workflow_result.prd_analysis.confidence_score,
-                "quality_baseline": workflow_result.prd_analysis.quality_baseline
+                "quality_baseline": workflow_result.prd_analysis.quality_baseline,
             },
             "statistics": {
                 "nodes_generated": len(workflow_result.generated_nodes),
                 "total_files": workflow_result.total_files,
-                "node_types": list(set(node.get("node_type") for node in workflow_result.generated_nodes))
-            }
+                "node_types": list(
+                    set(
+                        node.get("node_type")
+                        for node in workflow_result.generated_nodes
+                    )
+                ),
+            },
         }
 
         return output_data
 
     async def _generate_single_node(
-        self,
-        task: AgentTask,
-        input_data: Dict[str, Any]
+        self, task: AgentTask, input_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Generate single node from specifications.
@@ -325,7 +340,7 @@ class CodeGeneratorAgent:
             message="Starting single node generation",
             level=TraceLevel.INFO,
             agent_name=self.config.agent_name,
-            task_id=task.task_id
+            task_id=task.task_id,
         )
 
         # Extract parameters
@@ -341,7 +356,7 @@ class CodeGeneratorAgent:
             microservice_name=microservice_name,
             domain=domain,
             business_description=business_description,
-            output_directory=output_directory
+            output_directory=output_directory,
         )
 
         # Build output data
@@ -356,8 +371,8 @@ class CodeGeneratorAgent:
             "statistics": {
                 "nodes_generated": 1,
                 "total_files": len(node_result.get("generated_files", [])) + 1,
-                "node_types": [node_type]
-            }
+                "node_types": [node_type],
+            },
         }
 
         return output_data
@@ -371,6 +386,7 @@ class CodeGeneratorAgent:
 # ============================================================================
 # Parallel Code Generator (for testing and parallel execution)
 # ============================================================================
+
 
 class ParallelCodeGenerator:
     """
@@ -417,14 +433,15 @@ class ParallelCodeGenerator:
 # Example Usage
 # ============================================================================
 
+
 async def main():
     """Example usage of code generator agent."""
     agent = CodeGeneratorAgent()
 
     # Example 1: PRD-based generation
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("Example 1: PRD-Based Generation")
-    print("="*80)
+    print("=" * 80)
 
     prd_task = AgentTask(
         task_id="codegen-prd-001",
@@ -449,15 +466,12 @@ Implement a user authentication service using OmniNode architecture.
 - Email service integration for verification
             """,
             "output_directory": "/tmp/generated_auth_service",
-            "workspace_context": {
-                "project_type": "microservice",
-                "language": "python"
-            }
-        }
+            "workspace_context": {"project_type": "microservice", "language": "python"},
+        },
     )
 
     result = await agent.execute(prd_task)
-    print(f"\nPRD Generation Result:")
+    print("\nPRD Generation Result:")
     print(f"Success: {result.success}")
     if result.success:
         output = result.output_data
@@ -469,9 +483,9 @@ Implement a user authentication service using OmniNode architecture.
         print(f"Error: {result.error}")
 
     # Example 2: Single node generation
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("Example 2: Single Node Generation")
-    print("="*80)
+    print("=" * 80)
 
     single_task = AgentTask(
         task_id="codegen-single-001",
@@ -482,12 +496,12 @@ Implement a user authentication service using OmniNode architecture.
             "microservice_name": "payment",
             "domain": "transactions",
             "business_description": "Process payment transactions via Stripe API",
-            "output_directory": "/tmp/generated_payment_node"
-        }
+            "output_directory": "/tmp/generated_payment_node",
+        },
     )
 
     result = await agent.execute(single_task)
-    print(f"\nSingle Node Generation Result:")
+    print("\nSingle Node Generation Result:")
     print(f"Success: {result.success}")
     if result.success:
         output = result.output_data

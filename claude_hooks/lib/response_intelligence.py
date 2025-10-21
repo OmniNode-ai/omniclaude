@@ -9,8 +9,8 @@ Performance target: <30ms execution time.
 import sys
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 # Add lib directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -31,7 +31,7 @@ class ResponseIntelligence:
         session_id: str,
         tools_executed: Optional[List[str]] = None,
         completion_status: str = "complete",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Log response completion event to database.
 
@@ -65,7 +65,9 @@ class ResponseIntelligence:
                 created_at_str = corr_context.get("created_at")
                 if created_at_str:
                     try:
-                        created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                        created_at = datetime.fromisoformat(
+                            created_at_str.replace("Z", "+00:00")
+                        )
                         now = datetime.now(timezone.utc)
                         response_time_ms = (now - created_at).total_seconds() * 1000
                     except Exception:
@@ -90,19 +92,25 @@ class ResponseIntelligence:
                 "multi_tool_count": multi_tool_count,
                 "response_time_ms": response_time_ms,
                 "completion_status": completion_status,
-                "interrupted": interrupted
+                "interrupted": interrupted,
             }
 
             # Build metadata
             event_metadata = metadata or {}
-            event_metadata.update({
-                "session_id": session_id,
-                "correlation_id": correlation_id,
-                "agent_name": agent_name,
-                "agent_domain": agent_domain,
-                "hook_type": "Stop",
-                "interruption_point": event_metadata.get("interruption_point") if interrupted else None
-            })
+            event_metadata.update(
+                {
+                    "session_id": session_id,
+                    "correlation_id": correlation_id,
+                    "agent_name": agent_name,
+                    "agent_domain": agent_domain,
+                    "hook_type": "Stop",
+                    "interruption_point": (
+                        event_metadata.get("interruption_point")
+                        if interrupted
+                        else None
+                    ),
+                }
+            )
 
             # Log event
             event_id = self.logger.log_event(
@@ -111,7 +119,7 @@ class ResponseIntelligence:
                 resource="response",
                 resource_id=correlation_id or session_id,
                 payload=payload,
-                metadata=event_metadata
+                metadata=event_metadata,
             )
 
             # Performance tracking
@@ -121,19 +129,19 @@ class ResponseIntelligence:
             if execution_time_ms > 30:
                 print(
                     f"⚠️  [ResponseIntelligence] Performance warning: {execution_time_ms:.2f}ms (target: <30ms)",
-                    file=sys.stderr
+                    file=sys.stderr,
                 )
 
             return event_id
 
         except Exception as e:
-            print(f"⚠️  [ResponseIntelligence] Failed to log response completion: {e}", file=sys.stderr)
+            print(
+                f"⚠️  [ResponseIntelligence] Failed to log response completion: {e}",
+                file=sys.stderr,
+            )
             return None
 
-    def detect_multi_tool_workflow(
-        self,
-        tools_executed: List[str]
-    ) -> Dict[str, Any]:
+    def detect_multi_tool_workflow(self, tools_executed: List[str]) -> Dict[str, Any]:
         """Analyze multi-tool workflow patterns.
 
         Args:
@@ -143,11 +151,7 @@ class ResponseIntelligence:
             Dict with workflow analysis
         """
         if not tools_executed:
-            return {
-                "is_multi_tool": False,
-                "tool_count": 0,
-                "workflow_pattern": None
-            }
+            return {"is_multi_tool": False, "tool_count": 0, "workflow_pattern": None}
 
         tool_count = len(tools_executed)
         is_multi_tool = tool_count > 1
@@ -155,7 +159,7 @@ class ResponseIntelligence:
         # Detect common workflow patterns
         workflow_pattern = None
         if is_multi_tool:
-            tools_str = " -> ".join(tools_executed)
+            " -> ".join(tools_executed)
 
             # Common patterns
             if "Read" in tools_executed and "Edit" in tools_executed:
@@ -177,7 +181,7 @@ class ResponseIntelligence:
             "is_multi_tool": is_multi_tool,
             "tool_count": tool_count,
             "workflow_pattern": workflow_pattern,
-            "tools_sequence": tools_executed
+            "tools_sequence": tools_executed,
         }
 
 
@@ -185,7 +189,7 @@ def log_response_completion(
     session_id: str,
     tools_executed: Optional[List[str]] = None,
     completion_status: str = "complete",
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Convenience function to log response completion.
 
@@ -203,7 +207,7 @@ def log_response_completion(
         session_id=session_id,
         tools_executed=tools_executed,
         completion_status=completion_status,
-        metadata=metadata
+        metadata=metadata,
     )
 
 
@@ -216,7 +220,7 @@ if __name__ == "__main__":
     event_id = log_response_completion(
         session_id="test-session-123",
         tools_executed=["Write"],
-        completion_status="complete"
+        completion_status="complete",
     )
     print(f"✓ Event logged: {event_id}")
 
@@ -225,7 +229,7 @@ if __name__ == "__main__":
     event_id = log_response_completion(
         session_id="test-session-456",
         tools_executed=["Read", "Edit", "Bash"],
-        completion_status="complete"
+        completion_status="complete",
     )
     print(f"✓ Event logged: {event_id}")
 
@@ -235,7 +239,7 @@ if __name__ == "__main__":
         session_id="test-session-789",
         tools_executed=["Write", "Edit"],
         completion_status="interrupted",
-        metadata={"interruption_point": "mid_execution"}
+        metadata={"interruption_point": "mid_execution"},
     )
     print(f"✓ Event logged: {event_id}")
 

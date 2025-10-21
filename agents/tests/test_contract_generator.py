@@ -6,21 +6,21 @@ Tests YAML contract generation for all 4 node types, subcontract generation,
 and validation logic.
 """
 
+import shutil
+import tempfile
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 import yaml
-from datetime import datetime
-from uuid import uuid4
-from pathlib import Path
-import tempfile
-import shutil
+from omnibase_core.errors import OnexError
 
 from agents.lib.contract_generator import ContractGenerator
 from agents.lib.simple_prd_analyzer import (
-    SimplePRDAnalysisResult,
+    SimpleDecompositionResult,
     SimpleParsedPRD,
-    SimpleDecompositionResult
+    SimplePRDAnalysisResult,
 )
-from omnibase_core.errors import OnexError
 
 
 # Test fixtures
@@ -34,31 +34,31 @@ def sample_prd_analysis():
             "Must authenticate users with username and password",
             "Shall generate JWT tokens for authenticated users",
             "Required to validate existing JWT tokens",
-            "Must handle password reset functionality"
+            "Must handle password reset functionality",
         ],
         features=[
             "Multi-factor authentication support",
             "Session management and timeout",
-            "OAuth integration for social login"
+            "OAuth integration for social login",
         ],
         success_criteria=[
             "Authentication response time < 200ms",
             "Support 1000 concurrent users",
-            "99.9% uptime"
+            "99.9% uptime",
         ],
         technical_details=[
             "Use PostgreSQL for user data storage",
             "Use Redis for session caching",
-            "JWT tokens with HS256 algorithm"
+            "JWT tokens with HS256 algorithm",
         ],
         dependencies=[
             "PostgreSQL database",
             "Redis cache",
-            "Email service for password reset"
+            "Email service for password reset",
         ],
         extracted_keywords=["Authentication", "Security", "Session", "Token"],
         sections=["Overview", "Requirements", "Features"],
-        word_count=250
+        word_count=250,
     )
 
     decomposition_result = SimpleDecompositionResult(
@@ -68,25 +68,25 @@ def sample_prd_analysis():
                 "title": "Implement user authentication endpoint",
                 "description": "Create API endpoint for user login",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_2",
                 "title": "Implement JWT token generation",
                 "description": "Generate and sign JWT tokens",
                 "priority": "high",
-                "complexity": "medium"
+                "complexity": "medium",
             },
             {
                 "id": "task_3",
                 "title": "Implement token validation",
                 "description": "Validate and decode JWT tokens",
                 "priority": "high",
-                "complexity": "low"
-            }
+                "complexity": "low",
+            },
         ],
         total_tasks=3,
-        verification_successful=True
+        verification_successful=True,
     )
 
     return SimplePRDAnalysisResult(
@@ -99,18 +99,18 @@ def sample_prd_analysis():
             "EFFECT": 0.8,
             "COMPUTE": 0.3,
             "REDUCER": 0.1,
-            "ORCHESTRATOR": 0.2
+            "ORCHESTRATOR": 0.2,
         },
         recommended_mixins=[
             "MixinEventBus",
             "MixinCaching",
             "MixinHealthCheck",
             "MixinSecurity",
-            "MixinValidation"
+            "MixinValidation",
         ],
         external_systems=["PostgreSQL", "Redis", "Email Service"],
         quality_baseline=0.85,
-        confidence_score=0.78
+        confidence_score=0.78,
     )
 
 
@@ -130,14 +130,16 @@ def temp_output_dir():
 
 # Test YAML generation for all node types
 @pytest.mark.asyncio
-async def test_generate_effect_contract(contract_generator, sample_prd_analysis, temp_output_dir):
+async def test_generate_effect_contract(
+    contract_generator, sample_prd_analysis, temp_output_dir
+):
     """Test EFFECT node contract generation"""
     result = await contract_generator.generate_contract_yaml(
         analysis_result=sample_prd_analysis,
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory=temp_output_dir
+        output_directory=temp_output_dir,
     )
 
     # Verify result structure
@@ -172,7 +174,7 @@ async def test_generate_compute_contract(contract_generator, sample_prd_analysis
         analysis_result=sample_prd_analysis,
         node_type="COMPUTE",
         microservice_name="data_processor",
-        domain="processing"
+        domain="processing",
     )
 
     contract = result["contract"]
@@ -193,7 +195,7 @@ async def test_generate_reducer_contract(contract_generator, sample_prd_analysis
         analysis_result=sample_prd_analysis,
         node_type="REDUCER",
         microservice_name="data_aggregator",
-        domain="analytics"
+        domain="analytics",
     )
 
     contract = result["contract"]
@@ -213,7 +215,7 @@ async def test_generate_orchestrator_contract(contract_generator, sample_prd_ana
         analysis_result=sample_prd_analysis,
         node_type="ORCHESTRATOR",
         microservice_name="workflow_manager",
-        domain="coordination"
+        domain="coordination",
     )
 
     contract = result["contract"]
@@ -232,16 +234,13 @@ async def test_generate_subcontracts(contract_generator):
     """Test subcontract generation for mixins"""
     recommended_mixins = ["MixinEventBus", "MixinCaching", "MixinHealthCheck"]
     contract_fields = {
-        "capabilities": [
-            {"name": "test_capability", "type": "operation"}
-        ],
+        "capabilities": [{"name": "test_capability", "type": "operation"}],
         "operations": [],
-        "external_systems": []
+        "external_systems": [],
     }
 
     subcontracts = await contract_generator.generate_subcontracts(
-        recommended_mixins=recommended_mixins,
-        contract_fields=contract_fields
+        recommended_mixins=recommended_mixins, contract_fields=contract_fields
     )
 
     assert len(subcontracts) == 3
@@ -271,8 +270,7 @@ async def test_generate_subcontracts_unknown_mixin(contract_generator):
     contract_fields = {"capabilities": [], "operations": [], "external_systems": []}
 
     subcontracts = await contract_generator.generate_subcontracts(
-        recommended_mixins=recommended_mixins,
-        contract_fields=contract_fields
+        recommended_mixins=recommended_mixins, contract_fields=contract_fields
     )
 
     assert len(subcontracts) == 1
@@ -285,8 +283,7 @@ async def test_generate_subcontracts_unknown_mixin(contract_generator):
 async def test_infer_contract_fields(contract_generator, sample_prd_analysis):
     """Test contract field inference from PRD analysis"""
     contract_fields = await contract_generator.infer_contract_fields(
-        analysis_result=sample_prd_analysis,
-        node_type="EFFECT"
+        analysis_result=sample_prd_analysis, node_type="EFFECT"
     )
 
     assert "capabilities" in contract_fields
@@ -302,7 +299,11 @@ async def test_infer_contract_fields(contract_generator, sample_prd_analysis):
     assert len(required_caps) > 0
 
     # Verify external systems
-    assert contract_fields["external_systems"] == ["PostgreSQL", "Redis", "Email Service"]
+    assert contract_fields["external_systems"] == [
+        "PostgreSQL",
+        "Redis",
+        "Email Service",
+    ]
 
 
 @pytest.mark.asyncio
@@ -349,22 +350,10 @@ async def test_validate_valid_contract(contract_generator):
         "domain": "test",
         "service_name": "test_service",
         "capabilities": [
-            {
-                "name": "test_capability",
-                "type": "operation",
-                "required": True
-            }
+            {"name": "test_capability", "type": "operation", "required": True}
         ],
-        "subcontracts": [
-            {
-                "mixin": "MixinEventBus",
-                "config": {}
-            }
-        ],
-        "dependencies": {
-            "external_systems": [],
-            "required_mixins": ["MixinEventBus"]
-        }
+        "subcontracts": [{"mixin": "MixinEventBus", "config": {}}],
+        "dependencies": {"external_systems": [], "required_mixins": ["MixinEventBus"]},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -378,7 +367,7 @@ async def test_validate_missing_required_fields(contract_generator):
     """Test validation with missing required fields"""
     contract = {
         "version": "1.0.0",
-        "node_type": "EFFECT"
+        "node_type": "EFFECT",
         # Missing: domain, service_name, capabilities, dependencies
     }
 
@@ -399,7 +388,7 @@ async def test_validate_invalid_node_type(contract_generator):
         "service_name": "test_service",
         "capabilities": [],
         "subcontracts": [],
-        "dependencies": {}
+        "dependencies": {},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -417,10 +406,8 @@ async def test_validate_invalid_subcontract(contract_generator):
         "domain": "test",
         "service_name": "test_service",
         "capabilities": [],
-        "subcontracts": [
-            {"config": {}}  # Missing 'mixin' field
-        ],
-        "dependencies": {}
+        "subcontracts": [{"config": {}}],  # Missing 'mixin' field
+        "dependencies": {},
     }
 
     validation_result = await contract_generator.validate_contract(contract)
@@ -438,7 +425,7 @@ async def test_invalid_node_type_raises_error(contract_generator, sample_prd_ana
             analysis_result=sample_prd_analysis,
             node_type="INVALID_TYPE",
             microservice_name="test_service",
-            domain="test"
+            domain="test",
         )
 
     assert "Invalid node type" in str(exc_info.value)
@@ -446,14 +433,16 @@ async def test_invalid_node_type_raises_error(contract_generator, sample_prd_ana
 
 # Test integration with PRD analysis
 @pytest.mark.asyncio
-async def test_full_contract_generation_workflow(contract_generator, sample_prd_analysis, temp_output_dir):
+async def test_full_contract_generation_workflow(
+    contract_generator, sample_prd_analysis, temp_output_dir
+):
     """Test complete contract generation workflow"""
     result = await contract_generator.generate_contract_yaml(
         analysis_result=sample_prd_analysis,
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory=temp_output_dir
+        output_directory=temp_output_dir,
     )
 
     # Verify all components are present
@@ -472,7 +461,10 @@ async def test_full_contract_generation_workflow(contract_generator, sample_prd_
         assert mixin in subcontract_mixins
 
     # Verify external systems are in dependencies
-    assert contract["dependencies"]["external_systems"] == sample_prd_analysis.external_systems
+    assert (
+        contract["dependencies"]["external_systems"]
+        == sample_prd_analysis.external_systems
+    )
 
 
 @pytest.mark.asyncio
@@ -482,7 +474,7 @@ async def test_contract_yaml_format(contract_generator, sample_prd_analysis):
         analysis_result=sample_prd_analysis,
         node_type="EFFECT",
         microservice_name="test_service",
-        domain="test"
+        domain="test",
     )
 
     yaml_content = result["contract_yaml"]
@@ -529,9 +521,7 @@ async def test_capability_name_sanitization(contract_generator):
     assert sanitized == "create_user_account_with_validation"
 
     # Test with spaces and hyphens
-    sanitized = contract_generator._sanitize_capability_name(
-        "Update-User Profile Data"
-    )
+    sanitized = contract_generator._sanitize_capability_name("Update-User Profile Data")
     assert sanitized == "update_user_profile_data"
 
     # Test length limit
@@ -550,7 +540,9 @@ async def test_required_capability_detection(contract_generator):
     assert contract_generator._is_capability_required("Critical security feature")
 
     # Test without required keywords
-    assert not contract_generator._is_capability_required("Can support multi-factor auth")
+    assert not contract_generator._is_capability_required(
+        "Can support multi-factor auth"
+    )
     assert not contract_generator._is_capability_required("May include social login")
 
 

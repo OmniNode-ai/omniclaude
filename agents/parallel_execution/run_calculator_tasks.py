@@ -10,9 +10,8 @@ from pathlib import Path
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_model import AgentTask
 from agent_dispatcher import ParallelCoordinator
-from trace_logger import get_trace_logger
+from agent_model import AgentTask
 
 # Calculator contract
 CALCULATOR_CONTRACT = {
@@ -22,26 +21,26 @@ CALCULATOR_CONTRACT = {
         "add": {
             "inputs": ["a: float", "b: float"],
             "output": "float",
-            "description": "Add two numbers"
+            "description": "Add two numbers",
         },
         "subtract": {
             "inputs": ["a: float", "b: float"],
             "output": "float",
-            "description": "Subtract b from a"
+            "description": "Subtract b from a",
         },
         "multiply": {
             "inputs": ["a: float", "b: float"],
             "output": "float",
-            "description": "Multiply two numbers"
+            "description": "Multiply two numbers",
         },
         "divide": {
             "inputs": ["a: float", "b: float"],
             "output": "float",
-            "description": "Divide a by b, raises error if b is zero"
-        }
+            "description": "Divide a by b, raises error if b is zero",
+        },
     },
     "node_type": "Compute",
-    "language": "python"
+    "language": "python",
 }
 
 
@@ -64,8 +63,8 @@ async def create_calculator():
                 input_data={
                     "contract": CALCULATOR_CONTRACT,
                     "node_type": "Compute",
-                    "language": "python"
-                }
+                    "language": "python",
+                },
             )
         ]
 

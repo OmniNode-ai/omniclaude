@@ -25,13 +25,14 @@ Performance Metrics:
 
 import re
 import time
-from typing import Dict, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, Optional, Tuple
 
 
 @dataclass
 class QualityMetrics:
     """Quality metrics for code analysis."""
+
     quality_score: float  # 0-1
     naming_conventions: str  # pass, warning, fail
     type_safety: str  # pass, warning, fail
@@ -42,6 +43,7 @@ class QualityMetrics:
 @dataclass
 class PerformanceMetrics:
     """Performance metrics for tool execution."""
+
     execution_time_ms: float
     bytes_written: int
     lines_changed: int
@@ -51,6 +53,7 @@ class PerformanceMetrics:
 @dataclass
 class ExecutionAnalysis:
     """Analysis of execution behavior."""
+
     deviation_from_expected: str  # none, minor, major
     required_retries: int
     error_recovery_applied: bool
@@ -59,6 +62,7 @@ class ExecutionAnalysis:
 @dataclass
 class EnhancedMetadata:
     """Complete enhanced metadata for PostToolUse."""
+
     success_classification: str
     quality_metrics: QualityMetrics
     performance_metrics: PerformanceMetrics
@@ -70,7 +74,7 @@ class EnhancedMetadata:
             "success_classification": self.success_classification,
             "quality_metrics": asdict(self.quality_metrics),
             "performance_metrics": asdict(self.performance_metrics),
-            "execution_analysis": asdict(self.execution_analysis)
+            "execution_analysis": asdict(self.execution_analysis),
         }
 
 
@@ -86,7 +90,7 @@ class PostToolMetricsCollector:
         tool_input: Dict[str, Any],
         tool_output: Optional[Dict[str, Any]],
         file_path: Optional[str] = None,
-        content: Optional[str] = None
+        content: Optional[str] = None,
     ) -> EnhancedMetadata:
         """
         Collect all metrics for PostToolUse event.
@@ -105,10 +109,16 @@ class PostToolMetricsCollector:
         success = self._classify_success(tool_name, tool_output)
 
         # Quality metrics (if content available)
-        quality = self._calculate_quality_metrics(file_path, content) if content else self._default_quality_metrics()
+        quality = (
+            self._calculate_quality_metrics(file_path, content)
+            if content
+            else self._default_quality_metrics()
+        )
 
         # Performance metrics
-        performance = self._extract_performance_metrics(tool_input, tool_output, content)
+        performance = self._extract_performance_metrics(
+            tool_input, tool_output, content
+        )
 
         # Execution analysis
         analysis = self._analyze_execution(tool_output)
@@ -117,10 +127,12 @@ class PostToolMetricsCollector:
             success_classification=success,
             quality_metrics=quality,
             performance_metrics=performance,
-            execution_analysis=analysis
+            execution_analysis=analysis,
         )
 
-    def _classify_success(self, tool_name: str, tool_output: Optional[Dict[str, Any]]) -> str:
+    def _classify_success(
+        self, tool_name: str, tool_output: Optional[Dict[str, Any]]
+    ) -> str:
         """
         Classify success level based on tool output.
 
@@ -157,9 +169,7 @@ class PostToolMetricsCollector:
             return "full_success"
 
     def _calculate_quality_metrics(
-        self,
-        file_path: Optional[str],
-        content: Optional[str]
+        self, file_path: Optional[str], content: Optional[str]
     ) -> QualityMetrics:
         """
         Calculate rule-based quality score.
@@ -189,10 +199,10 @@ class PostToolMetricsCollector:
 
         # Calculate weighted total
         total_score = (
-            naming_score * 0.25 +
-            type_score * 0.25 +
-            doc_score * 0.25 +
-            error_score * 0.25
+            naming_score * 0.25
+            + type_score * 0.25
+            + doc_score * 0.25
+            + error_score * 0.25
         )
 
         return QualityMetrics(
@@ -200,10 +210,12 @@ class PostToolMetricsCollector:
             naming_conventions=naming_status,
             type_safety=type_status,
             documentation=doc_status,
-            error_handling=error_status
+            error_handling=error_status,
         )
 
-    def _check_naming_conventions(self, content: str, language: str) -> Tuple[float, str]:
+    def _check_naming_conventions(
+        self, content: str, language: str
+    ) -> Tuple[float, str]:
         """
         Check naming conventions compliance.
 
@@ -215,14 +227,14 @@ class PostToolMetricsCollector:
             violations = 0
 
             # Check for camelCase variables (should be snake_case)
-            camel_case_vars = re.findall(r'\b[a-z]+[A-Z][a-zA-Z]*\b', content)
-            violations += len([v for v in camel_case_vars if not v.startswith('_')])
+            camel_case_vars = re.findall(r"\b[a-z]+[A-Z][a-zA-Z]*\b", content)
+            violations += len([v for v in camel_case_vars if not v.startswith("_")])
 
             # Check for SCREAMING_SNAKE_CASE in non-constant contexts
-            lines = content.split('\n')
+            lines = content.split("\n")
             for line in lines:
-                if '=' in line and not line.strip().startswith('#'):
-                    if re.search(r'\b[A-Z_]{2,}\b\s*=', line) and 'class ' not in line:
+                if "=" in line and not line.strip().startswith("#"):
+                    if re.search(r"\b[A-Z_]{2,}\b\s*=", line) and "class " not in line:
                         # Likely a constant, but check if it's inside a function
                         violations += 0.5
 
@@ -239,7 +251,7 @@ class PostToolMetricsCollector:
             violations = 0
 
             # Check for snake_case variables (should be camelCase)
-            snake_case_vars = re.findall(r'\b[a-z]+_[a-z_]+\b', content)
+            snake_case_vars = re.findall(r"\b[a-z]+_[a-z_]+\b", content)
             violations += len(snake_case_vars)
 
             if violations == 0:
@@ -260,14 +272,16 @@ class PostToolMetricsCollector:
         """
         if language == "python":
             # Count function definitions
-            func_defs = re.findall(r'^\s*def\s+\w+\s*\(', content, re.MULTILINE)
+            func_defs = re.findall(r"^\s*def\s+\w+\s*\(", content, re.MULTILINE)
             total_funcs = len(func_defs)
 
             if total_funcs == 0:
                 return 1.0, "pass"  # No functions, N/A
 
             # Count typed function definitions
-            typed_funcs = re.findall(r'^\s*def\s+\w+\s*\([^)]*:\s*\w+', content, re.MULTILINE)
+            typed_funcs = re.findall(
+                r"^\s*def\s+\w+\s*\([^)]*:\s*\w+", content, re.MULTILINE
+            )
             type_ratio = len(typed_funcs) / total_funcs if total_funcs > 0 else 1.0
 
             if type_ratio >= 0.8:
@@ -280,7 +294,7 @@ class PostToolMetricsCollector:
         elif language == "typescript":
             # TypeScript should have type annotations
             # Check for 'any' usage (anti-pattern)
-            any_usage = len(re.findall(r':\s*any\b', content))
+            any_usage = len(re.findall(r":\s*any\b", content))
 
             if any_usage == 0:
                 return 1.0, "pass"
@@ -300,7 +314,9 @@ class PostToolMetricsCollector:
         """
         if language == "python":
             # Count functions/classes
-            func_class_defs = re.findall(r'^\s*(def|class)\s+\w+', content, re.MULTILINE)
+            func_class_defs = re.findall(
+                r"^\s*(def|class)\s+\w+", content, re.MULTILINE
+            )
             total_defs = len(func_class_defs)
 
             if total_defs == 0:
@@ -321,13 +337,15 @@ class PostToolMetricsCollector:
 
         elif language in ["typescript", "javascript"]:
             # Check for JSDoc comments
-            func_defs = re.findall(r'(function|const\s+\w+\s*=\s*\([^)]*\)\s*=>)', content)
+            func_defs = re.findall(
+                r"(function|const\s+\w+\s*=\s*\([^)]*\)\s*=>)", content
+            )
             total_funcs = len(func_defs)
 
             if total_funcs == 0:
                 return 1.0, "pass"
 
-            jsdoc_comments = re.findall(r'/\*\*', content)
+            jsdoc_comments = re.findall(r"/\*\*", content)
             doc_ratio = len(jsdoc_comments) / total_funcs if total_funcs > 0 else 1.0
 
             if doc_ratio >= 0.6:
@@ -348,11 +366,11 @@ class PostToolMetricsCollector:
         """
         if language == "python":
             # Check for bare except clauses (anti-pattern)
-            bare_excepts = re.findall(r'^\s*except\s*:', content, re.MULTILINE)
+            bare_excepts = re.findall(r"^\s*except\s*:", content, re.MULTILINE)
             violations = len(bare_excepts)
 
             # Check for proper exception handling
-            proper_excepts = re.findall(r'^\s*except\s+\w+', content, re.MULTILINE)
+            proper_excepts = re.findall(r"^\s*except\s+\w+", content, re.MULTILINE)
 
             if violations == 0:
                 return 1.0, "pass"
@@ -363,7 +381,7 @@ class PostToolMetricsCollector:
 
         elif language in ["typescript", "javascript"]:
             # Check for empty catch blocks (anti-pattern)
-            empty_catches = re.findall(r'catch\s*\([^)]*\)\s*\{\s*\}', content)
+            empty_catches = re.findall(r"catch\s*\([^)]*\)\s*\{\s*\}", content)
             violations = len(empty_catches)
 
             if violations == 0:
@@ -379,7 +397,7 @@ class PostToolMetricsCollector:
         self,
         tool_input: Dict[str, Any],
         tool_output: Optional[Dict[str, Any]],
-        content: Optional[str]
+        content: Optional[str],
     ) -> PerformanceMetrics:
         """
         Extract performance metrics from tool execution.
@@ -393,17 +411,19 @@ class PostToolMetricsCollector:
         # Calculate bytes written
         bytes_written = 0
         if content:
-            bytes_written = len(content.encode('utf-8'))
+            bytes_written = len(content.encode("utf-8"))
         elif tool_input.get("content"):
-            bytes_written = len(str(tool_input["content"]).encode('utf-8'))
+            bytes_written = len(str(tool_input["content"]).encode("utf-8"))
 
         # Calculate lines changed (count non-empty lines)
         lines_changed = 0
         if content:
-            lines = [line for line in content.split('\n') if line.strip()]
+            lines = [line for line in content.split("\n") if line.strip()]
             lines_changed = len(lines)
         elif tool_input.get("content"):
-            lines = [line for line in str(tool_input["content"]).split('\n') if line.strip()]
+            lines = [
+                line for line in str(tool_input["content"]).split("\n") if line.strip()
+            ]
             lines_changed = len(lines)
 
         # Files modified (always 1 for Write/Edit, 0 otherwise)
@@ -413,10 +433,12 @@ class PostToolMetricsCollector:
             execution_time_ms=round(execution_time_ms, 2),
             bytes_written=bytes_written,
             lines_changed=lines_changed,
-            files_modified=files_modified
+            files_modified=files_modified,
         )
 
-    def _analyze_execution(self, tool_output: Optional[Dict[str, Any]]) -> ExecutionAnalysis:
+    def _analyze_execution(
+        self, tool_output: Optional[Dict[str, Any]]
+    ) -> ExecutionAnalysis:
         """
         Analyze execution behavior for deviations and retries.
 
@@ -448,7 +470,7 @@ class PostToolMetricsCollector:
         return ExecutionAnalysis(
             deviation_from_expected=deviation,
             required_retries=retries,
-            error_recovery_applied=recovery
+            error_recovery_applied=recovery,
         )
 
     def _default_quality_metrics(self) -> QualityMetrics:
@@ -458,19 +480,19 @@ class PostToolMetricsCollector:
             naming_conventions="pass",
             type_safety="pass",
             documentation="pass",
-            error_handling="pass"
+            error_handling="pass",
         )
 
     def _detect_language(self, file_path: str) -> Optional[str]:
         """Detect programming language from file extension."""
-        ext = file_path.lower().split('.')[-1] if '.' in file_path else ''
+        ext = file_path.lower().split(".")[-1] if "." in file_path else ""
 
         mapping = {
             "py": "python",
             "ts": "typescript",
             "tsx": "typescript",
             "js": "javascript",
-            "jsx": "javascript"
+            "jsx": "javascript",
         }
 
         return mapping.get(ext)
@@ -505,7 +527,7 @@ def collect_post_tool_metrics(tool_info: Dict[str, Any]) -> Dict[str, Any]:
         tool_input=tool_input,
         tool_output=tool_output,
         file_path=file_path,
-        content=content
+        content=content,
     )
 
     return metadata.to_dict()
@@ -513,8 +535,8 @@ def collect_post_tool_metrics(tool_info: Dict[str, Any]) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     # Test the metrics collector
-    import sys
     import json
+    import sys
 
     print("Testing PostToolMetricsCollector...", file=sys.stderr)
 
@@ -529,9 +551,9 @@ if __name__ == "__main__":
         return a + b
     except TypeError as e:
         raise ValueError(f"Invalid input: {e}")
-"""
+""",
         },
-        "tool_response": {"success": True}
+        "tool_response": {"success": True},
     }
 
     metrics = collect_post_tool_metrics(test_tool_info)
@@ -543,9 +565,9 @@ if __name__ == "__main__":
         "tool_input": {
             "file_path": "/test/bad.py",
             "old_string": "foo",
-            "new_string": "bar"
+            "new_string": "bar",
         },
-        "tool_response": {"error": "File not found"}
+        "tool_response": {"error": "File not found"},
     }
 
     metrics_fail = collect_post_tool_metrics(test_tool_info_fail)

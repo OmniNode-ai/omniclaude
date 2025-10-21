@@ -7,13 +7,13 @@ Uses asyncpg to persist generation_sessions and generation_artifacts.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 from uuid import UUID
 
 import asyncpg
+
 from .version_config import get_config
 
 
@@ -110,7 +110,7 @@ class CodegenPersistence:
             self._pool = None
 
     # =========================================================================
-    # Phase 7 Schema Operations
+    # Agent Framework Schema Operations
     # =========================================================================
 
     # Mixin Compatibility Matrix Operations
@@ -519,5 +519,3 @@ class CodegenPersistence:
             else:
                 rows = await conn.fetch("SELECT * FROM event_processing_health")
             return [dict(row) for row in rows]
-
-

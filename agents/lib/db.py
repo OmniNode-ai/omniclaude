@@ -1,5 +1,4 @@
 import os
-import asyncio
 from typing import Any, Optional
 
 import asyncpg
@@ -19,7 +18,11 @@ _pool: Optional[asyncpg.Pool] = None
 def _build_dsn_from_env() -> Optional[str]:
     host = os.getenv("POSTGRES_HOST")
     port = os.getenv("POSTGRES_PORT")
-    db = os.getenv("POSTGRES_DATABASE") or os.getenv("POSTGRES_DB") or os.getenv("POSTGRES_DBNAME")
+    db = (
+        os.getenv("POSTGRES_DATABASE")
+        or os.getenv("POSTGRES_DB")
+        or os.getenv("POSTGRES_DBNAME")
+    )
     user = os.getenv("POSTGRES_USER")
     password = os.getenv("POSTGRES_PASSWORD")
     if not host or not port or not db or not user:
@@ -55,7 +58,7 @@ async def close_pg_pool() -> None:
 async def execute_query(query: str, *args) -> Any:
     """Execute a query and return results.
 
-    Helper function for Phase 7 schema operations.
+    Helper function for agent framework schema operations.
 
     Args:
         query: SQL query string
@@ -75,7 +78,7 @@ async def execute_query(query: str, *args) -> Any:
 async def execute_command(query: str, *args) -> str:
     """Execute a command (INSERT, UPDATE, DELETE) and return status.
 
-    Helper function for Phase 7 schema operations.
+    Helper function for agent framework schema operations.
 
     Args:
         query: SQL command string
@@ -90,5 +93,3 @@ async def execute_command(query: str, *args) -> str:
 
     async with pool.acquire() as conn:
         return await conn.execute(query, *args)
-
-

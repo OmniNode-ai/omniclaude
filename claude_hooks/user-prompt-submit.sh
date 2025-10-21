@@ -13,6 +13,10 @@ export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 export ARCHON_MCP_URL="${ARCHON_MCP_URL:-http://localhost:8051}"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
+# Database credentials for hook event logging (required from .env)
+# Set DB_PASSWORD in your .env file or environment
+export DB_PASSWORD="${DB_PASSWORD:-}"
+
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 b64() { printf %s "$1" | base64; }
 
@@ -22,7 +26,7 @@ b64() { printf %s "$1" | base64; }
 INPUT="$(cat)"
 log "UserPromptSubmit hook triggered"
 
-PROMPT="$(printf %s "$INPUT" | jq -r ".prompt // \"\"")"
+PROMPT="$(printf %s "$INPUT" | jq -r ".prompt // \"\"" 2>>"$LOG_FILE" || echo "")"
 if [[ -z "$PROMPT" ]]; then
   log "ERROR: No prompt in input"
   printf %s "$INPUT"
@@ -75,7 +79,7 @@ fi
 # -----------------------------
 # Parse selector output
 # -----------------------------
-field() { printf %s "$AGENT_DETECTION" | grep "$1" | cut -d: -f2-; }
+field() { printf %s "$AGENT_DETECTION" | grep "$1" | cut -d: -f2- || echo ""; }
 
 AGENT_NAME="$(field "AGENT_DETECTED:" | tr -d " ")"
 CONFIDENCE="$(field "CONFIDENCE:" | tr -d " ")"
@@ -94,7 +98,12 @@ log "Reasoning: ${SELECTION_REASONING:0:120}..."
 # -----------------------------
 # Correlation ID
 # -----------------------------
-CORRELATION_ID="$(uuidgen | tr "[:upper:]" "[:lower:]")"
+# Use uuidgen if available, fallback to Python
+if command -v uuidgen >/dev/null 2>&1; then
+    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+else
+    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
 
 # -----------------------------
 # Metadata extraction
@@ -129,16 +138,18 @@ fi
 # -----------------------------
 # Intent tracking
 # -----------------------------
-if [[ -n "${AGENT_NAME:-}" ]]; then
+if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_PURPOSE:-}" ]]; then
   log "Tracking intent for $AGENT_NAME"
-  printf %s "$PROMPT" | python3 "${HOOKS_LIB}/track_intent.py" \
-    --prompt - \
-    --agent "$AGENT_NAME" \
-    --domain "$AGENT_DOMAIN" \
-    --purpose "$AGENT_PURPOSE" \
-    --correlation-id "$CORRELATION_ID" \
-    --session-id "${SESSION_ID:-}" \
-    >> "$LOG_FILE" 2>&1 || log "Intent tracking failed (continuing)"
+  (
+    printf %s "$PROMPT" | timeout 3 python3 "${HOOKS_LIB}/track_intent.py" \
+      --prompt - \
+      --agent "$AGENT_NAME" \
+      --domain "$AGENT_DOMAIN" \
+      --purpose "$AGENT_PURPOSE" \
+      --correlation-id "$CORRELATION_ID" \
+      --session-id "${SESSION_ID:-}" \
+      >> "$LOG_FILE" 2>&1
+  ) || log "Intent tracking failed (continuing)"
 fi
 
 # -----------------------------
@@ -148,7 +159,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
   log "RAG domain query"
   (
     JSON="$(jq -n --arg q "$DOMAIN_QUERY" --arg ctx "general" --argjson n 5 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s -X POST "${ARCHON_MCP_URL}/api/rag/query" \
+    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
       -H "Content-Type: application/json" \
       --data-binary "$JSON" \
       > "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" 2>&1
@@ -159,7 +170,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
   log "RAG implementation query"
   (
     JSON="$(jq -n --arg q "$IMPL_QUERY" --arg ctx "general" --argjson n 3 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s -X POST "${ARCHON_MCP_URL}/api/rag/query" \
+    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
       -H "Content-Type: application/json" \
       --data-binary "$JSON" \
       > "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" 2>&1
@@ -167,35 +178,56 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
-# Context blocks
+# Context blocks - AGENT DISPATCH DIRECTIVE
 # -----------------------------
 AGENT_CONTEXT="$(cat <<EOF
 
----
-[Agent Framework Context - Auto-injected by hooks]
+========================================================================
+🎯 AGENT DISPATCH DIRECTIVE (Auto-detected by hooks)
+========================================================================
 
-Agent Detected: ${AGENT_NAME}
-Agent Domain: ${AGENT_DOMAIN}
-Agent Purpose: ${AGENT_PURPOSE}
+DETECTED AGENT: ${AGENT_NAME}
+Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
+Domain: ${AGENT_DOMAIN}
+Purpose: ${AGENT_PURPOSE}
 
-Framework References:
-- @MANDATORY_FUNCTIONS.md (47 required functions across 11 categories)
-- @quality-gates-spec.yaml (23 quality gates for validation)
-- @performance-thresholds.yaml (33 performance thresholds)
-- @COMMON_WORKFLOW.md (Agent workflow patterns)
+REQUIRED ACTION: Use the Task tool to dispatch this request to agent-workflow-coordinator
 
-Intelligence Gathering:
-- Domain Query: ${DOMAIN_QUERY:0:80}...
-- Implementation Query: ${IMPL_QUERY:0:80}...
-- RAG queries executed in background (check /tmp/agent_intelligence_*)
-- Correlation ID: ${CORRELATION_ID}
+Task Tool Configuration:
+┌────────────────────────────────────────────────────────────────────┐
+│ description: "${AGENT_DOMAIN} task execution"                       │
+│ subagent_type: "agent-workflow-coordinator"                         │
+│ prompt: "Route to ${AGENT_NAME} and execute the following request: │
+│                                                                      │
+│   ${PROMPT:0:200}...                                                │
+│                                                                      │
+│   Intelligence Context (pre-gathered by hooks):                    │
+│   - Agent: ${AGENT_NAME}                                            │
+│   - Domain: ${AGENT_DOMAIN}                                         │
+│   - Purpose: ${AGENT_PURPOSE}                                       │
+│   - Detection Confidence: ${CONFIDENCE}                             │
+│   - Detection Method: ${SELECTION_METHOD}                           │
+│   - Detection Reasoning: ${SELECTION_REASONING:0:120}...            │
+│   - RAG Domain Intelligence: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json │
+│   - RAG Implementation Intelligence: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
+│   - Correlation ID: ${CORRELATION_ID}                               │
+│   - Archon MCP: ${ARCHON_MCP_URL}                                   │
+│                                                                      │
+│   Framework Requirements:                                            │
+│   - 47 mandatory functions (IC-001 to FI-004)                       │
+│   - 23 quality gates validation                                     │
+│   - Performance thresholds compliance                                │
+│                                                                      │
+│   The agent-workflow-coordinator will handle routing, execution,    │
+│   and intelligence integration for this task."                       │
+└────────────────────────────────────────────────────────────────────┘
 
-Archon MCP Integration:
-- MCP Server: ${ARCHON_MCP_URL}
-- Intelligence Service: ${ARCHON_INTELLIGENCE_URL}
+Why this dispatch is recommended:
+- ${SELECTION_REASONING:0:200}
 
-Mandatory Execution:
-All 47 mandatory functions (IC-001 to FI-004) and 23 quality gates will be enforced through PreToolUse and PostToolUse hooks.
+Alternative: If you prefer manual execution, the above intelligence context
+is available for your direct use.
+========================================================================
 EOF
 )"
 
@@ -203,10 +235,13 @@ WORKFLOW_CONTEXT=""
 if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
   log "Launching automated workflow with output capture"
 
+  # Get repository root dynamically
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "${WORKSPACE_PATH:-$PWD}")"
+
   # Create workflow input JSON
   WORKFLOW_JSON="$(jq -n \
     --arg prompt "$PROMPT" \
-    --arg workspace "/Volumes/PRO-G40/Code/omniclaude" \
+    --arg workspace "$REPO_ROOT" \
     --arg corr_id "$CORRELATION_ID" \
     '{user_prompt: $prompt, workspace_path: $workspace, correlation_id: $corr_id}')"
 
@@ -214,7 +249,7 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
   OUTPUT_FILE="/tmp/workflow_${CORRELATION_ID}.log"
 
   (
-    cd /Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution
+    cd "$REPO_ROOT/agents/parallel_execution" 2>/dev/null || cd "${WORKSPACE_PATH:-$PWD}/agents/parallel_execution"
     echo "$WORKFLOW_JSON" | python3 dispatch_runner.py --enable-context --enable-quorum > "$OUTPUT_FILE" 2>&1
   ) &
   WORKFLOW_PID=$!
@@ -253,4 +288,4 @@ FINAL_CONTEXT="${WORKFLOW_CONTEXT}${AGENT_CONTEXT}"
 # Output with injected context via hookSpecificOutput.additionalContext
 printf %s "$INPUT" | jq --arg ctx "$FINAL_CONTEXT" \
   '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-   .hookSpecificOutput.additionalContext = $ctx'
+   .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"

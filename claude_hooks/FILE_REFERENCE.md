@@ -70,13 +70,13 @@ python3 test_hook_integration.py
 # Recent PostToolUse events
 # Note: Set PGPASSWORD environment variable before running
 PGPASSWORD="${PGPASSWORD}" psql -h localhost -p 5436 -U postgres -d omninode_bridge -c \
-"SELECT 
+"SELECT
   metadata->>'success_classification' as success,
   (metadata->'quality_metrics'->>'quality_score')::float as quality,
   (metadata->'performance_metrics'->>'execution_time_ms')::float as time_ms
-FROM hook_events 
-WHERE source = 'PostToolUse' 
-ORDER BY created_at DESC 
+FROM hook_events
+WHERE source = 'PostToolUse'
+ORDER BY created_at DESC
 LIMIT 10;"
 ```
 

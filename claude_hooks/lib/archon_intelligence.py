@@ -4,12 +4,13 @@ Archon MCP Intelligence Executor
 Executes RAG queries and intelligence gathering via Archon MCP.
 """
 
-import httpx
+import asyncio
+import json
 import os
 import sys
-import json
-import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, Optional
+
+import httpx
 
 
 class ArchonIntelligence:
@@ -136,18 +137,18 @@ class ArchonIntelligence:
         )
 
         return {
-            "debug_intelligence": results[0]
-            if not isinstance(results[0], Exception)
-            else {},
-            "domain_standards": results[1]
-            if not isinstance(results[1], Exception)
-            else {},
-            "performance_quality": results[2]
-            if not isinstance(results[2], Exception)
-            else {},
-            "collaboration": results[3]
-            if not isinstance(results[3], Exception)
-            else {},
+            "debug_intelligence": (
+                results[0] if not isinstance(results[0], Exception) else {}
+            ),
+            "domain_standards": (
+                results[1] if not isinstance(results[1], Exception) else {}
+            ),
+            "performance_quality": (
+                results[2] if not isinstance(results[2], Exception) else {}
+            ),
+            "collaboration": (
+                results[3] if not isinstance(results[3], Exception) else {}
+            ),
         }
 
     async def _execute_rag_query(

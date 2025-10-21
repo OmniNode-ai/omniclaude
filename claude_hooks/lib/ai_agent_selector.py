@@ -11,12 +11,13 @@ Author: OmniClaude Framework
 Version: 1.0.0
 """
 
-import sys
 import json
-import yaml
+import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import subprocess
+
+import yaml
 
 
 class AIAgentSelector:
@@ -33,7 +34,7 @@ class AIAgentSelector:
         self,
         config_dir: Optional[Path] = None,
         model_preference: str = "auto",  # "auto", "local", "cloud", "gemini", "glm", "5090"
-        zen_mcp_available: bool = True
+        zen_mcp_available: bool = True,
     ):
         """
         Initialize AI agent selector.
@@ -43,7 +44,8 @@ class AIAgentSelector:
             model_preference: Which AI model to use for selection
             zen_mcp_available: Whether Zen MCP is available for model access
         """
-        self.config_dir = config_dir or Path.home() / ".claude" / "agents" / "configs"
+        # Use consolidated agent-definitions/ directory
+        self.config_dir = config_dir or Path.home() / ".claude" / "agent-definitions"
         self.model_preference = model_preference
         self.zen_mcp_available = zen_mcp_available
 
@@ -55,7 +57,7 @@ class AIAgentSelector:
             "total_selections": 0,
             "ai_selections": 0,
             "fallback_selections": 0,
-            "model_used": {}
+            "model_used": {},
         }
 
     def _load_agent_metadata(self) -> List[Dict]:
@@ -65,19 +67,57 @@ class AIAgentSelector:
         if not self.config_dir.exists():
             return agents
 
-        for yaml_file in self.config_dir.glob("agent-*.yaml"):
+        # Load from definitions/ directory (includes various naming patterns)
+        for yaml_file in self.config_dir.glob("*.yaml"):
+            # Skip registry file
+            if yaml_file.name == "agent-registry.yaml":
+                continue
+
             try:
-                with open(yaml_file, 'r') as f:
-                    config = yaml.safe_load(f)
+                with open(yaml_file, "r") as f:
+                    content = f.read()
+
+                    # Handle files with YAML + Markdown content
+                    # Only parse content before first '---' separator (if present after frontmatter)
+                    parts = content.split("\n---\n")
+                    yaml_content = parts[0] if len(parts) > 1 else content
+
+                    # Parse only the YAML portion
+                    config = yaml.safe_load(yaml_content)
+
+                    if not config or not isinstance(config, dict):
+                        continue
 
                     # Extract key metadata for AI selection
+                    # Handle capabilities as either dict or list
+                    capabilities = config.get("capabilities", {})
+                    if isinstance(capabilities, dict):
+                        capabilities_list = list(capabilities.keys())
+                    elif isinstance(capabilities, list):
+                        capabilities_list = capabilities
+                    else:
+                        capabilities_list = []
+
+                    # Get triggers - handle both flat list and nested dict formats
+                    activation_triggers = config.get("activation_triggers", [])
+                    if isinstance(activation_triggers, dict):
+                        # Nested format: {primary: [...], secondary: [...], patterns: [...]}
+                        triggers = []
+                        for key in ["primary", "secondary", "patterns"]:
+                            triggers.extend(activation_triggers.get(key, []))
+                    elif isinstance(activation_triggers, list):
+                        # Flat list format
+                        triggers = activation_triggers
+                    else:
+                        triggers = []
+
                     agent_meta = {
                         "name": yaml_file.stem,
                         "domain": config.get("agent_domain", ""),
                         "purpose": config.get("agent_purpose", ""),
                         "description": config.get("agent_description", ""),
-                        "triggers": config.get("triggers", []),
-                        "capabilities": list(config.get("capabilities", {}).keys())
+                        "triggers": triggers,
+                        "capabilities": capabilities_list,
                     }
                     agents.append(agent_meta)
 
@@ -87,10 +127,7 @@ class AIAgentSelector:
         return agents
 
     def select_agent(
-        self,
-        prompt: str,
-        context: Optional[Dict] = None,
-        top_n: int = 1
+        self, prompt: str, context: Optional[Dict] = None, top_n: int = 1
     ) -> List[Tuple[str, float, str]]:
         """
         Select best agent(s) for the prompt using AI analysis.
@@ -119,10 +156,7 @@ class AIAgentSelector:
         return self._fallback_select(prompt, top_n)
 
     def _ai_select(
-        self,
-        prompt: str,
-        context: Optional[Dict],
-        top_n: int
+        self, prompt: str, context: Optional[Dict], top_n: int
     ) -> Optional[List[Tuple[str, float, str]]]:
         """Use AI model to select agent."""
 
@@ -146,7 +180,9 @@ class AIAgentSelector:
 
         # Track which model was used
         model_name = model.get("name", "unknown")
-        self.stats["model_used"][model_name] = self.stats["model_used"].get(model_name, 0) + 1
+        self.stats["model_used"][model_name] = (
+            self.stats["model_used"].get(model_name, 0) + 1
+        )
 
         return selections[:top_n]
 
@@ -156,19 +192,17 @@ class AIAgentSelector:
 
         for agent in self.agents:
             # Ultra-compact format: name|domain|top-3-triggers
-            triggers_str = ",".join(agent["triggers"][:3])
-            lines.append(
-                f"{agent['name']}|{agent['domain']}|{triggers_str}"
-            )
+            # Defensive: ensure triggers is a list to prevent slice errors
+            triggers = agent.get("triggers", [])
+            if not isinstance(triggers, list):
+                triggers = []
+            triggers_str = ",".join(triggers[:3])
+            lines.append(f"{agent['name']}|{agent['domain']}|{triggers_str}")
 
         return "\n".join(lines)
 
     def _build_selection_prompt(
-        self,
-        user_prompt: str,
-        agent_catalog: str,
-        context: Optional[Dict],
-        top_n: int
+        self, user_prompt: str, agent_catalog: str, context: Optional[Dict], top_n: int
     ) -> str:
         """Build prompt for AI model to select agent."""
 
@@ -208,22 +242,14 @@ Be concise. Match user intent to agent domain and triggers."""
                 "name": "llama3.1-5090",
                 "type": "local",
                 "endpoint": "http://192.168.86.201:8001",  # vLLM on RTX 5090
-                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"  # Fast local model
+                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",  # Fast local model
             }
 
         elif self.model_preference == "gemini":
-            return {
-                "name": "gemini-2.5-pro",
-                "type": "cloud",
-                "provider": "google"
-            }
+            return {"name": "gemini-2.5-pro", "type": "cloud", "provider": "google"}
 
         elif self.model_preference == "glm":
-            return {
-                "name": "glm-4.6",
-                "type": "cloud",
-                "provider": "zhipu"
-            }
+            return {"name": "glm-4.6", "type": "cloud", "provider": "zhipu"}
 
         else:  # auto
             # Try local 5090 first (fastest), fall back to cloud
@@ -232,24 +258,20 @@ Be concise. Match user intent to agent domain and triggers."""
                 result = subprocess.run(
                     ["curl", "-s", "http://192.168.86.201:8001/v1/models"],
                     capture_output=True,
-                    timeout=1
+                    timeout=1,
                 )
                 if result.returncode == 0:
                     return {
                         "name": "llama3.1-5090",
                         "type": "local",
                         "endpoint": "http://192.168.86.201:8001",
-                        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+                        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
                     }
-            except:
+            except Exception:
                 pass
 
             # Fall back to Gemini (fast and reliable)
-            return {
-                "name": "gemini-2.5-flash",
-                "type": "cloud",
-                "provider": "google"
-            }
+            return {"name": "gemini-2.5-flash", "type": "cloud", "provider": "google"}
 
     def _call_ai_model(self, model: Dict, prompt: str) -> Optional[str]:
         """Call AI model to get agent selection."""
@@ -270,13 +292,11 @@ Be concise. Match user intent to agent domain and triggers."""
                 f"{model['endpoint']}/v1/chat/completions",
                 json={
                     "model": model["model"],
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 300,  # Reduce token count for faster response
-                    "temperature": 0.3  # Lower temperature for consistent selection
+                    "temperature": 0.3,  # Lower temperature for consistent selection
                 },
-                timeout=10  # Fast local inference should be <10s
+                timeout=10,  # Fast local inference should be <10s
             )
 
             if response.status_code == 200:
@@ -298,15 +318,18 @@ Be concise. Match user intent to agent domain and triggers."""
             # Use poetry to call Zen MCP chat tool
             # This leverages the existing Zen MCP integration
             # Determine hooks lib path dynamically
-            hooks_lib = Path.home() / ".claude" / "hooks" / "lib"
+            Path.home() / ".claude" / "hooks" / "lib"
 
             # Find project root (walk up from current file)
             project_root = Path(__file__).resolve().parent.parent.parent
 
             result = subprocess.run(
                 [
-                    "poetry", "run", "python3", "-c",
-                    f"""
+                    "poetry",
+                    "run",
+                    "python3",
+                    "-c",
+                    """
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.home() / '.claude' / 'hooks' / 'lib'))
@@ -314,12 +337,12 @@ sys.path.insert(0, str(Path.home() / '.claude' / 'hooks' / 'lib'))
 # Would call Zen MCP here if available
 # For now, return None to use fallback
 print("CLOUD_MODEL_PLACEHOLDER")
-"""
+""",
                 ],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=15,
             )
 
             if "CLOUD_MODEL_PLACEHOLDER" in result.stdout:
@@ -344,11 +367,9 @@ print("CLOUD_MODEL_PLACEHOLDER")
 
                 selections = []
                 for item in data.get("selections", []):
-                    selections.append((
-                        item["agent"],
-                        float(item["confidence"]),
-                        item["reasoning"]
-                    ))
+                    selections.append(
+                        (item["agent"], float(item["confidence"]), item["reasoning"])
+                    )
 
                 return selections
 
@@ -368,7 +389,12 @@ print("CLOUD_MODEL_PLACEHOLDER")
             reasons = []
 
             # Match against triggers
-            for trigger in agent["triggers"]:
+            # Defensive: ensure triggers is a list
+            triggers = agent.get("triggers", [])
+            if not isinstance(triggers, list):
+                triggers = []
+
+            for trigger in triggers:
                 if trigger.lower() in prompt_lower:
                     score += 0.3
                     reasons.append(f"trigger: {trigger}")
@@ -410,14 +436,12 @@ print("CLOUD_MODEL_PLACEHOLDER")
                 self.stats["ai_selections"] / self.stats["total_selections"]
                 if self.stats["total_selections"] > 0
                 else 0.0
-            )
+            ),
         }
 
 
 def select_agent_for_prompt(
-    prompt: str,
-    model_preference: str = "auto",
-    context: Optional[Dict] = None
+    prompt: str, model_preference: str = "auto", context: Optional[Dict] = None
 ) -> Dict:
     """
     Convenience function for single agent selection.
@@ -444,7 +468,7 @@ def select_agent_for_prompt(
             "agent": None,
             "confidence": 0.0,
             "reasoning": "No suitable agent found",
-            "model_used": "none"
+            "model_used": "none",
         }
 
     agent_name, confidence, reasoning = selections[0]
@@ -453,7 +477,7 @@ def select_agent_for_prompt(
         "agent": agent_name,
         "confidence": confidence,
         "reasoning": reasoning,
-        "model_used": selector.stats.get("model_used", {})
+        "model_used": selector.stats.get("model_used", {}),
     }
 
 
@@ -466,13 +490,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="AI-powered agent selector")
     parser.add_argument("prompt", help="User prompt to analyze")
-    parser.add_argument("--model", default="auto",
-                       choices=["auto", "5090", "local", "gemini", "glm", "cloud"],
-                       help="AI model preference")
-    parser.add_argument("--top-n", type=int, default=1,
-                       help="Number of agents to return")
-    parser.add_argument("--stats", action="store_true",
-                       help="Show selection statistics")
+    parser.add_argument(
+        "--model",
+        default="auto",
+        choices=["auto", "5090", "local", "gemini", "glm", "cloud"],
+        help="AI model preference",
+    )
+    parser.add_argument(
+        "--top-n", type=int, default=1, help="Number of agents to return"
+    )
+    parser.add_argument(
+        "--stats", action="store_true", help="Show selection statistics"
+    )
 
     args = parser.parse_args()
 
@@ -484,13 +513,9 @@ if __name__ == "__main__":
     result = {
         "prompt": args.prompt,
         "selections": [
-            {
-                "agent": agent,
-                "confidence": conf,
-                "reasoning": reason
-            }
+            {"agent": agent, "confidence": conf, "reasoning": reason}
             for agent, conf, reason in selections
-        ]
+        ],
     }
 
     if args.stats:

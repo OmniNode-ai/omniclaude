@@ -8,7 +8,7 @@ Tracks violations, corrections, scores, actions, and user responses.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 
 class DecisionLogger:

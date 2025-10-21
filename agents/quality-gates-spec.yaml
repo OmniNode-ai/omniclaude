@@ -4,7 +4,7 @@
 
 schema_version: "1.0.0"
 total_gates: 23
-categories: 8
+total_categories: 8
 performance_target_ms: 200
 
 # Quality Gate Categories

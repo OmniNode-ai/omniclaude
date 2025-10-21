@@ -5,31 +5,29 @@ Generation Validation Tests
 Tests for ONEX compliance, type safety, contract validation, and enum serialization.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+import pytest
+
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.tests.fixtures.phase4_fixtures import (
     EFFECT_ANALYSIS_RESULT,
-    COMPUTE_ANALYSIS_RESULT,
-    ONEX_NAMING_VIOLATIONS,
-    ONEX_NAMING_VALID,
-    TYPE_SAFETY_VIOLATIONS,
-    TYPE_SAFETY_VALID,
     EXPECTED_EFFECT_CONTRACT_YAML,
+    ONEX_NAMING_VALID,
+    ONEX_NAMING_VIOLATIONS,
+    TYPE_SAFETY_VIOLATIONS,
 )
 from agents.tests.utils.generation_test_helpers import (
-    parse_generated_yaml,
-    validate_contract_schema,
-    parse_generated_python,
-    check_type_annotations,
     check_for_any_types,
-    validate_onex_naming,
+    check_type_annotations,
+    parse_generated_python,
+    parse_generated_yaml,
     validate_class_naming,
+    validate_contract_schema,
     validate_enum_serialization,
     validate_mixin_compatibility,
+    validate_onex_naming,
 )
 
 
@@ -108,7 +106,7 @@ class TestONEXCompliance:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             main_file = Path(result["main_file"])
@@ -168,10 +166,10 @@ from typing import Any, Dict, List
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, errors = parse_generated_python(content)
@@ -194,10 +192,10 @@ from typing import Any, Dict, List
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             is_valid, violations = check_for_any_types(content)
@@ -361,18 +359,20 @@ class TestMixinValidation:
         engine = OmniNodeTemplateEngine()
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = await engine.generate_node(
+            await engine.generate_node(
                 analysis_result=EFFECT_ANALYSIS_RESULT,
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
             # Check mixin compatibility
             mixins = EFFECT_ANALYSIS_RESULT.recommended_mixins
             is_compatible, conflicts = validate_mixin_compatibility(mixins)
-            assert is_compatible, f"Generated code uses incompatible mixins: {conflicts}"
+            assert (
+                is_compatible
+            ), f"Generated code uses incompatible mixins: {conflicts}"
 
 
 class TestQualityMetrics:
@@ -389,10 +389,10 @@ class TestQualityMetrics:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             # Check for docstrings
@@ -409,14 +409,20 @@ class TestQualityMetrics:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)
-            imports = [node for node in tree.body if isinstance(node, (__import__('ast').Import, __import__('ast').ImportFrom))]
+            imports = [
+                node
+                for node in tree.body
+                if isinstance(
+                    node, (__import__("ast").Import, __import__("ast").ImportFrom)
+                )
+            ]
             assert len(imports) > 0, "No imports found"
 
     @pytest.mark.asyncio
@@ -432,10 +438,10 @@ class TestQualityMetrics:
                 node_type="EFFECT",
                 microservice_name="user_management",
                 domain="identity",
-                output_directory=temp_dir
+                output_directory=temp_dir,
             )
 
-            with open(result["main_file"], 'r') as f:
+            with open(result["main_file"], "r") as f:
                 content = f.read()
 
             tree, _ = parse_generated_python(content)

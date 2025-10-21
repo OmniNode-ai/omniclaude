@@ -111,7 +111,7 @@ User Request → Claude Agent (Orchestrator) → dispatch_runner.py
 
 - **[QUICK_START.md](QUICK_START.md)**: Quick reference and common patterns
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed architecture documentation
-- **[agent-parallel-dispatcher.md](agent-parallel-dispatcher.md)**: Agent instructions and workflow
+- **[AGENT-PARALLEL-DISPATCHER.md](AGENT-PARALLEL-DISPATCHER.md)**: Agent instructions and workflow
 - **[task_schema.py](task_schema.py)**: Task schema definitions and examples
 - **[dispatch_runner.py](dispatch_runner.py)**: Main execution script
 
@@ -364,7 +364,7 @@ All agents connect to Archon MCP for:
 parallel_execution/
 ├── dispatch_runner.py          # Main entry point
 ├── task_schema.py              # Task definitions & validation
-├── agent-parallel-dispatcher.md # Agent instructions
+├── AGENT-PARALLEL-DISPATCHER.md # Agent instructions
 ├── ARCHITECTURE.md             # Detailed architecture
 ├── QUICK_START.md              # Quick reference
 ├── README.md                   # This file

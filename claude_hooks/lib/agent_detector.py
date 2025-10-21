@@ -6,9 +6,10 @@ Identifies agent invocations in user prompts and extracts agent configuration.
 
 import re
 import sys
-import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class AgentDetector:
@@ -20,6 +21,12 @@ class AgentDetector:
         r"use\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # use agent-name, use the agent-name
         r"invoke\s+(?:the\s+)?(agent-[a-z0-9-]+)",  # invoke agent-name, invoke the agent-name
         r'subagent_type["\']?\s*[:=]\s*["\']([^"\']+)["\']',  # subagent_type="agent-name"
+        # Polly patterns (dictation-friendly for agent-workflow-coordinator)
+        # Handles: poly, polly, pollys, pollies, etc (flexible for dictation errors)
+        r"dispatch\s+(?:for\s+|4\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "dispatch for Polly", "dispatch 4 poly"
+        r"@pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "@poly", "@polly", "@pollys"
+        r"use\s+(?:the\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "use poly", "use the polly"
+        r"invoke\s+(?:the\s+)?pol(?:ly|y|lys|ys|lies|ies|lie|ie)",  # "invoke poly", "invoke pollies"
         # Add flexible workflow coordinator patterns
         r"(?:use|invoke)\s+(?:the\s+)?agent\s+workflow\s+coordinator",  # "use agent workflow coordinator"
         r"(?:use|invoke)\s+(?:the\s+)?workflow\s+coordinator",  # "use workflow coordinator"
@@ -28,14 +35,17 @@ class AgentDetector:
 
     # Automated workflow trigger patterns - launch dispatch_runner.py
     AUTOMATED_WORKFLOW_PATTERNS = [
-        r"coordinate\s+(?:a\s+)?workflow",          # "coordinate a workflow", "coordinate workflow"
-        r"orchestrate\s+(?:a\s+)?workflow",         # "orchestrate a workflow"
-        r"execute\s+workflow",                      # "execute workflow"
-        r"run\s+(?:automated\s+)?workflow",         # "run workflow", "run automated workflow"
+        r"coordinate\s+(?:a\s+)?workflow",  # "coordinate a workflow", "coordinate workflow"
+        r"orchestrate\s+(?:a\s+)?workflow",  # "orchestrate a workflow"
+        r"execute\s+workflow",  # "execute workflow"
+        r"run\s+(?:automated\s+)?workflow",  # "run workflow", "run automated workflow"
     ]
 
-    AGENT_CONFIG_DIR = Path.home() / ".claude" / "agents" / "configs"
-    AGENT_REGISTRY_PATH = Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    # Use agent-definitions/ (consolidated system)
+    AGENT_CONFIG_DIR = Path.home() / ".claude" / "agent-definitions"
+    AGENT_REGISTRY_PATH = (
+        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+    )
 
     def __init__(self):
         """Initialize detector and load agent registry."""
@@ -81,7 +91,7 @@ class AgentDetector:
                 trigger_lower = trigger.lower()
                 # Use flexible matching that handles plurals and variations
                 # Match "test" in "tests", "testing", etc.
-                pattern = r'\b' + re.escape(trigger_lower) + r'(?:s|ing|ed)?\b'
+                pattern = r"\b" + re.escape(trigger_lower) + r"(?:s|ing|ed)?\b"
                 if re.search(pattern, prompt_lower):
                     matches += 1
 
@@ -123,7 +133,9 @@ class AgentDetector:
         """
         # Try explicit pattern matching (case-insensitive)
         for i, pattern in enumerate(self.AGENT_PATTERNS):
-            match = re.search(pattern, prompt, re.IGNORECASE)  # Case-insensitive matching
+            match = re.search(
+                pattern, prompt, re.IGNORECASE
+            )  # Case-insensitive matching
             if match:
                 # Handle patterns that capture groups vs those that don't
                 if match.groups():
@@ -133,8 +145,11 @@ class AgentDetector:
                         agent_name = f"agent-{agent_name}"
                     return agent_name
                 else:
-                    # Handle workflow coordinator patterns that don't capture groups
-                    if "workflow" in pattern and "coordinator" in pattern:
+                    # Handle patterns that don't capture groups
+                    # Map to agent-workflow-coordinator for both "workflow" and "pol" patterns
+                    if (
+                        "workflow" in pattern and "coordinator" in pattern
+                    ) or "pol" in pattern:
                         return "agent-workflow-coordinator"
 
         # No pattern matched - return None
@@ -152,14 +167,39 @@ class AgentDetector:
         Returns:
             Agent configuration dict or None if not found
         """
-        config_path = self.AGENT_CONFIG_DIR / f"{agent_name}.yaml"
+        # Strip 'agent-' prefix from agent name for file lookup
+        # Files are named 'research.yaml', 'performance.yaml', etc.
+        # but agent names are 'agent-research', 'agent-performance', etc.
+        file_name = (
+            agent_name.replace("agent-", "", 1)
+            if agent_name.startswith("agent-")
+            else agent_name
+        )
+        config_path = self.AGENT_CONFIG_DIR / f"{file_name}.yaml"
 
         if not config_path.exists():
-            return None
+            # Try with full agent name as fallback
+            config_path = self.AGENT_CONFIG_DIR / f"{agent_name}.yaml"
+            if not config_path.exists():
+                return None
 
         try:
             with open(config_path, "r") as f:
-                return yaml.safe_load(f)
+                content = f.read()
+
+                # Handle files with YAML + Markdown content
+                # Only parse content before first '---' separator (if present after frontmatter)
+                # Split on '\n---\n' to separate YAML from markdown documentation
+                parts = content.split("\n---\n")
+                yaml_content = parts[0] if len(parts) > 1 else content
+
+                # Parse only the YAML portion
+                config = yaml.safe_load(yaml_content)
+
+                if not config or not isinstance(config, dict):
+                    return None
+
+                return config
         except Exception as e:
             print(f"Error loading agent config: {e}", file=sys.stderr)
             return None
@@ -176,13 +216,47 @@ class AgentDetector:
         Returns:
             Dict with domain_query, implementation_query, and other metadata
         """
+        # Extract from nested YAML structure
+        domain_queries = agent_config.get("framework_integration", {}).get(
+            "domain_queries", {}
+        )
+        agent_identity = agent_config.get("agent_identity", {})
+        agent_philosophy = agent_config.get("agent_philosophy", {})
+
+        # Get domain and implementation queries
+        domain_query = (
+            domain_queries.get("domain", "") if isinstance(domain_queries, dict) else ""
+        )
+        implementation_query = (
+            domain_queries.get("implementation", "")
+            if isinstance(domain_queries, dict)
+            else ""
+        )
+
+        # Get agent domain from capabilities or identity
+        capabilities = agent_config.get("capabilities", {})
+        if isinstance(capabilities, dict):
+            primary_caps = capabilities.get("primary", [])
+            agent_domain = (
+                ", ".join(primary_caps[:2])
+                if primary_caps
+                else agent_identity.get("title", "")
+            )
+        else:
+            agent_domain = agent_identity.get("title", "")
+
+        # Get agent purpose from philosophy or identity
+        agent_purpose = agent_philosophy.get(
+            "core_responsibility", ""
+        ) or agent_identity.get("description", "")
+
         return {
-            "domain_query": agent_config.get("domain_query", ""),
-            "implementation_query": agent_config.get("implementation_query", ""),
-            "agent_context": agent_config.get("agent_context", "general"),
-            "match_count": agent_config.get("match_count", 5),
-            "agent_domain": agent_config.get("agent_domain", ""),
-            "agent_purpose": agent_config.get("agent_purpose", ""),
+            "domain_query": domain_query,
+            "implementation_query": implementation_query,
+            "agent_context": "general",
+            "match_count": 5,
+            "agent_domain": agent_domain,
+            "agent_purpose": agent_purpose,
         }
 
     def get_framework_references(self) -> list[str]:

@@ -1,10 +1,12 @@
 import asyncio
+import os
+import sys
 from pathlib import Path
 from typing import List
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 from agents.lib.db import get_pg_pool
 
@@ -40,11 +42,17 @@ async def run_migrations() -> None:
         ident_col = await _ensure_migrations_table(conn)
         # If the chosen ident_col is 'version', prefer a safer text column for tracking if available
         if ident_col == "version":
-            if await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='filename'"):
+            if await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='filename'"
+            ):
                 ident_col = "filename"
-            elif await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='name'"):
+            elif await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='name'"
+            ):
                 ident_col = "name"
-            elif await conn.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='id'"):
+            elif await conn.fetchval(
+                "SELECT 1 FROM information_schema.columns WHERE table_name='schema_migrations' AND column_name='id'"
+            ):
                 ident_col = "id"
         # Inspect columns and nullability
         cols = await conn.fetch(
@@ -55,11 +63,14 @@ async def run_migrations() -> None:
             WHERE table_name='schema_migrations'
             """
         )
-        col_meta = {r["column_name"]: {
-            "nullable": (r["is_nullable"] == "YES"),
-            "default": r["column_default"],
-            "type": r["data_type"],
-        } for r in cols}
+        col_meta = {
+            r["column_name"]: {
+                "nullable": (r["is_nullable"] == "YES"),
+                "default": r["column_default"],
+                "type": r["data_type"],
+            }
+            for r in cols
+        }
         for sql in sql_files:
             migration_id = sql.name
             row = None
@@ -117,5 +128,3 @@ async def run_migrations() -> None:
 
 if __name__ == "__main__":
     asyncio.run(run_migrations())
-
-

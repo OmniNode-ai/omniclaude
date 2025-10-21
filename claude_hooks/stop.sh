@@ -154,6 +154,38 @@ if [ $EXECUTION_TIME_MS -gt $PERFORMANCE_TARGET_MS ]; then
 fi
 
 # ============================================================================
+# AGENT EXECUTION SUMMARY BANNER
+# ============================================================================
+
+# Display agent execution summary banner
+if [[ -f "${HOOKS_LIB}/agent_summary_banner.py" ]]; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Displaying agent execution summary..." >> "$LOG_FILE"
+
+    python3 -c "
+import sys
+sys.path.insert(0, '${HOOKS_LIB}')
+from agent_summary_banner import display_summary_banner
+import json
+
+# Parse tools executed
+try:
+    tools_executed = json.loads('''$TOOLS_EXECUTED''')
+    if not isinstance(tools_executed, list):
+        tools_executed = []
+except:
+    tools_executed = []
+
+# Display summary banner
+display_summary_banner(
+    tools_executed=tools_executed,
+    completion_status='$COMPLETION_STATUS'
+)
+" 2>>"$LOG_FILE"
+
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Agent summary banner displayed" >> "$LOG_FILE"
+fi
+
+# ============================================================================
 # CORRELATION CLEANUP
 # ============================================================================
 

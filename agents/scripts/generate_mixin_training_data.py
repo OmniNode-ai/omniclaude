@@ -12,19 +12,19 @@ Usage:
     python agents/scripts/generate_mixin_training_data.py --samples 200
 """
 
-import asyncio
 import argparse
+import asyncio
 import logging
 import random
-from typing import List, Tuple
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import List, Tuple
 
 # Add agents lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib.persistence import CodegenPersistence
 from lib.mixin_features import MixinFeatureExtractor
+from lib.persistence import CodegenPersistence
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,83 +33,104 @@ logger = logging.getLogger(__name__)
 # Compatibility rules based on domain knowledge
 COMPATIBILITY_RULES = {
     # Highly compatible pairs (same category, complementary)
-    'highly_compatible': [
-        ('MixinLogging', 'MixinMetrics'),  # Both observability
-        ('MixinLogging', 'MixinHealthCheck'),  # Both infrastructure
-        ('MixinRetry', 'MixinCircuitBreaker'),  # Both resilience
-        ('MixinRetry', 'MixinTimeout'),  # Both resilience
-        ('MixinCaching', 'MixinMetrics'),  # Performance + monitoring
-        ('MixinValidation', 'MixinSecurity'),  # Both business logic
-        ('MixinTransaction', 'MixinConnection'),  # Both data access
-        ('MixinEventBus', 'MixinMetrics'),  # Messaging + monitoring
-        ('MixinHealthCheck', 'MixinMetrics'),  # Monitoring + observability
-        ('MixinAuthorization', 'MixinAudit'),  # Security + compliance
+    "highly_compatible": [
+        ("MixinLogging", "MixinMetrics"),  # Both observability
+        ("MixinLogging", "MixinHealthCheck"),  # Both infrastructure
+        ("MixinRetry", "MixinCircuitBreaker"),  # Both resilience
+        ("MixinRetry", "MixinTimeout"),  # Both resilience
+        ("MixinCaching", "MixinMetrics"),  # Performance + monitoring
+        ("MixinValidation", "MixinSecurity"),  # Both business logic
+        ("MixinTransaction", "MixinConnection"),  # Both data access
+        ("MixinEventBus", "MixinMetrics"),  # Messaging + monitoring
+        ("MixinHealthCheck", "MixinMetrics"),  # Monitoring + observability
+        ("MixinAuthorization", "MixinAudit"),  # Security + compliance
     ],
     # Compatible pairs (different categories but complementary)
-    'compatible': [
-        ('MixinLogging', 'MixinRetry'),  # Infrastructure + resilience
-        ('MixinValidation', 'MixinLogging'),  # Business + infrastructure
-        ('MixinCaching', 'MixinLogging'),  # Performance + observability
-        ('MixinTransaction', 'MixinLogging'),  # Data access + observability
-        ('MixinEventBus', 'MixinLogging'),  # Messaging + observability
-        ('MixinSecurity', 'MixinLogging'),  # Security + observability
-        ('MixinRetry', 'MixinLogging'),  # Resilience + observability
-        ('MixinCircuitBreaker', 'MixinMetrics'),  # Resilience + monitoring
-        ('MixinRateLimiter', 'MixinMetrics'),  # Resilience + monitoring
-        ('MixinValidation', 'MixinRetry'),  # Business + resilience
+    "compatible": [
+        ("MixinLogging", "MixinRetry"),  # Infrastructure + resilience
+        ("MixinValidation", "MixinLogging"),  # Business + infrastructure
+        ("MixinCaching", "MixinLogging"),  # Performance + observability
+        ("MixinTransaction", "MixinLogging"),  # Data access + observability
+        ("MixinEventBus", "MixinLogging"),  # Messaging + observability
+        ("MixinSecurity", "MixinLogging"),  # Security + observability
+        ("MixinRetry", "MixinLogging"),  # Resilience + observability
+        ("MixinCircuitBreaker", "MixinMetrics"),  # Resilience + monitoring
+        ("MixinRateLimiter", "MixinMetrics"),  # Resilience + monitoring
+        ("MixinValidation", "MixinRetry"),  # Business + resilience
     ],
     # Potentially incompatible pairs (lifecycle conflicts)
-    'uncertain': [
-        ('MixinCaching', 'MixinTransaction'),  # Cache + transaction state
-        ('MixinCircuitBreaker', 'MixinRetry'),  # Overlapping retry logic
-        ('MixinTransaction', 'MixinRetry'),  # Transaction + retry complexity
-        ('MixinCaching', 'MixinCircuitBreaker'),  # State management conflicts
-        ('MixinRateLimiter', 'MixinCircuitBreaker'),  # Overlapping protection
+    "uncertain": [
+        ("MixinCaching", "MixinTransaction"),  # Cache + transaction state
+        ("MixinCircuitBreaker", "MixinRetry"),  # Overlapping retry logic
+        ("MixinTransaction", "MixinRetry"),  # Transaction + retry complexity
+        ("MixinCaching", "MixinCircuitBreaker"),  # State management conflicts
+        ("MixinRateLimiter", "MixinCircuitBreaker"),  # Overlapping protection
     ],
     # Incompatible pairs (conflicting functionality)
-    'incompatible': [
-        ('MixinCaching', 'MixinCaching'),  # Duplicate functionality
-        ('MixinTransaction', 'MixinTransaction'),  # Duplicate transactions
-        ('MixinRetry', 'MixinRetry'),  # Duplicate retry logic
-        ('MixinCircuitBreaker', 'MixinCircuitBreaker'),  # Duplicate circuit breakers
-        ('MixinConnection', 'MixinConnection'),  # Duplicate connections
-    ]
+    "incompatible": [
+        ("MixinCaching", "MixinCaching"),  # Duplicate functionality
+        ("MixinTransaction", "MixinTransaction"),  # Duplicate transactions
+        ("MixinRetry", "MixinRetry"),  # Duplicate retry logic
+        ("MixinCircuitBreaker", "MixinCircuitBreaker"),  # Duplicate circuit breakers
+        ("MixinConnection", "MixinConnection"),  # Duplicate connections
+    ],
 }
 
 
 # Node type specific compatibility patterns
 NODE_TYPE_PATTERNS = {
-    'EFFECT': {
-        'preferred_mixins': [
-            'MixinTransaction', 'MixinConnection', 'MixinValidation',
-            'MixinLogging', 'MixinMetrics', 'MixinRetry'
+    "EFFECT": {
+        "preferred_mixins": [
+            "MixinTransaction",
+            "MixinConnection",
+            "MixinValidation",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinRetry",
         ],
-        'avoid_mixins': []
+        "avoid_mixins": [],
     },
-    'COMPUTE': {
-        'preferred_mixins': [
-            'MixinValidation', 'MixinLogging', 'MixinMetrics', 'MixinCaching'
+    "COMPUTE": {
+        "preferred_mixins": [
+            "MixinValidation",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinCaching",
         ],
-        'avoid_mixins': ['MixinTransaction', 'MixinConnection']  # Compute should be pure
+        "avoid_mixins": [
+            "MixinTransaction",
+            "MixinConnection",
+        ],  # Compute should be pure
     },
-    'REDUCER': {
-        'preferred_mixins': [
-            'MixinTransaction', 'MixinConnection', 'MixinLogging',
-            'MixinMetrics', 'MixinValidation'
+    "REDUCER": {
+        "preferred_mixins": [
+            "MixinTransaction",
+            "MixinConnection",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinValidation",
         ],
-        'avoid_mixins': []
+        "avoid_mixins": [],
     },
-    'ORCHESTRATOR': {
-        'preferred_mixins': [
-            'MixinEventBus', 'MixinLogging', 'MixinMetrics',
-            'MixinCircuitBreaker', 'MixinRetry', 'MixinHealthCheck'
+    "ORCHESTRATOR": {
+        "preferred_mixins": [
+            "MixinEventBus",
+            "MixinLogging",
+            "MixinMetrics",
+            "MixinCircuitBreaker",
+            "MixinRetry",
+            "MixinHealthCheck",
         ],
-        'avoid_mixins': ['MixinTransaction']  # Orchestrator shouldn't manage transactions
-    }
+        "avoid_mixins": [
+            "MixinTransaction"
+        ],  # Orchestrator shouldn't manage transactions
+    },
 }
 
 
-def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, str, bool, str]]:
+def generate_training_samples(
+    num_samples: int = 200,
+) -> List[Tuple[str, str, str, bool, str]]:
     """
     Generate training samples with known compatibility outcomes.
 
@@ -124,7 +145,7 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
     # Initialize feature extractor to get available mixins
     feature_extractor = MixinFeatureExtractor()
     available_mixins = list(feature_extractor.MIXIN_CHARACTERISTICS.keys())
-    node_types = ['EFFECT', 'COMPUTE', 'REDUCER', 'ORCHESTRATOR']
+    node_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
 
     # Generate samples from known compatibility rules (70% of data)
     rule_samples = int(num_samples * 0.7)
@@ -133,8 +154,8 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         # Randomly select compatibility level
         level = random.choices(
             list(COMPATIBILITY_RULES.keys()),
-            weights=[30, 40, 20, 10],  # More compatible than incompatible
-            k=1
+            weights=[30, 40, 20, 10],
+            k=1,  # More compatible than incompatible
         )[0]
 
         pairs = COMPATIBILITY_RULES[level]
@@ -142,17 +163,14 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         node_type = random.choice(node_types)
 
         # Determine success based on level
-        if level == 'highly_compatible':
-            success = True
+        if level == "highly_compatible":
             success_rate = random.uniform(0.95, 1.0)
-        elif level == 'compatible':
-            success = True
+        elif level == "compatible":
             success_rate = random.uniform(0.75, 0.95)
-        elif level == 'uncertain':
-            success = random.choice([True, False])
+        elif level == "uncertain":
+            random.choice([True, False])
             success_rate = random.uniform(0.4, 0.7)
         else:  # incompatible
-            success = False
             success_rate = random.uniform(0.0, 0.3)
 
         # Generate multiple test results for this combination
@@ -163,10 +181,9 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         reason = f"Generated from {level} rule"
 
         # Add sample with test counts
-        samples.append((
-            mixin_a, mixin_b, node_type,
-            success_count, failure_count, reason
-        ))
+        samples.append(
+            (mixin_a, mixin_b, node_type, success_count, failure_count, reason)
+        )
 
     # Generate random samples (30% of data) for unknown combinations
     random_samples = num_samples - rule_samples
@@ -187,9 +204,15 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
         success_prob = 0.7 if same_category else 0.5
 
         # Node type preference adjustment
-        if mixin_a in node_pattern['preferred_mixins'] or mixin_b in node_pattern['preferred_mixins']:
+        if (
+            mixin_a in node_pattern["preferred_mixins"]
+            or mixin_b in node_pattern["preferred_mixins"]
+        ):
             success_prob += 0.15
-        if mixin_a in node_pattern['avoid_mixins'] or mixin_b in node_pattern['avoid_mixins']:
+        if (
+            mixin_a in node_pattern["avoid_mixins"]
+            or mixin_b in node_pattern["avoid_mixins"]
+        ):
             success_prob -= 0.25
 
         # Lifecycle conflict penalty
@@ -212,10 +235,9 @@ def generate_training_samples(num_samples: int = 200) -> List[Tuple[str, str, st
 
         reason = "Generated from random sampling with heuristics"
 
-        samples.append((
-            mixin_a, mixin_b, node_type,
-            success_count, failure_count, reason
-        ))
+        samples.append(
+            (mixin_a, mixin_b, node_type, success_count, failure_count, reason)
+        )
 
     logger.info(f"Generated {len(samples)} training samples")
     return samples
@@ -231,7 +253,14 @@ async def populate_database(samples: List[Tuple[str, str, str, int, int, str]]):
     persistence = CodegenPersistence()
 
     try:
-        for idx, (mixin_a, mixin_b, node_type, success_count, failure_count, reason) in enumerate(samples):
+        for idx, (
+            mixin_a,
+            mixin_b,
+            node_type,
+            success_count,
+            failure_count,
+            reason,
+        ) in enumerate(samples):
             # Update compatibility matrix multiple times to simulate test history
             for _ in range(success_count):
                 await persistence.update_mixin_compatibility(
@@ -239,7 +268,7 @@ async def populate_database(samples: List[Tuple[str, str, str, int, int, str]]):
                     mixin_b=mixin_b,
                     node_type=node_type,
                     success=True,
-                    resolution_pattern=f"Success: {reason}"
+                    resolution_pattern=f"Success: {reason}",
                 )
 
             for _ in range(failure_count):
@@ -248,7 +277,7 @@ async def populate_database(samples: List[Tuple[str, str, str, int, int, str]]):
                     mixin_b=mixin_b,
                     node_type=node_type,
                     success=False,
-                    conflict_reason=f"Conflict: {reason}"
+                    conflict_reason=f"Conflict: {reason}",
                 )
 
             if (idx + 1) % 20 == 0:
@@ -278,16 +307,16 @@ def main():
         description="Generate mixin compatibility training data"
     )
     parser.add_argument(
-        '--samples',
+        "--samples",
         type=int,
         default=200,
-        help='Number of training samples to generate (default: 200)'
+        help="Number of training samples to generate (default: 200)",
     )
     parser.add_argument(
-        '--seed',
+        "--seed",
         type=int,
         default=42,
-        help='Random seed for reproducibility (default: 42)'
+        help="Random seed for reproducibility (default: 42)",
     )
 
     args = parser.parse_args()
@@ -299,5 +328,5 @@ def main():
     asyncio.run(generate_and_populate(args.samples))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

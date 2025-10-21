@@ -97,7 +97,7 @@ triggers:
   - "batch"
 
 instructions:
-  path: ${PROJECT_ROOT}/agents/agent-parallel-dispatcher.md
+  path: ${PROJECT_ROOT}/agents/AGENT-PARALLEL-DISPATCHER.md
 
 metadata:
   domain: orchestration
@@ -122,7 +122,7 @@ Ask Claude Code:
 ```
 
 Claude should:
-1. Load agent-parallel-dispatcher.md instructions
+1. Load AGENT-PARALLEL-DISPATCHER.md instructions
 2. Analyze the request
 3. Create task JSON
 4. Execute dispatch_runner.py

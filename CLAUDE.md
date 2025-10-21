@@ -128,7 +128,7 @@ The system modifies `~/.claude/settings.json` to:
 - `claude-providers.json` - Provider configuration file
 - `SECURITY_KEY_ROTATION.md` - API key security and rotation guide
 - `.env.example` - Environment variable template
-- `ClaudeToggle.md` - Planning and architecture documentation
+- `CLAUDETOGGLE.md` - Planning and architecture documentation
 - `README.md` - Project overview and usage instructions
 
 ## Polymorphic Agent Framework

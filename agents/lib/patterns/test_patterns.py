@@ -29,26 +29,26 @@ async def test_patterns():
             "name": "create_user",
             "type": "create",
             "description": "Create a new user record in the database",
-            "required": True
+            "required": True,
         },
         {
             "name": "transform_csv_to_json",
             "type": "transformation",
             "description": "Transform CSV data to JSON format",
-            "required": False
+            "required": False,
         },
         {
             "name": "aggregate_sales_data",
             "type": "aggregation",
             "description": "Aggregate sales data by region and calculate totals",
-            "required": True
+            "required": True,
         },
         {
             "name": "orchestrate_order_workflow",
             "type": "orchestration",
             "description": "Orchestrate multi-step order processing workflow",
-            "required": True
-        }
+            "required": True,
+        },
     ]
 
     print("=" * 80)
@@ -63,7 +63,7 @@ async def test_patterns():
         matches = matcher.match_patterns(capability, max_matches=2)
 
         if not matches:
-            print(f"  ❌ No patterns matched")
+            print("  ❌ No patterns matched")
             continue
 
         print(f"  ✅ Found {len(matches)} pattern matches:")
@@ -82,17 +82,15 @@ async def test_patterns():
         context = {
             "has_event_bus": True,
             "service_name": "test_service",
-            **best_match.context
+            **best_match.context,
         }
 
         generated_code = registry.generate_code_for_pattern(
-            pattern_match=best_match,
-            capability=capability,
-            context=context
+            pattern_match=best_match, capability=capability, context=context
         )
 
         if generated_code:
-            lines = generated_code.strip().split('\n')
+            lines = generated_code.strip().split("\n")
             preview_lines = lines[:10]  # Show first 10 lines
             print(f"\n  Generated Code Preview ({len(lines)} lines total):")
             print("  " + "\n  ".join(preview_lines))
@@ -119,14 +117,18 @@ async def test_patterns():
 
     # Show pattern statistics
     stats = registry.get_cache_stats()
-    print(f"\nPattern Registry Statistics:")
+    print("\nPattern Registry Statistics:")
     print(f"  Total Patterns: {stats['pattern_count']}")
-    print(f"  Registered Patterns: {', '.join([p.value for p in stats['patterns_registered']])}")
+    print(
+        f"  Registered Patterns: {', '.join([p.value for p in stats['patterns_registered']])}"
+    )
 
     # Show pattern priorities
     priorities = registry.get_pattern_priorities()
-    print(f"\nPattern Priorities:")
-    for pattern_type, priority in sorted(priorities.items(), key=lambda x: x[1], reverse=True):
+    print("\nPattern Priorities:")
+    for pattern_type, priority in sorted(
+        priorities.items(), key=lambda x: x[1], reverse=True
+    ):
         print(f"  {pattern_type.value}: {priority}")
 
 

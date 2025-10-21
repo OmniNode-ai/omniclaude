@@ -1,0 +1,29 @@
+# Dockerfile for Kafka Agent Action Consumer (Testing)
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional test dependencies
+RUN pip install --no-cache-dir \
+    kafka-python \
+    asyncpg \
+    psutil
+
+# Copy application code
+COPY agents/lib/kafka_agent_action_consumer.py /app/
+
+# Run consumer
+CMD ["python", "/app/kafka_agent_action_consumer.py"]

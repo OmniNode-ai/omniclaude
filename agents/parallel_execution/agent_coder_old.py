@@ -5,13 +5,12 @@ Generates ONEX-compliant code from contracts with quality validation.
 Based on agent-contract-driven-generator.yaml configuration.
 """
 
-import asyncio
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 
 class CoderAgent:
@@ -49,8 +48,8 @@ class CoderAgent:
             task_id=task.task_id,
             metadata={
                 "domain": self.config.agent_domain,
-                "input_data": task.input_data
-            }
+                "input_data": task.input_data,
+            },
         )
 
         try:
@@ -59,7 +58,7 @@ class CoderAgent:
                 message=f"Starting contract-driven code generation: {task.description}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Extract task inputs
@@ -81,25 +80,31 @@ class CoderAgent:
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
                     task_id=task.task_id,
-                    metadata={"context_items": len(pre_gathered_context)}
+                    metadata={"context_items": len(pre_gathered_context)},
                 )
 
                 # Extract intelligence from pre-gathered context
                 for key, context_item in pre_gathered_context.items():
                     context_type = context_item.get("type")
                     if context_type == "rag" and "domain" in key:
-                        intelligence["domain_patterns"] = context_item.get("content", {})
+                        intelligence["domain_patterns"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "pattern":
-                        intelligence["pattern_examples"] = context_item.get("content", {})
+                        intelligence["pattern_examples"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "file":
-                        intelligence.setdefault("context_files", []).append(context_item.get("content", ""))
+                        intelligence.setdefault("context_files", []).append(
+                            context_item.get("content", "")
+                        )
 
                 await self.trace_logger.log_event(
                     event_type=TraceEventType.AGENT_START,
                     message=f"Extracted {len(intelligence)} intelligence sources from pre-gathered context",
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
             elif self.config.archon_mcp_enabled:
@@ -109,23 +114,25 @@ class CoderAgent:
                     message="Phase 1: Gathering intelligence (no pre-gathered context available)",
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
                 try:
                     # Gather domain-specific intelligence
                     domain_intel = await self.mcp_client.perform_rag_query(
-                        query=self.config.domain_query or "contract-driven development patterns",
+                        query=self.config.domain_query
+                        or "contract-driven development patterns",
                         context="api_development",
-                        match_count=self.config.match_count
+                        match_count=self.config.match_count,
                     )
                     intelligence["domain_patterns"] = domain_intel
 
                     # Gather implementation intelligence
                     impl_intel = await self.mcp_client.perform_rag_query(
-                        query=self.config.implementation_query or "API contract validation",
+                        query=self.config.implementation_query
+                        or "API contract validation",
                         context="api_development",
-                        match_count=self.config.match_count
+                        match_count=self.config.match_count,
                     )
                     intelligence["implementation_patterns"] = impl_intel
 
@@ -135,7 +142,7 @@ class CoderAgent:
                         level=TraceLevel.INFO,
                         agent_name=self.config.agent_name,
                         task_id=task.task_id,
-                        metadata={"intelligence_count": len(intelligence)}
+                        metadata={"intelligence_count": len(intelligence)},
                     )
 
                 except Exception as e:
@@ -144,7 +151,7 @@ class CoderAgent:
                         message=f"Intelligence gathering failed (continuing): {str(e)}",
                         level=TraceLevel.WARNING,
                         agent_name=self.config.agent_name,
-                        task_id=task.task_id
+                        task_id=task.task_id,
                     )
 
             # Phase 2: Generate code from contract
@@ -153,13 +160,11 @@ class CoderAgent:
                 message="Phase 2: Generating ONEX-compliant code",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             generated_code = self._generate_code_from_contract(
-                contract=contract,
-                node_type=node_type,
-                intelligence=intelligence
+                contract=contract, node_type=node_type, intelligence=intelligence
             )
 
             # Phase 3: Quality validation
@@ -168,7 +173,7 @@ class CoderAgent:
                 message="Phase 3: Validating generated code quality",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             quality_metrics = {}
@@ -178,7 +183,7 @@ class CoderAgent:
                     quality_result = await self.mcp_client.assess_code_quality(
                         content=generated_code,
                         source_path=f"generated_{node_type.lower()}.py",
-                        language=language
+                        language=language,
                     )
                     quality_metrics = quality_result
 
@@ -188,7 +193,7 @@ class CoderAgent:
                         level=TraceLevel.INFO,
                         agent_name=self.config.agent_name,
                         task_id=task.task_id,
-                        metadata=quality_metrics
+                        metadata=quality_metrics,
                     )
 
                 except Exception as e:
@@ -197,7 +202,7 @@ class CoderAgent:
                         message=f"Quality validation failed (continuing): {str(e)}",
                         level=TraceLevel.WARNING,
                         agent_name=self.config.agent_name,
-                        task_id=task.task_id
+                        task_id=task.task_id,
                     )
 
             # Calculate execution time
@@ -211,8 +216,8 @@ class CoderAgent:
                 "intelligence_gathered": intelligence,
                 "quality_metrics": quality_metrics,
                 "quality_score": quality_metrics.get("quality_score", 0.0),
-                "lines_generated": len(generated_code.split('\n')),
-                "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7
+                "lines_generated": len(generated_code.split("\n")),
+                "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7,
             }
 
             # Create result
@@ -222,14 +227,14 @@ class CoderAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             # End trace successfully
             await self.trace_logger.end_agent_trace(
                 trace_id=self._current_trace_id,
                 status="completed",
-                result=result.model_dump()
+                result=result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -238,7 +243,7 @@ class CoderAgent:
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
                 task_id=task.task_id,
-                metadata={"execution_time_ms": execution_time_ms}
+                metadata={"execution_time_ms": execution_time_ms},
             )
 
             return result
@@ -253,13 +258,11 @@ class CoderAgent:
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
                 task_id=task.task_id,
-                metadata={"error": str(e)}
+                metadata={"error": str(e)},
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
+                trace_id=self._current_trace_id, status="failed", error=error_msg
             )
 
             return AgentResult(
@@ -268,14 +271,11 @@ class CoderAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     def _generate_code_from_contract(
-        self,
-        contract: Dict[str, Any],
-        node_type: str,
-        intelligence: Dict[str, Any]
+        self, contract: Dict[str, Any], node_type: str, intelligence: Dict[str, Any]
     ) -> str:
         """
         Generate ONEX-compliant code from contract specification.
@@ -316,7 +316,9 @@ class CoderAgent:
             for field_name, field_spec in input_model.items():
                 field_type = field_spec.get("type", "Any")
                 field_desc = field_spec.get("description", "")
-                code_parts.append(f'    {field_name}: {field_type} = Field(description="{field_desc}")')
+                code_parts.append(
+                    f'    {field_name}: {field_type} = Field(description="{field_desc}")'
+                )
         else:
             code_parts.append("    pass")
 
@@ -329,7 +331,9 @@ class CoderAgent:
             for field_name, field_spec in output_model.items():
                 field_type = field_spec.get("type", "Any")
                 field_desc = field_spec.get("description", "")
-                code_parts.append(f'    {field_name}: {field_type} = Field(description="{field_desc}")')
+                code_parts.append(
+                    f'    {field_name}: {field_type} = Field(description="{field_desc}")'
+                )
         else:
             code_parts.append("    pass")
 
@@ -337,26 +341,30 @@ class CoderAgent:
         code_parts.append("")
         code_parts.append("")
         code_parts.append(f"class Node{contract_name}{node_type}:")
-        code_parts.append(f'    """')
-        code_parts.append(f'    ONEX {node_type} node for {contract_name}.')
-        code_parts.append(f'    ')
-        code_parts.append(f'    {description}')
-        code_parts.append(f'    """')
+        code_parts.append('    """')
+        code_parts.append(f"    ONEX {node_type} node for {contract_name}.")
+        code_parts.append("    ")
+        code_parts.append(f"    {description}")
+        code_parts.append('    """')
         code_parts.append("")
-        code_parts.append(f"    async def execute(self, input_data: {contract_name}Input) -> {contract_name}Output:")
-        code_parts.append(f'        """')
-        code_parts.append(f'        Execute {node_type.lower()} operation.')
-        code_parts.append(f'        ')
-        code_parts.append(f'        Args:')
-        code_parts.append(f'            input_data: Validated input model')
-        code_parts.append(f'        ')
-        code_parts.append(f'        Returns:')
-        code_parts.append(f'            Validated output model')
-        code_parts.append(f'        """')
+        code_parts.append(
+            f"    async def execute(self, input_data: {contract_name}Input) -> {contract_name}Output:"
+        )
+        code_parts.append('        """')
+        code_parts.append(f"        Execute {node_type.lower()} operation.")
+        code_parts.append("        ")
+        code_parts.append("        Args:")
+        code_parts.append("            input_data: Validated input model")
+        code_parts.append("        ")
+        code_parts.append("        Returns:")
+        code_parts.append("            Validated output model")
+        code_parts.append('        """')
         code_parts.append(f"        # TODO: Implement {node_type.lower()} logic")
-        code_parts.append(f"        # Intelligence gathered: {len(intelligence)} sources")
-        code_parts.append(f"        ")
-        code_parts.append(f"        # Placeholder implementation")
+        code_parts.append(
+            f"        # Intelligence gathered: {len(intelligence)} sources"
+        )
+        code_parts.append("        ")
+        code_parts.append("        # Placeholder implementation")
         code_parts.append(f"        return {contract_name}Output()")
 
         return "\n".join(code_parts)

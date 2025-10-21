@@ -12,15 +12,17 @@ This is the Phase 5 orchestrator that integrates all quality enforcement phases:
 
 Performance Budget: <2000ms total
 """
-import sys
-import json
+
 import asyncio
-import time
+import json
 import os
-import yaml
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
-from datetime import datetime, timezone
+
+import yaml
 
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -88,8 +90,7 @@ PERFORMANCE_BUDGET_SECONDS = float(
 
 # Enforcement mode: "warn" or "block"
 ENFORCEMENT_MODE = os.getenv(
-    "ENFORCEMENT_MODE",
-    str(CONFIG.get("enforcement", {}).get("mode", "warn"))
+    "ENFORCEMENT_MODE", str(CONFIG.get("enforcement", {}).get("mode", "warn"))
 ).lower()
 
 
@@ -167,13 +168,15 @@ class ViolationsLogger:
             # Don't fail enforcement if logging fails
             print(f"[Warning] Failed to log violations: {e}", file=sys.stderr)
 
-    def _update_summary(
-        self, file_path: str, violations: List, timestamp: str
-    ) -> None:
+    def _update_summary(self, file_path: str, violations: List, timestamp: str) -> None:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
-            summary = {"last_updated": "", "total_violations_today": 0, "files_with_violations": []}
+            summary = {
+                "last_updated": "",
+                "total_violations_today": 0,
+                "files_with_violations": [],
+            }
 
             if self.violations_summary.exists():
                 try:
@@ -216,7 +219,9 @@ class ViolationsLogger:
                 json.dump(summary, f, indent=2)
 
         except Exception as e:
-            print(f"[Warning] Failed to update violations summary: {e}", file=sys.stderr)
+            print(
+                f"[Warning] Failed to update violations summary: {e}", file=sys.stderr
+            )
 
     def _rotate_log_if_needed(self) -> None:
         """Rotate violations.log if it exceeds size limit."""
@@ -332,7 +337,7 @@ class QualityEnforcer:
 
             # Check performance budget before continuing
             if self._elapsed() > self.performance_budget * 0.5:
-                self._log(f"[Warning] Already used 50% of budget, skipping AI analysis")
+                self._log("[Warning] Already used 50% of budget, skipping AI analysis")
                 # Build system message and block (no time for corrections)
                 self.system_message = self._build_violations_system_message(
                     violations, file_path, mode=ENFORCEMENT_MODE
@@ -353,11 +358,15 @@ class QualityEnforcer:
                     # If corrections were auto-applied, clear system message (allow write)
                     # If only suggested, keep system message (block write)
                     if self.stats["corrections_applied"] > 0:
-                        self._log(f"[Phase 5] Auto-applied {self.stats['corrections_applied']} corrections, allowing write")
+                        self._log(
+                            f"[Phase 5] Auto-applied {self.stats['corrections_applied']} corrections, allowing write"
+                        )
                         self.system_message = None  # Clear - all violations fixed
                     else:
                         # No auto-apply, violations remain - build system message to block
-                        self._log(f"[Phase 5] No auto-apply, violations remain - blocking")
+                        self._log(
+                            "[Phase 5] No auto-apply, violations remain - blocking"
+                        )
                         self.system_message = self._build_violations_system_message(
                             violations, file_path, mode=ENFORCEMENT_MODE
                         )
@@ -373,7 +382,7 @@ class QualityEnforcer:
             else:
                 # Phase 1 only mode - just report violations and block
                 self._log(
-                    f"[Phase 1 Only] Violations detected but correction phases disabled"
+                    "[Phase 1 Only] Violations detected but correction phases disabled"
                 )
                 self.system_message = self._build_violations_system_message(
                     violations, file_path, mode=ENFORCEMENT_MODE
@@ -435,10 +444,9 @@ class QualityEnforcer:
         # Phase 2: RAG intelligence (target: <500ms)
         if ENABLE_PHASE_2_RAG:
             phase_start = time.time()
-            self._log(f"[Phase 2] Querying RAG intelligence...")
+            self._log("[Phase 2] Querying RAG intelligence...")
 
             try:
-                from intelligence.rag_client import RAGIntelligenceClient
                 from correction.generator import CorrectionGenerator
 
                 # Get RAG config from CONFIG
@@ -478,7 +486,7 @@ class QualityEnforcer:
 
         if ENABLE_PHASE_4_AI_QUORUM:
             phase_start = time.time()
-            self._log(f"[Phase 4] Running AI quorum...")
+            self._log("[Phase 4] Running AI quorum...")
 
             try:
                 from consensus.quorum import AIQuorum
@@ -489,7 +497,7 @@ class QualityEnforcer:
                     # Check budget before each scoring
                     if self._elapsed() > self.performance_budget * 0.9:
                         self._log(
-                            f"[Warning] Approaching budget limit, skipping remaining corrections"
+                            "[Warning] Approaching budget limit, skipping remaining corrections"
                         )
                         break
 
@@ -582,7 +590,7 @@ class QualityEnforcer:
         - Score >= 0.60: Suggest to user (log only)
         - Score < 0.60: Skip
         """
-        self._log(f"[Phase 5] Applying decisions...")
+        self._log("[Phase 5] Applying decisions...")
 
         auto_applied = 0
         suggested = 0
@@ -712,7 +720,9 @@ class QualityEnforcer:
 
         return mapping.get(ext)
 
-    def _build_violations_system_message(self, violations: List, file_path: str, mode: str = "warn") -> str:
+    def _build_violations_system_message(
+        self, violations: List, file_path: str, mode: str = "warn"
+    ) -> str:
         """
         Build system message for Claude Code with violation warnings.
 
@@ -749,12 +759,16 @@ class QualityEnforcer:
         for vtype, violations_list in violations_by_type.items():
             lines.append(f"{vtype.upper()} VIOLATIONS ({len(violations_list)}):")
             for v in violations_list[:5]:  # Limit to 5 per type to avoid spam
-                lines.append(f"  • Line {v.line}: '{v.name}' should be '{v.expected_format}'")
+                lines.append(
+                    f"  • Line {v.line}: '{v.name}' should be '{v.expected_format}'"
+                )
                 if v.suggestion and v.suggestion != v.expected_format:
                     lines.append(f"    Suggestion: {v.suggestion}")
 
             if len(violations_list) > 5:
-                lines.append(f"  ... and {len(violations_list) - 5} more {vtype} violation(s)")
+                lines.append(
+                    f"  ... and {len(violations_list) - 5} more {vtype} violation(s)"
+                )
             lines.append("")
 
         # Footer with guidance based on mode
@@ -778,7 +792,9 @@ class QualityEnforcer:
         """Log message to stderr."""
         print(message, file=sys.stderr)
 
-    def _capture_tool_selection_metadata(self, tool_name: str, tool_input: Dict) -> None:
+    def _capture_tool_selection_metadata(
+        self, tool_name: str, tool_input: Dict
+    ) -> None:
         """
         Capture tool selection intelligence metadata.
 
@@ -796,7 +812,7 @@ class QualityEnforcer:
             self.tool_selection_metadata = create_enhanced_metadata(
                 tool_name=tool_name,
                 tool_input=tool_input,
-                quality_checks=None  # Will be updated after validation
+                quality_checks=None,  # Will be updated after validation
             )
 
             self._log(
@@ -828,7 +844,9 @@ class QualityEnforcer:
             # Analyze violations
             if violations:
                 violation_types = {v.violation_type for v in violations}
-                checks_failed.extend([f"{vtype}_convention" for vtype in violation_types])
+                checks_failed.extend(
+                    [f"{vtype}_convention" for vtype in violation_types]
+                )
 
             # Create quality check metadata
             quality_metadata = QualityCheckMetadata(
@@ -837,7 +855,7 @@ class QualityEnforcer:
                 checks_failed=checks_failed,
                 violations_found=len(violations),
                 corrections_suggested=self.stats.get("corrections_suggested", 0),
-                enforcement_mode=ENFORCEMENT_MODE
+                enforcement_mode=ENFORCEMENT_MODE,
             )
 
             # Update tool selection metadata with quality checks
@@ -882,7 +900,7 @@ class QualityEnforcer:
         )
         self._log(f"Phase 1 (Validation): {self.stats['phase_1_time']:.3f}s")
         self._log(f"Phase 2 (RAG): {self.stats['phase_2_time']:.3f}s")
-        self._log(f"Phase 3 (Correction): Included in Phase 2")
+        self._log("Phase 3 (Correction): Included in Phase 2")
         self._log(f"Phase 4 (AI Quorum): {self.stats['phase_4_time']:.3f}s")
         self._log(f"Phase 5 (Decision): {self.stats['phase_5_time']:.3f}s")
         self._log("-" * 60)
@@ -935,7 +953,9 @@ async def main():
             f.write(f"[{timestamp}] Tool: {tool_name}, File: {file_path}\n")
             # Debug: log full tool call structure (first 500 chars)
             tool_call_str = json.dumps(tool_call, indent=2)
-            f.write(f"[{timestamp}] Tool call structure (first 500 chars): {tool_call_str[:500]}\n")
+            f.write(
+                f"[{timestamp}] Tool call structure (first 500 chars): {tool_call_str[:500]}\n"
+            )
 
         # Run enforcement
         enforcer = QualityEnforcer()
@@ -964,9 +984,9 @@ async def main():
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": permission_decision,
-                    "permissionDecisionReason": enforcer.system_message
+                    "permissionDecisionReason": enforcer.system_message,
                 },
-                "enhanced_metadata": enhanced_metadata  # Add for logging
+                "enhanced_metadata": enhanced_metadata,  # Add for logging
             }
 
             # Output result to stdout

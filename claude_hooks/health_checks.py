@@ -16,33 +16,37 @@ Design Philosophy:
 - Configurable: Flexible timeout and retry policies
 """
 
-import asyncio
 import json
 import sys
 import time
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 # Use httpx for async requests (fallback to requests for sync)
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     import requests
+
     HAS_HTTPX = False
 
 # Import pattern tracker for configuration
 try:
     from pattern_tracker import PatternTrackerConfig, get_tracker
+
     HAS_PATTERN_TRACKER = True
 except ImportError:
     HAS_PATTERN_TRACKER = False
 
+
 class HealthStatus(Enum):
     """Health check status levels."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -52,6 +56,7 @@ class HealthStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """Result of a health check operation."""
+
     component: str
     status: HealthStatus
     timestamp: str
@@ -73,7 +78,11 @@ class Phase4HealthChecker:
     APIs, databases, and supporting services with both sync and async capabilities.
     """
 
-    def __init__(self, base_url: str = "http://localhost:8053", config: Optional[PatternTrackerConfig] = None):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8053",
+        config: Optional[PatternTrackerConfig] = None,
+    ):
         """
         Initialize Phase 4 health checker.
 
@@ -97,7 +106,7 @@ class Phase4HealthChecker:
             "timestamp": timestamp,
             "level": level,
             "message": f"[HEALTH] {message}",
-            **kwargs
+            **kwargs,
         }
 
         try:
@@ -157,7 +166,7 @@ class Phase4HealthChecker:
                         details = {
                             "status_code": response.status_code,
                             "response_size": len(response.content),
-                            "response_data": response_data
+                            "response_data": response_data,
                         }
                         suggestion = None
                         status = HealthStatus.HEALTHY
@@ -165,7 +174,7 @@ class Phase4HealthChecker:
                         details = {
                             "status_code": response.status_code,
                             "response_size": len(response.content),
-                            "warning": "Non-JSON response"
+                            "warning": "Non-JSON response",
                         }
                         suggestion = "Endpoint returned non-JSON response"
                         status = HealthStatus.DEGRADED
@@ -173,7 +182,7 @@ class Phase4HealthChecker:
                     details = {
                         "status_code": response.status_code,
                         "response_size": len(response.content),
-                        "error_type": "http_error"
+                        "error_type": "http_error",
                     }
                     suggestion = f"HTTP {response.status_code} - check service status"
                     status = HealthStatus.UNHEALTHY
@@ -184,7 +193,7 @@ class Phase4HealthChecker:
                     timestamp=timestamp,
                     response_time_ms=response_time_ms,
                     details=details,
-                    suggestion=suggestion
+                    suggestion=suggestion,
                 )
 
                 self._cache_result(cache_key, result.to_dict())
@@ -197,8 +206,8 @@ class Phase4HealthChecker:
                 status=HealthStatus.UNHEALTHY,
                 timestamp=timestamp,
                 response_time_ms=response_time_ms,
-                error_message=f"Timeout after 5.0s",
-                suggestion="Service may be overloaded or unreachable"
+                error_message="Timeout after 5.0s",
+                suggestion="Service may be overloaded or unreachable",
             )
             self._cache_result(cache_key, result.to_dict())
             return result
@@ -211,7 +220,7 @@ class Phase4HealthChecker:
                 timestamp=timestamp,
                 response_time_ms=response_time_ms,
                 error_message="Connection failed",
-                suggestion="Check if Phase 4 service is running"
+                suggestion="Check if Phase 4 service is running",
             )
             self._cache_result(cache_key, result.to_dict())
             return result
@@ -224,7 +233,7 @@ class Phase4HealthChecker:
                 timestamp=timestamp,
                 response_time_ms=response_time_ms,
                 error_message=str(e),
-                suggestion="Unexpected error during health check"
+                suggestion="Unexpected error during health check",
             )
             self._cache_result(cache_key, result.to_dict())
             return result
@@ -244,11 +253,13 @@ class Phase4HealthChecker:
 
             # Parse response if JSON
             try:
-                if response.headers.get('content-type', '').startswith('application/json'):
+                if response.headers.get("content-type", "").startswith(
+                    "application/json"
+                ):
                     result["details"] = response.json()
                 else:
                     result["details"] = response.text[:500]  # Limit text length
-            except:
+            except Exception:
                 result["details"] = "Could not parse response"
 
             return result
@@ -257,26 +268,28 @@ class Phase4HealthChecker:
             return {
                 "status": "timeout",
                 "error": "Request timed out after 2 seconds",
-                "response_time_ms": 2000
+                "response_time_ms": 2000,
             }
         except requests.exceptions.ConnectionError:
             return {
                 "status": "connection_error",
                 "error": f"Cannot connect to {self.base_url}",
-                "response_time_ms": (time.time() - start_time) * 1000
+                "response_time_ms": (time.time() - start_time) * 1000,
             }
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000
+                "response_time_ms": (time.time() - start_time) * 1000,
             }
 
     def check_database_connectivity(self) -> Dict[str, Any]:
         """Check if we can reach the database through Phase 4 API"""
         start_time = time.time()
         try:
-            response = requests.get(f"{self.base_url}/api/pattern-traceability/health", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/api/pattern-traceability/health", timeout=5
+            )
             response_time_ms = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
@@ -285,33 +298,33 @@ class Phase4HealthChecker:
                     return {
                         "status": "connected",
                         "response_time_ms": round(response_time_ms, 2),
-                        "details": details
+                        "details": details,
                     }
-                except:
+                except Exception:
                     return {
                         "status": "connected",
                         "response_time_ms": round(response_time_ms, 2),
-                        "details": "Connected but response parsing failed"
+                        "details": "Connected but response parsing failed",
                     }
             else:
                 return {
                     "status": "error",
                     "response_time_ms": round(response_time_ms, 2),
                     "status_code": response.status_code,
-                    "error": f"HTTP {response.status_code}: {response.text[:200]}"
+                    "error": f"HTTP {response.status_code}: {response.text[:200]}",
                 }
 
         except requests.exceptions.Timeout:
             return {
                 "status": "timeout",
                 "error": "Database health check timed out after 5 seconds",
-                "response_time_ms": 5000
+                "response_time_ms": 5000,
             }
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000
+                "response_time_ms": (time.time() - start_time) * 1000,
             }
 
     def check_lineage_endpoint(self) -> Dict[str, Any]:
@@ -325,13 +338,13 @@ class Phase4HealthChecker:
                 "pattern_type": "test",
                 "pattern_data": {"test": True, "timestamp": time.time()},
                 "triggered_by": "health_check",
-                "user_id": "health_check_user"
+                "user_id": "health_check_user",
             }
 
             response = requests.post(
                 f"{self.base_url}/api/pattern-traceability/lineage/track",
                 json=test_payload,
-                timeout=3
+                timeout=3,
             )
 
             response_time_ms = (time.time() - start_time) * 1000
@@ -343,34 +356,34 @@ class Phase4HealthChecker:
                         "status": "working",
                         "response_time_ms": round(response_time_ms, 2),
                         "response_code": response.status_code,
-                        "details": response_data
+                        "details": response_data,
                     }
-                except:
+                except Exception:
                     return {
                         "status": "working",
                         "response_time_ms": round(response_time_ms, 2),
                         "response_code": response.status_code,
-                        "details": "Endpoint responded but response parsing failed"
+                        "details": "Endpoint responded but response parsing failed",
                     }
             else:
                 return {
                     "status": "error",
                     "response_time_ms": round(response_time_ms, 2),
                     "response_code": response.status_code,
-                    "error": f"HTTP {response.status_code}: {response.text[:200]}"
+                    "error": f"HTTP {response.status_code}: {response.text[:200]}",
                 }
 
         except requests.exceptions.Timeout:
             return {
                 "status": "timeout",
                 "error": "Lineage endpoint test timed out after 3 seconds",
-                "response_time_ms": 3000
+                "response_time_ms": 3000,
             }
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000
+                "response_time_ms": (time.time() - start_time) * 1000,
             }
 
     def check_feedback_endpoint(self) -> Dict[str, Any]:
@@ -382,13 +395,13 @@ class Phase4HealthChecker:
                 "feedback_type": "test",
                 "feedback_data": {"test": True, "rating": 5},
                 "user_id": "health_check_user",
-                "context": {"test": True}
+                "context": {"test": True},
             }
 
             response = requests.post(
                 f"{self.base_url}/api/pattern-traceability/feedback/submit",
                 json=test_payload,
-                timeout=3
+                timeout=3,
             )
 
             response_time_ms = (time.time() - start_time) * 1000
@@ -397,37 +410,34 @@ class Phase4HealthChecker:
                 return {
                     "status": "working",
                     "response_time_ms": round(response_time_ms, 2),
-                    "response_code": response.status_code
+                    "response_code": response.status_code,
                 }
             else:
                 return {
                     "status": "error",
                     "response_time_ms": round(response_time_ms, 2),
                     "response_code": response.status_code,
-                    "error": f"HTTP {response.status_code}: {response.text[:200]}"
+                    "error": f"HTTP {response.status_code}: {response.text[:200]}",
                 }
 
         except requests.exceptions.Timeout:
             return {
                 "status": "timeout",
                 "error": "Feedback endpoint test timed out after 3 seconds",
-                "response_time_ms": 3000
+                "response_time_ms": 3000,
             }
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "response_time_ms": (time.time() - start_time) * 1000
+                "response_time_ms": (time.time() - start_time) * 1000,
             }
 
     def run_comprehensive_health_check(self) -> Dict[str, Any]:
         """Run all health checks and return comprehensive status"""
         print("🔍 Running comprehensive Phase 4 health check...", file=sys.stderr)
 
-        results = {
-            "timestamp": time.time(),
-            "checks": {}
-        }
+        results = {"timestamp": time.time(), "checks": {}}
 
         # Run all checks
         results["checks"]["intelligence_service"] = self.check_intelligence_service()
@@ -453,18 +463,29 @@ class Phase4HealthChecker:
         results["summary"] = {
             "total_checks": len(results["checks"]),
             "passed_checks": len(results["checks"]) - len(failed_checks),
-            "failed_checks": len(failed_checks)
+            "failed_checks": len(failed_checks),
         }
 
         # Print summary
-        status_emoji = "✅" if overall_status == "healthy" else ("⚠️" if overall_status == "degraded" else "❌")
-        print(f"{status_emoji} Overall Phase 4 Status: {overall_status.upper()}", file=sys.stderr)
-        print(f"📊 Passed: {results['summary']['passed_checks']}/{results['summary']['total_checks']} checks", file=sys.stderr)
+        status_emoji = (
+            "✅"
+            if overall_status == "healthy"
+            else ("⚠️" if overall_status == "degraded" else "❌")
+        )
+        print(
+            f"{status_emoji} Overall Phase 4 Status: {overall_status.upper()}",
+            file=sys.stderr,
+        )
+        print(
+            f"📊 Passed: {results['summary']['passed_checks']}/{results['summary']['total_checks']} checks",
+            file=sys.stderr,
+        )
 
         if failed_checks:
             print(f"❌ Failed checks: {', '.join(failed_checks)}", file=sys.stderr)
 
         return results
+
 
 def main():
     """Run health check when script is executed directly"""
@@ -476,6 +497,7 @@ def main():
 
     # Exit with appropriate code
     sys.exit(0 if results["overall_status"] == "healthy" else 1)
+
 
 if __name__ == "__main__":
     main()

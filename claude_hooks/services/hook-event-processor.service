@@ -1,0 +1,52 @@
+[Unit]
+Description=Hook Event Processor Service
+Documentation=file:///Volumes/PRO-G40/Code/omniclaude/claude_hooks/services/README_PROCESSOR.md
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=jonah
+Group=staff
+WorkingDirectory=/Volumes/PRO-G40/Code/omniclaude/claude_hooks/services
+
+# Environment configuration
+Environment="DB_PASSWORD=omninode-bridge-postgres-dev-2024"
+Environment="POLL_INTERVAL=1.0"
+Environment="BATCH_SIZE=100"
+Environment="MAX_RETRY_COUNT=3"
+EnvironmentFile=-/Volumes/PRO-G40/Code/omniclaude/.env
+
+# Execute processor
+ExecStart=/usr/bin/python3 /Volumes/PRO-G40/Code/omniclaude/claude_hooks/services/hook_event_processor.py
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hook-event-processor
+
+# Auto-restart configuration
+Restart=always
+RestartSec=5s
+StartLimitInterval=300s
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=4096
+MemoryLimit=512M
+CPUQuota=50%
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp /var/log
+
+# Graceful shutdown
+TimeoutStopSec=30s
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

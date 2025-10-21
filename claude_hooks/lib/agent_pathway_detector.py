@@ -13,13 +13,14 @@ Version: 1.0.0
 """
 
 import re
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class PathwayDetection:
     """Result of pathway detection."""
+
     pathway: Optional[str]  # "coordinator" | "direct_single" | "direct_parallel" | None
     agents: List[str]  # Agent names to invoke
     task: str  # Cleaned task description
@@ -40,28 +41,28 @@ class AgentPathwayDetector:
 
     # Coordinator trigger patterns
     COORDINATOR_PATTERNS = [
-        r'\b(coordinate|orchestrate):\s*',
-        r'@workflow-coordinator\b',
-        r'\bcoordinator\s+mode\b',
+        r"\b(coordinate|orchestrate):\s*",
+        r"@workflow-coordinator\b",
+        r"\bcoordinator\s+mode\b",
     ]
 
     # Parallel execution patterns
     PARALLEL_PATTERNS = [
-        r'\b(parallel|concurrently):\s*',
-        r'@parallel\b',
-        r'\bmultiple\s+agents?\b',
+        r"\b(parallel|concurrently):\s*",
+        r"@parallel\b",
+        r"\bmultiple\s+agents?\b",
     ]
 
     # Single agent patterns
     SINGLE_AGENT_PATTERNS = [
-        r'@(agent-[\w-]+)',
-        r'\buse\s+(agent-[\w-]+)',
-        r'\binvoke\s+(agent-[\w-]+)',
-        r'\bwith\s+(agent-[\w-]+)',
+        r"@(agent-[\w-]+)",
+        r"\buse\s+(agent-[\w-]+)",
+        r"\binvoke\s+(agent-[\w-]+)",
+        r"\bwith\s+(agent-[\w-]+)",
     ]
 
     # Agent name extraction
-    AGENT_NAME_PATTERN = r'@?(agent-[\w-]+)'
+    AGENT_NAME_PATTERN = r"@?(agent-[\w-]+)"
 
     def __init__(self):
         """Initialize pathway detector."""
@@ -103,11 +104,7 @@ class AgentPathwayDetector:
         # No agent invocation detected
         self.detection_stats["no_agent"] += 1
         return PathwayDetection(
-            pathway=None,
-            agents=[],
-            task=prompt,
-            confidence=1.0,
-            trigger_pattern=None
+            pathway=None, agents=[], task=prompt, confidence=1.0, trigger_pattern=None
         )
 
     def _check_coordinator(self, prompt: str) -> Optional[PathwayDetection]:
@@ -116,13 +113,13 @@ class AgentPathwayDetector:
             match = re.search(pattern, prompt, re.IGNORECASE)
             if match:
                 # Extract task after trigger
-                task = re.sub(pattern, '', prompt, flags=re.IGNORECASE).strip()
+                task = re.sub(pattern, "", prompt, flags=re.IGNORECASE).strip()
                 return PathwayDetection(
                     pathway="coordinator",
                     agents=["agent-workflow-coordinator"],
                     task=task or prompt,
                     confidence=1.0,
-                    trigger_pattern=pattern
+                    trigger_pattern=pattern,
                 )
         return None
 
@@ -144,7 +141,7 @@ class AgentPathwayDetector:
                         agents=agents,
                         task=task,
                         confidence=0.95,
-                        trigger_pattern=pattern
+                        trigger_pattern=pattern,
                     )
 
         # Alternative: Check for multiple @agent mentions without explicit parallel keyword
@@ -157,7 +154,7 @@ class AgentPathwayDetector:
                 agents=agents,
                 task=task,
                 confidence=0.85,
-                trigger_pattern="implicit_multiple_agents"
+                trigger_pattern="implicit_multiple_agents",
             )
 
         return None
@@ -174,7 +171,7 @@ class AgentPathwayDetector:
                     agents=[agent_name],
                     task=prompt,
                     confidence=0.95,
-                    trigger_pattern=pattern
+                    trigger_pattern=pattern,
                 )
 
         return None
@@ -199,10 +196,7 @@ class AgentPathwayDetector:
         return unique_agents
 
     def _clean_task(
-        self,
-        prompt: str,
-        trigger_pattern: Optional[str],
-        agents: List[str]
+        self, prompt: str, trigger_pattern: Optional[str], agents: List[str]
     ) -> str:
         """
         Clean task description by removing trigger keywords and agent names.
@@ -219,22 +213,28 @@ class AgentPathwayDetector:
 
         # Remove trigger pattern
         if trigger_pattern:
-            task = re.sub(trigger_pattern, '', task, flags=re.IGNORECASE)
+            task = re.sub(trigger_pattern, "", task, flags=re.IGNORECASE)
 
         # Remove agent name mentions (but keep context)
         # Replace "@agent-name" with empty string, but keep surrounding text
         for agent in agents:
             # Remove @agent-name mentions
-            task = re.sub(rf'@{re.escape(agent)}\b', '', task, flags=re.IGNORECASE)
+            task = re.sub(rf"@{re.escape(agent)}\b", "", task, flags=re.IGNORECASE)
             # Remove "use agent-name" patterns
-            task = re.sub(rf'\buse\s+{re.escape(agent)}\b', '', task, flags=re.IGNORECASE)
-            task = re.sub(rf'\binvoke\s+{re.escape(agent)}\b', '', task, flags=re.IGNORECASE)
-            task = re.sub(rf'\bwith\s+{re.escape(agent)}\b', '', task, flags=re.IGNORECASE)
+            task = re.sub(
+                rf"\buse\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
+            task = re.sub(
+                rf"\binvoke\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
+            task = re.sub(
+                rf"\bwith\s+{re.escape(agent)}\b", "", task, flags=re.IGNORECASE
+            )
 
         # Clean up extra whitespace and commas
-        task = re.sub(r'\s*,\s*,\s*', ', ', task)  # Remove double commas
-        task = re.sub(r'\s+', ' ', task)  # Normalize whitespace
-        task = task.strip(', ')  # Remove leading/trailing commas
+        task = re.sub(r"\s*,\s*,\s*", ", ", task)  # Remove double commas
+        task = re.sub(r"\s+", " ", task)  # Normalize whitespace
+        task = task.strip(", ")  # Remove leading/trailing commas
 
         return task.strip()
 
@@ -255,7 +255,7 @@ class AgentPathwayDetector:
             "rates": {
                 pathway: f"{count/total*100:.1f}%"
                 for pathway, count in self.detection_stats.items()
-            }
+            },
         }
 
     def reset_stats(self):
@@ -286,7 +286,7 @@ def detect_invocation_pathway(prompt: str) -> Dict[str, Any]:
         "agents": result.agents,
         "task": result.task,
         "confidence": result.confidence,
-        "trigger_pattern": result.trigger_pattern
+        "trigger_pattern": result.trigger_pattern,
     }
 
 
@@ -295,15 +295,21 @@ def detect_invocation_pathway(prompt: str) -> Dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     if len(sys.argv) < 2:
         print("Usage: python agent_pathway_detector.py '<prompt>'")
         print("\nExamples:")
-        print("  python agent_pathway_detector.py 'coordinate: Implement authentication'")
-        print("  python agent_pathway_detector.py '@agent-testing Analyze test coverage'")
-        print("  python agent_pathway_detector.py 'parallel: @agent-testing, @agent-commit Review PR'")
+        print(
+            "  python agent_pathway_detector.py 'coordinate: Implement authentication'"
+        )
+        print(
+            "  python agent_pathway_detector.py '@agent-testing Analyze test coverage'"
+        )
+        print(
+            "  python agent_pathway_detector.py 'parallel: @agent-testing, @agent-commit Review PR'"
+        )
         sys.exit(1)
 
     prompt = " ".join(sys.argv[1:])
@@ -318,8 +324,8 @@ if __name__ == "__main__":
             "agents": result.agents,
             "task": result.task,
             "confidence": result.confidence,
-            "trigger_pattern": result.trigger_pattern
-        }
+            "trigger_pattern": result.trigger_pattern,
+        },
     }
 
     print(json.dumps(output, indent=2))

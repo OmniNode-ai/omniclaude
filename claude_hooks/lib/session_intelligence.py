@@ -13,15 +13,15 @@ Logs session start/end events to database with rich context:
 Target: <50ms execution time for session metadata capture
 """
 
-import sys
-import os
-import json
 import argparse
+import json
+import os
 import subprocess
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
-from pathlib import Path
+import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Add hooks lib to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
@@ -31,6 +31,7 @@ from hook_event_logger import HookEventLogger
 # PostgreSQL connection (lazy import to avoid dependency issues)
 try:
     import psycopg2
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -50,7 +51,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
         "git_dirty": False,
         "git_commit": None,
         "git_remote": None,
-        "is_git_repo": False
+        "is_git_repo": False,
     }
 
     try:
@@ -60,7 +61,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=1
+            timeout=1,
         )
 
         if result.returncode != 0:
@@ -74,7 +75,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=1
+            timeout=1,
         )
         if result.returncode == 0:
             metadata["git_branch"] = result.stdout.strip()
@@ -85,7 +86,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=1
+            timeout=1,
         )
         if result.returncode == 0:
             metadata["git_dirty"] = bool(result.stdout.strip())
@@ -96,7 +97,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=1
+            timeout=1,
         )
         if result.returncode == 0:
             metadata["git_commit"] = result.stdout.strip()
@@ -107,7 +108,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=1
+            timeout=1,
         )
         if result.returncode == 0:
             metadata["git_remote"] = result.stdout.strip()
@@ -142,7 +143,7 @@ def log_session_start(
     session_id: str,
     project_path: str,
     cwd: str,
-    additional_metadata: Optional[Dict[str, Any]] = None
+    additional_metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Log session start event to database.
 
@@ -176,14 +177,14 @@ def log_session_start(
             "git_branch": git_metadata["git_branch"],
             "git_dirty": git_metadata["git_dirty"],
             "git_commit": git_metadata["git_commit"],
-            "start_time": datetime.now(timezone.utc).isoformat()
+            "start_time": datetime.now(timezone.utc).isoformat(),
         }
 
         # Build metadata
         metadata = {
             "hook_type": "SessionStart",
             "git_metadata": git_metadata,
-            "environment": env_metadata
+            "environment": env_metadata,
         }
 
         # Merge additional metadata if provided
@@ -197,7 +198,7 @@ def log_session_start(
             resource="session",
             resource_id=session_id or "unknown",
             payload=payload,
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Performance check
@@ -208,16 +209,21 @@ def log_session_start(
 
             # Warn if exceeded performance target
             if elapsed_ms > 50:
-                print(f"⚠️  WARNING: Session logging exceeded 50ms target: {elapsed_ms:.1f}ms", file=sys.stderr)
+                print(
+                    f"⚠️  WARNING: Session logging exceeded 50ms target: {elapsed_ms:.1f}ms",
+                    file=sys.stderr,
+                )
         else:
-            print(f"❌ Failed to log session start", file=sys.stderr)
+            print("❌ Failed to log session start", file=sys.stderr)
 
         return event_id
 
     except Exception as e:
         # Graceful error handling - don't break user workflow
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"❌ Session intelligence error ({elapsed_ms:.1f}ms): {e}", file=sys.stderr)
+        print(
+            f"❌ Session intelligence error ({elapsed_ms:.1f}ms): {e}", file=sys.stderr
+        )
         return None
 
 
@@ -228,13 +234,15 @@ def get_session_start_time() -> Optional[datetime]:
         Session start time or None if not found
     """
     try:
-        state_file = Path.home() / ".claude" / "hooks" / ".state" / "correlation_id.json"
+        state_file = (
+            Path.home() / ".claude" / "hooks" / ".state" / "correlation_id.json"
+        )
         if state_file.exists():
             with open(state_file, "r") as f:
                 state = json.load(f)
                 created_at = state.get("created_at")
                 if created_at:
-                    return datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    return datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     except Exception as e:
         print(f"⚠️  Failed to get session start time: {e}", file=sys.stderr)
 
@@ -248,19 +256,20 @@ def query_session_statistics() -> Dict[str, Any]:
         Dict with aggregated session statistics
     """
     if not PSYCOPG2_AVAILABLE:
-        print(f"⚠️  psycopg2 not available, returning empty statistics", file=sys.stderr)
+        print("⚠️  psycopg2 not available, returning empty statistics", file=sys.stderr)
         return {
             "duration_seconds": 0,
             "total_prompts": 0,
             "total_tools": 0,
             "agents_invoked": [],
             "agent_usage": {},
-            "tool_breakdown": {}
+            "tool_breakdown": {},
         }
 
     try:
         # Note: Set DB_PASSWORD environment variable for database access
         import os
+
         db_password = os.getenv("DB_PASSWORD", "")
 
         # Connect to database
@@ -278,36 +287,47 @@ def query_session_statistics() -> Dict[str, Any]:
         # If no session start time, use earliest event in last hour
         if session_start is None:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT MIN(created_at)
                     FROM hook_events
                     WHERE created_at > NOW() - INTERVAL '1 hour'
-                """)
+                """
+                )
                 result = cur.fetchone()
-                session_start = result[0] if result and result[0] else datetime.now(timezone.utc)
+                session_start = (
+                    result[0] if result and result[0] else datetime.now(timezone.utc)
+                )
 
         # Query statistics for current session
         with conn.cursor() as cur:
             # Count prompts
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) as prompt_count
                 FROM hook_events
                 WHERE source = 'UserPromptSubmit'
                   AND created_at >= %s
-            """, (session_start,))
+            """,
+                (session_start,),
+            )
             prompt_count = cur.fetchone()[0]
 
             # Count tools
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) as tool_count
                 FROM hook_events
                 WHERE source = 'PostToolUse'
                   AND created_at >= %s
-            """, (session_start,))
+            """,
+                (session_start,),
+            )
             tool_count = cur.fetchone()[0]
 
             # Get unique agents invoked
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT DISTINCT resource_id, COUNT(*) as usage_count
                 FROM hook_events
                 WHERE source = 'UserPromptSubmit'
@@ -315,11 +335,14 @@ def query_session_statistics() -> Dict[str, Any]:
                   AND resource_id != 'no_agent'
                 GROUP BY resource_id
                 ORDER BY usage_count DESC
-            """, (session_start,))
+            """,
+                (session_start,),
+            )
             agents_data = cur.fetchall()
 
             # Get tool usage breakdown
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT resource_id, COUNT(*) as count
                 FROM hook_events
                 WHERE source = 'PostToolUse'
@@ -327,7 +350,9 @@ def query_session_statistics() -> Dict[str, Any]:
                 GROUP BY resource_id
                 ORDER BY count DESC
                 LIMIT 10
-            """, (session_start,))
+            """,
+                (session_start,),
+            )
             tool_breakdown = cur.fetchall()
 
         conn.close()
@@ -349,7 +374,7 @@ def query_session_statistics() -> Dict[str, Any]:
             "total_tools": tool_count,
             "agents_invoked": agents_invoked,
             "agent_usage": agent_usage,
-            "tool_breakdown": {tool[0]: tool[1] for tool in tool_breakdown}
+            "tool_breakdown": {tool[0]: tool[1] for tool in tool_breakdown},
         }
 
         return statistics
@@ -357,6 +382,7 @@ def query_session_statistics() -> Dict[str, Any]:
     except Exception as e:
         print(f"⚠️  Failed to query session events: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return {
             "error": str(e),
@@ -365,7 +391,7 @@ def query_session_statistics() -> Dict[str, Any]:
             "total_tools": 0,
             "agents_invoked": [],
             "agent_usage": {},
-            "tool_breakdown": {}
+            "tool_breakdown": {},
         }
 
 
@@ -379,7 +405,7 @@ def classify_workflow_pattern(statistics: Dict[str, Any]) -> str:
         Workflow pattern classification
     """
     agents_invoked = statistics.get("agents_invoked", [])
-    agent_usage = statistics.get("agent_usage", {})
+    statistics.get("agent_usage", {})
     tool_breakdown = statistics.get("tool_breakdown", {})
 
     # No agents detected
@@ -398,11 +424,16 @@ def classify_workflow_pattern(statistics: Dict[str, Any]) -> str:
             return "debugging"
 
         # Code generation patterns
-        if any(keyword in agent.lower() for keyword in ["code", "generator", "implement"]):
+        if any(
+            keyword in agent.lower() for keyword in ["code", "generator", "implement"]
+        ):
             return "feature_development"
 
         # Refactoring patterns
-        if any(keyword in agent.lower() for keyword in ["refactor", "optimize", "architect"]):
+        if any(
+            keyword in agent.lower()
+            for keyword in ["refactor", "optimize", "architect"]
+        ):
             return "refactoring"
 
         return "specialized_task"
@@ -412,15 +443,22 @@ def classify_workflow_pattern(statistics: Dict[str, Any]) -> str:
     agent_names_lower = [a.lower() for a in agents_invoked]
 
     # Debugging workflow (debug + testing + code)
-    if any("debug" in a for a in agent_names_lower) and any("test" in a for a in agent_names_lower):
+    if any("debug" in a for a in agent_names_lower) and any(
+        "test" in a for a in agent_names_lower
+    ):
         return "debugging"
 
     # Feature development workflow
-    if any("code" in a or "generator" in a or "implement" in a for a in agent_names_lower):
+    if any(
+        "code" in a or "generator" in a or "implement" in a for a in agent_names_lower
+    ):
         return "feature_development"
 
     # Architecture/refactoring workflow
-    if any("architect" in a or "refactor" in a or "optimize" in a for a in agent_names_lower):
+    if any(
+        "architect" in a or "refactor" in a or "optimize" in a
+        for a in agent_names_lower
+    ):
         return "refactoring"
 
     # Multi-agent exploration
@@ -429,7 +467,7 @@ def classify_workflow_pattern(statistics: Dict[str, Any]) -> str:
 
 def log_session_end(
     session_id: Optional[str] = None,
-    additional_metadata: Optional[Dict[str, Any]] = None
+    additional_metadata: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Log session end event and aggregate statistics.
 
@@ -445,6 +483,7 @@ def log_session_end(
 
     try:
         import uuid
+
         from correlation_manager import get_correlation_id
 
         # Query session statistics
@@ -484,14 +523,14 @@ def log_session_end(
             "agent_usage": statistics.get("agent_usage", {}),
             "tool_breakdown": statistics.get("tool_breakdown", {}),
             "session_start": statistics.get("session_start"),
-            "session_end": statistics.get("session_end")
+            "session_end": statistics.get("session_end"),
         }
 
         # Build event metadata
         metadata = {
             "hook_type": "SessionEnd",
             "session_quality_score": quality_score,
-            "workflow_pattern": workflow_pattern
+            "workflow_pattern": workflow_pattern,
         }
 
         if additional_metadata:
@@ -505,7 +544,7 @@ def log_session_end(
             resource="session",
             resource_id=session_id,
             payload=payload,
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Performance check
@@ -521,9 +560,12 @@ def log_session_end(
 
             # Warn if exceeded performance target
             if elapsed_ms > 50:
-                print(f"⚠️  WARNING: Session end logging exceeded 50ms target: {elapsed_ms:.1f}ms", file=sys.stderr)
+                print(
+                    f"⚠️  WARNING: Session end logging exceeded 50ms target: {elapsed_ms:.1f}ms",
+                    file=sys.stderr,
+                )
         else:
-            print(f"❌ Failed to log session end", file=sys.stderr)
+            print("❌ Failed to log session end", file=sys.stderr)
 
         return event_id
 
@@ -532,6 +574,7 @@ def log_session_end(
         elapsed_ms = (time.time() - start_time) * 1000
         print(f"❌ Session end error ({elapsed_ms:.1f}ms): {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         return None
 
@@ -545,28 +588,19 @@ def main():
         "--mode",
         choices=["start", "end"],
         required=True,
-        help="Session lifecycle mode (start or end)"
+        help="Session lifecycle mode (start or end)",
     )
     parser.add_argument(
-        "--session-id",
-        default=None,
-        help="Session identifier (optional for end mode)"
+        "--session-id", default=None, help="Session identifier (optional for end mode)"
     )
     parser.add_argument(
-        "--project-path",
-        default="",
-        help="Project root path (for start mode)"
+        "--project-path", default="", help="Project root path (for start mode)"
     )
     parser.add_argument(
-        "--cwd",
-        default="",
-        help="Current working directory (for start mode)"
+        "--cwd", default="", help="Current working directory (for start mode)"
     )
     parser.add_argument(
-        "--metadata",
-        type=json.loads,
-        default=None,
-        help="Additional metadata as JSON"
+        "--metadata", type=json.loads, default=None, help="Additional metadata as JSON"
     )
 
     args = parser.parse_args()
@@ -581,20 +615,17 @@ def main():
         cwd = args.cwd or os.getcwd()
 
         # Log session start
-        event_id = log_session_start(
+        log_session_start(
             session_id=args.session_id,
             project_path=args.project_path,
             cwd=cwd,
-            additional_metadata=args.metadata
+            additional_metadata=args.metadata,
         )
 
     # Handle end mode
     elif args.mode == "end":
         # Log session end (session_id is optional, will use correlation_id if not provided)
-        event_id = log_session_end(
-            session_id=args.session_id,
-            additional_metadata=args.metadata
-        )
+        log_session_end(session_id=args.session_id, additional_metadata=args.metadata)
 
     # Exit with success even if logging failed (graceful degradation)
     sys.exit(0)

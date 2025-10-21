@@ -6,13 +6,12 @@ performance correlation, and intelligent root cause analysis.
 Based on agent-debug-intelligence.yaml configuration.
 """
 
-import asyncio
 import time
-from typing import Dict, Any, List
+from typing import Any, Dict
 
-from agent_model import AgentConfig, AgentTask, AgentResult
+from agent_model import AgentConfig, AgentResult, AgentTask
 from mcp_client import ArchonMCPClient
-from trace_logger import get_trace_logger, TraceEventType, TraceLevel
+from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 
 class DebugIntelligenceAgent:
@@ -51,8 +50,8 @@ class DebugIntelligenceAgent:
             task_id=task.task_id,
             metadata={
                 "domain": self.config.agent_domain,
-                "input_data": task.input_data
-            }
+                "input_data": task.input_data,
+            },
         )
 
         try:
@@ -61,7 +60,7 @@ class DebugIntelligenceAgent:
                 message=f"Starting intelligence-enhanced debugging: {task.description}",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             # Extract task inputs
@@ -84,19 +83,23 @@ class DebugIntelligenceAgent:
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
                     task_id=task.task_id,
-                    metadata={"context_items": len(pre_gathered_context)}
+                    metadata={"context_items": len(pre_gathered_context)},
                 )
 
                 # Extract intelligence from pre-gathered context
                 for key, context_item in pre_gathered_context.items():
                     context_type = context_item.get("type")
                     if context_type == "rag" and "domain" in key:
-                        intelligence["domain_patterns"] = context_item.get("content", {})
+                        intelligence["domain_patterns"] = context_item.get(
+                            "content", {}
+                        )
                     elif context_type == "pattern":
                         intelligence["anti_patterns"] = context_item.get("content", {})
                     elif context_type == "file":
                         # Could be used for analyzing related files
-                        intelligence.setdefault("related_files", []).append(context_item.get("content", ""))
+                        intelligence.setdefault("related_files", []).append(
+                            context_item.get("content", "")
+                        )
 
                 # Still need to assess the problematic code itself
                 if self.config.archon_mcp_enabled and problematic_code:
@@ -104,7 +107,7 @@ class DebugIntelligenceAgent:
                         quality_result = await self.mcp_client.assess_code_quality(
                             content=problematic_code,
                             source_path=file_path,
-                            language=language
+                            language=language,
                         )
                         intelligence["code_quality"] = quality_result
                     except Exception as e:
@@ -113,7 +116,7 @@ class DebugIntelligenceAgent:
                             message=f"Code quality assessment failed: {str(e)}",
                             level=TraceLevel.WARNING,
                             agent_name=self.config.agent_name,
-                            task_id=task.task_id
+                            task_id=task.task_id,
                         )
 
                 await self.trace_logger.log_event(
@@ -121,7 +124,7 @@ class DebugIntelligenceAgent:
                     message=f"Extracted {len(intelligence)} intelligence sources from pre-gathered context",
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
             else:
@@ -131,7 +134,7 @@ class DebugIntelligenceAgent:
                     message="Phase 1: Gathering pre-investigation intelligence (no pre-gathered context)",
                     level=TraceLevel.INFO,
                     agent_name=self.config.agent_name,
-                    task_id=task.task_id
+                    task_id=task.task_id,
                 )
 
                 intelligence = await self._gather_intelligence(
@@ -144,13 +147,13 @@ class DebugIntelligenceAgent:
                 message="Phase 2: Applying BFROS framework",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             bfros_analysis = self._apply_bfros_framework(
                 problematic_code=problematic_code,
                 error_message=error_message,
-                intelligence=intelligence
+                intelligence=intelligence,
             )
 
             # Phase 3: Root Cause Analysis
@@ -159,12 +162,11 @@ class DebugIntelligenceAgent:
                 message="Phase 3: Determining root cause with confidence scoring",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             root_cause = self._determine_root_cause(
-                intelligence=intelligence,
-                bfros_analysis=bfros_analysis
+                intelligence=intelligence, bfros_analysis=bfros_analysis
             )
 
             # Phase 4: Solution Generation
@@ -173,13 +175,13 @@ class DebugIntelligenceAgent:
                 message="Phase 4: Generating optimal solution",
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
-                task_id=task.task_id
+                task_id=task.task_id,
             )
 
             solution = self._generate_solution(
                 problematic_code=problematic_code,
                 root_cause=root_cause,
-                intelligence=intelligence
+                intelligence=intelligence,
             )
 
             # Calculate execution time
@@ -192,9 +194,13 @@ class DebugIntelligenceAgent:
                 "bfros_analysis": bfros_analysis,
                 "root_cause": root_cause,
                 "solution": solution,
-                "quality_improvement": self._calculate_quality_improvement(intelligence, solution),
+                "quality_improvement": self._calculate_quality_improvement(
+                    intelligence, solution
+                ),
                 "root_cause_confidence": root_cause.get("confidence_score", 0.0),
-                "intelligence_sources": len(intelligence.get("domain_patterns", {}).get("results", {}))
+                "intelligence_sources": len(
+                    intelligence.get("domain_patterns", {}).get("results", {})
+                ),
             }
 
             # Create result
@@ -204,14 +210,14 @@ class DebugIntelligenceAgent:
                 success=True,
                 output_data=output_data,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
             # End trace successfully
             await self.trace_logger.end_agent_trace(
                 trace_id=self._current_trace_id,
                 status="completed",
-                result=result.model_dump()
+                result=result.model_dump(),
             )
 
             await self.trace_logger.log_event(
@@ -220,7 +226,7 @@ class DebugIntelligenceAgent:
                 level=TraceLevel.INFO,
                 agent_name=self.config.agent_name,
                 task_id=task.task_id,
-                metadata={"execution_time_ms": execution_time_ms}
+                metadata={"execution_time_ms": execution_time_ms},
             )
 
             return result
@@ -235,13 +241,11 @@ class DebugIntelligenceAgent:
                 level=TraceLevel.ERROR,
                 agent_name=self.config.agent_name,
                 task_id=task.task_id,
-                metadata={"error": str(e)}
+                metadata={"error": str(e)},
             )
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id,
-                status="failed",
-                error=error_msg
+                trace_id=self._current_trace_id, status="failed", error=error_msg
             )
 
             return AgentResult(
@@ -250,15 +254,11 @@ class DebugIntelligenceAgent:
                 success=False,
                 error=error_msg,
                 execution_time_ms=execution_time_ms,
-                trace_id=self._current_trace_id
+                trace_id=self._current_trace_id,
             )
 
     async def _gather_intelligence(
-        self,
-        code: str,
-        file_path: str,
-        language: str,
-        error: str
+        self, code: str, file_path: str, language: str, error: str
     ) -> Dict[str, Any]:
         """
         Gather pre-investigation intelligence using MCP tools.
@@ -277,13 +277,11 @@ class DebugIntelligenceAgent:
                 event_type=TraceEventType.AGENT_START,
                 message="Assessing code quality at bug location",
                 level=TraceLevel.INFO,
-                agent_name=self.config.agent_name
+                agent_name=self.config.agent_name,
             )
 
             quality_result = await self.mcp_client.assess_code_quality(
-                content=code,
-                source_path=file_path,
-                language=language
+                content=code, source_path=file_path, language=language
             )
             intelligence["code_quality"] = quality_result
 
@@ -292,13 +290,11 @@ class DebugIntelligenceAgent:
                 event_type=TraceEventType.AGENT_START,
                 message="Checking architectural compliance",
                 level=TraceLevel.INFO,
-                agent_name=self.config.agent_name
+                agent_name=self.config.agent_name,
             )
 
             compliance_result = await self.mcp_client.call_tool(
-                "check_architectural_compliance",
-                content=code,
-                architecture_type="onex"
+                "check_architectural_compliance", content=code, architecture_type="onex"
             )
             intelligence["architectural_compliance"] = compliance_result
 
@@ -307,13 +303,11 @@ class DebugIntelligenceAgent:
                 event_type=TraceEventType.AGENT_START,
                 message="Identifying anti-patterns",
                 level=TraceLevel.INFO,
-                agent_name=self.config.agent_name
+                agent_name=self.config.agent_name,
             )
 
             patterns_result = await self.mcp_client.call_tool(
-                "get_quality_patterns",
-                content=code,
-                pattern_type="anti_patterns"
+                "get_quality_patterns", content=code, pattern_type="anti_patterns"
             )
             intelligence["anti_patterns"] = patterns_result
 
@@ -322,13 +316,13 @@ class DebugIntelligenceAgent:
                 event_type=TraceEventType.AGENT_START,
                 message="Searching for similar bug patterns",
                 level=TraceLevel.INFO,
-                agent_name=self.config.agent_name
+                agent_name=self.config.agent_name,
             )
 
             domain_intel = await self.mcp_client.perform_rag_query(
                 query=f"debugging {error} systematic root cause analysis",
                 context="debugging",
-                match_count=self.config.match_count
+                match_count=self.config.match_count,
             )
             intelligence["domain_patterns"] = domain_intel
 
@@ -338,12 +332,11 @@ class DebugIntelligenceAgent:
                     event_type=TraceEventType.AGENT_START,
                     message="Analyzing performance impact",
                     level=TraceLevel.INFO,
-                    agent_name=self.config.agent_name
+                    agent_name=self.config.agent_name,
                 )
 
                 perf_result = await self.mcp_client.call_tool(
-                    "identify_optimization_opportunities",
-                    operation_name=file_path
+                    "identify_optimization_opportunities", operation_name=file_path
                 )
                 intelligence["performance_analysis"] = perf_result
 
@@ -353,16 +346,13 @@ class DebugIntelligenceAgent:
                 message=f"Intelligence gathering partially failed: {str(e)}",
                 level=TraceLevel.WARNING,
                 agent_name=self.config.agent_name,
-                metadata={"error": str(e)}
+                metadata={"error": str(e)},
             )
 
         return intelligence
 
     def _apply_bfros_framework(
-        self,
-        problematic_code: str,
-        error_message: str,
-        intelligence: Dict[str, Any]
+        self, problematic_code: str, error_message: str, intelligence: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Apply BFROS (Behavior, Fault, Root cause, Optimal solution, Solution validation) framework.
@@ -377,25 +367,25 @@ class DebugIntelligenceAgent:
             "behavior_analysis": {
                 "expected": "Correct execution without errors",
                 "actual": f"Error: {error_message}",
-                "deviation": error_message
+                "deviation": error_message,
             },
             "fault_localization": {
                 "error_location": "Code snippet provided",
                 "affected_components": ["Primary code block"],
                 "quality_score": quality.get("quality_score", 0.0),
-                "compliance_score": compliance.get("compliance_score", 0.0)
+                "compliance_score": compliance.get("compliance_score", 0.0),
             },
             "root_cause_factors": {
                 "quality_issues": quality.get("improvement_opportunities", []),
                 "architectural_violations": compliance.get("violations", []),
-                "anti_patterns": intelligence.get("anti_patterns", {}).get("patterns", [])
-            }
+                "anti_patterns": intelligence.get("anti_patterns", {}).get(
+                    "patterns", []
+                ),
+            },
         }
 
     def _determine_root_cause(
-        self,
-        intelligence: Dict[str, Any],
-        bfros_analysis: Dict[str, Any]
+        self, intelligence: Dict[str, Any], bfros_analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Determine root cause with confidence scoring.
@@ -436,18 +426,22 @@ class DebugIntelligenceAgent:
             "contributing_factors": {
                 "quality_issues": factors.get("quality_issues", []),
                 "architectural_issues": factors.get("architectural_violations", []),
-                "pattern_issues": factors.get("anti_patterns", [])
+                "pattern_issues": factors.get("anti_patterns", []),
             },
             "confidence_score": confidence_score,
-            "confidence_level": "High" if confidence_score >= 0.7 else "Medium" if confidence_score >= 0.5 else "Low",
-            "validation_method": "Intelligence-based multi-factor analysis"
+            "confidence_level": (
+                "High"
+                if confidence_score >= 0.7
+                else "Medium" if confidence_score >= 0.5 else "Low"
+            ),
+            "validation_method": "Intelligence-based multi-factor analysis",
         }
 
     def _generate_solution(
         self,
         problematic_code: str,
         root_cause: Dict[str, Any],
-        intelligence: Dict[str, Any]
+        intelligence: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Generate optimal solution addressing root cause.
@@ -464,26 +458,24 @@ class DebugIntelligenceAgent:
                 "Resolve quality issues (root cause)",
                 "Fix architectural violations (prevention)",
                 "Eliminate anti-patterns (systemic fix)",
-                "Apply best practices from intelligence"
+                "Apply best practices from intelligence",
             ],
             "quality_improvements": factors.get("quality_issues", []),
             "compliance_improvements": factors.get("architectural_issues", []),
             "tests_required": [
                 "Unit test preventing recurrence",
                 "Integration test for affected flow",
-                "Regression test for similar scenarios"
+                "Regression test for similar scenarios",
             ],
             "prevention_measures": {
                 "pattern_documented": True,
                 "quality_gates_added": True,
-                "monitoring_enabled": True
-            }
+                "monitoring_enabled": True,
+            },
         }
 
     def _calculate_quality_improvement(
-        self,
-        intelligence: Dict[str, Any],
-        solution: Dict[str, Any]
+        self, intelligence: Dict[str, Any], solution: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Calculate expected quality improvement from solution.
@@ -506,8 +498,12 @@ class DebugIntelligenceAgent:
             "before": before_score,
             "after": after_score,
             "delta": estimated_improvement,
-            "improvement_percentage": (estimated_improvement / max(0.01, before_score)) * 100 if before_score > 0 else 0,
-            "meets_minimum": after_score >= 0.6
+            "improvement_percentage": (
+                (estimated_improvement / max(0.01, before_score)) * 100
+                if before_score > 0
+                else 0
+            ),
+            "meets_minimum": after_score >= 0.6,
         }
 
     async def cleanup(self):

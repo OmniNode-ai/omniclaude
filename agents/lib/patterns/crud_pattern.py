@@ -8,7 +8,7 @@ Typical for EFFECT nodes with database dependencies.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,23 @@ class CRUDPattern:
             Confidence score (0.0 to 1.0)
         """
         crud_keywords = {
-            'create', 'insert', 'add', 'read', 'get', 'fetch',
-            'update', 'modify', 'delete', 'remove', 'save', 'store'
+            "create",
+            "insert",
+            "add",
+            "read",
+            "get",
+            "fetch",
+            "update",
+            "modify",
+            "delete",
+            "remove",
+            "save",
+            "store",
         }
 
-        text = f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        text = (
+            f"{capability.get('name', '')} {capability.get('description', '')}".lower()
+        )
         matched = sum(1 for kw in crud_keywords if kw in text)
 
         return min(matched / 3.0, 1.0)  # 3+ matches = 100% confidence
@@ -68,16 +80,26 @@ class CRUDPattern:
         entity_name = self._extract_entity_name(capability, context)
 
         if operation == "create":
-            return self._generate_create_method(method_name, description, entity_name, context)
+            return self._generate_create_method(
+                method_name, description, entity_name, context
+            )
         elif operation == "read":
-            return self._generate_read_method(method_name, description, entity_name, context)
+            return self._generate_read_method(
+                method_name, description, entity_name, context
+            )
         elif operation == "update":
-            return self._generate_update_method(method_name, description, entity_name, context)
+            return self._generate_update_method(
+                method_name, description, entity_name, context
+            )
         elif operation == "delete":
-            return self._generate_delete_method(method_name, description, entity_name, context)
+            return self._generate_delete_method(
+                method_name, description, entity_name, context
+            )
         else:
             # Generic CRUD method
-            return self._generate_generic_crud_method(method_name, description, entity_name, context)
+            return self._generate_generic_crud_method(
+                method_name, description, entity_name, context
+            )
 
     def get_required_imports(self) -> List[str]:
         """Get required imports for CRUD pattern"""
@@ -101,7 +123,7 @@ class CRUDPattern:
         method_name: str,
         description: str,
         entity_name: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> str:
         """Generate CREATE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -189,7 +211,7 @@ class CRUDPattern:
         method_name: str,
         description: str,
         entity_name: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> str:
         """Generate READ operation method"""
         return f'''
@@ -248,7 +270,7 @@ class CRUDPattern:
         method_name: str,
         description: str,
         entity_name: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> str:
         """Generate UPDATE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -333,7 +355,7 @@ class CRUDPattern:
         method_name: str,
         description: str,
         entity_name: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> str:
         """Generate DELETE operation method"""
         has_event_bus = context.get("has_event_bus", False)
@@ -408,7 +430,7 @@ class CRUDPattern:
         method_name: str,
         description: str,
         entity_name: str,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> str:
         """Generate generic CRUD method stub"""
         return f'''
@@ -451,21 +473,20 @@ class CRUDPattern:
     def _sanitize_method_name(self, name: str) -> str:
         """Convert to valid Python method name"""
         import re
-        name = re.sub(r'[^\w\s-]', '', name.lower())
-        name = re.sub(r'[-\s]+', '_', name)
-        return name.strip('_') or "execute_operation"
+
+        name = re.sub(r"[^\w\s-]", "", name.lower())
+        name = re.sub(r"[-\s]+", "_", name)
+        return name.strip("_") or "execute_operation"
 
     def _extract_entity_name(
-        self,
-        capability: Dict[str, Any],
-        context: Dict[str, Any]
+        self, capability: Dict[str, Any], context: Dict[str, Any]
     ) -> str:
         """Extract entity name from capability or context"""
         # Try to extract from capability name
         name = capability.get("name", "")
 
         # Remove operation verbs
-        for verb in ['create', 'read', 'update', 'delete', 'get', 'fetch', 'save']:
-            name = name.replace(verb, '').strip('_')
+        for verb in ["create", "read", "update", "delete", "get", "fetch", "save"]:
+            name = name.replace(verb, "").strip("_")
 
         return name.capitalize() or "Entity"

@@ -16,14 +16,14 @@ meta_type: "node"
 runtime_language_hint: "python>=3.11"
 
 # === NODE CAPABILITIES ===
-capabilities:
-{CAPABILITIES_LIST}
+capabilities: []
+# {CAPABILITIES_LIST}
 
-protocols_supported:
-{PROTOCOLS_SUPPORTED}
+protocols_supported: []
+# {PROTOCOLS_SUPPORTED}
 
-dependencies:
-{DEPENDENCIES_MANIFEST}
+dependencies: []
+# {DEPENDENCIES_MANIFEST}
 
 # === VERSION MANAGEMENT (via x_extensions) ===
 x_extensions:
@@ -72,9 +72,9 @@ testing:
   required_ci_tiers:
     - "mock"
     - "integration"
-  minimum_coverage_percentage: {MIN_COVERAGE}
-  canonical_test_case_ids:
-{CANONICAL_TEST_CASES}
+  minimum_coverage_percentage: 80
+  canonical_test_case_ids: []
+  # {CANONICAL_TEST_CASES}
 
 # === SECURITY METADATA ===
 data_handling_declaration:
@@ -82,16 +82,16 @@ data_handling_declaration:
   data_classification: "{DATA_CLASSIFICATION}"
 
 security_context:
-  requires_network_access: {REQUIRES_NETWORK_ACCESS}
-  external_endpoints:
-{EXTERNAL_ENDPOINTS}
+  requires_network_access: false
+  external_endpoints: []
+  # {EXTERNAL_ENDPOINTS}
 
 # === LOGGING CONFIGURATION ===
 logging_config:
   level: "info"
   format: "json"
-  audit_events:
-{AUDIT_EVENTS}
+  audit_events: []
+  # {AUDIT_EVENTS}
 
-tags:
-{TAGS_LIST}
+tags: []
+# {TAGS_LIST}

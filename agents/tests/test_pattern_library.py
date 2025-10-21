@@ -7,23 +7,22 @@ pattern registry lookup, and multi-pattern composition.
 """
 
 import pytest
-from typing import Dict, Any, List
 
 from agents.lib.pattern_library import PatternLibrary
 from agents.tests.fixtures.phase4_fixtures import (
-    CRUD_PATTERN_CONTRACT,
-    TRANSFORMATION_PATTERN_CONTRACT,
     AGGREGATION_PATTERN_CONTRACT,
+    CRUD_PATTERN_CONTRACT,
     ORCHESTRATION_PATTERN_CONTRACT,
     PATTERN_DETECTION_CASES,
     SAMPLE_CONTRACT_WITH_CRUD,
     SAMPLE_CONTRACT_WITH_TRANSFORMATION,
+    TRANSFORMATION_PATTERN_CONTRACT,
 )
-
 
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
 
 @pytest.fixture
 def pattern_library():
@@ -47,6 +46,7 @@ def transformation_contract():
 # PATTERN MATCHING TESTS
 # ============================================================================
 
+
 class TestPatternMatching:
     """Tests for pattern detection and matching"""
 
@@ -58,7 +58,9 @@ class TestPatternMatching:
         assert result["confidence"] >= 0.8
         assert result["matched"] is True
 
-    def test_detect_transformation_pattern(self, pattern_library, transformation_contract):
+    def test_detect_transformation_pattern(
+        self, pattern_library, transformation_contract
+    ):
         """Test detection of Transformation pattern"""
         result = pattern_library.detect_pattern(transformation_contract)
 
@@ -107,6 +109,7 @@ class TestPatternMatching:
 # ============================================================================
 # CONFIDENCE SCORING TESTS
 # ============================================================================
+
 
 class TestConfidenceScoring:
     """Tests for pattern confidence scoring"""
@@ -166,6 +169,7 @@ class TestConfidenceScoring:
 # PATTERN CODE GENERATION TESTS
 # ============================================================================
 
+
 class TestPatternCodeGeneration:
     """Tests for pattern-based code generation"""
 
@@ -175,7 +179,7 @@ class TestPatternCodeGeneration:
             pattern_name="CRUD",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
             node_type="EFFECT",
-            class_name="NodeUserManagementEffect"
+            class_name="NodeUserManagementEffect",
         )
 
         assert "code" in result
@@ -193,7 +197,7 @@ class TestPatternCodeGeneration:
             pattern_name="Transformation",
             contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION,
             node_type="COMPUTE",
-            class_name="NodeDataTransformerCompute"
+            class_name="NodeDataTransformerCompute",
         )
 
         assert "code" in result
@@ -209,7 +213,7 @@ class TestPatternCodeGeneration:
             pattern_name="Aggregation",
             contract=AGGREGATION_PATTERN_CONTRACT,
             node_type="REDUCER",
-            class_name="NodeAnalyticsReducer"
+            class_name="NodeAnalyticsReducer",
         )
 
         assert "code" in result
@@ -224,11 +228,12 @@ class TestPatternCodeGeneration:
             pattern_name="CRUD",
             contract=SAMPLE_CONTRACT_WITH_CRUD,
             node_type="EFFECT",
-            class_name="NodeTestEffect"
+            class_name="NodeTestEffect",
         )
 
         # Verify code can be parsed
         import ast
+
         try:
             ast.parse(result["code"])
         except SyntaxError as e:
@@ -238,6 +243,7 @@ class TestPatternCodeGeneration:
 # ============================================================================
 # PATTERN REGISTRY TESTS
 # ============================================================================
+
 
 class TestPatternRegistry:
     """Tests for pattern registry lookup"""
@@ -283,6 +289,7 @@ class TestPatternRegistry:
 # MULTI-PATTERN COMPOSITION TESTS
 # ============================================================================
 
+
 class TestMultiPatternComposition:
     """Tests for combining multiple patterns"""
 
@@ -314,7 +321,7 @@ class TestMultiPatternComposition:
             patterns=patterns,
             contract=SAMPLE_CONTRACT_WITH_CRUD,
             node_type="EFFECT",
-            class_name="NodeCompositeEffect"
+            class_name="NodeCompositeEffect",
         )
 
         assert "code" in result
@@ -329,14 +336,14 @@ class TestMultiPatternComposition:
 # REQUIRED IMPORTS/MIXINS INFERENCE TESTS
 # ============================================================================
 
+
 class TestImportMixinInference:
     """Tests for inferring required imports and mixins"""
 
     def test_infer_crud_pattern_mixins(self, pattern_library):
         """Test mixin inference for CRUD pattern"""
         result = pattern_library.infer_required_mixins(
-            pattern_name="CRUD",
-            contract=SAMPLE_CONTRACT_WITH_CRUD
+            pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD
         )
 
         assert "mixins" in result
@@ -346,8 +353,7 @@ class TestImportMixinInference:
     def test_infer_transformation_pattern_mixins(self, pattern_library):
         """Test mixin inference for Transformation pattern"""
         result = pattern_library.infer_required_mixins(
-            pattern_name="Transformation",
-            contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION
+            pattern_name="Transformation", contract=SAMPLE_CONTRACT_WITH_TRANSFORMATION
         )
 
         assert "mixins" in result
@@ -357,8 +363,7 @@ class TestImportMixinInference:
     def test_infer_pattern_imports(self, pattern_library):
         """Test import inference for pattern"""
         result = pattern_library.infer_required_imports(
-            pattern_name="CRUD",
-            contract=SAMPLE_CONTRACT_WITH_CRUD
+            pattern_name="CRUD", contract=SAMPLE_CONTRACT_WITH_CRUD
         )
 
         assert "imports" in result
@@ -372,6 +377,7 @@ class TestImportMixinInference:
 # ============================================================================
 # PATTERN FALLBACK TESTS
 # ============================================================================
+
 
 class TestPatternFallback:
     """Tests for pattern fallback behavior"""
@@ -395,7 +401,7 @@ class TestPatternFallback:
             pattern_name="Generic",
             contract={"capabilities": []},
             node_type="EFFECT",
-            class_name="NodeGenericEffect"
+            class_name="NodeGenericEffect",
         )
 
         assert "code" in result
@@ -408,7 +414,7 @@ class TestPatternFallback:
             pattern_name="Generic",
             contract={},
             node_type="EFFECT",
-            class_name="NodeFallbackEffect"
+            class_name="NodeFallbackEffect",
         )
 
         code = result["code"]
@@ -423,6 +429,7 @@ class TestPatternFallback:
 # PATTERN MATCHING PERFORMANCE TESTS
 # ============================================================================
 
+
 class TestPatternMatchingPerformance:
     """Tests for pattern matching performance"""
 
@@ -435,7 +442,9 @@ class TestPatternMatchingPerformance:
         duration_ms = (time.time() - start) * 1000
 
         # Pattern matching should be < 100ms
-        assert duration_ms < 100, f"Pattern matching took {duration_ms}ms, expected < 100ms"
+        assert (
+            duration_ms < 100
+        ), f"Pattern matching took {duration_ms}ms, expected < 100ms"
 
     def test_multiple_pattern_detection_performance(self, pattern_library):
         """Test detecting all patterns is fast"""

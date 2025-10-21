@@ -5,23 +5,18 @@ Tests for Model Generator (Phase 4)
 Comprehensive tests for Pydantic model generation from PRD analysis.
 """
 
-import pytest
-import asyncio
-from uuid import uuid4, UUID
 from datetime import datetime
+from uuid import UUID, uuid4
+
+import pytest
 
 # Import the classes we need
-from agents.lib.model_generator import (
-    ModelGenerator,
-    ModelField,
-    GeneratedModel,
-    ModelGenerationResult
-)
+from agents.lib.model_generator import ModelGenerator
 from agents.lib.simple_prd_analyzer import (
-    SimplePRDAnalyzer,
-    SimpleParsedPRD,
     SimpleDecompositionResult,
-    SimplePRDAnalysisResult
+    SimpleParsedPRD,
+    SimplePRDAnalysisResult,
+    SimplePRDAnalyzer,
 )
 
 
@@ -148,8 +143,7 @@ class TestInputModelGeneration:
     async def test_generate_basic_input_model(self, model_generator, prd_analysis):
         """Test basic input model generation"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         assert model is not None
@@ -169,8 +163,7 @@ class TestInputModelGeneration:
     async def test_input_model_field_types(self, model_generator, prd_analysis):
         """Test input model has correct field types"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         # Find specific fields and check types
@@ -184,8 +177,7 @@ class TestInputModelGeneration:
     async def test_input_model_has_imports(self, model_generator, prd_analysis):
         """Test input model includes necessary imports"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         import_str = " ".join(model.imports)
@@ -197,8 +189,7 @@ class TestInputModelGeneration:
     async def test_input_model_has_config(self, model_generator, prd_analysis):
         """Test input model includes class config"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         assert model.class_config is not None
@@ -213,8 +204,7 @@ class TestOutputModelGeneration:
     async def test_generate_basic_output_model(self, model_generator, prd_analysis):
         """Test basic output model generation"""
         model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         assert model is not None
@@ -233,8 +223,7 @@ class TestOutputModelGeneration:
     async def test_output_model_field_types(self, model_generator, prd_analysis):
         """Test output model has correct field types"""
         model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         field_map = {f.name: f.type_hint for f in model.fields}
@@ -248,8 +237,7 @@ class TestOutputModelGeneration:
     async def test_output_model_has_optional_error(self, model_generator, prd_analysis):
         """Test output model error field is optional"""
         model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         error_field = next(f for f in model.fields if f.name == "error")
@@ -264,8 +252,7 @@ class TestConfigModelGeneration:
     async def test_generate_basic_config_model(self, model_generator, prd_analysis):
         """Test basic config model generation"""
         model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         assert model is not None
@@ -283,20 +270,20 @@ class TestConfigModelGeneration:
     async def test_config_model_has_defaults(self, model_generator, prd_analysis):
         """Test config model fields have default values"""
         model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         # All config fields should have defaults
         for field in model.fields:
-            assert field.default_value is not None, f"Field {field.name} missing default value"
+            assert (
+                field.default_value is not None
+            ), f"Field {field.name} missing default value"
 
     @pytest.mark.asyncio
     async def test_config_model_field_types(self, model_generator, prd_analysis):
         """Test config model has correct field types"""
         model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         field_map = {f.name: f.type_hint for f in model.fields}
@@ -314,8 +301,7 @@ class TestModelCodeGeneration:
     async def test_generate_input_model_code(self, model_generator, prd_analysis):
         """Test input model code generation"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
         code = model_generator._generate_model_code(model)
 
@@ -334,8 +320,7 @@ class TestModelCodeGeneration:
     async def test_generate_output_model_code(self, model_generator, prd_analysis):
         """Test output model code generation"""
         model = await model_generator.generate_output_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
         code = model_generator._generate_model_code(model)
 
@@ -349,8 +334,7 @@ class TestModelCodeGeneration:
     async def test_generate_config_model_code(self, model_generator, prd_analysis):
         """Test config model code generation"""
         model = await model_generator.generate_config_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
         code = model_generator._generate_model_code(model)
 
@@ -364,8 +348,7 @@ class TestModelCodeGeneration:
     async def test_generated_code_is_valid_python(self, model_generator, prd_analysis):
         """Test that generated code is syntactically valid Python"""
         model = await model_generator.generate_input_model(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
         code = model_generator._generate_model_code(model)
 
@@ -382,15 +365,25 @@ class TestONEXCompliance:
     @pytest.mark.asyncio
     async def test_validate_compliant_models(self, model_generator, prd_analysis):
         """Test validation of ONEX-compliant models"""
-        input_model = await model_generator.generate_input_model("UserAuth", prd_analysis)
-        output_model = await model_generator.generate_output_model("UserAuth", prd_analysis)
-        config_model = await model_generator.generate_config_model("UserAuth", prd_analysis)
+        input_model = await model_generator.generate_input_model(
+            "UserAuth", prd_analysis
+        )
+        output_model = await model_generator.generate_output_model(
+            "UserAuth", prd_analysis
+        )
+        config_model = await model_generator.generate_config_model(
+            "UserAuth", prd_analysis
+        )
 
         input_code = model_generator._generate_model_code(input_model)
         output_code = model_generator._generate_model_code(output_model)
         config_code = model_generator._generate_model_code(config_model)
 
-        quality_score, onex_compliant, violations = await model_generator.validate_model_code(
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(
             input_code, output_code, config_code
         )
 
@@ -405,9 +398,11 @@ class TestONEXCompliance:
 class ModelTestInput:
     pass
 """
-        quality_score, onex_compliant, violations = await model_generator.validate_model_code(
-            bad_code, bad_code, bad_code
-        )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(bad_code, bad_code, bad_code)
 
         assert quality_score < 1.0
         assert any("BaseModel" in v for v in violations)
@@ -421,9 +416,11 @@ from pydantic import BaseModel
 class ModelTestInput(BaseModel):
     field: str
 """
-        quality_score, onex_compliant, violations = await model_generator.validate_model_code(
-            bad_code, bad_code, bad_code
-        )
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(bad_code, bad_code, bad_code)
 
         assert any("docstring" in v.lower() for v in violations)
 
@@ -452,7 +449,11 @@ class ModelTestConfig(BaseModel):
     field: str
 """
 
-        quality_score, onex_compliant, violations = await model_generator.validate_model_code(
+        (
+            quality_score,
+            onex_compliant,
+            violations,
+        ) = await model_generator.validate_model_code(
             input_code, output_code, config_code
         )
 
@@ -465,14 +466,15 @@ class TestParallelGeneration:
     """Test parallel model generation"""
 
     @pytest.mark.asyncio
-    async def test_generate_all_models_concurrently(self, model_generator, prd_analysis):
+    async def test_generate_all_models_concurrently(
+        self, model_generator, prd_analysis
+    ):
         """Test concurrent generation of all models"""
         import time
 
         start_time = time.time()
         result = await model_generator.generate_all_models(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
         end_time = time.time()
 
@@ -499,8 +501,7 @@ class TestParallelGeneration:
     async def test_generation_result_completeness(self, model_generator, prd_analysis):
         """Test that generation result contains all expected data"""
         result = await model_generator.generate_all_models(
-            "UserAuthentication",
-            prd_analysis
+            "UserAuthentication", prd_analysis
         )
 
         # Check all required fields are present
@@ -523,12 +524,12 @@ class TestFieldInference:
         requirements = [
             "User authentication with email and password",
             "Support for user_id and session_id",
-            "Return error messages on failure"
+            "Return error messages on failure",
         ]
 
         fields = model_generator.infer_model_fields(requirements, [], "input")
 
-        field_names = [f.name for f in fields]
+        [f.name for f in fields]
 
         # Should extract common field names
         assert len(fields) > 0
@@ -541,7 +542,7 @@ class TestFieldInference:
         context = [
             "Store results in result_data field",
             "Include status flag",
-            "Add error message if needed"
+            "Add error message if needed",
         ]
 
         fields = model_generator.infer_model_fields(requirements, context, "output")
@@ -566,7 +567,7 @@ class TestErrorHandling:
             dependencies=[],
             extracted_keywords=[],
             sections=[],
-            word_count=0
+            word_count=0,
         )
 
         empty_analysis = SimplePRDAnalysisResult(
@@ -575,21 +576,18 @@ class TestErrorHandling:
             prd_content="",
             parsed_prd=empty_prd,
             decomposition_result=SimpleDecompositionResult(
-                tasks=[],
-                total_tasks=0,
-                verification_successful=True
+                tasks=[], total_tasks=0, verification_successful=True
             ),
             node_type_hints={},
             recommended_mixins=[],
             external_systems=[],
             quality_baseline=0.5,
-            confidence_score=0.0
+            confidence_score=0.0,
         )
 
         # Should still generate models (with minimal fields)
         result = await model_generator.generate_all_models(
-            "EmptyService",
-            empty_analysis
+            "EmptyService", empty_analysis
         )
 
         assert result is not None

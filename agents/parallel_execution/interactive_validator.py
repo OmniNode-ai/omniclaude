@@ -16,18 +16,19 @@ Features:
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
-import subprocess
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field, asdict
-from enum import Enum
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class UserChoice(Enum):
     """User choices at interactive checkpoints"""
+
     APPROVE = "a"
     EDIT = "e"
     RETRY = "r"
@@ -38,6 +39,7 @@ class UserChoice(Enum):
 
 class CheckpointType(Enum):
     """Types of interactive checkpoints"""
+
     CONTEXT_GATHERING = "context_gathering"
     TASK_BREAKDOWN = "task_breakdown"
     AGENT_EXECUTION = "agent_execution"
@@ -47,6 +49,7 @@ class CheckpointType(Enum):
 @dataclass
 class CheckpointResult:
     """Result of an interactive checkpoint"""
+
     choice: UserChoice
     modified_output: Optional[Any] = None
     user_feedback: Optional[str] = None
@@ -57,6 +60,7 @@ class CheckpointResult:
 @dataclass
 class SessionState:
     """Session state for resuming interrupted workflows"""
+
     session_id: str
     workflow_name: str
     checkpoints_completed: List[str] = field(default_factory=list)
@@ -91,6 +95,7 @@ class SessionState:
 
 class Colors:
     """ANSI color codes for terminal output"""
+
     RESET = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
@@ -137,7 +142,7 @@ class InteractiveValidator:
         session_state: Optional[SessionState] = None,
         auto_approve_timeout: Optional[int] = None,
         enable_colors: bool = True,
-        session_file: Optional[Path] = None
+        session_file: Optional[Path] = None,
     ):
         """
         Initialize interactive validator.
@@ -150,10 +155,14 @@ class InteractiveValidator:
         """
         self.session_state = session_state or SessionState(
             session_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
-            workflow_name="workflow"
+            workflow_name="workflow",
         )
         self.auto_approve_timeout = auto_approve_timeout
-        self.session_file = session_file or Path(tempfile.gettempdir()) / f"interactive_session_{self.session_state.session_id}.json"
+        self.session_file = (
+            session_file
+            or Path(tempfile.gettempdir())
+            / f"interactive_session_{self.session_state.session_id}.json"
+        )
 
         # Disable colors if not TTY or explicitly disabled
         if not enable_colors or not sys.stdout.isatty():
@@ -171,7 +180,7 @@ class InteractiveValidator:
         step_name: str,
         output_data: Any,
         quorum_result: Optional[Dict[str, Any]] = None,
-        deficiencies: Optional[List[str]] = None
+        deficiencies: Optional[List[str]] = None,
     ) -> CheckpointResult:
         """
         Present interactive checkpoint to user.
@@ -191,7 +200,9 @@ class InteractiveValidator:
         """
         # Check if batch approve is active
         if self.session_state.batch_approve_remaining:
-            print(f"{Colors.DIM}[Batch Approve] Auto-approving checkpoint: {step_name}{Colors.RESET}")
+            print(
+                f"{Colors.DIM}[Batch Approve] Auto-approving checkpoint: {step_name}{Colors.RESET}"
+            )
             result = CheckpointResult(choice=UserChoice.APPROVE)
             self._save_checkpoint_result(checkpoint_id, result)
             return result
@@ -223,8 +234,7 @@ class InteractiveValidator:
                 modified_output = self._edit_output(output_data)
                 if modified_output is not None:
                     result = CheckpointResult(
-                        choice=UserChoice.EDIT,
-                        modified_output=modified_output
+                        choice=UserChoice.EDIT, modified_output=modified_output
                     )
                     self._save_checkpoint_result(checkpoint_id, result)
                     return result
@@ -233,8 +243,7 @@ class InteractiveValidator:
             elif choice == UserChoice.RETRY:
                 feedback = self._get_retry_feedback()
                 result = CheckpointResult(
-                    choice=UserChoice.RETRY,
-                    user_feedback=feedback
+                    choice=UserChoice.RETRY, user_feedback=feedback
                 )
                 self._save_checkpoint_result(checkpoint_id, result)
                 return result
@@ -248,23 +257,31 @@ class InteractiveValidator:
                 self.session_state.batch_approve_remaining = True
                 result = CheckpointResult(choice=UserChoice.APPROVE)
                 self._save_checkpoint_result(checkpoint_id, result)
-                print(f"{Colors.GREEN}✓ Batch approve enabled - remaining steps will auto-approve{Colors.RESET}\n")
+                print(
+                    f"{Colors.GREEN}✓ Batch approve enabled - remaining steps will auto-approve{Colors.RESET}\n"
+                )
                 return result
 
             elif choice == UserChoice.QUIT:
                 self._save_session_state()
-                print(f"\n{Colors.YELLOW}Workflow interrupted. Session saved to: {self.session_file}{Colors.RESET}")
+                print(
+                    f"\n{Colors.YELLOW}Workflow interrupted. Session saved to: {self.session_file}{Colors.RESET}"
+                )
                 print(f"Resume with: --resume-session {self.session_file}")
                 sys.exit(0)
 
-    def _display_checkpoint_header(self, step_number: int, total_steps: int, step_name: str):
+    def _display_checkpoint_header(
+        self, step_number: int, total_steps: int, step_name: str
+    ):
         """Display checkpoint header with progress"""
         box_width = 60
         header = f" Step {step_number}/{total_steps}: {step_name} "
         padding = (box_width - len(header)) // 2
 
         print(f"\n{Colors.BOLD}{Colors.CYAN}┌{'─' * box_width}┐{Colors.RESET}")
-        print(f"{Colors.BOLD}{Colors.CYAN}│{' ' * padding}{header}{' ' * (box_width - padding - len(header))}│{Colors.RESET}")
+        print(
+            f"{Colors.BOLD}{Colors.CYAN}│{' ' * padding}{header}{' ' * (box_width - padding - len(header))}│{Colors.RESET}"
+        )
         print(f"{Colors.BOLD}{Colors.CYAN}└{'─' * box_width}┘{Colors.RESET}\n")
 
     def _display_quorum_result(self, quorum_result: Dict[str, Any]):
@@ -283,7 +300,9 @@ class InteractiveValidator:
             color = Colors.RED
             symbol = "✗"
 
-        print(f"{Colors.BOLD}Quorum Decision:{Colors.RESET} {color}{symbol} {decision} ({confidence:.0%} confidence){Colors.RESET}")
+        print(
+            f"{Colors.BOLD}Quorum Decision:{Colors.RESET} {color}{symbol} {decision} ({confidence:.0%} confidence){Colors.RESET}"
+        )
 
     def _display_deficiencies(self, deficiencies: List[str]):
         """Display deficiencies/issues found"""
@@ -310,7 +329,9 @@ class InteractiveValidator:
         lines = output_str.split("\n")
         if len(lines) > max_lines:
             print("\n".join(lines[:max_lines]))
-            print(f"{Colors.DIM}... ({len(lines) - max_lines} more lines, use [E]dit to view all){Colors.RESET}")
+            print(
+                f"{Colors.DIM}... ({len(lines) - max_lines} more lines, use [E]dit to view all){Colors.RESET}"
+            )
         else:
             print(output_str)
         print()
@@ -327,7 +348,9 @@ class InteractiveValidator:
 
         while True:
             try:
-                choice_str = input(f"{Colors.BOLD}Your choice:{Colors.RESET} ").strip().lower()
+                choice_str = (
+                    input(f"{Colors.BOLD}Your choice:{Colors.RESET} ").strip().lower()
+                )
 
                 if not choice_str:
                     continue
@@ -339,16 +362,20 @@ class InteractiveValidator:
                     "r": UserChoice.RETRY,
                     "s": UserChoice.SKIP,
                     "b": UserChoice.BATCH_APPROVE,
-                    "q": UserChoice.QUIT
+                    "q": UserChoice.QUIT,
                 }
 
                 if choice_str in choice_map:
                     return choice_map[choice_str]
                 else:
-                    print(f"{Colors.RED}Invalid choice. Please select A, E, R, S, B, or Q.{Colors.RESET}")
+                    print(
+                        f"{Colors.RED}Invalid choice. Please select A, E, R, S, B, or Q.{Colors.RESET}"
+                    )
 
             except (EOFError, KeyboardInterrupt):
-                print(f"\n{Colors.YELLOW}Interrupted. Use [Q]uit to save session state.{Colors.RESET}")
+                print(
+                    f"\n{Colors.YELLOW}Interrupted. Use [Q]uit to save session state.{Colors.RESET}"
+                )
                 return UserChoice.QUIT
 
     def _edit_output(self, output_data: Any) -> Optional[Any]:
@@ -363,9 +390,7 @@ class InteractiveValidator:
         """
         # Create temporary file with output
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".json",
-            delete=False
+            mode="w", suffix=".json", delete=False
         ) as tmp_file:
             tmp_path = Path(tmp_file.name)
 
@@ -380,7 +405,9 @@ class InteractiveValidator:
             result = subprocess.run([self.editor, str(tmp_path)])
 
             if result.returncode != 0:
-                print(f"{Colors.RED}Editor exited with error code {result.returncode}{Colors.RESET}")
+                print(
+                    f"{Colors.RED}Editor exited with error code {result.returncode}{Colors.RESET}"
+                )
                 return None
 
             # Read modified content
@@ -390,11 +417,15 @@ class InteractiveValidator:
             # Try to parse as JSON
             try:
                 modified_data = json.loads(modified_content)
-                print(f"{Colors.GREEN}✓ Successfully parsed modified JSON{Colors.RESET}")
+                print(
+                    f"{Colors.GREEN}✓ Successfully parsed modified JSON{Colors.RESET}"
+                )
                 return modified_data
             except json.JSONDecodeError:
                 # Not JSON, return as string
-                print(f"{Colors.YELLOW}⚠ Modified content is not valid JSON, returning as text{Colors.RESET}")
+                print(
+                    f"{Colors.YELLOW}⚠ Modified content is not valid JSON, returning as text{Colors.RESET}"
+                )
                 return modified_content
 
         except Exception as e:
@@ -436,7 +467,9 @@ class InteractiveValidator:
         feedback = "\n".join(lines)
 
         if feedback:
-            print(f"\n{Colors.GREEN}✓ Feedback captured ({len(feedback)} characters){Colors.RESET}")
+            print(
+                f"\n{Colors.GREEN}✓ Feedback captured ({len(feedback)} characters){Colors.RESET}"
+            )
         else:
             print(f"\n{Colors.YELLOW}⚠ No feedback provided{Colors.RESET}")
 
@@ -454,7 +487,10 @@ class InteractiveValidator:
             with open(self.session_file, "w") as f:
                 json.dump(self.session_state.to_dict(), f, indent=2)
         except Exception as e:
-            print(f"{Colors.RED}Warning: Failed to save session state: {e}{Colors.RESET}", file=sys.stderr)
+            print(
+                f"{Colors.RED}Warning: Failed to save session state: {e}{Colors.RESET}",
+                file=sys.stderr,
+            )
 
     @classmethod
     def load_session(cls, session_file: Path) -> "InteractiveValidator":
@@ -491,7 +527,7 @@ class QuietValidator:
         step_name: str,
         output_data: Any,
         quorum_result: Optional[Dict[str, Any]] = None,
-        deficiencies: Optional[List[str]] = None
+        deficiencies: Optional[List[str]] = None,
     ) -> CheckpointResult:
         """Auto-approve checkpoint without user interaction"""
         return CheckpointResult(choice=UserChoice.APPROVE)
@@ -500,7 +536,7 @@ class QuietValidator:
 def create_validator(
     interactive: bool = False,
     session_file: Optional[Path] = None,
-    auto_approve_timeout: Optional[int] = None
+    auto_approve_timeout: Optional[int] = None,
 ) -> InteractiveValidator | QuietValidator:
     """
     Factory function to create appropriate validator.
@@ -521,8 +557,7 @@ def create_validator(
         return InteractiveValidator.load_session(session_file)
 
     return InteractiveValidator(
-        auto_approve_timeout=auto_approve_timeout,
-        session_file=session_file
+        auto_approve_timeout=auto_approve_timeout, session_file=session_file
     )
 
 
@@ -536,14 +571,10 @@ if __name__ == "__main__":
         "node_type": "Effect",
         "name": "PostgreSQLAdapter",
         "description": "Adapter for PostgreSQL database operations",
-        "methods": ["connect", "execute_query", "close"]
+        "methods": ["connect", "execute_query", "close"],
     }
 
-    test_quorum = {
-        "decision": "PASS",
-        "confidence": 0.87,
-        "deficiencies": []
-    }
+    test_quorum = {"decision": "PASS", "confidence": 0.87, "deficiencies": []}
 
     result = validator.checkpoint(
         checkpoint_id="test_1",
@@ -552,7 +583,7 @@ if __name__ == "__main__":
         total_steps=4,
         step_name="Task Breakdown Validation",
         output_data=test_output,
-        quorum_result=test_quorum
+        quorum_result=test_quorum,
     )
 
     print(f"\nResult: {result.choice.name}")

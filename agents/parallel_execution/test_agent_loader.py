@@ -13,13 +13,13 @@ Tests:
 import asyncio
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any, Dict
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_loader import AgentLoader, AgentLoadStatus
 from agent_dispatcher import ParallelCoordinator
+from agent_loader import AgentLoader, AgentLoadStatus
 from agent_model import AgentTask
 
 
@@ -76,11 +76,17 @@ class AgentLoaderValidator:
 
             if len(loaded_agents) > 0:
                 print(f"  ✅ Loaded {len(loaded_agents)} agent configurations")
-                self.results[test_name] = {"status": "PASSED", "count": len(loaded_agents)}
+                self.results[test_name] = {
+                    "status": "PASSED",
+                    "count": len(loaded_agents),
+                }
                 self.passed_tests += 1
             else:
-                print(f"  ❌ No agents loaded")
-                self.results[test_name] = {"status": "FAILED", "error": "No agents loaded"}
+                print("  ❌ No agents loaded")
+                self.results[test_name] = {
+                    "status": "FAILED",
+                    "error": "No agents loaded",
+                }
                 self.failed_tests += 1
 
             await loader.cleanup()
@@ -99,7 +105,7 @@ class AgentLoaderValidator:
 
         try:
             loader = AgentLoader(enable_hot_reload=False)
-            loaded_agents = await loader.initialize()
+            await loader.initialize()
 
             stats = loader.get_agent_stats()
             total = stats["total_agents"]
@@ -111,16 +117,24 @@ class AgentLoaderValidator:
             print(f"  ❌ Failed to load: {failed}")
 
             if failed > 0:
-                print(f"\n  Failed agents:")
+                print("\n  Failed agents:")
                 for name, agent in loader.agents.items():
                     if agent.status == AgentLoadStatus.FAILED:
                         print(f"    - {name}: {agent.error}")
 
             if loaded >= 45:  # Allow up to 5 failures
-                self.results[test_name] = {"status": "PASSED", "loaded": loaded, "failed": failed}
+                self.results[test_name] = {
+                    "status": "PASSED",
+                    "loaded": loaded,
+                    "failed": failed,
+                }
                 self.passed_tests += 1
             else:
-                self.results[test_name] = {"status": "FAILED", "loaded": loaded, "failed": failed}
+                self.results[test_name] = {
+                    "status": "FAILED",
+                    "loaded": loaded,
+                    "failed": failed,
+                }
                 self.failed_tests += 1
 
             await loader.cleanup()
@@ -153,34 +167,36 @@ class AgentLoaderValidator:
                         "agent_purpose",
                         "agent_title",
                         "agent_description",
-                        "triggers"
+                        "triggers",
                     ]
 
                     missing_fields = [
-                        field for field in required_fields
+                        field
+                        for field in required_fields
                         if not getattr(config, field, None)
                     ]
 
                     if missing_fields:
-                        validation_results.append({
-                            "agent": name,
-                            "status": "INVALID",
-                            "missing": missing_fields
-                        })
+                        validation_results.append(
+                            {
+                                "agent": name,
+                                "status": "INVALID",
+                                "missing": missing_fields,
+                            }
+                        )
                     else:
-                        validation_results.append({
-                            "agent": name,
-                            "status": "VALID"
-                        })
+                        validation_results.append({"agent": name, "status": "VALID"})
 
             valid_count = sum(1 for r in validation_results if r["status"] == "VALID")
-            invalid_count = sum(1 for r in validation_results if r["status"] == "INVALID")
+            invalid_count = sum(
+                1 for r in validation_results if r["status"] == "INVALID"
+            )
 
             print(f"  ✅ Valid configurations: {valid_count}")
             print(f"  ❌ Invalid configurations: {invalid_count}")
 
             if invalid_count > 0:
-                print(f"\n  Invalid agents:")
+                print("\n  Invalid agents:")
                 for result in validation_results:
                     if result["status"] == "INVALID":
                         print(f"    - {result['agent']}: Missing {result['missing']}")
@@ -189,7 +205,11 @@ class AgentLoaderValidator:
                 self.results[test_name] = {"status": "PASSED", "valid": valid_count}
                 self.passed_tests += 1
             else:
-                self.results[test_name] = {"status": "FAILED", "valid": valid_count, "invalid": invalid_count}
+                self.results[test_name] = {
+                    "status": "FAILED",
+                    "valid": valid_count,
+                    "invalid": invalid_count,
+                }
                 self.failed_tests += 1
 
             await loader.cleanup()
@@ -220,7 +240,7 @@ class AgentLoaderValidator:
                 "quality_intelligence",
                 "template_system",
                 "mandatory_functions",
-                "onex_compliance_validation"
+                "onex_compliance_validation",
             ]
 
             for capability in test_capabilities:
@@ -228,7 +248,10 @@ class AgentLoaderValidator:
                 print(f"  ✅ '{capability}': {len(agents)} agents")
 
             if capabilities_indexed > 0:
-                self.results[test_name] = {"status": "PASSED", "count": capabilities_indexed}
+                self.results[test_name] = {
+                    "status": "PASSED",
+                    "count": capabilities_indexed,
+                }
                 self.passed_tests += 1
             else:
                 self.results[test_name] = {"status": "FAILED", "count": 0}
@@ -257,7 +280,7 @@ class AgentLoaderValidator:
                 ("debug", "agent-debug-intelligence"),
                 ("generate", "agent-contract-driven-generator"),
                 ("api", "agent-api-architect"),
-                ("investigate", "agent-debug-intelligence")
+                ("investigate", "agent-debug-intelligence"),
             ]
 
             matched = 0
@@ -267,7 +290,9 @@ class AgentLoaderValidator:
                     print(f"  ✅ Trigger '{trigger}' -> {expected_agent}")
                     matched += 1
                 else:
-                    print(f"  ⚠️  Trigger '{trigger}' -> {agents if agents else 'No match'}")
+                    print(
+                        f"  ⚠️  Trigger '{trigger}' -> {agents if agents else 'No match'}"
+                    )
 
             if matched >= len(test_triggers) * 0.75:  # 75% match rate
                 self.results[test_name] = {"status": "PASSED", "matched": matched}
@@ -292,8 +317,7 @@ class AgentLoaderValidator:
 
         try:
             coordinator = ParallelCoordinator(
-                enable_hot_reload=False,
-                use_dynamic_loading=True
+                enable_hot_reload=False, use_dynamic_loading=True
             )
             await coordinator.initialize()
 
@@ -301,15 +325,13 @@ class AgentLoaderValidator:
             test_tasks = [
                 ("Debug the authentication bug", "agent-debug-intelligence"),
                 ("Generate contract-driven code", "agent-contract-driven-generator"),
-                ("Design REST API", "agent-api-architect")
+                ("Design REST API", "agent-api-architect"),
             ]
 
             matched = 0
             for description, expected_agent in test_tasks:
                 task = AgentTask(
-                    task_id=f"test-{matched}",
-                    description=description,
-                    dependencies=[]
+                    task_id=f"test-{matched}", description=description, dependencies=[]
                 )
 
                 selected_agent = coordinator._select_agent_for_task(task)
@@ -317,7 +339,9 @@ class AgentLoaderValidator:
                     print(f"  ✅ '{description}' -> {selected_agent}")
                     matched += 1
                 else:
-                    print(f"  ⚠️  '{description}' -> {selected_agent} (expected {expected_agent})")
+                    print(
+                        f"  ⚠️  '{description}' -> {selected_agent} (expected {expected_agent})"
+                    )
 
             if matched >= len(test_tasks) * 0.66:  # 66% match rate
                 self.results[test_name] = {"status": "PASSED", "matched": matched}
@@ -379,8 +403,7 @@ class AgentLoaderValidator:
         try:
             # Test with dynamic loading
             coordinator = ParallelCoordinator(
-                enable_hot_reload=False,
-                use_dynamic_loading=True
+                enable_hot_reload=False, use_dynamic_loading=True
             )
             await coordinator.initialize()
 
@@ -388,11 +411,13 @@ class AgentLoaderValidator:
             print(f"  📊 Registry stats: {stats}")
 
             if stats.get("loaded_agents", 0) > 0:
-                print(f"  ✅ Coordinator initialized with {stats['loaded_agents']} agents")
+                print(
+                    f"  ✅ Coordinator initialized with {stats['loaded_agents']} agents"
+                )
                 self.results[test_name] = {"status": "PASSED", "stats": stats}
                 self.passed_tests += 1
             else:
-                print(f"  ❌ No agents loaded in coordinator")
+                print("  ❌ No agents loaded in coordinator")
                 self.results[test_name] = {"status": "FAILED", "stats": stats}
                 self.failed_tests += 1
 

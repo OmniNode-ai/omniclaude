@@ -89,7 +89,7 @@ echo '{"tasks": [...]}' | \
    - Edit: Modify final output
    - Approve: Print and exit
 
-### 3. agent-parallel-dispatcher.md (Documentation)
+### 3. AGENT-PARALLEL-DISPATCHER.md (Documentation)
 
 **Purpose**: Comprehensive documentation for interactive mode
 
@@ -489,7 +489,7 @@ python dispatch_runner.py --interactive \
 
 ## Related Documentation
 
-- **agent-parallel-dispatcher.md**: Complete parallel dispatcher documentation
+- **AGENT-PARALLEL-DISPATCHER.md**: Complete parallel dispatcher documentation
 - **quorum_minimal.py**: AI quorum validation implementation
 - **context_manager.py**: Context gathering and filtering
 - **ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md**: ONEX architecture patterns
@@ -497,7 +497,7 @@ python dispatch_runner.py --interactive \
 ## Support
 
 For issues or questions:
-1. Check documentation: `agent-parallel-dispatcher.md`
+1. Check documentation: `AGENT-PARALLEL-DISPATCHER.md`
 2. Run examples: `./example_interactive_workflow.sh`
 3. Run tests: `python test_interactive_mode.py`
 4. Review session file: Check /tmp/interactive_session_*.json
