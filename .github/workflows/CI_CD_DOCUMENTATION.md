@@ -772,7 +772,7 @@ mv .github/workflows/enhanced-ci.yml .github/workflows/ci-cd.yml
 ## Appendix
 
 ### Related Documentation
-- `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` - ONEX architecture reference
+- [ONEX Architecture Patterns](https://github.com/OmniNode-ai/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md) - ONEX architecture reference (external)
 - `pyproject.toml` - Project dependencies and tool configuration
 - `docker-compose.yml` - Full stack deployment configuration
 - `scripts/init-db.sh` - Database initialization script

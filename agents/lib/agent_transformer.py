@@ -101,7 +101,8 @@ class AgentTransformer:
             config_dir: Directory containing agent-*.yaml files
         """
         if config_dir is None:
-            config_dir = Path("/Volumes/PRO-G40/Code/omniclaude/agents/configs")
+            # Use relative path from this file's location
+            config_dir = Path(__file__).parent.parent / "configs"
 
         self.config_dir = Path(config_dir)
 

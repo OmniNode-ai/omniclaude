@@ -407,7 +407,7 @@ class NodeUserValidatorCompute(NodeCompute):
 ### Documentation
 - Full documentation: `.github/workflows/CI_CD_DOCUMENTATION.md`
 - This quick reference: `.github/workflows/CI_QUICK_REFERENCE.md`
-- ONEX architecture: `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+- ONEX architecture: [ONEX Architecture Patterns](https://github.com/OmniNode-ai/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md) (external)
 
 ### Getting Help
 1. Check workflow logs in GitHub Actions
