@@ -54,6 +54,16 @@ from .generation.contract_builder_factory import ContractBuilderFactory  # noqa:
 from .intelligence_gatherer import IntelligenceGatherer  # noqa: E402
 from .models.intelligence_context import IntelligenceContext  # noqa: E402
 
+# Import performance tracking and quality gates  # noqa: E402
+from .models.model_performance_tracking import (  # noqa: E402
+    MetricsCollector,
+)
+from .models.model_quality_gate import (  # noqa: E402
+    EnumQualityGate,
+    ModelQualityGateResult,
+    QualityGateRegistry,
+)
+
 # Import pipeline models  # noqa: E402
 from .models.pipeline_models import (  # noqa: E402
     GateType,
@@ -165,6 +175,55 @@ class GenerationPipeline:
         self.written_files: List[Path] = []
         self.temp_files: List[Path] = []
 
+        # Performance tracking and quality gates (Week 1 Day 5)
+        self.metrics_collector = MetricsCollector()
+        self.quality_gate_registry = QualityGateRegistry()
+
+        # Configure performance thresholds for all stages
+        self._configure_performance_thresholds()
+
+    def _configure_performance_thresholds(self) -> None:
+        """
+        Configure performance thresholds for all pipeline stages.
+
+        Targets from POC documentation:
+        - Stage 1: PRD Analysis (5s)
+        - Stage 1.5: Intelligence Gathering (3s)
+        - Stage 2: Contract Building (2s)
+        - Stage 4: Code Generation (12.5s)
+        - Stage 4.5: Event Bus Integration (2s)
+        - Stage 5: Post Validation (5s)
+        - Stage 5.5: AI Refinement (3s)
+        """
+        self.metrics_collector.set_threshold("stage_1_prd_analysis", target_ms=5000)
+        self.metrics_collector.set_threshold(
+            "stage_1.5_intelligence_gathering", target_ms=3000
+        )
+        self.metrics_collector.set_threshold(
+            "stage_2_contract_building", target_ms=2000
+        )
+        self.metrics_collector.set_threshold("stage_4_code_generation", target_ms=12500)
+        self.metrics_collector.set_threshold(
+            "stage_4.5_event_bus_integration", target_ms=2000
+        )
+        self.metrics_collector.set_threshold("stage_5_post_validation", target_ms=5000)
+        self.metrics_collector.set_threshold("stage_5.5_ai_refinement", target_ms=3000)
+
+    async def _check_quality_gate(
+        self, gate: EnumQualityGate, context: Dict[str, Any]
+    ) -> ModelQualityGateResult:
+        """
+        Check quality gate (placeholder for Week 2 implementation).
+
+        Args:
+            gate: Quality gate to check
+            context: Validation context
+
+        Returns:
+            Quality gate result
+        """
+        return await self.quality_gate_registry.check_gate(gate, context)
+
     async def execute(
         self, prompt: str, output_directory: str, correlation_id: Optional[UUID] = None
     ) -> PipelineResult:
@@ -202,6 +261,15 @@ class GenerationPipeline:
         error_summary = None
 
         try:
+            # Quality Gate: Input Validation (SV-001)
+            gate_input_validation = await self._check_quality_gate(
+                EnumQualityGate.INPUT_VALIDATION,
+                {"prompt": prompt, "output_directory": output_directory},
+            )
+            self.logger.info(
+                f"✅ Quality Gate SV-001 (Input Validation): {gate_input_validation.status}"
+            )
+
             # Stage 1: Prompt Parsing
             stage1, parse_result = await self._stage_1_parse_prompt(prompt)
             stages.append(stage1)
@@ -333,6 +401,15 @@ class GenerationPipeline:
                 )
                 # Continue without event bus integration
 
+            # Quality Gate: Output Validation (SV-003) - After code generation
+            gate_output_validation = await self._check_quality_gate(
+                EnumQualityGate.OUTPUT_VALIDATION,
+                {"generation_result": generation_result, "node_type": node_type},
+            )
+            self.logger.info(
+                f"✅ Quality Gate SV-003 (Output Validation): {gate_output_validation.status}"
+            )
+
             # Interactive Checkpoint 2: Review Generated Contract/Code
             if self.interactive_mode:
                 # Read generated contract/code for review
@@ -399,6 +476,19 @@ class GenerationPipeline:
                 )
 
             validation_passed = stage5.status == StageStatus.COMPLETED
+
+            # Quality Gate: ONEX Standards (QC-001) - After post-validation
+            gate_onex_standards = await self._check_quality_gate(
+                EnumQualityGate.ONEX_STANDARDS,
+                {
+                    "generation_result": generation_result,
+                    "node_type": node_type,
+                    "validation_passed": validation_passed,
+                },
+            )
+            self.logger.info(
+                f"✅ Quality Gate QC-001 (ONEX Standards): {gate_onex_standards.status}"
+            )
 
             # Stage 5.5: Code Refinement (AI-powered)
             # Collect all validation gates from previous stages for refinement context
@@ -500,6 +590,9 @@ class GenerationPipeline:
                 "prompt": prompt,
                 "output_directory": output_directory,
                 "timestamp": datetime.utcnow().isoformat(),
+                # Week 1 Day 5: Add performance metrics and quality gates
+                "performance_metrics": self.metrics_collector.get_summary(),
+                "quality_gates": self.quality_gate_registry.get_summary(),
             },
         )
 
@@ -574,6 +667,12 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_1_prd_analysis",
+                duration_ms=stage.duration_ms,
+            )
+
     async def _stage_1_5_gather_intelligence(
         self, parsed_data: Dict[str, Any], analysis_result: SimplePRDAnalysisResult
     ) -> Tuple[PipelineStage, IntelligenceContext]:
@@ -634,6 +733,12 @@ class GenerationPipeline:
 
         finally:
             stage.duration_ms = int((time() - start_ms) * 1000)
+
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_1.5_intelligence_gathering",
+                duration_ms=stage.duration_ms,
+            )
 
     async def _stage_2_contract_building(
         self, prompt: str, parsed_data: Dict[str, Any], correlation_id: UUID
@@ -832,6 +937,12 @@ class GenerationPipeline:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_2_contract_building",
+                duration_ms=stage.duration_ms,
+            )
+
     async def _stage_3_pre_validation(
         self, parsed_data: Dict[str, Any]
     ) -> PipelineStage:
@@ -967,6 +1078,12 @@ class GenerationPipeline:
         finally:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
+
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_4_code_generation",
+                duration_ms=stage.duration_ms,
+            )
 
     async def _stage_4_5_event_bus_integration(
         self,
@@ -1250,6 +1367,12 @@ except ImportError:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
 
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_4.5_event_bus_integration",
+                duration_ms=stage.duration_ms,
+            )
+
     async def _stage_5_post_validation(
         self, generated_files: Dict[str, Any], node_type: str
     ) -> PipelineStage:
@@ -1331,6 +1454,12 @@ except ImportError:
         finally:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
+
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_5_post_validation",
+                duration_ms=stage.duration_ms,
+            )
 
     async def _stage_5_5_code_refinement(
         self,
@@ -1466,6 +1595,12 @@ except ImportError:
         finally:
             stage.end_time = datetime.utcnow()
             stage.duration_ms = int((time() - start_ms) * 1000)
+
+            # Record performance metrics (Week 1 Day 5)
+            self.metrics_collector.record_stage_timing(
+                stage_name="stage_5.5_ai_refinement",
+                duration_ms=stage.duration_ms,
+            )
 
     def _build_refinement_context(
         self,
