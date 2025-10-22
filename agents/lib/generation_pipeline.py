@@ -1063,6 +1063,23 @@ class GenerationPipeline:
             introspection_template = env.get_template("introspection_event.py.jinja2")
             introspection_method = introspection_template.render(context)
 
+            # 1.5 Render orchestrator workflow events (Day 4 enhancement)
+            orchestrator_workflow_methods = ""
+            if node_type.lower() == "orchestrator":
+                try:
+                    orchestrator_template = env.get_template(
+                        "orchestrator_workflow_events.py.jinja2"
+                    )
+                    orchestrator_workflow_methods = orchestrator_template.render(
+                        context
+                    )
+                    self.logger.info("Rendered orchestrator workflow event methods")
+                except Exception as e:
+                    self.logger.warning(
+                        f"Could not load orchestrator workflow template: {e}"
+                    )
+                    orchestrator_workflow_methods = ""
+
             # 2. Render startup script
             startup_template = env.get_template("startup_script.py.jinja2")
             startup_script = startup_template.render(context)
@@ -1072,7 +1089,25 @@ class GenerationPipeline:
                 node_code = f.read()
 
             # Add imports at top (after existing imports)
-            event_bus_imports = """
+            # Day 4: Add UUID and Any imports for orchestrators
+            if node_type.lower() == "orchestrator":
+                event_bus_imports = """
+# Event Bus Integration (Stage 4.5 + Day 4 Orchestrator Enhancements)
+import asyncio
+import os
+from datetime import datetime
+from uuid import UUID, uuid4
+from typing import Any, Optional
+
+try:
+    from omniarchon.events.publisher import EventPublisher
+    EVENT_BUS_AVAILABLE = True
+except ImportError:
+    EVENT_BUS_AVAILABLE = False
+    EventPublisher = None
+"""
+            else:
+                event_bus_imports = """
 # Event Bus Integration (Stage 4.5)
 import asyncio
 import os
@@ -1155,6 +1190,13 @@ except ImportError:
             # Insert before the last line of the file
             node_code = node_code.rstrip() + "\n\n" + introspection_method + "\n"
 
+            # Day 4: Add orchestrator workflow event methods if this is an orchestrator
+            if orchestrator_workflow_methods:
+                node_code = (
+                    node_code.rstrip() + "\n\n" + orchestrator_workflow_methods + "\n"
+                )
+                self.logger.info("✅ Injected orchestrator workflow event methods")
+
             # Write updated node code
             with open(main_file, "w") as f:
                 f.write(node_code)
@@ -1185,9 +1227,17 @@ except ImportError:
                 "event_bus_code_injected": True,
                 "startup_script_generated": True,
                 "startup_script_path": str(startup_script_path),
+                "orchestrator_workflow_events": bool(
+                    orchestrator_workflow_methods
+                ),  # Day 4
             }
 
-            self.logger.info("Stage 4.5 completed successfully")
+            if orchestrator_workflow_methods:
+                self.logger.info(
+                    "Stage 4.5 completed successfully (with Day 4 orchestrator enhancements)"
+                )
+            else:
+                self.logger.info("Stage 4.5 completed successfully")
             return stage, generation_result
 
         except Exception as e:
