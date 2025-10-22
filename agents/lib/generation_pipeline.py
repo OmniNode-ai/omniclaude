@@ -2,18 +2,19 @@
 """
 Generation Pipeline - Autonomous Node Generation POC
 
-Orchestrates the 8-stage node generation pipeline with 16 validation gates:
+Orchestrates the 9-stage node generation pipeline with 16 validation gates:
 - Stage 1: Prompt Parsing (5s)
 - Stage 1.5: Intelligence Gathering (3s) - 1 warning gate
 - Stage 2: Contract Building (2s) - Quorum validation
 - Stage 3: Pre-Generation Validation (2s) - 6 blocking gates
 - Stage 4: Code Generation (10-15s) - 2 warning gates
+- Stage 4.5: Event Bus Integration (2s) - NEW Day 2 MVP
 - Stage 5: Post-Generation Validation (5s) - 4 blocking gates
 - Stage 5.5: AI-Powered Code Refinement (3s) - 1 blocking gate (R1)
 - Stage 6: File Writing (3s)
 - Stage 7: Compilation Testing (10s) - 2 warning gates
 
-Total target: ~51 seconds for successful generation.
+Total target: ~53 seconds for successful generation.
 """
 
 import ast
@@ -315,6 +316,22 @@ class GenerationPipeline:
                     code=EnumCoreErrorCode.OPERATION_FAILED,
                     message=f"Stage 4 failed: {stage4.error}",
                 )
+
+            # Stage 4.5: Event Bus Integration (NEW - Day 2 MVP)
+            stage4_5, generation_result = await self._stage_4_5_event_bus_integration(
+                generation_result,
+                node_type,
+                service_name,
+                domain,
+            )
+            stages.append(stage4_5)
+
+            # Stage 4.5 failure is non-fatal (graceful degradation)
+            if stage4_5.status == StageStatus.FAILED:
+                self.logger.warning(
+                    f"Stage 4.5 (Event Bus Integration) failed: {stage4_5.error}"
+                )
+                # Continue without event bus integration
 
             # Interactive Checkpoint 2: Review Generated Contract/Code
             if self.interactive_mode:
@@ -946,6 +963,231 @@ class GenerationPipeline:
             stage.status = StageStatus.FAILED
             stage.error = str(e)
             return stage, {}
+
+        finally:
+            stage.end_time = datetime.utcnow()
+            stage.duration_ms = int((time() - start_ms) * 1000)
+
+    async def _stage_4_5_event_bus_integration(
+        self,
+        generation_result: Dict[str, Any],
+        node_type: str,
+        service_name: str,
+        domain: str,
+    ) -> Tuple[PipelineStage, Dict[str, Any]]:
+        """
+        Stage 4.5: Event Bus Integration (NEW - Day 2 MVP)
+
+        Injects event bus initialization code and generates startup script:
+        - Adds EventPublisher initialization to __init__
+        - Adds initialize() and shutdown() lifecycle methods
+        - Adds _publish_introspection_event() method
+        - Generates standalone startup script (start_node.py)
+
+        No blocking validation gates - graceful degradation if event bus unavailable.
+        """
+        stage = PipelineStage(
+            stage_name="event_bus_integration", status=StageStatus.RUNNING
+        )
+        stage.start_time = datetime.utcnow()
+        start_ms = time()
+
+        try:
+            self.logger.info("Stage 4.5: Injecting event bus integration...")
+
+            # Only inject event bus code for Effect and Orchestrator nodes
+            # Compute and Reducer can optionally have it but not required for MVP
+            if node_type.lower() not in ["effect", "orchestrator"]:
+                self.logger.info(
+                    f"Skipping event bus integration for {node_type} node (optional)"
+                )
+                stage.status = StageStatus.SKIPPED
+                stage.metadata = {
+                    "reason": f"Event bus integration optional for {node_type} nodes"
+                }
+                return stage, generation_result
+
+            # Extract node name and paths
+            main_file = generation_result.get("main_file", "")
+            if not main_file or not Path(main_file).exists():
+                raise ValueError(f"Main file not found: {main_file}")
+
+            node_path = Path(main_file)
+            output_dir = node_path.parent
+
+            # Extract node name from file
+            node_name = generation_result.get("node_name", "")
+            if not node_name:
+                # Parse from main file
+                with open(main_file, "r") as f:
+                    content = f.read()
+                    match = re.search(r"class (Node\w+)\(", content)
+                    if match:
+                        node_name = match.group(1)
+                    else:
+                        raise ValueError(
+                            "Could not extract node name from generated code"
+                        )
+
+            # Prepare template context
+            name_lower = re.sub(r"^Node", "", node_name).lower()
+            name_lower = re.sub(
+                r"(Effect|Compute|Reducer|Orchestrator)$", "", name_lower
+            )
+
+            context = {
+                "node_name": node_name,
+                "node_type": node_type.lower(),
+                "service_name": service_name,
+                "domain": domain,
+                "version": "1.0.0",
+                "description": generation_result.get(
+                    "description", f"{node_name} node"
+                ),
+                "name_lower": name_lower,
+                "name_pascal": node_name.replace("Node", "")
+                .replace("Effect", "")
+                .replace("Compute", "")
+                .replace("Reducer", "")
+                .replace("Orchestrator", ""),
+                "kafka_bootstrap_servers": "omninode-bridge-redpanda:9092",
+            }
+
+            # Render event bus templates
+            from jinja2 import Environment, FileSystemLoader
+
+            template_dir = Path(__file__).parent.parent / "templates"
+            env = Environment(loader=FileSystemLoader(str(template_dir)))
+
+            # 1. Render introspection event method
+            introspection_template = env.get_template("introspection_event.py.jinja2")
+            introspection_method = introspection_template.render(context)
+
+            # 2. Render startup script
+            startup_template = env.get_template("startup_script.py.jinja2")
+            startup_script = startup_template.render(context)
+
+            # 3. Inject event bus code into main node file
+            with open(main_file, "r") as f:
+                node_code = f.read()
+
+            # Add imports at top (after existing imports)
+            event_bus_imports = """
+# Event Bus Integration (Stage 4.5)
+import asyncio
+import os
+from uuid import uuid4
+from typing import Optional
+
+try:
+    from omniarchon.events.publisher import EventPublisher
+    EVENT_BUS_AVAILABLE = True
+except ImportError:
+    EVENT_BUS_AVAILABLE = False
+    EventPublisher = None
+"""
+
+            # Insert imports after the last import statement
+            import_pattern = r"(import .*\n|from .* import .*\n)+"
+            match = list(re.finditer(import_pattern, node_code))
+            if match:
+                last_import_end = match[-1].end()
+                node_code = (
+                    node_code[:last_import_end]
+                    + event_bus_imports
+                    + node_code[last_import_end:]
+                )
+            else:
+                # No imports found, add at beginning
+                node_code = event_bus_imports + "\n\n" + node_code
+
+            # Add event bus initialization to __init__ method
+            event_bus_init_code = """
+        # Event Bus Integration (Stage 4.5)
+        if EVENT_BUS_AVAILABLE:
+            self.event_publisher: Optional[EventPublisher] = None
+            self._bootstrap_servers = os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS",
+                "%s"
+            )
+            self._service_name = "%s"
+            self._instance_id = f"%s-{uuid4().hex[:8]}"
+            self._node_id = uuid4()
+            self.is_running = False
+            self._shutdown_event = asyncio.Event()
+            self.logger.info(
+                f"%s initialized | "
+                f"service={self._service_name} | "
+                f"instance={self._instance_id}"
+            )
+        else:
+            self.logger.warning("Event bus not available - node will run in standalone mode")
+""" % (
+                context["kafka_bootstrap_servers"],
+                context["service_name"],
+                context["name_lower"],
+                context["node_name"],
+            )
+
+            # Find the last line in __init__ and append event bus code
+            init_match = re.search(
+                r"def __init__\(self[^)]*\):[^\n]+\n((?:\s+.*\n)+)",
+                node_code,
+                re.MULTILINE,
+            )
+            if init_match:
+                # Insert event bus code at the end of __init__
+                insert_pos = init_match.end()
+                node_code = (
+                    node_code[:insert_pos]
+                    + event_bus_init_code
+                    + node_code[insert_pos:]
+                )
+
+            # Add introspection method at the end of the class (before the last line)
+            # Insert before the last line of the file
+            node_code = node_code.rstrip() + "\n\n" + introspection_method + "\n"
+
+            # Write updated node code
+            with open(main_file, "w") as f:
+                f.write(node_code)
+
+            self.logger.info(f"✅ Injected event bus code into {node_path.name}")
+
+            # 4. Write startup script
+            startup_script_path = output_dir / "start_node.py"
+            with open(startup_script_path, "w") as f:
+                f.write(startup_script)
+
+            # Make startup script executable
+            startup_script_path.chmod(0o755)
+
+            self.logger.info(f"✅ Generated startup script: {startup_script_path.name}")
+
+            # Update generation_result with new files
+            if "generated_files" not in generation_result:
+                generation_result["generated_files"] = []
+
+            generation_result["generated_files"].append(str(startup_script_path))
+            generation_result["startup_script"] = str(startup_script_path)
+            generation_result["event_bus_integrated"] = True
+
+            stage.status = StageStatus.COMPLETED
+            stage.metadata = {
+                "node_type": node_type,
+                "event_bus_code_injected": True,
+                "startup_script_generated": True,
+                "startup_script_path": str(startup_script_path),
+            }
+
+            self.logger.info("Stage 4.5 completed successfully")
+            return stage, generation_result
+
+        except Exception as e:
+            stage.status = StageStatus.FAILED
+            stage.error = str(e)
+            self.logger.error(f"Stage 4.5 failed: {e}", exc_info=True)
+            return stage, generation_result  # Return original result on failure
 
         finally:
             stage.end_time = datetime.utcnow()
