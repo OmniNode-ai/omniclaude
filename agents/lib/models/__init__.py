@@ -6,6 +6,12 @@ from .intelligence_context import (
     NodeTypeIntelligence,
     get_default_intelligence,
 )
+from .model_code_pattern import (
+    EnumPatternType,
+    ModelCodePattern,
+    ModelPatternExtractionResult,
+    ModelPatternMatch,
+)
 from .model_performance_tracking import (
     MetricsCollector,
     ModelPerformanceMetric,
@@ -31,4 +37,8 @@ __all__ = [
     "EnumQualityGate",
     "ModelQualityGateResult",
     "QualityGateRegistry",
+    "EnumPatternType",
+    "ModelCodePattern",
+    "ModelPatternExtractionResult",
+    "ModelPatternMatch",
 ]

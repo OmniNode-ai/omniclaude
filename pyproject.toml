@@ -31,6 +31,11 @@ scikit-learn = "^1.7.2"
 fastapi = "^0.115.0"
 uvicorn = "^0.32.0"
 psycopg2-binary = "^2.9.10"
+jinja2 = "^3.1.0"
+
+[tool.poetry.group.patterns.dependencies]
+# Optional dependencies for pattern storage with Qdrant
+qdrant-client = "^1.7.0"
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"
