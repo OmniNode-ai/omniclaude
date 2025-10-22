@@ -277,5 +277,354 @@ class TestMetricsPerformance:
         assert duration_ms < 200, f"Quality gate check too slow: {duration_ms:.2f}ms"
 
 
+class TestPOLYFGateIntegration:
+    """Test POLY-F quality gate integration (7 gates: SV-001 to SV-004, PV-001 to PV-003)."""
+
+    @pytest.mark.asyncio
+    async def test_all_7_validators_registered(self):
+        """Test that all 7 validators are registered in the pipeline."""
+        pipeline = GenerationPipeline()
+
+        # Verify 7 validators are registered
+        registered_gates = list(pipeline.quality_gate_registry.validators.keys())
+
+        # Check sequential validators
+        assert (
+            EnumQualityGate.INPUT_VALIDATION in registered_gates
+        ), "SV-001 not registered"
+        assert (
+            EnumQualityGate.PROCESS_VALIDATION in registered_gates
+        ), "SV-002 not registered"
+        assert (
+            EnumQualityGate.OUTPUT_VALIDATION in registered_gates
+        ), "SV-003 not registered"
+        assert (
+            EnumQualityGate.INTEGRATION_TESTING in registered_gates
+        ), "SV-004 not registered"
+
+        # Check parallel validators
+        assert (
+            EnumQualityGate.CONTEXT_SYNCHRONIZATION in registered_gates
+        ), "PV-001 not registered"
+        assert (
+            EnumQualityGate.COORDINATION_VALIDATION in registered_gates
+        ), "PV-002 not registered"
+        assert (
+            EnumQualityGate.RESULT_CONSISTENCY in registered_gates
+        ), "PV-003 not registered"
+
+        # Verify we have at least 7 validators
+        assert (
+            len(registered_gates) >= 7
+        ), f"Expected at least 7 validators, found {len(registered_gates)}"
+
+    @pytest.mark.asyncio
+    async def test_sv_001_input_validation(self):
+        """Test SV-001 (Input Validation) with comprehensive context."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.sequential_validators import InputValidationValidator
+
+        registry.register_validator(InputValidationValidator())
+
+        # Test with valid inputs
+        result = await registry.check_gate(
+            EnumQualityGate.INPUT_VALIDATION,
+            {
+                "inputs": {"prompt": "Create a test node", "output_directory": "/tmp"},
+                "required_fields": ["prompt", "output_directory"],
+                "constraints": {"prompt": {"type": str, "min_length": 5}},
+            },
+        )
+
+        assert result.status == "passed"
+        assert result.execution_time_ms < 50, "SV-001 performance target: 50ms"
+
+    @pytest.mark.asyncio
+    async def test_sv_002_process_validation(self):
+        """Test SV-002 (Process Validation) with workflow state."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.sequential_validators import (
+            ProcessValidationValidator,
+        )
+
+        registry.register_validator(ProcessValidationValidator())
+
+        # Test with valid process state
+        result = await registry.check_gate(
+            EnumQualityGate.PROCESS_VALIDATION,
+            {
+                "current_stage": "stage_4",
+                "completed_stages": ["stage_1", "stage_2", "stage_3"],
+                "expected_stages": ["stage_1", "stage_2", "stage_3"],
+                "workflow_pattern": "sequential_execution",
+            },
+        )
+
+        assert result.status == "passed"
+        assert result.execution_time_ms < 30, "SV-002 performance target: 30ms"
+
+    @pytest.mark.asyncio
+    async def test_sv_003_output_validation(self):
+        """Test SV-003 (Output Validation) with generation results."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.sequential_validators import (
+            OutputValidationValidator,
+        )
+
+        registry.register_validator(OutputValidationValidator())
+
+        # Test with valid outputs
+        result = await registry.check_gate(
+            EnumQualityGate.OUTPUT_VALIDATION,
+            {
+                "outputs": {
+                    "node_type": "effect",
+                    "service_name": "test_service",
+                    "main_file": "/tmp/test.py",
+                },
+                "expected_outputs": ["node_type", "service_name", "main_file"],
+            },
+        )
+
+        assert result.status == "passed"
+        assert result.execution_time_ms < 40, "SV-003 performance target: 40ms"
+
+    @pytest.mark.asyncio
+    async def test_sv_004_integration_testing_stub(self):
+        """Test SV-004 (Integration Testing) stub implementation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.sequential_validators import (
+            IntegrationTestingValidator,
+        )
+
+        registry.register_validator(IntegrationTestingValidator())
+
+        # Test stub with empty delegation data
+        result = await registry.check_gate(
+            EnumQualityGate.INTEGRATION_TESTING,
+            {
+                "delegations": [],
+                "context_transfers": [],
+                "messages": [],
+                "coordination_protocol": None,
+            },
+        )
+
+        assert result.status == "passed", "Stub should pass with empty data"
+        assert result.execution_time_ms < 60, "SV-004 performance target: 60ms"
+
+    @pytest.mark.asyncio
+    async def test_pv_001_context_synchronization_stub(self):
+        """Test PV-001 (Context Synchronization) stub implementation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.parallel_validators import (
+            ContextSynchronizationValidator,
+        )
+
+        registry.register_validator(ContextSynchronizationValidator())
+
+        # Test stub with empty parallel contexts
+        result = await registry.check_gate(
+            EnumQualityGate.CONTEXT_SYNCHRONIZATION,
+            {
+                "parallel_contexts": [],
+                "shared_state_keys": [],
+                "synchronization_points": [],
+            },
+        )
+
+        assert result.status == "passed", "Stub should pass with empty data"
+        assert result.execution_time_ms < 80, "PV-001 performance target: 80ms"
+
+    @pytest.mark.asyncio
+    async def test_pv_002_coordination_validation_stub(self):
+        """Test PV-002 (Coordination Validation) stub implementation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.parallel_validators import (
+            CoordinationValidationValidator,
+        )
+
+        registry.register_validator(CoordinationValidationValidator())
+
+        # Test stub with empty coordination data
+        result = await registry.check_gate(
+            EnumQualityGate.COORDINATION_VALIDATION,
+            {
+                "coordination_events": [],
+                "sync_points": [],
+                "agent_states": {},
+                "coordination_protocol": None,
+            },
+        )
+
+        assert result.status == "passed", "Stub should pass with empty data"
+        assert result.execution_time_ms < 50, "PV-002 performance target: 50ms"
+
+    @pytest.mark.asyncio
+    async def test_pv_003_result_consistency_stub(self):
+        """Test PV-003 (Result Consistency) stub implementation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.parallel_validators import ResultConsistencyValidator
+
+        registry.register_validator(ResultConsistencyValidator())
+
+        # Test stub with empty parallel results
+        result = await registry.check_gate(
+            EnumQualityGate.RESULT_CONSISTENCY,
+            {
+                "parallel_results": [],
+                "aggregation_rules": {},
+                "conflict_resolution": None,
+            },
+        )
+
+        assert result.status == "passed", "Stub should pass with empty data"
+        assert result.execution_time_ms < 70, "PV-003 performance target: 70ms"
+
+    # POLY-I: Knowledge and Framework Validation Tests
+    @pytest.mark.asyncio
+    async def test_kv_001_uaks_integration(self):
+        """Test KV-001 (UAKS Integration) validation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.knowledge_validators import UAKSIntegrationValidator
+
+        registry.register_validator(UAKSIntegrationValidator())
+
+        # Test with valid UAKS knowledge structure
+        result = await registry.check_gate(
+            EnumQualityGate.UAKS_INTEGRATION,
+            {
+                "uaks_knowledge": {
+                    "execution_id": str(uuid4()),
+                    "timestamp": "2025-01-01T00:00:00Z",
+                    "agent_type": "test_agent",
+                    "success": True,
+                    "duration_ms": 1500,
+                    "patterns_extracted": [],
+                    "intelligence_used": [],
+                    "quality_metrics": {"test_metric": 0.85},
+                    "metadata": {"context": "test"},
+                },
+                "uaks_storage_result": {
+                    "success": True,
+                    "patterns_stored": 0,
+                },
+            },
+        )
+
+        assert (
+            result.status == "passed"
+        ), f"KV-001 should pass with valid structure: {result.message}"
+        assert result.execution_time_ms < 50, "KV-001 performance target: 50ms"
+
+    @pytest.mark.asyncio
+    async def test_kv_002_pattern_recognition(self):
+        """Test KV-002 (Pattern Recognition) validation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.knowledge_validators import (
+            PatternRecognitionValidator,
+        )
+
+        registry.register_validator(PatternRecognitionValidator())
+
+        # Test with valid pattern structure
+        result = await registry.check_gate(
+            EnumQualityGate.PATTERN_RECOGNITION,
+            {
+                "patterns_extracted": [
+                    {
+                        "pattern_type": "workflow",
+                        "pattern_name": "test_pattern",
+                        "pattern_description": "Test pattern description",
+                        "confidence_score": 0.85,
+                        "source_context": {"stage": "test"},
+                        "reuse_conditions": ["test_condition"],
+                        "examples": [{"input": "test", "output": "result"}],
+                    }
+                ],
+                "pattern_storage_result": {
+                    "success": True,
+                    "patterns_stored": 1,
+                },
+            },
+        )
+
+        assert (
+            result.status == "passed"
+        ), f"KV-002 should pass with valid patterns: {result.message}"
+        assert result.execution_time_ms < 40, "KV-002 performance target: 40ms"
+
+    @pytest.mark.asyncio
+    async def test_fv_001_lifecycle_compliance(self):
+        """Test FV-001 (Lifecycle Compliance) validation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.framework_validators import (
+            LifecycleComplianceValidator,
+        )
+
+        registry.register_validator(LifecycleComplianceValidator())
+
+        # Test initialization check
+        class TestAgent:
+            def __init__(self, container):
+                self.container = container
+
+            async def startup(self):
+                pass
+
+            async def shutdown(self):
+                pass
+
+        result = await registry.check_gate(
+            EnumQualityGate.LIFECYCLE_COMPLIANCE,
+            {
+                "agent_class": TestAgent,
+                "lifecycle_stage": "initialization",
+                "initialization_result": {
+                    "success": True,
+                    "resources_acquired": ["resource1", "resource2"],
+                },
+            },
+        )
+
+        assert (
+            result.status == "passed"
+        ), f"FV-001 should pass with valid lifecycle: {result.message}"
+        assert result.execution_time_ms < 35, "FV-001 performance target: 35ms"
+
+    @pytest.mark.asyncio
+    async def test_fv_002_framework_integration(self):
+        """Test FV-002 (Framework Integration) validation."""
+        registry = QualityGateRegistry()
+        from agents.lib.validators.framework_validators import (
+            FrameworkIntegrationValidator,
+        )
+
+        registry.register_validator(FrameworkIntegrationValidator())
+
+        # Test framework integration
+        class NodeTestEffect:
+            def __init__(self, container):
+                self.container = container
+
+        result = await registry.check_gate(
+            EnumQualityGate.FRAMEWORK_INTEGRATION,
+            {
+                "agent_class": NodeTestEffect,
+                "imports": ["omnibase_core", "llama_index", "pydantic"],
+                "patterns_used": ["dependency_injection"],
+                "integration_points": {
+                    "contract_yaml": True,
+                    "event_publisher": True,
+                },
+            },
+        )
+
+        assert (
+            result.status == "passed"
+        ), f"FV-002 should pass with valid framework integration: {result.message}"
+        assert result.execution_time_ms < 25, "FV-002 performance target: 25ms"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

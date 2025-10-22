@@ -12,6 +12,12 @@ from .model_code_pattern import (
     ModelPatternExtractionResult,
     ModelPatternMatch,
 )
+from .model_gate_aggregation import (
+    EnumGateCategory,
+    ModelCategorySummary,
+    ModelGateAggregation,
+    ModelPipelineQualityReport,
+)
 from .model_performance_tracking import (
     MetricsCollector,
     ModelPerformanceMetric,
@@ -41,4 +47,8 @@ __all__ = [
     "ModelCodePattern",
     "ModelPatternExtractionResult",
     "ModelPatternMatch",
+    "EnumGateCategory",
+    "ModelCategorySummary",
+    "ModelGateAggregation",
+    "ModelPipelineQualityReport",
 ]
