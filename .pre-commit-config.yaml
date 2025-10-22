@@ -16,6 +16,13 @@ repos:
   # Fast Python formatting and linting (optimized for speed)
   - repo: local
     hooks:
+      - id: clean-output-directory
+        name: clean output directory (prevent test artifacts)
+        entry: bash -c 'rm -rf output/ && exit 0'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: black-format
         name: black (auto-format)
         entry: poetry run black
