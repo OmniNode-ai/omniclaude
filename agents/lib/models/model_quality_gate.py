@@ -391,11 +391,28 @@ class QualityGateRegistry:
 
     Updated to work with ONEX v2.0 Pydantic models while maintaining
     backward compatibility with existing pipeline code.
+
+    Supports validator registration and automatic execution with dependency checking.
     """
 
     def __init__(self) -> None:
         """Initialize quality gate registry."""
         self.results: list[ModelQualityGateResult] = []
+        self.validators: dict[EnumQualityGate, Any] = {}  # Map gate -> validator
+
+    def register_validator(self, validator: Any) -> None:
+        """
+        Register a quality gate validator.
+
+        Args:
+            validator: BaseQualityGate subclass instance
+
+        Raises:
+            ValueError: If validator is already registered
+        """
+        if validator.gate in self.validators:
+            raise ValueError(f"Validator for {validator.gate.value} already registered")
+        self.validators[validator.gate] = validator
 
     async def check_gate(
         self, gate: EnumQualityGate, context: dict[str, Any]
@@ -403,8 +420,8 @@ class QualityGateRegistry:
         """
         Execute quality gate check.
 
-        This is a placeholder implementation - actual validators
-        will be implemented by BaseQualityGate subclasses.
+        If a validator is registered for this gate, executes the validator.
+        Otherwise, returns a placeholder pass result for backward compatibility.
 
         Args:
             gate: Quality gate to check
@@ -413,7 +430,23 @@ class QualityGateRegistry:
         Returns:
             Gate execution result
         """
-        # Placeholder - actual validation in BaseQualityGate subclasses
+        # Check if validator is registered
+        if gate in self.validators:
+            validator = self.validators[gate]
+
+            # Check if gate should be skipped
+            should_skip, skip_reason = validator.should_skip(context, self.results)
+            if should_skip:
+                result = validator.create_skipped_result(skip_reason)
+                self.results.append(result)
+                return result
+
+            # Execute validator with timing
+            result = await validator.execute_with_timing(context)
+            self.results.append(result)
+            return result
+
+        # Placeholder - no validator registered, backward compatibility
         result = ModelQualityGateResult(
             gate=gate,
             status="passed",
