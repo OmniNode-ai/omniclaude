@@ -190,13 +190,134 @@ def test_startup_script_executable():
     print("\n✅ Executable test passed")
 
 
+def test_orchestrator_workflow_events_template_renders():
+    """Test orchestrator workflow events template renders correctly (Day 4)."""
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("orchestrator_workflow_events.py.jinja2")
+
+    context = {
+        "node_name": "NodeCodeGenOrchestrator",
+        "node_type": "orchestrator",
+        "domain": "codegen",
+        "service_name": "code-generator",
+        "version": "1.0.0",
+        "description": "Code generation orchestrator",
+    }
+
+    result = template.render(context)
+
+    # Verify workflow event methods are present
+    assert "_publish_workflow_started" in result
+    assert "_publish_stage_started" in result
+    assert "_publish_stage_completed" in result
+    assert "_publish_stage_failed" in result
+    assert "_publish_workflow_completed" in result
+    assert "_publish_workflow_failed" in result
+
+    # Verify event types are correct
+    assert "omninode.orchestration.workflow_started.v1" in result
+    assert "omninode.orchestration.stage_started.v1" in result
+    assert "omninode.orchestration.stage_completed.v1" in result
+    assert "omninode.orchestration.workflow_completed.v1" in result
+
+    # Verify parameters are present
+    assert "correlation_id: UUID" in result
+    assert "workflow_context: dict[str, Any]" in result
+    assert "stage_name: str" in result
+    assert "stage_result: dict[str, Any]" in result
+    assert "duration_ms: int" in result
+
+    # Verify logging statements
+    assert "WORKFLOW_STARTED" in result
+    assert "STAGE_COMPLETED" in result
+    assert "workflow_id=" in result
+
+    # Verify error handling
+    assert (
+        "Don't raise - event publishing failure shouldn't block workflow execution"
+        in result
+    )
+
+    print("\n✅ Orchestrator workflow events template rendered successfully")
+    print(f"   Length: {len(result)} characters")
+    print(f"   Lines: {result.count(chr(10)) + 1}")
+    print("   Methods: 6 workflow event methods")
+
+
+def test_orchestrator_template_all_node_types():
+    """Test that orchestrator template works with various orchestrator types."""
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("orchestrator_workflow_events.py.jinja2")
+
+    test_cases = [
+        {
+            "node_name": "NodeWorkflowOrchestrator",
+            "node_type": "orchestrator",
+            "domain": "workflow",
+            "service_name": "workflow-orchestrator",
+            "version": "1.0.0",
+            "description": "Workflow orchestration",
+        },
+        {
+            "node_name": "NodeDataPipelineOrchestrator",
+            "node_type": "orchestrator",
+            "domain": "data",
+            "service_name": "data-pipeline",
+            "version": "2.0.0",
+            "description": "Data pipeline orchestrator",
+        },
+    ]
+
+    for i, context in enumerate(test_cases, 1):
+        result = template.render(context)
+        assert context["node_name"] in result
+        assert context["service_name"] in result
+        assert context["domain"] in result
+        assert "_publish_workflow_started" in result
+        print(f"\n✅ Test case {i} passed: {context['node_name']}")
+
+
+def test_orchestrator_template_indentation():
+    """Test that orchestrator workflow events maintain proper indentation."""
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    template = env.get_template("orchestrator_workflow_events.py.jinja2")
+
+    context = {
+        "node_name": "NodeTestOrchestrator",
+        "node_type": "orchestrator",
+        "domain": "test",
+        "service_name": "test-orchestrator",
+        "version": "1.0.0",
+        "description": "Test orchestrator",
+    }
+
+    result = template.render(context)
+
+    # Check that method definitions start with proper indentation (4 spaces)
+    lines = result.split("\n")
+    non_empty_lines = [line for line in lines if line.strip()]
+
+    # Find first method definition
+    method_lines = [
+        line for line in non_empty_lines if "async def _publish_workflow" in line
+    ]
+    assert len(method_lines) > 0
+    assert method_lines[0].startswith("    async def _publish_workflow")
+
+    # Check docstring indentation
+    assert '        """' in result
+
+    print("\n✅ Orchestrator template indentation test passed")
+
+
 if __name__ == "__main__":
     print("=" * 70)
-    print("Testing Stage 4.5 Templates")
+    print("Testing Stage 4.5 Templates (+ Day 4 Orchestrator Enhancements)")
     print("=" * 70)
 
     # Run tests manually for visual feedback
     try:
+        # Original Stage 4.5 tests
         test_introspection_template_renders()
         test_startup_script_template_renders()
         test_introspection_template_all_variables()
@@ -204,8 +325,16 @@ if __name__ == "__main__":
         test_template_indentation()
         test_startup_script_executable()
 
+        # Day 4: Orchestrator workflow events tests
         print("\n" + "=" * 70)
-        print("✅ All tests passed!")
+        print("Day 4: Testing Orchestrator Workflow Events Template")
+        print("=" * 70)
+        test_orchestrator_workflow_events_template_renders()
+        test_orchestrator_template_all_node_types()
+        test_orchestrator_template_indentation()
+
+        print("\n" + "=" * 70)
+        print("✅ All tests passed! (6 original + 3 Day 4 orchestrator tests)")
         print("=" * 70)
 
     except AssertionError as e:
