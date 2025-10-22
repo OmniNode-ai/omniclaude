@@ -1,0 +1,73 @@
+{# Introspection Event Publishing for Service Discovery #}
+{# Replaces placeholder in Effect node template #}
+
+    def _publish_introspection_event(self) -> None:
+        """
+        Publish NODE_INTROSPECTION_EVENT for automatic service discovery.
+
+        This enables Consul registration with:
+        - Node ID and metadata
+        - Available actions/capabilities
+        - Health endpoint
+        - Service tags for discovery
+        """
+        if not hasattr(self, 'event_publisher') or self.event_publisher is None:
+            self.logger.warning("Event publisher not initialized, skipping introspection")
+            return
+
+        try:
+            # Gather node capabilities
+            capabilities = {
+                "actions": [
+                    "process",
+                    "health_check",
+                    "get_metrics",
+                    "validate_input",
+                    "validate_output",
+                ],
+                "protocols": ["event_bus", "http"],
+                "metadata": {
+                    "node_type": "{{ node_type }}",
+                    "domain": "{{ domain }}",
+                    "service_name": "{{ service_name }}",
+                    "version": "{{ version }}",
+                    "description": "{{ description }}",
+                    "author": "ONEX",
+                },
+            }
+
+            # Create introspection event payload
+            introspection_event = {
+                "event_type": "omninode.discovery.node_introspection.v1",
+                "node_id": str(self._node_id) if hasattr(self, '_node_id') else "unknown",
+                "node_name": "{{ node_name }}",
+                "version": "{{ version }}",
+                "capabilities": capabilities,
+                "tags": [
+                    "{{ domain }}",
+                    "{{ node_type }}",
+                    "{{ service_name }}",
+                    "event_driven",
+                    "onex_compliant",
+                ],
+                "health_endpoint": f"/health/{self._node_id}" if hasattr(self, '_node_id') else "/health",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            # Publish to event bus
+            self.event_publisher.publish(
+                topic="omninode.discovery.introspection.v1",
+                event_type="NODE_INTROSPECTION",
+                payload=introspection_event,
+                correlation_id=self._node_id if hasattr(self, '_node_id') else None,
+            )
+
+            self.logger.info(
+                f"Published introspection event | "
+                f"node_id={self._node_id if hasattr(self, '_node_id') else 'unknown'} | "
+                f"service={{ service_name }}"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to publish introspection event: {e}", exc_info=True)
+            # Don't raise - introspection failure shouldn't block node startup

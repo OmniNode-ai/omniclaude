@@ -9,8 +9,8 @@ packages = [{include = "parallel_execution", from = "agents"}]
 [tool.poetry.dependencies]
 python = "^3.12"
 
-# ONEX dependencies - Using local git repo with doc_fixes branch
-omnibase_core = {git = "file:///Volumes/PRO-G40/Code/omnibase_core", branch = "doc_fixes"}
+# ONEX dependencies - Using public GitHub repos
+omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main"}
 omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", tag = "v0.1.0"}
 
 # Core dependencies

@@ -1,0 +1,29 @@
+{# Event Bus Initialization for Effect Nodes #}
+{# Add to __init__ method after regular initialization #}
+{#
+Variables expected:
+- kafka_bootstrap_servers: Kafka bootstrap servers (default: omninode-bridge-redpanda:9092)
+- service_name: Service name (e.g., "database-writer")
+- node_name: Full node name (e.g., "NodePostgresqlWriterEffect")
+- node_name_lower: Lowercase node name for instance ID
+#}
+
+        # Event bus infrastructure (Stage 4.5: Event Bus Integration)
+        self.event_publisher: Optional[EventPublisher] = None
+        self._bootstrap_servers = os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS",
+            "{{ kafka_bootstrap_servers | default('omninode-bridge-redpanda:9092') }}"
+        )
+        self._service_name = "{{ service_name }}"
+        self._instance_id = f"{{ node_name_lower }}-{uuid4().hex[:8]}"
+        self._node_id = uuid4()
+
+        # Lifecycle state
+        self.is_running = False
+        self._shutdown_event = asyncio.Event()
+
+        logger.info(
+            f"{{ node_name }} initialized | "
+            f"service={self._service_name} | "
+            f"instance={self._instance_id}"
+        )
