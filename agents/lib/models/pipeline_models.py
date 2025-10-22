@@ -64,6 +64,7 @@ class PipelineStage(BaseModel):
     Pipeline stage tracking.
 
     Tracks individual stage execution with validation gates, timing, and errors.
+    Includes performance tracking against target thresholds.
     """
 
     stage_name: str = Field(..., description="Stage identifier")
@@ -89,10 +90,49 @@ class PipelineStage(BaseModel):
         default_factory=dict, description="Stage-specific metadata"
     )
 
+    # Performance tracking fields (NEW)
+    performance_target_ms: int = Field(
+        default=0, description="Target performance threshold in milliseconds"
+    )
+    actual_duration_ms: int = Field(
+        default=0, description="Actual execution duration in milliseconds"
+    )
+    performance_ratio: float = Field(
+        default=0.0,
+        description="Performance ratio (actual/target) - <1.0 is good, >1.0 is slow",
+    )
+
     class Config:
         """Pydantic configuration."""
 
         json_encoders = {datetime: lambda v: v.isoformat()}
+
+    def calculate_performance_ratio(self) -> float:
+        """
+        Calculate performance ratio (actual vs target).
+
+        Returns:
+            Performance ratio where:
+            - <1.0 = Better than target (good)
+            - 1.0 = Exactly on target
+            - >1.0 = Slower than target (needs attention)
+            - 0.0 = No target set or no actual duration
+        """
+        if self.performance_target_ms > 0 and self.actual_duration_ms > 0:
+            return self.actual_duration_ms / self.performance_target_ms
+        return 0.0
+
+    def update_performance_metrics(self, target_ms: int) -> None:
+        """
+        Update performance metrics based on stage duration.
+
+        Args:
+            target_ms: Target performance threshold in milliseconds
+        """
+        self.performance_target_ms = target_ms
+        if self.duration_ms is not None:
+            self.actual_duration_ms = self.duration_ms
+            self.performance_ratio = self.calculate_performance_ratio()
 
 
 class PipelineResult(BaseModel):

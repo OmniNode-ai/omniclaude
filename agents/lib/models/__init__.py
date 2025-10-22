@@ -6,6 +6,16 @@ from .intelligence_context import (
     NodeTypeIntelligence,
     get_default_intelligence,
 )
+from .model_performance_tracking import (
+    MetricsCollector,
+    ModelPerformanceMetric,
+    ModelPerformanceThreshold,
+)
+from .model_quality_gate import (
+    EnumQualityGate,
+    ModelQualityGateResult,
+    QualityGateRegistry,
+)
 from .prompt_parse_result import PromptParseResult
 from .quorum_config import QuorumConfig
 
@@ -15,4 +25,10 @@ __all__ = [
     "NodeTypeIntelligence",
     "get_default_intelligence",
     "QuorumConfig",
+    "MetricsCollector",
+    "ModelPerformanceMetric",
+    "ModelPerformanceThreshold",
+    "EnumQualityGate",
+    "ModelQualityGateResult",
+    "QualityGateRegistry",
 ]
