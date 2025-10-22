@@ -62,10 +62,17 @@ class MockG13Fixer:
     def fix(self, code: str, node_type: str) -> tuple[str, bool]:
         """Apply G13 fix."""
         modified = False
-        tree = ast.parse(code)
+
+        # Add error handling around AST parsing
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # Cannot parse code, return unchanged
+            return code, False
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            # Check both FunctionDef and AsyncFunctionDef
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Add type hints to execute methods
                 if node.name.startswith("execute_"):
                     if not node.returns:
@@ -223,20 +230,34 @@ class MockCodeRefinementEngine:
 
         # Step 2: Pattern application
         step2_start = perf_counter()
-        similar_patterns = await self.pattern_applicator.find_similar_patterns(
-            code, node_type, domain
-        )
-        if similar_patterns:
-            code = await self.pattern_applicator.apply_patterns(code, similar_patterns)
-            patterns_applied = len(similar_patterns)
+        try:
+            similar_patterns = await self.pattern_applicator.find_similar_patterns(
+                code, node_type, domain
+            )
+            if similar_patterns:
+                code = await self.pattern_applicator.apply_patterns(
+                    code, similar_patterns
+                )
+                patterns_applied = len(similar_patterns)
+        except Exception as e:
+            # Log error but continue with original code
+            import logging
+
+            logging.warning(f"Pattern application failed: {e}")
         step2_duration_ms = int((perf_counter() - step2_start) * 1000)
 
         # Step 3: Quorum enhancement
         step3_start = perf_counter()
-        if quorum_suggestions:
-            code = await self.quorum_enhancer.apply_suggestions(
-                code, quorum_suggestions
-            )
+        try:
+            if quorum_suggestions:
+                code = await self.quorum_enhancer.apply_suggestions(
+                    code, quorum_suggestions
+                )
+        except Exception as e:
+            # Log error but continue with current code
+            import logging
+
+            logging.warning(f"Quorum enhancement failed: {e}")
         step3_duration_ms = int((perf_counter() - step3_start) * 1000)
 
         total_duration_ms = int((perf_counter() - start_time) * 1000)

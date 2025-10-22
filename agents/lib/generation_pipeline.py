@@ -43,6 +43,9 @@ from ..parallel_execution.interactive_validator import (  # noqa: E402
     create_validator,
 )
 
+# Import code refinement components  # noqa: E402
+from .code_refiner import CodeRefiner  # noqa: E402
+
 # Import contract building components  # noqa: E402
 from .generation.contract_builder_factory import ContractBuilderFactory  # noqa: E402
 
@@ -65,6 +68,7 @@ from .simple_prd_analyzer import (  # noqa: E402
     SimplePRDAnalysisResult,
     SimplePRDAnalyzer,
 )
+from .warning_fixer import apply_automatic_fixes  # noqa: E402
 
 # Import quorum validation (optional dependency)
 try:
@@ -152,6 +156,9 @@ class GenerationPipeline:
 
         # Lazy-initialize quorum validator (only if needed and available)
         self._quorum_validator: Optional[QuorumValidator] = None
+
+        # Lazy-initialize code refiner (only if needed)
+        self._code_refiner: Optional[CodeRefiner] = None
 
         # Track written files for rollback
         self.written_files: List[Path] = []
@@ -388,6 +395,9 @@ class GenerationPipeline:
                 quorum_result,
                 intelligence_context,
                 correlation_id,
+                node_type,
+                service_name,
+                domain,
             )
             stages.append(stage5_5)
 
@@ -1030,6 +1040,9 @@ class GenerationPipeline:
         quorum_result: Optional["QuorumResult"],
         intelligence: IntelligenceContext,
         correlation_id: UUID,
+        node_type: str,
+        service_name: str,
+        domain: str,
     ) -> Tuple[PipelineStage, Dict[str, Any]]:
         """
         Stage 5.5: AI-Powered Code Refinement
@@ -1046,6 +1059,9 @@ class GenerationPipeline:
             quorum_result: Quorum validation result from Stage 2 (if available)
             intelligence: Intelligence context from Stage 1.5
             correlation_id: Pipeline correlation ID
+            node_type: ONEX node type (effect, compute, reducer, orchestrator)
+            service_name: Service name for the node
+            domain: Domain/category for the node
 
         Returns:
             Tuple of (PipelineStage, refined_files_dict)
@@ -1091,6 +1107,9 @@ class GenerationPipeline:
                 refinement_context=refinement_context,
                 intelligence=intelligence,
                 correlation_id=correlation_id,
+                node_type=node_type,
+                service_name=service_name,
+                domain=domain,
             )
 
             # R1: Validate refinement quality
@@ -1235,44 +1254,88 @@ class GenerationPipeline:
         refinement_context: List[str],
         intelligence: IntelligenceContext,
         correlation_id: UUID,
+        node_type: str,
+        service_name: str,
+        domain: str,
     ) -> str:
         """
-        Apply AI-powered code refinement.
+        Apply AI-powered code refinement using CodeRefiner.
 
-        This is a placeholder for future AI model integration.
-        Currently returns original code with minimal automatic fixes.
+        Applies refinement in two phases:
+        1. Deterministic fixes (G12, G13, G14) - fast & free via WarningFixer
+        2. AI-powered refinement - pattern-based via CodeRefiner
 
         Args:
             original_code: Original generated code
             refinement_context: Refinement recommendations
             intelligence: Intelligence context
             correlation_id: Pipeline correlation ID
+            node_type: ONEX node type (effect, compute, reducer, orchestrator)
+            service_name: Service name for the node
+            domain: Domain/category for the node
 
         Returns:
-            Refined code
+            Refined code with both deterministic and AI-powered improvements
         """
-        # TODO: Integrate with AI Quorum or LLM API for intelligent refinement
-        # For now, we'll apply simple automatic fixes
-
-        refined_code = original_code
-
-        # Simple fix 1: Ensure proper spacing around operators
-        # (This is a placeholder - real implementation would use AST transformation)
-
-        # Simple fix 2: Add missing docstring sections if intelligence suggests it
-        if "documentation" in " ".join(refinement_context).lower():
-            # Check if class has docstring
-            if "class Node" in refined_code and '"""' in refined_code:
-                # Docstring exists, consider it good enough for now
-                pass
-
-        # Return refined code (currently same as original)
-        # Real implementation would call LLM with refinement_context
         self.logger.info(
-            f"AI refinement placeholder called with {len(refinement_context)} recommendations"
+            f"Starting code refinement for {node_type}/{domain} "
+            f"with {len(refinement_context)} recommendations"
         )
 
-        return refined_code
+        # Step 1: Apply deterministic fixes (G12, G13, G14) - fast & free
+        fix_result = apply_automatic_fixes(original_code, Path(f"temp_{node_type}.py"))
+        code = fix_result.fixed_code if fix_result.fix_count > 0 else original_code
+
+        if fix_result.fix_count > 0:
+            self.logger.info(
+                f"Applied {fix_result.fix_count} automatic fixes: "
+                f"{', '.join(fix_result.fixes_applied[:3])}"
+            )
+
+        # Step 2: AI-powered refinement using CodeRefiner
+        if not hasattr(self, "_code_refiner") or self._code_refiner is None:
+            try:
+                self._code_refiner = CodeRefiner()
+                self.logger.info("Initialized CodeRefiner for AI-powered refinement")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize CodeRefiner: {e}, "
+                    "continuing with deterministic fixes only"
+                )
+                return code
+
+        try:
+            # Build refinement context dict for CodeRefiner
+            context_dict = {
+                "node_type": node_type,
+                "domain": domain,
+                "service_name": service_name,
+                "requirements": {
+                    "refinement_context": refinement_context,
+                    "intelligence_patterns": intelligence.node_type_patterns or [],
+                    "domain_practices": intelligence.domain_best_practices or [],
+                    "anti_patterns": intelligence.anti_patterns or [],
+                },
+            }
+
+            # Apply AI refinement
+            refined_code = await self._code_refiner.refine_code(
+                code=code, file_type="node", refinement_context=context_dict
+            )
+
+            self.logger.info(
+                f"AI refinement completed for {node_type}/{domain} "
+                f"({len(original_code.splitlines())} → {len(refined_code.splitlines())} lines)"
+            )
+
+            return refined_code
+
+        except Exception as e:
+            # Graceful degradation: return code with deterministic fixes
+            self.logger.warning(
+                f"AI refinement failed: {e}, returning code with deterministic fixes only"
+            )
+            return code
 
     async def _stage_6_write_files(
         self, generation_result: Dict[str, Any], output_directory: str
