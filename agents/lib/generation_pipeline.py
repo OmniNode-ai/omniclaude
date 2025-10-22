@@ -1088,14 +1088,21 @@ except ImportError:
 """
 
             # Insert imports after the last import statement
-            import_pattern = r"(import .*\n|from .* import .*\n)+"
+            # Handle multi-line imports with backslash continuations
+            import_pattern = r"((?:import |from )(?:[^\n]|\\\n)+\n)+"
             match = list(re.finditer(import_pattern, node_code))
             if match:
                 last_import_end = match[-1].end()
+                # Find the next blank line or class definition
+                next_section = node_code[last_import_end : last_import_end + 200]
+                blank_line = next_section.find("\n\n")
+                if blank_line != -1:
+                    insert_pos = last_import_end + blank_line
+                else:
+                    insert_pos = last_import_end
+
                 node_code = (
-                    node_code[:last_import_end]
-                    + event_bus_imports
-                    + node_code[last_import_end:]
+                    node_code[:insert_pos] + event_bus_imports + node_code[insert_pos:]
                 )
             else:
                 # No imports found, add at beginning
