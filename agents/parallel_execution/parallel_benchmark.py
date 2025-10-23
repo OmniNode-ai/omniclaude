@@ -3,21 +3,26 @@
 Parallel Generation Performance Benchmark
 
 Demonstrates 3x+ throughput improvement with parallel node generation.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/parallel_benchmark.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
-
-# Add parent directory to path
-import sys
 import tempfile
 import time
-from pathlib import Path
 from uuid import uuid4
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.codegen_workflow import CodegenWorkflow
 from lib.simple_prd_analyzer import SimplePRDAnalyzer
+
 from tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
 
 

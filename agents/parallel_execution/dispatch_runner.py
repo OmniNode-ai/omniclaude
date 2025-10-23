@@ -27,6 +27,16 @@ Interactive Mode Features:
 - Session save/resume for interrupted workflows
 - Batch approval for trusted workflows
 
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/dispatch_runner.py < tasks.json
+
+    Or install the package in development mode:
+
+        pip install -e .
+
 Usage:
     # Standard execution
     python dispatch_runner.py < tasks.json
@@ -49,6 +59,7 @@ import asyncio
 import json
 import logging
 import sys
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -65,9 +76,6 @@ except ImportError:
     BaseModel = None
     PYDANTIC_AVAILABLE = False
 
-# Add current directory to path before importing local modules
-sys.path.insert(0, str(Path(__file__).parent))
-
 from agent_architect import ArchitectAgent
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask
@@ -75,7 +83,7 @@ from agent_registry import agent_exists, list_registered_agents
 from context_manager import ContextManager
 
 # Configure logging to write to both stderr and file
-log_file = Path("/tmp/logging_implementation_coord.log")
+log_file = Path(tempfile.gettempdir()) / "logging_implementation_coord.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

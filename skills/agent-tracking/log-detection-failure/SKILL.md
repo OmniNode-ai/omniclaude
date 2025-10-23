@@ -92,7 +92,7 @@ python3 ~/.claude/skills/agent-tracking/log-detection-failure/execute.py \
 ## Skills Location
 
 **Claude Code Access**: `~/.claude/skills/` (symlinked to repository)
-**Repository Source**: `/Volumes/PRO-G40/Code/omniclaude/skills/`
+**Repository Source**: `skills/`
 
 Skills are version-controlled in the repository and symlinked to `~/.claude/skills/` so Claude Code can access them.
 

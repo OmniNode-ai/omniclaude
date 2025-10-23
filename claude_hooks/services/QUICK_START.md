@@ -6,7 +6,7 @@
 
 ### 1. Quick Test (Manual)
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/claude_hooks/services
+cd claude_hooks/services
 ./run_processor.sh --once
 ```
 

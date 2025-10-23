@@ -28,7 +28,7 @@ kafka-topics.sh --bootstrap-server localhost:9092 --list
 ### 2. Install Dependencies
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/consumers
+cd consumers
 pip install -r requirements.txt
 ```
 

@@ -9,18 +9,20 @@ Tests all components of the enhanced routing system:
 - ResultCache
 - EnhancedAgentRouter (integration)
 
-Run with: python -m pytest tests/test_enhanced_router.py -v
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/test_enhanced_router.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_enhanced_router.py -v
 """
 
-# Add parent directory to path for imports
-import sys
 import time
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.capability_index import CapabilityIndex
 from lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
 from lib.enhanced_router import EnhancedAgentRouter

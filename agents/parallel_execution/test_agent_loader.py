@@ -8,15 +8,20 @@ Tests:
 - Trigger matching
 - Hot-reload simulation
 - Integration with ParallelCoordinator
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/test_agent_loader.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
-import sys
-from pathlib import Path
 from typing import Any, Dict
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from agent_dispatcher import ParallelCoordinator
 from agent_loader import AgentLoader, AgentLoadStatus

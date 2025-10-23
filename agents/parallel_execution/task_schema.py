@@ -5,6 +5,8 @@ Provides reusable schema definitions and examples for both agent types.
 Use this file as a reference when creating task definitions.
 """
 
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field
@@ -289,7 +291,7 @@ if __name__ == "__main__":
         description="Generate database Effect node",
         contract_description="Database writer for user records",
         node_type="Effect",
-        output_path="/tmp/node_db_writer_effect.py",
+        output_path=str(Path(tempfile.gettempdir()) / "node_db_writer_effect.py"),
     )
 
     task2 = builder.create_debug_task(

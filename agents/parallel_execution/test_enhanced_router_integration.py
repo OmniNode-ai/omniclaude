@@ -4,14 +4,20 @@ Test Enhanced Router Integration
 
 Validates that the EnhancedAgentRouter is properly integrated into ParallelCoordinator.
 Tests confidence scoring, fallback strategies, and error handling.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/test_enhanced_router_integration.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
 import sys
-from pathlib import Path
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask

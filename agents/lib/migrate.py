@@ -1,12 +1,20 @@
+"""
+Database Migration Script
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/lib/migrate.py
+
+    Or install the package in development mode:
+
+        pip install -e .
+"""
+
 import asyncio
-import os
-import sys
 from pathlib import Path
 from typing import List
-
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
 
 from agents.lib.db import get_pg_pool
 

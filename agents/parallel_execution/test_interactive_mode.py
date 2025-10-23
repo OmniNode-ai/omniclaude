@@ -11,6 +11,7 @@ Tests the interactive validation system components:
 """
 
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -407,7 +408,8 @@ class TestDispatchRunnerIntegration:
         original_argv = sys.argv.copy()
 
         try:
-            sys.argv = ["dispatch_runner.py", "--resume-session", "/tmp/session.json"]
+            session_path = str(Path(tempfile.gettempdir()) / "session.json")
+            sys.argv = ["dispatch_runner.py", "--resume-session", session_path]
 
             resume_session_file = None
             if "--resume-session" in sys.argv:
@@ -415,7 +417,7 @@ class TestDispatchRunnerIntegration:
                 if idx + 1 < len(sys.argv):
                     resume_session_file = Path(sys.argv[idx + 1])
 
-            assert resume_session_file == Path("/tmp/session.json")
+            assert resume_session_file == Path(session_path)
 
         finally:
             sys.argv = original_argv

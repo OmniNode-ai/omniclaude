@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
 Create a simple calculator app using parallel agent execution.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/run_calculator_tasks.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
-import sys
 from pathlib import Path
-
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask

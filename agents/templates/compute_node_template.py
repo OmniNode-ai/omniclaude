@@ -41,6 +41,24 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
 
     Features:
 {FEATURES}
+
+    Best Practices Applied (Intelligence-Driven):
+{BEST_PRACTICES_FORMATTED}
+
+    Performance Targets:
+{PERFORMANCE_TARGETS_FORMATTED}
+
+    Error Scenarios Handled:
+{ERROR_SCENARIOS_FORMATTED}
+
+    Domain-Specific Patterns:
+{DOMAIN_PATTERNS_FORMATTED}
+
+    Testing Recommendations:
+{TESTING_SECTION}
+
+    Security Considerations:
+{SECURITY_SECTION}
     """
 
     def __init__(self, container: ModelONEXContainer):
@@ -67,13 +85,15 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
             Model{MICROSERVICE_NAME_PASCAL}Output: Result of the computation
 
         Raises:
-            OnexError: If computation fails
+            ModelOnexError: If computation fails
         """
         try:
             self.logger.info(f"Processing {MICROSERVICE_NAME} compute operation: {input_data.operation_type}")
 
             # Validate input
             await self._validate_input(input_data)
+
+{PATTERN_CODE_BLOCKS}
 
             # Execute computation
             result_data = await self._execute_computation(input_data)
@@ -91,18 +111,18 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
         except Exception as e:
             self.logger.error(f"{MICROSERVICE_NAME} compute operation failed: {str(e)}")
             raise ModelOnexError(
-                code=EnumCoreErrorCode.PROCESSING_ERROR,
+                error_code=EnumCoreErrorCode.PROCESSING_ERROR,
                 message=f"{MICROSERVICE_NAME} compute operation failed: {str(e)}",
-                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
-            )
+                context={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else str(input_data)}
+            ) from e
 
     async def _validate_input(self, input_data: Model{MICROSERVICE_NAME_PASCAL}Input) -> None:
         """Validate input data for computation"""
         if not input_data.operation_type:
             raise ModelOnexError(
-                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.dict() if hasattr(input_data, 'dict') else str(input_data)}
+                context={"input_data": input_data.model_dump() if hasattr(input_data, 'model_dump') else str(input_data)}
             )
 
         # Add computation-specific validation
