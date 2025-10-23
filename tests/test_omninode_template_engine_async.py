@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 
-
 # -------------------------------------------------------------------------
 # Fixtures
 # -------------------------------------------------------------------------
@@ -100,9 +99,7 @@ async def test_cleanup_async_propagates_cache_exception(
 
     # Assert: Exactly one error log (if any logging occurs before propagation)
     # Note: The actual implementation might log before propagating
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     # Since exception propagates, there might be 0 or 1 error logs
     assert len(error_logs) <= 1, (
         f"Expected at most 1 error log, got {len(error_logs)}: "
@@ -161,9 +158,7 @@ async def test_cleanup_async_with_disabled_cache(tmp_path, caplog):
         await engine.cleanup_async(timeout=1.0)
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0, f"Expected no error logs, got: {error_logs}"
 
 
@@ -220,9 +215,7 @@ async def test_aexit_cleanup_exception_propagates(
                 pass  # Normal operation, but cleanup fails
 
     # Assert: Error log might be present (implementation-dependent)
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     # Implementation might log before propagating
     assert len(error_logs) <= 1
 
@@ -249,9 +242,7 @@ async def test_aexit_successful_cleanup_no_errors(
             pass  # Normal operation
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0, f"Expected no error logs, got: {error_logs}"
 
     # Assert: cleanup_async was called
@@ -340,9 +331,7 @@ async def test_cleanup_async_with_none_cache_reference(tmp_path, caplog):
         await engine.cleanup_async(timeout=1.0)
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0
 
 

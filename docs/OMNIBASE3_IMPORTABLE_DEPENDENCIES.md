@@ -1,7 +1,7 @@
 # Omnibase_3 Importable Dependencies Guide
 
 **Research Date**: 2025-10-22
-**Source Repository**: `/Volumes/PRO-G40/Code/omnibase_3`
+**Source Repository**: `../omnibase_3`
 **Target**: OmniClaude Node Generation System
 
 ## Overview
@@ -415,7 +415,7 @@ For development, you can reference `omnibase_3` locally:
 
 ```toml
 [tool.poetry.dependencies]
-omnibase_core = { path = "/Volumes/PRO-G40/Code/omnibase_3", develop = true }
+omnibase_core = { path = "../omnibase_3", develop = true }
 ```
 
 Or via git for specific branch:
@@ -584,7 +584,7 @@ def test_node_error_handling(mock_container):
 
 ## References
 
-- **omnibase_3 Repository**: `/Volumes/PRO-G40/Code/omnibase_3`
+- **omnibase_3 Repository**: `../omnibase_3`
 - **Core Module**: `omnibase_3/src/omnibase/core/`
 - **Enums**: `omnibase_3/src/omnibase/enums/`
 - **Models**: `omnibase_3/src/omnibase/core/models/`

@@ -41,7 +41,7 @@
 
 ```bash
 # 1. Clone repository
-cd /Volumes/PRO-G40/Code/omniclaude
+cd .
 
 # 2. Install dependencies
 poetry install

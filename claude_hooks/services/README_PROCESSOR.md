@@ -83,7 +83,7 @@ Production deployment with:
 psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT COUNT(*) FROM hook_events"
 
 # Ensure Python dependencies are installed
-cd /Volumes/PRO-G40/Code/omniclaude
+cd .
 poetry install
 ```
 
@@ -106,7 +106,7 @@ MAX_RETRY_COUNT=3        # Maximum retry attempts
 Test the processor manually before installing as a service:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/claude_hooks/services
+cd claude_hooks/services
 python3 hook_event_processor.py
 ```
 

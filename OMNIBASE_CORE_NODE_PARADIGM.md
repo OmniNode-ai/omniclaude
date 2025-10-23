@@ -1018,18 +1018,18 @@ poetry add package-name
 
 ### Documentation Locations
 
-- **Main Docs**: `/Volumes/PRO-G40/Code/omnibase_core/docs/INDEX.md`
-- **Node Building**: `/Volumes/PRO-G40/Code/omnibase_core/docs/guides/node-building/README.md`
-- **Templates**: `/Volumes/PRO-G40/Code/omnibase_core/docs/reference/templates/`
-- **Architecture**: `/Volumes/PRO-G40/Code/omnibase_core/docs/architecture/ONEX_FOUR_NODE_ARCHITECTURE.md`
-- **Error Handling**: `/Volumes/PRO-G40/Code/omnibase_core/docs/conventions/ERROR_HANDLING_BEST_PRACTICES.md`
+- **Main Docs**: `omnibase_core/docs/INDEX.md` (external omnibase_core repository)
+- **Node Building**: `omnibase_core/docs/guides/node-building/README.md`
+- **Templates**: `omnibase_core/docs/reference/templates/`
+- **Architecture**: `omnibase_core/docs/architecture/ONEX_FOUR_NODE_ARCHITECTURE.md`
+- **Error Handling**: `omnibase_core/docs/conventions/ERROR_HANDLING_BEST_PRACTICES.md`
 
 ### Example Implementations
 
-- **COMPUTE**: `/Volumes/PRO-G40/Code/omnibase_core/src/omnibase_core/nodes/node_compute.py`
-- **EFFECT**: `/Volumes/PRO-G40/Code/omnibase_core/src/omnibase_core/nodes/node_effect.py`
-- **REDUCER**: `/Volumes/PRO-G40/Code/omnibase_core/src/omnibase_core/nodes/node_reducer.py`
-- **ORCHESTRATOR**: `/Volumes/PRO-G40/Code/omnibase_core/src/omnibase_core/nodes/node_orchestrator.py`
+- **COMPUTE**: `omnibase_core.nodes.node_compute` (see package source)
+- **EFFECT**: `omnibase_core.nodes.node_effect`
+- **REDUCER**: `omnibase_core.nodes.node_reducer`
+- **ORCHESTRATOR**: `omnibase_core.nodes.node_orchestrator`
 
 ### Key Concepts to Remember
 

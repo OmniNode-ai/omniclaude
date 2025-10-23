@@ -3,17 +3,21 @@
 Unit Tests for Performance Tracking and Quality Gate Models
 
 Tests Week 1 Day 5 model implementations without pipeline dependencies.
+
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/test_metrics_models.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_metrics_models.py -v
 """
 
-import sys
-from pathlib import Path
 
-# Add agents dir to path (must be before local imports)
-agents_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(agents_dir))
-
-import pytest  # noqa: E402
-from lib.models.model_performance_tracking import (  # noqa: E402
+import pytest
+from lib.models.model_performance_tracking import (
     MetricsCollector,
     ModelPerformanceMetric,
     ModelPerformanceThreshold,

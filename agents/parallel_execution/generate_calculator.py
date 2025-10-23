@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
 Generate ONEX-compliant calculator using agent_coder via parallel dispatcher.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/generate_calculator.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
-
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 import agent_dispatcher
 import agent_model

@@ -321,7 +321,7 @@ When encountering issues:
 ## 📚 Additional Resources
 
 - **Full Documentation**: `OMNIBASE3_IMPORTABLE_DEPENDENCIES.md`
-- **Source**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/`
+- **Source**: `../omnibase_3/src/omnibase/`
 - **Core Module**: `omnibase_3/src/omnibase/core/`
 - **Enums**: `omnibase_3/src/omnibase/enums/`
 

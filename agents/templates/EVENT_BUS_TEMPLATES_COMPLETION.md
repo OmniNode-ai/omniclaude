@@ -10,7 +10,7 @@
 ## Deliverables
 
 ### 1. event_bus_init_effect.py.jinja2 ✅
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/templates/event_bus_init_effect.py.jinja2`
+**Location**: `agents/templates/event_bus_init_effect.py.jinja2`
 **Size**: 29 lines
 **Purpose**: EventPublisher initialization snippet for Effect node `__init__` method
 
@@ -30,7 +30,7 @@
 ---
 
 ### 2. event_bus_lifecycle.py.jinja2 ✅
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/templates/event_bus_lifecycle.py.jinja2`
+**Location**: `agents/templates/event_bus_lifecycle.py.jinja2`
 **Size**: 131 lines
 **Purpose**: Lifecycle methods for event bus management
 
@@ -65,7 +65,7 @@
 ---
 
 ### 3. EVENT_BUS_TEMPLATES_README.md ✅
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/templates/EVENT_BUS_TEMPLATES_README.md`
+**Location**: `agents/templates/EVENT_BUS_TEMPLATES_README.md`
 **Size**: 327 lines
 **Purpose**: Comprehensive documentation and usage guide
 
@@ -92,7 +92,7 @@
 - No syntax errors detected
 
 ### Pattern Compliance ✅
-**Reference**: `/Volumes/PRO-G40/Code/omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
+**Reference**: `../omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
 
 **Verified Against Reference**:
 - ✅ EventPublisher initialization pattern
@@ -291,7 +291,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Effect(NodeEffect{MIXIN_INHERITANCE}):
 ## File Checksums (for verification)
 
 ```bash
-$ ls -lh /Volumes/PRO-G40/Code/omniclaude/agents/templates/event_bus_*
+$ ls -lh agents/templates/event_bus_*
 -rw-r--r--  1 jonah  staff  1.1K Oct 22 07:43 event_bus_init_effect.py.jinja2
 -rw-r--r--  1 jonah  staff  4.4K Oct 22 07:43 event_bus_lifecycle.py.jinja2
 -rw-r--r--  1 jonah  staff  9.5K Oct 22 07:45 EVENT_BUS_TEMPLATES_README.md
@@ -301,8 +301,8 @@ $ ls -lh /Volumes/PRO-G40/Code/omniclaude/agents/templates/event_bus_*
 
 ## References
 
-- **Reference Implementation**: `/Volumes/PRO-G40/Code/omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
-- **EventPublisher Source**: `/Volumes/PRO-G40/Code/omniarchon/python/src/events/publisher/event_publisher.py`
+- **Reference Implementation**: `../omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
+- **EventPublisher Source**: `../omniarchon/python/src/events/publisher/event_publisher.py`
 - **Event Bus Architecture**: `docs/CLI_EVENT_BUS_MIGRATION.md`
 - **ONEX Node Paradigm**: `OMNIBASE_CORE_NODE_PARADIGM.md`
 

@@ -521,13 +521,13 @@ except ModelOnexError as e:
 
 ```bash
 # Run all FileWriter tests
-PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude poetry run pytest tests/node_gen/test_file_writer.py -v
+PYTHONPATH=. poetry run pytest tests/node_gen/test_file_writer.py -v
 
 # Run specific test
-PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude poetry run pytest tests/node_gen/test_file_writer.py::TestFileWriter::test_successful_write -v
+PYTHONPATH=. poetry run pytest tests/node_gen/test_file_writer.py::TestFileWriter::test_successful_write -v
 
 # Run with coverage
-PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude poetry run pytest tests/node_gen/test_file_writer.py --cov=tools.node_gen.file_writer --cov-report=html
+PYTHONPATH=. poetry run pytest tests/node_gen/test_file_writer.py --cov=tools.node_gen.file_writer --cov-report=html
 ```
 
 ### Test Results
@@ -788,7 +788,7 @@ result = writer.write_node_files(output_directory="/tmp/output", ...)
 **Solution**:
 ```bash
 # Run tests with PYTHONPATH
-PYTHONPATH=/Volumes/PRO-G40/Code/omniclaude poetry run pytest tests/node_gen/test_file_writer.py -v
+PYTHONPATH=. poetry run pytest tests/node_gen/test_file_writer.py -v
 
 # Or add to pyproject.toml
 [tool.pytest.ini_options]

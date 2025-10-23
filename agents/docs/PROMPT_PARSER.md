@@ -730,9 +730,9 @@ Confidence: 0.52
 
 ### Related Documentation
 
-- **POC Pipeline Architecture**: `/Volumes/PRO-G40/Code/omniclaude/docs/POC_PIPELINE_ARCHITECTURE.md`
-- **ONEX Node Paradigm**: `/Volumes/PRO-G40/Code/omniclaude/OMNIBASE_CORE_NODE_PARADIGM.md`
-- **SimplePRDAnalyzer**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/simple_prd_analyzer.py`
+- **POC Pipeline Architecture**: `docs/POC_PIPELINE_ARCHITECTURE.md`
+- **ONEX Node Paradigm**: `OMNIBASE_CORE_NODE_PARADIGM.md`
+- **SimplePRDAnalyzer**: `agents/lib/simple_prd_analyzer.py`
 
 ### Glossary
 

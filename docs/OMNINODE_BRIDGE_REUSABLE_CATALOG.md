@@ -2,7 +2,7 @@
 
 **Research Date**: 2025-10-22
 **Purpose**: Catalog of reusable classes, patterns, and dependencies for ONEX node generation
-**Source Repository**: `/Volumes/PRO-G40/Code/omninode_bridge`
+**Source Repository**: `../omninode_bridge`
 
 ---
 

@@ -3,19 +3,22 @@
 Codegen Kafka Consumer Smoke Test
 
 Subscribes to analysis response topic and prints the first matching message.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/codegen_consume_smoke.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import argparse
 import asyncio
-import sys
-from pathlib import Path
 
-# Ensure project root on sys.path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from agents.lib.kafka_codegen_client import KafkaCodegenClient  # noqa: E402
+from agents.lib.kafka_codegen_client import KafkaCodegenClient
 
 
 async def main() -> None:

@@ -69,7 +69,7 @@ Total: 20-26 hours
 **Objective**: Identify all incorrect import paths in templates
 
 **Steps**:
-1. Open `/Volumes/PRO-G40/Code/omniclaude/agents/lib/omninode_template_engine.py`
+1. Open `agents/lib/omninode_template_engine.py`
 2. Search for all imports from `omnibase_core`
 3. Cross-reference with actual omnibase_core structure
 4. Document incorrect paths

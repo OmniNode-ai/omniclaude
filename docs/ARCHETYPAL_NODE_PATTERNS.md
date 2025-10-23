@@ -38,7 +38,7 @@ The value of these examples is in understanding **how archetypes work**, not in 
 
 ## 1. Effect Node Archetype: Database Adapter
 
-**File**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/nodes/database_adapter_effect/v1_0_0/node.py`
+**File**: `../omninode_bridge/src/omninode_bridge/nodes/database_adapter_effect/v1_0_0/node.py`
 
 ### Key Characteristics
 
@@ -120,7 +120,7 @@ class NodeXxxEffect(NodeEffect):
 
 ## 2. Compute Node Archetype: LLM Inference
 
-**File**: `/Volumes/PRO-G40/Code/omniagent/archived/src/omni_agent/workflow/nodes/llm_inference.py`
+**File**: `../omniagent/archived/src/omni_agent/workflow/nodes/llm_inference.py`
 
 ### Key Characteristics
 
@@ -234,7 +234,7 @@ class NodeXxxCompute(NodeCompute):
 
 ## 3. Reducer Node Archetype: State Aggregator
 
-**File**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/nodes/reducer/v1_0_0/node.py`
+**File**: `../omninode_bridge/src/omninode_bridge/nodes/reducer/v1_0_0/node.py`
 
 ### Key Characteristics
 
@@ -503,7 +503,7 @@ class NodeMetricsAggregatorReducer(NodeReducer, IntentPublisherMixin):
 
 ## 4. Orchestrator Node Archetype: Workflow Coordinator
 
-**File**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/nodes/orchestrator/v1_0_0/node.py`
+**File**: `../omninode_bridge/src/omninode_bridge/nodes/orchestrator/v1_0_0/node.py`
 
 **IMPORTANT - Modern Architecture Only**:
 - **Event-driven only** - No legacy/fallback modes
@@ -1001,7 +1001,7 @@ class XxxWorkflow(Workflow):
 
 ### Example: Code Generation Orchestrator Workflow
 
-**File**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/nodes/codegen_orchestrator/v1_0_0/workflow.py`
+**File**: `../omninode_bridge/src/omninode_bridge/nodes/codegen_orchestrator/v1_0_0/workflow.py`
 
 ```python
 from llama_index.core.workflow import (
@@ -1375,8 +1375,8 @@ class NodeCodegenOrchestrator(NodeOrchestrator):
 
 ### References
 
-- **LlamaIndex Workflows Guide**: `/Volumes/PRO-G40/Code/omninode_bridge/docs/LLAMAINDEX_WORKFLOWS_GUIDE.md`
-- **Production Example**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/nodes/codegen_orchestrator/v1_0_0/workflow.py`
+- **LlamaIndex Workflows Guide**: `../omninode_bridge/docs/LLAMAINDEX_WORKFLOWS_GUIDE.md`
+- **Production Example**: `../omninode_bridge/src/omninode_bridge/nodes/codegen_orchestrator/v1_0_0/workflow.py`
 - **Official Docs**: https://docs.llamaindex.ai/en/stable/understanding/workflows/
 
 ---

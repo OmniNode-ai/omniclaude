@@ -24,7 +24,7 @@ Execute this transformation sequence:
 ### Step 1: Load Agent Definition
 ```bash
 # Use Read tool to load the agent config
-Read file: /Volumes/PRO-G40/Code/omniclaude/agents/configs/agent-{agent_name}.yaml
+Read file: agents/configs/agent-{agent_name}.yaml
 ```
 
 ### Step 2: Parse Agent Identity
@@ -75,7 +75,7 @@ After completing the task:
 
 **Transformation Protocol**:
 
-1. **Read**: `/Volumes/PRO-G40/Code/omniclaude/agents/configs/agent-devops-infrastructure.yaml`
+1. **Read**: `agents/configs/agent-devops-infrastructure.yaml`
 
 2. **Parse Identity**:
 ```yaml
@@ -136,7 +136,7 @@ Any of these trigger transformation:
 
 ## Agent Config Location
 
-**All agent configs**: `/Volumes/PRO-G40/Code/omniclaude/agents/configs/agent-*.yaml`
+**All agent configs**: `agents/configs/agent-*.yaml`
 
 **Available agents** (check directory for full list):
 - agent-devops-infrastructure
@@ -210,7 +210,7 @@ class NodeMyOperationEffect(NodeEffect):
             return ModelResult(success=True, data=result)
 ```
 
-**Full Reference**: See `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` for complete ONEX architecture patterns
+**Full Reference**: See `../Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` for complete ONEX architecture patterns
 
 ## AI Quorum Integration
 

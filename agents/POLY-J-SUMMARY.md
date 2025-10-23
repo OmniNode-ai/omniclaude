@@ -28,7 +28,7 @@ POLY-J implements a comprehensive quality gate aggregation and visualization sys
 
 ### 1. Aggregation Models (`model_gate_aggregation.py`)
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/models/model_gate_aggregation.py`
+**Location**: `agents/lib/models/model_gate_aggregation.py`
 
 **Models**:
 
@@ -77,7 +77,7 @@ for category, summary in agg.category_summary.items():
 
 ### 2. Gate Result Aggregator (`gate_result_aggregator.py`)
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/aggregators/gate_result_aggregator.py`
+**Location**: `agents/lib/aggregators/gate_result_aggregator.py`
 
 **Key Features**:
 
@@ -119,7 +119,7 @@ Identifies critical issues requiring immediate attention:
 
 ### 3. Quality Dashboard (`quality_dashboard.py`)
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/dashboard/quality_dashboard.py`
+**Location**: `agents/lib/dashboard/quality_dashboard.py`
 
 **Display Modes**:
 
@@ -166,7 +166,7 @@ dashboard.print_text_summary(quality_report)
 
 ### 4. Pipeline Integration
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/generation_pipeline.py`
+**Location**: `agents/lib/generation_pipeline.py`
 
 **Changes Made**:
 
@@ -212,7 +212,7 @@ else:
 
 ### 5. Dependencies Added
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/pyproject.toml`
+**Location**: `pyproject.toml`
 
 **Added** (line 35):
 ```toml
@@ -230,7 +230,7 @@ poetry install
 
 ### 6. Comprehensive Tests
 
-**Location**: `/Volumes/PRO-G40/Code/omniclaude/agents/tests/test_gate_aggregation.py`
+**Location**: `agents/tests/test_gate_aggregation.py`
 
 **Test Coverage**:
 

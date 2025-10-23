@@ -22,7 +22,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.generation_pipeline import GenerationPipeline
 
-
 # -------------------------------------------------------------------------
 # Fixtures
 # -------------------------------------------------------------------------
@@ -75,9 +74,7 @@ async def test_cleanup_async_propagates_template_engine_exception(
         await pipeline.cleanup_async(timeout=1.0)
 
     # Assert: Exactly one error log
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 1, (
         f"Expected exactly 1 error log, got {len(error_logs)}: "
         f"{[r.message for r in error_logs]}"
@@ -115,12 +112,13 @@ async def test_cleanup_async_logs_multiple_errors_separately(
 
     # Assert: Exactly one error log for template engine
     error_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "ERROR" and "template engine" in record.message
     ]
-    assert len(error_logs) == 1, (
-        f"Expected exactly 1 template engine error log, got {len(error_logs)}"
-    )
+    assert (
+        len(error_logs) == 1
+    ), f"Expected exactly 1 template engine error log, got {len(error_logs)}"
 
 
 # -------------------------------------------------------------------------
@@ -179,12 +177,13 @@ async def test_aexit_cleanup_exception_is_logged_not_suppressed(
 
     # Assert: Exactly one error log for cleanup failure
     error_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "ERROR" and "cleanup" in record.message.lower()
     ]
-    assert len(error_logs) == 1, (
-        f"Expected exactly 1 cleanup error log, got {len(error_logs)}"
-    )
+    assert (
+        len(error_logs) == 1
+    ), f"Expected exactly 1 cleanup error log, got {len(error_logs)}"
 
 
 @pytest.mark.asyncio
@@ -209,9 +208,7 @@ async def test_aexit_successful_cleanup_no_exceptions(
             pass  # Normal operation
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0, f"Expected no error logs, got: {error_logs}"
 
     # Assert: cleanup_async was called
@@ -298,16 +295,12 @@ async def test_cleanup_async_with_none_template_engine(caplog):
         await pipeline.cleanup_async(timeout=1.0)
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0
 
 
 @pytest.mark.asyncio
-async def test_aexit_with_slow_cleanup(
-    pipeline, mock_template_engine, caplog
-):
+async def test_aexit_with_slow_cleanup(pipeline, mock_template_engine, caplog):
     """
     Test __aexit__ handles slow cleanup operations.
 
@@ -316,6 +309,7 @@ async def test_aexit_with_slow_cleanup(
     - No timeout errors when cleanup takes time
     - Cleanup is called despite being slow
     """
+
     # Arrange
     async def slow_cleanup(timeout):
         await asyncio.sleep(0.1)  # Simulate slow cleanup

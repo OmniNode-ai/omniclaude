@@ -319,7 +319,7 @@ When adding new reusable components:
 
 - **Documentation Version**: 1.0.0
 - **Last Updated**: 2025-10-22
-- **Source Repository**: `/Volumes/PRO-G40/Code/omninode_bridge`
+- **Source Repository**: `../omninode_bridge`
 - **Related Project**: OmniClaude Node Generation System
 
 ---
@@ -333,8 +333,8 @@ When adding new reusable components:
 
 ### Related Documentation
 
-- ONEX Architecture Patterns: `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
-- OmniNode Bridge Planning: `/Volumes/PRO-G40/Code/omninode_bridge/docs/planning/`
+- ONEX Architecture Patterns: `../Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+- OmniNode Bridge Planning: `../omninode_bridge/docs/planning/`
 
 ---
 

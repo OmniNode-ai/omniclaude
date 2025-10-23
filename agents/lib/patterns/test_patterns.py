@@ -3,14 +3,19 @@
 Quick test script for Pattern Library
 
 Demonstrates pattern matching and code generation capabilities.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/lib/patterns/test_patterns.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from agents.lib.patterns.pattern_matcher import PatternMatcher
 from agents.lib.patterns.pattern_registry import PatternRegistry

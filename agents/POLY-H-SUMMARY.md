@@ -490,26 +490,26 @@ quality_report = self.gate_aggregator.generate_report(
 ## Documentation & References
 
 ### Modified Files
-1. `/Volumes/PRO-G40/Code/omniclaude/agents/lib/generation_pipeline.py`
+1. `agents/lib/generation_pipeline.py`
    - Added QC-002 checkpoint at Stage 3 (~line 500)
    - Added QC-002 checkpoint at completion (~line 866)
    - **Changes**: 2 quality gate integrations
 
 ### Referenced Files
-1. `/Volumes/PRO-G40/Code/omniclaude/agents/lib/validators/quality_compliance_validators.py`
+1. `agents/lib/validators/quality_compliance_validators.py`
    - QC-001, QC-002, QC-003, QC-004 implementations
    - AST-based validation logic
 
-2. `/Volumes/PRO-G40/Code/omniclaude/agents/lib/validators/performance_validators.py`
+2. `agents/lib/validators/performance_validators.py`
    - PF-001, PF-002 implementations
    - MetricsCollector integration
 
-3. `/Volumes/PRO-G40/Code/omniclaude/agents/lib/models/model_quality_gate.py`
+3. `agents/lib/models/model_quality_gate.py`
    - EnumQualityGate definitions
    - ModelQualityGateResult models
    - QualityGateRegistry implementation
 
-4. `/Volumes/PRO-G40/Code/omniclaude/agents/tests/test_quality_compliance_validators.py`
+4. `agents/tests/test_quality_compliance_validators.py`
    - Comprehensive test suite
    - 32 test cases covering all validators
 

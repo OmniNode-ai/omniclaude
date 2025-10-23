@@ -23,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.template_cache import TemplateCache
 
-
 # -------------------------------------------------------------------------
 # Fixtures
 # -------------------------------------------------------------------------
@@ -62,9 +61,7 @@ def template_cache_with_persistence():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_timeout_error_during_task_wait(
-    template_cache, caplog
-):
+async def test_cleanup_async_timeout_error_during_task_wait(template_cache, caplog):
     """
     Test cleanup_async handles TimeoutError during task wait.
 
@@ -74,6 +71,7 @@ async def test_cleanup_async_timeout_error_during_task_wait(
     - Exactly one warning log for timeout
     - Cleanup indicators reflect timeout occurred
     """
+
     # Arrange - create slow background task
     async def slow_task():
         await asyncio.sleep(100)  # Never completes
@@ -89,7 +87,8 @@ async def test_cleanup_async_timeout_error_during_task_wait(
 
     # Assert: Exactly one warning log for timeout
     warning_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "WARNING" and "timeout" in record.message.lower()
     ]
     assert len(warning_logs) == 1, (
@@ -117,6 +116,7 @@ async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(
     - Single timeout warning log
     - All tasks cleared from tracking set
     """
+
     # Arrange - create multiple slow tasks
     async def slow_task(task_id):
         await asyncio.sleep(100)
@@ -135,7 +135,8 @@ async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(
 
     # Assert: Exactly one timeout warning
     warning_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "WARNING" and "timeout" in record.message.lower()
     ]
     assert len(warning_logs) == 1
@@ -157,6 +158,7 @@ async def test_cleanup_async_successful_task_completion_no_timeout(
     - Debug log confirms success
     - Tasks cleared from tracking set
     """
+
     # Arrange - create fast task
     async def fast_task():
         await asyncio.sleep(0.01)  # Quick completion
@@ -177,7 +179,8 @@ async def test_cleanup_async_successful_task_completion_no_timeout(
 
     # Assert: Debug log confirms success
     debug_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "DEBUG" and "complete" in record.message.lower()
     ]
     assert len(debug_logs) >= 1
@@ -218,12 +221,14 @@ async def test_cleanup_async_persistence_close_error_is_logged(
 
     # Assert: Exactly one debug log for close error
     debug_logs = [
-        record for record in caplog.records
-        if record.levelname == "DEBUG" and "closing persistence" in record.message.lower()
+        record
+        for record in caplog.records
+        if record.levelname == "DEBUG"
+        and "closing persistence" in record.message.lower()
     ]
-    assert len(debug_logs) == 1, (
-        f"Expected exactly 1 persistence close error log, got {len(debug_logs)}"
-    )
+    assert (
+        len(debug_logs) == 1
+    ), f"Expected exactly 1 persistence close error log, got {len(debug_logs)}"
 
     # Assert: Persistence instance is cleared
     assert template_cache_with_persistence._persistence_instance is None
@@ -258,7 +263,8 @@ async def test_cleanup_async_persistence_successful_close(
 
     # Assert: Debug log confirms closure
     debug_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "DEBUG" and "closed" in record.message.lower()
     ]
     assert any("persistence" in log.message.lower() for log in debug_logs)
@@ -267,16 +273,12 @@ async def test_cleanup_async_persistence_successful_close(
     assert template_cache_with_persistence._persistence_instance is None
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_without_persistence_instance(
-    template_cache, caplog
-):
+async def test_cleanup_async_without_persistence_instance(template_cache, caplog):
     """
     Test cleanup_async when persistence instance is None.
 
@@ -294,9 +296,7 @@ async def test_cleanup_async_without_persistence_instance(
         await template_cache.cleanup_async(timeout=1.0)
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0
 
 
@@ -318,6 +318,7 @@ async def test_cleanup_async_both_timeout_and_persistence_errors(
     - Both errors handled independently
     - Total log count is 2 (one for each error)
     """
+
     # Arrange - slow task + persistence error
     async def slow_task():
         await asyncio.sleep(100)
@@ -337,14 +338,16 @@ async def test_cleanup_async_both_timeout_and_persistence_errors(
 
     # Assert: One timeout warning
     timeout_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "WARNING" and "timeout" in record.message.lower()
     ]
     assert len(timeout_logs) == 1
 
     # Assert: One persistence error log
     persistence_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "DEBUG" and "persistence" in record.message.lower()
     ]
     assert len(persistence_logs) >= 1  # At least one log about persistence
@@ -356,9 +359,7 @@ async def test_cleanup_async_both_timeout_and_persistence_errors(
 
 
 @pytest.mark.asyncio
-async def test_aexit_returns_false_for_exception_propagation(
-    template_cache
-):
+async def test_aexit_returns_false_for_exception_propagation(template_cache):
     """
     Test __aexit__ returns False to allow exception propagation.
 
@@ -377,9 +378,7 @@ async def test_aexit_returns_false_for_exception_propagation(
 
 
 @pytest.mark.asyncio
-async def test_aexit_cleanup_successful_no_errors(
-    template_cache, caplog
-):
+async def test_aexit_cleanup_successful_no_errors(template_cache, caplog):
     """
     Test __aexit__ successful cleanup path.
 
@@ -395,9 +394,7 @@ async def test_aexit_cleanup_successful_no_errors(
             pass  # Normal operation
 
     # Assert: No error logs
-    error_logs = [
-        record for record in caplog.records if record.levelname == "ERROR"
-    ]
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     assert len(error_logs) == 0
 
     # Assert: Background tasks cleared
@@ -410,9 +407,7 @@ async def test_aexit_cleanup_successful_no_errors(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_clears_background_tasks_set(
-    template_cache
-):
+async def test_cleanup_async_clears_background_tasks_set(template_cache):
     """
     Test cleanup_async clears _background_tasks set.
 
@@ -420,6 +415,7 @@ async def test_cleanup_async_clears_background_tasks_set(
     - Background tasks set is cleared after cleanup
     - Set is empty even if tasks were cancelled
     """
+
     # Arrange - add task
     async def dummy_task():
         await asyncio.sleep(0.01)
@@ -436,7 +432,7 @@ async def test_cleanup_async_clears_background_tasks_set(
 
 @pytest.mark.asyncio
 async def test_cleanup_async_clears_persistence_instance(
-    template_cache_with_persistence
+    template_cache_with_persistence,
 ):
     """
     Test cleanup_async clears _persistence_instance.
@@ -461,9 +457,7 @@ async def test_cleanup_async_clears_persistence_instance(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_with_empty_background_tasks(
-    template_cache, caplog
-):
+async def test_cleanup_async_with_empty_background_tasks(template_cache, caplog):
     """
     Test cleanup_async with no background tasks.
 
@@ -517,6 +511,7 @@ async def test_cleanup_async_zero_timeout(template_cache, caplog):
     - Warning log is emitted
     - Tasks are cancelled
     """
+
     # Arrange - add slow task
     async def slow_task():
         await asyncio.sleep(1.0)
@@ -531,7 +526,8 @@ async def test_cleanup_async_zero_timeout(template_cache, caplog):
 
     # Assert: Timeout warning
     warning_logs = [
-        record for record in caplog.records
+        record
+        for record in caplog.records
         if record.levelname == "WARNING" and "timeout" in record.message.lower()
     ]
     assert len(warning_logs) == 1

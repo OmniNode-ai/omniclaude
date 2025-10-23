@@ -17,7 +17,7 @@ This gives us:
 ## Skills Location
 
 **Claude Code**: `~/.claude/skills/` (symlink)
-**Repository**: `/Volumes/PRO-G40/Code/omniclaude/skills/`
+**Repository**: `skills/`
 
 The skills directory is **symlinked** from `~/.claude/skills/` to the repository, so:
 - Claude Code can discover and use skills
@@ -261,10 +261,10 @@ From Claude Code, activate the skill:
 
 ## Version Control
 
-All skills are tracked in git at `/Volumes/PRO-G40/Code/omniclaude/skills/`.
+All skills are tracked in git at `skills/`.
 
 When you modify a skill:
-1. Edit in repository: `/Volumes/PRO-G40/Code/omniclaude/skills/`
+1. Edit in repository: `skills/`
 2. Changes automatically available via symlink: `~/.claude/skills/`
 3. Commit to git for version control
 4. No need to manually sync - symlink handles it

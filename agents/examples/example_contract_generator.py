@@ -4,18 +4,24 @@ Example: Contract Generator Usage
 
 Demonstrates how to use the ContractGenerator to generate YAML contracts
 from PRD analysis results.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/examples/example_contract_generator.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
-import sys
+import tempfile
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(project_root))
-
-from agents.lib.contract_generator import ContractGenerator  # noqa: E402
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer  # noqa: E402
+from agents.lib.contract_generator import ContractGenerator
+from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
 
 
 async def main():
@@ -85,7 +91,7 @@ and session management.
         node_type="EFFECT",
         microservice_name="user_authentication",
         domain="auth",
-        output_directory="/tmp/contract_examples",
+        output_directory=str(Path(tempfile.gettempdir()) / "contract_examples"),
     )
 
     print("  ✓ Contract generated successfully")

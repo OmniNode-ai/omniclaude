@@ -10,6 +10,7 @@ Demonstrates Week 1 Day 5 deliverables:
 
 import asyncio
 import json
+import tempfile
 
 # Mock pipeline execution for demonstration
 # (Real execution requires full omnibase_core environment)
@@ -159,7 +160,8 @@ async def demonstrate_metrics_api():
     print("3️⃣  Checking quality gate...")
     registry = QualityGateRegistry()
     result = await registry.check_gate(
-        EnumQualityGate.INPUT_VALIDATION, {"prompt": "test", "output_dir": "/tmp"}
+        EnumQualityGate.INPUT_VALIDATION,
+        {"prompt": "test", "output_dir": tempfile.gettempdir()},
     )
     print(f"   🚦 Gate: {result.gate.gate_name}")
     print(f"   ✅ Status: {result.status}")

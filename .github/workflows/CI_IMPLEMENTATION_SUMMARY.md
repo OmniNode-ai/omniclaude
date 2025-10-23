@@ -5,7 +5,7 @@
 **Project**: Enhanced CI/CD Pipeline for OmniClaude Repository
 **Agent**: agent-devops-infrastructure
 **Date**: 2025-10-17
-**Repository**: /Volumes/PRO-G40/Code/omniclaude
+**Repository**: .
 **Status**: ✅ Complete
 
 ---
@@ -609,7 +609,7 @@ The enhanced CI complements existing security workflows:
 5. `scripts/init-db.sh` - Database initialization
 
 ### External Documentation
-1. `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` - ONEX patterns
+1. `../Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md` - ONEX patterns
 2. `agents/tests/README.md` - Test suite documentation
 3. `claude_hooks/tests/README.md` - Hooks test documentation
 
