@@ -1,0 +1,131 @@
+{# Event Bus Lifecycle Methods for Effect Nodes #}
+{# Add these methods to the node class #}
+{#
+Variables expected:
+- node_name: Full node name (e.g., "NodePostgresqlWriterEffect")
+#}
+
+    async def initialize(self) -> None:
+        """
+        Initialize event bus connection and publish introspection event.
+
+        This method:
+        1. Creates event publisher for Kafka
+        2. Publishes introspection event for Consul registration
+        3. Marks node as running
+
+        Raises:
+            RuntimeError: If initialization fails
+        """
+        if self.is_running:
+            logger.warning(f"{self._service_name} already running, skipping initialization")
+            return
+
+        try:
+            # Initialize event publisher
+            self.event_publisher = EventPublisher(
+                bootstrap_servers=self._bootstrap_servers,
+                service_name=self._service_name,
+                instance_id=self._instance_id,
+                max_retries=3,
+                enable_dlq=True,
+            )
+
+            logger.info(f"Event publisher initialized | service={self._service_name}")
+
+            # Publish introspection event for Consul registration
+            await self._publish_introspection_event()
+
+            self.is_running = True
+            logger.info(f"{{ node_name }} initialized and registered successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize event bus: {e}", exc_info=True)
+            await self.shutdown()
+            raise RuntimeError(f"Event bus initialization failed: {e}")
+
+    async def shutdown(self) -> None:
+        """
+        Graceful shutdown with cleanup.
+
+        This method:
+        1. Signals shutdown
+        2. Closes event publisher
+        3. Cleans up resources
+
+        Does not raise exceptions - logs warnings on failure.
+        """
+        if not self.is_running:
+            logger.info(f"{self._service_name} not running, nothing to shutdown")
+            return
+
+        logger.info(f"Shutting down {self._service_name}...")
+
+        # Signal shutdown
+        self._shutdown_event.set()
+        self.is_running = False
+
+        # Close event publisher
+        if self.event_publisher:
+            try:
+                await self.event_publisher.close()
+                logger.info("Event publisher closed successfully")
+            except Exception as e:
+                logger.warning(f"Error closing event publisher: {e}")
+
+        logger.info(f"{self._service_name} shutdown complete")
+
+    async def _publish_introspection_event(self) -> None:
+        """
+        Publish introspection event for Consul service registration.
+
+        This event contains:
+        - Node ID and instance ID
+        - Service name and capabilities
+        - Health check endpoint information
+        - Metadata for service discovery
+
+        The event is consumed by the Consul adapter for automatic registration.
+        """
+        try:
+            introspection_payload = {
+                "node_id": str(self._node_id),
+                "instance_id": self._instance_id,
+                "service_name": self._service_name,
+                "node_type": "effect",
+                "capabilities": self._get_node_capabilities(),
+                "health_check_endpoint": f"/health/{self._instance_id}",
+                "metadata": {
+                    "node_class": "{{ node_name }}",
+                    "initialized_at": datetime.utcnow().isoformat(),
+                },
+            }
+
+            # Publish introspection event
+            await self.event_publisher.publish(
+                event_type="node.introspection.v1",
+                payload=introspection_payload,
+                correlation_id=str(self._node_id),
+                topic="dev.omninode.system.introspection.v1",
+            )
+
+            logger.info(
+                f"Published introspection event | "
+                f"node_id={self._node_id} | "
+                f"instance_id={self._instance_id}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to publish introspection event: {e}", exc_info=True)
+            raise
+
+    def _get_node_capabilities(self) -> list[str]:
+        """
+        Get list of capabilities this node provides.
+
+        Override this method in generated nodes to specify actual capabilities.
+
+        Returns:
+            List of capability strings (e.g., ["write_database", "transaction_support"])
+        """
+        return ["effect_operations"]

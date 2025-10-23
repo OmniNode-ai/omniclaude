@@ -21,7 +21,7 @@ If any fail, see [DEPLOYMENT.md](DEPLOYMENT.md) for setup instructions.
 
 ```bash
 # 1. Install dependencies
-cd /Volumes/PRO-G40/Code/omniclaude/consumers
+cd consumers
 pip install -r requirements.txt
 
 # 2. Apply database migration (if not already done)

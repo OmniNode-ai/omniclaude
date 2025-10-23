@@ -3,14 +3,20 @@
 Smoke test for Business Logic Generator
 
 Quick validation that business logic generation works end-to-end.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/scripts/test_business_logic_generation.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
 import sys
-from pathlib import Path
-
-# Add agents to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.lib.contract_generator import ContractGenerator

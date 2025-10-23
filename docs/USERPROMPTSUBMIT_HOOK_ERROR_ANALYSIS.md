@@ -268,7 +268,7 @@ Investigation showed that 8 agents selected by AI don't have these fields define
 
 ## Fixes Applied
 
-### File: `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib/agent_detector.py`
+### File: `claude_hooks/lib/agent_detector.py`
 
 **Lines 175-191**: Updated `load_agent_config()` to split YAML from markdown
 
@@ -296,7 +296,7 @@ Investigation showed that 8 agents selected by AI don't have these fields define
               return None
 ```
 
-### File: `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib/ai_agent_selector.py`
+### File: `claude_hooks/lib/ai_agent_selector.py`
 
 **Lines 195-199**: Added defensive type checking in `_build_agent_catalog()`
 
@@ -337,7 +337,7 @@ Investigation showed that 8 agents selected by AI don't have these fields define
 ### Test 1: Hook Execution
 
 ```bash
-$ cd /Volumes/PRO-G40/Code/omniclaude/claude_hooks
+$ cd claude_hooks
 $ echo '{"prompt": "optimize my database queries"}' | ./user-prompt-submit.sh
 
 ✅ Result: Hook executed successfully
@@ -442,18 +442,18 @@ def load_agent_yaml(file_path: Path) -> Optional[Dict]:
 ## Related Files
 
 ### Files Modified
-- `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib/agent_detector.py`
-- `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib/ai_agent_selector.py`
+- `claude_hooks/lib/agent_detector.py`
+- `claude_hooks/lib/ai_agent_selector.py`
 
 ### Files Analyzed (No Changes)
-- `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib/hybrid_agent_selector.py`
-- `/Volumes/PRO-G40/Code/omniclaude/claude_hooks/user-prompt-submit.sh`
+- `claude_hooks/lib/hybrid_agent_selector.py`
+- `claude_hooks/user-prompt-submit.sh`
 - `/Users/jonah/.claude/agent-definitions/agent-address-pr-comments.yaml`
 - `/Users/jonah/.claude/agent-definitions/*.yaml` (48 agent definition files)
 
 ### Related Documentation
-- `/Volumes/PRO-G40/Code/omniclaude/docs/POLLY_DISPATCH_FIX_QUICK_START.md`
-- `/Volumes/PRO-G40/Code/omniclaude/docs/AGENT_DISPATCH_QUICK_REFERENCE.md`
+- `docs/POLLY_DISPATCH_FIX_QUICK_START.md`
+- `docs/AGENT_DISPATCH_QUICK_REFERENCE.md`
 
 ---
 

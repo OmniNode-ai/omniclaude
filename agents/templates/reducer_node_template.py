@@ -41,6 +41,24 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
 
     Features:
 {FEATURES}
+
+    Best Practices Applied (Intelligence-Driven):
+{BEST_PRACTICES_FORMATTED}
+
+    Performance Targets:
+{PERFORMANCE_TARGETS_FORMATTED}
+
+    Error Scenarios Handled:
+{ERROR_SCENARIOS_FORMATTED}
+
+    Domain-Specific Patterns:
+{DOMAIN_PATTERNS_FORMATTED}
+
+    Testing Recommendations:
+{TESTING_SECTION}
+
+    Security Considerations:
+{SECURITY_SECTION}
     """
 
     def __init__(self, container: ModelONEXContainer):
@@ -67,13 +85,15 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
             Model{MICROSERVICE_NAME_PASCAL}Output: Result of the reduction
 
         Raises:
-            OnexError: If reduction fails
+            ModelOnexError: If reduction fails
         """
         try:
             self.logger.info(f"Executing {MICROSERVICE_NAME} reduce operation: {input_data.operation_type}")
 
             # Validate input
             await self._validate_input(input_data)
+
+{PATTERN_CODE_BLOCKS}
 
             # Execute reduction
             result_data = await self._execute_reduction(input_data)
@@ -100,9 +120,9 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
         """Validate input data for reduction"""
         if not input_data.operation_type:
             raise ModelOnexError(
-                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Operation type is required",
-                details={"input_data": input_data.model_dump()}
+                context={"input_data": input_data.model_dump()}
             )
 
         # Add reduction-specific validation
@@ -112,7 +132,20 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
         self,
         input_data: Model{MICROSERVICE_NAME_PASCAL}Input
     ) -> Dict[str, Any]:
-        """Execute the actual reduction"""
+        """
+        Execute the actual reduction.
+
+        REDUCER Pattern:
+        - Aggregates state over time (group by correlation_id)
+        - Emits INTENTS (does NOT execute side effects directly)
+        - Uses FSM for state transitions
+        - EFFECT nodes consume intents and execute actions
+
+        Example:
+            aggregated_state = self._aggregate_events(input_data)
+            intent = self._emit_intent_if_needed(aggregated_state)
+            return {"state": aggregated_state, "intents": [intent]}
+        """
 
         # Reduction logic stub
 {BUSINESS_LOGIC_STUB}
@@ -120,14 +153,32 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
         # TODO: Implement actual reduction logic
         # This is a placeholder - replace with real implementation
 
+        # Step 1: Aggregate state (by correlation_id or other key)
         operations = {OPERATIONS}
-        result = {
+        aggregated_state = {
             "operation_type": input_data.operation_type,
             "reduction_result": "placeholder_reduction",
             "parameters": input_data.parameters,
             "metadata": input_data.metadata,
             "operations": operations,
             "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        # Step 2: Emit intents based on aggregated state
+        # Intents are consumed by EFFECT nodes for actual execution
+        intents = []
+
+        # Example intent emission:
+        # if aggregated_state["threshold_reached"]:
+        #     intents.append({
+        #         "action": "write_to_database",
+        #         "payload": aggregated_state,
+        #         "target_effect_node": "database_writer"
+        #     })
+
+        result = {
+            "aggregated_state": aggregated_state,
+            "intents": intents,
             "status": "completed"
         }
 

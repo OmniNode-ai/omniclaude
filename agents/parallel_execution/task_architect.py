@@ -6,16 +6,22 @@ Converts natural language prompts into structured task definitions
 for parallel agent execution.
 
 Uses LLM to analyze user requests and plan optimal task breakdown.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/task_architect.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
 import json
 import sys
-from pathlib import Path
 from typing import Any, Dict, Optional
-
-# Add current directory to path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp_client import ArchonMCPClient
 

@@ -307,7 +307,7 @@ class NodeMyOperationEffect(NodeEffect):
             return ModelResult(success=True, data=result)
 ```
 
-**Full Reference**: `/Volumes/PRO-G40/Code/Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
+**Full Reference**: `../Archon/docs/ONEX_ARCHITECTURE_PATTERNS_COMPLETE.md`
 
 ## ONEX MCP Service Integration (114 Total Tools)
 

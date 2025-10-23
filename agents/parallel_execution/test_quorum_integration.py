@@ -4,6 +4,16 @@ Integration Test for Quorum Validation in Dispatch Runner
 
 Tests the complete integration of quorum validation into the parallel
 dispatch workflow, including the PostgreSQL adapter failure case.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/test_quorum_integration.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
 import asyncio
@@ -12,9 +22,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
-# Add current directory to path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from quorum_minimal import MinimalQuorum, ValidationDecision
 

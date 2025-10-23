@@ -510,7 +510,7 @@ echo "AUTO_DISPATCH_ENABLED=false" >> .env
 source .env
 
 # 2. Revert hook changes
-cd /Volumes/PRO-G40/Code/omniclaude
+cd .
 git checkout claude_hooks/user-prompt-submit.sh
 
 # 3. Remove slash command

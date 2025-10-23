@@ -268,8 +268,9 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             "from datetime import datetime, timezone",
             "",
             "# Core imports",
-            f"from omnibase_core.core.node_{node_type.lower()} import {self.node_base_classes[node_type]}",
-            "from omnibase_core.errors import OnexError, EnumCoreErrorCode",
+            f"from omnibase_core.nodes.node_{node_type.lower()} import {self.node_base_classes[node_type]}",
+            "from omnibase_core.errors.error_codes import EnumCoreErrorCode",
+            "from omnibase_core.errors import OnexError",
             "",
         ]
 

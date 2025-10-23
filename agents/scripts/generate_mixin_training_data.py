@@ -8,6 +8,16 @@ known compatibility patterns and edge cases.
 Author: OmniClaude Autonomous Code Generation System
 Phase: 7 Stream 4
 
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/scripts/generate_mixin_training_data.py --samples 200
+
+    Or install the package in development mode:
+
+        pip install -e .
+
 Usage:
     python agents/scripts/generate_mixin_training_data.py --samples 200
 """
@@ -16,12 +26,7 @@ import argparse
 import asyncio
 import logging
 import random
-import sys
-from pathlib import Path
 from typing import List, Tuple
-
-# Add agents lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.mixin_features import MixinFeatureExtractor
 from lib.persistence import CodegenPersistence

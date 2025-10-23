@@ -312,10 +312,11 @@ class EnumTestOperationType(str, Enum):
 
         error = exc_info.value
         assert "validation failed" in str(error).lower()
-        # Check details contain the error (OnexError stores details directly)
-        assert hasattr(error, "details")
-        assert "errors" in error.details
-        assert any("Missing" in err for err in error.details["errors"])
+        # Check details contain the error (OnexError stores details in context.additional_context.details)
+        assert hasattr(error, "context")
+        details = error.context.get("additional_context", {}).get("details", {})
+        assert "errors" in details
+        assert any("Missing" in err for err in details["errors"])
 
     def test_validate_enum_code_missing_methods(self, generator):
         """Test validation fails for missing required methods"""
@@ -332,10 +333,11 @@ class EnumTestOperationType(str, Enum):
 
         error = exc_info.value
         assert "validation failed" in str(error).lower()
-        # Check details contain method errors (OnexError stores details directly)
-        assert hasattr(error, "details")
-        assert "errors" in error.details
-        error_messages = " ".join(error.details["errors"])
+        # Check details contain method errors (OnexError stores details in context.additional_context.details)
+        assert hasattr(error, "context")
+        details = error.context.get("additional_context", {}).get("details", {})
+        assert "errors" in details
+        error_messages = " ".join(details["errors"])
         assert "from_string" in error_messages or "__str__" in error_messages
 
     def test_to_enum_name_conversion(self, generator):

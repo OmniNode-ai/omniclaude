@@ -498,9 +498,9 @@ def index_document(event):
 
 ## References
 
-- [ConfluentKafkaClient Implementation](/Volumes/PRO-G40/Code/omniclaude/agents/lib/kafka_confluent_client.py)
-- [Publisher Script](/Volumes/PRO-G40/Code/omniclaude/scripts/publish_doc_change.py)
-- [Installation Script](/Volumes/PRO-G40/Code/omniclaude/scripts/install-hooks.sh)
+- [ConfluentKafkaClient Implementation](agents/lib/kafka_confluent_client.py)
+- [Publisher Script](scripts/publish_doc_change.py)
+- [Installation Script](scripts/install-hooks.sh)
 - [Git Hooks Documentation](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)
 - [Confluent Kafka Python](https://docs.confluent.io/kafka-clients/python/current/overview.html)
 

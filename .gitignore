@@ -231,6 +231,7 @@ claude_hooks/logs/
 # Docker runtime data directories
 data/
 generated/
+generated_nodes/
 reports/
 secrets/
 

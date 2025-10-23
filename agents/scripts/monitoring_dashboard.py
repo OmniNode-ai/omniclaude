@@ -9,6 +9,16 @@ Generates comprehensive dashboard data for agent framework monitoring including:
 - Performance trends
 - Component-specific dashboards
 
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/scripts/monitoring_dashboard.py [--format json|html] [--output path]
+
+    Or install the package in development mode:
+
+        pip install -e .
+
 Usage:
     python monitoring_dashboard.py [--format json|html] [--output path]
     python monitoring_dashboard.py --format json > dashboard.json
@@ -25,9 +35,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.alert_manager import get_alert_statistics
 from lib.health_checker import (
