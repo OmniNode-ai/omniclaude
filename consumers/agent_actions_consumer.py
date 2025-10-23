@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-Agent Actions Kafka Consumer - Production Implementation
+Agent Observability Kafka Consumer - Production Implementation
 
-Consumes agent action events from Kafka and persists to PostgreSQL with:
+Consumes agent observability events from multiple Kafka topics and persists to PostgreSQL with:
+- Multi-topic subscription (agent-actions, agent-routing-decisions, agent-transformation-events, router-performance-metrics)
+- Topic-based routing to appropriate database tables
 - Batch processing (100 events or 1 second intervals)
 - Dead letter queue for failed messages
 - Graceful shutdown on SIGTERM
@@ -15,7 +17,7 @@ Usage:
 
 Environment Variables:
     KAFKA_BROKERS: Comma-separated Kafka brokers (default: localhost:9092)
-    KAFKA_GROUP_ID: Consumer group ID (default: agent-actions-postgres)
+    KAFKA_GROUP_ID: Consumer group ID (default: agent-observability-postgres)
     POSTGRES_HOST: PostgreSQL host (default: localhost)
     POSTGRES_PORT: PostgreSQL port (default: 5436)
     POSTGRES_DATABASE: Database name (default: omninode_bridge)
@@ -173,9 +175,18 @@ class AgentActionsConsumer:
             "kafka_brokers", os.getenv("KAFKA_BROKERS", "localhost:9092")
         ).split(",")
         self.group_id = config.get(
-            "group_id", os.getenv("KAFKA_GROUP_ID", "agent-actions-postgres")
+            "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
         )
-        self.topic = config.get("topic", "agent-actions")
+        # Subscribe to all agent observability topics
+        self.topics = config.get(
+            "topics",
+            [
+                "agent-actions",
+                "agent-routing-decisions",
+                "agent-transformation-events",
+                "router-performance-metrics",
+            ],
+        )
 
         # Batch configuration
         self.batch_size = int(config.get("batch_size", os.getenv("BATCH_SIZE", "100")))
@@ -227,7 +238,7 @@ class AgentActionsConsumer:
         """Initialize Kafka consumer."""
         logger.info("Setting up Kafka consumer...")
         self.consumer = KafkaConsumer(
-            self.topic,
+            *self.topics,  # Subscribe to multiple topics
             bootstrap_servers=self.kafka_brokers,
             group_id=self.group_id,
             auto_offset_reset="earliest",
@@ -237,10 +248,10 @@ class AgentActionsConsumer:
             consumer_timeout_ms=self.batch_timeout_ms,
         )
         logger.info(
-            "Kafka consumer connected to brokers: %s, group: %s, topic: %s",
+            "Kafka consumer connected to brokers: %s, group: %s, topics: %s",
             self.kafka_brokers,
             self.group_id,
-            self.topic,
+            ", ".join(self.topics),
         )
 
     def setup_dlq_producer(self):
@@ -282,81 +293,233 @@ class AgentActionsConsumer:
             self.health_check_port,
         )
 
-    def insert_batch(self, events: List[Dict[str, Any]]) -> tuple[int, int]:
+    def insert_batch(
+        self, events_by_topic: Dict[str, List[Dict[str, Any]]]
+    ) -> tuple[int, int]:
         """
         Insert batch of events to PostgreSQL with idempotency.
+        Routes events to appropriate tables based on topic.
+
+        Args:
+            events_by_topic: Dictionary mapping topic names to lists of events
 
         Returns:
             Tuple of (inserted_count, duplicate_count)
         """
-        if not events:
+        if not events_by_topic:
             return 0, 0
 
-        inserted = 0
-        duplicates = 0
+        total_inserted = 0
+        total_duplicates = 0
 
         try:
             cursor = self.db_conn.cursor()
 
-            # Use INSERT ... ON CONFLICT for idempotency
-            # We'll generate deterministic IDs based on correlation_id + timestamp
-            insert_sql = """
-                INSERT INTO agent_actions (
-                    id, correlation_id, agent_name, action_type, action_name,
-                    action_details, debug_mode, duration_ms, created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (id) DO NOTHING
-            """
+            # Process each topic's events
+            for topic, events in events_by_topic.items():
+                if not events:
+                    continue
 
-            batch_data = []
-            for event in events:
-                # Generate deterministic ID from correlation_id + timestamp
-                # This ensures idempotency if same message is processed twice
-                event_id = str(uuid.uuid4())  # Could use UUID5 for determinism
-                correlation_id = event.get("correlation_id")
-                timestamp = event.get("timestamp", datetime.utcnow().isoformat())
-
-                batch_data.append(
-                    (
-                        event_id,
-                        correlation_id,
-                        event.get("agent_name"),
-                        event.get("action_type"),
-                        event.get("action_name"),
-                        json.dumps(event.get("action_details", {})),
-                        event.get("debug_mode", True),
-                        event.get("duration_ms"),
-                        timestamp,
+                if topic == "agent-actions":
+                    inserted, duplicates = self._insert_agent_actions(cursor, events)
+                elif topic == "agent-routing-decisions":
+                    inserted, duplicates = self._insert_routing_decisions(
+                        cursor, events
                     )
-                )
+                elif topic == "agent-transformation-events":
+                    inserted, duplicates = self._insert_transformation_events(
+                        cursor, events
+                    )
+                elif topic == "router-performance-metrics":
+                    inserted, duplicates = self._insert_performance_metrics(
+                        cursor, events
+                    )
+                else:
+                    logger.warning(
+                        "Unknown topic: %s, skipping %d events", topic, len(events)
+                    )
+                    continue
 
-            # Execute batch insert
-            execute_batch(cursor, insert_sql, batch_data, page_size=100)
-            inserted = cursor.rowcount
-            duplicates = len(events) - inserted
+                total_inserted += inserted
+                total_duplicates += duplicates
 
             self.db_conn.commit()
             cursor.close()
 
             logger.info(
                 "Batch insert: %d inserted, %d duplicates (total: %d)",
-                inserted,
-                duplicates,
-                len(events),
+                total_inserted,
+                total_duplicates,
+                total_inserted + total_duplicates,
             )
 
-            return inserted, duplicates
+            return total_inserted, total_duplicates
 
         except Exception as e:
             logger.error("Batch insert failed: %s", e, exc_info=True)
             self.db_conn.rollback()
             raise
 
-    def send_to_dlq(self, events: List[Dict[str, Any]], error: str):
+    def _insert_agent_actions(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_actions events."""
+        insert_sql = """
+            INSERT INTO agent_actions (
+                id, correlation_id, agent_name, action_type, action_name,
+                action_details, debug_mode, duration_ms, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            event_id = str(uuid.uuid4())
+            correlation_id = event.get("correlation_id")
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            batch_data.append(
+                (
+                    event_id,
+                    correlation_id,
+                    event.get("agent_name"),
+                    event.get("action_type"),
+                    event.get("action_name"),
+                    json.dumps(event.get("action_details", {})),
+                    event.get("debug_mode", True),
+                    event.get("duration_ms"),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _insert_routing_decisions(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_routing_decisions events."""
+        insert_sql = """
+            INSERT INTO agent_routing_decisions (
+                id, user_request, selected_agent, confidence_score, alternatives,
+                reasoning, routing_strategy, context, routing_time_ms, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            event_id = str(uuid.uuid4())
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            batch_data.append(
+                (
+                    event_id,
+                    event.get("user_request", ""),
+                    event.get("selected_agent"),
+                    event.get("confidence_score"),
+                    json.dumps(event.get("alternatives", [])),
+                    event.get("reasoning"),
+                    event.get("routing_strategy"),
+                    json.dumps(event.get("context", {})),
+                    event.get("routing_time_ms"),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _insert_transformation_events(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_transformation_events events."""
+        insert_sql = """
+            INSERT INTO agent_transformation_events (
+                id, source_agent, target_agent, transformation_reason,
+                confidence_score, transformation_duration_ms, success, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            event_id = str(uuid.uuid4())
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            batch_data.append(
+                (
+                    event_id,
+                    event.get("source_agent"),
+                    event.get("target_agent"),
+                    event.get("transformation_reason"),
+                    event.get("confidence_score"),
+                    event.get("transformation_duration_ms"),
+                    event.get("success", True),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _insert_performance_metrics(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert router_performance_metrics events."""
+        insert_sql = """
+            INSERT INTO router_performance_metrics (
+                id, query_text, routing_duration_ms, cache_hit,
+                trigger_match_strategy, confidence_components, candidates_evaluated, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            event_id = str(uuid.uuid4())
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            batch_data.append(
+                (
+                    event_id,
+                    event.get("query_text"),
+                    event.get("routing_duration_ms"),
+                    event.get("cache_hit", False),
+                    event.get("trigger_match_strategy"),
+                    json.dumps(event.get("confidence_components", {})),
+                    event.get("candidates_evaluated"),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def send_to_dlq(
+        self,
+        events: List[Dict[str, Any]],
+        error: str,
+        topic: str = "agent-observability",
+    ):
         """Send failed events to dead letter queue."""
-        dlq_topic = f"{self.topic}-dlq"
+        dlq_topic = f"{topic}-dlq"
 
         for event in events:
             try:
@@ -387,13 +550,16 @@ class AgentActionsConsumer:
             return 0, 0
 
         start_time = time.time()
-        events = []
+        events_by_topic = {}
         failed_events = []
 
-        # Extract events from messages
+        # Extract and group events by topic
         for msg in messages:
             try:
-                events.append(msg.value)
+                topic = msg.topic
+                if topic not in events_by_topic:
+                    events_by_topic[topic] = []
+                events_by_topic[topic].append(msg.value)
             except Exception as e:
                 logger.error("Failed to deserialize message: %s", e)
                 failed_events.append(msg.value)
@@ -403,7 +569,7 @@ class AgentActionsConsumer:
         failed = 0
 
         try:
-            inserted, duplicates = self.insert_batch(events)
+            inserted, duplicates = self.insert_batch(events_by_topic)
             failed = len(failed_events)
 
             # Commit Kafka offsets after successful DB insert
@@ -416,19 +582,23 @@ class AgentActionsConsumer:
         except Exception as e:
             logger.error("Batch processing failed: %s", e, exc_info=True)
             # Send entire batch to DLQ
-            self.send_to_dlq(events, str(e))
-            failed = len(events)
+            all_events = []
+            for events in events_by_topic.values():
+                all_events.extend(events)
+            self.send_to_dlq(all_events, str(e))
+            failed = sum(len(events) for events in events_by_topic.values())
 
         # Record metrics
         processing_time_ms = (time.time() - start_time) * 1000
         self.metrics.record_batch(len(messages), inserted, failed, processing_time_ms)
 
         logger.info(
-            "Batch processed: %d messages, %d inserted, %d failed, %.2f ms",
+            "Batch processed: %d messages, %d inserted, %d failed, %.2f ms (topics: %s)",
             len(messages),
             inserted,
             failed,
             processing_time_ms,
+            ", ".join(events_by_topic.keys()),
         )
 
         return inserted, failed
