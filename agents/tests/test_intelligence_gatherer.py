@@ -3,8 +3,12 @@
 Tests for IntelligenceGatherer - RAG Integration for Node Generation
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 
+from agents.lib.config.intelligence_config import IntelligenceConfig
+from agents.lib.intelligence_event_client import IntelligenceEventClient
 from agents.lib.intelligence_gatherer import IntelligenceGatherer
 from agents.lib.models.intelligence_context import IntelligenceContext
 
@@ -309,6 +313,214 @@ class TestIntelligenceGatherer:
         # Should still gather intelligence even without explicit operations
         assert len(intelligence.node_type_patterns) > 0
         assert len(intelligence.common_operations) > 0  # Should have default operations
+
+    @pytest.mark.asyncio
+    async def test_event_based_discovery_success(self):
+        """Test successful event-based pattern discovery"""
+        # Mock configuration with event discovery enabled
+        config = IntelligenceConfig(
+            kafka_enable_intelligence=True,
+            enable_event_based_discovery=True,
+            enable_filesystem_fallback=True,
+            prefer_event_patterns=True,
+        )
+
+        # Mock event client with successful response
+        mock_event_client = AsyncMock(spec=IntelligenceEventClient)
+        mock_event_client.request_pattern_discovery = AsyncMock(
+            return_value=[
+                {
+                    "file_path": "node_database_writer_effect.py",
+                    "confidence": 0.95,
+                    "pattern_type": "database_effect",
+                    "description": "Production database writer with connection pooling",
+                    "code_snippet": "async def write_data(self, data): ...",
+                    "best_practices": [
+                        "Use connection pooling",
+                        "Implement transaction support",
+                    ],
+                },
+                {
+                    "file_path": "node_api_client_effect.py",
+                    "confidence": 0.88,
+                    "pattern_type": "api_effect",
+                    "description": "API client with retry logic",
+                    "best_practices": ["Implement exponential backoff"],
+                },
+            ]
+        )
+
+        # Create gatherer with mocked event client
+        gatherer = IntelligenceGatherer(
+            config=config,
+            event_client=mock_event_client,
+        )
+
+        # Gather intelligence
+        intelligence = await gatherer.gather_intelligence(
+            node_type="EFFECT",
+            domain="database",
+            service_name="DatabaseWriter",
+            operations=["write"],
+            prompt="Database writer",
+        )
+
+        # Verify event client was called
+        mock_event_client.request_pattern_discovery.assert_called_once()
+
+        # Verify patterns were extracted
+        assert len(intelligence.node_type_patterns) > 0
+        assert any(
+            "connection pooling" in p.lower() for p in intelligence.node_type_patterns
+        )
+
+        # Verify code examples were added
+        assert len(intelligence.code_examples) > 0
+
+        # Verify event source was tracked
+        assert "event_based_discovery" in intelligence.rag_sources
+
+        # Verify high confidence score (prefer_event_patterns=True)
+        assert intelligence.confidence_score >= 0.9
+
+    @pytest.mark.asyncio
+    async def test_event_based_discovery_timeout(self):
+        """Test event-based discovery with timeout fallback"""
+        # Mock configuration
+        config = IntelligenceConfig(
+            kafka_enable_intelligence=True,
+            enable_event_based_discovery=True,
+            enable_filesystem_fallback=True,
+        )
+
+        # Mock event client that times out
+        mock_event_client = AsyncMock(spec=IntelligenceEventClient)
+        mock_event_client.request_pattern_discovery = AsyncMock(
+            side_effect=TimeoutError("Request timeout after 5000ms")
+        )
+
+        # Create gatherer with mocked event client
+        gatherer = IntelligenceGatherer(
+            config=config,
+            event_client=mock_event_client,
+        )
+
+        # Gather intelligence - should fallback to built-in patterns
+        intelligence = await gatherer.gather_intelligence(
+            node_type="EFFECT",
+            domain="database",
+            service_name="DatabaseClient",
+            operations=["query"],
+            prompt="Database client",
+        )
+
+        # Verify event client was called
+        mock_event_client.request_pattern_discovery.assert_called_once()
+
+        # Should still have patterns from built-in library
+        assert len(intelligence.node_type_patterns) > 0
+
+        # Should have built-in source
+        assert "builtin_pattern_library" in intelligence.rag_sources
+
+        # Should NOT have event-based source
+        assert "event_based_discovery" not in intelligence.rag_sources
+
+        # Should have reasonable confidence from built-in patterns
+        assert intelligence.confidence_score >= 0.7
+
+    @pytest.mark.asyncio
+    async def test_event_based_discovery_disabled(self):
+        """Test that event discovery is skipped when disabled"""
+        # Mock configuration with event discovery disabled
+        config = IntelligenceConfig(
+            kafka_enable_intelligence=False,
+            enable_event_based_discovery=False,
+        )
+
+        # Mock event client (should not be called)
+        mock_event_client = AsyncMock(spec=IntelligenceEventClient)
+        mock_event_client.request_pattern_discovery = AsyncMock()
+
+        # Create gatherer
+        gatherer = IntelligenceGatherer(
+            config=config,
+            event_client=mock_event_client,
+        )
+
+        # Gather intelligence
+        intelligence = await gatherer.gather_intelligence(
+            node_type="EFFECT",
+            domain="database",
+            service_name="DatabaseClient",
+            operations=["query"],
+            prompt="Database client",
+        )
+
+        # Verify event client was NOT called
+        mock_event_client.request_pattern_discovery.assert_not_called()
+
+        # Should still have patterns from built-in library
+        assert len(intelligence.node_type_patterns) > 0
+        assert "builtin_pattern_library" in intelligence.rag_sources
+
+    @pytest.mark.asyncio
+    async def test_event_based_discovery_no_event_client(self):
+        """Test graceful handling when event client is not provided"""
+        # Create gatherer without event client
+        gatherer = IntelligenceGatherer(event_client=None)
+
+        # Gather intelligence
+        intelligence = await gatherer.gather_intelligence(
+            node_type="EFFECT",
+            domain="database",
+            service_name="DatabaseClient",
+            operations=["query"],
+            prompt="Database client",
+        )
+
+        # Should still work with built-in patterns
+        assert len(intelligence.node_type_patterns) > 0
+        assert "builtin_pattern_library" in intelligence.rag_sources
+
+    @pytest.mark.asyncio
+    async def test_event_based_discovery_empty_response(self):
+        """Test handling of empty response from event discovery"""
+        # Mock configuration
+        config = IntelligenceConfig(
+            kafka_enable_intelligence=True,
+            enable_event_based_discovery=True,
+            enable_filesystem_fallback=True,
+        )
+
+        # Mock event client with empty response
+        mock_event_client = AsyncMock(spec=IntelligenceEventClient)
+        mock_event_client.request_pattern_discovery = AsyncMock(return_value=[])
+
+        # Create gatherer
+        gatherer = IntelligenceGatherer(
+            config=config,
+            event_client=mock_event_client,
+        )
+
+        # Gather intelligence
+        intelligence = await gatherer.gather_intelligence(
+            node_type="EFFECT",
+            domain="database",
+            service_name="DatabaseClient",
+            operations=["query"],
+            prompt="Database client",
+        )
+
+        # Verify event client was called
+        mock_event_client.request_pattern_discovery.assert_called_once()
+
+        # Should fallback to built-in patterns
+        assert len(intelligence.node_type_patterns) > 0
+        assert "builtin_pattern_library" in intelligence.rag_sources
+
+        # Should NOT have event-based source (empty response)
+        assert "event_based_discovery" not in intelligence.rag_sources
 
 
 class TestIntelligenceContext:
