@@ -10,6 +10,7 @@ Tests:
 """
 
 import ast
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -124,8 +125,8 @@ class TestProductionPatternMatcher:
         )
 
     @pytest.mark.skipif(
-        not Path("/Volumes/PRO-G40/Code/omniarchon").exists(),
-        reason="Requires omniarchon repository",
+        not Path(os.getenv("OMNIARCHON_PATH", "../omniarchon")).exists(),
+        reason="Requires omniarchon repository (set OMNIARCHON_PATH env var)",
     )
     def test_extract_patterns_from_production_effect(self, matcher):
         """Test pattern extraction from production Effect node."""
@@ -159,8 +160,8 @@ class TestProductionPatternMatcher:
         )
 
     @pytest.mark.skipif(
-        not Path("/Volumes/PRO-G40/Code/omniarchon").exists(),
-        reason="Requires omniarchon repository",
+        not Path(os.getenv("OMNIARCHON_PATH", "../omniarchon")).exists(),
+        reason="Requires omniarchon repository (set OMNIARCHON_PATH env var)",
     )
     def test_extract_patterns_from_production_compute(self, matcher):
         """Test pattern extraction from production Compute node."""
@@ -453,8 +454,8 @@ def hello():
         assert result == sample_code
 
     @pytest.mark.skipif(
-        not Path("/Volumes/PRO-G40/Code/omniarchon").exists(),
-        reason="Requires omniarchon repository",
+        not Path(os.getenv("OMNIARCHON_PATH", "../omniarchon")).exists(),
+        reason="Requires omniarchon repository (set OMNIARCHON_PATH env var)",
     )
     @pytest.mark.asyncio
     async def test_refine_code_integration(self, sample_code):
@@ -498,8 +499,8 @@ class TestCodeRefinerIntegration:
     """Integration tests for full code refinement workflow."""
 
     @pytest.mark.skipif(
-        not Path("/Volumes/PRO-G40/Code/omniarchon").exists(),
-        reason="Requires omniarchon repository",
+        not Path(os.getenv("OMNIARCHON_PATH", "../omniarchon")).exists(),
+        reason="Requires omniarchon repository (set OMNIARCHON_PATH env var)",
     )
     def test_find_and_extract_effect_patterns(self):
         """Test finding and extracting Effect node patterns."""
@@ -520,8 +521,8 @@ class TestCodeRefinerIntegration:
                 assert len(pattern.transaction_management) > 0
 
     @pytest.mark.skipif(
-        not Path("/Volumes/PRO-G40/Code/omniarchon").exists(),
-        reason="Requires omniarchon repository",
+        not Path(os.getenv("OMNIARCHON_PATH", "../omniarchon")).exists(),
+        reason="Requires omniarchon repository (set OMNIARCHON_PATH env var)",
     )
     def test_find_and_extract_compute_patterns(self):
         """Test finding and extracting Compute node patterns."""

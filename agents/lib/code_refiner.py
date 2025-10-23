@@ -96,9 +96,20 @@ class ProductionPatternMatcher:
     relevant ONEX patterns from omniarchon codebase.
     """
 
-    # Production codebase paths
-    OMNIARCHON_PATH = Path("/Volumes/PRO-G40/Code/omniarchon")
-    OMNINODE_BRIDGE_PATH = Path("/Volumes/PRO-G40/Code/omninode_bridge")
+    # Production codebase paths (configurable via environment variables)
+    # Default: assumes sibling directories
+    OMNIARCHON_PATH = Path(
+        os.getenv(
+            "OMNIARCHON_PATH",
+            str(Path(__file__).resolve().parents[2] / "../omniarchon"),
+        )
+    ).resolve()
+    OMNINODE_BRIDGE_PATH = Path(
+        os.getenv(
+            "OMNINODE_BRIDGE_PATH",
+            str(Path(__file__).resolve().parents[2] / "../omninode_bridge"),
+        )
+    ).resolve()
 
     # Node type to directory mappings (omniarchon structure)
     NODE_TYPE_PATHS = {
