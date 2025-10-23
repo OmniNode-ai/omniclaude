@@ -75,7 +75,7 @@ if docker ps | grep -q "omniclaude_test_redpanda"; then
     print_status "Redpanda container running"
 else
     echo -e "${RED}❌ Redpanda container not running${NC}"
-    echo -e "${YELLOW}   Run: docker-compose -f docker-compose.test.yml up -d redpanda${NC}"
+    echo -e "${YELLOW}   Run: docker-compose -f deployment/docker-compose.test.yml up -d redpanda${NC}"
     exit 1
 fi
 
@@ -84,7 +84,7 @@ if docker ps | grep -q "omniclaude_test_postgres"; then
     print_status "PostgreSQL container running"
 else
     echo -e "${RED}❌ PostgreSQL container not running${NC}"
-    echo -e "${YELLOW}   Run: docker-compose -f docker-compose.test.yml up -d postgres${NC}"
+    echo -e "${YELLOW}   Run: docker-compose -f deployment/docker-compose.test.yml up -d postgres${NC}"
     exit 1
 fi
 
@@ -223,7 +223,7 @@ echo -e "  1. Run unit tests:         ${YELLOW}pytest tests/test_kafka_logging.p
 echo -e "  2. Run integration tests:  ${YELLOW}pytest tests/test_kafka_consumer.py -v${NC}"
 echo -e "  3. Run e2e tests:          ${YELLOW}pytest tests/test_e2e_agent_logging.py -v${NC}"
 echo -e "  4. Run performance tests:  ${YELLOW}pytest tests/test_logging_performance.py -v -m performance${NC}"
-echo -e "  5. Run all tests:          ${YELLOW}docker-compose -f docker-compose.test.yml --profile test up test-runner${NC}"
+echo -e "  5. Run all tests:          ${YELLOW}docker-compose -f deployment/docker-compose.test.yml --profile test up test-runner${NC}"
 echo ""
 
 exit 0
