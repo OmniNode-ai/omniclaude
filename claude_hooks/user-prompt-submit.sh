@@ -191,12 +191,12 @@ Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
-REQUIRED ACTION: Use the Task tool to dispatch this request to agent-workflow-coordinator
+REQUIRED ACTION: Use the Task tool to dispatch this request to polymorphic-agent
 
 Task Tool Configuration:
 ┌────────────────────────────────────────────────────────────────────┐
 │ description: "${AGENT_DOMAIN} task execution"                       │
-│ subagent_type: "agent-workflow-coordinator"                         │
+│ subagent_type: "polymorphic-agent"                                  │
 │ prompt: "Route to ${AGENT_NAME} and execute the following request: │
 │                                                                      │
 │   ${PROMPT:0:200}...                                                │
@@ -218,7 +218,7 @@ Task Tool Configuration:
 │   - 23 quality gates validation                                     │
 │   - Performance thresholds compliance                                │
 │                                                                      │
-│   The agent-workflow-coordinator will handle routing, execution,    │
+│   The polymorphic-agent will handle routing, execution,             │
 │   and intelligence integration for this task."                       │
 └────────────────────────────────────────────────────────────────────┘
 
