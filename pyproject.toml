@@ -40,6 +40,7 @@ qdrant-client = "^1.7.0"
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"
+kafka-python = "^2.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
