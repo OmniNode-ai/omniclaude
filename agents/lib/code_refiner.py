@@ -19,6 +19,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import google.generativeai as genai
 
+from .config.intelligence_config import IntelligenceConfig
+from .intelligence_event_client import IntelligenceEventClient
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,16 +155,28 @@ class ProductionPatternMatcher:
         ],
     }
 
-    def __init__(self):
-        """Initialize pattern matcher with production codebase paths."""
+    def __init__(
+        self,
+        event_client: Optional[IntelligenceEventClient] = None,
+        config: Optional[IntelligenceConfig] = None,
+    ):
+        """
+        Initialize pattern matcher with production codebase paths and
+        optional event client.
+        """
         self.cache: Dict[str, ProductionPattern] = {}
+        self.event_client = event_client
+        self.config = config or IntelligenceConfig.from_env()
         logger.info("Initialized ProductionPatternMatcher")
 
-    def find_similar_nodes(
+    async def find_similar_nodes(
         self, node_type: str, domain: str, limit: int = 3
     ) -> List[Path]:
         """
         Search for similar production nodes by type and domain.
+
+        Uses event-based discovery first (if enabled), then falls back
+        to filesystem scanning for local development.
 
         Args:
             node_type: ONEX node type (effect, compute, reducer, orchestrator)
@@ -173,11 +188,28 @@ class ProductionPatternMatcher:
 
         Example:
             >>> matcher = ProductionPatternMatcher()
-            >>> nodes = matcher.find_similar_nodes("effect", "database")
+            >>> nodes = await matcher.find_similar_nodes("effect", "database")
             >>> assert len(nodes) <= 3
         """
         logger.info(f"Finding similar {node_type} nodes for domain '{domain}'")
 
+        # Try event-based discovery first
+        if self.config.is_event_discovery_enabled() and self.event_client:
+            try:
+                event_patterns = await self._find_nodes_via_events(
+                    node_type=node_type,
+                    domain=domain,
+                    limit=limit,
+                )
+                if event_patterns:
+                    logger.info(f"Found {len(event_patterns)} nodes via events")
+                    return event_patterns
+            except Exception as e:
+                logger.warning(
+                    f"Event-based discovery failed: {e}, falling back to filesystem"
+                )
+
+        # Fallback to filesystem scanning (original implementation)
         similar_nodes: List[Tuple[Path, float]] = []
 
         # 1. Start with best examples for this node type
@@ -218,6 +250,51 @@ class ProductionPatternMatcher:
 
         logger.info(f"Found {len(result)} similar nodes for {node_type}/{domain}")
         return result
+
+    async def _find_nodes_via_events(
+        self, node_type: str, domain: str, limit: int = 3
+    ) -> List[Path]:
+        """
+        Find similar nodes using event-based intelligence discovery.
+
+        Args:
+            node_type: ONEX node type (effect, compute, reducer, orchestrator)
+            domain: Domain/category (database, api, analytics, etc.)
+            limit: Maximum number of examples to return
+
+        Returns:
+            List of paths to similar production nodes
+
+        Raises:
+            Exception: If event client not configured or request fails
+        """
+        if not self.event_client:
+            raise ValueError("Event client not configured")
+
+        # Build search pattern for this node type
+        search_pattern = f"node_*_{node_type}.py"
+
+        # Request pattern discovery via events
+        response = await self.event_client.request_pattern_discovery(
+            source_path=search_pattern,
+            language="python",
+            timeout_ms=self.config.kafka_request_timeout_ms,
+        )
+
+        # Extract patterns from response
+        node_paths = []
+        if response and isinstance(response, list):
+            for pattern_data in response[:limit]:
+                # Extract file path from pattern data
+                file_path = pattern_data.get("file_path") or pattern_data.get("path")
+                if file_path:
+                    # Calculate domain similarity for ranking
+                    similarity = self._calculate_domain_similarity(domain, file_path)
+                    node_paths.append((Path(file_path), similarity))
+
+        # Sort by similarity and return top N
+        node_paths.sort(key=lambda x: x[1], reverse=True)
+        return [path[0] for path in node_paths[:limit]]
 
     def _calculate_domain_similarity(self, target_domain: str, file_path: str) -> float:
         """
@@ -361,7 +438,8 @@ class ProductionPatternMatcher:
         self.cache[cache_key] = pattern
 
         logger.info(
-            f"Extracted pattern from {node_path.name} (confidence: {pattern.confidence:.2f})"
+            f"Extracted pattern from {node_path.name} "
+            f"(confidence: {pattern.confidence:.2f})"
         )
         return pattern
 
@@ -531,8 +609,15 @@ class CodeRefiner:
     extracted from omniarchon codebase.
     """
 
-    def __init__(self):
-        """Initialize code refiner with AI model and pattern matcher."""
+    def __init__(
+        self,
+        event_client: Optional[IntelligenceEventClient] = None,
+        config: Optional[IntelligenceConfig] = None,
+    ):
+        """
+        Initialize code refiner with AI model, pattern matcher, and
+        optional event client.
+        """
         # Initialize Gemini 2.5 Flash
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -541,13 +626,18 @@ class CodeRefiner:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
-        # Initialize pattern matcher
-        self.pattern_matcher = ProductionPatternMatcher()
+        # Initialize pattern matcher with event client
+        self.pattern_matcher = ProductionPatternMatcher(
+            event_client=event_client,
+            config=config,
+        )
 
         # Pattern extraction cache
         self.pattern_cache: Dict[str, List[ProductionPattern]] = {}
 
-        logger.info("Initialized CodeRefiner with Gemini 2.5 Flash")
+        logger.info(
+            "Initialized CodeRefiner with Gemini 2.5 Flash and " "event-based discovery"
+        )
 
     async def refine_code(
         self,
@@ -583,7 +673,9 @@ class CodeRefiner:
             >>> assert "async with self.transaction_manager.begin():" in refined
         """
         logger.info(
-            f"Refining {file_type} code for {refinement_context.get('node_type', 'N/A')}/{refinement_context.get('domain', 'N/A')}"
+            f"Refining {file_type} code for "
+            f"{refinement_context.get('node_type', 'N/A')}/"
+            f"{refinement_context.get('domain', 'N/A')}"
         )
 
         # 1. Find production patterns
@@ -638,7 +730,7 @@ class CodeRefiner:
             return self.pattern_cache[cache_key]
 
         # Find similar nodes
-        similar_nodes = self.pattern_matcher.find_similar_nodes(
+        similar_nodes = await self.pattern_matcher.find_similar_nodes(
             node_type=node_type,
             domain=domain,
             limit=3,
