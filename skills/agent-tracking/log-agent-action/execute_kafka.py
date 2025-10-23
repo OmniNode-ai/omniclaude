@@ -57,7 +57,7 @@ def get_kafka_producer():
             )
 
     # Get Kafka brokers from environment
-    brokers = os.environ.get("KAFKA_BROKERS", "localhost:9092").split(",")
+    brokers = os.environ.get("KAFKA_BROKERS", "localhost:29102").split(",")
 
     # Create producer with JSON serialization
     producer = KafkaProducer(
