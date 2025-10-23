@@ -11,7 +11,7 @@ python = "^3.12"
 
 # ONEX dependencies - Using public GitHub repos
 omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main"}
-omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", tag = "v0.1.0"}
+omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch = "main"}
 
 # Core dependencies
 pydantic = "^2.0.0"
