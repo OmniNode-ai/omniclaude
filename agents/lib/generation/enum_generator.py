@@ -9,6 +9,7 @@ Adapted from omnibase_3 for omniclaude/omnibase_core compatibility.
 
 import ast
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -153,6 +154,12 @@ class EnumGenerator:
                 f"Got: {class_name}"
             )
 
+        # Issue 1: Validate enum_type before creating bases
+        if enum_type not in {"str", "int"}:
+            raise ValueError(
+                f"Unsupported enum_type: {enum_type}, expected 'str' or 'int'"
+            )
+
         # Create class with str/int and Enum as bases
         bases = [
             ast.Name(id=enum_type, ctx=ast.Load()),
@@ -165,10 +172,21 @@ class EnumGenerator:
         docstring = f"{class_name} enumeration from contract definitions."
         body.append(ast.Expr(value=ast.Constant(value=docstring)))
 
-        # Add enum values
-        for enum_value in enum_values:
-            # Convert value to UPPER_SNAKE_CASE for member name
-            attr_name = enum_value.upper().replace("-", "_").replace(" ", "_")
+        # Issue 2: Robust sanitization of enum member names
+        used: set[str] = set()
+        for idx, enum_value in enumerate(enum_values):
+            # Sanitize to valid Python identifier
+            raw = str(enum_value).strip()
+            candidate = re.sub(r"\W+", "_", raw).upper()
+
+            # Ensure valid identifier (starts with letter or underscore)
+            if not candidate or not re.match(r"^[A-Z_]\w*$", candidate):
+                candidate = f"VALUE_{idx}"
+
+            # Handle duplicates
+            attr_name = candidate if candidate not in used else f"{candidate}_{idx}"
+            used.add(attr_name)
+
             assignment = ast.Assign(
                 targets=[ast.Name(id=attr_name, ctx=ast.Store())],
                 value=ast.Constant(value=enum_value),
@@ -307,8 +325,9 @@ class EnumGenerator:
         deduplicated = []
 
         for enum_info in enum_infos:
-            # Create a hashable key from sorted values
-            values_key = tuple(sorted(enum_info.values))
+            # Issue 3: Normalize to strings to handle mixed types before sorting
+            norm = [str(v) for v in enum_info.values]
+            values_key = tuple(sorted(norm))
 
             if values_key not in seen_values:
                 seen_values[values_key] = enum_info
@@ -373,8 +392,8 @@ class EnumGenerator:
             },
         )
 
-        # Check if this schema itself is an enum
-        if schema.get("type") == "string" and "enum" in schema:
+        # Issue 4: Comprehensive enum discovery - check for enum regardless of type
+        if isinstance(schema, dict) and "enum" in schema:
             enum_name = self.generate_enum_name_from_schema(schema)
 
             logger.debug(
@@ -418,3 +437,14 @@ class EnumGenerator:
                         enum_schemas,
                         f"{source_schema}.{field_name}[]",
                     )
+
+        # Issue 4: Recursively check oneOf/anyOf/allOf for enum definitions
+        for combiner_key in ["oneOf", "anyOf", "allOf"]:
+            if combiner_key in schema and isinstance(schema[combiner_key], list):
+                for idx, sub_schema in enumerate(schema[combiner_key]):
+                    if isinstance(sub_schema, dict):
+                        self._collect_enum_schemas_from_dict(
+                            sub_schema,
+                            enum_schemas,
+                            f"{source_schema}.{combiner_key}[{idx}]",
+                        )

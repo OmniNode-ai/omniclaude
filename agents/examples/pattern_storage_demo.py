@@ -22,9 +22,10 @@ import asyncio
 import hashlib
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agents.lib.patterns.pattern_extractor import PatternExtractor
 from agents.lib.patterns.pattern_reuse import PatternReuse

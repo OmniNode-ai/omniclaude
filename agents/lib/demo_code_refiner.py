@@ -262,7 +262,12 @@ async def main():
     print("=" * 80)
 
     # Check if omniarchon repository is available
-    omniarchon_path = Path("/Volumes/PRO-G40/Code/omniarchon")
+    omniarchon_path = Path(
+        os.getenv(
+            "OMNIARCHON_PATH",
+            str(Path(__file__).resolve().parents[2] / "../omniarchon"),
+        )
+    )
     if not omniarchon_path.exists():
         print("\n⚠️  Warning: omniarchon repository not found")
         print(f"   Expected at: {omniarchon_path}")
