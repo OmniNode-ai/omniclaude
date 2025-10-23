@@ -187,6 +187,50 @@ class NodeOrderProcessingReducer(NodeReducerService):
         )
 ```
 
+### Coordination Pattern: Intent Publisher Mixin
+
+**Purpose**: Allows REDUCER/COMPUTE/ORCHESTRATOR nodes to publish events while maintaining ONEX purity.
+
+**Pattern** (Conceptual - actual implementation in omnibase_core may differ):
+```python
+# NOTE: Class names and imports shown are conceptual
+# Consult omnibase_core documentation for actual implementation
+
+class NodeMetricsAggregatorReducer(NodeReducer, IntentPublisherMixin):
+    """REDUCER with intent-based event publishing."""
+
+    def __init__(self, container):
+        super().__init__(container)
+        self._init_intent_publisher(container)  # Initialize mixin
+
+    async def execute_reduction(self, events):
+        # Pure aggregation (no I/O)
+        metrics = self._aggregate_metrics(events)
+
+        # Coordination I/O via intent (not direct publishing)
+        await self.publish_event_intent(
+            target_topic="metrics.processed",
+            target_key=str(metrics.id),
+            event=MetricsEvent(data=metrics)
+        )
+
+        return metrics
+```
+
+**When to Use**:
+- ✅ REDUCER nodes need to publish aggregated results
+- ✅ COMPUTE nodes need to publish computed results
+- ✅ ORCHESTRATOR nodes need coordination events
+- ❌ EFFECT nodes (they perform I/O directly)
+
+**Architecture Benefits**:
+- **ONEX Compliance**: Node logic stays pure (no direct I/O)
+- **Testability**: Intent building is deterministic and mockable
+- **Flexibility**: Can swap message brokers without changing node logic
+- **Observability**: All coordination intents logged and traceable
+
+**Note**: This pattern is implemented in omninode_bridge and will be available in omnibase_core. Consult the latest omnibase_core documentation for current class names and import paths.
+
 ---
 
 #### 4. **ORCHESTRATOR Node**
