@@ -16,8 +16,10 @@ The intelligence gathered includes:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from .config.intelligence_config import IntelligenceConfig
+from .intelligence_event_client import IntelligenceEventClient
 from .models.intelligence_context import IntelligenceContext
 
 logger = logging.getLogger(__name__)
@@ -35,14 +37,23 @@ class IntelligenceGatherer:
     The gatherer gracefully degrades when external sources are unavailable.
     """
 
-    def __init__(self, archon_client=None):
+    def __init__(
+        self,
+        archon_client=None,
+        config: Optional[IntelligenceConfig] = None,
+        event_client: Optional[IntelligenceEventClient] = None,
+    ):
         """
         Initialize intelligence gatherer.
 
         Args:
             archon_client: Optional Archon MCP client for RAG queries
+            config: Optional intelligence configuration (default: load from env)
+            event_client: Optional Kafka event client for event-based pattern discovery
         """
         self.archon = archon_client
+        self.config = config or IntelligenceConfig.from_env()
+        self.event_client = event_client
         self.pattern_library = self._load_pattern_library()
         self.logger = logging.getLogger(__name__)
 
@@ -73,12 +84,34 @@ class IntelligenceGatherer:
 
         intelligence = IntelligenceContext()
 
-        # Source 1: Built-in pattern library (always available)
-        self._gather_builtin_patterns(
-            intelligence, node_type, domain, service_name, operations
-        )
+        # Source 1: Event-based pattern discovery (priority source, if enabled)
+        event_success = False
+        if self.config.is_event_discovery_enabled() and self.event_client:
+            try:
+                event_success = await self._gather_event_based_patterns(
+                    intelligence,
+                    node_type,
+                    domain,
+                    service_name,
+                    timeout_ms=self.config.kafka_pattern_discovery_timeout_ms,
+                )
+                if event_success:
+                    self.logger.debug(
+                        "Event-based discovery successful, continuing with additional sources"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Event-based discovery failed: {e}, using fallback sources"
+                )
 
-        # Source 2: Archon RAG (if available)
+        # Source 2: Built-in pattern library (always available as fallback)
+        # Only skip if event discovery was successful and fallback is disabled
+        if not event_success or self.config.enable_filesystem_fallback:
+            self._gather_builtin_patterns(
+                intelligence, node_type, domain, service_name, operations
+            )
+
+        # Source 3: Archon RAG (if available)
         if self.archon:
             await self._gather_archon_intelligence(
                 intelligence, node_type, domain, service_name, prompt
@@ -86,12 +119,13 @@ class IntelligenceGatherer:
         else:
             self.logger.debug("Archon client not available, skipping RAG queries")
 
-        # Source 3: Codebase pattern analysis (future enhancement)
+        # Source 4: Codebase pattern analysis (future enhancement)
         # await self._gather_codebase_patterns(intelligence, node_type, domain)
 
         self.logger.info(
             f"Intelligence gathering complete: {len(intelligence.node_type_patterns)} patterns, "
-            f"{len(intelligence.code_examples)} examples from {len(intelligence.rag_sources)} sources"
+            f"{len(intelligence.code_examples)} examples from {len(intelligence.rag_sources)} sources "
+            f"(confidence: {intelligence.confidence_score:.2f})"
         )
 
         return intelligence
@@ -154,7 +188,9 @@ class IntelligenceGatherer:
         intelligence.rag_sources.append("builtin_pattern_library")
 
         # Set confidence score (0.7 for built-in patterns)
-        intelligence.confidence_score = 0.7
+        # Only set if not already set by higher confidence source (e.g., event-based)
+        if intelligence.confidence_score < 0.7:
+            intelligence.confidence_score = 0.7
 
     async def _gather_archon_intelligence(
         self,
@@ -187,6 +223,127 @@ class IntelligenceGatherer:
 
         except Exception as e:
             self.logger.warning(f"Archon RAG query failed: {e}")
+
+    async def _gather_event_based_patterns(
+        self,
+        intelligence: IntelligenceContext,
+        node_type: str,
+        domain: str,
+        service_name: str,
+        timeout_ms: int = 5000,
+    ) -> bool:
+        """
+        Gather patterns via Kafka events from omniarchon intelligence adapter.
+
+        This method uses event-based pattern discovery to query the omniarchon
+        codebase for production examples and best practices.
+
+        Args:
+            intelligence: IntelligenceContext to populate
+            node_type: ONEX node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)
+            domain: Domain context (e.g., "database", "api", "messaging")
+            service_name: Service name for context
+            timeout_ms: Response timeout in milliseconds
+
+        Returns:
+            True if patterns were successfully gathered, False otherwise
+
+        Raises:
+            TimeoutError: If no response within timeout
+            KafkaError: If Kafka communication fails
+        """
+        if not self.event_client:
+            self.logger.debug(
+                "Event client not available, skipping event-based discovery"
+            )
+            return False
+
+        try:
+            # Construct search pattern based on node type
+            search_pattern = f"node_*_{node_type.lower()}.py"
+
+            self.logger.debug(
+                f"Requesting event-based pattern discovery (pattern: {search_pattern}, "
+                f"domain: {domain}, service: {service_name})"
+            )
+
+            # Request pattern discovery via events
+            patterns = await self.event_client.request_pattern_discovery(
+                source_path=search_pattern,
+                language="python",
+                timeout_ms=timeout_ms,
+            )
+
+            if not patterns:
+                self.logger.debug("No patterns returned from event-based discovery")
+                return False
+
+            self.logger.info(
+                f"Event-based discovery returned {len(patterns)} patterns "
+                f"for {node_type}/{domain}"
+            )
+
+            # Extract and integrate patterns into intelligence context
+            for pattern in patterns:
+                # Pattern structure from omniarchon intelligence adapter:
+                # {
+                #   "file_path": str,
+                #   "confidence": float,
+                #   "pattern_type": str,
+                #   "description": str,
+                #   "code_snippet": str (optional),
+                #   "best_practices": List[str] (optional),
+                #   "metrics": Dict[str, Any] (optional)
+                # }
+
+                # Add to node type patterns
+                if "description" in pattern:
+                    intelligence.node_type_patterns.append(pattern["description"])
+
+                # Add best practices if available
+                if "best_practices" in pattern:
+                    intelligence.domain_best_practices.extend(pattern["best_practices"])
+
+                # Add code examples if available
+                if "code_snippet" in pattern:
+                    intelligence.code_examples.append(
+                        {
+                            "source": pattern.get("file_path", "unknown"),
+                            "code": pattern["code_snippet"],
+                            "context": pattern.get("description", ""),
+                        }
+                    )
+
+            # Track event-based source
+            intelligence.rag_sources.append("event_based_discovery")
+
+            # Boost confidence score for event-based patterns
+            if self.config.prefer_event_patterns:
+                # Event-based patterns get higher confidence (0.9 base)
+                intelligence.confidence_score = max(intelligence.confidence_score, 0.9)
+            else:
+                # Standard confidence boost (0.8 base)
+                intelligence.confidence_score = max(intelligence.confidence_score, 0.8)
+
+            self.logger.debug(
+                f"Successfully integrated event-based patterns (confidence: {intelligence.confidence_score})"
+            )
+
+            return True
+
+        except TimeoutError:
+            self.logger.warning(
+                f"Event-based pattern discovery timeout after {timeout_ms}ms, "
+                "falling back to built-in patterns"
+            )
+            return False
+
+        except Exception as e:
+            self.logger.warning(
+                f"Event-based pattern discovery failed: {e}, "
+                "falling back to built-in patterns"
+            )
+            return False
 
     def _load_pattern_library(self) -> Dict[str, Any]:
         """
