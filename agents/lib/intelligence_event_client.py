@@ -468,7 +468,8 @@ class IntelligenceEventClient:
 
         try:
             # Publish request
-            assert self._producer is not None
+            if self._producer is None:
+                raise RuntimeError("Producer not initialized. Call start() first.")
             await self._producer.send_and_wait(self.TOPIC_REQUEST, payload)
 
             # Wait for response with timeout
@@ -495,7 +496,8 @@ class IntelligenceEventClient:
         self.logger.debug("Starting response consumer task")
 
         try:
-            assert self._consumer is not None
+            if self._consumer is None:
+                raise RuntimeError("Consumer not initialized. Call start() first.")
 
             async for msg in self._consumer:
                 try:

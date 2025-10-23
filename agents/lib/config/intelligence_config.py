@@ -9,7 +9,7 @@ Usage:
     >>>
     >>> # Load from environment
     >>> config = IntelligenceConfig.from_env()
-    >>> config.validate()
+    >>> config.validate_config()
     >>>
     >>> # Check if event discovery is enabled
     >>> if config.is_event_discovery_enabled():
@@ -246,7 +246,7 @@ class IntelligenceConfig(BaseModel):
     # Validation & Utility Methods
     # =========================================================================
 
-    def validate(self) -> None:
+    def validate_config(self) -> None:
         """
         Validate configuration consistency.
 

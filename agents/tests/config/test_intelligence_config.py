@@ -102,7 +102,7 @@ class TestIntelligenceConfigDefaults:
         """Test default configuration passes validation."""
         config = IntelligenceConfig()
         # Should not raise
-        config.validate()
+        config.validate_config()
 
 
 # =============================================================================
@@ -247,7 +247,7 @@ class TestConfigurationValidation:
         )
 
         with pytest.raises(ValueError, match="At least one intelligence source"):
-            config.validate()
+            config.validate_config()
 
     def test_validate_accepts_event_only(self):
         """Test validation accepts event-based discovery only."""
@@ -256,7 +256,7 @@ class TestConfigurationValidation:
             enable_filesystem_fallback=False,
         )
         # Should not raise
-        config.validate()
+        config.validate_config()
 
     def test_validate_accepts_filesystem_only(self):
         """Test validation accepts filesystem fallback only."""
@@ -265,7 +265,7 @@ class TestConfigurationValidation:
             enable_filesystem_fallback=True,
         )
         # Should not raise
-        config.validate()
+        config.validate_config()
 
     def test_validate_empty_topic_requested(self):
         """Test validation rejects empty request topic name."""
@@ -274,7 +274,7 @@ class TestConfigurationValidation:
         with pytest.raises(
             ValueError, match="topic_code_analysis_requested cannot be empty"
         ):
-            config.validate()
+            config.validate_config()
 
     def test_validate_empty_topic_completed(self):
         """Test validation rejects empty completed topic name."""
@@ -283,7 +283,7 @@ class TestConfigurationValidation:
         with pytest.raises(
             ValueError, match="topic_code_analysis_completed cannot be empty"
         ):
-            config.validate()
+            config.validate_config()
 
     def test_validate_empty_topic_failed(self):
         """Test validation rejects empty failed topic name."""
@@ -292,7 +292,7 @@ class TestConfigurationValidation:
         with pytest.raises(
             ValueError, match="topic_code_analysis_failed cannot be empty"
         ):
-            config.validate()
+            config.validate_config()
 
 
 # =============================================================================
