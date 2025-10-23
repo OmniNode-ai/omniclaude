@@ -36,8 +36,9 @@ WORKDIR /app
 
 # Install Python dependencies
 # Use --no-cache-dir to minimize image size
+# kafka-python-ng is a maintained fork compatible with Python 3.12
 RUN pip install --no-cache-dir \
-    kafka-python==2.0.2 \
+    kafka-python-ng==2.2.3 \
     psycopg2-binary==2.9.9
 
 # Copy consumer application and shared helpers

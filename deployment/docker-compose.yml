@@ -112,9 +112,7 @@ services:
       - LOG_LEVEL=INFO
     networks:
       - app_network
-    external_links:
-      - omninode-bridge-redpanda:omninode-bridge-redpanda
-      - omninode-bridge-postgres:omninode-bridge-postgres
+      - omninode_bridge_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -346,6 +344,9 @@ networks:
     ipam:
       config:
         - subnet: 172.23.0.0/16
+  omninode_bridge_network:
+    external: true
+    name: omninode_bridge_omninode-bridge-network
 
 # ============================================================================
 # Volumes - Persistent data storage
