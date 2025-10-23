@@ -365,18 +365,18 @@ result = await engine.generate_node(
 ## Files Created/Modified
 
 ### Created Files
-- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/models/intelligence_context.py`
-- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/template_helpers.py`
-- `/Volumes/PRO-G40/Code/omniclaude/agents/tests/test_template_intelligence.py`
-- `/Volumes/PRO-G40/Code/omniclaude/agents/examples/intelligence_enhanced_generation.py`
+- `agents/lib/models/intelligence_context.py`
+- `agents/lib/template_helpers.py`
+- `agents/tests/test_template_intelligence.py`
+- `agents/examples/intelligence_enhanced_generation.py`
 
 ### Modified Files
-- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/models/__init__.py` (exports)
-- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/omninode_template_engine.py` (intelligence support)
-- `/Volumes/PRO-G40/Code/omniclaude/agents/templates/effect_node_template.py` (enhanced)
-- `/Volumes/PRO-G40/Code/omniclaude/agents/templates/compute_node_template.py` (enhanced)
-- `/Volumes/PRO-G40/Code/omniclaude/agents/templates/reducer_node_template.py` (enhanced)
-- `/Volumes/PRO-G40/Code/omniclaude/agents/templates/orchestrator_node_template.py` (enhanced)
+- `agents/lib/models/__init__.py` (exports)
+- `agents/lib/omninode_template_engine.py` (intelligence support)
+- `agents/templates/effect_node_template.py` (enhanced)
+- `agents/templates/compute_node_template.py` (enhanced)
+- `agents/templates/reducer_node_template.py` (enhanced)
+- `agents/templates/orchestrator_node_template.py` (enhanced)
 
 ## Next Steps
 

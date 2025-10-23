@@ -14,6 +14,7 @@ Issue: generation_pipeline -> contract_builder_factory -> generation/__init__.py
 This will be fixed in Week 4 full pipeline integration.
 """
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -289,7 +290,9 @@ class TestPipelineValidationGates:
 
         # Parser will infer a valid type or default to EFFECT
         # G2 should still pass because parser only produces valid types
-        result = await pipeline.execute(prompt, "/tmp/test_invalid")
+        result = await pipeline.execute(
+            prompt, str(Path(tempfile.gettempdir()) / "test_invalid")
+        )
 
         # Either succeeds with valid type, or fails at earlier stage
         if result.status == "failed":

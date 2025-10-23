@@ -10,7 +10,7 @@ Stage 4.5 introduces two critical Jinja2 templates for Event Bus Integration:
 ## Template Locations
 
 ```
-/Volumes/PRO-G40/Code/omniclaude/agents/templates/
+agents/templates/
 ├── introspection_event.py.jinja2   (2.9 KB, 73 lines)
 └── startup_script.py.jinja2        (4.6 KB, 145 lines)
 ```
@@ -227,7 +227,12 @@ python start_node.py --help
 
 Update `effect_node_template.py` to include the introspection method:
 
+### Conceptual Example (Pseudocode)
+
+**Note**: The following is pseudocode for illustration purposes. The actual implementation in the generation pipeline may differ. These methods serve as examples of how the templates could be integrated.
+
 ```python
+# Pseudocode - illustrative example only
 # In business_logic_generator.py
 def _generate_effect_node(self, context: dict) -> str:
     # Render introspection event method
@@ -249,7 +254,12 @@ def _generate_effect_node(self, context: dict) -> str:
 
 Add startup script generation to the pipeline:
 
+### Conceptual Example (Pseudocode)
+
+**Note**: The following is pseudocode for illustration purposes. The actual implementation in the generation pipeline may differ. These methods serve as examples of how startup scripts could be generated.
+
 ```python
+# Pseudocode - illustrative example only
 # In generation_pipeline.py
 def generate_node_with_startup_script(self, prompt: str, output_dir: Path):
     # Generate node
@@ -281,7 +291,7 @@ def generate_node_with_startup_script(self, prompt: str, output_dir: Path):
 
 Comprehensive test suite available at:
 ```
-/Volumes/PRO-G40/Code/omniclaude/agents/tests/test_stage_4_5_templates.py
+agents/tests/test_stage_4_5_templates.py
 ```
 
 **Run Tests**:
@@ -392,8 +402,8 @@ class NodePostgresqlWriterEffect(NodeEffect):
 
 ## References
 
-- **Introspection Publisher Mixin**: `/Volumes/PRO-G40/Code/omniarchon/python/.venv/lib/python3.12/site-packages/omnibase_core/mixins/mixin_introspection_publisher.py`
-- **Effect Node Template**: `/Volumes/PRO-G40/Code/omniclaude/agents/templates/effect_node_template.py`
+- **Introspection Publisher Mixin**: `omnibase_core.mixins.mixin_introspection_publisher` (from omnibase_core package)
+- **Effect Node Template**: `agents/templates/effect_node_template.py`
 - **ONEX Architecture**: Internal documentation
 - **Stage 4.5 Specification**: Event Bus Integration requirements
 

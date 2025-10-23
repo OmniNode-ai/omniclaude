@@ -604,7 +604,7 @@ omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch 
 
 **Fix Required**:
 ```bash
-cd /Volumes/PRO-G40/Code/omninode_bridge
+cd ../omninode_bridge
 poetry install --with dev
 # Or if credentials missing:
 poetry add ../omnibase_core --editable
@@ -723,7 +723,7 @@ poetry add ../omnibase_spi --editable
 **Tasks**:
 1. Install omnibase_core and omnibase_spi in omninode_bridge
    ```bash
-   cd /Volumes/PRO-G40/Code/omninode_bridge
+   cd ../omninode_bridge
    poetry add ../omnibase_core --editable
    poetry add ../omnibase_spi --editable
    poetry install --with dev

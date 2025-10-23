@@ -7,18 +7,22 @@ Tests Week 2 Poly-J implementation:
 - GateResultAggregator analytics and quality scoring
 - ModelPipelineQualityReport generation
 - Recommendation and critical issue detection
+
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/test_gate_aggregation.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_gate_aggregation.py -v
 """
 
-import sys
-from pathlib import Path
 
-# Add agents dir to path (must be before local imports)
-agents_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(agents_dir))
-
-import pytest  # noqa: E402
-from lib.aggregators.gate_result_aggregator import GateResultAggregator  # noqa: E402
-from lib.models.model_gate_aggregation import (  # noqa: E402
+import pytest
+from lib.aggregators.gate_result_aggregator import GateResultAggregator
+from lib.models.model_gate_aggregation import (
     EnumGateCategory,
     ModelCategorySummary,
     ModelGateAggregation,

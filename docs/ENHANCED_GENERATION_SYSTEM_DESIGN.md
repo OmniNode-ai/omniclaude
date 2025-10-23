@@ -499,7 +499,7 @@ async def _checkpoint_contract_review(
 
 #### 4.3.1 Adapter Script
 
-Already created: `/Volumes/PRO-G40/Code/omniclaude/agents/parallel_execution/run_from_problem_statement.py`
+Already created: `agents/parallel_execution/run_from_problem_statement.py`
 
 **Flow**:
 ```python

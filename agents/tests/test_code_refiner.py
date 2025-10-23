@@ -10,6 +10,7 @@ Tests:
 """
 
 import ast
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -203,7 +204,7 @@ class NodeTestEffect:
             logger.info("Executing")
             return result
 '''
-        test_file = Path("/tmp/test_node_effect.py")
+        test_file = Path(tempfile.gettempdir()) / "test_node_effect.py"
         test_file.write_text(test_code)
 
         try:
@@ -318,15 +319,16 @@ def hello():
         }
 
         # Mock pattern matcher
+        test_node_path = Path(tempfile.gettempdir()) / "test_node_effect.py"
         refiner.pattern_matcher.find_similar_nodes = MagicMock(
             return_value=[
-                Path("/tmp/test_node_effect.py"),
+                test_node_path,
             ]
         )
 
         refiner.pattern_matcher.extract_patterns = MagicMock(
             return_value=ProductionPattern(
-                node_path=Path("/tmp/test_node_effect.py"),
+                node_path=test_node_path,
                 node_type="effect",
                 domain="database",
                 imports=["import logging"],
@@ -352,7 +354,7 @@ def hello():
         # Pre-populate cache
         cache_key = "effect:database"
         cached_pattern = ProductionPattern(
-            node_path=Path("/tmp/cached.py"),
+            node_path=Path(tempfile.gettempdir()) / "cached.py",
             node_type="effect",
             domain="database",
             confidence=0.9,
@@ -369,7 +371,7 @@ def hello():
         """Test refinement prompt building."""
         patterns = [
             ProductionPattern(
-                node_path=Path("/tmp/example.py"),
+                node_path=Path(tempfile.gettempdir()) / "example.py",
                 node_type="effect",
                 domain="database",
                 imports=["import logging", "from pathlib import Path"],
@@ -432,7 +434,7 @@ def hello():
         refiner._get_production_patterns = AsyncMock(
             return_value=[
                 ProductionPattern(
-                    node_path=Path("/tmp/test.py"),
+                    node_path=Path(tempfile.gettempdir()) / "test.py",
                     node_type="effect",
                     domain="database",
                     confidence=0.9,

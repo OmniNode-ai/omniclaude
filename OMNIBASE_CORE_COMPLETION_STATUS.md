@@ -1,7 +1,7 @@
 # Omnibase Core Completion Status Analysis
 
 **Analysis Date**: 2025-10-22
-**Repository**: `/Volumes/PRO-G40/Code/omnibase_3`
+**Repository**: `omnibase_3` (external repository)
 **Package Name**: `omnibase` (provides foundation for ONEX architecture)
 **Status**: ✅ **MVP COMPLETE** - Ready for integration
 
@@ -406,7 +406,7 @@ typing-extensions = "^4.13.2"
 **Option 1: Local Development (Recommended for now)**
 ```toml
 [tool.poetry.dependencies]
-omnibase = { path = "/Volumes/PRO-G40/Code/omnibase_3", develop = true }
+omnibase = { path = "../omnibase_3", develop = true }
 ```
 
 **Option 2: Git Reference (For CI/CD)**
@@ -533,7 +533,7 @@ from omnibase.core.models.model_onex_reply import ModelOnexReply
    - Test migration on sample files
 
 2. **Add omnibase to pyproject.toml**
-   - Use local path dependency: `{ path = "/Volumes/PRO-G40/Code/omnibase_3", develop = true }`
+   - Use local path dependency: `{ path = "../omnibase_3", develop = true }`
    - Run `poetry lock && poetry install`
    - Verify imports work in omniclaude
 

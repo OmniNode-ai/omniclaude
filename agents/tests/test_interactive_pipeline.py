@@ -16,10 +16,21 @@ Issue: generation_pipeline -> contract_builder_factory -> generation/__init__.py
 
 This will be resolved in Week 4 when the generation pipeline is fully integrated.
 For now, these tests verify the underlying functionality works when executed directly.
+
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/test_interactive_pipeline.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_interactive_pipeline.py -v
 """
 
 import asyncio
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -29,9 +40,6 @@ pytestmark = pytest.mark.skip(
     reason="Pytest collection import issue with omnibase_core.models.contracts - "
     "functionality works, will be fixed in Week 4 pipeline integration"
 )
-
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.generation_pipeline import GenerationPipeline  # noqa: E402
 
@@ -57,7 +65,7 @@ async def test_non_interactive_mode():
     try:
         result = await pipeline.execute(
             prompt=prompt,
-            output_directory="/tmp/test_node_gen",
+            output_directory=str(Path(tempfile.gettempdir()) / "test_node_gen"),
         )
 
         print(f"\n✓ Pipeline completed: {result.status}")

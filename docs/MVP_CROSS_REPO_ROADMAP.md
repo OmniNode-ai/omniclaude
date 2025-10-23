@@ -88,7 +88,7 @@ MVP COMPLETE (7-13 days critical path)
 2. Fix import paths in generation templates
 3. Add dependency to omniclaude:
    ```toml
-   omnibase = { path = "/Volumes/PRO-G40/Code/omnibase_3", develop = true }
+   omnibase = { path = "../omnibase_3", develop = true }
    ```
 
 **Effort**: 1 hour (documentation updates)
@@ -252,7 +252,7 @@ MVP COMPLETE (7-13 days critical path)
 **Immediate Actions** (within 24 hours):
 ```bash
 # 1. Start missing services
-cd /Volumes/PRO-G40/Code/omniarchon
+cd ../omniarchon  # External repository
 docker compose -f deployment/docker-compose.yml up -d archon-server archon-mcp archon-valkey
 
 # 2. Check database connectivity
@@ -453,7 +453,7 @@ Result: End-to-end self-improving code generation demonstrated ✅
 
 2. **Start missing omniarchon services** (1 hour)
    ```bash
-   cd /Volumes/PRO-G40/Code/omniarchon
+   cd ../omniarchon  # External repository
    docker compose up -d archon-server archon-mcp archon-valkey
    ```
 
@@ -496,10 +496,10 @@ Result: End-to-end self-improving code generation demonstrated ✅
 ## Appendices
 
 ### A. Repository Links
-- **omnibase_3**: `/Volumes/PRO-G40/Code/omnibase_3`
-- **omniclaude**: `/Volumes/PRO-G40/Code/omniclaude`
-- **omninode_bridge**: `/Volumes/PRO-G40/Code/omninode_bridge`
-- **omniarchon**: `/Volumes/PRO-G40/Code/omniarchon`
+- **omnibase_3**: `../omnibase_3`
+- **omniclaude**: `.`
+- **omninode_bridge**: `../omninode_bridge`
+- **omniarchon**: `../omniarchon`
 
 ### B. Key Documents
 - `OMNICLAUDE_MVP_AND_RELEASE_REQUIREMENTS.md` - Detailed omniclaude analysis

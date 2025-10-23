@@ -3,13 +3,18 @@
 Warning Fixer Demo
 
 Demonstrates automatic fixes for G12, G13, G14 validation warnings.
+
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/examples/warning_fixer_demo.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 """
 
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from agents.lib.warning_fixer import WarningFixer, apply_automatic_fixes
 

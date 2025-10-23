@@ -217,7 +217,7 @@ python scripts/migrate_imports.py agents/lib/generation/
 ### 1. Contract Analyzer
 
 #### Source
-**File**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_contract_analyzer.py`
+**File**: `../omnibase_3/src/omnibase/utils/generation/utility_contract_analyzer.py`
 **Lines**: 658
 
 #### Target
@@ -228,7 +228,7 @@ python scripts/migrate_imports.py agents/lib/generation/
 
 1. **Copy source file**:
 ```bash
-cp /Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_contract_analyzer.py \
+cp ../omnibase_3/src/omnibase/utils/generation/utility_contract_analyzer.py \
    agents/lib/generation/contract_analyzer.py
 ```
 
@@ -350,7 +350,7 @@ def test_load_invalid_contract():
 ### 2. AST Builder
 
 #### Source
-**File**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_ast_builder.py`
+**File**: `../omnibase_3/src/omnibase/utils/generation/utility_ast_builder.py`
 **Lines**: 479
 
 #### Target
@@ -361,7 +361,7 @@ def test_load_invalid_contract():
 
 1. **Copy and migrate imports**:
 ```bash
-cp /Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_ast_builder.py \
+cp ../omnibase_3/src/omnibase/utils/generation/utility_ast_builder.py \
    agents/lib/generation/ast_builder.py
 python scripts/migrate_imports.py agents/lib/generation/ast_builder.py
 ```
@@ -448,7 +448,7 @@ def test_generate_pydantic_model():
 ### 3. Type Mapper
 
 #### Source
-**File**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_type_mapper.py`
+**File**: `../omnibase_3/src/omnibase/utils/generation/utility_type_mapper.py`
 **Lines**: 330
 
 #### Target
@@ -459,7 +459,7 @@ def test_generate_pydantic_model():
 
 1. **Copy and migrate**:
 ```bash
-cp /Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_type_mapper.py \
+cp ../omnibase_3/src/omnibase/utils/generation/utility_type_mapper.py \
    agents/lib/generation/type_mapper.py
 python scripts/migrate_imports.py agents/lib/generation/type_mapper.py
 ```
@@ -547,7 +547,7 @@ def get_python_type(self, schema_type: str, schema_format: str | None = None) ->
 ### 4. Enum Generator
 
 #### Source
-**File**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_enum_generator.py`
+**File**: `../omnibase_3/src/omnibase/utils/generation/utility_enum_generator.py`
 **Lines**: 440
 
 #### Target
@@ -558,7 +558,7 @@ def get_python_type(self, schema_type: str, schema_format: str | None = None) ->
 
 1. **Copy and migrate**:
 ```bash
-cp /Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_enum_generator.py \
+cp ../omnibase_3/src/omnibase/utils/generation/utility_enum_generator.py \
    agents/lib/generation/enum_generator.py
 python scripts/migrate_imports.py agents/lib/generation/enum_generator.py
 ```
@@ -681,7 +681,7 @@ def test_enum_name_validation():
 ### 5. Reference Resolver
 
 #### Source
-**File**: `/Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_reference_resolver.py`
+**File**: `../omnibase_3/src/omnibase/utils/generation/utility_reference_resolver.py`
 **Lines**: 303
 
 #### Target
@@ -692,7 +692,7 @@ def test_enum_name_validation():
 
 1. **Copy and migrate**:
 ```bash
-cp /Volumes/PRO-G40/Code/omnibase_3/src/omnibase/utils/generation/utility_reference_resolver.py \
+cp ../omnibase_3/src/omnibase/utils/generation/utility_reference_resolver.py \
    agents/lib/generation/reference_resolver.py
 python scripts/migrate_imports.py agents/lib/generation/reference_resolver.py
 ```

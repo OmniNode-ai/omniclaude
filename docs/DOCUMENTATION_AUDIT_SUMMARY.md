@@ -77,13 +77,13 @@ All corrections are backed by verifiable evidence:
 ### Evidence 1: LOC Count
 ```bash
 # Command run:
-find /Volumes/PRO-G40/Code/omniclaude/agents -name "*.py" -type f | xargs wc -l | tail -1
+find agents -name "*.py" -type f | xargs wc -l | tail -1
 
 # Output:
 87547 total
 
 # Python file count:
-find /Volumes/PRO-G40/Code/omniclaude/agents -name "*.py" -type f | wc -l
+find agents -name "*.py" -type f | wc -l
 225
 ```
 
@@ -93,7 +93,7 @@ find /Volumes/PRO-G40/Code/omniclaude/agents -name "*.py" -type f | wc -l
 
 ### Evidence 2: Test Results
 
-**Source**: `/Volumes/PRO-G40/Code/omniclaude/TEST_RESULTS.md`
+**Source**: `TEST_RESULTS.md`
 
 **Key Findings**:
 - **Line 5**: "Status: ⚠️ **PARTIAL SUCCESS** - Core functionality works, minor issues found"

@@ -6,7 +6,7 @@ These Jinja2 templates provide event bus initialization and lifecycle management
 
 **Stage**: 4.5 (Event Bus Integration)
 **Created**: 2025-10-22
-**Reference**: `/Volumes/PRO-G40/Code/omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
+**Reference**: `../omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
 
 ---
 
@@ -130,7 +130,7 @@ from src.events.publisher.event_publisher import EventPublisher
 - **As installed package**: `from omniarchon.events.publisher import EventPublisher`
 - **Docker/microservice**: Verify the package structure in your container
 
-**Reference**: `/Volumes/PRO-G40/Code/omniarchon/python/src/events/publisher/event_publisher.py`
+**Reference**: `../omniarchon/python/src/events/publisher/event_publisher.py`
 
 ---
 
@@ -330,7 +330,7 @@ async def test_introspection_event_published():
 
 ## Related Documentation
 
-- **Reference Implementation**: `/Volumes/PRO-G40/Code/omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
+- **Reference Implementation**: `../omniarchon/python/src/intelligence/nodes/node_intelligence_adapter_effect.py`
 - **Event Bus Architecture**: `docs/CLI_EVENT_BUS_MIGRATION.md`
 - **Generation Pipeline**: `docs/GENERATION_PIPELINE.md`
 - **ONEX Node Paradigm**: `OMNIBASE_CORE_NODE_PARADIGM.md`

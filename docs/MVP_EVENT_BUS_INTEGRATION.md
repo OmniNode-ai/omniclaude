@@ -126,7 +126,7 @@ class NodeIntelligenceAdapterEffect:
 
 ### 3.1 EventPublisher Integration
 
-**From**: `/Volumes/PRO-G40/Code/omniarchon/python/src/events/publisher/event_publisher.py`
+**From**: `../omniarchon/python/src/events/publisher/event_publisher.py`
 
 ```python
 class EventPublisher:

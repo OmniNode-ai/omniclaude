@@ -133,7 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Project Metadata
 
-**Repository**: `/Volumes/PRO-G40/Code/omniclaude`
+**Repository**: `.`
 **Language**: Python 3.12
 **Framework**: ONEX Architecture
 **License**: Proprietary

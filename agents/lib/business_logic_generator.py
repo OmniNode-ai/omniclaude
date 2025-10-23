@@ -270,7 +270,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
             "# Core imports",
             f"from omnibase_core.nodes.node_{node_type.lower()} import {self.node_base_classes[node_type]}",
             "from omnibase_core.errors.error_codes import EnumCoreErrorCode",
-            "from omnibase_core.errors.model_onex_error import ModelOnexError",
+            "from omnibase_core.errors import OnexError",
             "",
         ]
 

@@ -3136,12 +3136,23 @@ except ImportError:
     def _gate_g14_import_test(
         self, output_path: Path, node_type: str, service_name: str
     ) -> ValidationGate:
-        """G14: Import test succeeds (WARNING)."""
+        """
+        G14: Import test succeeds (WARNING).
+
+        NOTE: This temporarily modifies sys.path for import testing.
+        The modification is cleaned up in the finally block to prevent side effects.
+        This is one of the few legitimate cases where sys.path manipulation is acceptable,
+        as it's scoped to testing dynamically generated code that isn't installed as a package.
+        """
         start_ms = time()
+        test_path = str(output_path.parent)
+        path_added = False
 
         try:
-            # Add to Python path
-            sys.path.insert(0, str(output_path.parent))
+            # Temporarily add to Python path for import testing
+            if test_path not in sys.path:
+                sys.path.insert(0, test_path)
+                path_added = True
 
             # Try to import
             node_module_name = (
@@ -3181,7 +3192,6 @@ except ImportError:
                 message=f"Import failed: {str(e)[:100]}",
                 duration_ms=int((time() - start_ms) * 1000),
             )
-
         except Exception as e:
             return ValidationGate(
                 gate_id="G14",
@@ -3191,11 +3201,10 @@ except ImportError:
                 message=f"Import test error: {str(e)[:100]}",
                 duration_ms=int((time() - start_ms) * 1000),
             )
-
         finally:
-            # Remove from path
-            if str(output_path.parent) in sys.path:
-                sys.path.remove(str(output_path.parent))
+            # Clean up sys.path to prevent side effects
+            if path_added and test_path in sys.path:
+                sys.path.remove(test_path)
 
     # -------------------------------------------------------------------------
     # Helper Methods

@@ -725,7 +725,7 @@ Net Benefit:          $123,700+ (first year)
 ## 📞 Contact & Support
 
 ### Project Documentation
-- **Primary**: `/Volumes/PRO-G40/Code/omniclaude/docs/`
+- **Primary**: `docs/`
 - **User Guide**: `CLI_USAGE.md`
 - **API Docs**: In-code docstrings
 - **Architecture**: `POC_PIPELINE_ARCHITECTURE.md`

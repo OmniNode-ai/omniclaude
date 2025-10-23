@@ -20,8 +20,8 @@
 
 ### Key Repositories
 
-1. **omniarchon** (`/Volumes/PRO-G40/Code/omniarchon`): 34 production nodes
-2. **omninode_bridge** (`/Volumes/PRO-G40/Code/omninode_bridge`): No ONEX nodes found (legacy patterns)
+1. **omniarchon** (`../omniarchon`): 34 production nodes
+2. **omninode_bridge** (`../omninode_bridge`): No ONEX nodes found (legacy patterns)
 
 ---
 
@@ -32,7 +32,7 @@
 **Best Examples**:
 
 #### 🌟 Qdrant Search Effect
-**File**: `/Volumes/PRO-G40/Code/omniarchon/services/intelligence/onex/effects/node_qdrant_search_effect.py`
+**File**: `../omniarchon/services/intelligence/onex/effects/node_qdrant_search_effect.py`
 
 **Why This Example**:
 - Production-proven vector search (<100ms for 10K vectors)
@@ -114,7 +114,7 @@ class NodeQdrantSearchEffect(NodeBaseEffect):
 **Best Examples**:
 
 #### 🌟 Intent Classifier Compute
-**File**: `/Volumes/PRO-G40/Code/omniarchon/services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py`
+**File**: `../omniarchon/services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py`
 
 **Why This Example**:
 - Pure functional compute (no side effects)
@@ -219,7 +219,7 @@ class NodeIntentClassifierCompute:
 **Best Example**:
 
 #### 🌟 Usage Analytics Reducer
-**File**: `/Volumes/PRO-G40/Code/omniarchon/services/intelligence/src/services/pattern_learning/phase4_traceability/node_usage_analytics_reducer.py`
+**File**: `../omniarchon/services/intelligence/src/services/pattern_learning/phase4_traceability/node_usage_analytics_reducer.py`
 
 **Why This Example**:
 - Pure data aggregation (no external I/O)
@@ -341,7 +341,7 @@ class NodeUsageAnalyticsReducer:
 **Best Example**:
 
 #### 🌟 Pattern Assembler Orchestrator
-**File**: `/Volumes/PRO-G40/Code/omniarchon/services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_pattern_assembler_orchestrator.py`
+**File**: `../omniarchon/services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_pattern_assembler_orchestrator.py`
 
 **Why This Example**:
 - Coordinates multiple compute nodes

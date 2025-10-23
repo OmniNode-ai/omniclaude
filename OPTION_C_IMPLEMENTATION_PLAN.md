@@ -64,8 +64,8 @@ from omnibase_core.nodes.node_effect import NodeEffect
 1. **Investigate actual omnibase_core I/O model location**
    ```bash
    # Search for actual input/output models
-   find /Volumes/PRO-G40/Code/omnibase_core -name "*.py" | xargs grep -l "class ModelEffectInput"
-   find /Volumes/PRO-G40/Code/omnibase_core -name "*.py" | xargs grep -l "class ModelEffectOutput"
+   find ../omnibase_core -name "*.py" | xargs grep -l "class ModelEffectInput"
+   find ../omnibase_core -name "*.py" | xargs grep -l "class ModelEffectOutput"
    ```
 
 2. **Update template engine generation logic**

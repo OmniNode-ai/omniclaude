@@ -4,18 +4,23 @@ Tests for Pattern Feedback System (Agent Framework)
 
 Tests the pattern feedback collection, analysis, and tuning system
 to ensure ≥90% precision target is achievable.
+
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/test_pattern_feedback.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_pattern_feedback.py -v
 """
 
-import sys
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.pattern_feedback import PatternFeedback, PatternFeedbackCollector
 from lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
 from lib.patterns.pattern_matcher import PatternMatcher, PatternType

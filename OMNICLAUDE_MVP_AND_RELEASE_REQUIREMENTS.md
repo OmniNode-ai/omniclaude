@@ -1,7 +1,7 @@
 # OmniClaude MVP and Release Requirements Analysis
 
 **Generated**: 2025-10-22
-**Location**: `/Volumes/PRO-G40/Code/omniclaude`
+**Location**: `.`
 **Status**: Comprehensive analysis for MVP completion and product release
 
 ---
@@ -286,7 +286,7 @@ poetry run python cli/hook_agent_health_dashboard.py --watch
 export DB_PASSWORD="omninode-bridge-postgres-dev-2024"
 
 # Restart omniarchon intelligence service
-cd /Volumes/PRO-G40/Code/omniarchon
+cd ../omniarchon  # External repository
 # Restart with working DB connection
 ```
 
@@ -693,7 +693,7 @@ class CostOptimizationEngine:
 
 #### 1. omnibase_core
 
-**Location**: `/Volumes/PRO-G40/Code/omnibase_core`
+**Location**: `../omnibase_core`
 **Branch**: `doc_fixes`
 **Status**: ✅ **STABLE**
 
@@ -706,13 +706,13 @@ class CostOptimizationEngine:
 
 **Import Method**: Local git repo
 ```toml
-omnibase_core = {git = "file:///Volumes/PRO-G40/Code/omnibase_core", branch = "doc_fixes"}
+omnibase_core = {git = "file://../omnibase_core", branch = "doc_fixes"}
 ```
 
 **Breaking Changes**: None expected (stable API)
 
 **Documentation**:
-- `/Volumes/PRO-G40/Code/omnibase_core/docs/INDEX.md`
+- `../omnibase_core/docs/INDEX.md`
 - Node building guides in `docs/guides/node-building/`
 - Templates in `docs/reference/templates/`
 
@@ -722,7 +722,7 @@ omnibase_core = {git = "file:///Volumes/PRO-G40/Code/omnibase_core", branch = "d
 
 #### 2. omniarchon
 
-**Location**: `/Volumes/PRO-G40/Code/omniarchon`
+**Location**: `../omniarchon`
 **Branch**: `main` (recently: `feature/event-bus-integration`)
 **Status**: ⚠️ **ACTIVE DEVELOPMENT**
 
@@ -755,7 +755,7 @@ omnibase_core = {git = "file:///Volumes/PRO-G40/Code/omnibase_core", branch = "d
 
 #### 3. omninode_bridge
 
-**Location**: `/Volumes/PRO-G40/Code/omninode_bridge`
+**Location**: `../omninode_bridge`
 **Status**: ✅ **STABLE** (Reusable component source)
 
 **Dependencies Used** (90% of generated code):
@@ -781,7 +781,7 @@ omnibase_core = {git = "file:///Volumes/PRO-G40/Code/omnibase_core", branch = "d
 
 #### 4. omnibase_spi
 
-**Location**: `/Volumes/PRO-G40/Code/omnibase_spi`
+**Location**: `../omnibase_spi`
 **Tag**: `v0.1.0`
 **Status**: ✅ **STABLE**
 
@@ -1103,7 +1103,7 @@ Blocks: MVP Day 8 (PoC test), Day 10 (Metrics)
 1. **Fix Database Persistence** (CRITICAL)
    ```bash
    export DB_PASSWORD="omninode-bridge-postgres-dev-2024"
-   cd /Volumes/PRO-G40/Code/omniarchon
+   cd ../omniarchon  # External repository
    # Restart intelligence service with DB connection
    # Verify with: poetry run python cli/hook_agent_health_dashboard.py
    ```

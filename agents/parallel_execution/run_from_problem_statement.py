@@ -8,6 +8,16 @@ Takes a problem statement markdown file and:
 3. Uses QuorumValidator for multi-model validation
 4. Optionally executes via dispatch_runner.py
 
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/run_from_problem_statement.py /path/to/PROBLEM_STATEMENT.md [--execute]
+
+    Or install the package in development mode:
+
+        pip install -e .
+
 Usage:
     python run_from_problem_statement.py /path/to/PROBLEM_STATEMENT.md [--execute]
 """
@@ -17,9 +27,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from parallel_execution.validated_task_architect import ValidatedTaskArchitect
 

@@ -4,7 +4,7 @@
 
 **Solution**: Track actual time vs estimated time, calculate complexity scores, measure velocity per model.
 
-**Inspired By**: `/Volumes/PRO-G40/Code/omnibase_3/docs/dev_logs/jonah/velocity/`
+**Inspired By**: `../omnibase_3/docs/dev_logs/jonah/velocity/`
 
 ---
 

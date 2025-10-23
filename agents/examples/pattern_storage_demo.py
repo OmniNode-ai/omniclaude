@@ -9,8 +9,15 @@ Demonstrates complete pattern lifecycle:
 4. Query similar patterns
 5. Reuse patterns in new generation
 
-Usage:
-    python agents/examples/pattern_storage_demo.py
+Setup:
+    Run from project root with proper PYTHONPATH:
+
+        cd /path/to/omniclaude
+        PYTHONPATH=/path/to/omniclaude python agents/examples/pattern_storage_demo.py
+
+    Or install the package in development mode:
+
+        pip install -e .
 
 ONEX v2.0 Compliance:
 - Uses in-memory storage for demo (no Qdrant required)
@@ -20,12 +27,7 @@ ONEX v2.0 Compliance:
 
 import asyncio
 import hashlib
-import sys
 from datetime import datetime
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from agents.lib.patterns.pattern_extractor import PatternExtractor
 from agents.lib.patterns.pattern_reuse import PatternReuse

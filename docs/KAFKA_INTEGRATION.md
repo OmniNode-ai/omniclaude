@@ -1159,7 +1159,7 @@ docker-compose logs -f db-writer-consumer
 
 ```bash
 # Update skills to use Kafka producers
-cd /Volumes/PRO-G40/Code/omniclaude/skills/agent-tracking
+cd skills/agent-tracking
 
 # Update each skill script to use Kafka template
 # (See Producer Implementation section above)

@@ -7,6 +7,16 @@ Measures:
 - Cache hit rate (target: ≥80% after warmup)
 - Memory usage
 - Concurrent access performance
+
+Setup:
+    Run with pytest from project root:
+
+        cd /path/to/omniclaude
+        pytest agents/tests/benchmark_template_cache.py -v
+
+    Or use PYTHONPATH:
+
+        PYTHONPATH=/path/to/omniclaude python agents/tests/benchmark_template_cache.py
 """
 
 import statistics
@@ -14,9 +24,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from agents.lib.template_cache import TemplateCache
 

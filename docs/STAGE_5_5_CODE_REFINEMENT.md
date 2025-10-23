@@ -327,7 +327,7 @@ def fix_g14_imports(code: str) -> str:
 
 #### Production Pattern Library
 
-**Source**: `/Volumes/PRO-G40/Code/omniarchon` (34 production nodes)
+**Source**: `../omniarchon` (34 production nodes)
 
 **Catalog Structure**:
 ```python
@@ -677,7 +677,7 @@ PRODUCTION_PATTERNS: Dict[str, Dict[str, List[ProductionPattern]]] = {
     "EFFECT": {
         "database": [
             ProductionPattern(
-                source_file="/Volumes/PRO-G40/Code/omniarchon/services/intelligence/onex/effects/node_postgres_writer_effect.py",
+                source_file="../omniarchon/services/intelligence/onex/effects/node_postgres_writer_effect.py",
                 node_type="EFFECT",
                 domain="database",
                 service_name="postgres_writer",

@@ -1008,10 +1008,10 @@ if __name__ == '__main__':
 # Install documentation indexing git hooks across multiple repos
 
 REPOS=(
-    "/Volumes/PRO-G40/Code/omniclaude"
-    "/Volumes/PRO-G40/Code/omninode_bridge"
-    "/Volumes/PRO-G40/Code/omniarchon"
-    "/Volumes/PRO-G40/Code/omnibase_*"
+    "."
+    "../omninode_bridge"
+    "../omniarchon"
+    "../omnibase_*"
 )
 
 for repo in "${REPOS[@]}"; do
@@ -1500,28 +1500,28 @@ class RepositoryRegistry:
 
     REPOSITORIES = {
         "omniclaude": {
-            "path": "/Volumes/PRO-G40/Code/omniclaude",
+            "path": ".",
             "priority": "high",
             "doc_paths": ["docs/", "README.md", "CLAUDE.md"],
             "indexing_policy": "realtime",
             "kafka_partition": 0
         },
         "omninode_bridge": {
-            "path": "/Volumes/PRO-G40/Code/omninode_bridge",
+            "path": "../omninode_bridge",
             "priority": "high",
             "doc_paths": ["docs/", "README.md"],
             "indexing_policy": "realtime",
             "kafka_partition": 1
         },
         "omniarchon": {
-            "path": "/Volumes/PRO-G40/Code/omniarchon",
+            "path": "../omniarchon",
             "priority": "high",
             "doc_paths": ["docs/", "python/docs/", "README.md"],
             "indexing_policy": "realtime",
             "kafka_partition": 2
         },
         "omnibase_legacy": {
-            "path": "/Volumes/PRO-G40/Code/Archived Projects/omnibase_*",
+            "path": "../Archived Projects/omnibase_*",
             "priority": "low",
             "doc_paths": ["docs/", "README.md"],
             "indexing_policy": "batch",  # Lower priority, batch processing

@@ -1,7 +1,7 @@
 # Incomplete Features Inventory
 
 **Generated**: 2025-10-18
-**Repository**: /Volumes/PRO-G40/Code/omniclaude
+**Repository**: .
 **Purpose**: Comprehensive catalog of incomplete, partial, or planned features
 
 ---

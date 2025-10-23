@@ -10,7 +10,9 @@ Integration: Phase 2.5 of dispatch_runner workflow (between Task Architecture an
 
 import asyncio
 import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 # Import from parallel_execution package
@@ -465,7 +467,9 @@ Implement a user authentication service using OmniNode architecture.
 - Redis cache for session tokens
 - Email service integration for verification
             """,
-            "output_directory": "/tmp/generated_auth_service",
+            "output_directory": str(
+                Path(tempfile.gettempdir()) / "generated_auth_service"
+            ),
             "workspace_context": {"project_type": "microservice", "language": "python"},
         },
     )
@@ -496,7 +500,9 @@ Implement a user authentication service using OmniNode architecture.
             "microservice_name": "payment",
             "domain": "transactions",
             "business_description": "Process payment transactions via Stripe API",
-            "output_directory": "/tmp/generated_payment_node",
+            "output_directory": str(
+                Path(tempfile.gettempdir()) / "generated_payment_node"
+            ),
         },
     )
 

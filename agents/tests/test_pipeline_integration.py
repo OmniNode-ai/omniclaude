@@ -17,6 +17,8 @@ Issue: generation_pipeline -> contract_builder_factory -> generation/__init__.py
 This will be fixed in Week 4 full pipeline integration.
 """
 
+import tempfile
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -345,7 +347,10 @@ class TestPOLYFGateIntegration:
         result = await registry.check_gate(
             EnumQualityGate.INPUT_VALIDATION,
             {
-                "inputs": {"prompt": "Create a test node", "output_directory": "/tmp"},
+                "inputs": {
+                    "prompt": "Create a test node",
+                    "output_directory": tempfile.gettempdir(),
+                },
                 "required_fields": ["prompt", "output_directory"],
                 "constraints": {"prompt": {"type": str, "min_length": 5}},
             },
@@ -395,7 +400,7 @@ class TestPOLYFGateIntegration:
                 "outputs": {
                     "node_type": "effect",
                     "service_name": "test_service",
-                    "main_file": "/tmp/test.py",
+                    "main_file": str(Path(tempfile.gettempdir()) / "test.py"),
                 },
                 "expected_outputs": ["node_type", "service_name", "main_file"],
             },
