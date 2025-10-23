@@ -519,7 +519,7 @@ class TestBackgroundConsumerTask:
         mock_msg.topic = IntelligenceEventClient.TOPIC_COMPLETED
 
         # Create async generator for consumer
-        async def mock_aiter():
+        async def mock_aiter(self):
             yield mock_msg
 
         mock_consumer.__aiter__ = mock_aiter
@@ -556,7 +556,7 @@ class TestBackgroundConsumerTask:
         mock_msg.topic = IntelligenceEventClient.TOPIC_FAILED
 
         # Create async generator for consumer
-        async def mock_aiter():
+        async def mock_aiter(self):
             yield mock_msg
 
         mock_consumer.__aiter__ = mock_aiter
@@ -615,9 +615,11 @@ class TestBackgroundConsumerTask:
         mock_msg = Mock()
         mock_msg.value = None  # Malformed
 
-        # Create async generator for consumer
-        async def mock_aiter():
+        # Create async generator for consumer that continues indefinitely
+        async def mock_aiter(self):
             yield mock_msg
+            # Keep generator alive to verify task continues
+            await asyncio.sleep(1)
 
         mock_consumer.__aiter__ = mock_aiter
 
