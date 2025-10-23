@@ -430,6 +430,75 @@ class NodeXxxReducer(NodeReducer):
 
 **Use Cases**: Session management, state aggregation, event sourcing, metrics collection, cache management, workflow state tracking
 
+### Coordination Pattern: Intent Publisher Mixin
+
+**Purpose**: Enables REDUCER/COMPUTE/ORCHESTRATOR nodes to publish events while maintaining ONEX architectural purity.
+
+**Problem**: REDUCER nodes need to publish aggregated results, but direct event publishing violates ONEX principles (nodes should be pure for their type).
+
+**Solution**: Use IntentPublisherMixin to emit event publishing intents instead of performing I/O directly.
+
+**Pattern** (Conceptual - actual implementation in omnibase_core may differ):
+```python
+# NOTE: Class names and imports shown are conceptual examples
+# Consult omnibase_core documentation for actual implementation details
+
+class NodeMetricsAggregatorReducer(NodeReducer, IntentPublisherMixin):
+    """
+    REDUCER with intent-based event publishing.
+
+    Characteristics:
+    - Pure aggregation logic (no direct I/O)
+    - Coordination I/O via intents (deferred execution)
+    - Testable and deterministic
+    - ONEX compliant
+    """
+
+    def __init__(self, container):
+        super().__init__(container)
+        self._init_intent_publisher(container)  # Initialize mixin capability
+
+    async def execute_reduction(self, events):
+        # Pure aggregation (no side effects)
+        metrics = self._aggregate_metrics(events)
+
+        # Coordination I/O via intent (not direct Kafka publishing)
+        await self.publish_event_intent(
+            target_topic="metrics.processed",
+            target_key=str(metrics.id),
+            event=MetricsEvent(
+                timestamp=metrics.timestamp,
+                data=metrics.aggregated_data
+            )
+        )
+
+        return ModelReducerOutput(
+            aggregated_data=metrics,
+            processing_time_ms=metrics.duration
+        )
+```
+
+**When to Use This Pattern**:
+- ✅ **REDUCER nodes** - Publishing aggregated results to event streams
+- ✅ **COMPUTE nodes** - Publishing computed results for downstream processing
+- ✅ **ORCHESTRATOR nodes** - Coordination events between workflow steps
+- ❌ **EFFECT nodes** - These perform I/O directly (no intent layer needed)
+
+**Architecture Benefits**:
+1. **ONEX Compliance**: Node logic stays pure (no direct I/O in domain logic)
+2. **Testability**: Intent building is deterministic and mockable (no Kafka required for tests)
+3. **Flexibility**: Can swap message brokers without changing node implementation
+4. **Observability**: All coordination intents logged on dedicated topic for tracing
+5. **Separation of Concerns**: Domain logic separate from coordination mechanism
+
+**Implementation Notes**:
+- Intent execution happens asynchronously via a dedicated EFFECT node or service
+- Intents are published to a coordination topic (e.g., `event.publish.intents`)
+- An intent executor service consumes these intents and performs actual event publishing
+- This allows for retry logic, batching, and monitoring at the coordination layer
+
+**Note**: This pattern is currently implemented in omninode_bridge and is being migrated to omnibase_core. Consult the latest omnibase_core documentation for current class names, import paths, and integration steps.
+
 ---
 
 ## 4. Orchestrator Node Archetype: Workflow Coordinator
