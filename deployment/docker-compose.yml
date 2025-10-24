@@ -97,11 +97,13 @@ services:
       - KAFKA_GROUP_ID=agent-observability-postgres
 
       # PostgreSQL configuration (connects to external omninode-bridge database)
+      # SECURITY WARNING: Change OMNINODE_BRIDGE_POSTGRES_PASSWORD in production!
+      # Default is for local development only - never use in production environments
       - POSTGRES_HOST=omninode-bridge-postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=omninode_bridge
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-omninode-bridge-postgres-dev-2024}
 
       # Batch processing configuration
       - BATCH_SIZE=100
