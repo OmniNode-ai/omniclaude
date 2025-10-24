@@ -149,6 +149,21 @@ def log_agent_action_kafka(args):
             if hasattr(args, "duration_ms") and args.duration_ms
             else None
         ),
+        "project_path": (
+            args.project_path
+            if hasattr(args, "project_path") and args.project_path
+            else None
+        ),
+        "project_name": (
+            args.project_name
+            if hasattr(args, "project_name") and args.project_name
+            else None
+        ),
+        "working_directory": (
+            args.working_directory
+            if hasattr(args, "working_directory") and args.working_directory
+            else None
+        ),
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -207,6 +222,11 @@ def main():
     parser.add_argument(
         "--duration-ms", type=int, help="Action duration in milliseconds"
     )
+
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--working-directory", help="Current working directory")
 
     args = parser.parse_args()
 

@@ -71,6 +71,39 @@ AGENT_DETECTION="$(
 log "Detection result: $AGENT_DETECTION"
 
 if [[ "$AGENT_DETECTION" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_DETECTION" ]]; then
+  log "No agent detected, logging failure..."
+
+  # Log detection failure
+  FAILURE_CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+  FAILURE_PROMPT_B64="$(printf %s "${PROMPT:0:500}" | base64)"
+  PROMPT_B64="$FAILURE_PROMPT_B64" FAILURE_CORRELATION_ID="$FAILURE_CORRELATION_ID" \
+    PROJECT_PATH="${PROJECT_PATH:-}" PROJECT_NAME="${PROJECT_NAME:-}" SESSION_ID="${SESSION_ID:-}" \
+    ENABLE_AI="$ENABLE_AI_AGENT_SELECTION" \
+    python3 - <<'PYFAIL' 2>>"$LOG_FILE" || log "WARNING: Failed to log detection failure"
+import sys
+import os
+import base64
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks/lib"))
+try:
+    from hook_event_adapter import get_hook_event_adapter
+
+    # Safely decode base64-encoded prompt
+    user_request = base64.b64decode(os.environ.get("PROMPT_B64", "")).decode("utf-8", "replace")
+
+    adapter = get_hook_event_adapter()
+    adapter.publish_detection_failure(
+        user_request=user_request,
+        failure_reason="No agent detected by hybrid selector",
+        attempted_methods=[os.environ.get("ENABLE_AI") == "true" and "ai" or "trigger", "fuzzy"],
+        correlation_id=os.environ.get("FAILURE_CORRELATION_ID"),
+        project_path=os.environ.get("PROJECT_PATH"),
+        project_name=os.environ.get("PROJECT_NAME"),
+        session_id=os.environ.get("SESSION_ID")
+    )
+except Exception as e:
+    print(f"Error logging detection failure: {e}", file=sys.stderr)
+PYFAIL
+
   log "No agent detected, passing through"
   printf %s "$INPUT"
   exit 0
@@ -96,6 +129,15 @@ log "Domain: $AGENT_DOMAIN"
 log "Reasoning: ${SELECTION_REASONING:0:120}..."
 
 # -----------------------------
+# Project Context Extraction
+# -----------------------------
+PROJECT_PATH="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+PROJECT_NAME="$(basename "$PROJECT_PATH")"
+SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+
+log "Project: $PROJECT_NAME, Session: ${SESSION_ID:0:8}..."
+
+# -----------------------------
 # Correlation ID
 # -----------------------------
 # Use uuidgen if available, fallback to Python
@@ -103,6 +145,60 @@ if command -v uuidgen >/dev/null 2>&1; then
     CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 else
     CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
+
+# -----------------------------
+# Log Routing Decision with Project Context
+# -----------------------------
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+  log "Logging routing decision for project $PROJECT_NAME..."
+
+  # Check if the skill exists before attempting to log
+  SKILL_PATH="$HOME/.claude/skills/agent-tracking/log-routing-decision/execute_unified.py"
+  if [[ -f "$SKILL_PATH" ]]; then
+    # Convert latency to integer (remove decimal part)
+    LATENCY_INT="${LATENCY_MS%.*}"
+    [[ -z "$LATENCY_INT" ]] && LATENCY_INT="0"
+
+    python3 "$SKILL_PATH" \
+        --agent "$AGENT_NAME" \
+        --confidence "$CONFIDENCE" \
+        --strategy "$SELECTION_METHOD" \
+        --latency-ms "$LATENCY_INT" \
+        --user-request "${PROMPT:0:200}" \
+        --project-path "$PROJECT_PATH" \
+        --project-name "$PROJECT_NAME" \
+        --session-id "$SESSION_ID" \
+        --correlation-id "$CORRELATION_ID" \
+        --reasoning "${SELECTION_REASONING:0:500}" \
+        2>>"$LOG_FILE" || log "WARNING: Failed to log routing decision"
+  else
+    log "WARNING: Routing decision logging skill not found at $SKILL_PATH"
+  fi
+
+  # Log agent action (agent dispatch)
+  ACTION_SKILL_PATH="$HOME/.claude/skills/agent-tracking/log-agent-action/execute_unified.py"
+  if [[ -f "$ACTION_SKILL_PATH" ]]; then
+    log "Logging agent dispatch action..."
+
+    # Build action details JSON
+    ACTION_DETAILS="$(jq -n \
+      --arg method "$SELECTION_METHOD" \
+      --arg confidence "$CONFIDENCE" \
+      --arg latency "$LATENCY_MS" \
+      '{selection_method: $method, confidence: $confidence, latency_ms: $latency}')"
+
+    python3 "$ACTION_SKILL_PATH" \
+        --agent "$AGENT_NAME" \
+        --action-type "decision" \
+        --action-name "agent_selected" \
+        --details "$ACTION_DETAILS" \
+        --correlation-id "$CORRELATION_ID" \
+        --project-path "$PROJECT_PATH" \
+        --project-name "$PROJECT_NAME" \
+        --working-directory "$(pwd)" \
+        2>>"$LOG_FILE" || log "WARNING: Failed to log agent action"
+  fi
 fi
 
 # -----------------------------
