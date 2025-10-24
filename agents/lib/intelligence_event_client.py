@@ -39,6 +39,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -255,7 +256,7 @@ class IntelligenceEventClient:
         codebase using event-based communication.
 
         Args:
-            source_path: Pattern to search for (e.g., "node_*_effect.py")
+            source_path: Pattern to search for (e.g., "node_*_effect.py") or actual file path
             language: Programming language (e.g., "python")
             timeout_ms: Response timeout in milliseconds (default: request_timeout_ms)
 
@@ -282,9 +283,23 @@ class IntelligenceEventClient:
 
         timeout = timeout_ms or self.request_timeout_ms
 
+        # Read file content if source_path is an actual file (not a pattern)
+        content = None
+        file_path = Path(source_path)
+        if file_path.exists() and file_path.is_file():
+            try:
+                content = file_path.read_text()
+                self.logger.debug(
+                    f"Read file content from {source_path} ({len(content)} bytes)"
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to read file {source_path}: {e}. Proceeding with empty content."
+                )
+
         # Use PATTERN_EXTRACTION operation type for pattern discovery
         return await self.request_code_analysis(
-            content=None,
+            content=content,
             source_path=source_path,
             language=language,
             options={

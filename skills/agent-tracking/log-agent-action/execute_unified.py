@@ -47,6 +47,11 @@ def main():
     parser.add_argument("--duration-ms", type=int, help="Duration in milliseconds")
     parser.add_argument("--success", type=bool, default=True, help="Success flag")
 
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--working-directory", help="Current working directory")
+
     args = parser.parse_args()
 
     # Get or generate correlation ID
@@ -65,6 +70,21 @@ def main():
         action_details=action_details,
         duration_ms=args.duration_ms,
         success=args.success,
+        project_path=(
+            args.project_path
+            if hasattr(args, "project_path") and args.project_path
+            else None
+        ),
+        project_name=(
+            args.project_name
+            if hasattr(args, "project_name") and args.project_name
+            else None
+        ),
+        working_directory=(
+            args.working_directory
+            if hasattr(args, "working_directory") and args.working_directory
+            else None
+        ),
     )
 
     if success:

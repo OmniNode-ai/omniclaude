@@ -154,6 +154,19 @@ def log_routing_decision_kafka(args):
         "routing_strategy": args.strategy,
         "context": context,
         "routing_time_ms": int(args.latency_ms),
+        "project_path": (
+            args.project_path
+            if hasattr(args, "project_path") and args.project_path
+            else None
+        ),
+        "project_name": (
+            args.project_name
+            if hasattr(args, "project_name") and args.project_name
+            else None
+        ),
+        "session_id": (
+            args.session_id if hasattr(args, "session_id") and args.session_id else None
+        ),
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -207,6 +220,11 @@ def main():
     parser.add_argument("--alternatives", help="JSON array of alternative agents")
     parser.add_argument("--reasoning", help="Reasoning for agent selection")
     parser.add_argument("--context", help="JSON object with additional context")
+
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--session-id", help="Claude session ID")
 
     args = parser.parse_args()
 

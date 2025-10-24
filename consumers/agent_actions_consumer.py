@@ -185,6 +185,7 @@ class AgentActionsConsumer:
                 "agent-routing-decisions",
                 "agent-transformation-events",
                 "router-performance-metrics",
+                "agent-detection-failures",
             ],
         )
 
@@ -334,6 +335,10 @@ class AgentActionsConsumer:
                     inserted, duplicates = self._insert_performance_metrics(
                         cursor, events
                     )
+                elif topic == "agent-detection-failures":
+                    inserted, duplicates = self._insert_detection_failures(
+                        cursor, events
+                    )
                 else:
                     logger.warning(
                         "Unknown topic: %s, skipping %d events", topic, len(events)
@@ -367,9 +372,10 @@ class AgentActionsConsumer:
         insert_sql = """
             INSERT INTO agent_actions (
                 id, correlation_id, agent_name, action_type, action_name,
-                action_details, debug_mode, duration_ms, created_at
+                action_details, debug_mode, duration_ms, created_at,
+                project_path, project_name, working_directory
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -391,6 +397,9 @@ class AgentActionsConsumer:
                     event.get("debug_mode", True),
                     event.get("duration_ms"),
                     timestamp,
+                    event.get("project_path"),  # Extract project context
+                    event.get("project_name"),
+                    event.get("working_directory"),
                 )
             )
 
@@ -405,10 +414,10 @@ class AgentActionsConsumer:
         """Insert agent_routing_decisions events."""
         insert_sql = """
             INSERT INTO agent_routing_decisions (
-                id, user_request, selected_agent, confidence_score, alternatives,
+                id, project_name, user_request, selected_agent, confidence_score, alternatives,
                 reasoning, routing_strategy, context, routing_time_ms, created_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -421,6 +430,7 @@ class AgentActionsConsumer:
             batch_data.append(
                 (
                     event_id,
+                    event.get("project_name"),  # Extract project_name from event
                     event.get("user_request", ""),
                     event.get("selected_agent"),
                     event.get("confidence_score"),
@@ -445,9 +455,10 @@ class AgentActionsConsumer:
         insert_sql = """
             INSERT INTO agent_transformation_events (
                 id, source_agent, target_agent, transformation_reason,
-                confidence_score, transformation_duration_ms, success, created_at
+                confidence_score, transformation_duration_ms, success, created_at,
+                project_path, project_name, claude_session_id
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -467,6 +478,11 @@ class AgentActionsConsumer:
                     event.get("transformation_duration_ms"),
                     event.get("success", True),
                     timestamp,
+                    event.get("project_path"),  # Extract project context
+                    event.get("project_name"),
+                    event.get(
+                        "session_id"
+                    ),  # Note: event uses session_id, DB uses claude_session_id
                 )
             )
 
@@ -503,6 +519,67 @@ class AgentActionsConsumer:
                     event.get("trigger_match_strategy"),
                     json.dumps(event.get("confidence_components", {})),
                     event.get("candidates_evaluated"),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _insert_detection_failures(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_detection_failures events."""
+        import hashlib
+
+        insert_sql = """
+            INSERT INTO agent_detection_failures (
+                correlation_id, user_prompt, prompt_length, prompt_hash,
+                detection_status, failure_reason, detection_metadata,
+                attempted_methods, project_path, project_name,
+                claude_session_id, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (correlation_id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            correlation_id = event.get("correlation_id")
+            user_request = event.get("user_request", "")
+            prompt_length = len(user_request)
+            prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            # Map generic failure_reason to detection_status
+            failure_reason = event.get("failure_reason", "")
+            detection_status = "error"  # Default
+            if (
+                "no agent" in failure_reason.lower()
+                or "not detected" in failure_reason.lower()
+            ):
+                detection_status = "no_detection"
+            elif "timeout" in failure_reason.lower():
+                detection_status = "timeout"
+            elif "confidence" in failure_reason.lower():
+                detection_status = "low_confidence"
+
+            batch_data.append(
+                (
+                    correlation_id,
+                    user_request,
+                    prompt_length,
+                    prompt_hash,
+                    detection_status,
+                    failure_reason,
+                    json.dumps(event.get("error_details", {})),
+                    json.dumps(event.get("attempted_methods", [])),
+                    event.get("project_path"),
+                    event.get("project_name"),
+                    event.get("session_id"),
                     timestamp,
                 )
             )

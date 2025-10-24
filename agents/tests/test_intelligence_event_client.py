@@ -872,3 +872,122 @@ class TestEdgeCases:
         assert ".v1" in IntelligenceEventClient.TOPIC_REQUEST
         assert ".v1" in IntelligenceEventClient.TOPIC_COMPLETED
         assert ".v1" in IntelligenceEventClient.TOPIC_FAILED
+
+
+# =============================================================================
+# Integration Tests (Requires Running Services)
+# =============================================================================
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestIntelligenceIntegration:
+    """
+    Integration tests against real Redpanda/Kafka and Archon services.
+
+    Requirements:
+    - Redpanda running on localhost:29102
+    - Archon intelligence service running
+    - Run with: pytest -m integration agents/tests/test_intelligence_event_client.py
+    """
+
+    async def test_stub_responses_removed(self):
+        """
+        Verify archon returns real analysis, not stub responses.
+
+        Tests the fix from PR where IntelligenceEventClient now sends
+        file content instead of empty strings.
+        """
+        from pathlib import Path
+
+        # Use this test file as content
+        test_file = Path(__file__)
+        assert test_file.exists(), f"Test file not found: {test_file}"
+
+        client = IntelligenceEventClient(
+            bootstrap_servers="localhost:29102",
+            enable_intelligence=True,
+            request_timeout_ms=10000,
+        )
+
+        try:
+            await client.start()
+
+            result = await client.request_pattern_discovery(
+                source_path=str(test_file),
+                language="python",
+                timeout_ms=10000,
+            )
+
+            # Verify we got a response
+            assert result is not None, "No response from intelligence service"
+            assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+
+            # Check for stub response indicator
+            status = result.get("status")
+            quality_score = result.get("quality_score", 0)
+
+            # Stub responses have status="stub_response"
+            assert status != "stub_response", (
+                "❌ FAIL: Still getting stub responses from archon! "
+                "Intelligence adapter handler needs to call actual services."
+            )
+
+            # Real responses should have non-zero quality score
+            assert quality_score > 0, (
+                f"❌ FAIL: quality_score is {quality_score}. "
+                "Expected > 0 for real analysis."
+            )
+
+            print(f"✅ PASS: Got real response with quality_score={quality_score}")
+
+        finally:
+            await client.stop()
+
+    async def test_file_content_sent(self):
+        """Verify client sends file content, not empty strings."""
+        from pathlib import Path
+
+        test_file = Path(__file__)
+
+        client = IntelligenceEventClient(
+            bootstrap_servers="localhost:29102",
+            enable_intelligence=True,
+            request_timeout_ms=10000,
+        )
+
+        try:
+            await client.start()
+
+            # Capture the payload being sent
+            original_send = client.producer.send_and_wait
+            sent_payload = None
+
+            async def capture_send(topic, value):
+                nonlocal sent_payload
+                sent_payload = value
+                return await original_send(topic, value)
+
+            client.producer.send_and_wait = capture_send
+
+            await client.request_pattern_discovery(
+                source_path=str(test_file),
+                language="python",
+                timeout_ms=10000,
+            )
+
+            # Verify payload has content
+            assert sent_payload is not None, "No payload sent"
+            payload_dict = sent_payload  # Already deserialized
+
+            content = payload_dict.get("payload", {}).get("content")
+            assert content, "Content field is empty!"
+            assert len(content) > 1000, (
+                f"Content too short ({len(content)} bytes). "
+                "Expected test file content (~82K bytes)."
+            )
+
+            print(f"✅ PASS: Sent {len(content)} bytes of file content")
+
+        finally:
+            await client.stop()
