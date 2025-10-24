@@ -88,7 +88,7 @@ class IntelligenceEventClient:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:29092",
+        bootstrap_servers: str = "localhost:29102",
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
         consumer_group_id: Optional[str] = None,
@@ -98,7 +98,7 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:29092" (Redpanda port mapping)
+                - External host: "localhost:29102" (Redpanda port mapping)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
@@ -424,7 +424,9 @@ class IntelligenceEventClient:
             "service": "omniclaude",
             "payload": {
                 "source_path": source_path,
-                "content": content,
+                "content": (
+                    content if content is not None else ""
+                ),  # Empty string for pattern discovery
                 "language": language,
                 "operation_type": operation_type,
                 "options": options,
