@@ -239,6 +239,31 @@ class GenerationPipeline:
             "✅ Pipeline initialization complete with framework integration"
         )
 
+    def _find_project_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
+        """
+        Find project root by searching for pyproject.toml.
+
+        Args:
+            start_path: Path to start searching from (defaults to file_path parent or cwd)
+
+        Returns:
+            Path to project root or None if not found
+        """
+        if start_path is None:
+            start_path = Path.cwd()
+
+        current = start_path if start_path.is_dir() else start_path.parent
+
+        # Search up to 10 levels
+        for _ in range(10):
+            if (current / "pyproject.toml").exists():
+                return current
+            if current.parent == current:  # Reached filesystem root
+                break
+            current = current.parent
+
+        return None
+
     def _configure_performance_thresholds(self) -> None:
         """
         Configure performance thresholds for all pipeline stages.
@@ -3086,13 +3111,38 @@ except ImportError:
         start_ms = time()
 
         try:
-            # Run mypy
-            result = subprocess.run(
-                ["poetry", "run", "mypy", file_path, "--no-error-summary"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+            # Find project root (where pyproject.toml exists)
+            project_root = self._find_project_root(Path(file_path))
+
+            if project_root is None:
+                # No pyproject.toml found - skip validation gracefully
+                return ValidationGate(
+                    gate_id="G13",
+                    name="MyPy Type Checking",
+                    status="skipped",
+                    gate_type=GateType.WARNING,
+                    message="Skipped: No pyproject.toml found (not in Poetry project)",
+                    duration_ms=int((time() - start_ms) * 1000),
+                )
+
+            # Run mypy from project root directory (prefer Poetry if available; fallback to direct mypy)
+            try:
+                result = subprocess.run(
+                    ["poetry", "run", "mypy", file_path, "--no-error-summary"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(project_root),
+                )
+            except FileNotFoundError:
+                # Poetry not available - fallback to direct mypy
+                result = subprocess.run(
+                    ["mypy", file_path, "--no-error-summary"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(project_root),
+                )
 
             if result.returncode != 0:
                 return ValidationGate(

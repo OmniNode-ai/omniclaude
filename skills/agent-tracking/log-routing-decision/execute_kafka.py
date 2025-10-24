@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-Log Agent Action Skill - Kafka Version
+Log Routing Decision Skill - Kafka Version
 
-Publishes agent actions to Kafka for async, non-blocking logging with
+Publishes routing decisions to Kafka for async, non-blocking logging with
 multiple consumers (PostgreSQL, dashboards, analytics).
 
 Usage:
-  /log-agent-action --agent AGENT_NAME --action-type TYPE --action-name NAME --details JSON
+  /log-routing-decision --agent AGENT_NAME --confidence 0.95 --strategy enhanced_fuzzy_matching --latency-ms 45
 
 Options:
-  --agent: Agent name performing the action (required)
-  --action-type: Type of action (tool_call|decision|error|success) (required)
-  --action-name: Specific action name (required)
-  --details: JSON object with action-specific details (optional)
+  --agent: Selected agent name (required)
+  --confidence: Confidence score 0.0-1.0 (required)
+  --strategy: Routing strategy used (required)
+  --latency-ms: Routing latency in milliseconds (required)
   --correlation-id: Correlation ID for tracking (optional, auto-generated)
-  --debug-mode: Force debug logging regardless of DEBUG env var (optional)
-  --duration-ms: How long the action took in milliseconds (optional)
+  --user-request: Original user request text (optional)
+  --alternatives: JSON array of alternative agents considered (optional)
+  --reasoning: Reasoning for agent selection (optional)
+  --context: JSON object with additional context (optional)
 """
 
 import argparse
@@ -31,12 +33,6 @@ from db_helper import get_correlation_id, parse_json_param
 
 # Kafka imports (lazy loaded)
 KafkaProducer = None
-
-
-def should_log_debug() -> bool:
-    """Check if debug logging is enabled."""
-    debug_env = os.environ.get("DEBUG", "").lower()
-    return debug_env in ("true", "1", "yes", "on")
 
 
 def get_kafka_producer():
@@ -76,7 +72,7 @@ def get_kafka_producer():
     return producer
 
 
-def publish_to_kafka(event: dict, topic: str = "agent-actions") -> bool:
+def publish_to_kafka(event: dict, topic: str = "agent-routing-decisions") -> bool:
     """
     Publish event to Kafka topic.
 
@@ -108,63 +104,72 @@ def publish_to_kafka(event: dict, topic: str = "agent-actions") -> bool:
         return False
 
 
-def log_agent_action_kafka(args):
-    """Log agent action to Kafka."""
-
-    # Check if we should log (debug mode)
-    force_debug = getattr(args, "debug_mode", False)
-    if not force_debug and not should_log_debug():
-        # Silent skip in non-debug mode
-        output = {
-            "success": True,
-            "skipped": True,
-            "reason": "debug_mode_disabled",
-            "message": "Action logging skipped (DEBUG mode not enabled)",
-        }
-        print(json.dumps(output, indent=2))
-        return 0
+def log_routing_decision_kafka(args):
+    """Log routing decision to Kafka."""
 
     # Get or generate correlation ID
     correlation_id = (
         args.correlation_id if args.correlation_id else get_correlation_id()
     )
 
-    # Parse JSON details
-    details = {}
-    if hasattr(args, "details") and args.details:
-        details = parse_json_param(args.details)
-        if details is None:
-            details = {}
+    # Parse JSON parameters
+    alternatives = (
+        parse_json_param(args.alternatives)
+        if hasattr(args, "alternatives") and args.alternatives
+        else []
+    )
+    context = (
+        parse_json_param(args.context)
+        if hasattr(args, "context") and args.context
+        else {}
+    )
+
+    # Add correlation_id to context
+    context["correlation_id"] = correlation_id
+
+    # Validate confidence score
+    confidence = float(args.confidence)
+    if confidence < 0.0 or confidence > 1.0:
+        error = {
+            "success": False,
+            "error": f"Confidence score must be between 0.0 and 1.0, got {confidence}",
+        }
+        print(json.dumps(error), file=sys.stderr)
+        return 1
 
     # Build event
     event = {
         "correlation_id": correlation_id,
-        "agent_name": args.agent,
-        "action_type": args.action_type,
-        "action_name": args.action_name,
-        "action_details": details,
-        "debug_mode": True,
-        "duration_ms": (
-            int(args.duration_ms)
-            if hasattr(args, "duration_ms") and args.duration_ms
-            else None
+        "user_request": (
+            args.user_request
+            if hasattr(args, "user_request") and args.user_request
+            else ""
         ),
+        "selected_agent": args.agent,
+        "confidence_score": confidence,
+        "alternatives": alternatives,
+        "reasoning": (
+            args.reasoning if hasattr(args, "reasoning") and args.reasoning else None
+        ),
+        "routing_strategy": args.strategy,
+        "context": context,
+        "routing_time_ms": int(args.latency_ms),
         "timestamp": datetime.utcnow().isoformat(),
     }
 
     # Publish to Kafka
-    success = publish_to_kafka(event, topic="agent-actions")
+    success = publish_to_kafka(event, topic="agent-routing-decisions")
 
     if success:
         output = {
             "success": True,
             "correlation_id": correlation_id,
-            "agent_name": args.agent,
-            "action_type": args.action_type,
-            "action_name": args.action_name,
-            "debug_mode": True,
+            "selected_agent": args.agent,
+            "confidence_score": confidence,
+            "routing_strategy": args.strategy,
+            "routing_time_ms": int(args.latency_ms),
             "published_to": "kafka",
-            "topic": "agent-actions",
+            "topic": "agent-routing-decisions",
         }
         print(json.dumps(output, indent=2))
         return 0
@@ -181,36 +186,31 @@ def log_agent_action_kafka(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Log agent action to Kafka (debug mode)",
+        description="Log agent routing decision to Kafka",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
 
     # Required arguments
-    parser.add_argument("--agent", required=True, help="Agent name performing action")
+    parser.add_argument("--agent", required=True, help="Selected agent name")
     parser.add_argument(
-        "--action-type",
-        required=True,
-        choices=["tool_call", "decision", "error", "success"],
-        help="Type of action",
+        "--confidence", required=True, type=float, help="Confidence score (0.0-1.0)"
     )
-    parser.add_argument("--action-name", required=True, help="Specific action name")
+    parser.add_argument("--strategy", required=True, help="Routing strategy used")
+    parser.add_argument(
+        "--latency-ms", required=True, type=int, help="Routing latency in milliseconds"
+    )
 
     # Optional arguments
-    parser.add_argument("--details", help="JSON object with action details")
     parser.add_argument("--correlation-id", help="Correlation ID for tracking")
-    parser.add_argument(
-        "--debug-mode",
-        action="store_true",
-        help="Force debug logging (override DEBUG env var)",
-    )
-    parser.add_argument(
-        "--duration-ms", type=int, help="Action duration in milliseconds"
-    )
+    parser.add_argument("--user-request", help="Original user request text")
+    parser.add_argument("--alternatives", help="JSON array of alternative agents")
+    parser.add_argument("--reasoning", help="Reasoning for agent selection")
+    parser.add_argument("--context", help="JSON object with additional context")
 
     args = parser.parse_args()
 
-    return log_agent_action_kafka(args)
+    return log_routing_decision_kafka(args)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,66 @@
+# Dockerfile.consumer - Lightweight Agent Observability Kafka Consumer
+# Consumes agent observability events and persists to PostgreSQL
+# Optimized for minimal footprint and fast startup
+
+FROM python:3.12-slim AS runtime
+
+# Set build arguments for metadata
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=0.1.0
+
+# Metadata labels following OCI image spec
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.authors="OmniClaude Team" \
+      org.opencontainers.image.url="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.source="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="OmniClaude Agent Observability Consumer" \
+      org.opencontainers.image.description="Kafka consumer for agent observability events"
+
+# Install runtime dependencies
+# libpq5 for PostgreSQL client, ca-certificates for HTTPS, curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd --system --gid 1000 omniclaude && \
+    useradd --system --uid 1000 --gid omniclaude --shell /bin/bash --create-home omniclaude
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+# Use --no-cache-dir to minimize image size
+# kafka-python-ng is a maintained fork compatible with Python 3.12
+RUN pip install --no-cache-dir \
+    kafka-python-ng==2.2.3 \
+    psycopg2-binary==2.9.9
+
+# Copy consumer application and shared helpers
+COPY --chown=omniclaude:omniclaude consumers/agent_actions_consumer.py .
+COPY --chown=omniclaude:omniclaude skills/_shared/db_helper.py ./shared/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    LOG_LEVEL=INFO
+
+# Switch to non-root user
+USER omniclaude
+
+# Expose health check port
+EXPOSE 8080
+
+# Health check configuration
+# Consumer exposes /health endpoint on port 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run consumer
+CMD ["python", "agent_actions_consumer.py"]
