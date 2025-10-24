@@ -53,7 +53,7 @@ def main():
     correlation_id = args.correlation_id or get_correlation_id()
 
     # Parse details
-    details = parse_json_param(args.details) if args.details else {}
+    action_details = parse_json_param(args.details) if args.details else {}
 
     # Get adapter and publish
     adapter = get_hook_event_adapter()
@@ -62,7 +62,7 @@ def main():
         action_type=args.action_type,
         action_name=args.action_name,
         correlation_id=correlation_id,
-        details=details,
+        action_details=action_details,
         duration_ms=args.duration_ms,
         success=args.success,
     )

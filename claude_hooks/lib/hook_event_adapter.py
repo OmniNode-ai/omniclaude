@@ -67,8 +67,8 @@ class HookEventAdapter:
     # Event topics (ONEX event bus architecture)
     TOPIC_ROUTING_DECISIONS = "agent-routing-decisions"
     TOPIC_AGENT_ACTIONS = "agent-actions"
-    TOPIC_PERFORMANCE_METRICS = "agent-performance-metrics"
-    TOPIC_TRANSFORMATIONS = "agent-transformations"
+    TOPIC_PERFORMANCE_METRICS = "router-performance-metrics"
+    TOPIC_TRANSFORMATIONS = "agent-transformation-events"
 
     def __init__(
         self,
@@ -216,9 +216,10 @@ class HookEventAdapter:
         action_type: str,
         action_name: str,
         correlation_id: str,
-        details: Optional[Dict[str, Any]] = None,
+        action_details: Optional[Dict[str, Any]] = None,
         duration_ms: Optional[int] = None,
         success: bool = True,
+        debug_mode: bool = True,
     ) -> bool:
         """
         Publish agent action event.
@@ -228,9 +229,10 @@ class HookEventAdapter:
             action_type: Type of action (tool_call, decision, error, success)
             action_name: Specific action name
             correlation_id: Correlation ID for tracking
-            details: Action-specific details
+            action_details: Action-specific details (matches consumer schema)
             duration_ms: Action duration in milliseconds
             success: Whether action succeeded
+            debug_mode: Enable debug information in consumer
 
         Returns:
             True if published successfully, False otherwise
@@ -240,9 +242,10 @@ class HookEventAdapter:
             "agent_name": agent_name,
             "action_type": action_type,
             "action_name": action_name,
-            "details": details or {},
+            "action_details": action_details or {},
             "duration_ms": duration_ms,
             "success": success,
+            "debug_mode": debug_mode,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
