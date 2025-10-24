@@ -64,6 +64,10 @@ class AgentExecutionLogger:
         correlation_id: Optional[UUID | str] = None,
         session_id: Optional[UUID | str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        project_path: Optional[str] = None,
+        project_name: Optional[str] = None,
+        claude_session_id: Optional[str] = None,
+        terminal_id: Optional[str] = None,
     ):
         """
         Initialize agent execution logger.
@@ -74,12 +78,20 @@ class AgentExecutionLogger:
             correlation_id: Correlation ID for request tracing
             session_id: Session ID for grouping related executions
             metadata: Additional metadata to log
+            project_path: Path to the project being worked on
+            project_name: Name of the project
+            claude_session_id: Claude session identifier
+            terminal_id: Terminal identifier
         """
         self.agent_name = agent_name
         self.user_prompt = user_prompt
         self.correlation_id = str(correlation_id) if correlation_id else str(uuid4())
         self.session_id = str(session_id) if session_id else str(uuid4())
         self.metadata = metadata or {}
+        self.project_path = project_path
+        self.project_name = project_name
+        self.claude_session_id = claude_session_id
+        self.terminal_id = terminal_id
 
         self.execution_id: Optional[str] = None
         self.started_at: Optional[datetime] = None
@@ -113,6 +125,10 @@ class AgentExecutionLogger:
             "started_at": self.started_at.isoformat(),
             "status": "in_progress",
             "metadata": self.metadata,
+            "project_path": self.project_path,
+            "project_name": self.project_name,
+            "claude_session_id": self.claude_session_id,
+            "terminal_id": self.terminal_id,
         }
 
         # Try database logging first
@@ -124,8 +140,9 @@ class AgentExecutionLogger:
                         """
                         INSERT INTO agent_execution_logs (
                             execution_id, correlation_id, session_id,
-                            agent_name, user_prompt, status, metadata
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            agent_name, user_prompt, status, metadata,
+                            project_path, project_name, claude_session_id, terminal_id
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
                         """,
                         self.execution_id,
                         self.correlation_id,
@@ -134,6 +151,10 @@ class AgentExecutionLogger:
                         self.user_prompt,
                         "in_progress",
                         json.dumps(self.metadata),
+                        self.project_path,
+                        self.project_name,
+                        self.claude_session_id,
+                        self.terminal_id,
                     )
                 self.logger.info(
                     "Agent execution started",
@@ -194,7 +215,7 @@ class AgentExecutionLogger:
                         await conn.execute(
                             """
                             UPDATE agent_execution_logs
-                            SET metadata = metadata || $1::jsonb
+                            SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
                             WHERE execution_id = $2
                             """,
                             json.dumps({"progress": progress_data}),
@@ -278,7 +299,7 @@ class AgentExecutionLogger:
                                 quality_score = $3,
                                 error_message = $4,
                                 error_type = $5,
-                                metadata = metadata || $6::jsonb
+                                metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb
                             WHERE execution_id = $7
                             """,
                             completed_at,
@@ -358,6 +379,10 @@ async def log_agent_execution(
     user_prompt: Optional[str] = None,
     correlation_id: Optional[UUID | str] = None,
     session_id: Optional[UUID | str] = None,
+    project_path: Optional[str] = None,
+    project_name: Optional[str] = None,
+    claude_session_id: Optional[str] = None,
+    terminal_id: Optional[str] = None,
 ) -> AgentExecutionLogger:
     """
     Factory function to create and start agent execution logger.
@@ -367,6 +392,10 @@ async def log_agent_execution(
         user_prompt: User's original request
         correlation_id: Correlation ID for tracing
         session_id: Session ID for grouping
+        project_path: Path to the project being worked on
+        project_name: Name of the project
+        claude_session_id: Claude session identifier
+        terminal_id: Terminal identifier
 
     Returns:
         AgentExecutionLogger instance with execution already started
@@ -375,7 +404,8 @@ async def log_agent_execution(
         logger = await log_agent_execution(
             agent_name="agent-researcher",
             user_prompt="Research ONEX patterns",
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
+            project_path="/path/to/project"
         )
 
         await logger.progress(stage="gathering", percent=50)
@@ -386,6 +416,10 @@ async def log_agent_execution(
         user_prompt=user_prompt,
         correlation_id=correlation_id,
         session_id=session_id,
+        project_path=project_path,
+        project_name=project_name,
+        claude_session_id=claude_session_id,
+        terminal_id=terminal_id,
     )
     await logger.start()
     return logger

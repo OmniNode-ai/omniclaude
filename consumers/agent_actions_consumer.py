@@ -22,7 +22,7 @@ Environment Variables:
     POSTGRES_PORT: PostgreSQL port (default: 5436)
     POSTGRES_DATABASE: Database name (default: omninode_bridge)
     POSTGRES_USER: Database user (default: postgres)
-    POSTGRES_PASSWORD: Database password
+    POSTGRES_PASSWORD: Database password (REQUIRED - no default for security)
     BATCH_SIZE: Max events per batch (default: 100)
     BATCH_TIMEOUT_MS: Max wait time for batch (default: 1000)
     HEALTH_CHECK_PORT: Health check HTTP port (default: 8080)
@@ -30,6 +30,7 @@ Environment Variables:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -196,6 +197,17 @@ class AgentActionsConsumer:
         )
 
         # PostgreSQL configuration
+        # Security: POSTGRES_PASSWORD must be set via environment variable (no default)
+        postgres_password = config.get("postgres_password") or os.getenv(
+            "POSTGRES_PASSWORD"
+        )
+        if not postgres_password:
+            raise ValueError(
+                "POSTGRES_PASSWORD environment variable must be set. "
+                "No default value provided for security reasons. "
+                "Set it in your environment or .env file before starting the consumer."
+            )
+
         self.db_config = {
             "host": config.get(
                 "postgres_host", os.getenv("POSTGRES_HOST", "localhost")
@@ -207,10 +219,7 @@ class AgentActionsConsumer:
                 "postgres_database", os.getenv("POSTGRES_DATABASE", "omninode_bridge")
             ),
             "user": config.get("postgres_user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": config.get(
-                "postgres_password",
-                os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"),
-            ),
+            "password": postgres_password,
         }
 
         # Health check configuration
@@ -532,8 +541,6 @@ class AgentActionsConsumer:
         self, cursor, events: List[Dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert agent_detection_failures events."""
-        import hashlib
-
         insert_sql = """
             INSERT INTO agent_detection_failures (
                 correlation_id, user_prompt, prompt_length, prompt_hash,

@@ -31,6 +31,7 @@ from db_helper import get_correlation_id, parse_json_param
 
 # Kafka imports (lazy loaded)
 KafkaProducer = None
+_producer_instance = None  # Cached producer instance for singleton pattern
 
 
 def should_log_debug() -> bool:
@@ -43,9 +44,15 @@ def get_kafka_producer():
     """
     Get or create Kafka producer (singleton pattern).
     Lazy imports kafka-python to avoid import errors if not installed.
+    Returns cached producer instance to prevent connection/memory leaks.
     """
-    global KafkaProducer
+    global KafkaProducer, _producer_instance
 
+    # Return cached instance if available
+    if _producer_instance is not None:
+        return _producer_instance
+
+    # Import KafkaProducer class if not already imported
     if KafkaProducer is None:
         try:
             from kafka import KafkaProducer as KP
@@ -73,7 +80,27 @@ def get_kafka_producer():
         max_in_flight_requests_per_connection=5,
     )
 
+    # Cache the instance for reuse
+    _producer_instance = producer
+
     return producer
+
+
+def close_kafka_producer():
+    """
+    Close and cleanup the cached Kafka producer instance.
+    Should be called on graceful shutdown to properly close connections.
+    """
+    global _producer_instance
+
+    if _producer_instance is not None:
+        try:
+            _producer_instance.close()
+        except Exception as e:
+            # Log error but don't raise - this is cleanup code
+            print(f"Error closing Kafka producer: {e}", file=sys.stderr)
+        finally:
+            _producer_instance = None
 
 
 def publish_to_kafka(event: dict, topic: str = "agent-actions") -> bool:

@@ -288,7 +288,7 @@ class IntelligenceEventClient:
         file_path = Path(source_path)
         if file_path.exists() and file_path.is_file():
             try:
-                content = file_path.read_text()
+                content = file_path.read_text(encoding="utf-8")
                 self.logger.debug(
                     f"Read file content from {source_path} ({len(content)} bytes)"
                 )
@@ -439,9 +439,7 @@ class IntelligenceEventClient:
             "service": "omniclaude",
             "payload": {
                 "source_path": source_path,
-                "content": (
-                    content if content is not None else ""
-                ),  # Empty string for pattern discovery
+                "content": content,  # Keep None as None for pattern discovery
                 "language": language,
                 "operation_type": operation_type,
                 "options": options,
