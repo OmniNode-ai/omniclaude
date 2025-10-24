@@ -48,7 +48,7 @@ E   KeyError: 'node_type'
 ## Test-Driven Development (TDD) Workflow
 
 ### Phase 1: Write Tests (✅ COMPLETED)
-- Created 11 comprehensive tests for event-based discovery
+- Created 10 comprehensive tests for event-based discovery
 - Tests cover success, failure, edge cases, and integration
 - Tests follow patterns from `test_intelligence_gatherer.py`
 
@@ -176,19 +176,25 @@ async def _discover_via_events(
 ) -> List[Path]:
     """Discover patterns via event-based discovery."""
     try:
+        # Convert search parameters to source_path pattern
+        source_path = f"node_*_{node_type}.py"
+
         results = await self.event_client.request_pattern_discovery(
-            node_type=node_type,
-            domain=domain,
-            limit=limit,
+            source_path=source_path,
+            language="python",
+            timeout_ms=5000,
         )
 
         # Convert event results to Path objects
         paths = []
         for result in results:
-            # Filter by confidence
+            # Filter by confidence and domain
             if result.get("confidence", 0.0) >= 0.5:
+                # Additional domain filtering if needed
                 path = Path(result["file_path"])
                 paths.append(path)
+                if len(paths) >= limit:
+                    break
 
         return paths
     except Exception as e:

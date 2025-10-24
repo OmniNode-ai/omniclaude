@@ -295,7 +295,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
 # Core imports
-from omnibase_core.core.node_effect import NodeEffectService
+from omnibase_core.core.infrastructure_service_bases import NodeEffectService
 from omnibase_core.errors import OnexError, EnumCoreErrorCode
 
 logger = logging.getLogger(__name__)
@@ -424,10 +424,13 @@ Test files exist in `agents/tests/test_business_logic_generator.py`:
 Phase 5 consumes Phase 4 outputs:
 
 ```
+Phase 3 (PRD Analysis)
+    └── SimplePRDAnalysisResult
+           ↓
 Phase 4 (Contract Generation)
-    ├── SimplePRDAnalysisResult
     ├── Contract YAML
-    └── Capability definitions
+    ├── Validation metadata
+    └── Inferred capabilities/operations/external_systems
            ↓
 Phase 5 (Business Logic Generation)
     ├── Class definition
@@ -459,11 +462,11 @@ Pattern hooks enable automated implementation:
 
 ## Deliverables
 
-✅ **Primary Module**: `agents/lib/business_logic_generator.py` (948 lines)
-✅ **Test File**: `agents/tests/test_business_logic_generator.py` (537 lines)
-✅ **Validation Script**: `agents/scripts/validate_business_logic_generation.py` (140 lines)
+✅ **Primary Module**: `agents/lib/business_logic_generator.py` (1,177 lines)
+✅ **Test File**: `agents/tests/test_business_logic_generator.py` (565 lines)
+✅ **Validation Script**: `agents/scripts/validate_business_logic_generation.py` (192 lines)
 ✅ **Documentation**: This file
 
-**Total Lines**: 1,625 lines of production code
+**Total Lines**: 1,934 lines of production code
 **Test Coverage**: Static validation + comprehensive test suite
 **ONEX Compliance**: 100%

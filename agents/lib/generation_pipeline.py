@@ -3119,20 +3119,30 @@ except ImportError:
                 return ValidationGate(
                     gate_id="G13",
                     name="MyPy Type Checking",
-                    status="skip",
+                    status="skipped",
                     gate_type=GateType.WARNING,
                     message="Skipped: No pyproject.toml found (not in Poetry project)",
                     duration_ms=int((time() - start_ms) * 1000),
                 )
 
-            # Run mypy from project root directory
-            result = subprocess.run(
-                ["poetry", "run", "mypy", file_path, "--no-error-summary"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                cwd=str(project_root),
-            )
+            # Run mypy from project root directory (prefer Poetry if available; fallback to direct mypy)
+            try:
+                result = subprocess.run(
+                    ["poetry", "run", "mypy", file_path, "--no-error-summary"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(project_root),
+                )
+            except FileNotFoundError:
+                # Poetry not available - fallback to direct mypy
+                result = subprocess.run(
+                    ["mypy", file_path, "--no-error-summary"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(project_root),
+                )
 
             if result.returncode != 0:
                 return ValidationGate(
