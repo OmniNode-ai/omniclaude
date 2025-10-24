@@ -78,6 +78,59 @@ services:
           memory: 512M
 
   # ============================================================================
+  # Agent Observability Consumer Service
+  # ============================================================================
+  agent-observability-consumer:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.consumer
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.1.0}
+    image: omniclaude-agent-consumer:${VERSION:-latest}
+    container_name: omniclaude_agent_consumer
+    restart: unless-stopped
+    environment:
+      # Kafka configuration
+      - KAFKA_BROKERS=omninode-bridge-redpanda:9092
+      - KAFKA_GROUP_ID=agent-observability-postgres
+
+      # PostgreSQL configuration (connects to external omninode-bridge database)
+      # SECURITY WARNING: Change OMNINODE_BRIDGE_POSTGRES_PASSWORD in production!
+      # Default is for local development only - never use in production environments
+      - POSTGRES_HOST=omninode-bridge-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=omninode_bridge
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-omninode-bridge-postgres-dev-2024}
+
+      # Batch processing configuration
+      - BATCH_SIZE=100
+      - BATCH_TIMEOUT_MS=1000
+
+      # Health check and logging
+      - HEALTH_CHECK_PORT=8080
+      - LOG_LEVEL=INFO
+    networks:
+      - app_network
+      - omninode_bridge_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ============================================================================
   # PostgreSQL Database Service
   # ============================================================================
   postgres:
@@ -293,6 +346,9 @@ networks:
     ipam:
       config:
         - subnet: 172.23.0.0/16
+  omninode_bridge_network:
+    external: true
+    name: omninode_bridge_omninode-bridge-network
 
 # ============================================================================
 # Volumes - Persistent data storage

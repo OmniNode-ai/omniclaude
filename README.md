@@ -208,8 +208,12 @@ omniclaude/
 ├── .env.example                      # Environment template
 ├── toggle-claude-provider.sh         # Main provider toggle script
 ├── claude-providers.json             # Provider configuration (7 providers)
-├── Dockerfile                        # Container configuration
-├── docker-compose.yml                # Multi-service orchestration
+├── deployment/                       # Docker deployment files
+│   ├── Dockerfile                    # Main application container
+│   ├── Dockerfile.consumer           # Agent observability consumer
+│   ├── docker-compose.yml            # Multi-service orchestration
+│   ├── docker-compose.test.yml       # Test environment configuration
+│   └── .dockerignore                 # Docker build exclusions
 ├── agents/                           # Polymorphic agent framework
 │   ├── configs/                      # 52 agent definitions (YAML)
 │   ├── lib/                          # Agent framework libraries
@@ -381,7 +385,7 @@ source .env
 ./scripts/init-db.sh
 
 # Start services with Docker
-docker-compose up -d
+docker-compose -f deployment/docker-compose.yml up -d
 
 # Verify health
 ./claude_hooks/tests/check_phase4_health.sh

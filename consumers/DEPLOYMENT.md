@@ -183,35 +183,30 @@ curl http://localhost:8080/metrics
 sudo journalctl -u agent_actions_consumer -f
 ```
 
-## Docker Deployment (Alternative)
+## Docker Deployment (Recommended)
 
-### 1. Create Dockerfile
+The agent observability consumer is now integrated into the main docker-compose stack.
 
-```dockerfile
-FROM python:3.11-slim
+### 1. Using Docker Compose
 
-WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy consumer
-COPY agent_actions_consumer.py .
-COPY ../skills/_shared /app/skills/_shared
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
-
-# Run consumer
-CMD ["python", "agent_actions_consumer.py"]
-```
-
-### 2. Build Image
+The consumer is defined in `deployment/Dockerfile.consumer` and integrated in `deployment/docker-compose.yml`:
 
 ```bash
-docker build -t agent-actions-consumer:latest .
+# Start all services including the agent consumer
+docker-compose -f deployment/docker-compose.yml up -d agent-observability-consumer
+
+# View logs
+docker logs -f omniclaude_agent_consumer
+
+# Check health
+curl http://localhost:8080/health
+```
+
+### 2. Manual Docker Build (Alternative)
+
+```bash
+# Build consumer image
+docker build -f deployment/Dockerfile.consumer -t agent-actions-consumer:latest .
 ```
 
 ### 3. Run Container

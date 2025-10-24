@@ -98,7 +98,7 @@ POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
 
 ```bash
 # 1. Log routing decision (publishes to 'agent-routing-decisions' topic)
-/log-routing-decision \
+python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent <selected_agent_name> \
   --confidence <0.0-1.0> \
   --strategy <routing_strategy> \
@@ -108,7 +108,7 @@ POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
   --correlation-id <correlation_id>
 
 # 2. Log transformation event (publishes to 'agent-transformation-events' topic)
-/log-transformation \
+python3 ~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py \
   --from-agent polymorphic-agent \
   --to-agent <target_agent_name> \
   --success true \
@@ -117,7 +117,7 @@ POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
   --reason "<transformation_reason>"
 
 # 3. Log performance metrics (publishes to 'router-performance-metrics' topic)
-/log-performance-metrics \
+python3 ~/.claude/skills/agent-tracking/log-performance-metrics/execute_kafka.py \
   --query "<user_request>" \
   --duration-ms <routing_duration_ms> \
   --cache-hit false \
@@ -206,7 +206,7 @@ STRATEGY="enhanced_fuzzy_matching"
 REASONING="High confidence match on 'optimize' and 'performance' triggers"
 
 # 1. Log routing decision (→ Kafka topic: agent-routing-decisions)
-/log-routing-decision \
+python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent "$SELECTED_AGENT" \
   --confidence "$CONFIDENCE" \
   --strategy "$STRATEGY" \
@@ -221,7 +221,7 @@ REASONING="High confidence match on 'optimize' and 'performance' triggers"
 #    - Audit Logger → S3 archival
 
 # 2. Log transformation (→ Kafka topic: agent-transformation-events)
-/log-transformation \
+python3 ~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py \
   --from-agent polymorphic-agent \
   --to-agent "$SELECTED_AGENT" \
   --success true \
@@ -232,7 +232,7 @@ REASONING="High confidence match on 'optimize' and 'performance' triggers"
 # ↓ Consumers update transformation analytics and monitoring
 
 # 3. Log performance (→ Kafka topic: router-performance-metrics)
-/log-performance-metrics \
+python3 ~/.claude/skills/agent-tracking/log-performance-metrics/execute_kafka.py \
   --query "$USER_REQUEST" \
   --duration-ms "$ROUTING_TIME" \
   --cache-hit false \
@@ -259,6 +259,32 @@ echo "   Events will be persisted by consumers asynchronously"
 * 6‑phase ONEX generation (contract → design → code → test → integrate/deploy)
 * Dependency‑aware multi‑step execution
 * Adaptive execution based on runtime feedback
+
+## Available Observability Skills
+
+**Kafka-Based Agent Tracking** (located in `~/.claude/skills/agent-tracking/`):
+
+* **log-routing-decision** (`execute_kafka.py`) - Log agent routing decisions to Kafka topic `agent-routing-decisions`
+  - Records which agent was selected, confidence score, routing strategy, and reasoning
+  - Publishes to Kafka with <5ms latency, non-blocking
+
+* **log-transformation** (`execute_kafka.py`) - Log agent transformation events to Kafka topic `agent-transformation-events`
+  - Tracks polymorphic agent transformations from source to target agent
+  - Records transformation duration and success status
+
+* **log-performance-metrics** (`execute_kafka.py`) - Log router performance metrics to Kafka topic `router-performance-metrics`
+  - Tracks routing duration, cache hits, candidates evaluated
+  - Enables performance analysis and optimization
+
+* **log-agent-action** (`execute_kafka.py`) - Log agent actions to Kafka topic `agent-actions`
+  - Records all agent tool calls, decisions, and execution steps
+  - Provides complete action replay capability
+
+**Note**: All skills publish to Kafka asynchronously. Events are consumed by `omniclaude_agent_consumer` container and persisted to PostgreSQL database (`omninode_bridge`). This enables:
+- Complete agent observability with replay capability
+- Real-time performance dashboards and analytics
+- Historical routing pattern analysis for ML optimization
+- Full audit trail for debugging and compliance
 
 ## Execution Patterns
 

@@ -65,7 +65,7 @@ echo -e "${BLUE}2. Consumer Tests (test_kafka_consumer.py)${NC}"
 # For full integration test coverage, run with Docker environment
 
 echo -e "${YELLOW}Note: Integration test coverage requires Docker environment${NC}"
-echo -e "${YELLOW}Run: docker-compose -f docker-compose.test.yml --profile test up test-runner${NC}\n"
+echo -e "${YELLOW}Run: docker-compose -f deployment/docker-compose.test.yml --profile test up test-runner${NC}\n"
 
 # Coverage summary
 echo -e "${BLUE}========================================${NC}"
@@ -129,7 +129,7 @@ echo "   ✅ tests/test_kafka_logging.py (Unit tests)"
 echo "   ✅ tests/test_kafka_consumer.py (Integration tests)"
 echo "   ✅ tests/test_e2e_agent_logging.py (E2E tests)"
 echo "   ✅ tests/test_logging_performance.py (Performance tests)"
-echo "   ✅ docker-compose.test.yml (Test environment)"
+echo "   ✅ deployment/docker-compose.test.yml (Test environment)"
 echo "   ✅ Dockerfile.test-consumer (Consumer container)"
 echo "   ✅ Dockerfile.test-runner (Test runner container)"
 echo "   ✅ tests/init-test-db.sql (Database schema)"
@@ -153,7 +153,7 @@ echo -e "${BLUE}========================================${NC}\n"
 # Next steps
 echo -e "${BLUE}📋 Next Steps:${NC}"
 echo "1. View coverage report: open coverage-reports/unit/index.html"
-echo "2. Run full test suite: docker-compose -f docker-compose.test.yml --profile test up test-runner"
+echo "2. Run full test suite: docker-compose -f deployment/docker-compose.test.yml --profile test up test-runner"
 echo "3. Validate setup: ./scripts/validate-kafka-setup.sh"
 echo "4. Manual E2E test: ./scripts/test-agent-logging.sh"
 echo ""

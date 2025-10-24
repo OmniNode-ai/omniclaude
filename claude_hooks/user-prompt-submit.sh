@@ -180,6 +180,9 @@ fi
 # -----------------------------
 # Context blocks - AGENT DISPATCH DIRECTIVE
 # -----------------------------
+# Strip "agent-" prefix to get the role/configuration name
+AGENT_ROLE="${AGENT_NAME#agent-}"
+
 AGENT_CONTEXT="$(cat <<EOF
 
 ========================================================================
@@ -187,21 +190,23 @@ AGENT_CONTEXT="$(cat <<EOF
 ========================================================================
 
 DETECTED AGENT: ${AGENT_NAME}
+Detected Role: ${AGENT_ROLE}
 Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
-REQUIRED ACTION: Use the Task tool to dispatch this request to agent-workflow-coordinator
+REQUIRED ACTION: Use the Task tool to dispatch to polymorphic-agent
 
 Task Tool Configuration:
 ┌────────────────────────────────────────────────────────────────────┐
 │ description: "${AGENT_DOMAIN} task execution"                       │
-│ subagent_type: "agent-workflow-coordinator"                         │
-│ prompt: "Route to ${AGENT_NAME} and execute the following request: │
+│ subagent_type: "polymorphic-agent"                                  │
+│ prompt: "Load configuration for role '${AGENT_ROLE}' and execute:   │
 │                                                                      │
 │   ${PROMPT:0:200}...                                                │
 │                                                                      │
 │   Intelligence Context (pre-gathered by hooks):                    │
+│   - Requested Role: ${AGENT_ROLE}                                   │
 │   - Agent: ${AGENT_NAME}                                            │
 │   - Domain: ${AGENT_DOMAIN}                                         │
 │   - Purpose: ${AGENT_PURPOSE}                                       │
@@ -218,8 +223,8 @@ Task Tool Configuration:
 │   - 23 quality gates validation                                     │
 │   - Performance thresholds compliance                                │
 │                                                                      │
-│   The agent-workflow-coordinator will handle routing, execution,    │
-│   and intelligence integration for this task."                       │
+│   The agent will handle execution and intelligence integration       │
+│   for this task."                                                    │
 └────────────────────────────────────────────────────────────────────┘
 
 Why this dispatch is recommended:

@@ -4,12 +4,12 @@ Agent Pathway Detector
 Determines which invocation pathway to use for agent requests.
 
 Three pathways supported:
-1. coordinator: Spawn agent-workflow-coordinator for complex orchestration
+1. coordinator: Spawn polymorphic-agent for complex orchestration
 2. direct_single: Execute single agent with context injection
 3. direct_parallel: Execute multiple agents in parallel coordination
 
 Author: OmniClaude Framework
-Version: 1.0.0
+Version: 1.1.0
 """
 
 import re
@@ -116,7 +116,7 @@ class AgentPathwayDetector:
                 task = re.sub(pattern, "", prompt, flags=re.IGNORECASE).strip()
                 return PathwayDetection(
                     pathway="coordinator",
-                    agents=["agent-workflow-coordinator"],
+                    agents=["polymorphic-agent"],
                     task=task or prompt,
                     confidence=1.0,
                     trigger_pattern=pattern,
