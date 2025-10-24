@@ -21,15 +21,19 @@ from omnibase_core.nodes.node_compute import NodeCompute
 # Mixin imports
 {MIXIN_IMPORTS}
 
-from .enums.enum_{MICROSERVICE_NAME}_operation_type import \
-    Enum{MICROSERVICE_NAME_PASCAL}OperationType
-from .models.model_{MICROSERVICE_NAME}_config import \
-    Model{MICROSERVICE_NAME_PASCAL}Config
 # Local imports
-from .models.model_{MICROSERVICE_NAME}_input import \
+from .enums.enum_{MICROSERVICE_NAME}_operation_type import (
+    Enum{MICROSERVICE_NAME_PASCAL}OperationType
+)
+from .models.model_{MICROSERVICE_NAME}_config import (
+    Model{MICROSERVICE_NAME_PASCAL}Config
+)
+from .models.model_{MICROSERVICE_NAME}_input import (
     Model{MICROSERVICE_NAME_PASCAL}Input
-from .models.model_{MICROSERVICE_NAME}_output import \
+)
+from .models.model_{MICROSERVICE_NAME}_output import (
     Model{MICROSERVICE_NAME_PASCAL}Output
+)
 
 logger = logging.getLogger(__name__)
 

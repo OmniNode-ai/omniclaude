@@ -64,7 +64,7 @@ Assess code quality and ONEX compliance:
 
 - Kafka broker running on localhost:29092 (or configured via --kafka-brokers)
 - Omni Archon intelligence adapter service running and healthy
-- OMNICLAUDE_PATH environment variable set (or default /Volumes/PRO-G40/Code/omniclaude)
+- OMNICLAUDE_PATH environment variable set (or defaults to script's project root)
 
 ## Integration
 

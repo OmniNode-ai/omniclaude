@@ -13,9 +13,8 @@ from typing import Any, Dict
 def analyze_stage45_implementation() -> Dict[str, Any]:
     """Analyze Stage 4.5 implementation in generation_pipeline.py."""
 
-    pipeline_file = Path(
-        "/Volumes/PRO-G40/Code/omniclaude/agents/lib/generation_pipeline.py"
-    )
+    project_root = Path(__file__).parent.parent
+    pipeline_file = project_root / "agents" / "lib" / "generation_pipeline.py"
 
     with open(pipeline_file, "r") as f:
         content = f.read()
@@ -154,7 +153,8 @@ def analyze_stage45_implementation() -> Dict[str, Any]:
 def validate_templates() -> Dict[str, Any]:
     """Validate that all required templates exist."""
 
-    template_dir = Path("/Volumes/PRO-G40/Code/omniclaude/agents/templates")
+    project_root = Path(__file__).parent.parent
+    template_dir = project_root / "agents" / "templates"
 
     required_templates = [
         "introspection_event.py.jinja2",
@@ -192,9 +192,8 @@ def validate_templates() -> Dict[str, Any]:
 def check_integration_point() -> Dict[str, Any]:
     """Check where Stage 4.5 is called in the pipeline."""
 
-    pipeline_file = Path(
-        "/Volumes/PRO-G40/Code/omniclaude/agents/lib/generation_pipeline.py"
-    )
+    project_root = Path(__file__).parent.parent
+    pipeline_file = project_root / "agents" / "lib" / "generation_pipeline.py"
 
     with open(pipeline_file, "r") as f:
         content = f.read()
@@ -408,9 +407,8 @@ def generate_report():
         "total_features": total_features,
     }
 
-    report_file = Path(
-        "/Volumes/PRO-G40/Code/omniclaude/stage45_validation_report.json"
-    )
+    project_root = Path(__file__).parent.parent
+    report_file = project_root / "stage45_validation_report.json"
     with open(report_file, "w") as f:
         json.dump(report_data, f, indent=2)
 

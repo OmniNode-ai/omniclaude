@@ -36,7 +36,7 @@ from typing import Any, Dict, Optional
 
 # Add omniclaude agents/lib to path for IntelligenceEventClient
 OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
+    os.environ.get("OMNICLAUDE_PATH", str(Path(__file__).parent.parent.parent.parent))
 )
 sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
 
