@@ -38,7 +38,7 @@ async def analyze_code_quality(
                 results[path] = {"error": "file_not_found"}
                 continue
 
-            content = file_path.read_text()
+            content = file_path.read_text(encoding="utf-8")
 
             result = await client.request_code_analysis(
                 content=content,  # Provide actual file content
@@ -65,7 +65,7 @@ async def analyze_code_quality(
                 for issue in issues[:3]:  # Show first 3
                     print(f"     - {issue.get('message', 'Unknown issue')}")
 
-        except TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             print(f"  ⏱️  Timeout analyzing {path}")
             results[path] = {"error": "timeout"}
         except Exception as e:
@@ -101,7 +101,7 @@ async def discover_patterns(
                 patterns_found = result.get("patterns", [])
                 print(f"  ✓ Found {len(patterns_found)} patterns")
 
-        except TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             print(f"  ⏱️  Timeout discovering pattern {pattern}")
             results[pattern] = {"error": "timeout"}
         except Exception as e:
@@ -132,7 +132,7 @@ async def extract_insights(
                     continue
 
                 # Analyze first file as representative
-                content = py_files[0].read_text()
+                content = py_files[0].read_text(encoding="utf-8")
                 source_path = str(py_files[0])
                 print(f"  📄 Analyzing representative file: {py_files[0].name}")
             else:
@@ -140,7 +140,7 @@ async def extract_insights(
                     print(f"  ⚠️  File not found: {path}")
                     results[path] = {"error": "file_not_found"}
                     continue
-                content = path_obj.read_text()
+                content = path_obj.read_text(encoding="utf-8")
                 source_path = path
 
             result = await client.request_code_analysis(
@@ -168,7 +168,7 @@ async def extract_insights(
             if patterns:
                 print(f"  ✓ Patterns found: {len(patterns)}")
 
-        except TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             print(f"  ⏱️  Timeout extracting insights from {path}")
             results[path] = {"error": "timeout"}
         except Exception as e:
