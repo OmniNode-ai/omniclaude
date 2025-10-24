@@ -169,7 +169,7 @@ class TestInvalidPrompts:
         with pytest.raises(OnexError) as exc_info:
             parser.parse("")
 
-        assert exc_info.value.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert exc_info.value.error_code == EnumCoreErrorCode.VALIDATION_ERROR
         assert "empty" in str(exc_info.value).lower()
 
     def test_none_prompt(self, parser):
@@ -177,14 +177,14 @@ class TestInvalidPrompts:
         with pytest.raises(OnexError) as exc_info:
             parser.parse(None)
 
-        assert exc_info.value.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert exc_info.value.error_code == EnumCoreErrorCode.VALIDATION_ERROR
 
     def test_too_short_prompt(self, parser):
         """Test very short prompt raises error."""
         with pytest.raises(OnexError) as exc_info:
             parser.parse("node")
 
-        assert exc_info.value.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert exc_info.value.error_code == EnumCoreErrorCode.VALIDATION_ERROR
         assert "too short" in str(exc_info.value).lower()
 
     def test_whitespace_only_prompt(self, parser):
@@ -192,7 +192,7 @@ class TestInvalidPrompts:
         with pytest.raises(OnexError) as exc_info:
             parser.parse("   \n\t   ")
 
-        assert exc_info.value.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert exc_info.value.error_code == EnumCoreErrorCode.VALIDATION_ERROR
 
 
 class TestNodeTypeExtraction:
