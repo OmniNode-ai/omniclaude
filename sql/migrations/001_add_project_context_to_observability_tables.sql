@@ -120,9 +120,9 @@ SELECT
     e.status as execution_status,
     e.started_at,
     COUNT(a.id) as total_actions,
-    COUNT(a.id) FILTER (WHERE a.action_details->>'status' = 'started') as actions_in_progress,
-    COUNT(a.id) FILTER (WHERE a.action_details->>'status' = 'completed') as actions_completed,
-    COUNT(a.id) FILTER (WHERE a.action_details->>'status' = 'error') as actions_failed,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'tool_call') as actions_in_progress,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'success') as actions_completed,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'error') as actions_failed,
     MAX(a.created_at) as last_action_at,
     ARRAY_AGG(DISTINCT a.action_type ORDER BY a.action_type) as action_types_used,
     e.execution_id
