@@ -20,6 +20,7 @@ Options:
 import argparse
 import json
 import sys
+from enum import Enum
 from pathlib import Path
 
 # Add hooks/lib to path
@@ -31,6 +32,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
 
+class ActionType(str, Enum):
+    """Action types for agent actions."""
+
+    TOOL_CALL = "tool_call"
+    DECISION = "decision"
+    ERROR = "error"
+    SUCCESS = "success"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Log agent action via unified event adapter",
@@ -38,14 +48,24 @@ def main():
 
     # Required arguments
     parser.add_argument("--agent", required=True, help="Agent name")
-    parser.add_argument("--action-type", required=True, help="Action type")
+    parser.add_argument(
+        "--action-type",
+        required=True,
+        choices=[at.value for at in ActionType],
+        help="Action type (tool_call, decision, error, success)",
+    )
     parser.add_argument("--action-name", required=True, help="Action name")
 
     # Optional arguments
     parser.add_argument("--details", help="JSON object with details")
     parser.add_argument("--correlation-id", help="Correlation ID")
     parser.add_argument("--duration-ms", type=int, help="Duration in milliseconds")
-    parser.add_argument("--success", type=bool, default=True, help="Success flag")
+    parser.add_argument(
+        "--success",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Success flag (use --no-success to set False)",
+    )
 
     # Project context arguments
     parser.add_argument("--project-path", help="Absolute path to project directory")

@@ -22,7 +22,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add _shared to path
@@ -191,7 +191,7 @@ def log_agent_action_kafka(args):
             if hasattr(args, "working_directory") and args.working_directory
             else None
         ),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     # Publish to Kafka
