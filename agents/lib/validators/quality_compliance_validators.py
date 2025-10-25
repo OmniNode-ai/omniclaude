@@ -77,7 +77,7 @@ class ONEXStandardsValidator(BaseQualityGate):
         if isinstance(code, Path):
             # Explicit Path object
             file_path = str(code)
-            code = code.read_text()
+            code = code.read_text(encoding="utf-8")
         elif isinstance(code, str) and not (
             "\n" in code or "class " in code or "def " in code
         ):
@@ -85,7 +85,7 @@ class ONEXStandardsValidator(BaseQualityGate):
             path = Path(code)
             if path.exists() and path.is_file():
                 file_path = str(path)
-                code = path.read_text()
+                code = path.read_text(encoding="utf-8")
 
         if not code or len(code) < 5:
             return ModelQualityGateResult(
@@ -397,13 +397,13 @@ class TypeSafetyValidator(BaseQualityGate):
 
         # Load code from file if path provided
         if isinstance(code, Path):
-            code = code.read_text()
+            code = code.read_text(encoding="utf-8")
         elif isinstance(code, str) and not (
             "\n" in code or "class " in code or "def " in code
         ):
             path = Path(code)
             if path.exists() and path.is_file():
-                code = path.read_text()
+                code = path.read_text(encoding="utf-8")
 
         if not code:
             return ModelQualityGateResult(
@@ -625,13 +625,13 @@ class ErrorHandlingValidator(BaseQualityGate):
 
         # Load code from file if path provided
         if isinstance(code, Path):
-            code = code.read_text()
+            code = code.read_text(encoding="utf-8")
         elif isinstance(code, str) and not (
             "\n" in code or "class " in code or "def " in code
         ):
             path = Path(code)
             if path.exists() and path.is_file():
-                code = path.read_text()
+                code = path.read_text(encoding="utf-8")
 
         if not code:
             return ModelQualityGateResult(

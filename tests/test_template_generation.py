@@ -420,7 +420,7 @@ class TemplateGenerationTester:
 
             # Check all Python files
             for py_file in self.output_dir.rglob("*.py"):
-                content = py_file.read_text()
+                content = py_file.read_text(encoding="utf-8")
 
                 # Check for old imports
                 if "omnibase_core.core." in content:

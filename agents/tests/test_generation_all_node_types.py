@@ -99,7 +99,7 @@ class TestComputeNodeGeneration:
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
         assert main_file.exists()
 
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
         assert "NodeCompute" in content
         assert "execute_compute" in content or "_execute_computation" in content
 
@@ -157,7 +157,7 @@ class TestReducerNodeGeneration:
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
         assert main_file.exists()
 
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
         assert "NodeReducer" in content
         assert "execute_reduction" in content or "_execute_reduction" in content
         # Check for intent emission pattern
@@ -213,7 +213,7 @@ class TestOrchestratorNodeGeneration:
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
         assert main_file.exists()
 
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
         assert "NodeOrchestrator" in content
         assert "execute_orchestration" in content or "_execute_orchestration" in content
         # Check for lease/action patterns
@@ -345,7 +345,7 @@ class TestTemplateSelection:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "from omnibase_core.nodes.node_effect import NodeEffect" in content
         assert "NodeEffect" in content
@@ -357,7 +357,7 @@ class TestTemplateSelection:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "from omnibase_core.nodes.node_compute import NodeCompute" in content
         assert "NodeCompute" in content
@@ -369,7 +369,7 @@ class TestTemplateSelection:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "from omnibase_core.nodes.node_reducer import NodeReducer" in content
         assert "NodeReducer" in content
@@ -381,7 +381,7 @@ class TestTemplateSelection:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert (
             "from omnibase_core.nodes.node_orchestrator import NodeOrchestrator"
@@ -400,7 +400,7 @@ class TestONEXNamingConvention:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         # Should have class NodeDatabasewriterEffect or similar
         assert "Effect(" in content  # Class ends with Effect
@@ -412,7 +412,7 @@ class TestONEXNamingConvention:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "Compute(" in content  # Class ends with Compute
 
@@ -423,7 +423,7 @@ class TestONEXNamingConvention:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "Reducer(" in content  # Class ends with Reducer
 
@@ -434,7 +434,7 @@ class TestONEXNamingConvention:
         result = await pipeline.execute(prompt, output_dir)
 
         main_file = Path(result.output_path) / "v1_0_0" / "node.py"
-        content = main_file.read_text()
+        content = main_file.read_text(encoding="utf-8")
 
         assert "Orchestrator(" in content  # Class ends with Orchestrator
 

@@ -51,7 +51,7 @@ def benchmark_uncached_loads(templates_dir: Path, iterations: int = 100):
 
             if template_path.exists():
                 start = time.perf_counter()
-                template_path.read_text()
+                template_path.read_text(encoding="utf-8")
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 load_times.append(elapsed_ms)
 
@@ -106,7 +106,7 @@ def benchmark_cached_loads(templates_dir: Path, iterations: int = 100):
                     template_name=f"{template_type}_template",
                     template_type=template_type,
                     file_path=template_path,
-                    loader_func=lambda p: p.read_text(),
+                    loader_func=lambda p: p.read_text(encoding="utf-8"),
                 )
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 load_times.append(elapsed_ms)
@@ -165,7 +165,7 @@ def benchmark_concurrent_loads(
                         template_name=f"{template_type}_template",
                         template_type=template_type,
                         file_path=template_path,
-                        loader_func=lambda p: p.read_text(),
+                        loader_func=lambda p: p.read_text(encoding="utf-8"),
                     )
 
     print(f"\n  Threads: {num_threads}")

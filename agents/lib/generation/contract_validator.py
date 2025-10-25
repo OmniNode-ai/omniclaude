@@ -233,7 +233,7 @@ class ContractValidator:
             )
             return result
 
-        contract_yaml = contract_path.read_text()
+        contract_yaml = contract_path.read_text(encoding="utf-8")
         return self.validate_contract(contract_yaml, node_type)
 
     def _get_contract_model(self, node_type: str):

@@ -14,6 +14,16 @@ from typing import Dict
 from uuid import uuid4
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables from .env file for distributed testing
+# This ensures tests use the correct remote infrastructure configuration
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path, override=True)
+    print(f"✅ Loaded .env configuration from {env_path}")
+else:
+    print(f"⚠️  No .env file found at {env_path}, using system environment variables")
 
 # Import project modules
 # Temporarily commented out - contract_validator depends on omnibase_core

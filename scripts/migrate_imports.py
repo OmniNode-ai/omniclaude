@@ -40,7 +40,7 @@ def migrate_file(file_path: Path, dry_run: bool = False) -> None:
         file_path: Path to file to migrate
         dry_run: If True, only show changes without writing
     """
-    content = file_path.read_text()
+    content = file_path.read_text(encoding="utf-8")
     original_content = content
 
     # Migrate imports

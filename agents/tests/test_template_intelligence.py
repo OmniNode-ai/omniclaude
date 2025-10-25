@@ -145,7 +145,7 @@ async def test_template_with_intelligence(
     assert main_file_path.exists()
 
     # Read generated content
-    generated_code = main_file_path.read_text()
+    generated_code = main_file_path.read_text(encoding="utf-8")
 
     # Verify intelligence-driven content is present
     assert "Best Practices Applied (Intelligence-Driven):" in generated_code
@@ -200,7 +200,7 @@ async def test_template_without_intelligence(sample_prd_analysis, temp_output_di
 
     # Read generated content
     main_file_path = Path(result["main_file"])
-    generated_code = main_file_path.read_text()
+    generated_code = main_file_path.read_text(encoding="utf-8")
 
     # Verify default intelligence was used
     assert "Best Practices Applied (Intelligence-Driven):" in generated_code
@@ -237,7 +237,7 @@ async def test_all_node_types_with_intelligence(sample_prd_analysis, temp_output
 
         # Read generated content
         main_file_path = Path(result["main_file"])
-        generated_code = main_file_path.read_text()
+        generated_code = main_file_path.read_text(encoding="utf-8")
 
         # Verify intelligence sections are present
         assert "Best Practices Applied (Intelligence-Driven):" in generated_code
@@ -286,7 +286,7 @@ async def test_pattern_code_block_generation(
 
     # Read generated content
     main_file_path = Path(result["main_file"])
-    generated_code = main_file_path.read_text()
+    generated_code = main_file_path.read_text(encoding="utf-8")
 
     # Verify pattern code blocks are present
     # Based on sample_intelligence, we should have:

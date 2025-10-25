@@ -129,7 +129,7 @@ class OmniNodeTemplateEngine:
                         template_name=f"{node_type}_template",
                         template_type=node_type,
                         file_path=template_path,
-                        loader_func=lambda p: p.read_text(),
+                        loader_func=lambda p: p.read_text(encoding="utf-8"),
                     )
 
                     if cache_hit:

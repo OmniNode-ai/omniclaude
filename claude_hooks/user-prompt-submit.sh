@@ -94,7 +94,7 @@ try:
     adapter.publish_detection_failure(
         user_request=user_request,
         failure_reason="No agent detected by hybrid selector",
-        attempted_methods=[os.environ.get("ENABLE_AI") == "true" and "ai" or "trigger", "fuzzy"],
+        attempted_methods=["ai" if os.environ.get("ENABLE_AI") == "true" else "trigger", "fuzzy"],
         correlation_id=os.environ.get("FAILURE_CORRELATION_ID"),
         project_path=os.environ.get("PROJECT_PATH"),
         project_name=os.environ.get("PROJECT_NAME"),
@@ -163,7 +163,10 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
   if [[ -f "$SKILL_PATH" ]]; then
     # Convert latency to integer (remove decimal part)
     LATENCY_INT="${LATENCY_MS%.*}"
-    [[ -z "$LATENCY_INT" ]] && LATENCY_INT="0"
+    # Validate numeric value with regex
+    if [[ ! "$LATENCY_INT" =~ ^[0-9]+$ ]]; then
+      LATENCY_INT="0"
+    fi
 
     python3 "$SKILL_PATH" \
         --agent "$AGENT_NAME" \
@@ -248,7 +251,7 @@ if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_
       --domain "$AGENT_DOMAIN" \
       --purpose "$AGENT_PURPOSE" \
       --correlation-id "$CORRELATION_ID" \
-      --session-id "${SESSION_ID:-}" \
+      --session-id "$SESSION_ID" \
       >> "$LOG_FILE" 2>&1
   ) || log "Intent tracking failed (continuing)"
 fi

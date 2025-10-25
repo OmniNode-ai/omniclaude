@@ -84,7 +84,7 @@ class ONEXTemplateInjector:
     def _load_patterns(self) -> str:
         """Load ONEX patterns document."""
         if self.PATTERNS_DOC.exists():
-            return self.PATTERNS_DOC.read_text()
+            return self.PATTERNS_DOC.read_text(encoding="utf-8")
         return ""
 
     def _extract_node_templates(self) -> Dict[ONEXNodeType, str]:

@@ -364,7 +364,7 @@ class TestThreadSafety:
                     assert main_file.exists(), f"Main file should exist: {main_file}"
 
                     # Verify file is not empty and has valid content
-                    content = main_file.read_text()
+                    content = main_file.read_text(encoding="utf-8")
                     assert (
                         len(content) > 100
                     ), "Generated file should have substantial content"
