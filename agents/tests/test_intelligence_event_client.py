@@ -960,7 +960,7 @@ class TestIntelligenceIntegration:
             await client.start()
 
             # Capture the payload being sent
-            original_send = client.producer.send_and_wait
+            original_send = client._producer.send_and_wait
             sent_payload = None
 
             async def capture_send(topic, value):
@@ -968,7 +968,7 @@ class TestIntelligenceIntegration:
                 sent_payload = value
                 return await original_send(topic, value)
 
-            client.producer.send_and_wait = capture_send
+            client._producer.send_and_wait = capture_send
 
             await client.request_pattern_discovery(
                 source_path=str(test_file),
