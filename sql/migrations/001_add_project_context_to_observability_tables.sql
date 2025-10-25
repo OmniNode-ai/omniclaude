@@ -102,7 +102,9 @@ RETURNS VARCHAR AS $$
 BEGIN
     -- Extract last directory name from path
     -- /Volumes/PRO-G40/Code/omniclaude → omniclaude
-    RETURN (SELECT regexp_replace(full_path, '.*/', ''));
+    -- /Volumes/PRO-G40/Code/omniclaude/ → omniclaude (handles trailing slash)
+    -- First remove trailing slash, then extract last directory name
+    RETURN (SELECT regexp_replace(regexp_replace(full_path, '/$', ''), '.*/', ''));
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 

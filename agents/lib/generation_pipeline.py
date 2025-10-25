@@ -2141,7 +2141,7 @@ except ImportError:
                 stage.error = f"Main file not found: {main_file_path}"
                 return stage
 
-            main_file_content = main_file_path.read_text()
+            main_file_content = main_file_path.read_text(encoding="utf-8")
 
             # G9: Python syntax valid
             gate_g9 = self._gate_g9_python_syntax_valid(
@@ -2253,7 +2253,7 @@ except ImportError:
                 stage.error = f"Main file not found: {main_file_path}"
                 return stage, generated_files
 
-            original_code = main_file_path.read_text()
+            original_code = main_file_path.read_text(encoding="utf-8")
 
             # Check if refinement is needed
             needs_refinement = self._check_refinement_needed(
@@ -2987,7 +2987,7 @@ except ImportError:
                 if not file_path.exists():
                     continue
 
-                code = file_path.read_text()
+                code = file_path.read_text(encoding="utf-8")
 
                 # Check for old Pydantic v1 patterns
                 if ".dict()" in code:

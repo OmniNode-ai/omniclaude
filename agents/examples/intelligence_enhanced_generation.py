@@ -162,7 +162,7 @@ async def example_with_custom_intelligence():
     # Show snippet of generated code
     main_file_path = Path(result["main_file"])
     if main_file_path.exists():
-        generated_code = main_file_path.read_text()
+        generated_code = main_file_path.read_text(encoding="utf-8")
 
         # Extract docstring
         docstring_start = generated_code.find('"""')

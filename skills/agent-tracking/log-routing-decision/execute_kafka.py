@@ -24,7 +24,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add _shared to path
@@ -33,15 +33,22 @@ from db_helper import get_correlation_id, parse_json_param
 
 # Kafka imports (lazy loaded)
 KafkaProducer = None
+_producer_instance = None  # Cached producer instance for singleton pattern
 
 
 def get_kafka_producer():
     """
     Get or create Kafka producer (singleton pattern).
     Lazy imports kafka-python to avoid import errors if not installed.
+    Returns cached producer instance to prevent connection/memory leaks.
     """
-    global KafkaProducer
+    global KafkaProducer, _producer_instance
 
+    # Return cached instance if available
+    if _producer_instance is not None:
+        return _producer_instance
+
+    # Import KafkaProducer class if not already imported
     if KafkaProducer is None:
         try:
             from kafka import KafkaProducer as KP
@@ -68,6 +75,9 @@ def get_kafka_producer():
         retries=3,
         max_in_flight_requests_per_connection=5,
     )
+
+    # Cache the instance for reuse
+    _producer_instance = producer
 
     return producer
 
@@ -167,7 +177,7 @@ def log_routing_decision_kafka(args):
         "session_id": (
             args.session_id if hasattr(args, "session_id") and args.session_id else None
         ),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     # Publish to Kafka
