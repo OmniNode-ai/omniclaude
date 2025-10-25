@@ -12,6 +12,8 @@ Usage:
 import asyncio
 import json
 import sys
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -19,6 +21,13 @@ from typing import Any, Dict, List
 sys.path.insert(0, str(Path(__file__).parent / "agents" / "lib"))
 
 from intelligence_event_client import IntelligenceEventClient
+
+
+class OperationType(str, Enum):
+    """Operation types for intelligence requests."""
+
+    QUALITY_ASSESSMENT = "QUALITY_ASSESSMENT"
+    PATTERN_EXTRACTION = "PATTERN_EXTRACTION"
 
 
 async def analyze_code_quality(
@@ -45,7 +54,7 @@ async def analyze_code_quality(
                 source_path=path,
                 language="python",
                 options={
-                    "operation_type": "QUALITY_ASSESSMENT",
+                    "operation_type": OperationType.QUALITY_ASSESSMENT.value,
                     "include_metrics": True,
                     "include_recommendations": True,
                 },
@@ -148,7 +157,7 @@ async def extract_insights(
                 source_path=source_path,
                 language="python",
                 options={
-                    "operation_type": "PATTERN_EXTRACTION",
+                    "operation_type": OperationType.PATTERN_EXTRACTION.value,
                     "include_patterns": True,
                     "include_metrics": True,
                     "include_recommendations": True,
@@ -291,7 +300,7 @@ async def main():
         # Save detailed results
         output_file = Path("intelligence_analysis_results.json")
         full_results = {
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "quality_assessment": quality_results,
             "pattern_discovery": pattern_results,
             "insights": insight_results,
