@@ -12,24 +12,58 @@ Logs:
 Features:
 - Dual-path logging: PostgreSQL primary, file fallback
 - Non-blocking: Never fails agent execution due to logging issues
-- Structured JSON file logs in /tmp/omniclaude_logs/
+- Platform-aware: Uses tempfile.gettempdir() for cross-platform compatibility
+- Structured JSON file logs in {temp}/omniclaude_logs/ or .omniclaude_logs/
 - Correlation ID tracking for request tracing
 - Quality score capture for trend analysis
 """
 
 import json
+import tempfile
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
+from omnibase_core.enums.enum_operation_status import EnumOperationStatus
+
 from .db import get_pg_pool
 from .structured_logger import StructuredLogger
 
-# Fallback log directory
-FALLBACK_LOG_DIR = Path("/tmp/omniclaude_logs")
-FALLBACK_LOG_DIR.mkdir(exist_ok=True)
+# Lazy initialization for fallback log directory (platform-appropriate)
+_FALLBACK_LOG_DIR = None
+
+
+def get_fallback_log_dir() -> Path:
+    """Get platform-appropriate fallback log directory with lazy initialization."""
+    global _FALLBACK_LOG_DIR
+    if _FALLBACK_LOG_DIR is None:
+        _FALLBACK_LOG_DIR = _get_fallback_log_dir()
+    return _FALLBACK_LOG_DIR
+
+
+def _get_fallback_log_dir() -> Path:
+    """
+    Create and verify platform-appropriate fallback log directory.
+
+    Returns:
+        Path: Writable log directory (tempdir/omniclaude_logs or .omniclaude_logs)
+    """
+    # Try platform-appropriate temp directory first
+    base_dir = Path(tempfile.gettempdir()) / "omniclaude_logs"
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        # Verify writable
+        test_file = base_dir / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return base_dir
+    except (PermissionError, OSError):
+        # Fallback to current directory if temp is not writable
+        fallback = Path.cwd() / ".omniclaude_logs"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
 
 class AgentExecutionLogger:
@@ -194,6 +228,14 @@ class AgentExecutionLogger:
             self.logger.warning("Progress logged before start() called")
             return
 
+        # Validate progress percent range (0-100)
+        if percent is not None and not (0 <= percent <= 100):
+            self.logger.warning(
+                "Progress percent out of range (must be 0-100)",
+                metadata={"percent": percent, "execution_id": self.execution_id},
+            )
+            return
+
         progress_data = {
             "stage": stage,
             "percent": percent,
@@ -243,7 +285,7 @@ class AgentExecutionLogger:
 
     async def complete(
         self,
-        status: str = "success",
+        status: EnumOperationStatus = EnumOperationStatus.SUCCESS,
         quality_score: Optional[float] = None,
         error_message: Optional[str] = None,
         error_type: Optional[str] = None,
@@ -253,9 +295,9 @@ class AgentExecutionLogger:
         Log execution completion.
 
         Args:
-            status: Execution status (success/error/cancelled)
+            status: Execution status (EnumOperationStatus.SUCCESS/FAILED/CANCELLED)
             quality_score: Quality score 0.0-1.0 (optional)
-            error_message: Error description if status=error (optional)
+            error_message: Error description if status=FAILED (optional)
             error_type: Error type/class name (optional)
             metadata: Final execution metadata (optional)
         """
@@ -273,9 +315,12 @@ class AgentExecutionLogger:
             **(metadata or {}),
         }
 
+        # Convert enum to string value for storage
+        status_value = status.value
+
         log_data = {
             "execution_id": self.execution_id,
-            "status": status,
+            "status": status_value,
             "quality_score": quality_score,
             "error_message": error_message,
             "error_type": error_type,
@@ -303,7 +348,7 @@ class AgentExecutionLogger:
                             WHERE execution_id = $7
                             """,
                             completed_at,
-                            status,
+                            status_value,
                             quality_score,
                             error_message,
                             error_type,
@@ -312,10 +357,12 @@ class AgentExecutionLogger:
                         )
 
                     log_method = (
-                        self.logger.info if status == "success" else self.logger.error
+                        self.logger.info
+                        if status == EnumOperationStatus.SUCCESS
+                        else self.logger.error
                     )
                     log_method(
-                        f"Agent execution {status}",
+                        f"Agent execution {status_value}",
                         metadata={
                             "execution_id": self.execution_id,
                             "duration_ms": duration_ms,
@@ -339,7 +386,7 @@ class AgentExecutionLogger:
         """
         Write log to fallback file when database is unavailable.
 
-        Creates structured JSON log files in /tmp/omniclaude_logs/ organized by date.
+        Creates structured JSON log files in platform-appropriate temp directory organized by date.
 
         Args:
             event_type: Type of event (start/progress/complete)
@@ -348,7 +395,7 @@ class AgentExecutionLogger:
         try:
             # Create date-based subdirectory
             date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            log_dir = FALLBACK_LOG_DIR / date_str
+            log_dir = get_fallback_log_dir() / date_str
             log_dir.mkdir(exist_ok=True)
 
             # Create log file named by execution_id
