@@ -67,8 +67,8 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default="localhost:29092",
-        description="Kafka bootstrap servers (external port mapping)",
+        default_factory=lambda: os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", ""),
+        description="Kafka bootstrap servers (REQUIRED - set via KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS env var)",
     )
 
     kafka_enable_intelligence: bool = Field(

@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -89,7 +90,7 @@ class IntelligenceEventClient:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:29102",
+        bootstrap_servers: Optional[str] = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
         consumer_group_id: Optional[str] = None,
@@ -105,7 +106,18 @@ class IntelligenceEventClient:
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
-        self.bootstrap_servers = bootstrap_servers
+        # Bootstrap servers - use env var if not provided
+        self.bootstrap_servers = (
+            bootstrap_servers
+            or os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS")
+            or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+        )
+        if not self.bootstrap_servers:
+            raise ValueError(
+                "bootstrap_servers must be provided or set via "
+                "KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS environment variable. "
+                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:29102"
+            )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = (
@@ -600,7 +612,7 @@ class IntelligenceEventClientContext:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:29092",
+        bootstrap_servers: Optional[str] = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
     ):

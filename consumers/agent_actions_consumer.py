@@ -16,9 +16,9 @@ Usage:
     python agent_actions_consumer.py [--config config.json]
 
 Environment Variables:
-    KAFKA_BROKERS: Comma-separated Kafka brokers (default: localhost:9092)
+    KAFKA_BROKERS: Comma-separated Kafka brokers (REQUIRED - no default)
     KAFKA_GROUP_ID: Consumer group ID (default: agent-observability-postgres)
-    POSTGRES_HOST: PostgreSQL host (default: localhost)
+    POSTGRES_HOST: PostgreSQL host (REQUIRED - no default)
     POSTGRES_PORT: PostgreSQL port (default: 5436)
     POSTGRES_DATABASE: Database name (default: omninode_bridge)
     POSTGRES_USER: Database user (default: postgres)
@@ -184,10 +184,14 @@ class AgentActionsConsumer:
         # Thread safety for health checks
         self._health_lock = threading.Lock()
 
-        # Kafka configuration
-        self.kafka_brokers = config.get(
-            "kafka_brokers", os.getenv("KAFKA_BROKERS", "localhost:9092")
-        ).split(",")
+        # Kafka configuration (no localhost default - must be explicitly configured)
+        kafka_brokers_str = config.get("kafka_brokers") or os.getenv("KAFKA_BROKERS")
+        if not kafka_brokers_str:
+            raise ValueError(
+                "KAFKA_BROKERS environment variable must be set. "
+                "Example: KAFKA_BROKERS=192.168.86.200:29102"
+            )
+        self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = config.get(
             "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
         )
@@ -221,10 +225,16 @@ class AgentActionsConsumer:
                 "Set it in your environment or .env file before starting the consumer."
             )
 
+        # Database host (no localhost default - must be explicitly configured)
+        postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
+        if not postgres_host:
+            raise ValueError(
+                "POSTGRES_HOST environment variable must be set. "
+                "Example: POSTGRES_HOST=192.168.86.200"
+            )
+
         self.db_config = {
-            "host": config.get(
-                "postgres_host", os.getenv("POSTGRES_HOST", "localhost")
-            ),
+            "host": postgres_host,
             "port": int(
                 config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
             ),
