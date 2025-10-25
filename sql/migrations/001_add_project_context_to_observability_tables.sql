@@ -113,6 +113,13 @@ COMMENT ON FUNCTION extract_project_name(VARCHAR) IS 'Extract project name from 
 -- ======================================================================
 -- Create Real-Time Multi-Terminal View
 -- ======================================================================
+-- NOTE: action_type represents the TYPE of logged action, not execution status:
+--   - 'tool_call': Agent called a tool (Read, Write, Bash, etc.)
+--   - 'decision': Agent made a decision (routing, planning, etc.)
+--   - 'error': An error was logged during execution
+--   - 'success': A success event was logged
+-- The execution_status field from agent_execution_logs indicates overall execution state.
+-- ======================================================================
 
 CREATE OR REPLACE VIEW agent_activity_realtime AS
 SELECT
@@ -122,9 +129,10 @@ SELECT
     e.status as execution_status,
     e.started_at,
     COUNT(a.id) as total_actions,
-    COUNT(a.id) FILTER (WHERE a.action_type = 'tool_call') as actions_in_progress,
-    COUNT(a.id) FILTER (WHERE a.action_type = 'success') as actions_completed,
-    COUNT(a.id) FILTER (WHERE a.action_type = 'error') as actions_failed,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'tool_call') as tool_call_count,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'decision') as decision_count,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'success') as success_event_count,
+    COUNT(a.id) FILTER (WHERE a.action_type = 'error') as error_event_count,
     MAX(a.created_at) as last_action_at,
     ARRAY_AGG(DISTINCT a.action_type ORDER BY a.action_type) as action_types_used,
     e.execution_id
@@ -134,7 +142,7 @@ WHERE e.started_at > NOW() - INTERVAL '1 hour'
 GROUP BY e.project_name, e.claude_session_id, e.agent_name, e.status, e.started_at, e.execution_id
 ORDER BY e.started_at DESC;
 
-COMMENT ON VIEW agent_activity_realtime IS 'Real-time view of agent activity across all projects in the last hour';
+COMMENT ON VIEW agent_activity_realtime IS 'Real-time agent activity monitoring (last 1 hour). Column names reflect action_type values: tool_call_count, decision_count, success_event_count, error_event_count. Use execution_status for overall execution state.';
 
 COMMIT;
 

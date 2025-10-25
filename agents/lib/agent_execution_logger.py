@@ -451,14 +451,16 @@ class AgentExecutionLogger:
                                 quality_score = $3,
                                 error_message = $4,
                                 error_type = $5,
-                                metadata = COALESCE(metadata, '{}'::jsonb) || $6::jsonb
-                            WHERE execution_id = $7
+                                duration_ms = $6,
+                                metadata = COALESCE(metadata, '{}'::jsonb) || $7::jsonb
+                            WHERE execution_id = $8
                             """,
                             completed_at,
                             status_value,
                             quality_score,
                             error_message,
                             error_type,
+                            duration_ms,
                             json.dumps(final_metadata),
                             self.execution_id,
                         )
