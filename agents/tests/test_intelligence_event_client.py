@@ -984,7 +984,7 @@ class TestIntelligenceIntegration:
             assert content, "Content field is empty!"
             assert len(content) > 1000, (
                 f"Content too short ({len(content)} bytes). "
-                "Expected test file content (~82K bytes)."
+                "Expected test file content (>1000 bytes)."
             )
 
             print(f"✅ PASS: Sent {len(content)} bytes of file content")

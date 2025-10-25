@@ -17,7 +17,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List
 
-# Add agents/lib to path
+# NOTE: sys.path modification required for standalone script execution
+# This script runs from project root and needs to import from agents/lib
+# which is not in a standard Python package structure. This allows the script
+# to function as a standalone analysis tool without requiring package installation.
+# Alternative: Convert to proper package with pyproject.toml entry point.
 sys.path.insert(0, str(Path(__file__).parent / "agents" / "lib"))
 
 from intelligence_event_client import IntelligenceEventClient
@@ -33,7 +37,23 @@ class OperationType(str, Enum):
 async def analyze_code_quality(
     client: IntelligenceEventClient, paths: List[str]
 ) -> Dict[str, Any]:
-    """Analyze code quality for specified paths."""
+    """
+    Analyze code quality for specified paths.
+
+    Args:
+        client: IntelligenceEventClient instance for making requests
+        paths: List of file paths to analyze
+
+    Returns:
+        Dictionary mapping file paths to quality analysis results
+
+    Raises:
+        Exception: If analysis fails for any reason
+
+    Example:
+        >>> results = await analyze_code_quality(client, ["path/to/file.py"])
+        >>> print(results["path/to/file.py"]["quality_score"])
+    """
     results = {}
 
     for path in paths:
@@ -87,7 +107,23 @@ async def analyze_code_quality(
 async def discover_patterns(
     client: IntelligenceEventClient, patterns: List[str]
 ) -> Dict[str, Any]:
-    """Discover architectural patterns in the codebase."""
+    """
+    Discover architectural patterns in the codebase.
+
+    Args:
+        client: IntelligenceEventClient instance for making requests
+        patterns: List of pattern paths or glob patterns to search
+
+    Returns:
+        Dictionary mapping pattern searches to discovery results
+
+    Raises:
+        Exception: If pattern discovery fails for any reason
+
+    Example:
+        >>> results = await discover_patterns(client, ["agents/lib/*.py"])
+        >>> print(len(results["agents/lib/*.py"]))
+    """
     results = {}
 
     for pattern in patterns:
@@ -123,7 +159,23 @@ async def discover_patterns(
 async def extract_insights(
     client: IntelligenceEventClient, paths: List[str]
 ) -> Dict[str, Any]:
-    """Extract architectural insights and recommendations."""
+    """
+    Extract architectural insights and recommendations.
+
+    Args:
+        client: IntelligenceEventClient instance for making requests
+        paths: List of file or directory paths to analyze
+
+    Returns:
+        Dictionary mapping paths to extracted insights and recommendations
+
+    Raises:
+        Exception: If insight extraction fails for any reason
+
+    Example:
+        >>> results = await extract_insights(client, ["agents/"])
+        >>> print(results["agents/"]["recommendations"])
+    """
     results = {}
 
     for path in paths:
@@ -188,7 +240,19 @@ async def extract_insights(
 
 
 async def main():
-    """Main analysis workflow."""
+    """
+    Main analysis workflow.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+
+    Raises:
+        Exception: If analysis workflow fails
+
+    Example:
+        >>> exit_code = await main()
+        >>> sys.exit(exit_code)
+    """
     print("=" * 80)
     print("OMNICLAUDE INTELLIGENCE ANALYSIS")
     print("=" * 80)

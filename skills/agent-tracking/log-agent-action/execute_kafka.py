@@ -16,6 +16,11 @@ Options:
   --correlation-id: Correlation ID for tracking (optional, auto-generated)
   --debug-mode: Force debug logging regardless of DEBUG env var (optional)
   --duration-ms: How long the action took in milliseconds (optional)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --working-directory: Current working directory (optional)
 """
 
 import argparse

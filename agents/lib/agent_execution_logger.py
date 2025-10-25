@@ -19,7 +19,9 @@ Features:
 """
 
 import json
+import os
 import tempfile
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +35,10 @@ from .structured_logger import StructuredLogger
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None
+
+# DB retry configuration
+_DB_RETRY_BACKOFF_SECONDS = [60, 120, 300, 600]  # Exponential backoff: 1m, 2m, 5m, 10m
+_MAX_RETRY_ATTEMPTS = len(_DB_RETRY_BACKOFF_SECONDS)
 
 
 def get_fallback_log_dir() -> Path:
@@ -137,8 +143,91 @@ class AgentExecutionLogger:
         self.logger.set_correlation_id(self.correlation_id)
         self.logger.set_session_id(self.session_id)
 
-        # Track if DB is available
+        # Track DB availability with retry logic
         self._db_available = True
+        self._db_retry_count = 0
+        self._last_retry_time = 0.0  # Unix timestamp of last retry attempt
+
+    def _should_retry_db(self) -> bool:
+        """
+        Check if enough time has passed to retry database connection.
+
+        Returns:
+            True if retry should be attempted, False otherwise
+        """
+        if self._db_available:
+            return True
+
+        if self._db_retry_count >= _MAX_RETRY_ATTEMPTS:
+            # Max retries reached, stay in fallback mode
+            return False
+
+        current_time = time.time()
+        backoff_seconds = _DB_RETRY_BACKOFF_SECONDS[self._db_retry_count]
+        time_since_last_retry = current_time - self._last_retry_time
+
+        should_retry = time_since_last_retry >= backoff_seconds
+
+        if should_retry:
+            retry_msg = (
+                f"Retrying database connection "
+                f"(attempt {self._db_retry_count + 1}/{_MAX_RETRY_ATTEMPTS})"
+            )
+            self.logger.info(
+                retry_msg,
+                metadata={
+                    "backoff_seconds": backoff_seconds,
+                    "time_since_last_retry": int(time_since_last_retry),
+                },
+            )
+
+        return should_retry
+
+    def _handle_db_failure(self, error: Exception, operation: str):
+        """
+        Handle database operation failure with retry tracking.
+
+        Args:
+            error: Exception that caused the failure
+            operation: Operation name (for logging)
+        """
+        self._db_available = False
+        self._last_retry_time = time.time()
+        self._db_retry_count = min(self._db_retry_count + 1, _MAX_RETRY_ATTEMPTS)
+
+        # Calculate next retry delay
+        if self._db_retry_count < _MAX_RETRY_ATTEMPTS:
+            retry_idx = min(self._db_retry_count, _MAX_RETRY_ATTEMPTS - 1)
+            next_retry_in = _DB_RETRY_BACKOFF_SECONDS[retry_idx]
+        else:
+            next_retry_in = None
+
+        # Format next retry time
+        next_retry_str = f"{next_retry_in}s" if next_retry_in else "max_retries_reached"
+
+        self.logger.warning(
+            f"Database {operation} failed, using file fallback",
+            metadata={
+                "error": str(error),
+                "retry_count": self._db_retry_count,
+                "next_retry_in": next_retry_str,
+                "execution_id": self.execution_id,
+            },
+        )
+
+    def _handle_db_success(self):
+        """Reset retry counters on successful database operation."""
+        if not self._db_available or self._db_retry_count > 0:
+            self.logger.info(
+                "Database connection restored",
+                metadata={
+                    "previous_retry_count": self._db_retry_count,
+                    "execution_id": self.execution_id,
+                },
+            )
+        self._db_available = True
+        self._db_retry_count = 0
+        self._last_retry_time = 0.0
 
     async def start(self) -> str:
         """
@@ -146,6 +235,13 @@ class AgentExecutionLogger:
 
         Returns:
             Execution ID (UUID as string)
+
+        Raises:
+            Exception: If database logging fails (falls back to file logging)
+
+        Example:
+            >>> logger = AgentExecutionLogger(agent_name="agent-researcher")
+            >>> execution_id = await logger.start()
         """
         self.execution_id = str(uuid4())
         self.started_at = datetime.now(timezone.utc)
@@ -165,47 +261,47 @@ class AgentExecutionLogger:
             "terminal_id": self.terminal_id,
         }
 
-        # Try database logging first
-        try:
-            pool = await get_pg_pool()
-            if pool:
-                async with pool.acquire() as conn:
-                    await conn.execute(
-                        """
-                        INSERT INTO agent_execution_logs (
-                            execution_id, correlation_id, session_id,
-                            agent_name, user_prompt, status, metadata,
-                            project_path, project_name, claude_session_id, terminal_id
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
-                        """,
-                        self.execution_id,
-                        self.correlation_id,
-                        self.session_id,
-                        self.agent_name,
-                        self.user_prompt,
-                        "in_progress",
-                        json.dumps(self.metadata),
-                        self.project_path,
-                        self.project_name,
-                        self.claude_session_id,
-                        self.terminal_id,
+        # Try database logging with retry logic
+        if self._should_retry_db():
+            try:
+                pool = await get_pg_pool()
+                if pool:
+                    async with pool.acquire() as conn:
+                        await conn.execute(
+                            """
+                            INSERT INTO agent_execution_logs (
+                                execution_id, correlation_id, session_id,
+                                agent_name, user_prompt, status, metadata,
+                                project_path, project_name, claude_session_id, terminal_id
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
+                            """,
+                            self.execution_id,
+                            self.correlation_id,
+                            self.session_id,
+                            self.agent_name,
+                            self.user_prompt,
+                            "in_progress",
+                            json.dumps(self.metadata),
+                            self.project_path,
+                            self.project_name,
+                            self.claude_session_id,
+                            self.terminal_id,
+                        )
+                    self._handle_db_success()
+                    self.logger.info(
+                        "Agent execution started",
+                        metadata={
+                            "execution_id": self.execution_id,
+                            "agent": self.agent_name,
+                        },
                     )
-                self.logger.info(
-                    "Agent execution started",
-                    metadata={
-                        "execution_id": self.execution_id,
-                        "agent": self.agent_name,
-                    },
-                )
-            else:
-                raise Exception("Database pool unavailable")
+                else:
+                    raise Exception("Database pool unavailable")
 
-        except Exception as e:
-            self._db_available = False
-            self.logger.warning(
-                "Database logging failed, using file fallback",
-                metadata={"error": str(e), "execution_id": self.execution_id},
-            )
+            except Exception as e:
+                self._handle_db_failure(e, "start")
+                self._write_fallback_log("start", log_data)
+        else:
             self._write_fallback_log("start", log_data)
 
         return self.execution_id
@@ -223,6 +319,13 @@ class AgentExecutionLogger:
             stage: Current stage name (e.g., "gathering_intelligence")
             percent: Progress percentage 0-100 (optional)
             metadata: Additional progress metadata (optional)
+
+        Raises:
+            Exception: If database logging fails (falls back to file logging)
+
+        Example:
+            >>> await logger.progress(stage="gathering_intelligence", percent=25)
+            >>> await logger.progress(stage="analyzing", percent=75, metadata={"source": "rag"})
         """
         if not self.execution_id:
             self.logger.warning("Progress logged before start() called")
@@ -248,8 +351,8 @@ class AgentExecutionLogger:
             "progress": progress_data,
         }
 
-        # Try database logging
-        if self._db_available:
+        # Try database logging with retry logic
+        if self._should_retry_db():
             try:
                 pool = await get_pg_pool()
                 if pool:
@@ -263,6 +366,7 @@ class AgentExecutionLogger:
                             json.dumps({"progress": progress_data}),
                             self.execution_id,
                         )
+                    self._handle_db_success()
                     self.logger.info(
                         f"Agent progress: {stage}",
                         metadata={
@@ -274,11 +378,7 @@ class AgentExecutionLogger:
                     raise Exception("Database pool unavailable")
 
             except Exception as e:
-                self._db_available = False
-                self.logger.warning(
-                    "Database progress logging failed, using file fallback",
-                    metadata={"error": str(e)},
-                )
+                self._handle_db_failure(e, "progress")
                 self._write_fallback_log("progress", log_data)
         else:
             self._write_fallback_log("progress", log_data)
@@ -300,6 +400,13 @@ class AgentExecutionLogger:
             error_message: Error description if status=FAILED (optional)
             error_type: Error type/class name (optional)
             metadata: Final execution metadata (optional)
+
+        Raises:
+            Exception: If database logging fails (falls back to file logging)
+
+        Example:
+            >>> await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
+            >>> await logger.complete(status=EnumOperationStatus.FAILED, error_message="Timeout")
         """
         if not self.execution_id:
             self.logger.warning("Complete logged before start() called")
@@ -329,8 +436,8 @@ class AgentExecutionLogger:
             "metadata": final_metadata,
         }
 
-        # Try database logging
-        if self._db_available:
+        # Try database logging with retry logic
+        if self._should_retry_db():
             try:
                 pool = await get_pg_pool()
                 if pool:
@@ -356,6 +463,7 @@ class AgentExecutionLogger:
                             self.execution_id,
                         )
 
+                    self._handle_db_success()
                     log_method = (
                         self.logger.info
                         if status == EnumOperationStatus.SUCCESS
@@ -373,11 +481,7 @@ class AgentExecutionLogger:
                     raise Exception("Database pool unavailable")
 
             except Exception as e:
-                self._db_available = False
-                self.logger.warning(
-                    "Database completion logging failed, using file fallback",
-                    metadata={"error": str(e)},
-                )
+                self._handle_db_failure(e, "complete")
                 self._write_fallback_log("complete", log_data)
         else:
             self._write_fallback_log("complete", log_data)
@@ -391,6 +495,12 @@ class AgentExecutionLogger:
         Args:
             event_type: Type of event (start/progress/complete)
             data: Event data to log
+
+        Raises:
+            Exception: If file logging also fails (logs to stderr)
+
+        Example:
+            >>> self._write_fallback_log("start", {"execution_id": "abc123"})
         """
         try:
             # Create date-based subdirectory
@@ -410,8 +520,12 @@ class AgentExecutionLogger:
                 **data,
             }
 
-            with open(log_file, "a") as f:
+            # Write with explicit UTF-8 encoding
+            with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
+
+            # Set secure file permissions (owner read/write only)
+            os.chmod(log_file, 0o600)
 
         except Exception as e:
             # If even file logging fails, log to stderr

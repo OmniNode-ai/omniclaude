@@ -18,6 +18,11 @@ Options:
   --alternatives: JSON array of alternative agents considered (optional)
   --reasoning: Reasoning for agent selection (optional)
   --context: JSON object with additional context (optional)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --session-id: Claude session ID (optional)
 """
 
 import argparse
