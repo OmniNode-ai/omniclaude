@@ -550,6 +550,28 @@ class AgentActionsConsumer:
         duplicates = len(events) - inserted
         return inserted, duplicates
 
+    def _derive_detection_status(self, failure_reason: str) -> str:
+        """
+        Derive detection status from failure reason text.
+
+        Args:
+            failure_reason: The failure reason string from the event
+
+        Returns:
+            Detection status: "no_detection", "timeout", "low_confidence", or "error"
+        """
+        reason_lower = failure_reason.lower()
+
+        # Use mapping approach for cleaner logic
+        if "no agent" in reason_lower or "not detected" in reason_lower:
+            return "no_detection"
+        elif "timeout" in reason_lower:
+            return "timeout"
+        elif "confidence" in reason_lower:
+            return "low_confidence"
+        else:
+            return "error"
+
     def _insert_detection_failures(
         self, cursor, events: List[Dict[str, Any]]
     ) -> tuple[int, int]:
@@ -574,18 +596,9 @@ class AgentActionsConsumer:
             prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
             timestamp = event.get("timestamp", datetime.utcnow().isoformat())
 
-            # Map generic failure_reason to detection_status
+            # Derive detection status from failure reason using helper method
             failure_reason = event.get("failure_reason", "")
-            detection_status = "error"  # Default
-            if (
-                "no agent" in failure_reason.lower()
-                or "not detected" in failure_reason.lower()
-            ):
-                detection_status = "no_detection"
-            elif "timeout" in failure_reason.lower():
-                detection_status = "timeout"
-            elif "confidence" in failure_reason.lower():
-                detection_status = "low_confidence"
+            detection_status = self._derive_detection_status(failure_reason)
 
             batch_data.append(
                 (

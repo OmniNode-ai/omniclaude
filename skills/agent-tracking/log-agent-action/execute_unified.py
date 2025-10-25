@@ -15,6 +15,11 @@ Options:
   --correlation-id: Correlation ID for tracking (optional, auto-generated)
   --duration-ms: How long the action took in milliseconds (optional)
   --success: Whether action succeeded (default: true)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --working-directory: Current working directory (optional)
 """
 
 import argparse
@@ -80,7 +85,7 @@ def main():
     # Parse details
     action_details = parse_json_param(args.details) if args.details else {}
 
-    # Get adapter and publish
+    # Get adapter and publish (argparse guarantees attributes exist, even if None)
     adapter = get_hook_event_adapter()
     success = adapter.publish_agent_action(
         agent_name=args.agent,
@@ -90,21 +95,9 @@ def main():
         action_details=action_details,
         duration_ms=args.duration_ms,
         success=args.success,
-        project_path=(
-            args.project_path
-            if hasattr(args, "project_path") and args.project_path
-            else None
-        ),
-        project_name=(
-            args.project_name
-            if hasattr(args, "project_name") and args.project_name
-            else None
-        ),
-        working_directory=(
-            args.working_directory
-            if hasattr(args, "working_directory") and args.working_directory
-            else None
-        ),
+        project_path=args.project_path or None,
+        project_name=args.project_name or None,
+        working_directory=args.working_directory or None,
     )
 
     if success:
