@@ -133,7 +133,12 @@ log "Reasoning: ${SELECTION_REASONING:0:120}..."
 # -----------------------------
 PROJECT_PATH="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 PROJECT_NAME="$(basename "$PROJECT_PATH")"
-SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+# Generate UUID if SESSION_ID not set (avoid 'unknown' string violating DB schema)
+if command -v uuidgen >/dev/null 2>&1; then
+    SESSION_ID="${CLAUDE_SESSION_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]')}"
+else
+    SESSION_ID="${CLAUDE_SESSION_ID:-$(python3 -c 'import uuid; print(str(uuid.uuid4()))')}"
+fi
 
 log "Project: $PROJECT_NAME, Session: ${SESSION_ID:0:8}..."
 
