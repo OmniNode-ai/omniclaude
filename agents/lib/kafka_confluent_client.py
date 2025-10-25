@@ -46,9 +46,8 @@ class ConfluentKafkaClient:
         # internal hostname:port that isn't accessible from host machine
         bootstrap_servers = self.bootstrap_servers
 
-        # Normalize to external listener if needed
-        if "omninode-bridge-redpanda:9092" in bootstrap_servers:
-            bootstrap_servers = "localhost:29092"
+        # No automatic host rewriting - use configured bootstrap servers directly
+        # (Remote infrastructure should be properly configured with advertised listeners)
 
         p = Producer(
             {

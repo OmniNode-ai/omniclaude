@@ -52,9 +52,13 @@ class KafkaAgentActionConsumer:
             batch_timeout_seconds: Max wait time for batch
             postgres_dsn: PostgreSQL connection string
         """
-        self.kafka_brokers = (
-            kafka_brokers or os.getenv("KAFKA_BROKERS", "localhost:9092")
-        ).split(",")
+        # Kafka brokers - require explicit configuration (no localhost default)
+        kafka_brokers_str = kafka_brokers or os.getenv("KAFKA_BROKERS")
+        if not kafka_brokers_str:
+            raise ValueError(
+                "KAFKA_BROKERS must be set. Example: KAFKA_BROKERS=192.168.86.200:29102"
+            )
+        self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = group_id
         self.topic = topic
         self.batch_size = batch_size
