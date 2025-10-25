@@ -70,8 +70,11 @@ def log_start(args):
         agent_name,
         user_prompt,
         status,
-        metadata
-    ) VALUES (%s, %s, %s, %s, %s, %s)
+        metadata,
+        project_path,
+        project_name,
+        terminal_id
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     RETURNING execution_id, started_at
     """
 
@@ -82,6 +85,17 @@ def log_start(args):
         args.description if hasattr(args, "description") else None,
         "in_progress",
         json.dumps(metadata),
+        (
+            args.project_path
+            if hasattr(args, "project_path") and args.project_path
+            else None
+        ),
+        (
+            args.project_name
+            if hasattr(args, "project_name") and args.project_name
+            else None
+        ),
+        args.terminal_id if hasattr(args, "terminal_id") and args.terminal_id else None,
     )
 
     try:
@@ -269,6 +283,12 @@ def main():
     start_parser.add_argument("--description", help="Task description")
     start_parser.add_argument("--session-id", help="Session ID (optional)")
     start_parser.add_argument("--metadata", help="JSON metadata (optional)")
+    # Project context arguments
+    start_parser.add_argument(
+        "--project-path", help="Absolute path to project directory"
+    )
+    start_parser.add_argument("--project-name", help="Project name")
+    start_parser.add_argument("--terminal-id", help="Terminal ID")
 
     # Progress command
     progress_parser = subparsers.add_parser("progress", help="Log execution progress")
@@ -298,6 +318,11 @@ def main():
         "--quality-score", type=float, help="Quality score (0.0-1.0)"
     )
     complete_parser.add_argument("--metadata", help="Final JSON metadata")
+    # Project context arguments
+    complete_parser.add_argument(
+        "--project-path", help="Absolute path to project directory"
+    )
+    complete_parser.add_argument("--project-name", help="Project name")
 
     args = parser.parse_args()
 

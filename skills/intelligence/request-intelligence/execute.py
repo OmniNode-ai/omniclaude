@@ -132,7 +132,7 @@ async def request_code_analysis(
                     "correlation_id": correlation_id,
                     "error": f"File not found: {source_path}",
                 }
-            content = file_path.read_text()
+            content = file_path.read_text(encoding="utf-8")
 
         result = await client.request_code_analysis(
             content=content,
@@ -194,7 +194,7 @@ async def request_quality_assessment(
                     "correlation_id": correlation_id,
                     "error": f"File not found: {source_path}",
                 }
-            content = file_path.read_text()
+            content = file_path.read_text(encoding="utf-8")
 
         result = await client.request_code_analysis(
             content=content,

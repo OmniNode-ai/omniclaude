@@ -53,7 +53,7 @@ class TestCacheBasics:
             template_name="test_template",
             template_type="TEST",
             file_path=template_file,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
 
         assert not hit1, "First access should be cache miss"
@@ -66,7 +66,7 @@ class TestCacheBasics:
             template_name="test_template",
             template_type="TEST",
             file_path=template_file,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
 
         assert hit2, "Second access should be cache hit"
@@ -90,7 +90,7 @@ class TestCacheBasics:
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template_file,
-                loader_func=lambda p: p.read_text(),
+                loader_func=lambda p: p.read_text(encoding="utf-8"),
             )
             assert not hit
 
@@ -103,7 +103,7 @@ class TestCacheBasics:
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template_file,
-                loader_func=lambda p: p.read_text(),
+                loader_func=lambda p: p.read_text(encoding="utf-8"),
             )
             assert hit
 
@@ -118,11 +118,15 @@ class TestCacheBasics:
         template_file.write_text("# Original content\n")
 
         # Load and cache
-        cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert cache.misses == 1
 
         # Verify cache hit
-        _, hit = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        _, hit = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert hit
 
         # Manually invalidate
@@ -130,7 +134,9 @@ class TestCacheBasics:
         assert cache.invalidations == 1
 
         # Next access should be cache miss
-        _, hit = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        _, hit = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert not hit
         assert cache.misses == 2
 
@@ -142,7 +148,12 @@ class TestCacheBasics:
         for i in range(3):
             template_file = tmp_path / f"template_{i}.py"
             template_file.write_text(f"# Template {i}\n")
-            cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                f"template_{i}",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
+            )
 
         stats = cache.get_stats()
         assert stats["cached_templates"] == 3
@@ -167,13 +178,15 @@ class TestContentBasedInvalidation:
 
         # Load and cache
         content1, hit1 = cache.get(
-            "template", "TEST", template_file, lambda p: p.read_text()
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
         )
         assert not hit1
         assert "Original content" in content1
 
         # Verify cache hit
-        _, hit2 = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        _, hit2 = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert hit2
 
         # Modify file
@@ -181,7 +194,7 @@ class TestContentBasedInvalidation:
 
         # Next access should detect change and reload
         content3, hit3 = cache.get(
-            "template", "TEST", template_file, lambda p: p.read_text()
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
         )
         assert not hit3, "Modified file should invalidate cache"
         assert "Modified content" in content3
@@ -220,7 +233,12 @@ class TestLRUEviction:
         for i in range(4):
             template_file = tmp_path / f"template_{i}.py"
             template_file.write_text(f"# Template {i}\n")
-            cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                f"template_{i}",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
+            )
 
         stats = cache.get_stats()
         assert stats["cached_templates"] == 3, "Should have evicted 1 template"
@@ -229,7 +247,10 @@ class TestLRUEviction:
         # template_0 should be evicted (least recently used)
         template_0_file = tmp_path / "template_0.py"
         _, hit = cache.get(
-            "template_0", "TEST", template_0_file, lambda p: p.read_text()
+            "template_0",
+            "TEST",
+            template_0_file,
+            lambda p: p.read_text(encoding="utf-8"),
         )
         assert not hit, "Evicted template should be cache miss"
 
@@ -249,7 +270,10 @@ class TestLRUEviction:
             template_file.write_text(large_content)
             template_files.append(template_file)
             cache.get(
-                f"large_template_{i}", "TEST", template_file, lambda p: p.read_text()
+                f"large_template_{i}",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
             )
 
         # Should have evicted some templates due to size limit
@@ -264,29 +288,33 @@ class TestLRUEviction:
         # Add template 0
         t0 = tmp_path / "template_0.py"
         t0.write_text("# Template 0\n")
-        cache.get("template_0", "TEST", t0, lambda p: p.read_text())
+        cache.get("template_0", "TEST", t0, lambda p: p.read_text(encoding="utf-8"))
 
         # Add template 1
         t1 = tmp_path / "template_1.py"
         t1.write_text("# Template 1\n")
-        cache.get("template_1", "TEST", t1, lambda p: p.read_text())
+        cache.get("template_1", "TEST", t1, lambda p: p.read_text(encoding="utf-8"))
 
         # Access template 0 again (makes it more recently used)
-        cache.get("template_0", "TEST", t0, lambda p: p.read_text())
+        cache.get("template_0", "TEST", t0, lambda p: p.read_text(encoding="utf-8"))
 
         # Add template 2 (should evict template_1, not template_0)
         t2 = tmp_path / "template_2.py"
         t2.write_text("# Template 2\n")
-        cache.get("template_2", "TEST", t2, lambda p: p.read_text())
+        cache.get("template_2", "TEST", t2, lambda p: p.read_text(encoding="utf-8"))
 
         assert cache.evictions == 1
 
         # template_0 should still be cached
-        _, hit0 = cache.get("template_0", "TEST", t0, lambda p: p.read_text())
+        _, hit0 = cache.get(
+            "template_0", "TEST", t0, lambda p: p.read_text(encoding="utf-8")
+        )
         assert hit0, "Most recently used template should not be evicted"
 
         # template_1 should be evicted
-        _, hit1 = cache.get("template_1", "TEST", t1, lambda p: p.read_text())
+        _, hit1 = cache.get(
+            "template_1", "TEST", t1, lambda p: p.read_text(encoding="utf-8")
+        )
         assert not hit1, "Least recently used template should be evicted"
 
 
@@ -302,17 +330,23 @@ class TestTTLExpiration:
         template_file.write_text("# Test content\n")
 
         # Load and cache
-        cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
 
         # Immediate access should hit cache
-        _, hit1 = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        _, hit1 = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert hit1
 
         # Wait for TTL to expire
         time.sleep(1.5)
 
         # Should be expired now
-        _, hit2 = cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        _, hit2 = cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
         assert not hit2, "Template should expire after TTL"
         assert cache.invalidations == 1
 
@@ -324,13 +358,18 @@ class TestTTLExpiration:
         template_file.write_text("# Test content\n")
 
         # Load and cache
-        cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
 
         # Multiple accesses within TTL should hit cache
         for _ in range(5):
             time.sleep(0.5)  # Total 2.5 seconds, well within 5 second TTL
             _, hit = cache.get(
-                "template", "TEST", template_file, lambda p: p.read_text()
+                "template",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
             )
             assert hit, "Template should remain cached within TTL"
 
@@ -357,7 +396,10 @@ class TestCacheWarmup:
         # Subsequent accesses should be cache hits
         template_file = tmp_path / "effect_node_template.py"
         _, hit = cache.get(
-            "EFFECT_template", "EFFECT", template_file, lambda p: p.read_text()
+            "EFFECT_template",
+            "EFFECT",
+            template_file,
+            lambda p: p.read_text(encoding="utf-8"),
         )
         assert hit, "Warmed template should be cache hit"
 
@@ -388,7 +430,12 @@ class TestStatistics:
 
         # Generate some cache activity
         for _ in range(3):
-            cache.get("template", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                "template",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
+            )
 
         stats = cache.get_stats()
         assert stats["hits"] == 2
@@ -405,11 +452,18 @@ class TestStatistics:
         template_file.write_text("# " + ("X" * 10000))  # Make it non-trivial size
 
         # First load (miss)
-        cache.get("template", "TEST", template_file, lambda p: p.read_text())
+        cache.get(
+            "template", "TEST", template_file, lambda p: p.read_text(encoding="utf-8")
+        )
 
         # Multiple hits
         for _ in range(10):
-            cache.get("template", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                "template",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
+            )
 
         stats = cache.get_stats()
         assert stats["avg_uncached_load_ms"] > 0
@@ -428,7 +482,10 @@ class TestStatistics:
             # Access different numbers of times
             for _ in range(i + 1):
                 cache.get(
-                    f"template_{i}", "TEST", template_file, lambda p: p.read_text()
+                    f"template_{i}",
+                    "TEST",
+                    template_file,
+                    lambda p: p.read_text(encoding="utf-8"),
                 )
 
         detailed_stats = cache.get_detailed_stats()
@@ -450,7 +507,12 @@ class TestStatistics:
         for i in range(3):
             template_file = tmp_path / f"template_{i}.py"
             template_file.write_text(f"# Template {i}\n")
-            cache.get(f"template_{i}", "TEST", template_file, lambda p: p.read_text())
+            cache.get(
+                f"template_{i}",
+                "TEST",
+                template_file,
+                lambda p: p.read_text(encoding="utf-8"),
+            )
 
         stats = cache.get_stats()
         assert stats["capacity_usage_percent"] == 30.0  # 3/10 * 100
@@ -469,7 +531,12 @@ class TestThreadSafety:
 
         def load_template():
             for _ in range(5):
-                cache.get("template", "TEST", template_file, lambda p: p.read_text())
+                cache.get(
+                    "template",
+                    "TEST",
+                    template_file,
+                    lambda p: p.read_text(encoding="utf-8"),
+                )
 
         # Run multiple threads concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
@@ -499,7 +566,7 @@ class TestThreadSafety:
                     f"template_{template_id}",
                     "TEST",
                     template_file,
-                    lambda p: p.read_text(),
+                    lambda p: p.read_text(encoding="utf-8"),
                 )
 
         # Load templates concurrently
@@ -535,7 +602,7 @@ class TestPerformanceBenchmark:
 
         def uncached_load(path: Path) -> str:
             """Simulate uncached load with processing"""
-            content = path.read_text()
+            content = path.read_text(encoding="utf-8")
             process_template(content)  # Add processing overhead
             return content
 
@@ -556,7 +623,7 @@ class TestPerformanceBenchmark:
 
         def cached_loader(p: Path) -> str:
             """Cached loader with processing"""
-            content = p.read_text()
+            content = p.read_text(encoding="utf-8")
             process_template(content)
             return content
 
@@ -612,7 +679,7 @@ class TestPerformanceBenchmark:
         # Simulate realistic usage (20 accesses with distribution)
         for _ in range(20):
             for name, ttype, tfile in templates:
-                cache.get(name, ttype, tfile, lambda p: p.read_text())
+                cache.get(name, ttype, tfile, lambda p: p.read_text(encoding="utf-8"))
 
         stats = cache.get_stats()
         print(f"\n  Hit rate after warmup: {stats['hit_rate']:.1%}")

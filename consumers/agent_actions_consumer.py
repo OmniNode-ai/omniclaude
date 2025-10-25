@@ -22,7 +22,7 @@ Environment Variables:
     POSTGRES_PORT: PostgreSQL port (default: 5436)
     POSTGRES_DATABASE: Database name (default: omninode_bridge)
     POSTGRES_USER: Database user (default: postgres)
-    POSTGRES_PASSWORD: Database password
+    POSTGRES_PASSWORD: Database password (REQUIRED - no default for security)
     BATCH_SIZE: Max events per batch (default: 100)
     BATCH_TIMEOUT_MS: Max wait time for batch (default: 1000)
     HEALTH_CHECK_PORT: Health check HTTP port (default: 8080)
@@ -30,11 +30,13 @@ Environment Variables:
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
 import signal
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -44,7 +46,7 @@ from threading import Event, Thread
 from typing import Any, Dict, List, Optional
 
 import psycopg2
-from kafka import KafkaConsumer, KafkaProducer
+from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
 
 # Add _shared to path for db_helper
@@ -126,12 +128,16 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def send_health_response(self):
-        """Send health check response."""
-        if (
-            self.consumer_instance
-            and self.consumer_instance.running
-            and not self.consumer_instance.shutdown_event.is_set()
-        ):
+        """Send health check response with thread-safe state verification."""
+        # Thread-safe atomic health check to prevent TOCTOU race conditions
+        with self.consumer_instance._health_lock:
+            is_healthy = (
+                self.consumer_instance is not None
+                and self.consumer_instance.running
+                and not self.consumer_instance.shutdown_event.is_set()
+            )
+
+        if is_healthy:
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -170,6 +176,14 @@ class AgentActionsConsumer:
         self.running = False
         self.metrics = ConsumerMetrics()
 
+        # Retry management for poison message handling
+        self.retry_counts: Dict[str, int] = {}  # Track retries per message
+        self.max_retries = 3
+        self.backoff_base_ms = 100
+
+        # Thread safety for health checks
+        self._health_lock = threading.Lock()
+
         # Kafka configuration
         self.kafka_brokers = config.get(
             "kafka_brokers", os.getenv("KAFKA_BROKERS", "localhost:9092")
@@ -185,6 +199,7 @@ class AgentActionsConsumer:
                 "agent-routing-decisions",
                 "agent-transformation-events",
                 "router-performance-metrics",
+                "agent-detection-failures",
             ],
         )
 
@@ -195,6 +210,17 @@ class AgentActionsConsumer:
         )
 
         # PostgreSQL configuration
+        # Security: POSTGRES_PASSWORD must be set via environment variable (no default)
+        postgres_password = config.get("postgres_password") or os.getenv(
+            "POSTGRES_PASSWORD"
+        )
+        if not postgres_password:
+            raise ValueError(
+                "POSTGRES_PASSWORD environment variable must be set. "
+                "No default value provided for security reasons. "
+                "Set it in your environment or .env file before starting the consumer."
+            )
+
         self.db_config = {
             "host": config.get(
                 "postgres_host", os.getenv("POSTGRES_HOST", "localhost")
@@ -206,10 +232,7 @@ class AgentActionsConsumer:
                 "postgres_database", os.getenv("POSTGRES_DATABASE", "omninode_bridge")
             ),
             "user": config.get("postgres_user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": config.get(
-                "postgres_password",
-                os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"),
-            ),
+            "password": postgres_password,
         }
 
         # Health check configuration
@@ -334,6 +357,10 @@ class AgentActionsConsumer:
                     inserted, duplicates = self._insert_performance_metrics(
                         cursor, events
                     )
+                elif topic == "agent-detection-failures":
+                    inserted, duplicates = self._insert_detection_failures(
+                        cursor, events
+                    )
                 else:
                     logger.warning(
                         "Unknown topic: %s, skipping %d events", topic, len(events)
@@ -367,9 +394,10 @@ class AgentActionsConsumer:
         insert_sql = """
             INSERT INTO agent_actions (
                 id, correlation_id, agent_name, action_type, action_name,
-                action_details, debug_mode, duration_ms, created_at
+                action_details, debug_mode, duration_ms, created_at,
+                project_path, project_name, working_directory
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -391,6 +419,9 @@ class AgentActionsConsumer:
                     event.get("debug_mode", True),
                     event.get("duration_ms"),
                     timestamp,
+                    event.get("project_path"),  # Extract project context
+                    event.get("project_name"),
+                    event.get("working_directory"),
                 )
             )
 
@@ -405,10 +436,10 @@ class AgentActionsConsumer:
         """Insert agent_routing_decisions events."""
         insert_sql = """
             INSERT INTO agent_routing_decisions (
-                id, user_request, selected_agent, confidence_score, alternatives,
+                id, project_name, user_request, selected_agent, confidence_score, alternatives,
                 reasoning, routing_strategy, context, routing_time_ms, created_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -421,6 +452,7 @@ class AgentActionsConsumer:
             batch_data.append(
                 (
                     event_id,
+                    event.get("project_name"),  # Extract project_name from event
                     event.get("user_request", ""),
                     event.get("selected_agent"),
                     event.get("confidence_score"),
@@ -445,9 +477,10 @@ class AgentActionsConsumer:
         insert_sql = """
             INSERT INTO agent_transformation_events (
                 id, source_agent, target_agent, transformation_reason,
-                confidence_score, transformation_duration_ms, success, created_at
+                confidence_score, transformation_duration_ms, success, created_at,
+                project_path, project_name, claude_session_id
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -467,6 +500,11 @@ class AgentActionsConsumer:
                     event.get("transformation_duration_ms"),
                     event.get("success", True),
                     timestamp,
+                    event.get("project_path"),  # Extract project context
+                    event.get("project_name"),
+                    event.get(
+                        "session_id"
+                    ),  # Note: event uses session_id, DB uses claude_session_id
                 )
             )
 
@@ -503,6 +541,78 @@ class AgentActionsConsumer:
                     event.get("trigger_match_strategy"),
                     json.dumps(event.get("confidence_components", {})),
                     event.get("candidates_evaluated"),
+                    timestamp,
+                )
+            )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _derive_detection_status(self, failure_reason: str) -> str:
+        """
+        Derive detection status from failure reason text.
+
+        Args:
+            failure_reason: The failure reason string from the event
+
+        Returns:
+            Detection status: "no_detection", "timeout", "low_confidence", or "error"
+        """
+        reason_lower = failure_reason.lower()
+
+        # Use mapping approach for cleaner logic
+        if "no agent" in reason_lower or "not detected" in reason_lower:
+            return "no_detection"
+        elif "timeout" in reason_lower:
+            return "timeout"
+        elif "confidence" in reason_lower:
+            return "low_confidence"
+        else:
+            return "error"
+
+    def _insert_detection_failures(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_detection_failures events."""
+        insert_sql = """
+            INSERT INTO agent_detection_failures (
+                correlation_id, user_prompt, prompt_length, prompt_hash,
+                detection_status, failure_reason, detection_metadata,
+                attempted_methods, project_path, project_name,
+                claude_session_id, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (correlation_id) DO NOTHING
+        """
+
+        batch_data = []
+        for event in events:
+            correlation_id = event.get("correlation_id")
+            user_request = event.get("user_request", "")
+            prompt_length = len(user_request)
+            prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
+            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+
+            # Derive detection status from failure reason using helper method
+            failure_reason = event.get("failure_reason", "")
+            detection_status = self._derive_detection_status(failure_reason)
+
+            batch_data.append(
+                (
+                    correlation_id,
+                    user_request,
+                    prompt_length,
+                    prompt_hash,
+                    detection_status,
+                    failure_reason,
+                    json.dumps(event.get("error_details", {})),
+                    json.dumps(event.get("attempted_methods", [])),
+                    event.get("project_path"),
+                    event.get("project_name"),
+                    event.get("session_id"),
                     timestamp,
                 )
             )
@@ -581,12 +691,60 @@ class AgentActionsConsumer:
 
         except Exception as e:
             logger.error("Batch processing failed: %s", e, exc_info=True)
-            # Send entire batch to DLQ
-            all_events = []
-            for events in events_by_topic.values():
-                all_events.extend(events)
-            self.send_to_dlq(all_events, str(e))
-            failed = sum(len(events) for events in events_by_topic.values())
+
+            # Track retries and apply exponential backoff to prevent infinite loops
+            failed_events = []
+            committable_offsets = []
+
+            for msg in messages:
+                msg_key = f"{msg.topic}:{msg.partition}:{msg.offset}"
+                retry_count = self.retry_counts.get(msg_key, 0)
+
+                if retry_count >= self.max_retries:
+                    # Exceeded retries - send to DLQ and commit offset to move past poison message
+                    logger.error(
+                        "Message %s exceeded %d retries, sending to DLQ and committing offset",
+                        msg_key,
+                        self.max_retries,
+                    )
+                    failed_events.append(msg.value)
+                    committable_offsets.append(msg)
+                    # Clean up retry tracking
+                    del self.retry_counts[msg_key]
+                else:
+                    # Increment retry count and apply exponential backoff
+                    self.retry_counts[msg_key] = retry_count + 1
+                    backoff_ms = self.backoff_base_ms * (2**retry_count)
+                    logger.warning(
+                        "Message %s retry %d/%d, backoff %dms",
+                        msg_key,
+                        retry_count + 1,
+                        self.max_retries,
+                        backoff_ms,
+                    )
+                    time.sleep(backoff_ms / 1000)
+
+            # Send poison messages to DLQ
+            if failed_events:
+                self.send_to_dlq(failed_events, str(e))
+
+            # CRITICAL: Commit offsets for messages that exceeded retries
+            # This prevents infinite retry loops by moving the consumer past poison messages
+            if committable_offsets:
+                for msg in committable_offsets:
+                    self.consumer.commit(
+                        {
+                            TopicPartition(msg.topic, msg.partition): OffsetAndMetadata(
+                                msg.offset + 1, None
+                            )
+                        }
+                    )
+                logger.info(
+                    "Committed %d offsets after max retries to prevent infinite loop",
+                    len(committable_offsets),
+                )
+
+            failed = len(failed_events)
 
         # Record metrics
         processing_time_ms = (time.time() - start_time) * 1000

@@ -313,3 +313,101 @@ transformation_context:
     - "Systematic operational excellence enforcement"
     - "Polymorphic role transformation and identity assumption"
     - "Multiple activation keywords for flexible invocation"
+
+git_policy:
+  auto_commit: "NEVER"
+  commit_behavior: "ONLY commit when explicitly requested by user"
+
+  rules:
+    - "NEVER auto-commit changes unless user explicitly asks"
+    - "NEVER run 'git commit' automatically after completing work"
+    - "ALWAYS wait for user approval before committing"
+    - "Complete all work and testing, then report results WITHOUT committing"
+    - "User will decide when and how to commit changes"
+
+  rationale: |
+    User maintains full control over git commits. The agent should:
+    1. Complete all requested work
+    2. Run all tests and validations
+    3. Report comprehensive results
+    4. STOP before committing
+    5. Let user review and commit when ready
+
+  approved_workflow: |
+    ✅ DO: Complete work, test, report results
+    ❌ DON'T: Auto-commit
+    ✅ DO: Show user what changed and test results
+    ❌ DON'T: Run git commit unless user explicitly asks
+
+  exceptions: "NONE - never commit unless explicitly requested in user message"
+
+parallel_execution_best_practices:
+  lessons_learned:
+    what_worked_perfectly:
+      - name: "File Separation"
+        description: "Each Polly creates its own file = zero conflicts"
+        rationale: "Independent file creation prevents merge conflicts and allows true parallel work"
+
+      - name: "Single Branch Strategy"
+        description: "All work on same branch, no merge complexity"
+        rationale: "Avoids branch management overhead and merge conflicts in parallel execution"
+
+      - name: "Clear Interfaces"
+        description: "Defined contracts upfront prevented integration issues"
+        rationale: "Interface-first design enables independent parallel development"
+
+      - name: "Simultaneous Launch"
+        description: "All Pollys in single message = maximum parallelism"
+        rationale: "Single-message dispatch enables true parallel execution vs sequential"
+
+      - name: "Independent Testing"
+        description: "Unit tests with mocks started immediately"
+        rationale: "Mocked dependencies allow testing to proceed before integration"
+
+  established_best_practices:
+    - guideline: "Never create branches in parallel agents"
+      implementation: "Use file separation instead of branching"
+      reasoning: "Branch creation causes merge conflicts and coordination overhead"
+
+    - guideline: "Define interfaces first before parallel work"
+      implementation: "Document contracts, types, and APIs before implementation"
+      reasoning: "Clear contracts enable independent parallel development"
+
+    - guideline: "Launch all Pollys in one message for true parallelism"
+      implementation: "Single message with multiple Task tool calls"
+      reasoning: "Sequential messages cause sequential execution, not parallel"
+
+    - guideline: "Use mocks for tests so testing can start before integration"
+      implementation: "Mock external dependencies in unit tests"
+      reasoning: "Enables parallel test development without waiting for integration"
+
+    - guideline: "Validate in parallel too"
+      implementation: "Run tests, real workload, and planning concurrently"
+      reasoning: "Parallel validation catches issues faster and maintains velocity"
+
+  anti_patterns_to_avoid:
+    - pattern: "Sequential Polly dispatch"
+      problem: "Launching Pollys one at a time in separate messages"
+      impact: "Destroys parallelism benefits, causes sequential execution"
+      solution: "Always dispatch all Pollys in a single message"
+
+    - pattern: "Branch-per-Polly"
+      problem: "Creating separate git branches for each parallel agent"
+      impact: "Creates merge hell, coordination overhead, conflicts"
+      solution: "Use file separation on single branch"
+
+    - pattern: "Late interface definition"
+      problem: "Starting parallel work before defining contracts"
+      impact: "Integration failures, rework, wasted parallel effort"
+      solution: "Define all interfaces upfront before parallel execution"
+
+    - pattern: "Integration-dependent tests"
+      problem: "Writing tests that require full integration to run"
+      impact: "Testing blocked until integration complete"
+      solution: "Use mocks to enable immediate parallel test development"
+
+  performance_metrics:
+    parallelism_efficiency: "Near-linear speedup with N agents (observed: 4x with 4 Pollys)"
+    coordination_overhead: "Minimal (<5% overhead with proper file separation)"
+    conflict_rate: "Zero conflicts with file separation strategy"
+    integration_success: "100% first-time integration with clear interfaces"

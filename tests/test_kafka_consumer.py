@@ -38,12 +38,18 @@ def kafka_brokers():
 
 @pytest.fixture(scope="session")
 def postgres_dsn():
-    """PostgreSQL DSN for testing."""
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5436")
-    user = os.getenv("POSTGRES_USER", "postgres")
-    password = os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024")
-    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+    """PostgreSQL DSN for testing (loads from .env via conftest.py)."""
+    # Try to use pre-built DSN from .env first
+    dsn = os.getenv("PG_DSN")
+    if dsn:
+        return dsn
+
+    # Fallback to individual traceability DB environment variables
+    host = os.getenv("TRACEABILITY_DB_HOST", "localhost")
+    port = os.getenv("TRACEABILITY_DB_PORT", "5436")
+    user = os.getenv("TRACEABILITY_DB_USER", "postgres")
+    password = os.getenv("TRACEABILITY_DB_PASSWORD", "***REDACTED***")
+    database = os.getenv("TRACEABILITY_DB_NAME", "omninode_bridge")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
@@ -61,14 +67,15 @@ async def clean_database(db_pool):
     """Clean test data from database before each test."""
     async with db_pool.acquire() as conn:
         # Delete test data (correlation_id starts with 'test-')
+        # Cast UUID to TEXT for LIKE pattern matching
         await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id LIKE 'test-%'"
+            "DELETE FROM agent_actions WHERE correlation_id::text LIKE 'test-%'"
         )
     yield
     # Cleanup after test
     async with db_pool.acquire() as conn:
         await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id LIKE 'test-%'"
+            "DELETE FROM agent_actions WHERE correlation_id::text LIKE 'test-%'"
         )
 
 
@@ -227,7 +234,7 @@ class TestKafkaConsumerIntegration:
         # Verify all events were persisted
         async with db_pool.acquire() as conn:
             count = await conn.fetchval(
-                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id LIKE 'test-batch-%'"
+                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id::text LIKE 'test-batch-%'"
             )
 
             assert count == 50
@@ -529,7 +536,7 @@ class TestConsumerPerformance:
         # Verify all events were processed
         async with db_pool.acquire() as conn:
             count = await conn.fetchval(
-                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id LIKE 'test-perf-%'"
+                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id::text LIKE 'test-perf-%'"
             )
 
             # Should have processed all 1000 events

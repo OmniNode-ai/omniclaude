@@ -363,7 +363,7 @@ class TemplateCache:
                     template_name=f"{template_type}_template",
                     template_type=template_type,
                     file_path=template_path,
-                    loader_func=lambda p: p.read_text(),
+                    loader_func=lambda p: p.read_text(encoding="utf-8"),
                 )
                 loaded_count += 1
 
@@ -691,7 +691,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
         assert not hit, "First access should be cache miss"
@@ -702,7 +702,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
         assert hit, "Second access should be cache hit"
@@ -716,7 +716,7 @@ if __name__ == "__main__":
             template_name="EFFECT_template",
             template_type="EFFECT",
             file_path=effect_template,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit after modification: {hit}")
         assert not hit, "Modified template should invalidate cache"
@@ -727,7 +727,7 @@ if __name__ == "__main__":
             template_name="COMPUTE_template",
             template_type="COMPUTE",
             file_path=compute_template,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print("   Sleeping 6 seconds to exceed TTL...")
         time.sleep(6)
@@ -735,7 +735,7 @@ if __name__ == "__main__":
             template_name="COMPUTE_template",
             template_type="COMPUTE",
             file_path=compute_template,
-            loader_func=lambda p: p.read_text(),
+            loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit after TTL expiration: {hit}")
         assert not hit, "Expired template should not be cache hit"
@@ -766,7 +766,7 @@ if __name__ == "__main__":
                 template_name=f"template_{i}",
                 template_type="TEST",
                 file_path=template,
-                loader_func=lambda p: p.read_text(),
+                loader_func=lambda p: p.read_text(encoding="utf-8"),
             )
 
         stats = small_cache.get_stats()

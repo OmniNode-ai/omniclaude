@@ -325,7 +325,7 @@ class CodegenWorkflow:
 
                             path_obj = Path(file_path)
                             if path_obj.exists():
-                                content = path_obj.read_text()
+                                content = path_obj.read_text(encoding="utf-8")
                             else:
                                 content = ""
                         else:
@@ -410,7 +410,7 @@ class CodegenWorkflow:
 
                         path_obj = Path(file_path)
                         if path_obj.exists():
-                            content = path_obj.read_text()
+                            content = path_obj.read_text(encoding="utf-8")
                         else:
                             content = ""
                     else:

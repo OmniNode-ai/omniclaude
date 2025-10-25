@@ -16,13 +16,18 @@ Options:
   --correlation-id: Correlation ID for tracking (optional, auto-generated)
   --debug-mode: Force debug logging regardless of DEBUG env var (optional)
   --duration-ms: How long the action took in milliseconds (optional)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --working-directory: Current working directory (optional)
 """
 
 import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add _shared to path
@@ -31,6 +36,7 @@ from db_helper import get_correlation_id, parse_json_param
 
 # Kafka imports (lazy loaded)
 KafkaProducer = None
+_producer_instance = None  # Cached producer instance for singleton pattern
 
 
 def should_log_debug() -> bool:
@@ -43,9 +49,15 @@ def get_kafka_producer():
     """
     Get or create Kafka producer (singleton pattern).
     Lazy imports kafka-python to avoid import errors if not installed.
+    Returns cached producer instance to prevent connection/memory leaks.
     """
-    global KafkaProducer
+    global KafkaProducer, _producer_instance
 
+    # Return cached instance if available
+    if _producer_instance is not None:
+        return _producer_instance
+
+    # Import KafkaProducer class if not already imported
     if KafkaProducer is None:
         try:
             from kafka import KafkaProducer as KP
@@ -73,7 +85,27 @@ def get_kafka_producer():
         max_in_flight_requests_per_connection=5,
     )
 
+    # Cache the instance for reuse
+    _producer_instance = producer
+
     return producer
+
+
+def close_kafka_producer():
+    """
+    Close and cleanup the cached Kafka producer instance.
+    Should be called on graceful shutdown to properly close connections.
+    """
+    global _producer_instance
+
+    if _producer_instance is not None:
+        try:
+            _producer_instance.close()
+        except Exception as e:
+            # Log error but don't raise - this is cleanup code
+            print(f"Error closing Kafka producer: {e}", file=sys.stderr)
+        finally:
+            _producer_instance = None
 
 
 def publish_to_kafka(event: dict, topic: str = "agent-actions") -> bool:
@@ -149,7 +181,22 @@ def log_agent_action_kafka(args):
             if hasattr(args, "duration_ms") and args.duration_ms
             else None
         ),
-        "timestamp": datetime.utcnow().isoformat(),
+        "project_path": (
+            args.project_path
+            if hasattr(args, "project_path") and args.project_path
+            else None
+        ),
+        "project_name": (
+            args.project_name
+            if hasattr(args, "project_name") and args.project_name
+            else None
+        ),
+        "working_directory": (
+            args.working_directory
+            if hasattr(args, "working_directory") and args.working_directory
+            else None
+        ),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     # Publish to Kafka
@@ -207,6 +254,11 @@ def main():
     parser.add_argument(
         "--duration-ms", type=int, help="Action duration in milliseconds"
     )
+
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--working-directory", help="Current working directory")
 
     args = parser.parse_args()
 
