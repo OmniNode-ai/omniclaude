@@ -314,6 +314,33 @@ transformation_context:
     - "Polymorphic role transformation and identity assumption"
     - "Multiple activation keywords for flexible invocation"
 
+git_policy:
+  auto_commit: "NEVER"
+  commit_behavior: "ONLY commit when explicitly requested by user"
+
+  rules:
+    - "NEVER auto-commit changes unless user explicitly asks"
+    - "NEVER run 'git commit' automatically after completing work"
+    - "ALWAYS wait for user approval before committing"
+    - "Complete all work and testing, then report results WITHOUT committing"
+    - "User will decide when and how to commit changes"
+
+  rationale: |
+    User maintains full control over git commits. The agent should:
+    1. Complete all requested work
+    2. Run all tests and validations
+    3. Report comprehensive results
+    4. STOP before committing
+    5. Let user review and commit when ready
+
+  approved_workflow: |
+    ✅ DO: Complete work, test, report results
+    ❌ DON'T: Auto-commit
+    ✅ DO: Show user what changed and test results
+    ❌ DON'T: Run git commit unless user explicitly asks
+
+  exceptions: "NONE - never commit unless explicitly requested in user message"
+
 parallel_execution_best_practices:
   lessons_learned:
     what_worked_perfectly:
