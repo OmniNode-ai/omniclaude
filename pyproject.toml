@@ -33,6 +33,7 @@ uvicorn = "^0.32.0"
 psycopg2-binary = "^2.9.10"
 jinja2 = "^3.1.0"
 rich = "^13.7.0"
+dependency-injector = "^4.48.1"
 
 [tool.poetry.group.patterns.dependencies]
 # Optional dependencies for pattern storage with Qdrant

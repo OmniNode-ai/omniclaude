@@ -280,7 +280,7 @@ class QuorumIntegrationTest:
 
         try:
             # Check that the code has graceful degradation logic
-            dispatch_code = self.dispatch_runner.read_text()
+            dispatch_code = self.dispatch_runner.read_text(encoding="utf-8")
 
             if "QUORUM_AVAILABLE" in dispatch_code:
                 self.record_pass(

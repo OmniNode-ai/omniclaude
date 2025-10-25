@@ -378,7 +378,7 @@ class ProductionPatternMatcher:
 
         # Read source code
         try:
-            source_code = node_path.read_text()
+            source_code = node_path.read_text(encoding="utf-8")
         except Exception as e:
             logger.error(f"Failed to read {node_path}: {e}")
             return ProductionPattern(

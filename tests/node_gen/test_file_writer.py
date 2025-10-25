@@ -128,7 +128,7 @@ class TestFileWriter:
         for relative_path, expected_content in sample_files.items():
             file_path = node_dir / relative_path
             assert file_path.exists(), f"File not found: {relative_path}"
-            actual_content = file_path.read_text()
+            actual_content = file_path.read_text(encoding="utf-8")
             assert actual_content == expected_content
 
     def test_atomic_context_manager(self, temp_dir, sample_files):
@@ -247,7 +247,7 @@ class TestFileWriter:
 
         # Verify updated content
         node_dir = temp_dir / "node_test_domain_test_node_effect"
-        content = (node_dir / "v1_0_0" / "node.py").read_text()
+        content = (node_dir / "v1_0_0" / "node.py").read_text(encoding="utf-8")
         assert content == "updated content"
 
     def test_empty_files_error(self, temp_dir):
@@ -357,7 +357,7 @@ class TestFileWriter:
 
         # Verify file content matches
         node_dir = Path(result.output_path)
-        actual_content = (node_dir / "v1_0_0" / "node.py").read_text()
+        actual_content = (node_dir / "v1_0_0" / "node.py").read_text(encoding="utf-8")
         assert actual_content == "test content"
 
     def test_directory_creation_tracking(self, temp_dir, sample_files):

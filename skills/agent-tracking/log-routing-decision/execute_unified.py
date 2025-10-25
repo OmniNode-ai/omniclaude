@@ -18,6 +18,11 @@ Options:
   --alternatives: JSON array of alternative agents considered (optional)
   --reasoning: Reasoning for agent selection (optional)
   --context: JSON object with additional context (optional)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --session-id: Claude session ID (optional)
 """
 
 import argparse
@@ -35,24 +40,31 @@ from db_helper import get_correlation_id, parse_json_param
 
 
 def log_routing_decision_unified(args):
-    """Log routing decision using unified event adapter."""
+    """
+    Log routing decision using unified event adapter.
+
+    Args:
+        args: Argparse arguments containing routing decision details
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+
+    Raises:
+        ValueError: If confidence score is out of range (0.0-1.0)
+
+    Example:
+        >>> args = parser.parse_args(['--agent', 'agent-researcher', '--confidence', '0.92'])
+        >>> exit_code = log_routing_decision_unified(args)
+    """
 
     # Get or generate correlation ID
     correlation_id = (
         args.correlation_id if args.correlation_id else get_correlation_id()
     )
 
-    # Parse JSON parameters
-    alternatives = (
-        parse_json_param(args.alternatives)
-        if hasattr(args, "alternatives") and args.alternatives
-        else []
-    )
-    context = (
-        parse_json_param(args.context)
-        if hasattr(args, "context") and args.context
-        else {}
-    )
+    # Parse JSON parameters (argparse guarantees attributes exist, even if None)
+    alternatives = parse_json_param(args.alternatives) if args.alternatives else []
+    context = parse_json_param(args.context) if args.context else {}
 
     # Add correlation_id to context
     context["correlation_id"] = correlation_id
@@ -77,16 +89,13 @@ def log_routing_decision_unified(args):
         strategy=args.strategy,
         latency_ms=int(args.latency_ms),
         correlation_id=correlation_id,
-        user_request=(
-            args.user_request
-            if hasattr(args, "user_request") and args.user_request
-            else None
-        ),
+        user_request=args.user_request or None,
         alternatives=alternatives,
-        reasoning=(
-            args.reasoning if hasattr(args, "reasoning") and args.reasoning else None
-        ),
+        reasoning=args.reasoning or None,
         context=context,
+        project_path=args.project_path or None,
+        project_name=args.project_name or None,
+        session_id=args.session_id or None,
     )
 
     if success:
@@ -135,6 +144,11 @@ def main():
     parser.add_argument("--alternatives", help="JSON array of alternative agents")
     parser.add_argument("--reasoning", help="Reasoning for agent selection")
     parser.add_argument("--context", help="JSON object with additional context")
+
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--session-id", help="Claude session ID")
 
     args = parser.parse_args()
 

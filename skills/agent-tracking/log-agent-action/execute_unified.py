@@ -15,11 +15,17 @@ Options:
   --correlation-id: Correlation ID for tracking (optional, auto-generated)
   --duration-ms: How long the action took in milliseconds (optional)
   --success: Whether action succeeded (default: true)
+
+Project context (optional):
+  --project-path: Absolute path to project directory (optional)
+  --project-name: Project name (optional)
+  --working-directory: Current working directory (optional)
 """
 
 import argparse
 import json
 import sys
+from enum import Enum
 from pathlib import Path
 
 # Add hooks/lib to path
@@ -31,6 +37,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
 
+class ActionType(str, Enum):
+    """Action types for agent actions."""
+
+    TOOL_CALL = "tool_call"
+    DECISION = "decision"
+    ERROR = "error"
+    SUCCESS = "success"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Log agent action via unified event adapter",
@@ -38,14 +53,29 @@ def main():
 
     # Required arguments
     parser.add_argument("--agent", required=True, help="Agent name")
-    parser.add_argument("--action-type", required=True, help="Action type")
+    parser.add_argument(
+        "--action-type",
+        required=True,
+        choices=[at.value for at in ActionType],
+        help="Action type (tool_call, decision, error, success)",
+    )
     parser.add_argument("--action-name", required=True, help="Action name")
 
     # Optional arguments
     parser.add_argument("--details", help="JSON object with details")
     parser.add_argument("--correlation-id", help="Correlation ID")
     parser.add_argument("--duration-ms", type=int, help="Duration in milliseconds")
-    parser.add_argument("--success", type=bool, default=True, help="Success flag")
+    parser.add_argument(
+        "--success",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Success flag (use --no-success to set False)",
+    )
+
+    # Project context arguments
+    parser.add_argument("--project-path", help="Absolute path to project directory")
+    parser.add_argument("--project-name", help="Project name")
+    parser.add_argument("--working-directory", help="Current working directory")
 
     args = parser.parse_args()
 
@@ -55,7 +85,7 @@ def main():
     # Parse details
     action_details = parse_json_param(args.details) if args.details else {}
 
-    # Get adapter and publish
+    # Get adapter and publish (argparse guarantees attributes exist, even if None)
     adapter = get_hook_event_adapter()
     success = adapter.publish_agent_action(
         agent_name=args.agent,
@@ -65,6 +95,9 @@ def main():
         action_details=action_details,
         duration_ms=args.duration_ms,
         success=args.success,
+        project_path=args.project_path or None,
+        project_name=args.project_name or None,
+        working_directory=args.working_directory or None,
     )
 
     if success:

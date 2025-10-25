@@ -35,6 +35,7 @@ Usage:
 import json
 import logging
 import os
+import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
@@ -69,6 +70,7 @@ class HookEventAdapter:
     TOPIC_AGENT_ACTIONS = "agent-actions"
     TOPIC_PERFORMANCE_METRICS = "router-performance-metrics"
     TOPIC_TRANSFORMATIONS = "agent-transformation-events"
+    TOPIC_DETECTION_FAILURES = "agent-detection-failures"
 
     def __init__(
         self,
@@ -177,6 +179,9 @@ class HookEventAdapter:
         alternatives: Optional[list] = None,
         reasoning: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
+        project_path: Optional[str] = None,
+        project_name: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> bool:
         """
         Publish agent routing decision event.
@@ -191,6 +196,9 @@ class HookEventAdapter:
             alternatives: List of alternative agents considered
             reasoning: Reasoning for agent selection
             context: Additional context
+            project_path: Absolute path to project directory
+            project_name: Project name
+            session_id: Claude session ID
 
         Returns:
             True if published successfully, False otherwise
@@ -205,6 +213,9 @@ class HookEventAdapter:
             "routing_strategy": strategy,
             "context": context or {},
             "routing_time_ms": latency_ms,
+            "project_path": project_path,
+            "project_name": project_name,
+            "session_id": session_id,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
@@ -220,6 +231,9 @@ class HookEventAdapter:
         duration_ms: Optional[int] = None,
         success: bool = True,
         debug_mode: bool = True,
+        project_path: Optional[str] = None,
+        project_name: Optional[str] = None,
+        working_directory: Optional[str] = None,
     ) -> bool:
         """
         Publish agent action event.
@@ -233,6 +247,9 @@ class HookEventAdapter:
             duration_ms: Action duration in milliseconds
             success: Whether action succeeded
             debug_mode: Enable debug information in consumer
+            project_path: Absolute path to project directory
+            project_name: Project name
+            working_directory: Current working directory
 
         Returns:
             True if published successfully, False otherwise
@@ -246,6 +263,9 @@ class HookEventAdapter:
             "duration_ms": duration_ms,
             "success": success,
             "debug_mode": debug_mode,
+            "project_path": project_path,
+            "project_name": project_name,
+            "working_directory": working_directory,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
@@ -323,6 +343,47 @@ class HookEventAdapter:
         }
 
         return self._publish(self.TOPIC_TRANSFORMATIONS, event)
+
+    def publish_detection_failure(
+        self,
+        user_request: str,
+        failure_reason: str,
+        attempted_methods: Optional[list] = None,
+        error_details: Optional[Dict[str, Any]] = None,
+        correlation_id: Optional[str] = None,
+        project_path: Optional[str] = None,
+        project_name: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Publish agent detection failure event.
+
+        Args:
+            user_request: User's original request text
+            failure_reason: Why detection failed
+            attempted_methods: List of detection methods tried
+            error_details: Additional error information
+            correlation_id: Correlation ID for tracking
+            project_path: Absolute path to project directory
+            project_name: Project name
+            session_id: Claude session ID
+
+        Returns:
+            True if published successfully, False otherwise
+        """
+        event = {
+            "correlation_id": correlation_id or str(uuid.uuid4()),
+            "user_request": user_request,
+            "failure_reason": failure_reason,
+            "attempted_methods": attempted_methods or [],
+            "error_details": error_details or {},
+            "project_path": project_path,
+            "project_name": project_name,
+            "session_id": session_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        return self._publish(self.TOPIC_DETECTION_FAILURES, event)
 
     def close(self) -> None:
         """

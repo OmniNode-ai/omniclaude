@@ -211,7 +211,7 @@ class OmniBaseCompatibilityValidator:
 
         try:
             # Read file content
-            content = file_path.read_text()
+            content = file_path.read_text(encoding="utf-8")
 
             # Auto-detect template mode if not explicitly set
             is_template = self.template_mode or self._is_template_file(content)

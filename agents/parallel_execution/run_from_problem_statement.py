@@ -53,7 +53,7 @@ async def process_problem_statement(
         )
 
     print(f"📄 Reading problem statement: {ps_path.name}")
-    problem_content = ps_path.read_text()
+    problem_content = ps_path.read_text(encoding="utf-8")
 
     # Extract key sections for context
     print("🔍 Analyzing problem statement structure...")
