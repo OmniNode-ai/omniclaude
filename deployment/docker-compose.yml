@@ -103,7 +103,7 @@ services:
       - POSTGRES_PORT=5436
       - POSTGRES_DATABASE=omninode_bridge
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-omninode-bridge-postgres-dev-2024}
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-omninode_remote_2024_secure}
 
       # Batch processing configuration
       - BATCH_SIZE=100

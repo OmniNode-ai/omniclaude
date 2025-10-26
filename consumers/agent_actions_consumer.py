@@ -39,7 +39,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Event, Thread
@@ -73,8 +73,8 @@ class ConsumerMetrics:
         self.messages_failed = 0
         self.batches_processed = 0
         self.total_processing_time_ms = 0
-        self.last_commit_time = datetime.utcnow()
-        self.started_at = datetime.utcnow()
+        self.last_commit_time = datetime.now(timezone.utc)
+        self.started_at = datetime.now(timezone.utc)
 
     def record_batch(
         self, consumed: int, inserted: int, failed: int, processing_time_ms: float
@@ -85,11 +85,11 @@ class ConsumerMetrics:
         self.messages_failed += failed
         self.batches_processed += 1
         self.total_processing_time_ms += processing_time_ms
-        self.last_commit_time = datetime.utcnow()
+        self.last_commit_time = datetime.now(timezone.utc)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get current statistics."""
-        uptime_seconds = (datetime.utcnow() - self.started_at).total_seconds()
+        uptime_seconds = (datetime.now(timezone.utc) - self.started_at).total_seconds()
         avg_processing_time = (
             self.total_processing_time_ms / self.batches_processed
             if self.batches_processed > 0
@@ -416,7 +416,7 @@ class AgentActionsConsumer:
         for event in events:
             event_id = str(uuid.uuid4())
             correlation_id = event.get("correlation_id")
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -457,7 +457,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -498,7 +498,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -540,7 +540,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -604,7 +604,7 @@ class AgentActionsConsumer:
             user_request = event.get("user_request", "")
             prompt_length = len(user_request)
             prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             # Derive detection status from failure reason using helper method
             failure_reason = event.get("failure_reason", "")
@@ -646,7 +646,7 @@ class AgentActionsConsumer:
                 dlq_event = {
                     "original_event": event,
                     "error": str(error),
-                    "failed_at": datetime.utcnow().isoformat(),
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
                     "consumer_group": self.group_id,
                 }
 
