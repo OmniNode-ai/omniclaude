@@ -1,82 +1,626 @@
 """
-Manifest Injector - Load and inject system manifest into agent prompts.
+Manifest Injector - Dynamic System Manifest via Event Bus
 
-Provides agents with complete system awareness at spawn:
-- Available patterns (CRUD, Transformation, Orchestration, Aggregation)
-- Infrastructure topology (PostgreSQL, Kafka, Qdrant, Archon MCP)
-- Database schemas (15+ tables with columns)
-- Event contracts (9+ Kafka topics)
-- AI models and quorum configuration
-- File structure and dependencies
+Provides agents with complete system awareness at spawn through dynamic queries
+to archon-intelligence-adapter via Kafka event bus.
+
+Key Features:
+- Event-driven manifest generation (no static YAML)
+- Queries Qdrant, Memgraph, PostgreSQL via archon-intelligence-adapter
+- Request-response pattern with correlation tracking
+- Graceful fallback to minimal manifest on timeout
+- Compatible with existing hook infrastructure
+
+Architecture:
+    manifest_injector.py
+      → Publishes to Kafka "intelligence.requests"
+      → archon-intelligence-adapter consumes and queries backends
+      → Publishes response to "intelligence.responses"
+      → manifest_injector formats response for agent
+
+Event Flow:
+1. ManifestInjector.generate_dynamic_manifest()
+2. Publishes multiple intelligence requests (patterns, infrastructure, models)
+3. Waits for responses with timeout (default: 2000ms)
+4. Formats responses into structured manifest
+5. Falls back to minimal manifest on timeout
+
+Integration:
+- Uses IntelligenceEventClient for event bus communication
+- Maintains same format_for_prompt() API for backward compatibility
+- Sync wrapper for use in hooks
+
+Performance Targets:
+- Query time: <2000ms total (parallel queries)
+- Success rate: >90%
+- Fallback on timeout: minimal manifest with core info
+
+Created: 2025-10-26
 """
 
-import logging
-from pathlib import Path
-from typing import Any, Dict, Optional
+from __future__ import annotations
 
-import yaml
+import asyncio
+import logging
+import os
+from datetime import UTC, datetime
+from typing import Any, Dict, List, Optional
+
+# Import IntelligenceEventClient for event bus communication
+try:
+    from intelligence_event_client import IntelligenceEventClient
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from intelligence_event_client import IntelligenceEventClient
 
 logger = logging.getLogger(__name__)
 
 
 class ManifestInjector:
-    """Load and format system manifest for agent context injection."""
+    """
+    Dynamic manifest generator using event bus intelligence.
 
-    def __init__(self, manifest_path: Optional[str] = None):
+    Replaces static YAML with real-time queries to archon-intelligence-adapter,
+    which queries Qdrant, Memgraph, and PostgreSQL for current system state.
+
+    Features:
+    - Async event bus queries
+    - Parallel query execution
+    - Timeout handling with fallback
+    - Sync wrapper for hooks
+    - Same output format as static YAML version
+
+    Usage:
+        # Async usage
+        injector = ManifestInjector()
+        manifest = await injector.generate_dynamic_manifest_async(correlation_id)
+        formatted = injector.format_for_prompt()
+
+        # Sync usage (for hooks)
+        injector = ManifestInjector()
+        manifest = injector.generate_dynamic_manifest(correlation_id)
+        formatted = injector.format_for_prompt()
+    """
+
+    def __init__(
+        self,
+        kafka_brokers: Optional[str] = None,
+        enable_intelligence: bool = True,
+        query_timeout_ms: int = 2000,
+    ):
         """
         Initialize manifest injector.
 
         Args:
-            manifest_path: Path to system manifest YAML file.
-                          Defaults to agents/system_manifest.yaml
+            kafka_brokers: Kafka bootstrap servers
+                Default: KAFKA_BROKERS env var or "192.168.86.200:29102"
+            enable_intelligence: Enable event-based queries
+            query_timeout_ms: Timeout for intelligence queries (default: 2000ms)
         """
-        if manifest_path is None:
-            # Default to agents/system_manifest.yaml
-            base_dir = Path(__file__).parent.parent
-            resolved_path: Path = base_dir / "system_manifest.yaml"
-            self.manifest_path = resolved_path
-        else:
-            self.manifest_path = Path(manifest_path)
-        self._manifest: Optional[Dict[str, Any]] = None
-        self._cached_formatted: Optional[str] = None
+        self.kafka_brokers = kafka_brokers or os.environ.get(
+            "KAFKA_BROKERS", "192.168.86.200:29102"
+        )
+        self.enable_intelligence = enable_intelligence
+        self.query_timeout_ms = query_timeout_ms
 
-    def load_manifest(self) -> Dict[str, Any]:
+        # Cached manifest data
+        self._manifest_data: Optional[Dict[str, Any]] = None
+        self._cached_formatted: Optional[str] = None
+        self._last_update: Optional[datetime] = None
+
+        # Cache TTL (refresh after 5 minutes)
+        self.cache_ttl_seconds = 300
+
+        self.logger = logging.getLogger(__name__)
+
+    def generate_dynamic_manifest(
+        self,
+        correlation_id: str,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Load system manifest from YAML file.
+        Generate manifest by querying intelligence service (synchronous wrapper).
+
+        This is a synchronous wrapper around generate_dynamic_manifest_async()
+        for use in hooks and synchronous contexts.
+
+        Args:
+            correlation_id: Correlation ID for tracking
+            force_refresh: Force refresh even if cache is valid
 
         Returns:
-            Parsed manifest dictionary
-
-        Raises:
-            FileNotFoundError: If manifest file doesn't exist
-            yaml.YAMLError: If manifest is invalid YAML
+            Manifest data dictionary
         """
-        if self._manifest is not None:
-            return self._manifest
+        # Check cache first
+        if not force_refresh and self._is_cache_valid():
+            self.logger.debug("Using cached manifest data")
+            return self._manifest_data
 
-        if not self.manifest_path.exists():
-            raise FileNotFoundError(
-                f"System manifest not found: {self.manifest_path}. "
-                "Create it with: agents/system_manifest.yaml"
-            )
+        # Run async query in event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, we can't use run_until_complete
+                # Fall back to minimal manifest
+                self.logger.warning(
+                    "Event loop already running, falling back to minimal manifest"
+                )
+                return self._get_minimal_manifest()
+            else:
+                # Run async query
+                return loop.run_until_complete(
+                    self.generate_dynamic_manifest_async(correlation_id, force_refresh)
+                )
+        except Exception as e:
+            self.logger.error(f"Failed to generate dynamic manifest: {e}")
+            return self._get_minimal_manifest()
+
+    async def generate_dynamic_manifest_async(
+        self,
+        correlation_id: str,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Generate manifest by querying intelligence service (async).
+
+        Flow:
+        1. Check cache validity
+        2. Create IntelligenceEventClient
+        3. Execute parallel queries for different manifest sections
+        4. Wait for responses with timeout
+        5. Format responses into manifest structure
+        6. Cache and return
+
+        Args:
+            correlation_id: Correlation ID for tracking
+            force_refresh: Force refresh even if cache is valid
+
+        Returns:
+            Manifest data dictionary
+        """
+        # Check cache first
+        if not force_refresh and self._is_cache_valid():
+            self.logger.debug("Using cached manifest data")
+            return self._manifest_data
+
+        if not self.enable_intelligence:
+            self.logger.info("Intelligence queries disabled, using minimal manifest")
+            return self._get_minimal_manifest()
+
+        self.logger.info(
+            f"Generating dynamic manifest (correlation_id: {correlation_id})"
+        )
+
+        # Create intelligence client
+        client = IntelligenceEventClient(
+            bootstrap_servers=self.kafka_brokers,
+            enable_intelligence=True,
+            request_timeout_ms=self.query_timeout_ms,
+        )
 
         try:
-            with open(self.manifest_path, "r") as f:
-                self._manifest = yaml.safe_load(f)
+            # Start client
+            await client.start()
 
-            logger.info(f"Loaded system manifest from {self.manifest_path}")
-            return self._manifest
+            # Execute parallel queries for different manifest sections
+            query_tasks = {
+                "patterns": self._query_patterns(client, correlation_id),
+                "infrastructure": self._query_infrastructure(client, correlation_id),
+                "models": self._query_models(client, correlation_id),
+                "database_schemas": self._query_database_schemas(
+                    client, correlation_id
+                ),
+            }
 
-        except yaml.YAMLError as e:
-            logger.error(f"Invalid YAML in manifest: {e}")
-            raise
+            # Wait for all queries with timeout
+            results = await asyncio.gather(
+                *query_tasks.values(),
+                return_exceptions=True,
+            )
 
-    def format_for_prompt(self, sections: Optional[list] = None) -> str:
+            # Build manifest from results
+            manifest = self._build_manifest_from_results(
+                dict(zip(query_tasks.keys(), results))
+            )
+
+            # Cache manifest
+            self._manifest_data = manifest
+            self._last_update = datetime.now(UTC)
+
+            self.logger.info("Dynamic manifest generated successfully")
+            return manifest
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to query intelligence service: {e}", exc_info=True
+            )
+            # Fall back to minimal manifest
+            return self._get_minimal_manifest()
+
+        finally:
+            # Stop client
+            await client.stop()
+
+    async def _query_patterns(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query available code generation patterns.
+
+        Uses PATTERN_EXTRACTION operation to discover patterns from
+        Qdrant vector database.
+
+        Args:
+            client: Intelligence event client
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Patterns data dictionary
+        """
+        try:
+            self.logger.debug("Querying available patterns")
+
+            result = await client.request_code_analysis(
+                content="",  # Empty content for pattern discovery
+                source_path="node_*_*.py",  # Pattern for ONEX nodes
+                language="python",
+                options={
+                    "operation_type": "PATTERN_EXTRACTION",
+                    "include_patterns": True,
+                    "include_metrics": False,
+                    "pattern_types": [
+                        "CRUD",
+                        "Transformation",
+                        "Orchestration",
+                        "Aggregation",
+                    ],
+                },
+                timeout_ms=self.query_timeout_ms,
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(f"Pattern query failed: {e}")
+            return {"patterns": [], "error": str(e)}
+
+    async def _query_infrastructure(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query current infrastructure topology.
+
+        Queries for:
+        - PostgreSQL databases and schemas
+        - Kafka/Redpanda topics
+        - Qdrant collections
+        - Docker services
+
+        Args:
+            client: Intelligence event client
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Infrastructure data dictionary
+        """
+        try:
+            self.logger.debug("Querying infrastructure topology")
+
+            result = await client.request_code_analysis(
+                content="",  # Empty content for infrastructure scan
+                source_path="infrastructure",
+                language="yaml",
+                options={
+                    "operation_type": "INFRASTRUCTURE_SCAN",
+                    "include_databases": True,
+                    "include_kafka_topics": True,
+                    "include_qdrant_collections": True,
+                    "include_docker_services": True,
+                },
+                timeout_ms=self.query_timeout_ms,
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(f"Infrastructure query failed: {e}")
+            return {"infrastructure": {}, "error": str(e)}
+
+    async def _query_models(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query available AI models and ONEX data models.
+
+        Queries for:
+        - AI model providers (Anthropic, Google, Z.ai)
+        - ONEX node types and contracts
+        - Model quorum configuration
+
+        Args:
+            client: Intelligence event client
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Models data dictionary
+        """
+        try:
+            self.logger.debug("Querying available models")
+
+            result = await client.request_code_analysis(
+                content="",  # Empty content for model discovery
+                source_path="models",
+                language="python",
+                options={
+                    "operation_type": "MODEL_DISCOVERY",
+                    "include_ai_models": True,
+                    "include_onex_models": True,
+                    "include_quorum_config": True,
+                },
+                timeout_ms=self.query_timeout_ms,
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(f"Model query failed: {e}")
+            return {"models": {}, "error": str(e)}
+
+    async def _query_database_schemas(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query database schemas and table definitions.
+
+        Queries PostgreSQL for:
+        - Table schemas
+        - Column definitions
+        - Indexes and constraints
+
+        Args:
+            client: Intelligence event client
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Database schemas dictionary
+        """
+        try:
+            self.logger.debug("Querying database schemas")
+
+            result = await client.request_code_analysis(
+                content="",  # Empty content for schema discovery
+                source_path="database_schemas",
+                language="sql",
+                options={
+                    "operation_type": "SCHEMA_DISCOVERY",
+                    "include_tables": True,
+                    "include_columns": True,
+                    "include_indexes": False,
+                },
+                timeout_ms=self.query_timeout_ms,
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.warning(f"Database schema query failed: {e}")
+            return {"schemas": {}, "error": str(e)}
+
+    def _build_manifest_from_results(
+        self,
+        results: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Build structured manifest from query results.
+
+        Transforms raw query results into the manifest structure
+        expected by format_for_prompt().
+
+        Args:
+            results: Dictionary of query results by section
+
+        Returns:
+            Structured manifest dictionary
+        """
+        manifest = {
+            "manifest_metadata": {
+                "version": "2.0.0",
+                "generated_at": datetime.now(UTC).isoformat(),
+                "purpose": "Dynamic system context via event bus",
+                "target_agents": ["polymorphic-agent", "all-specialized-agents"],
+                "update_frequency": "on_demand",
+                "source": "archon-intelligence-adapter",
+            }
+        }
+
+        # Extract patterns
+        patterns_result = results.get("patterns", {})
+        if isinstance(patterns_result, Exception):
+            self.logger.warning(f"Patterns query failed: {patterns_result}")
+            manifest["patterns"] = {"available": [], "error": str(patterns_result)}
+        else:
+            manifest["patterns"] = self._format_patterns_result(patterns_result)
+
+        # Extract infrastructure
+        infra_result = results.get("infrastructure", {})
+        if isinstance(infra_result, Exception):
+            self.logger.warning(f"Infrastructure query failed: {infra_result}")
+            manifest["infrastructure"] = {"error": str(infra_result)}
+        else:
+            manifest["infrastructure"] = self._format_infrastructure_result(
+                infra_result
+            )
+
+        # Extract models
+        models_result = results.get("models", {})
+        if isinstance(models_result, Exception):
+            self.logger.warning(f"Models query failed: {models_result}")
+            manifest["models"] = {"error": str(models_result)}
+        else:
+            manifest["models"] = self._format_models_result(models_result)
+
+        # Extract database schemas
+        schemas_result = results.get("database_schemas", {})
+        if isinstance(schemas_result, Exception):
+            self.logger.warning(f"Database schemas query failed: {schemas_result}")
+            manifest["database_schemas"] = {"error": str(schemas_result)}
+        else:
+            manifest["database_schemas"] = self._format_schemas_result(schemas_result)
+
+        return manifest
+
+    def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format patterns query result into manifest structure."""
+        patterns = result.get("patterns", [])
+
+        return {
+            "available": [
+                {
+                    "name": p.get("name", "Unknown Pattern"),
+                    "file": p.get("file_path", ""),
+                    "description": p.get("description", ""),
+                    "node_types": p.get("node_types", []),
+                    "confidence": p.get("confidence", 0.0),
+                    "use_cases": p.get("use_cases", []),
+                }
+                for p in patterns
+            ],
+            "total_count": len(patterns),
+            "query_time_ms": result.get("query_time_ms", 0),
+        }
+
+    def _format_infrastructure_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format infrastructure query result into manifest structure."""
+        return {
+            "remote_services": {
+                "postgresql": result.get("postgresql", {}),
+                "kafka": result.get("kafka", {}),
+            },
+            "local_services": {
+                "qdrant": result.get("qdrant", {}),
+                "archon_mcp": result.get("archon_mcp", {}),
+            },
+            "docker_services": result.get("docker_services", []),
+        }
+
+    def _format_models_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format models query result into manifest structure."""
+        return {
+            "ai_models": result.get("ai_models", {}),
+            "onex_models": result.get("onex_models", {}),
+            "intelligence_models": result.get("intelligence_models", []),
+        }
+
+    def _format_schemas_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format database schemas query result into manifest structure."""
+        return {
+            "tables": result.get("tables", []),
+            "total_tables": len(result.get("tables", [])),
+        }
+
+    def _is_cache_valid(self) -> bool:
+        """
+        Check if cached manifest is still valid.
+
+        Returns:
+            True if cache is valid, False if refresh needed
+        """
+        if self._manifest_data is None or self._last_update is None:
+            return False
+
+        age_seconds = (datetime.now(UTC) - self._last_update).total_seconds()
+        return age_seconds < self.cache_ttl_seconds
+
+    def _get_minimal_manifest(self) -> Dict[str, Any]:
+        """
+        Get minimal fallback manifest.
+
+        Provides basic system information when event bus queries fail.
+
+        Returns:
+            Minimal manifest dictionary
+        """
+        return {
+            "manifest_metadata": {
+                "version": "2.0.0-minimal",
+                "generated_at": datetime.now(UTC).isoformat(),
+                "purpose": "Fallback manifest (intelligence queries unavailable)",
+                "target_agents": ["polymorphic-agent", "all-specialized-agents"],
+                "update_frequency": "on_demand",
+                "source": "fallback",
+            },
+            "patterns": {
+                "available": [],
+                "note": "Pattern discovery unavailable - use built-in patterns",
+            },
+            "infrastructure": {
+                "remote_services": {
+                    "postgresql": {
+                        "host": "192.168.86.200",
+                        "port": 5436,
+                        "database": "omninode_bridge",
+                        "note": "Connection details only - schemas unavailable",
+                    },
+                    "kafka": {
+                        "bootstrap_servers": "192.168.86.200:29102",
+                        "note": "Connection details only - topics unavailable",
+                    },
+                },
+                "local_services": {
+                    "qdrant": {
+                        "endpoint": "localhost:6333",
+                        "note": "Connection details only - collections unavailable",
+                    },
+                    "archon_mcp": {
+                        "endpoint": "http://localhost:8051",
+                        "note": "Use archon_menu() MCP tool for intelligence queries",
+                    },
+                },
+            },
+            "models": {
+                "ai_models": {
+                    "providers": [
+                        {"name": "Anthropic", "note": "Claude models available"},
+                        {"name": "Google Gemini", "note": "Gemini models available"},
+                    ]
+                },
+                "onex_models": {
+                    "node_types": [
+                        {"name": "EFFECT", "naming_pattern": "Node<Name>Effect"},
+                        {"name": "COMPUTE", "naming_pattern": "Node<Name>Compute"},
+                        {"name": "REDUCER", "naming_pattern": "Node<Name>Reducer"},
+                        {
+                            "name": "ORCHESTRATOR",
+                            "naming_pattern": "Node<Name>Orchestrator",
+                        },
+                    ]
+                },
+            },
+            "note": "This is a minimal fallback manifest. Full system context requires intelligence service.",
+        }
+
+    def format_for_prompt(self, sections: Optional[List[str]] = None) -> str:
         """
         Format manifest for injection into agent prompt.
 
+        Maintains backward compatibility with static YAML version.
+
         Args:
-            sections: Optional list of section names to include.
+            sections: Optional list of sections to include.
                      If None, includes all sections.
                      Available: ['patterns', 'models', 'infrastructure',
                                 'file_structure', 'dependencies', 'interfaces',
@@ -89,13 +633,27 @@ class ManifestInjector:
         if sections is None and self._cached_formatted is not None:
             return self._cached_formatted
 
-        manifest = self.load_manifest()
+        # Get manifest data
+        if self._manifest_data is None:
+            self.logger.warning(
+                "Manifest data not loaded - call generate_dynamic_manifest() first"
+            )
+            self._manifest_data = self._get_minimal_manifest()
+
+        manifest = self._manifest_data
 
         # Build formatted output
         output = []
         output.append("=" * 70)
-        output.append("SYSTEM MANIFEST - Complete Context for Agent Execution")
+        output.append("SYSTEM MANIFEST - Dynamic Context via Event Bus")
         output.append("=" * 70)
+        output.append("")
+
+        # Metadata
+        metadata = manifest.get("manifest_metadata", {})
+        output.append(f"Version: {metadata.get('version', 'unknown')}")
+        output.append(f"Generated: {metadata.get('generated_at', 'unknown')}")
+        output.append(f"Source: {metadata.get('source', 'unknown')}")
         output.append("")
 
         # Include requested sections or all if not specified
@@ -103,11 +661,7 @@ class ManifestInjector:
             "patterns": self._format_patterns,
             "models": self._format_models,
             "infrastructure": self._format_infrastructure,
-            "file_structure": self._format_file_structure,
-            "dependencies": self._format_dependencies,
-            "interfaces": self._format_interfaces,
-            "agent_framework": self._format_agent_framework,
-            "skills": self._format_skills,
+            "database_schemas": self._format_database_schemas,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -119,6 +673,17 @@ class ManifestInjector:
                 if section_output:
                     output.append(section_output)
                     output.append("")
+
+        # Add note about minimal manifest
+        if metadata.get("source") == "fallback":
+            output.append("⚠️  NOTE: This is a minimal fallback manifest.")
+            output.append(
+                "Full system context requires archon-intelligence-adapter service."
+            )
+            output.append(
+                "Use archon_menu() MCP tool for dynamic intelligence queries."
+            )
+            output.append("")
 
         output.append("=" * 70)
         output.append("END SYSTEM MANIFEST")
@@ -136,15 +701,22 @@ class ManifestInjector:
         """Format patterns section."""
         output = ["AVAILABLE PATTERNS:"]
 
-        for pattern in patterns_data.get("available", []):
+        patterns = patterns_data.get("available", [])
+        if not patterns:
+            output.append("  (No patterns discovered - use built-in patterns)")
+            return "\n".join(output)
+
+        for pattern in patterns[:10]:  # Limit to top 10
             output.append(
-                f"  • {pattern['name']} ({pattern['confidence']:.0%} confidence)"
+                f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence)"
             )
-            output.append(f"    File: {pattern['file']}")
-            output.append(f"    Node Types: {', '.join(pattern['node_types'])}")
-            use_cases = pattern.get("use_cases", [])
-            if use_cases:
-                output.append(f"    Use Cases: {', '.join(use_cases[:2])}...")
+            if pattern.get("file"):
+                output.append(f"    File: {pattern['file']}")
+            if pattern.get("node_types"):
+                output.append(f"    Node Types: {', '.join(pattern['node_types'])}")
+
+        if len(patterns) > 10:
+            output.append(f"  ... and {len(patterns) - 10} more patterns")
 
         return "\n".join(output)
 
@@ -155,17 +727,28 @@ class ManifestInjector:
         # AI Models
         if "ai_models" in models_data:
             output.append("  AI Providers:")
-            for provider in models_data["ai_models"].get("providers", []):
-                models_str = ", ".join(provider.get("models", []))
-                output.append(f"    • {provider['name']}: {models_str}")
+            providers = models_data["ai_models"].get("providers", [])
+            for provider in providers:
+                name = provider.get("name", "Unknown")
+                note = provider.get("note", "")
+                if note:
+                    output.append(f"    • {name}: {note}")
+                else:
+                    models = provider.get("models", [])
+                    if models:
+                        models_str = (
+                            ", ".join(models) if isinstance(models, list) else models
+                        )
+                        output.append(f"    • {name}: {models_str}")
 
         # ONEX Models
         if "onex_models" in models_data:
             output.append("  ONEX Node Types:")
-            for node_type in models_data["onex_models"].get("node_types", []):
-                output.append(
-                    f"    • {node_type['name']}: {node_type['naming_pattern']}"
-                )
+            node_types = models_data["onex_models"].get("node_types", [])
+            for node_type in node_types:
+                name = node_type.get("name", "Unknown")
+                pattern = node_type.get("naming_pattern", "")
+                output.append(f"    • {name}: {pattern}")
 
         return "\n".join(output)
 
@@ -178,103 +761,59 @@ class ManifestInjector:
         # PostgreSQL
         if "postgresql" in remote:
             pg = remote["postgresql"]
-            output.append(f"  PostgreSQL: {pg['host']}:{pg['port']}/{pg['database']}")
-            tables = pg.get("tables", [])
-            output.append(f"    Tables: {len(tables)} available")
+            host = pg.get("host", "unknown")
+            port = pg.get("port", "unknown")
+            db = pg.get("database", "unknown")
+            output.append(f"  PostgreSQL: {host}:{port}/{db}")
+            if "note" in pg:
+                output.append(f"    Note: {pg['note']}")
 
-        # Kafka (using bootstrap_servers)
+        # Kafka
         if "kafka" in remote:
             kafka = remote["kafka"]
             bootstrap = kafka.get("bootstrap_servers", "unknown")
             output.append(f"  Kafka: {bootstrap}")
-            topics = kafka.get("topics", [])
-            if topics:
-                topic_names = [
-                    t.get("name", t) if isinstance(t, dict) else t for t in topics[:3]
-                ]
-                topics_preview = ", ".join(topic_names)
-                output.append(f"    Topics: {topics_preview}...")
+            if "note" in kafka:
+                output.append(f"    Note: {kafka['note']}")
 
-        # Qdrant (using endpoint)
+        # Qdrant
         local = infra_data.get("local_services", {})
         if "qdrant" in local:
             qdrant = local["qdrant"]
-            endpoint = qdrant.get("endpoint", qdrant.get("host", "unknown"))
+            endpoint = qdrant.get("endpoint", "unknown")
             output.append(f"  Qdrant: {endpoint}")
-            collections = qdrant.get("collections", [])
-            if collections:
-                coll_names = [
-                    c.get("name", c) if isinstance(c, dict) else c for c in collections
-                ]
-                output.append(f"    Collections: {', '.join(coll_names)}")
+            if "note" in qdrant:
+                output.append(f"    Note: {qdrant['note']}")
+
+        # Archon MCP
+        if "archon_mcp" in local:
+            archon = local["archon_mcp"]
+            endpoint = archon.get("endpoint", "unknown")
+            output.append(f"  Archon MCP: {endpoint}")
+            if "note" in archon:
+                output.append(f"    Note: {archon['note']}")
 
         return "\n".join(output)
 
-    def _format_file_structure(self, file_data: Dict) -> str:
-        """Format file structure section."""
-        output = ["FILE STRUCTURE:"]
+    def _format_database_schemas(self, schemas_data: Dict) -> str:
+        """Format database schemas section."""
+        output = ["DATABASE SCHEMAS:"]
 
-        # Handle root path if present
-        if "root" in file_data:
-            output.append(f"  Root: {file_data['root']}")
+        tables = schemas_data.get("tables", [])
+        if not tables:
+            output.append("  (Schema information unavailable)")
+            return "\n".join(output)
 
-        # Handle directories
-        directories = file_data.get("directories", {})
-        for directory, info in directories.items():
-            if isinstance(info, dict):
-                description = info.get("description", "No description")
-                output.append(f"  {directory}: {description}")
+        output.append(
+            f"  Total Tables: {schemas_data.get('total_tables', len(tables))}"
+        )
 
-        return "\n".join(output)
+        for table in tables[:5]:  # Limit to top 5
+            table_name = table.get("name", "unknown")
+            output.append(f"  • {table_name}")
 
-    def _format_dependencies(self, deps_data: Dict) -> str:
-        """Format dependencies section."""
-        output = ["DEPENDENCIES:"]
-
-        if "python_packages" in deps_data:
-            packages = deps_data["python_packages"]
-            output.append(f"  Python Packages: {len(packages)} installed")
-            package_names = list(packages.keys())[:5]
-            output.append(f"    Key: {', '.join(package_names)}...")
-
-        return "\n".join(output)
-
-    def _format_interfaces(self, interfaces_data: Dict) -> str:
-        """Format interfaces section."""
-        output = ["INTERFACES:"]
-
-        if "databases" in interfaces_data:
-            output.append("  Databases: PostgreSQL schemas documented")
-
-        if "event_bus" in interfaces_data:
-            output.append("  Event Bus: Kafka topics with event contracts")
-
-        return "\n".join(output)
-
-    def _format_agent_framework(self, framework_data: Dict) -> str:
-        """Format agent framework section."""
-        output = ["AGENT FRAMEWORK:"]
-
-        if "quality_gates" in framework_data:
-            gates = framework_data["quality_gates"]
-            total_gates = gates.get("total_gates", 0)
-            output.append(f"  Quality Gates: {total_gates} validation checks")
-
-        if "mandatory_functions" in framework_data:
-            funcs = framework_data["mandatory_functions"]
-            total_funcs = funcs.get("total_functions", 0)
-            output.append(f"  Mandatory Functions: {total_funcs} required")
-
-        return "\n".join(output)
-
-    def _format_skills(self, skills_data: Dict) -> str:
-        """Format skills section."""
-        output = ["AVAILABLE SKILLS:"]
-
-        if "categories" in skills_data:
-            for category, info in skills_data["categories"].items():
-                count = info.get("count", 0)
-                output.append(f"  {category}: {count} skills")
+        if len(tables) > 5:
+            output.append(f"  ... and {len(tables) - 5} more tables")
 
         return "\n".join(output)
 
@@ -285,34 +824,61 @@ class ManifestInjector:
         Returns:
             Dictionary with counts and metadata
         """
-        manifest = self.load_manifest()
+        if self._manifest_data is None:
+            return {
+                "status": "not_loaded",
+                "message": "Call generate_dynamic_manifest() first",
+            }
 
-        # Extract nested data for readability
-        ai_models = manifest.get("models", {}).get("ai_models", {})
-        infra = manifest.get("infrastructure", {}).get("remote_services", {})
+        manifest = self._manifest_data
+        metadata = manifest.get("manifest_metadata", {})
 
         return {
-            "version": manifest.get("manifest_metadata", {}).get("version"),
+            "version": metadata.get("version"),
+            "source": metadata.get("source"),
+            "generated_at": metadata.get("generated_at"),
             "patterns_count": len(manifest.get("patterns", {}).get("available", [])),
-            "ai_providers_count": len(ai_models.get("providers", [])),
-            "database_tables_count": len(infra.get("postgresql", {}).get("tables", [])),
-            "kafka_topics_count": len(infra.get("kafka", {}).get("topics", [])),
-            "file_size_bytes": (
-                self.manifest_path.stat().st_size if self.manifest_path.exists() else 0
+            "cache_valid": self._is_cache_valid(),
+            "cache_age_seconds": (
+                (datetime.now(UTC) - self._last_update).total_seconds()
+                if self._last_update
+                else None
             ),
         }
 
 
-# Convenience function for quick access
-def inject_manifest(sections: Optional[list] = None) -> str:
+# Convenience function for quick access (sync wrapper)
+def inject_manifest(
+    correlation_id: Optional[str] = None,
+    sections: Optional[List[str]] = None,
+) -> str:
     """
-    Quick function to load and format manifest.
+    Quick function to load and format manifest (synchronous).
 
     Args:
+        correlation_id: Optional correlation ID for tracking
         sections: Optional list of sections to include
 
     Returns:
         Formatted manifest string
     """
+    from uuid import uuid4
+
+    correlation_id = correlation_id or str(uuid4())
+
     injector = ManifestInjector()
+
+    # Generate manifest (will use cache if valid)
+    try:
+        injector.generate_dynamic_manifest(correlation_id)
+    except Exception as e:
+        logger.error(f"Failed to generate dynamic manifest: {e}")
+        # Will use minimal manifest
+
     return injector.format_for_prompt(sections)
+
+
+__all__ = [
+    "ManifestInjector",
+    "inject_manifest",
+]
