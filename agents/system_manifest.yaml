@@ -1,0 +1,734 @@
+# OmniClaude System Manifest
+# ==================================================================================
+# This manifest provides complete system awareness for polymorphic agents at spawn
+# Version: 1.0.0
+# Last Updated: 2025-10-25
+# ==================================================================================
+
+manifest_metadata:
+  version: "1.0.0"
+  generated_at: "2025-10-25T18:45:00Z"
+  purpose: "Provide complete system context to agents at initialization"
+  target_agents: ["polymorphic-agent", "all-specialized-agents"]
+  update_frequency: "on_infrastructure_change"
+
+# ==================================================================================
+# PATTERNS - Available Code Generation Patterns
+# ==================================================================================
+patterns:
+  available:
+    - name: "CRUD Pattern"
+      file: "agents/lib/patterns/crud_pattern.py"
+      description: "Create, Read, Update, Delete operations for data entities"
+      node_types: ["EFFECT", "REDUCER"]
+      confidence: 0.95
+      use_cases:
+        - "Database entity operations"
+        - "API CRUD endpoints"
+        - "State management operations"
+
+    - name: "Transformation Pattern"
+      file: "agents/lib/patterns/transformation_pattern.py"
+      description: "Pure data transformation and processing"
+      node_types: ["COMPUTE"]
+      confidence: 0.90
+      use_cases:
+        - "Data format conversions"
+        - "Business logic calculations"
+        - "Data validation and enrichment"
+
+    - name: "Orchestration Pattern"
+      file: "agents/lib/patterns/orchestration_pattern.py"
+      description: "Workflow coordination and multi-step processes"
+      node_types: ["ORCHESTRATOR"]
+      confidence: 0.92
+      use_cases:
+        - "Multi-node workflows"
+        - "Saga pattern coordination"
+        - "Distributed transaction management"
+
+    - name: "Aggregation Pattern"
+      file: "agents/lib/patterns/aggregation_pattern.py"
+      description: "State aggregation and event reduction"
+      node_types: ["REDUCER"]
+      confidence: 0.88
+      use_cases:
+        - "Event stream aggregation"
+        - "State machine transitions"
+        - "Time-window aggregations"
+
+  pattern_registry:
+    file: "agents/lib/patterns/pattern_registry.py"
+    description: "Central pattern discovery and matching service"
+
+  pattern_storage:
+    file: "agents/lib/patterns/pattern_storage.py"
+    backend: "Qdrant + PostgreSQL"
+    description: "Persistent pattern storage with vector search"
+
+# ==================================================================================
+# MODELS - Data Models and Contracts
+# ==================================================================================
+models:
+  # AI Models Available
+  ai_models:
+    providers:
+      - name: "Anthropic"
+        models: ["claude-sonnet-4", "claude-opus-4"]
+        use_case: "Primary reasoning and code generation"
+        rate_limits: "Check Claude API dashboard"
+
+      - name: "Google Gemini"
+        models: ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"]
+        use_case: "Quorum validation, fast inference"
+        rate_limits: "Check Google Cloud Console"
+
+      - name: "Z.ai"
+        models: ["GLM-4.5-Air", "GLM-4.5", "GLM-4.6"]
+        use_case: "High-concurrency operations"
+        rate_limits: "35 total concurrent requests"
+
+    quorum_weights:
+      gemini_flash: 1.0
+      codestral_mac_studio: 1.5
+      deepseek_lite_rtx5090: 2.0
+      llama_31_rtx4090: 1.2
+      deepseek_full_mac_mini: 1.8
+      total_weight: 7.5
+
+    consensus_thresholds:
+      auto_apply: 0.80
+      suggest_with_review: 0.60
+      block: 0.60  # Below this threshold
+
+  # ONEX Data Models
+  onex_models:
+    node_types:
+      - name: "EFFECT"
+        description: "External I/O, APIs, side effects"
+        naming_pattern: "Node<Name>Effect"
+        file_pattern: "node_*_effect.py"
+        execute_method: "async def execute_effect(self, contract: ModelContractEffect) -> Any"
+        responsibilities:
+          - "External interactions"
+          - "API calls"
+          - "Database I/O"
+          - "UI components"
+
+      - name: "COMPUTE"
+        description: "Pure transforms and algorithms"
+        naming_pattern: "Node<Name>Compute"
+        file_pattern: "node_*_compute.py"
+        execute_method: "async def execute_compute(self, contract: ModelContractCompute) -> Any"
+        responsibilities:
+          - "Data processing"
+          - "Business logic"
+          - "Calculations"
+          - "Transformations"
+
+      - name: "REDUCER"
+        description: "Aggregation, persistence, state management"
+        naming_pattern: "Node<Name>Reducer"
+        file_pattern: "node_*_reducer.py"
+        execute_method: "async def execute_reduction(self, contract: ModelContractReducer) -> Any"
+        responsibilities:
+          - "State aggregation"
+          - "Event reduction"
+          - "Data persistence"
+          - "FSM transitions"
+
+      - name: "ORCHESTRATOR"
+        description: "Workflow coordination and dependencies"
+        naming_pattern: "Node<Name>Orchestrator"
+        file_pattern: "node_*_orchestrator.py"
+        execute_method: "async def execute_orchestration(self, contract: ModelContractOrchestrator) -> Any"
+        responsibilities:
+          - "Workflow coordination"
+          - "Process management"
+          - "System orchestration"
+          - "Dependency resolution"
+
+    contracts:
+      base: "omnibase_core/contracts/model_contract_base.py"
+      specialized:
+        - "ModelContractEffect"
+        - "ModelContractCompute"
+        - "ModelContractReducer"
+        - "ModelContractOrchestrator"
+      subcontracts:
+        - "ModelFSMSubcontract"
+        - "ModelEventTypeSubcontract"
+        - "ModelAggregationSubcontract"
+        - "ModelStateManagementSubcontract"
+        - "ModelRoutingSubcontract"
+        - "ModelCachingSubcontract"
+
+    intelligence_models:
+      - file: "agents/lib/models/intelligence_context.py"
+        class: "IntelligenceContext"
+        description: "RAG-gathered intelligence for template generation"
+        fields:
+          - "node_type_patterns"
+          - "common_operations"
+          - "required_mixins"
+          - "performance_targets"
+          - "error_scenarios"
+          - "domain_best_practices"
+          - "code_examples"
+          - "anti_patterns"
+
+      - file: "agents/lib/models/pipeline_models.py"
+        classes: ["StageResult", "GenerationContext", "ValidationResult"]
+        description: "6-stage generation pipeline models"
+
+# ==================================================================================
+# INFRASTRUCTURE - Services, Databases, Message Brokers
+# ==================================================================================
+infrastructure:
+  # Remote Services on 192.168.86.200
+  remote_services:
+    postgresql:
+      host: "192.168.86.200"
+      port: 5436
+      database: "omninode_bridge"
+      user: "postgres"
+      connection_string: "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
+      purpose: "Agent observability, pattern storage, intelligence metadata"
+      tables:
+        # Agent Observability Tables
+        - name: "agent_routing_decisions"
+          description: "Agent routing decision history with confidence scoring"
+          columns:
+            - "id (UUID)"
+            - "user_request (TEXT)"
+            - "selected_agent (TEXT)"
+            - "confidence_score (NUMERIC)"
+            - "alternatives (JSONB)"
+            - "reasoning (TEXT)"
+            - "routing_strategy (TEXT)"
+            - "routing_time_ms (INTEGER)"
+            - "created_at (TIMESTAMPTZ)"
+
+        - name: "agent_transformation_events"
+          description: "Polymorphic agent transformation tracking"
+          columns:
+            - "id (UUID)"
+            - "source_agent (TEXT)"
+            - "target_agent (TEXT)"
+            - "transformation_reason (TEXT)"
+            - "confidence_score (NUMERIC)"
+            - "transformation_duration_ms (INTEGER)"
+            - "success (BOOLEAN)"
+            - "created_at (TIMESTAMPTZ)"
+
+        - name: "router_performance_metrics"
+          description: "Router performance and optimization metrics"
+          columns:
+            - "id (UUID)"
+            - "query_text (TEXT)"
+            - "routing_duration_ms (INTEGER)"
+            - "cache_hit (BOOLEAN)"
+            - "trigger_match_strategy (TEXT)"
+            - "confidence_components (JSONB)"
+            - "candidates_evaluated (INTEGER)"
+            - "created_at (TIMESTAMPTZ)"
+
+        - name: "agent_actions"
+          description: "Complete agent action log for replay and debugging"
+          columns:
+            - "id (UUID)"
+            - "correlation_id (UUID)"
+            - "agent_name (TEXT)"
+            - "action_type (TEXT)"
+            - "action_name (TEXT)"
+            - "action_details (JSONB)"
+            - "duration_ms (INTEGER)"
+            - "success (BOOLEAN)"
+            - "created_at (TIMESTAMPTZ)"
+
+        # Pattern Lineage Tables
+        - name: "pattern_lineage_nodes"
+          description: "Pattern discovery and lineage tracking"
+
+        - name: "pattern_lineage_edges"
+          description: "Pattern relationships and dependencies"
+
+        # Debug Intelligence Tables
+        - name: "debug_transform_functions"
+          description: "Debug pattern catalog"
+
+        - name: "llm_calls"
+          description: "LLM call tracking and cost analysis"
+
+        - name: "workflow_steps"
+          description: "Workflow execution tracking"
+
+    kafka:
+      bootstrap_servers: "192.168.86.200:29102"
+      type: "Redpanda"
+      purpose: "Event bus for agent observability and intelligence"
+      admin_ui: "http://192.168.86.200:8080"
+      topics:
+        # Agent Observability Topics
+        - name: "agent-routing-decisions"
+          description: "Agent routing decision events"
+          partitions: 3
+          consumers: ["agent-observability-consumer"]
+
+        - name: "agent-transformation-events"
+          description: "Agent transformation events"
+          partitions: 3
+          consumers: ["agent-observability-consumer"]
+
+        - name: "router-performance-metrics"
+          description: "Router performance metrics"
+          partitions: 3
+          consumers: ["agent-observability-consumer"]
+
+        - name: "agent-actions"
+          description: "Complete agent action log"
+          partitions: 5
+          consumers: ["agent-observability-consumer"]
+
+        - name: "agent-detection-failures"
+          description: "Agent detection failure events for learning"
+          partitions: 1
+          consumers: ["agent-observability-consumer"]
+
+        # Documentation and Intelligence Topics
+        - name: "documentation-changed"
+          description: "Documentation change events"
+          partitions: 1
+
+        - name: "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
+          description: "Code analysis request events"
+
+        - name: "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
+          description: "Code analysis completion events"
+
+        - name: "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
+          description: "Code analysis failure events"
+
+  # Local Services
+  local_services:
+    qdrant:
+      endpoint: "localhost:6333"
+      purpose: "Vector database for pattern similarity search"
+      collections:
+        - name: "code_generation_patterns"
+          description: "Learned code patterns with embeddings"
+          vector_size: 1536
+
+        - name: "quality_vectors"
+          description: "Code quality assessment vectors"
+
+        - name: "domain_patterns"
+          description: "Domain-specific pattern embeddings"
+
+    archon_mcp:
+      endpoint: "http://localhost:8051"
+      purpose: "Orchestrated intelligence service (RAG, Vector Search, Quality)"
+      services:
+        - name: "intelligence"
+          tools:
+            - "assess_code_quality"
+            - "check_architectural_compliance"
+            - "get_quality_patterns"
+
+        - name: "vector-search"
+          tools:
+            - "advanced_vector_search"
+            - "quality_weighted_search"
+            - "batch_index_documents"
+
+        - name: "rag"
+          tools:
+            - "perform_rag_query"
+            - "search_code_examples"
+            - "cross_project_rag_query"
+
+        - name: "performance"
+          tools:
+            - "establish_performance_baseline"
+            - "monitor_performance_trends"
+            - "identify_optimization_opportunities"
+
+      total_tools: 114
+      external_services: ["Serena (25 tools)", "Zen (12 tools)", "Codanna (8 tools)"]
+
+  # Docker Compose Services
+  docker_services:
+    - name: "omniclaude_app"
+      ports: ["8000:8000", "8001:8001"]
+      purpose: "Main application and metrics"
+
+    - name: "omniclaude_agent_consumer"
+      purpose: "Kafka -> PostgreSQL event consumer"
+      health_check_port: 8080
+      topics_consumed: ["agent-routing-decisions", "agent-transformation-events", "router-performance-metrics", "agent-actions", "agent-detection-failures"]
+
+    - name: "omniclaude_postgres"
+      ports: ["5432:5432"]
+      purpose: "Local application database (separate from remote omninode_bridge)"
+
+    - name: "valkey"
+      ports: ["6379:6379"]
+      purpose: "Redis-compatible cache"
+
+# ==================================================================================
+# FILE STRUCTURE - Repository Organization
+# ==================================================================================
+file_structure:
+  root: "/Volumes/PRO-G40/Code/omniclaude"
+
+  directories:
+    agents:
+      path: "agents/"
+      description: "Agent framework, patterns, and generation infrastructure"
+      subdirectories:
+        - "lib/": "Core agent libraries and utilities"
+        - "lib/patterns/": "Code generation patterns (CRUD, Transformation, etc.)"
+        - "lib/models/": "Data models and intelligence context"
+        - "lib/generation/": "Code generation builders (AST, contracts, etc.)"
+        - "configs/": "Agent configuration files"
+        - "migrations/": "Database migration scripts"
+
+    consumers:
+      path: "consumers/"
+      description: "Kafka event consumers"
+      files:
+        - "agent_actions_consumer.py": "Main consumer (Kafka -> PostgreSQL)"
+
+    claude_hooks:
+      path: "claude_hooks/"
+      description: "Git hooks and event adapters"
+      subdirectories:
+        - "lib/": "Hook libraries"
+      files:
+        - "lib/hook_event_adapter.py": "Synchronous Kafka event publisher for hooks"
+
+    skills:
+      path: "skills/"
+      description: "Executable skills for agent operations"
+      subdirectories:
+        - "agent-tracking/": "Routing, transformation, performance logging"
+        - "agent-observability/": "Observability and monitoring skills"
+        - "intelligence/": "RAG and intelligence gathering"
+        - "log-execution/": "Execution logging"
+
+    deployment:
+      path: "deployment/"
+      description: "Docker and deployment configurations"
+      files:
+        - "docker-compose.yml": "Production-ready stack definition"
+        - "Dockerfile.consumer": "Consumer service container"
+
+    docs:
+      path: "docs/"
+      description: "Documentation and planning"
+      subdirectories:
+        - "planning/": "Project planning and roadmaps"
+        - "reference/": "Technical reference documentation"
+
+# ==================================================================================
+# DEPENDENCIES - Required Packages and Services
+# ==================================================================================
+dependencies:
+  python_packages:
+    core:
+      - "omnibase_core": "Core ONEX models, contracts, enums"
+      - "pydantic": "Data validation and settings"
+      - "fastapi": "API framework"
+      - "uvicorn": "ASGI server"
+
+    data:
+      - "psycopg2-binary": "PostgreSQL driver"
+      - "kafka-python-ng": "Kafka client (synchronous)"
+      - "aiokafka": "Kafka client (async)"
+      - "qdrant-client": "Vector database client"
+      - "valkey": "Redis-compatible client"
+
+    intelligence:
+      - "openai": "OpenAI API client (embeddings)"
+      - "anthropic": "Claude API client"
+      - "google-generativeai": "Gemini API client"
+
+    utilities:
+      - "pyyaml": "YAML parsing"
+      - "jinja2": "Template engine"
+      - "tenacity": "Retry logic"
+
+  system_services:
+    required:
+      - "Docker": "Container runtime"
+      - "PostgreSQL 16": "Remote database @ 192.168.86.200:5436"
+      - "Redpanda/Kafka": "Remote message broker @ 192.168.86.200:29102"
+      - "Qdrant": "Local vector database @ localhost:6333"
+
+    optional:
+      - "Archon MCP": "Intelligence orchestration @ localhost:8051"
+
+# ==================================================================================
+# INTERFACES - APIs, Event Contracts, Database Schemas
+# ==================================================================================
+interfaces:
+  event_bus:
+    kafka_events:
+      routing_decision:
+        topic: "agent-routing-decisions"
+        schema:
+          correlation_id: "UUID"
+          user_request: "TEXT"
+          selected_agent: "TEXT"
+          confidence_score: "FLOAT (0.0-1.0)"
+          alternatives: "JSONB (array)"
+          reasoning: "TEXT"
+          routing_strategy: "TEXT"
+          routing_time_ms: "INTEGER"
+
+      agent_action:
+        topic: "agent-actions"
+        schema:
+          correlation_id: "UUID"
+          agent_name: "TEXT"
+          action_type: "TEXT (tool_call, decision, error, success)"
+          action_name: "TEXT"
+          action_details: "JSONB"
+          duration_ms: "INTEGER"
+          success: "BOOLEAN"
+
+      transformation:
+        topic: "agent-transformation-events"
+        schema:
+          source_agent: "TEXT"
+          target_agent: "TEXT"
+          transformation_reason: "TEXT"
+          confidence_score: "FLOAT"
+          transformation_duration_ms: "INTEGER"
+          success: "BOOLEAN"
+
+  database_schemas:
+    agent_observability:
+      description: "Agent routing and execution tracking"
+      primary_tables: ["agent_routing_decisions", "agent_transformation_events", "router_performance_metrics", "agent_actions"]
+
+    pattern_lineage:
+      description: "Pattern discovery and relationships"
+      primary_tables: ["pattern_lineage_nodes", "pattern_lineage_edges"]
+
+    debug_intelligence:
+      description: "Debug patterns and LLM tracking"
+      primary_tables: ["debug_transform_functions", "llm_calls", "workflow_steps"]
+
+  archon_mcp_api:
+    base_url: "http://localhost:8051"
+    endpoints:
+      - path: "/mcp/intelligence/assess_code_quality"
+        method: "POST"
+        purpose: "ONEX compliance scoring"
+
+      - path: "/mcp/rag/perform_rag_query"
+        method: "POST"
+        purpose: "Comprehensive research queries"
+
+      - path: "/mcp/vector/advanced_vector_search"
+        method: "POST"
+        purpose: "Vector similarity search"
+
+# ==================================================================================
+# AGENT FRAMEWORK - Router, Capabilities, Quality Gates
+# ==================================================================================
+agent_framework:
+  router:
+    file: "agents/lib/enhanced_router.py"
+    class: "EnhancedAgentRouter"
+    performance_targets:
+      routing_time: "<100ms"
+      cache_hit_rate: ">60%"
+      accuracy: ">95%"
+
+    components:
+      - name: "EnhancedTriggerMatcher"
+        file: "agents/lib/trigger_matcher.py"
+        strategies: ["exact_substring", "fuzzy_similarity", "keyword_overlap", "capability_alignment"]
+
+      - name: "ConfidenceScorer"
+        file: "agents/lib/confidence_scorer.py"
+        components: ["trigger (40%)", "context (30%)", "capability (20%)", "historical (10%)"]
+
+      - name: "CapabilityIndex"
+        file: "agents/lib/capability_index.py"
+        description: "In-memory inverted index for fast capability lookups"
+
+      - name: "ResultCache"
+        file: "agents/lib/result_cache.py"
+        ttl: "3600s (1 hour)"
+
+  quality_gates:
+    total: 23
+    categories:
+      - "Sequential validation (3 gates)"
+      - "Parallel validation (3 gates)"
+      - "Intelligence validation (3 gates)"
+      - "Coordination validation (3 gates)"
+      - "Quality compliance (4 gates)"
+      - "Performance validation (3 gates)"
+      - "Knowledge validation (2 gates)"
+      - "Framework validation (2 gates)"
+
+    performance_target: "<200ms per gate"
+
+  mandatory_functions:
+    total: 47
+    categories:
+      intelligence_capture: 4
+      execution_lifecycle: 5
+      debug_intelligence: 3
+      context_management: 4
+      coordination_protocols: 5
+      performance_monitoring: 4
+      quality_validation: 5
+      parallel_coordination: 4
+      knowledge_capture: 4
+      error_handling: 5
+      framework_integration: 4
+
+# ==================================================================================
+# ENVIRONMENT VARIABLES - Configuration Reference
+# ==================================================================================
+environment_variables:
+  # AI Provider Keys
+  - name: "GEMINI_API_KEY"
+    required: true
+    purpose: "Google Gemini API access"
+    source: "https://console.cloud.google.com/apis/credentials"
+
+  - name: "ZAI_API_KEY"
+    required: false
+    purpose: "Z.ai GLM model access"
+
+  # Database Configuration
+  - name: "POSTGRES_PASSWORD"
+    required: true
+    purpose: "Remote PostgreSQL password (192.168.86.200:5436)"
+    default: "omninode-bridge-postgres-dev-2024"
+    security: "CHANGE IN PRODUCTION!"
+
+  # Kafka Configuration
+  - name: "KAFKA_BROKERS"
+    required: true
+    purpose: "Kafka bootstrap servers"
+    default: "192.168.86.200:29102"
+
+  - name: "KAFKA_ENABLE_LOGGING"
+    required: false
+    purpose: "Enable Kafka event logging"
+    default: "true"
+
+  # Feature Flags
+  - name: "ENABLE_EVENT_BASED_DISCOVERY"
+    required: false
+    purpose: "Enable event-first pattern discovery"
+    default: "true"
+
+  - name: "PREFER_EVENT_PATTERNS"
+    required: false
+    purpose: "Prefer event patterns over built-in patterns"
+    default: "true"
+
+# ==================================================================================
+# SKILLS - Available Executable Skills
+# ==================================================================================
+skills:
+  agent_tracking:
+    directory: "skills/agent-tracking/"
+    skills:
+      - name: "log-routing-decision"
+        file: "execute_kafka.py"
+        purpose: "Log agent routing decisions to Kafka"
+        topic: "agent-routing-decisions"
+
+      - name: "log-transformation"
+        file: "execute_kafka.py"
+        purpose: "Log agent transformation events to Kafka"
+        topic: "agent-transformation-events"
+
+      - name: "log-performance-metrics"
+        file: "execute_kafka.py"
+        purpose: "Log router performance metrics to Kafka"
+        topic: "router-performance-metrics"
+
+      - name: "log-agent-action"
+        file: "execute_kafka.py"
+        purpose: "Log agent actions to Kafka"
+        topic: "agent-actions"
+
+  intelligence:
+    directory: "skills/intelligence/"
+    skills:
+      - name: "gather-rag-intelligence"
+        purpose: "Gather RAG intelligence for task context"
+
+  agent_observability:
+    directory: "skills/agent-observability/"
+    purpose: "Agent observability and monitoring"
+
+# ==================================================================================
+# CURRENT LIMITATIONS AND CONTEXT GAPS
+# ==================================================================================
+known_limitations:
+  current_context_injection:
+    what_agents_receive:
+      - "Correlation ID (UUID)"
+      - "RAG Domain Intelligence file path (/tmp/agent_intelligence_domain_*.json)"
+      - "RAG Implementation Intelligence file path (/tmp/agent_intelligence_impl_*.json)"
+      - "Archon MCP endpoint (http://localhost:8051)"
+
+    what_is_missing:
+      - "Complete pattern catalog awareness"
+      - "Available AI models and quorum configuration"
+      - "Infrastructure topology (databases, Kafka, Qdrant)"
+      - "Database schema documentation"
+      - "Event topic schemas and contracts"
+      - "Available skills and capabilities"
+      - "File structure and code organization"
+      - "Environment variable requirements"
+      - "Quality gate specifications"
+      - "Mandatory function requirements"
+
+    impact:
+      - "Agents lack system awareness, must discover resources at runtime"
+      - "No comprehensive infrastructure map for decision-making"
+      - "Patterns must be discovered via RAG instead of manifest lookup"
+      - "Database schema knowledge limited to what's in RAG responses"
+      - "Event contracts not standardized in agent context"
+
+# ==================================================================================
+# RECOMMENDED ENHANCEMENTS
+# ==================================================================================
+recommendations:
+  context_injection_improvements:
+    - priority: "HIGH"
+      action: "Inject system manifest into agent initialization prompts"
+      implementation: "Add manifest to hook_event_adapter context payload"
+      benefit: "Complete system awareness from spawn, reduces discovery overhead"
+
+    - priority: "HIGH"
+      action: "Create manifest version tracking"
+      implementation: "Add manifest_version to correlation context"
+      benefit: "Ensure agents use correct infrastructure configuration"
+
+    - priority: "MEDIUM"
+      action: "Generate dynamic manifest from live infrastructure"
+      implementation: "Query Kafka topics, PostgreSQL schemas, Qdrant collections at runtime"
+      benefit: "Manifest always reflects current system state"
+
+    - priority: "MEDIUM"
+      action: "Add manifest validation in agent initialization"
+      implementation: "Agents validate manifest completeness at spawn"
+      benefit: "Early detection of missing infrastructure components"
+
+    - priority: "LOW"
+      action: "Create manifest diff tool"
+      implementation: "Compare manifest versions to detect infrastructure drift"
+      benefit: "Track infrastructure evolution over time"

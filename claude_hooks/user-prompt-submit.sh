@@ -257,28 +257,59 @@ if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_
 fi
 
 # -----------------------------
-# Background RAG queries
+# Event Bus Intelligence Requests
 # -----------------------------
 if [[ -n "${DOMAIN_QUERY:-}" ]]; then
-  log "RAG domain query"
+  log "Publishing domain intelligence request to event bus"
   (
-    JSON="$(jq -n --arg q "$DOMAIN_QUERY" --arg ctx "general" --argjson n 5 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
-      -H "Content-Type: application/json" \
-      --data-binary "$JSON" \
-      > "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" 2>&1
+    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+      --query-type "domain" \
+      --query "$DOMAIN_QUERY" \
+      --correlation-id "$CORRELATION_ID" \
+      --agent-name "${AGENT_NAME:-unknown}" \
+      --agent-domain "${AGENT_DOMAIN:-general}" \
+      --output-file "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
+      --match-count 5 \
+      --timeout-ms 500 \
+      2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
   ) &
 fi
 
 if [[ -n "${IMPL_QUERY:-}" ]]; then
-  log "RAG implementation query"
+  log "Publishing implementation intelligence request to event bus"
   (
-    JSON="$(jq -n --arg q "$IMPL_QUERY" --arg ctx "general" --argjson n 3 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
-      -H "Content-Type: application/json" \
-      --data-binary "$JSON" \
-      > "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" 2>&1
+    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+      --query-type "implementation" \
+      --query "$IMPL_QUERY" \
+      --correlation-id "$CORRELATION_ID" \
+      --agent-name "${AGENT_NAME:-unknown}" \
+      --agent-domain "${AGENT_DOMAIN:-general}" \
+      --output-file "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
+      --match-count 3 \
+      --timeout-ms 500 \
+      2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
   ) &
+fi
+
+# -----------------------------
+# System Manifest Injection
+# -----------------------------
+log "Loading system manifest for agent context..."
+
+# Use manifest_loader.py to avoid heredoc quoting issues
+MANIFEST_LOADER="$HOME/.claude/hooks/lib/manifest_loader.py"
+if [[ ! -f "$MANIFEST_LOADER" ]]; then
+  # Fallback to hooks directory
+  MANIFEST_LOADER="${HOOKS_LIB}/../manifest_loader.py"
+fi
+
+SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" python3 "$MANIFEST_LOADER" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
+
+if [[ -n "$SYSTEM_MANIFEST" ]]; then
+  log "System manifest loaded successfully (${#SYSTEM_MANIFEST} chars)"
+else
+  log "System manifest not available, continuing without it"
+  SYSTEM_MANIFEST="System Manifest: Not available"
 fi
 
 # -----------------------------
@@ -336,6 +367,10 @@ Why this dispatch is recommended:
 
 Alternative: If you prefer manual execution, the above intelligence context
 is available for your direct use.
+========================================================================
+
+${SYSTEM_MANIFEST}
+
 ========================================================================
 EOF
 )"
