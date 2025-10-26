@@ -276,15 +276,27 @@ class ManifestInjector:
                     "operation_type": "PATTERN_EXTRACTION",
                     "include_patterns": True,
                     "include_metrics": False,
-                    "pattern_types": [
-                        "CRUD",
-                        "Transformation",
-                        "Orchestration",
-                        "Aggregation",
-                    ],
+                    # Removed pattern_types filter - was blocking all patterns from Qdrant
+                    # The actual patterns (Semantic Cache Reducer, Event Bus Producer Effect, etc.)
+                    # don't match the hardcoded filter types (CRUD, Transformation, etc.)
                 },
                 timeout_ms=self.query_timeout_ms,
             )
+
+            # Debug logging
+            if result is None:
+                self.logger.warning("Pattern query returned None!")
+                return {"patterns": [], "error": "No response received"}
+
+            patterns_count = len(result.get("patterns", []))
+            self.logger.info(
+                f"Pattern query result: {patterns_count} patterns, "
+                f"query_time={result.get('query_time_ms', 0)}ms"
+            )
+            if result.get("patterns"):
+                self.logger.info(
+                    f"First pattern: {result['patterns'][0].get('name', 'unknown')}"
+                )
 
             return result
 
