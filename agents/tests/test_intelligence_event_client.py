@@ -16,7 +16,7 @@ Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.1
 
 import asyncio
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -58,6 +58,17 @@ def mock_consumer():
     consumer = AsyncMock()
     consumer.start = AsyncMock()
     consumer.stop = AsyncMock()
+
+    # Mock assignment() as a regular method (not async) that returns a set
+    # Initially returns a set with a partition to simulate ready consumer
+    from kafka import TopicPartition
+
+    consumer.assignment = MagicMock(
+        return_value={
+            TopicPartition("omniclaude.intelligence.analysis.completed", 0),
+            TopicPartition("omniclaude.intelligence.analysis.failed", 0),
+        }
+    )
 
     # Mock async iteration for background consumer task
     async def mock_aiter():
@@ -173,8 +184,8 @@ class TestIntelligenceEventClientLifecycle:
 
     def test_init_generates_consumer_group_id(self):
         """Test initialization generates unique consumer group ID."""
-        client1 = IntelligenceEventClient()
-        client2 = IntelligenceEventClient()
+        client1 = IntelligenceEventClient(bootstrap_servers="localhost:29092")
+        client2 = IntelligenceEventClient(bootstrap_servers="localhost:29092")
 
         assert client1.consumer_group_id.startswith("omniclaude-intelligence-")
         assert client2.consumer_group_id.startswith("omniclaude-intelligence-")
@@ -183,7 +194,9 @@ class TestIntelligenceEventClientLifecycle:
     def test_init_accepts_custom_consumer_group_id(self):
         """Test initialization accepts custom consumer group ID."""
         custom_id = "custom-consumer-group"
-        client = IntelligenceEventClient(consumer_group_id=custom_id)
+        client = IntelligenceEventClient(
+            bootstrap_servers="localhost:29092", consumer_group_id=custom_id
+        )
 
         assert client.consumer_group_id == custom_id
 
