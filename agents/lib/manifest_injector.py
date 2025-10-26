@@ -92,7 +92,7 @@ class ManifestInjector:
         self,
         kafka_brokers: Optional[str] = None,
         enable_intelligence: bool = True,
-        query_timeout_ms: int = 2000,
+        query_timeout_ms: int = 5000,
     ):
         """
         Initialize manifest injector.
@@ -101,7 +101,7 @@ class ManifestInjector:
             kafka_brokers: Kafka bootstrap servers
                 Default: KAFKA_BROKERS env var or "192.168.86.200:29102"
             enable_intelligence: Enable event-based queries
-            query_timeout_ms: Timeout for intelligence queries (default: 2000ms)
+            query_timeout_ms: Timeout for intelligence queries (default: 5000ms)
         """
         self.kafka_brokers = kafka_brokers or os.environ.get(
             "KAFKA_BROKERS", "192.168.86.200:29102"
@@ -761,37 +761,49 @@ class ManifestInjector:
         # PostgreSQL
         if "postgresql" in remote:
             pg = remote["postgresql"]
-            host = pg.get("host", "unknown")
-            port = pg.get("port", "unknown")
-            db = pg.get("database", "unknown")
-            output.append(f"  PostgreSQL: {host}:{port}/{db}")
-            if "note" in pg:
-                output.append(f"    Note: {pg['note']}")
+            if pg is not None:
+                host = pg.get("host", "unknown")
+                port = pg.get("port", "unknown")
+                db = pg.get("database", "unknown")
+                output.append(f"  PostgreSQL: {host}:{port}/{db}")
+                if "note" in pg:
+                    output.append(f"    Note: {pg['note']}")
+            else:
+                output.append("  PostgreSQL: unknown (scan failed)")
 
         # Kafka
         if "kafka" in remote:
             kafka = remote["kafka"]
-            bootstrap = kafka.get("bootstrap_servers", "unknown")
-            output.append(f"  Kafka: {bootstrap}")
-            if "note" in kafka:
-                output.append(f"    Note: {kafka['note']}")
+            if kafka is not None:
+                bootstrap = kafka.get("bootstrap_servers", "unknown")
+                output.append(f"  Kafka: {bootstrap}")
+                if "note" in kafka:
+                    output.append(f"    Note: {kafka['note']}")
+            else:
+                output.append("  Kafka: unknown (scan failed)")
 
         # Qdrant
         local = infra_data.get("local_services", {})
         if "qdrant" in local:
             qdrant = local["qdrant"]
-            endpoint = qdrant.get("endpoint", "unknown")
-            output.append(f"  Qdrant: {endpoint}")
-            if "note" in qdrant:
-                output.append(f"    Note: {qdrant['note']}")
+            if qdrant is not None:
+                endpoint = qdrant.get("endpoint", "unknown")
+                output.append(f"  Qdrant: {endpoint}")
+                if "note" in qdrant:
+                    output.append(f"    Note: {qdrant['note']}")
+            else:
+                output.append("  Qdrant: unknown (scan failed)")
 
         # Archon MCP
         if "archon_mcp" in local:
             archon = local["archon_mcp"]
-            endpoint = archon.get("endpoint", "unknown")
-            output.append(f"  Archon MCP: {endpoint}")
-            if "note" in archon:
-                output.append(f"    Note: {archon['note']}")
+            if archon is not None:
+                endpoint = archon.get("endpoint", "unknown")
+                output.append(f"  Archon MCP: {endpoint}")
+                if "note" in archon:
+                    output.append(f"    Note: {archon['note']}")
+            else:
+                output.append("  Archon MCP: unknown (scan failed)")
 
         return "\n".join(output)
 

@@ -178,6 +178,24 @@ class IntelligenceEventClient:
             )
             await self._consumer.start()
 
+            # CRITICAL: Wait for consumer to have partition assignments
+            # This ensures consumer is ready to receive messages BEFORE we return
+            # Without this, there's a race condition where requests are published
+            # before the consumer finishes subscribing, causing missed responses
+            self.logger.debug("Waiting for consumer partition assignment...")
+            max_wait_seconds = 5
+            start_time = asyncio.get_event_loop().time()
+            while not self._consumer.assignment():
+                await asyncio.sleep(0.1)
+                elapsed = asyncio.get_event_loop().time() - start_time
+                if elapsed > max_wait_seconds:
+                    raise TimeoutError(
+                        f"Consumer failed to get partition assignment after {max_wait_seconds}s"
+                    )
+            self.logger.debug(
+                f"Consumer ready with partitions: {self._consumer.assignment()}"
+            )
+
             # Start background consumer task
             asyncio.create_task(self._consume_responses())
 
@@ -520,13 +538,19 @@ class IntelligenceEventClient:
 
         This task runs in the background for the lifetime of the client.
         """
-        self.logger.debug("Starting response consumer task")
+        self.logger.info("Starting response consumer task")
+        self.logger.info(
+            f"Consumer subscribed to topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}"
+        )
 
         try:
             if self._consumer is None:
                 raise RuntimeError("Consumer not initialized. Call start() first.")
 
             async for msg in self._consumer:
+                self.logger.debug(
+                    f"[CONSUMER] Received message: topic={msg.topic}, partition={msg.partition}, offset={msg.offset}"
+                )
                 try:
                     # Parse response
                     response = msg.value
