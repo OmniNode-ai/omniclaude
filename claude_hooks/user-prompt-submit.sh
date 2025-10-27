@@ -13,6 +13,9 @@ export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 export ARCHON_MCP_URL="${ARCHON_MCP_URL:-http://localhost:8051}"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
+# Kafka/Redpanda configuration (moved to 192.168.86.200)
+export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
+
 # Database credentials for hook event logging (required from .env)
 # Set DB_PASSWORD in your .env file or environment
 export DB_PASSWORD="${DB_PASSWORD:-}"

@@ -14,6 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/post_tool_use_enforcer.py"
 LOG_FILE="${SCRIPT_DIR}/logs/post-tool-use.log"
 
+# Kafka/Redpanda configuration (moved to 192.168.86.200)
+export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
+
 # Database credentials for hook event logging (required from .env)
 # Set DB_PASSWORD in your .env file or environment
 export DB_PASSWORD="${DB_PASSWORD:-}"

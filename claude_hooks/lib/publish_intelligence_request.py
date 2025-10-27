@@ -97,7 +97,13 @@ class IntelligenceRequestPublisher:
                     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
                     compression_type="gzip",
                     acks=1,
-                    retries=3,
+                    retries=2,  # Reduced from 3 for faster failure
+                    # CRITICAL: Timeout settings to prevent hangs
+                    request_timeout_ms=1000,  # 1s max per request
+                    connections_max_idle_ms=5000,  # Close idle connections after 5s
+                    metadata_max_age_ms=5000,  # Force metadata refresh after 5s
+                    max_block_ms=2000,  # Max 2s block waiting for buffer/metadata
+                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 logger.debug("Kafka producer initialized")
             except Exception as e:
@@ -129,6 +135,16 @@ class IntelligenceRequestPublisher:
                     group_id=group_id,
                     consumer_timeout_ms=self.timeout_ms,
                     enable_auto_commit=True,
+                    # CRITICAL: Timeout hierarchy to prevent hangs
+                    # heartbeat < fetch_max_wait < session_timeout < request_timeout < connections_max_idle
+                    heartbeat_interval_ms=500,  # 500ms heartbeat
+                    fetch_max_wait_ms=600,  # 600ms fetch wait
+                    session_timeout_ms=2000,  # 2s session timeout
+                    request_timeout_ms=3000,  # 3s request timeout
+                    connections_max_idle_ms=5000,  # 5s idle before close
+                    metadata_max_age_ms=3000,  # 3s metadata refresh
+                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
+                    max_poll_interval_ms=4000,  # 4s max between polls
                 )
                 logger.debug(f"Kafka consumer initialized (group: {group_id})")
             except Exception as e:
