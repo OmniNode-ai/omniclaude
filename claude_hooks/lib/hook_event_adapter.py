@@ -118,8 +118,14 @@ class HookEventAdapter:
                     batch_size=16384,  # 16KB batches
                     # Reliability settings
                     acks=1,  # Wait for leader acknowledgment
-                    retries=3,
+                    retries=2,  # Reduced from 3 for faster failure
                     max_in_flight_requests_per_connection=5,
+                    # CRITICAL: Timeout settings to prevent hangs
+                    request_timeout_ms=1000,  # 1s max per request
+                    connections_max_idle_ms=5000,  # Close idle connections after 5s
+                    metadata_max_age_ms=5000,  # Force metadata refresh after 5s
+                    max_block_ms=2000,  # Max 2s block waiting for buffer/metadata
+                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 self._initialized = True
                 self.logger.debug(
