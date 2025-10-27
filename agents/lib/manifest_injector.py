@@ -45,6 +45,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 # Import IntelligenceEventClient for event bus communication
 try:
@@ -60,6 +61,181 @@ except ImportError:
     from intelligence_event_client import IntelligenceEventClient
 
 logger = logging.getLogger(__name__)
+
+
+class ManifestInjectionStorage:
+    """
+    Storage handler for manifest injection records.
+
+    Stores complete manifest injection records in PostgreSQL for traceability
+    and replay capability.
+    """
+
+    def __init__(
+        self,
+        db_host: Optional[str] = None,
+        db_port: Optional[int] = None,
+        db_name: Optional[str] = None,
+        db_user: Optional[str] = None,
+        db_password: Optional[str] = None,
+    ):
+        """
+        Initialize storage handler.
+
+        Args:
+            db_host: PostgreSQL host (default: env POSTGRES_HOST or 192.168.86.200)
+            db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
+            db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
+            db_user: Database user (default: env POSTGRES_USER or postgres)
+            db_password: Database password (default: env POSTGRES_PASSWORD)
+        """
+        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
+        self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
+        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
+        self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
+        self.db_password = db_password or os.environ.get(
+            "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
+        )
+
+    def store_manifest_injection(
+        self,
+        correlation_id: UUID,
+        agent_name: str,
+        manifest_data: Dict[str, Any],
+        formatted_text: str,
+        query_times: Dict[str, int],
+        sections_included: List[str],
+        **kwargs,
+    ) -> bool:
+        """
+        Store manifest injection record in database.
+
+        Args:
+            correlation_id: Correlation ID linking to routing decision
+            agent_name: Agent receiving the manifest
+            manifest_data: Complete manifest data structure
+            formatted_text: Formatted manifest text injected into prompt
+            query_times: Query performance breakdown {"patterns": 450, ...}
+            sections_included: Sections included in manifest
+            **kwargs: Additional fields (patterns_count, debug_intelligence_successes, etc.)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import psycopg2
+            import psycopg2.extras
+
+            # Connect to database
+            conn = psycopg2.connect(
+                host=self.db_host,
+                port=self.db_port,
+                dbname=self.db_name,
+                user=self.db_user,
+                password=self.db_password,
+            )
+
+            # Extract metadata
+            metadata = manifest_data.get("manifest_metadata", {})
+            manifest_version = metadata.get("version", "unknown")
+            generation_source = metadata.get("source", "unknown")
+            is_fallback = generation_source == "fallback"
+
+            # Calculate totals
+            total_query_time_ms = sum(query_times.values())
+            manifest_size_bytes = len(formatted_text.encode("utf-8"))
+
+            # Extract section counts
+            patterns_count = kwargs.get("patterns_count", 0)
+            infrastructure_services = kwargs.get("infrastructure_services", 0)
+            models_count = kwargs.get("models_count", 0)
+            database_schemas_count = kwargs.get("database_schemas_count", 0)
+            debug_intelligence_successes = kwargs.get("debug_intelligence_successes", 0)
+            debug_intelligence_failures = kwargs.get("debug_intelligence_failures", 0)
+
+            # Collections queried
+            collections_queried = kwargs.get("collections_queried", {})
+
+            # Query failures
+            query_failures = kwargs.get("query_failures", {})
+
+            # Warnings
+            warnings = kwargs.get("warnings", [])
+
+            # Insert record
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO agent_manifest_injections (
+                    correlation_id,
+                    agent_name,
+                    manifest_version,
+                    generation_source,
+                    is_fallback,
+                    sections_included,
+                    patterns_count,
+                    infrastructure_services,
+                    models_count,
+                    database_schemas_count,
+                    debug_intelligence_successes,
+                    debug_intelligence_failures,
+                    collections_queried,
+                    query_times,
+                    total_query_time_ms,
+                    full_manifest_snapshot,
+                    formatted_manifest_text,
+                    manifest_size_bytes,
+                    intelligence_available,
+                    query_failures,
+                    warnings,
+                    created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                )
+                """,
+                (
+                    str(correlation_id),
+                    agent_name,
+                    manifest_version,
+                    generation_source,
+                    is_fallback,
+                    sections_included,
+                    patterns_count,
+                    infrastructure_services,
+                    models_count,
+                    database_schemas_count,
+                    debug_intelligence_successes,
+                    debug_intelligence_failures,
+                    psycopg2.extras.Json(collections_queried),
+                    psycopg2.extras.Json(query_times),
+                    total_query_time_ms,
+                    psycopg2.extras.Json(manifest_data),
+                    formatted_text,
+                    manifest_size_bytes,
+                    not is_fallback,
+                    psycopg2.extras.Json(query_failures),
+                    warnings,
+                ),
+            )
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(
+                f"Stored manifest injection record: correlation_id={correlation_id}, "
+                f"agent={agent_name}, patterns={patterns_count}, "
+                f"query_time={total_query_time_ms}ms"
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to store manifest injection record: {e}", exc_info=True
+            )
+            return False
 
 
 class ManifestInjector:
@@ -93,6 +269,8 @@ class ManifestInjector:
         kafka_brokers: Optional[str] = None,
         enable_intelligence: bool = True,
         query_timeout_ms: int = 5000,
+        enable_storage: bool = True,
+        agent_name: Optional[str] = None,
     ):
         """
         Initialize manifest injector.
@@ -102,12 +280,16 @@ class ManifestInjector:
                 Default: KAFKA_BROKERS env var or "192.168.86.200:29102"
             enable_intelligence: Enable event-based queries
             query_timeout_ms: Timeout for intelligence queries (default: 5000ms)
+            enable_storage: Enable database storage of manifest injections
+            agent_name: Agent name for logging (if known at init time)
         """
         self.kafka_brokers = kafka_brokers or os.environ.get(
             "KAFKA_BROKERS", "192.168.86.200:29102"
         )
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms
+        self.enable_storage = enable_storage
+        self.agent_name = agent_name
 
         # Cached manifest data
         self._manifest_data: Optional[Dict[str, Any]] = None
@@ -116,6 +298,18 @@ class ManifestInjector:
 
         # Cache TTL (refresh after 5 minutes)
         self.cache_ttl_seconds = 300
+
+        # Tracking for current generation
+        self._current_correlation_id: Optional[UUID] = None
+        self._current_query_times: Dict[str, int] = {}
+        self._current_query_failures: Dict[str, Optional[str]] = {}
+        self._current_warnings: List[str] = []
+
+        # Storage handler
+        if self.enable_storage:
+            self._storage = ManifestInjectionStorage()
+        else:
+            self._storage = None
 
         self.logger = logging.getLogger(__name__)
 
@@ -184,17 +378,41 @@ class ManifestInjector:
         Returns:
             Manifest data dictionary
         """
+        import time
+
+        # Convert correlation_id to UUID
+        if isinstance(correlation_id, str):
+            correlation_id_uuid = UUID(correlation_id)
+        else:
+            correlation_id_uuid = correlation_id
+
+        # Store correlation ID for tracking
+        self._current_correlation_id = correlation_id_uuid
+
+        # Reset tracking
+        self._current_query_times = {}
+        self._current_query_failures = {}
+        self._current_warnings = []
+
         # Check cache first
         if not force_refresh and self._is_cache_valid():
-            self.logger.debug("Using cached manifest data")
+            self.logger.debug(
+                f"Using cached manifest data (correlation_id: {correlation_id})"
+            )
+            # Still log cache hit
+            self._store_manifest_if_enabled(from_cache=True)
             return self._manifest_data
 
         if not self.enable_intelligence:
-            self.logger.info("Intelligence queries disabled, using minimal manifest")
+            self.logger.info(
+                f"Intelligence queries disabled, using minimal manifest "
+                f"(correlation_id: {correlation_id})"
+            )
             return self._get_minimal_manifest()
 
+        start_time = time.time()
         self.logger.info(
-            f"Generating dynamic manifest (correlation_id: {correlation_id})"
+            f"[{correlation_id}] Generating dynamic manifest for agent '{self.agent_name or 'unknown'}'"
         )
 
         # Create intelligence client
@@ -216,6 +434,9 @@ class ManifestInjector:
                 "database_schemas": self._query_database_schemas(
                     client, correlation_id
                 ),
+                "debug_intelligence": self._query_debug_intelligence(
+                    client, correlation_id
+                ),
             }
 
             # Wait for all queries with timeout
@@ -233,13 +454,27 @@ class ManifestInjector:
             self._manifest_data = manifest
             self._last_update = datetime.now(UTC)
 
-            self.logger.info("Dynamic manifest generated successfully")
+            # Calculate total generation time
+            total_time_ms = int((time.time() - start_time) * 1000)
+
+            self.logger.info(
+                f"[{correlation_id}] Dynamic manifest generated successfully "
+                f"(total_time: {total_time_ms}ms, patterns: {len(manifest.get('patterns', {}).get('available', []))}, "
+                f"debug_intel: {manifest.get('debug_intelligence', {}).get('total_successes', 0)} successes/"
+                f"{manifest.get('debug_intelligence', {}).get('total_failures', 0)} failures)"
+            )
+
+            # Store manifest injection record
+            self._store_manifest_if_enabled(from_cache=False)
+
             return manifest
 
         except Exception as e:
             self.logger.error(
-                f"Failed to query intelligence service: {e}", exc_info=True
+                f"[{correlation_id}] Failed to query intelligence service: {e}",
+                exc_info=True,
             )
+            self._current_warnings.append(f"Intelligence query failed: {str(e)}")
             # Fall back to minimal manifest
             return self._get_minimal_manifest()
 
@@ -265,8 +500,14 @@ class ManifestInjector:
         Returns:
             Patterns data dictionary with merged results from both collections
         """
+        import time
+
+        start_time = time.time()
+
         try:
-            self.logger.debug("Querying patterns from both collections")
+            self.logger.debug(
+                f"[{correlation_id}] Querying patterns from both collections"
+            )
 
             # Query execution_patterns collection (ONEX architectural templates)
             self.logger.debug("Querying execution_patterns collection...")
@@ -311,16 +552,20 @@ class ManifestInjector:
             code_time = code_result.get("query_time_ms", 0) if code_result else 0
             total_query_time = exec_time + code_time
 
+            # Track timing
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["patterns"] = elapsed_ms
+
             self.logger.info(
-                f"Pattern query results: {len(exec_patterns)} from execution_patterns, "
+                f"[{correlation_id}] Pattern query results: {len(exec_patterns)} from execution_patterns, "
                 f"{len(code_patterns)} from code_patterns, "
                 f"{len(all_patterns)} total patterns, "
-                f"query_time={total_query_time}ms"
+                f"query_time={total_query_time}ms, elapsed={elapsed_ms}ms"
             )
 
             if all_patterns:
-                self.logger.info(
-                    f"First pattern: {all_patterns[0].get('name', 'unknown')}"
+                self.logger.debug(
+                    f"[{correlation_id}] First pattern: {all_patterns[0].get('name', 'unknown')}"
                 )
 
             return {
@@ -334,7 +579,10 @@ class ManifestInjector:
             }
 
         except Exception as e:
-            self.logger.warning(f"Pattern query failed: {e}")
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["patterns"] = elapsed_ms
+            self._current_query_failures["patterns"] = str(e)
+            self.logger.warning(f"[{correlation_id}] Pattern query failed: {e}")
             return {"patterns": [], "error": str(e)}
 
     async def _query_infrastructure(
@@ -358,8 +606,12 @@ class ManifestInjector:
         Returns:
             Infrastructure data dictionary
         """
+        import time
+
+        start_time = time.time()
+
         try:
-            self.logger.debug("Querying infrastructure topology")
+            self.logger.debug(f"[{correlation_id}] Querying infrastructure topology")
 
             result = await client.request_code_analysis(
                 content="",  # Empty content for infrastructure scan
@@ -375,10 +627,19 @@ class ManifestInjector:
                 timeout_ms=self.query_timeout_ms,
             )
 
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["infrastructure"] = elapsed_ms
+            self.logger.info(
+                f"[{correlation_id}] Infrastructure query completed in {elapsed_ms}ms"
+            )
+
             return result
 
         except Exception as e:
-            self.logger.warning(f"Infrastructure query failed: {e}")
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["infrastructure"] = elapsed_ms
+            self._current_query_failures["infrastructure"] = str(e)
+            self.logger.warning(f"[{correlation_id}] Infrastructure query failed: {e}")
             return {"infrastructure": {}, "error": str(e)}
 
     async def _query_models(
@@ -401,8 +662,12 @@ class ManifestInjector:
         Returns:
             Models data dictionary
         """
+        import time
+
+        start_time = time.time()
+
         try:
-            self.logger.debug("Querying available models")
+            self.logger.debug(f"[{correlation_id}] Querying available models")
 
             result = await client.request_code_analysis(
                 content="",  # Empty content for model discovery
@@ -417,10 +682,19 @@ class ManifestInjector:
                 timeout_ms=self.query_timeout_ms,
             )
 
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["models"] = elapsed_ms
+            self.logger.info(
+                f"[{correlation_id}] Models query completed in {elapsed_ms}ms"
+            )
+
             return result
 
         except Exception as e:
-            self.logger.warning(f"Model query failed: {e}")
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["models"] = elapsed_ms
+            self._current_query_failures["models"] = str(e)
+            self.logger.warning(f"[{correlation_id}] Model query failed: {e}")
             return {"models": {}, "error": str(e)}
 
     async def _query_database_schemas(
@@ -443,8 +717,12 @@ class ManifestInjector:
         Returns:
             Database schemas dictionary
         """
+        import time
+
+        start_time = time.time()
+
         try:
-            self.logger.debug("Querying database schemas")
+            self.logger.debug(f"[{correlation_id}] Querying database schemas")
 
             result = await client.request_code_analysis(
                 content="",  # Empty content for schema discovery
@@ -459,11 +737,88 @@ class ManifestInjector:
                 timeout_ms=self.query_timeout_ms,
             )
 
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["database_schemas"] = elapsed_ms
+            self.logger.info(
+                f"[{correlation_id}] Database schemas query completed in {elapsed_ms}ms"
+            )
+
             return result
 
         except Exception as e:
-            self.logger.warning(f"Database schema query failed: {e}")
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["database_schemas"] = elapsed_ms
+            self._current_query_failures["database_schemas"] = str(e)
+            self.logger.warning(f"[{correlation_id}] Database schema query failed: {e}")
             return {"schemas": {}, "error": str(e)}
+
+    async def _query_debug_intelligence(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query debug intelligence from workflow_events collection.
+
+        Retrieves similar past issues/workflows to avoid retrying failed approaches.
+
+        Queries workflow_events collection in Qdrant for:
+        - Similar workflows that failed (what didn't work)
+        - Similar workflows that succeeded (what worked)
+        - Common error patterns
+        - Successful resolution patterns
+
+        Args:
+            client: Intelligence event client
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Debug intelligence dictionary with past successes/failures
+        """
+        import time
+
+        start_time = time.time()
+
+        try:
+            self.logger.debug(
+                f"[{correlation_id}] Querying debug intelligence from workflow_events"
+            )
+
+            # Query workflow_events collection for similar issues
+            result = await client.request_code_analysis(
+                content="",  # Empty content for workflow discovery
+                source_path="workflow_events",
+                language="json",
+                options={
+                    "operation_type": "DEBUG_INTELLIGENCE_QUERY",
+                    "collection_name": "workflow_events",
+                    "include_failures": True,  # Get failed workflows to avoid retrying
+                    "include_successes": True,  # Get successful workflows as examples
+                    "limit": 20,  # Get recent similar workflows
+                },
+                timeout_ms=self.query_timeout_ms,
+            )
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["debug_intelligence"] = elapsed_ms
+
+            if result:
+                self.logger.info(
+                    f"[{correlation_id}] Debug intelligence query completed in {elapsed_ms}ms: "
+                    f"{len(result.get('similar_workflows', []))} similar workflows"
+                )
+
+            return result
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["debug_intelligence"] = elapsed_ms
+            self._current_query_failures["debug_intelligence"] = str(e)
+            self.logger.warning(
+                f"[{correlation_id}] Debug intelligence query failed: {e}"
+            )
+            # Not critical - return empty result
+            return {"similar_workflows": [], "error": str(e)}
 
     def _build_manifest_from_results(
         self,
@@ -526,6 +881,16 @@ class ManifestInjector:
         else:
             manifest["database_schemas"] = self._format_schemas_result(schemas_result)
 
+        # Extract debug intelligence
+        debug_result = results.get("debug_intelligence", {})
+        if isinstance(debug_result, Exception):
+            self.logger.warning(f"Debug intelligence query failed: {debug_result}")
+            manifest["debug_intelligence"] = {"error": str(debug_result)}
+        else:
+            manifest["debug_intelligence"] = self._format_debug_intelligence_result(
+                debug_result
+            )
+
         return manifest
 
     def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -577,6 +942,26 @@ class ManifestInjector:
         return {
             "tables": result.get("tables", []),
             "total_tables": len(result.get("tables", [])),
+        }
+
+    def _format_debug_intelligence_result(
+        self, result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Format debug intelligence query result into manifest structure."""
+        similar_workflows = result.get("similar_workflows", [])
+
+        # Separate successes and failures
+        successes = [w for w in similar_workflows if w.get("success", False)]
+        failures = [w for w in similar_workflows if not w.get("success", True)]
+
+        return {
+            "similar_workflows": {
+                "successes": successes[:10],  # Top 10 successful workflows
+                "failures": failures[:10],  # Top 10 failed workflows
+            },
+            "total_successes": len(successes),
+            "total_failures": len(failures),
+            "query_time_ms": result.get("query_time_ms", 0),
         }
 
     def _is_cache_valid(self) -> bool:
@@ -709,6 +1094,7 @@ class ManifestInjector:
             "models": self._format_models,
             "infrastructure": self._format_infrastructure,
             "database_schemas": self._format_database_schemas,
+            "debug_intelligence": self._format_debug_intelligence,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -891,6 +1277,51 @@ class ManifestInjector:
 
         return "\n".join(output)
 
+    def _format_debug_intelligence(self, debug_data: Dict) -> str:
+        """Format debug intelligence section."""
+        output = ["DEBUG INTELLIGENCE (Similar Workflows):"]
+
+        workflows = debug_data.get("similar_workflows", {})
+        successes = workflows.get("successes", [])
+        failures = workflows.get("failures", [])
+
+        if not successes and not failures:
+            output.append(
+                "  (No similar workflows found - first time seeing this pattern)"
+            )
+            return "\n".join(output)
+
+        output.append(
+            f"  Total Similar: {debug_data.get('total_successes', 0)} successes, "
+            f"{debug_data.get('total_failures', 0)} failures"
+        )
+        output.append("")
+
+        # Show successful approaches
+        if successes:
+            output.append("  ✅ SUCCESSFUL APPROACHES (what worked):")
+            for workflow in successes[:5]:  # Top 5 successes
+                tool = workflow.get("tool_name", "unknown")
+                reasoning = workflow.get("reasoning", "")
+                if reasoning:
+                    output.append(f"    • {tool}: {reasoning[:80]}")
+                else:
+                    output.append(f"    • {tool}")
+
+        # Show failed approaches to avoid
+        if failures:
+            output.append("")
+            output.append("  ❌ FAILED APPROACHES (avoid retrying):")
+            for workflow in failures[:5]:  # Top 5 failures
+                tool = workflow.get("tool_name", "unknown")
+                error = workflow.get("error", "")
+                if error:
+                    output.append(f"    • {tool}: {error[:80]}")
+                else:
+                    output.append(f"    • {tool}")
+
+        return "\n".join(output)
+
     def get_manifest_summary(self) -> Dict[str, Any]:
         """
         Get summary statistics about the manifest.
@@ -919,6 +1350,99 @@ class ManifestInjector:
                 else None
             ),
         }
+
+    def _store_manifest_if_enabled(self, from_cache: bool = False) -> None:
+        """
+        Store manifest injection record if storage is enabled.
+
+        Args:
+            from_cache: Whether manifest came from cache
+        """
+        if not self.enable_storage or not self._storage:
+            return
+
+        if self._manifest_data is None:
+            self.logger.warning("Cannot store manifest: no manifest data available")
+            return
+
+        if self._current_correlation_id is None:
+            self.logger.warning("Cannot store manifest: no correlation ID set")
+            return
+
+        try:
+            # Extract section counts
+            manifest = self._manifest_data
+            patterns_data = manifest.get("patterns", {})
+            infrastructure_data = manifest.get("infrastructure", {})
+            models_data = manifest.get("models", {})
+            schemas_data = manifest.get("database_schemas", {})
+            debug_data = manifest.get("debug_intelligence", {})
+
+            patterns_count = len(patterns_data.get("available", []))
+            collections_queried = patterns_data.get("collections_queried", {})
+
+            # Count infrastructure services
+            remote_services = infrastructure_data.get("remote_services", {})
+            local_services = infrastructure_data.get("local_services", {})
+            infrastructure_services = len(remote_services) + len(local_services)
+
+            # Count models
+            ai_models = models_data.get("ai_models", {})
+            models_count = len(ai_models.get("providers", []))
+
+            # Count schemas
+            database_schemas_count = len(schemas_data.get("tables", []))
+
+            # Debug intelligence counts
+            workflows = debug_data.get("similar_workflows", {})
+            debug_intelligence_successes = len(workflows.get("successes", []))
+            debug_intelligence_failures = len(workflows.get("failures", []))
+
+            # Get formatted text (generate if not cached)
+            if self._cached_formatted:
+                formatted_text = self._cached_formatted
+            else:
+                formatted_text = self.format_for_prompt()
+
+            # Determine sections included
+            sections_included = list(manifest.keys())
+            if "manifest_metadata" in sections_included:
+                sections_included.remove("manifest_metadata")
+
+            # Store record
+            success = self._storage.store_manifest_injection(
+                correlation_id=self._current_correlation_id,
+                agent_name=self.agent_name or "unknown",
+                manifest_data=manifest,
+                formatted_text=formatted_text,
+                query_times=self._current_query_times,
+                sections_included=sections_included,
+                patterns_count=patterns_count,
+                infrastructure_services=infrastructure_services,
+                models_count=models_count,
+                database_schemas_count=database_schemas_count,
+                debug_intelligence_successes=debug_intelligence_successes,
+                debug_intelligence_failures=debug_intelligence_failures,
+                collections_queried=collections_queried,
+                query_failures=self._current_query_failures,
+                warnings=self._current_warnings,
+            )
+
+            if success:
+                self.logger.debug(
+                    f"[{self._current_correlation_id}] Stored manifest injection record "
+                    f"(from_cache: {from_cache})"
+                )
+            else:
+                self.logger.warning(
+                    f"[{self._current_correlation_id}] Failed to store manifest injection record"
+                )
+
+        except Exception as e:
+            self.logger.error(
+                f"[{self._current_correlation_id}] Error storing manifest: {e}",
+                exc_info=True,
+            )
 
 
 # Convenience function for quick access (sync wrapper)
