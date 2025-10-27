@@ -32,6 +32,13 @@ from typing import Any, Dict
 
 import requests
 
+# Service URL configuration from environment
+INTELLIGENCE_SERVICE_URL = os.environ.get(
+    "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
+)
+MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
+MCP_SERVER_URL = os.environ.get("ARCHON_MCP_URL", "http://localhost:8051")
+
 
 def check_running_services() -> Dict[str, Any]:
     """Check which required services are running"""
@@ -42,7 +49,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check intelligence service (Phase 4)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8053/health"],
+            ["curl", "-s", f"{INTELLIGENCE_SERVICE_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -83,7 +90,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check main server (Port 8181)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8181/health"],
+            ["curl", "-s", f"{MAIN_SERVER_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -106,7 +113,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check MCP server (Port 8051)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8051/health"],
+            ["curl", "-s", f"{MCP_SERVER_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -250,12 +257,12 @@ def check_running_services() -> Dict[str, Any]:
 def check_network_connectivity() -> Dict[str, Any]:
     """Check network connectivity to required endpoints"""
     endpoints = [
-        ("Intelligence Service", "http://localhost:8053/health"),
-        ("Main Server", "http://localhost:8181/health"),
-        ("MCP Server", "http://localhost:8051/health"),
+        ("Intelligence Service", f"{INTELLIGENCE_SERVICE_URL}/health"),
+        ("Main Server", f"{MAIN_SERVER_URL}/health"),
+        ("MCP Server", f"{MCP_SERVER_URL}/health"),
         (
             "Pattern Lineage API",
-            "http://localhost:8053/api/pattern-traceability/health",
+            f"{INTELLIGENCE_SERVICE_URL}/api/pattern-traceability/health",
         ),
     ]
 
@@ -512,7 +519,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
         }
 
         response = requests.post(
-            "http://localhost:8053/api/pattern-traceability/lineage/track",
+            f"{INTELLIGENCE_SERVICE_URL}/api/pattern-traceability/lineage/track",
             json=test_payload,
             timeout=5,
         )

@@ -201,9 +201,18 @@ class CRUDPattern:
             )
 
     def _get_required_fields(self) -> List[str]:
-        """Get required fields for {entity_name} creation"""
-        # TODO: Implement field requirements based on schema
-        return []
+        """
+        Get required fields for entity creation.
+
+        Override this method in generated nodes to specify required fields
+        based on the entity schema.
+
+        Returns:
+            List of required field names
+        """
+        # Default implementation - can be overridden by generated code
+        # Common required fields for most entities
+        return ["name", "description"]
 '''
 
     def _generate_read_method(

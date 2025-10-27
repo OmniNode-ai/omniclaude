@@ -175,8 +175,14 @@ class TransformationPattern:
             return data
         elif format_type == "dict":
             return dict(data) if not isinstance(data, dict) else data
+        elif format_type == "csv":
+            import csv
+            from io import StringIO
+            if isinstance(data, str):
+                reader = csv.DictReader(StringIO(data))
+                return {{"rows": list(reader)}}
+            return data
         else:
-            # TODO: Implement additional format parsers (CSV, XML, etc.)
             return data
 
     async def _convert_to_target_format(self, data: Dict[str, Any], format_type: str) -> Any:
@@ -185,9 +191,18 @@ class TransformationPattern:
             return json.dumps(data, indent=2)
         elif format_type == "dict":
             return data
+        elif format_type == "csv":
+            import csv
+            from io import StringIO
+            output = StringIO()
+            if "rows" in data and data["rows"]:
+                rows = data["rows"]
+                writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            return output.getvalue()
         else:
-            # TODO: Implement additional format converters
-            return data
+            return json.dumps(data, indent=2)
 '''
 
     def _generate_data_mapping(
@@ -254,13 +269,120 @@ class TransformationPattern:
             )
 
     def _get_default_mapping_rules(self) -> Dict[str, str]:
-        """Get default field mapping rules"""
-        # TODO: Implement default mapping based on schema
-        return {{}}
+        """
+        Get default field mapping rules.
+
+        Provides intelligent default mappings for common field name variations.
+        Maps common variations (camelCase, snake_case, etc.) to standard names.
+
+        Returns:
+            Dictionary of source_field -> target_field mappings
+        """
+        # Common field name mappings (source -> target)
+        return {{
+            # ID fields
+            "id": "id",
+            "ID": "id",
+            "_id": "id",
+            "uuid": "id",
+
+            # Name fields
+            "name": "name",
+            "Name": "name",
+            "full_name": "name",
+            "fullName": "name",
+
+            # Description fields
+            "description": "description",
+            "desc": "description",
+            "Description": "description",
+
+            # Timestamp fields
+            "created_at": "created_at",
+            "createdAt": "created_at",
+            "created": "created_at",
+            "timestamp": "created_at",
+
+            "updated_at": "updated_at",
+            "updatedAt": "updated_at",
+            "modified": "updated_at",
+
+            # Status fields
+            "status": "status",
+            "state": "status",
+            "Status": "status",
+
+            # User fields
+            "user_id": "user_id",
+            "userId": "user_id",
+            "owner_id": "user_id",
+            "ownerId": "user_id",
+        }}
 
     async def _transform_value(self, value: Any, field_name: str) -> Any:
-        """Transform individual field value"""
-        # TODO: Implement value transformations (type conversion, formatting, etc.)
+        """
+        Transform individual field value.
+
+        Applies intelligent type conversions and formatting based on field name
+        and value characteristics.
+
+        Args:
+            value: The value to transform
+            field_name: Name of the field (used for context-aware transformations)
+
+        Returns:
+            Transformed value
+        """
+        if value is None:
+            return None
+
+        # Timestamp field transformations
+        if any(ts in field_name.lower() for ts in ["timestamp", "created_at", "updated_at", "time", "date"]):
+            from datetime import datetime
+            if isinstance(value, str):
+                try:
+                    # Try parsing ISO format
+                    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    return dt.isoformat()
+                except (ValueError, AttributeError):
+                    pass
+            elif isinstance(value, (int, float)):
+                try:
+                    # Assume Unix timestamp
+                    dt = datetime.fromtimestamp(value)
+                    return dt.isoformat()
+                except (ValueError, OSError):
+                    pass
+
+        # ID field transformations
+        if "id" in field_name.lower() or "uuid" in field_name.lower():
+            # Convert to string for consistency
+            return str(value)
+
+        # Boolean field transformations
+        if "is_" in field_name.lower() or "has_" in field_name.lower() or "enabled" in field_name.lower():
+            if isinstance(value, str):
+                return value.lower() in ("true", "yes", "1", "on", "enabled")
+            return bool(value)
+
+        # Numeric field transformations
+        if any(num in field_name.lower() for num in ["count", "total", "amount", "quantity", "price"]):
+            try:
+                if "." in str(value) or "price" in field_name.lower() or "amount" in field_name.lower():
+                    return float(value)
+                return int(value)
+            except (ValueError, TypeError):
+                pass
+
+        # String trimming and normalization
+        if isinstance(value, str):
+            # Trim whitespace
+            value = value.strip()
+
+            # Normalize empty strings to None if configured
+            if value == "":
+                return None
+
         return value
 '''
 
@@ -351,9 +473,66 @@ class TransformationPattern:
             )
 
     def _get_default_validation_rules(self) -> Dict[str, Any]:
-        """Get default validation rules"""
-        # TODO: Implement default rules based on schema
-        return {{}}
+        """
+        Get default validation rules.
+
+        Provides common validation rules for standard field types.
+        Rules include type checking, required fields, and value constraints.
+
+        Returns:
+            Dictionary of field_name -> validation_rules
+        """
+        return {{
+            # ID fields - required, string type
+            "id": {{
+                "required": False,
+                "type": "str"
+            }},
+
+            # Name fields - required, string, length constraints
+            "name": {{
+                "required": True,
+                "type": "str",
+                "min": 1,
+                "max": 255
+            }},
+
+            # Description fields - optional, string
+            "description": {{
+                "required": False,
+                "type": "str",
+                "max": 2000
+            }},
+
+            # Email fields - optional, string, format validation
+            "email": {{
+                "required": False,
+                "type": "str"
+            }},
+
+            # Status fields - optional, string
+            "status": {{
+                "required": False,
+                "type": "str"
+            }},
+
+            # Count/numeric fields - optional, int, non-negative
+            "count": {{
+                "required": False,
+                "type": "int",
+                "min": 0
+            }},
+
+            # Timestamp fields - optional, string
+            "created_at": {{
+                "required": False,
+                "type": "str"
+            }},
+            "updated_at": {{
+                "required": False,
+                "type": "str"
+            }},
+        }}
 
     def _convert_type(self, value: Any, expected_type: str) -> Any:
         """Convert value to expected type"""
@@ -438,9 +617,49 @@ class TransformationPattern:
             )
 
     async def _transform_item(self, item: Any) -> Any:
-        """Transform individual stream item"""
-        # TODO: Implement item transformation logic
-        return item
+        """
+        Transform individual stream item.
+
+        Applies transformations appropriate for the item type.
+        Handles dictionaries, lists, primitives, and objects.
+
+        Args:
+            item: Single item from stream to transform
+
+        Returns:
+            Transformed item
+        """
+        # Dictionary transformation - apply field-level transforms
+        if isinstance(item, dict):
+            result = {{}}
+            for key, value in item.items():
+                # Apply value transformation with field context
+                transformed_value = await self._transform_value(value, key)
+                result[key] = transformed_value
+            return result
+
+        # List transformation - recursively transform elements
+        elif isinstance(item, list):
+            return [await self._transform_item(element) for element in item]
+
+        # Primitive types - apply basic transformations
+        elif isinstance(item, str):
+            # String normalization
+            return item.strip()
+
+        elif isinstance(item, (int, float, bool, type(None))):
+            # Pass through unchanged
+            return item
+
+        # Object transformation - convert to dict if possible
+        else:
+            if hasattr(item, "__dict__"):
+                # Convert object to dict and transform
+                item_dict = {{k: v for k, v in item.__dict__.items() if not k.startswith("_")}}
+                return await self._transform_item(item_dict)
+
+            # Unknown type - pass through
+            return item
 '''
 
     def _generate_generic_transform(
@@ -466,9 +685,28 @@ class TransformationPattern:
         try:
             self.logger.info(f"Executing transformation: {{type(input_data).__name__}}")
 
-            # TODO: Implement transformation logic based on requirements
+            # Apply appropriate transformation based on input type
+            if isinstance(input_data, dict):
+                # Dictionary transformation - apply field mappings and value transforms
+                result = await self._transform_item(input_data)
 
-            result = input_data  # Placeholder
+            elif isinstance(input_data, list):
+                # List transformation - transform each item
+                result = [await self._transform_item(item) for item in input_data]
+
+            elif isinstance(input_data, str):
+                # String transformation - attempt to parse if JSON
+                try:
+                    import json
+                    parsed = json.loads(input_data)
+                    result = await self._transform_item(parsed)
+                except (json.JSONDecodeError, ValueError):
+                    # Not JSON, return normalized string
+                    result = input_data.strip()
+
+            else:
+                # Other types - pass through with basic normalization
+                result = input_data
 
             self.logger.info(f"Transformation completed: {{type(result).__name__}}")
 

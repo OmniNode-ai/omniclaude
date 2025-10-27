@@ -82,13 +82,13 @@ class HookEventAdapter:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - Default: KAFKA_BROKERS env var or "192.168.86.200:29102"
-                - Remote broker: "192.168.86.200:29102" (primary)
+                - Default: KAFKA_BROKERS env var or "192.168.86.200:9092"
+                - Remote broker: "192.168.86.200:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
-            "KAFKA_BROKERS", "192.168.86.200:29102"
+            "KAFKA_BROKERS", "192.168.86.200:9092"
         )
         self.enable_events = enable_events
 

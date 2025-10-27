@@ -33,7 +33,10 @@ def load_manifest():
     try:
         from manifest_injector import inject_manifest
 
-        manifest = inject_manifest()
+        # Read agent_name from environment (set by hook)
+        agent_name = os.environ.get("AGENT_NAME")
+
+        manifest = inject_manifest(agent_name=agent_name)
         return manifest
     except FileNotFoundError:
         # Manifest file doesn't exist - non-blocking

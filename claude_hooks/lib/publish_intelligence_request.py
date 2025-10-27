@@ -72,7 +72,7 @@ class IntelligenceRequestPublisher:
             timeout_ms: Response timeout in milliseconds
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
-            "KAFKA_BROKERS", "192.168.86.200:29102"
+            "KAFKA_BROKERS", "192.168.86.200:9092"
         )
         self.timeout_ms = timeout_ms
 
@@ -406,7 +406,7 @@ def main():
     parser.add_argument(
         "--kafka-brokers",
         default=None,
-        help="Kafka bootstrap servers (default: KAFKA_BROKERS env or 192.168.86.200:29102)",
+        help="Kafka bootstrap servers (default: KAFKA_BROKERS env or 192.168.86.200:9092)",
     )
 
     parser.add_argument(

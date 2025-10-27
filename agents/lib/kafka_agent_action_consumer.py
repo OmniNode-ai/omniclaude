@@ -56,7 +56,7 @@ class KafkaAgentActionConsumer:
         kafka_brokers_str = kafka_brokers or os.getenv("KAFKA_BROKERS")
         if not kafka_brokers_str:
             raise ValueError(
-                "KAFKA_BROKERS must be set. Example: KAFKA_BROKERS=192.168.86.200:29102"
+                "KAFKA_BROKERS must be set. Example: KAFKA_BROKERS=192.168.86.200:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = group_id

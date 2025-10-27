@@ -22,7 +22,7 @@ from pathlib import Path
 from uuid import uuid4
 
 
-def load_manifest(correlation_id: str = None):
+def load_manifest(correlation_id: str = None, agent_name: str = None):
     """
     Load and return dynamic system manifest.
 
@@ -31,6 +31,7 @@ def load_manifest(correlation_id: str = None):
 
     Args:
         correlation_id: Optional correlation ID for tracking (auto-generated if not provided)
+        agent_name: Optional agent name for logging/traceability
 
     Returns:
         Formatted manifest string ready for agent prompt injection
@@ -61,9 +62,9 @@ def load_manifest(correlation_id: str = None):
     try:
         from manifest_injector import inject_manifest
 
-        # Call inject_manifest with correlation_id (new v2.0 API)
+        # Call inject_manifest with correlation_id and agent_name (new v2.0 API)
         # This will query event bus for dynamic data or fall back to minimal manifest
-        manifest = inject_manifest(correlation_id=correlation_id)
+        manifest = inject_manifest(correlation_id=correlation_id, agent_name=agent_name)
         return manifest
 
     except ImportError as e:
@@ -84,8 +85,11 @@ def load_manifest(correlation_id: str = None):
 
 
 if __name__ == "__main__":
-    # Test with explicit correlation ID
+    # Test with explicit correlation ID and agent_name from environment
     test_correlation_id = str(uuid4())
-    print(f"Testing manifest load (correlation_id: {test_correlation_id})")
+    agent_name = os.environ.get("AGENT_NAME")
+    print(
+        f"Testing manifest load (correlation_id: {test_correlation_id}, agent_name: {agent_name})"
+    )
     print("=" * 70)
-    print(load_manifest(test_correlation_id))
+    print(load_manifest(test_correlation_id, agent_name))
