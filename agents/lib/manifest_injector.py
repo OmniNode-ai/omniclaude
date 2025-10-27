@@ -253,22 +253,24 @@ class ManifestInjector:
         correlation_id: str,
     ) -> Dict[str, Any]:
         """
-        Query available code generation patterns.
+        Query available code generation patterns from BOTH collections.
 
-        Uses PATTERN_EXTRACTION operation to discover patterns from
-        Qdrant vector database.
+        Queries both execution_patterns (ONEX templates) and code_patterns
+        (real code implementations) from Qdrant vector database.
 
         Args:
             client: Intelligence event client
             correlation_id: Correlation ID for tracking
 
         Returns:
-            Patterns data dictionary
+            Patterns data dictionary with merged results from both collections
         """
         try:
-            self.logger.debug("Querying available patterns")
+            self.logger.debug("Querying patterns from both collections")
 
-            result = await client.request_code_analysis(
+            # Query execution_patterns collection (ONEX architectural templates)
+            self.logger.debug("Querying execution_patterns collection...")
+            exec_result = await client.request_code_analysis(
                 content="",  # Empty content for pattern discovery
                 source_path="node_*_*.py",  # Pattern for ONEX nodes
                 language="python",
@@ -276,29 +278,60 @@ class ManifestInjector:
                     "operation_type": "PATTERN_EXTRACTION",
                     "include_patterns": True,
                     "include_metrics": False,
-                    # Removed pattern_types filter - was blocking all patterns from Qdrant
-                    # The actual patterns (Semantic Cache Reducer, Event Bus Producer Effect, etc.)
-                    # don't match the hardcoded filter types (CRUD, Transformation, etc.)
+                    "collection_name": "execution_patterns",
+                    "limit": 50,  # Get more patterns from this collection
                 },
                 timeout_ms=self.query_timeout_ms,
             )
 
-            # Debug logging
-            if result is None:
-                self.logger.warning("Pattern query returned None!")
-                return {"patterns": [], "error": "No response received"}
-
-            patterns_count = len(result.get("patterns", []))
-            self.logger.info(
-                f"Pattern query result: {patterns_count} patterns, "
-                f"query_time={result.get('query_time_ms', 0)}ms"
+            # Query code_patterns collection (real Python implementations)
+            self.logger.debug("Querying code_patterns collection...")
+            code_result = await client.request_code_analysis(
+                content="",  # Empty content for pattern discovery
+                source_path="*.py",  # All Python files
+                language="python",
+                options={
+                    "operation_type": "PATTERN_EXTRACTION",
+                    "include_patterns": True,
+                    "include_metrics": False,
+                    "collection_name": "code_patterns",
+                    "limit": 100,  # Get more patterns from this collection
+                },
+                timeout_ms=self.query_timeout_ms,
             )
-            if result.get("patterns"):
+
+            # Merge results from both collections
+            exec_patterns = exec_result.get("patterns", []) if exec_result else []
+            code_patterns = code_result.get("patterns", []) if code_result else []
+
+            all_patterns = exec_patterns + code_patterns
+
+            # Calculate combined query time
+            exec_time = exec_result.get("query_time_ms", 0) if exec_result else 0
+            code_time = code_result.get("query_time_ms", 0) if code_result else 0
+            total_query_time = exec_time + code_time
+
+            self.logger.info(
+                f"Pattern query results: {len(exec_patterns)} from execution_patterns, "
+                f"{len(code_patterns)} from code_patterns, "
+                f"{len(all_patterns)} total patterns, "
+                f"query_time={total_query_time}ms"
+            )
+
+            if all_patterns:
                 self.logger.info(
-                    f"First pattern: {result['patterns'][0].get('name', 'unknown')}"
+                    f"First pattern: {all_patterns[0].get('name', 'unknown')}"
                 )
 
-            return result
+            return {
+                "patterns": all_patterns,
+                "query_time_ms": total_query_time,
+                "total_count": len(all_patterns),
+                "collections_queried": {
+                    "execution_patterns": len(exec_patterns),
+                    "code_patterns": len(code_patterns),
+                },
+            }
 
         except Exception as e:
             self.logger.warning(f"Pattern query failed: {e}")
@@ -498,6 +531,7 @@ class ManifestInjector:
     def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format patterns query result into manifest structure."""
         patterns = result.get("patterns", [])
+        collections_queried = result.get("collections_queried", {})
 
         return {
             "available": [
@@ -513,6 +547,7 @@ class ManifestInjector:
             ],
             "total_count": len(patterns),
             "query_time_ms": result.get("query_time_ms", 0),
+            "collections_queried": collections_queried,
         }
 
     def _format_infrastructure_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -714,11 +749,23 @@ class ManifestInjector:
         output = ["AVAILABLE PATTERNS:"]
 
         patterns = patterns_data.get("available", [])
+        collections_queried = patterns_data.get("collections_queried", {})
+
         if not patterns:
             output.append("  (No patterns discovered - use built-in patterns)")
             return "\n".join(output)
 
-        for pattern in patterns[:10]:  # Limit to top 10
+        # Show collection statistics
+        if collections_queried:
+            output.append(
+                f"  Collections: execution_patterns ({collections_queried.get('execution_patterns', 0)}), "
+                f"code_patterns ({collections_queried.get('code_patterns', 0)})"
+            )
+            output.append("")
+
+        # Show top 20 patterns (increased from 10 to show more variety)
+        display_limit = 20
+        for pattern in patterns[:display_limit]:
             output.append(
                 f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence)"
             )
@@ -727,8 +774,11 @@ class ManifestInjector:
             if pattern.get("node_types"):
                 output.append(f"    Node Types: {', '.join(pattern['node_types'])}")
 
-        if len(patterns) > 10:
-            output.append(f"  ... and {len(patterns) - 10} more patterns")
+        if len(patterns) > display_limit:
+            output.append(f"  ... and {len(patterns) - display_limit} more patterns")
+
+        output.append("")
+        output.append(f"  Total: {len(patterns)} patterns available")
 
         return "\n".join(output)
 
