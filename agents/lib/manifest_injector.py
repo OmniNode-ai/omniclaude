@@ -177,6 +177,7 @@ class ManifestCache:
             "models": default_ttl_seconds * 3,  # 15 minutes
             "database_schemas": default_ttl_seconds,  # 5 minutes
             "debug_intelligence": default_ttl_seconds // 2,  # 2.5 minutes
+            "filesystem": default_ttl_seconds,  # 5 minutes
             "full_manifest": default_ttl_seconds,  # 5 minutes
         }
         self.metrics: Dict[str, CacheMetrics] = {}
@@ -642,19 +643,36 @@ class ManifestInjector:
             self._store_manifest_if_enabled(from_cache=True)
             return self._manifest_data
 
-        if not self.enable_intelligence:
-            self.logger.info(
-                f"Intelligence queries disabled, using minimal manifest "
-                f"(correlation_id: {correlation_id})"
-            )
-            return self._get_minimal_manifest()
-
         start_time = time.time()
         self.logger.info(
             f"[{correlation_id}] Generating dynamic manifest for agent '{self.agent_name or 'unknown'}'"
         )
 
-        # Create intelligence client
+        # Always query filesystem (local operation, doesn't require intelligence service)
+        # Create a dummy client for filesystem query (not actually used)
+        from intelligence_event_client import IntelligenceEventClient
+
+        dummy_client = IntelligenceEventClient(
+            bootstrap_servers=self.kafka_brokers,
+            enable_intelligence=False,
+        )
+
+        # Query filesystem first (always)
+        filesystem_result = await self._query_filesystem(dummy_client, correlation_id)
+
+        # If intelligence disabled, return minimal manifest with filesystem
+        if not self.enable_intelligence:
+            self.logger.info(
+                f"Intelligence queries disabled, using minimal manifest with filesystem "
+                f"(correlation_id: {correlation_id})"
+            )
+            manifest = self._get_minimal_manifest()
+            manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
+            self._manifest_data = manifest
+            self._last_update = datetime.now(UTC)
+            return manifest
+
+        # Create intelligence client for remote queries
         client = IntelligenceEventClient(
             bootstrap_servers=self.kafka_brokers,
             enable_intelligence=True,
@@ -666,6 +684,7 @@ class ManifestInjector:
             await client.start()
 
             # Execute parallel queries for different manifest sections
+            # Note: filesystem already queried above
             query_tasks = {
                 "patterns": self._query_patterns(client, correlation_id),
                 "infrastructure": self._query_infrastructure(client, correlation_id),
@@ -684,10 +703,10 @@ class ManifestInjector:
                 return_exceptions=True,
             )
 
-            # Build manifest from results
-            manifest = self._build_manifest_from_results(
-                dict(zip(query_tasks.keys(), results))
-            )
+            # Build manifest from results (including filesystem queried earlier)
+            all_results = dict(zip(query_tasks.keys(), results))
+            all_results["filesystem"] = filesystem_result  # Add filesystem result
+            manifest = self._build_manifest_from_results(all_results)
 
             # Cache manifest
             self._manifest_data = manifest
@@ -1092,6 +1111,235 @@ class ManifestInjector:
             # Not critical - return empty result
             return {"similar_workflows": [], "error": str(e)}
 
+    async def _query_filesystem(
+        self,
+        client: IntelligenceEventClient,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query filesystem tree and metadata.
+
+        Scans current working directory for:
+        - Complete file tree structure
+        - File metadata (size, modified date)
+        - ONEX compliance metadata where available
+        - File counts by type
+
+        Args:
+            client: Intelligence event client (not used for filesystem scan)
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Filesystem data dictionary with tree structure and metadata
+        """
+        import time
+        from pathlib import Path
+
+        start_time = time.time()
+
+        try:
+            self.logger.debug(f"[{correlation_id}] Scanning filesystem tree")
+
+            # Get current working directory
+            cwd = Path(os.getcwd())
+
+            # Define ignored paths
+            ignored_dirs = {
+                ".git",
+                "node_modules",
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".ruff_cache",
+                "dist",
+                "build",
+                ".egg-info",
+                ".tox",
+                ".coverage",
+                "htmlcov",
+                ".DS_Store",
+            }
+
+            ignored_extensions = {
+                ".pyc",
+                ".pyo",
+                ".pyd",
+                ".so",
+                ".dylib",
+                ".dll",
+                ".exe",
+            }
+
+            # Scan filesystem
+            file_tree = []
+            file_types = {}
+            onex_files = {
+                "effect": [],
+                "compute": [],
+                "reducer": [],
+                "orchestrator": [],
+            }
+            total_files = 0
+            total_dirs = 0
+            total_size_bytes = 0
+
+            def should_ignore(path: Path) -> bool:
+                """Check if path should be ignored."""
+                # Check if any parent directory is in ignored list
+                for parent in path.parents:
+                    if parent.name in ignored_dirs:
+                        return True
+                # Check if file itself is ignored
+                if path.name in ignored_dirs:
+                    return True
+                # Check file extension
+                if path.suffix in ignored_extensions:
+                    return True
+                return False
+
+            def get_onex_node_type(file_path: Path) -> Optional[str]:
+                """Detect ONEX node type from filename."""
+                name = file_path.name.lower()
+                if "_effect.py" in name or "effect.py" == name:
+                    return "EFFECT"
+                elif "_compute.py" in name or "compute.py" == name:
+                    return "COMPUTE"
+                elif "_reducer.py" in name or "reducer.py" == name:
+                    return "REDUCER"
+                elif "_orchestrator.py" in name or "orchestrator.py" == name:
+                    return "ORCHESTRATOR"
+                return None
+
+            def scan_directory(
+                directory: Path, depth: int = 0, max_depth: int = 5
+            ) -> List[Dict[str, Any]]:
+                """Recursively scan directory."""
+                nonlocal total_files, total_dirs, total_size_bytes
+
+                if depth > max_depth:
+                    return []
+
+                items = []
+
+                try:
+                    for item in sorted(directory.iterdir()):
+                        if should_ignore(item):
+                            continue
+
+                        try:
+                            stat = item.stat()
+                            rel_path = item.relative_to(cwd)
+
+                            if item.is_dir():
+                                total_dirs += 1
+                                # Recursively scan subdirectory
+                                children = scan_directory(item, depth + 1, max_depth)
+                                items.append(
+                                    {
+                                        "name": item.name,
+                                        "type": "directory",
+                                        "path": str(rel_path),
+                                        "children": children,
+                                        "depth": depth,
+                                    }
+                                )
+                            elif item.is_file():
+                                total_files += 1
+                                file_size = stat.st_size
+                                total_size_bytes += file_size
+
+                                # Track file types
+                                ext = item.suffix or "no_extension"
+                                file_types[ext] = file_types.get(ext, 0) + 1
+
+                                # Check for ONEX node type
+                                onex_type = get_onex_node_type(item)
+                                if onex_type:
+                                    onex_files[onex_type.lower()].append(str(rel_path))
+
+                                # Format file size
+                                if file_size < 1024:
+                                    size_str = f"{file_size}B"
+                                elif file_size < 1024 * 1024:
+                                    size_str = f"{file_size / 1024:.1f}KB"
+                                else:
+                                    size_str = f"{file_size / (1024 * 1024):.1f}MB"
+
+                                # Format modified time
+                                from datetime import UTC, datetime
+
+                                modified_time = datetime.fromtimestamp(
+                                    stat.st_mtime, tz=UTC
+                                )
+                                time_diff = datetime.now(UTC) - modified_time
+                                if time_diff.days > 0:
+                                    modified_str = f"{time_diff.days}d ago"
+                                elif time_diff.seconds > 3600:
+                                    modified_str = f"{time_diff.seconds // 3600}h ago"
+                                elif time_diff.seconds > 60:
+                                    modified_str = f"{time_diff.seconds // 60}m ago"
+                                else:
+                                    modified_str = "just now"
+
+                                items.append(
+                                    {
+                                        "name": item.name,
+                                        "type": "file",
+                                        "path": str(rel_path),
+                                        "size_bytes": file_size,
+                                        "size_formatted": size_str,
+                                        "modified": modified_str,
+                                        "modified_timestamp": modified_time.isoformat(),
+                                        "extension": ext,
+                                        "onex_type": onex_type,
+                                        "depth": depth,
+                                    }
+                                )
+                        except (PermissionError, OSError) as e:
+                            self.logger.debug(f"Cannot access {item}: {e}")
+                            continue
+
+                except (PermissionError, OSError) as e:
+                    self.logger.warning(f"Cannot scan directory {directory}: {e}")
+
+                return items
+
+            # Scan from current working directory
+            file_tree = scan_directory(cwd, depth=0, max_depth=5)
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["filesystem"] = elapsed_ms
+
+            self.logger.info(
+                f"[{correlation_id}] Filesystem scan completed in {elapsed_ms}ms: "
+                f"{total_files} files, {total_dirs} directories, "
+                f"{total_size_bytes / (1024 * 1024):.1f}MB total"
+            )
+
+            return {
+                "root_path": str(cwd),
+                "file_tree": file_tree,
+                "total_files": total_files,
+                "total_directories": total_dirs,
+                "total_size_bytes": total_size_bytes,
+                "file_types": file_types,
+                "onex_files": onex_files,
+                "query_time_ms": elapsed_ms,
+            }
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["filesystem"] = elapsed_ms
+            self._current_query_failures["filesystem"] = str(e)
+            self.logger.warning(f"[{correlation_id}] Filesystem scan failed: {e}")
+            return {
+                "root_path": os.getcwd(),
+                "file_tree": [],
+                "error": str(e),
+            }
+
     def _build_manifest_from_results(
         self,
         results: Dict[str, Any],
@@ -1163,6 +1411,14 @@ class ManifestInjector:
                 debug_result
             )
 
+        # Extract filesystem
+        filesystem_result = results.get("filesystem", {})
+        if isinstance(filesystem_result, Exception):
+            self.logger.warning(f"Filesystem query failed: {filesystem_result}")
+            manifest["filesystem"] = {"error": str(filesystem_result)}
+        else:
+            manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
+
         return manifest
 
     def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1233,6 +1489,19 @@ class ManifestInjector:
             },
             "total_successes": len(successes),
             "total_failures": len(failures),
+            "query_time_ms": result.get("query_time_ms", 0),
+        }
+
+    def _format_filesystem_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format filesystem query result into manifest structure."""
+        return {
+            "root_path": result.get("root_path", "unknown"),
+            "file_tree": result.get("file_tree", []),
+            "total_files": result.get("total_files", 0),
+            "total_directories": result.get("total_directories", 0),
+            "total_size_bytes": result.get("total_size_bytes", 0),
+            "file_types": result.get("file_types", {}),
+            "onex_files": result.get("onex_files", {}),
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
@@ -1371,6 +1640,7 @@ class ManifestInjector:
             "infrastructure": self._format_infrastructure,
             "database_schemas": self._format_database_schemas,
             "debug_intelligence": self._format_debug_intelligence,
+            "filesystem": self._format_filesystem,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -1598,6 +1868,118 @@ class ManifestInjector:
 
         return "\n".join(output)
 
+    def _format_filesystem(self, filesystem_data: Dict) -> str:
+        """Format filesystem section."""
+        output = ["FILESYSTEM STRUCTURE:"]
+
+        root_path = filesystem_data.get("root_path", "unknown")
+        total_files = filesystem_data.get("total_files", 0)
+        total_dirs = filesystem_data.get("total_directories", 0)
+        total_size_bytes = filesystem_data.get("total_size_bytes", 0)
+        file_types = filesystem_data.get("file_types", {})
+        onex_files = filesystem_data.get("onex_files", {})
+        file_tree = filesystem_data.get("file_tree", [])
+
+        if "error" in filesystem_data:
+            output.append(f"  Error: {filesystem_data['error']}")
+            return "\n".join(output)
+
+        # Format total size
+        if total_size_bytes < 1024 * 1024:
+            size_str = f"{total_size_bytes / 1024:.1f}KB"
+        else:
+            size_str = f"{total_size_bytes / (1024 * 1024):.1f}MB"
+
+        output.append(f"  Root: {root_path}")
+        output.append(f"  Total Files: {total_files}")
+        output.append(f"  Total Directories: {total_dirs}")
+        output.append(f"  Total Size: {size_str}")
+        output.append("")
+
+        # Show key directories (top level only)
+        if file_tree:
+            output.append("  Key Directories:")
+            key_dirs = [item for item in file_tree if item.get("type") == "directory"]
+            for directory in sorted(key_dirs, key=lambda x: x.get("name", ""))[:15]:
+                dir_name = directory.get("name", "unknown")
+                children = directory.get("children", [])
+                file_count = sum(1 for child in children if child.get("type") == "file")
+                subdir_count = sum(
+                    1 for child in children if child.get("type") == "directory"
+                )
+
+                if file_count > 0 or subdir_count > 0:
+                    output.append(
+                        f"    {dir_name}/ ({file_count} files, {subdir_count} subdirs)"
+                    )
+                else:
+                    output.append(f"    {dir_name}/")
+
+            output.append("")
+
+        # Show file types
+        if file_types:
+            output.append("  File Types:")
+            # Sort by count descending, show top 10
+            sorted_types = sorted(file_types.items(), key=lambda x: x[1], reverse=True)[
+                :10
+            ]
+            for ext, count in sorted_types:
+                ext_display = ext if ext != "no_extension" else "(no extension)"
+                output.append(f"    {ext_display}: {count} files")
+
+            if len(file_types) > 10:
+                output.append(f"    ... and {len(file_types) - 10} more file types")
+
+            output.append("")
+
+        # Show ONEX compliance
+        onex_total = sum(len(files) for files in onex_files.values())
+        if onex_total > 0:
+            output.append("  ONEX Compliance:")
+            for node_type, files in onex_files.items():
+                if files:
+                    output.append(f"    {node_type.upper()} nodes: {len(files)} files")
+            output.append("")
+
+        # Add duplicate prevention guidance
+        output.append("  ⚠️  DUPLICATE PREVENTION GUIDANCE:")
+        output.append("  Before creating new files, check if similar files exist in:")
+
+        # Suggest key directories to check based on common patterns
+        check_dirs = []
+        if any("agents" in d.get("name", "") for d in file_tree):
+            check_dirs.append("    • agents/ - Agent implementations and patterns")
+        if any("lib" in d.get("name", "") for d in file_tree):
+            check_dirs.append("    • lib/ - Library modules and utilities")
+        if any("tests" in d.get("name", "") for d in file_tree):
+            check_dirs.append("    • tests/ - Test files")
+        if any(
+            "hooks" in d.get("name", "").lower() or "claude" in d.get("name", "")
+            for d in file_tree
+        ):
+            check_dirs.append("    • claude_hooks/ - Hook scripts")
+        if any(
+            d.get("name", "").endswith(".md")
+            for d in file_tree
+            if d.get("type") == "file"
+        ):
+            check_dirs.append("    • Root *.md files - Documentation")
+
+        if check_dirs:
+            for check_dir in check_dirs:
+                output.append(check_dir)
+        else:
+            output.append("    • Review file tree above before creating new files")
+
+        output.append("")
+        output.append("  💡 TIP: Use Glob or Grep tools to search for existing files")
+        output.append(
+            "       before creating duplicates with similar names or purposes."
+        )
+
+        return "\n".join(output)
+
     def get_manifest_summary(self) -> Dict[str, Any]:
         """
         Get summary statistics about the manifest.
@@ -1674,6 +2056,11 @@ class ManifestInjector:
             debug_intelligence_successes = len(workflows.get("successes", []))
             debug_intelligence_failures = len(workflows.get("failures", []))
 
+            # Filesystem counts
+            filesystem_data = manifest.get("filesystem", {})
+            filesystem_files_count = filesystem_data.get("total_files", 0)
+            filesystem_directories_count = filesystem_data.get("total_directories", 0)
+
             # Get formatted text (generate if not cached)
             if self._cached_formatted:
                 formatted_text = self._cached_formatted
@@ -1702,6 +2089,8 @@ class ManifestInjector:
                 collections_queried=collections_queried,
                 query_failures=self._current_query_failures,
                 warnings=self._current_warnings,
+                filesystem_files_count=filesystem_files_count,
+                filesystem_directories_count=filesystem_directories_count,
             )
 
             if success:
