@@ -9,7 +9,7 @@ import pytest
 from agents.lib.manifest_injector import ManifestInjector, inject_manifest
 
 # Mock data for event bus responses
-MOCK_PATTERNS_RESPONSE = {
+MOCK_EXECUTION_PATTERNS_RESPONSE = {
     "patterns": [
         {
             "name": "CRUD Pattern",
@@ -27,6 +27,12 @@ MOCK_PATTERNS_RESPONSE = {
             "confidence": 0.92,
             "use_cases": ["data processing"],
         },
+    ],
+    "query_time_ms": 75,
+}
+
+MOCK_CODE_PATTERNS_RESPONSE = {
+    "patterns": [
         {
             "name": "Aggregation Pattern",
             "file_path": "node_aggregate_reducer.py",
@@ -44,7 +50,7 @@ MOCK_PATTERNS_RESPONSE = {
             "use_cases": ["workflows"],
         },
     ],
-    "query_time_ms": 150,
+    "query_time_ms": 85,
 }
 
 MOCK_INFRASTRUCTURE_RESPONSE = {
@@ -125,7 +131,14 @@ class MockIntelligenceEventClient:
         operation = options.get("operation_type", "")
 
         if operation == "PATTERN_EXTRACTION":
-            return MOCK_PATTERNS_RESPONSE
+            # Return different patterns based on collection_name
+            collection_name = options.get("collection_name", "execution_patterns")
+            if collection_name == "execution_patterns":
+                return MOCK_EXECUTION_PATTERNS_RESPONSE
+            elif collection_name == "code_patterns":
+                return MOCK_CODE_PATTERNS_RESPONSE
+            else:
+                return {"patterns": [], "query_time_ms": 0}
         elif operation == "INFRASTRUCTURE_SCAN":
             return MOCK_INFRASTRUCTURE_RESPONSE
         elif operation == "MODEL_DISCOVERY":
@@ -498,3 +511,44 @@ def test_format_for_prompt_without_loading():
 
     assert "SYSTEM MANIFEST" in formatted
     assert "fallback" in formatted.lower() or "minimal" in formatted.lower()
+
+
+def test_dual_collection_query(mock_intelligence_client):
+    """Test that both execution_patterns and code_patterns collections are queried."""
+    injector = ManifestInjector(enable_intelligence=True)
+    correlation_id = str(uuid.uuid4())
+
+    # Generate manifest
+    manifest = injector.generate_dynamic_manifest(correlation_id)
+
+    # Verify patterns from both collections are present
+    patterns = manifest.get("patterns", {})
+    all_patterns = patterns.get("available", [])
+
+    # Should have 4 patterns total (2 from execution_patterns + 2 from code_patterns)
+    assert len(all_patterns) == 4
+
+    # Verify collections_queried metadata
+    collections_queried = patterns.get("collections_queried", {})
+    assert collections_queried.get("execution_patterns") == 2
+    assert collections_queried.get("code_patterns") == 2
+
+    # Verify query time is combined
+    assert patterns.get("query_time_ms") == 160  # 75 + 85
+
+
+def test_dual_collection_formatted_output(mock_intelligence_client):
+    """Test that formatted output shows collection statistics."""
+    injector = ManifestInjector(enable_intelligence=True)
+    correlation_id = str(uuid.uuid4())
+
+    # Generate manifest
+    injector.generate_dynamic_manifest(correlation_id)
+
+    # Format patterns section
+    formatted = injector.format_for_prompt()
+
+    # Should show collection statistics
+    assert "execution_patterns" in formatted
+    assert "code_patterns" in formatted
+    assert "Total: 4 patterns available" in formatted
