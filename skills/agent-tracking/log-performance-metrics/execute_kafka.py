@@ -29,6 +29,31 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
+
+# Load .env file from project directory
+def load_env_file():
+    """Load environment variables from project .env file."""
+    env_paths = [
+        Path("/Volumes/PRO-G40/Code/omniclaude/.env"),
+        Path.home() / "Code" / "omniclaude" / ".env",
+    ]
+
+    for env_path in env_paths:
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        # Only set if not already in environment
+                        if key not in os.environ:
+                            os.environ[key] = value.strip('"').strip("'")
+            return
+
+
+# Load .env on import
+load_env_file()
+
 # Kafka imports (lazy loaded)
 KafkaProducer = None
 _producer_instance = None  # Cached producer instance for singleton pattern
@@ -65,7 +90,7 @@ def get_kafka_producer():
             )
 
     # Get Kafka brokers from environment
-    brokers = os.environ.get("KAFKA_BROKERS", "localhost:29102").split(",")
+    brokers = os.environ.get("KAFKA_BROKERS", "localhost:9092").split(",")
 
     # Create producer with JSON serialization
     producer = KafkaProducer(

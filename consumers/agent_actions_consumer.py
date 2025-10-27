@@ -189,7 +189,7 @@ class AgentActionsConsumer:
         if not kafka_brokers_str:
             raise ValueError(
                 "KAFKA_BROKERS environment variable must be set. "
-                "Example: KAFKA_BROKERS=192.168.86.200:29102"
+                "Example: KAFKA_BROKERS=192.168.86.200:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = config.get(

@@ -16,11 +16,13 @@ from psycopg2.pool import SimpleConnectionPool
 
 # Database configuration
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5436,
-    "database": "omninode_bridge",
-    "user": "postgres",
-    "password": "omninode-bridge-postgres-dev-2024",
+    "host": os.environ.get("POSTGRES_HOST", "localhost"),
+    "port": int(os.environ.get("POSTGRES_PORT", "5436")),
+    "database": os.environ.get("POSTGRES_DB", "omninode_bridge"),
+    "user": os.environ.get("POSTGRES_USER", "postgres"),
+    "password": os.environ.get(
+        "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
+    ),
 }
 
 # Connection pool (lazy initialization)

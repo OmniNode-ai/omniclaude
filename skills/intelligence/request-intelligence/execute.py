@@ -279,8 +279,8 @@ async def main():
     # Intelligence adapter configuration
     parser.add_argument(
         "--kafka-brokers",
-        default=os.environ.get("KAFKA_BROKERS", "localhost:29102"),
-        help="Kafka bootstrap servers (default: localhost:29102)",
+        default=os.environ.get("KAFKA_BROKERS", "localhost:9092"),
+        help="Kafka bootstrap servers (default: localhost:9092)",
     )
 
     args = parser.parse_args()

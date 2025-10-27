@@ -63,7 +63,7 @@ class IntelligenceEventClient:
 
     Usage:
         client = IntelligenceEventClient(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:9092",
             enable_intelligence=True,
             request_timeout_ms=5000,
         )
@@ -100,7 +100,7 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:29102" (Redpanda port mapping)
+                - External host: "localhost:9092" or "192.168.86.200:9092"
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
@@ -116,7 +116,7 @@ class IntelligenceEventClient:
             raise ValueError(
                 "bootstrap_servers must be provided or set via "
                 "KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS environment variable. "
-                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:29102"
+                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:9092"
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms

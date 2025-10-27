@@ -25,8 +25,8 @@ class ConfluentKafkaClient:
         Publish message to Kafka with delivery confirmation.
 
         Workaround for Redpanda advertised listener issues:
-        - Uses localhost:29092 as bootstrap server
-        - Rewrites omninode-bridge-redpanda:9092 → localhost:29092 in memory
+        - Uses localhost:9092 as bootstrap server
+        - Rewrites omninode-bridge-redpanda:9092 → localhost:9092 in memory
         - Falls back to aiokafka if confluent-kafka fails
 
         Raises:

@@ -282,8 +282,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--bootstrap-servers",
-        default=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
-        help="Kafka bootstrap servers (default: localhost:29092)",
+        default=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        help="Kafka bootstrap servers (default: localhost:9092)",
     )
     parser.add_argument(
         "--topic",

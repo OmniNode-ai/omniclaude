@@ -43,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -61,6 +62,229 @@ except ImportError:
     from intelligence_event_client import IntelligenceEventClient
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CacheMetrics:
+    """Cache performance metrics tracking."""
+
+    total_queries: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    total_query_time_ms: int = 0
+    cache_query_time_ms: int = 0
+    last_hit_timestamp: Optional[datetime] = None
+    last_miss_timestamp: Optional[datetime] = None
+
+    @property
+    def hit_rate(self) -> float:
+        """Calculate cache hit rate percentage."""
+        if self.total_queries == 0:
+            return 0.0
+        return (self.cache_hits / self.total_queries) * 100
+
+    @property
+    def average_query_time_ms(self) -> float:
+        """Calculate average query time in milliseconds."""
+        if self.total_queries == 0:
+            return 0.0
+        return self.total_query_time_ms / self.total_queries
+
+    @property
+    def average_cache_query_time_ms(self) -> float:
+        """Calculate average cache query time in milliseconds."""
+        if self.cache_hits == 0:
+            return 0.0
+        return self.cache_query_time_ms / self.cache_hits
+
+    def record_hit(self, query_time_ms: int = 0) -> None:
+        """Record a cache hit."""
+        self.total_queries += 1
+        self.cache_hits += 1
+        self.cache_query_time_ms += query_time_ms
+        self.total_query_time_ms += query_time_ms
+        self.last_hit_timestamp = datetime.now(UTC)
+
+    def record_miss(self, query_time_ms: int = 0) -> None:
+        """Record a cache miss."""
+        self.total_queries += 1
+        self.cache_misses += 1
+        self.total_query_time_ms += query_time_ms
+        self.last_miss_timestamp = datetime.now(UTC)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert metrics to dictionary for logging."""
+        return {
+            "total_queries": self.total_queries,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "hit_rate_percent": round(self.hit_rate, 2),
+            "average_query_time_ms": round(self.average_query_time_ms, 2),
+            "average_cache_query_time_ms": round(self.average_cache_query_time_ms, 2),
+            "last_hit": (
+                self.last_hit_timestamp.isoformat() if self.last_hit_timestamp else None
+            ),
+            "last_miss": (
+                self.last_miss_timestamp.isoformat()
+                if self.last_miss_timestamp
+                else None
+            ),
+        }
+
+
+@dataclass
+class CacheEntry:
+    """Individual cache entry with data and metadata."""
+
+    data: Any
+    timestamp: datetime
+    ttl_seconds: int
+    query_type: str
+    size_bytes: int = 0
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if cache entry is expired."""
+        age_seconds = (datetime.now(UTC) - self.timestamp).total_seconds()
+        return age_seconds >= self.ttl_seconds
+
+    @property
+    def age_seconds(self) -> float:
+        """Get age of cache entry in seconds."""
+        return (datetime.now(UTC) - self.timestamp).total_seconds()
+
+
+class ManifestCache:
+    """
+    Enhanced caching layer for manifest intelligence queries.
+
+    Features:
+    - Per-query-type caching (patterns, infrastructure, models, etc.)
+    - Configurable TTL per query type
+    - Cache metrics tracking (hit rate, query times)
+    - Cache invalidation (selective or full)
+    - Size tracking and management
+    """
+
+    def __init__(self, default_ttl_seconds: int = 300, enable_metrics: bool = True):
+        """Initialize manifest cache."""
+        self.default_ttl_seconds = default_ttl_seconds
+        self.enable_metrics = enable_metrics
+        self._caches: Dict[str, CacheEntry] = {}
+        self._ttls: Dict[str, int] = {
+            "patterns": default_ttl_seconds * 3,  # 15 minutes
+            "infrastructure": default_ttl_seconds * 2,  # 10 minutes
+            "models": default_ttl_seconds * 3,  # 15 minutes
+            "database_schemas": default_ttl_seconds,  # 5 minutes
+            "debug_intelligence": default_ttl_seconds // 2,  # 2.5 minutes
+            "full_manifest": default_ttl_seconds,  # 5 minutes
+        }
+        self.metrics: Dict[str, CacheMetrics] = {}
+        if enable_metrics:
+            for query_type in self._ttls.keys():
+                self.metrics[query_type] = CacheMetrics()
+        self.logger = logging.getLogger(__name__)
+
+    def get(self, query_type: str) -> Optional[Any]:
+        """Get cached data for query type."""
+        import time
+
+        start_time = time.time()
+        entry = self._caches.get(query_type)
+
+        if entry is None:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            if self.enable_metrics and query_type in self.metrics:
+                self.metrics[query_type].record_miss(elapsed_ms)
+            self.logger.debug(f"Cache MISS: {query_type} (not found)")
+            return None
+
+        if entry.is_expired:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            if self.enable_metrics and query_type in self.metrics:
+                self.metrics[query_type].record_miss(elapsed_ms)
+            self.logger.debug(f"Cache MISS: {query_type} (expired)")
+            del self._caches[query_type]
+            return None
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        if self.enable_metrics and query_type in self.metrics:
+            self.metrics[query_type].record_hit(elapsed_ms)
+        self.logger.debug(f"Cache HIT: {query_type}")
+        return entry.data
+
+    def set(
+        self, query_type: str, data: Any, ttl_seconds: Optional[int] = None
+    ) -> None:
+        """Store data in cache."""
+        ttl = ttl_seconds or self._ttls.get(query_type, self.default_ttl_seconds)
+        size_bytes = len(str(data).encode("utf-8"))
+        entry = CacheEntry(
+            data=data,
+            timestamp=datetime.now(UTC),
+            ttl_seconds=ttl,
+            query_type=query_type,
+            size_bytes=size_bytes,
+        )
+        self._caches[query_type] = entry
+        self.logger.debug(f"Cache SET: {query_type} (ttl: {ttl}s)")
+
+    def invalidate(self, query_type: Optional[str] = None) -> int:
+        """Invalidate cache entries."""
+        if query_type is None:
+            count = len(self._caches)
+            self._caches.clear()
+            self.logger.info(f"Cache invalidated: ALL ({count} entries)")
+            return count
+        if query_type in self._caches:
+            del self._caches[query_type]
+            self.logger.info(f"Cache invalidated: {query_type}")
+            return 1
+        return 0
+
+    def get_metrics(self, query_type: Optional[str] = None) -> Dict[str, Any]:
+        """Get cache metrics."""
+        if not self.enable_metrics:
+            return {"error": "Metrics disabled"}
+        if query_type is not None:
+            if query_type in self.metrics:
+                return {"query_type": query_type, **self.metrics[query_type].to_dict()}
+            return {"error": f"No metrics for {query_type}"}
+
+        total_metrics = CacheMetrics()
+        for metric in self.metrics.values():
+            total_metrics.total_queries += metric.total_queries
+            total_metrics.cache_hits += metric.cache_hits
+            total_metrics.cache_misses += metric.cache_misses
+            total_metrics.total_query_time_ms += metric.total_query_time_ms
+            total_metrics.cache_query_time_ms += metric.cache_query_time_ms
+
+        return {
+            "overall": total_metrics.to_dict(),
+            "by_query_type": {qt: m.to_dict() for qt, m in self.metrics.items()},
+            "cache_size": len(self._caches),
+            "cache_entries": list(self._caches.keys()),
+        }
+
+    def get_cache_info(self) -> Dict[str, Any]:
+        """Get cache information and statistics."""
+        total_size_bytes = sum(entry.size_bytes for entry in self._caches.values())
+        entries_info = [
+            {
+                "query_type": query_type,
+                "age_seconds": round(entry.age_seconds, 2),
+                "ttl_seconds": entry.ttl_seconds,
+                "size_bytes": entry.size_bytes,
+                "expired": entry.is_expired,
+            }
+            for query_type, entry in self._caches.items()
+        ]
+        return {
+            "cache_size": len(self._caches),
+            "total_size_bytes": total_size_bytes,
+            "entries": entries_info,
+            "ttl_configuration": self._ttls,
+        }
 
 
 class ManifestInjectionStorage:
@@ -270,6 +494,8 @@ class ManifestInjector:
         enable_intelligence: bool = True,
         query_timeout_ms: int = 5000,
         enable_storage: bool = True,
+        enable_cache: bool = True,
+        cache_ttl_seconds: Optional[int] = None,
         agent_name: Optional[str] = None,
     ):
         """
@@ -281,6 +507,8 @@ class ManifestInjector:
             enable_intelligence: Enable event-based queries
             query_timeout_ms: Timeout for intelligence queries (default: 5000ms)
             enable_storage: Enable database storage of manifest injections
+            enable_cache: Enable caching of intelligence queries (default: True)
+            cache_ttl_seconds: Cache TTL override (default: from env or 300)
             agent_name: Agent name for logging (if known at init time)
         """
         self.kafka_brokers = kafka_brokers or os.environ.get(
@@ -289,15 +517,26 @@ class ManifestInjector:
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms
         self.enable_storage = enable_storage
+        self.enable_cache = enable_cache
         self.agent_name = agent_name
 
-        # Cached manifest data
+        # Get cache TTL from environment or use default
+        default_ttl = int(os.environ.get("MANIFEST_CACHE_TTL_SECONDS", "300"))
+        self.cache_ttl_seconds = cache_ttl_seconds or default_ttl
+
+        # Initialize enhanced caching layer
+        if enable_cache:
+            self._cache = ManifestCache(
+                default_ttl_seconds=self.cache_ttl_seconds,
+                enable_metrics=True,
+            )
+        else:
+            self._cache = None
+
+        # Cached manifest data (for backward compatibility)
         self._manifest_data: Optional[Dict[str, Any]] = None
         self._cached_formatted: Optional[str] = None
         self._last_update: Optional[datetime] = None
-
-        # Cache TTL (refresh after 5 minutes)
-        self.cache_ttl_seconds = 300
 
         # Tracking for current generation
         self._current_correlation_id: Optional[UUID] = None
@@ -504,14 +743,25 @@ class ManifestInjector:
 
         start_time = time.time()
 
+        # Check cache first
+        if self.enable_cache and self._cache:
+            cached_result = self._cache.get("patterns")
+            if cached_result is not None:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                self._current_query_times["patterns"] = elapsed_ms
+                self.logger.info(
+                    f"[{correlation_id}] Pattern query: CACHE HIT ({elapsed_ms}ms)"
+                )
+                return cached_result
+
         try:
             self.logger.debug(
-                f"[{correlation_id}] Querying patterns from both collections"
+                f"[{correlation_id}] Querying patterns from both collections (PARALLEL)"
             )
 
-            # Query execution_patterns collection (ONEX architectural templates)
-            self.logger.debug("Querying execution_patterns collection...")
-            exec_result = await client.request_code_analysis(
+            # Execute BOTH collection queries in parallel using asyncio.gather
+            # This reduces total query time from sum(query_times) to max(query_times)
+            exec_task = client.request_code_analysis(
                 content="",  # Empty content for pattern discovery
                 source_path="node_*_*.py",  # Pattern for ONEX nodes
                 language="python",
@@ -525,9 +775,7 @@ class ManifestInjector:
                 timeout_ms=self.query_timeout_ms,
             )
 
-            # Query code_patterns collection (real Python implementations)
-            self.logger.debug("Querying code_patterns collection...")
-            code_result = await client.request_code_analysis(
+            code_task = client.request_code_analysis(
                 content="",  # Empty content for pattern discovery
                 source_path="*.py",  # All Python files
                 language="python",
@@ -540,6 +788,21 @@ class ManifestInjector:
                 },
                 timeout_ms=self.query_timeout_ms,
             )
+
+            # Wait for both queries to complete in parallel
+            self.logger.debug(
+                "Waiting for both pattern queries to complete in parallel..."
+            )
+            results = await asyncio.gather(exec_task, code_task, return_exceptions=True)
+            exec_result, code_result = results
+
+            # Handle exceptions from gather
+            if isinstance(exec_result, Exception):
+                self.logger.warning(f"execution_patterns query failed: {exec_result}")
+                exec_result = None
+            if isinstance(code_result, Exception):
+                self.logger.warning(f"code_patterns query failed: {code_result}")
+                code_result = None
 
             # Merge results from both collections
             exec_patterns = exec_result.get("patterns", []) if exec_result else []
@@ -556,11 +819,14 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["patterns"] = elapsed_ms
 
+            # Calculate speedup factor from parallelization
+            speedup = round(total_query_time / max(elapsed_ms, 1), 1)
+
             self.logger.info(
-                f"[{correlation_id}] Pattern query results: {len(exec_patterns)} from execution_patterns, "
+                f"[{correlation_id}] Pattern query results (PARALLEL): {len(exec_patterns)} from execution_patterns, "
                 f"{len(code_patterns)} from code_patterns, "
                 f"{len(all_patterns)} total patterns, "
-                f"query_time={total_query_time}ms, elapsed={elapsed_ms}ms"
+                f"query_time={total_query_time}ms, elapsed={elapsed_ms}ms, speedup={speedup}x"
             )
 
             if all_patterns:
@@ -568,7 +834,7 @@ class ManifestInjector:
                     f"[{correlation_id}] First pattern: {all_patterns[0].get('name', 'unknown')}"
                 )
 
-            return {
+            result = {
                 "patterns": all_patterns,
                 "query_time_ms": total_query_time,
                 "total_count": len(all_patterns),
@@ -577,6 +843,12 @@ class ManifestInjector:
                     "code_patterns": len(code_patterns),
                 },
             }
+
+            # Cache the result
+            if self.enable_cache and self._cache:
+                self._cache.set("patterns", result)
+
+            return result
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -1014,11 +1286,15 @@ class ManifestInjector:
                 },
                 "local_services": {
                     "qdrant": {
-                        "endpoint": "localhost:6333",
+                        "endpoint": os.environ.get("QDRANT_HOST", "localhost")
+                        + ":"
+                        + os.environ.get("QDRANT_PORT", "6333"),
                         "note": "Connection details only - collections unavailable",
                     },
                     "archon_mcp": {
-                        "endpoint": "http://localhost:8051",
+                        "endpoint": os.environ.get(
+                            "ARCHON_MCP_URL", "http://localhost:8051"
+                        ),
                         "note": "Use archon_menu() MCP tool for intelligence queries",
                     },
                 },
@@ -1444,6 +1720,81 @@ class ManifestInjector:
                 exc_info=True,
             )
 
+    def get_cache_metrics(self, query_type: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get cache performance metrics.
+
+        Args:
+            query_type: Specific query type metrics (None = all metrics)
+
+        Returns:
+            Cache metrics dictionary with hit rates, query times, etc.
+        """
+        if not self.enable_cache or not self._cache:
+            return {"error": "Caching disabled"}
+
+        return self._cache.get_metrics(query_type)
+
+    def invalidate_cache(self, query_type: Optional[str] = None) -> int:
+        """
+        Invalidate cache entries.
+
+        Args:
+            query_type: Specific query type to invalidate (None = invalidate all)
+
+        Returns:
+            Number of entries invalidated
+        """
+        if not self.enable_cache or not self._cache:
+            return 0
+
+        return self._cache.invalidate(query_type)
+
+    def get_cache_info(self) -> Dict[str, Any]:
+        """
+        Get cache information and statistics.
+
+        Returns:
+            Cache information dictionary with sizes, TTLs, and entry details
+        """
+        if not self.enable_cache or not self._cache:
+            return {"error": "Caching disabled"}
+
+        return self._cache.get_cache_info()
+
+    def log_cache_metrics(self) -> None:
+        """
+        Log current cache metrics for monitoring.
+
+        Logs overall cache performance including hit rates and query times.
+        """
+        if not self.enable_cache or not self._cache:
+            self.logger.info("Cache metrics: caching disabled")
+            return
+
+        metrics = self.get_cache_metrics()
+        overall = metrics.get("overall", {})
+
+        self.logger.info(
+            f"Cache metrics: "
+            f"hit_rate={overall.get('hit_rate_percent', 0):.1f}%, "
+            f"total_queries={overall.get('total_queries', 0)}, "
+            f"cache_hits={overall.get('cache_hits', 0)}, "
+            f"cache_misses={overall.get('cache_misses', 0)}, "
+            f"avg_query_time={overall.get('average_query_time_ms', 0):.1f}ms, "
+            f"avg_cache_time={overall.get('average_cache_query_time_ms', 0):.1f}ms"
+        )
+
+        # Log per-query-type metrics if available
+        by_type = metrics.get("by_query_type", {})
+        for query_type, type_metrics in by_type.items():
+            if type_metrics.get("total_queries", 0) > 0:
+                self.logger.debug(
+                    f"Cache metrics [{query_type}]: "
+                    f"hit_rate={type_metrics.get('hit_rate_percent', 0):.1f}%, "
+                    f"queries={type_metrics.get('total_queries', 0)}"
+                )
+
 
 # Convenience function for quick access (sync wrapper)
 def inject_manifest(
@@ -1477,6 +1828,10 @@ def inject_manifest(
 
 
 __all__ = [
+    "CacheMetrics",
+    "CacheEntry",
+    "ManifestCache",
     "ManifestInjector",
+    "ManifestInjectionStorage",
     "inject_manifest",
 ]

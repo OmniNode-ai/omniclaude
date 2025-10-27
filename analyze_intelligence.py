@@ -260,7 +260,7 @@ async def main():
 
     # Initialize client
     client = IntelligenceEventClient(
-        bootstrap_servers="localhost:29102",  # Redpanda external port
+        bootstrap_servers="localhost:9092",  # Redpanda external port
         enable_intelligence=True,
         request_timeout_ms=10000,
     )
