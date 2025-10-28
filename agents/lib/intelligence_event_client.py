@@ -107,6 +107,7 @@ class IntelligenceEventClient:
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
         # Bootstrap servers - use env var if not provided
+        # Priority: constructor arg > KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS > KAFKA_BOOTSTRAP_SERVERS
         self.bootstrap_servers = (
             bootstrap_servers
             or os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS")
@@ -114,9 +115,15 @@ class IntelligenceEventClient:
         )
         if not self.bootstrap_servers:
             raise ValueError(
-                "bootstrap_servers must be provided or set via "
-                "KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS environment variable. "
-                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:9092"
+                "bootstrap_servers must be provided or set via environment variables.\n"
+                "Checked variables (in order):\n"
+                "  1. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (preferred for intelligence)\n"
+                "  2. KAFKA_BOOTSTRAP_SERVERS (fallback)\n"
+                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                "Current values: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BOOTSTRAP_SERVERS={}".format(
+                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
+                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
+                )
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
@@ -182,21 +189,44 @@ class IntelligenceEventClient:
             # This ensures consumer is ready to receive messages BEFORE we return
             # Without this, there's a race condition where requests are published
             # before the consumer finishes subscribing, causing missed responses
-            self.logger.debug("Waiting for consumer partition assignment...")
-            max_wait_seconds = 5
+            self.logger.info(
+                f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
+            )
+            max_wait_seconds = 10  # Increased from 5s for slow networks
             start_time = asyncio.get_event_loop().time()
+            check_count = 0
+
             while not self._consumer.assignment():
+                check_count += 1
                 await asyncio.sleep(0.1)
                 elapsed = asyncio.get_event_loop().time() - start_time
-                if elapsed > max_wait_seconds:
-                    raise TimeoutError(
-                        f"Consumer failed to get partition assignment after {max_wait_seconds}s"
+
+                # Log progress every 1 second
+                if check_count % 10 == 0:
+                    self.logger.debug(
+                        f"Still waiting for partition assignment... ({elapsed:.1f}s elapsed)"
                     )
-            self.logger.debug(
-                f"Consumer ready with partitions: {self._consumer.assignment()}"
+
+                if elapsed > max_wait_seconds:
+                    # Provide detailed error with troubleshooting guidance
+                    error_msg = (
+                        f"Consumer failed to get partition assignment after {max_wait_seconds}s.\n"
+                        f"Troubleshooting:\n"
+                        f"  1. Check Kafka broker is accessible: {self.bootstrap_servers}\n"
+                        f"  2. Verify topics exist: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}\n"
+                        f"  3. Check consumer group permissions: {self.consumer_group_id}\n"
+                        f"  4. Review Kafka broker logs for connection issues\n"
+                        f"  5. Verify network connectivity to Kafka cluster"
+                    )
+                    self.logger.error(error_msg)
+                    raise TimeoutError(error_msg)
+
+            partition_count = len(self._consumer.assignment())
+            self.logger.info(
+                f"Consumer ready with {partition_count} partition(s): {self._consumer.assignment()}"
             )
 
-            # Start background consumer task
+            # Start background consumer task AFTER partition assignment confirmed
             asyncio.create_task(self._consume_responses())
 
             self._started = True
