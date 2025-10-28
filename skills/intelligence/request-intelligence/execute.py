@@ -60,6 +60,10 @@ except ImportError as e:
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id  # noqa: E402
 
+# Add lib to path for kafka_config
+sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
+from kafka_config import get_kafka_bootstrap_servers  # noqa: E402
+
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",
     "code-analysis": "CODE_ANALYSIS",
@@ -279,8 +283,8 @@ async def main():
     # Intelligence adapter configuration
     parser.add_argument(
         "--kafka-brokers",
-        default=os.environ.get("KAFKA_BROKERS", "localhost:9092"),
-        help="Kafka bootstrap servers (default: localhost:9092)",
+        default=get_kafka_bootstrap_servers(),
+        help="Kafka bootstrap servers (default: from centralized config)",
     )
 
     args = parser.parse_args()
