@@ -18,6 +18,7 @@ Setup:
 import argparse
 import asyncio
 import json
+import os
 from uuid import uuid4
 
 from agents.lib.codegen_events import CodegenAnalysisRequest
@@ -90,9 +91,11 @@ async def main() -> None:
         print("[rpk] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     elif args.confluent:
-        client = ConfluentKafkaClient(
-            bootstrap_servers=args.bootstrap or "localhost:29092"
+        # Use environment variable or fall back to external Redpanda address
+        bootstrap_servers = args.bootstrap or os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
         )
+        client = ConfluentKafkaClient(bootstrap_servers=bootstrap_servers)
         client.publish(
             evt.to_kafka_topic(),
             {
