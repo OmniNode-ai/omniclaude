@@ -1,13 +1,13 @@
 """
-Unit tests for Enhanced Agent Router - Phase 1
-==============================================
+Unit tests for Agent Router - Phase 1
+======================================
 
-Tests all components of the enhanced routing system:
+Tests all components of the routing system:
 - EnhancedTriggerMatcher
 - ConfidenceScorer
 - CapabilityIndex
 - ResultCache
-- EnhancedAgentRouter (integration)
+- AgentRouter (integration)
 
 Setup:
     Run with pytest from project root:
@@ -23,9 +23,9 @@ Setup:
 import time
 
 import pytest
+from lib.agent_router import AgentRouter
 from lib.capability_index import CapabilityIndex
 from lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
-from lib.enhanced_router import EnhancedAgentRouter
 from lib.result_cache import ResultCache
 from lib.trigger_matcher import EnhancedTriggerMatcher
 
@@ -358,12 +358,12 @@ class TestResultCache:
 
 
 # ============================================================================
-# EnhancedAgentRouter Integration Tests
+# AgentRouter Integration Tests
 # ============================================================================
 
 
-class TestEnhancedAgentRouter:
-    """Test EnhancedAgentRouter integration."""
+class TestAgentRouter:
+    """Test AgentRouter integration."""
 
     @pytest.fixture
     def router(self, tmp_path):
@@ -374,7 +374,7 @@ class TestEnhancedAgentRouter:
         with open(registry_file, "w") as f:
             yaml.dump(SAMPLE_REGISTRY, f)
 
-        return EnhancedAgentRouter(str(registry_file), cache_ttl=60)
+        return AgentRouter(str(registry_file), cache_ttl=60)
 
     def test_explicit_agent_request(self, router):
         """Test explicit agent name extraction."""
@@ -488,7 +488,7 @@ class TestPerformance:
         with open(registry_file, "w") as f:
             yaml.dump(SAMPLE_REGISTRY, f)
 
-        return EnhancedAgentRouter(str(registry_file))
+        return AgentRouter(str(registry_file))
 
     def test_routing_speed(self, router):
         """Test that routing meets performance target (<100ms)."""

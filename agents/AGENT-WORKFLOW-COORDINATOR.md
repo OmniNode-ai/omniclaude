@@ -244,7 +244,7 @@ class NodeMyOperationEffect(NodeEffect):
 2. **ConfidenceScorer** - 4-component weighted confidence calculation
 3. **CapabilityIndex** - In-memory inverted index for fast lookups
 4. **ResultCache** - TTL-based caching with hit tracking
-5. **EnhancedAgentRouter** - Main orchestration component
+5. **AgentRouter** - Main orchestration component
 
 ### Routing Decision Flow
 
@@ -278,10 +278,10 @@ class NodeMyOperationEffect(NodeEffect):
 ### Usage Example
 
 ```python
-from lib.enhanced_router import EnhancedAgentRouter
+from lib.agent_router import AgentRouter
 
 # Initialize router (loads registry and builds indexes)
-router = EnhancedAgentRouter()
+router = AgentRouter()
 
 # Route user request with context
 recommendations = router.route(

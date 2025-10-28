@@ -20,12 +20,12 @@ def test_polymorphic_agent_updates():
     ), "❌ Missing: MANDATORY ROUTING WORKFLOW section"
     print("✅ Test 1 passed: MANDATORY ROUTING WORKFLOW section present")
 
-    # Test 2: Check for EnhancedAgentRouter usage
-    assert "EnhancedAgentRouter" in content, "❌ Missing: EnhancedAgentRouter reference"
+    # Test 2: Check for AgentRouter usage
+    assert "AgentRouter" in content, "❌ Missing: AgentRouter reference"
     assert (
-        "from enhanced_router import EnhancedAgentRouter" in content
-    ), "❌ Missing: EnhancedAgentRouter import statement"
-    print("✅ Test 2 passed: EnhancedAgentRouter properly documented")
+        "from agent_router import AgentRouter" in content
+    ), "❌ Missing: AgentRouter import statement"
+    print("✅ Test 2 passed: AgentRouter properly documented")
 
     # Test 3: Check for selected_agent variable
     assert "selected_agent" in content, "❌ Missing: selected_agent variable"

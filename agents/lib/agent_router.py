@@ -1,6 +1,6 @@
 """
-Enhanced Agent Router - Phase 1
-===============================
+Agent Router - Phase 1
+======================
 
 Main orchestration component that ties all Phase 1 features together.
 
@@ -59,9 +59,9 @@ class AgentRecommendation:
     definition_path: str
 
 
-class EnhancedAgentRouter:
+class AgentRouter:
     """
-    Enhanced agent routing with confidence scoring and caching.
+    Agent routing with confidence scoring and caching.
 
     Combines fuzzy matching, capability indexing, confidence scoring,
     and result caching to provide intelligent agent recommendations.
@@ -314,7 +314,7 @@ if __name__ == "__main__":
         print(f"Registry not found at: {registry_path}")
         exit(1)
 
-    router = EnhancedAgentRouter(str(registry_path))
+    router = AgentRouter(str(registry_path))
 
     test_queries = [
         "debug this performance issue",

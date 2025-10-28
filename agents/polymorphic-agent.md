@@ -280,15 +280,15 @@ echo "   Events will be persisted by consumers asynchronously"
 
 ### Step 1: Analyze Request and Route to Specialized Agent
 
-**You MUST run the EnhancedAgentRouter to select the best specialized agent:**
+**You MUST run the AgentRouter to select the best specialized agent:**
 
 ```python
 import sys
 sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude/agents/lib')
-from enhanced_router import EnhancedAgentRouter
+from agent_router import AgentRouter
 
 # Initialize router
-router = EnhancedAgentRouter()
+router = AgentRouter()
 
 # User's request
 user_request = """<insert full user request here>"""
@@ -668,7 +668,7 @@ class NodeMyOperationEffect(NodeEffect):
 2. **ConfidenceScorer** - 4-component weighted confidence calculation
 3. **CapabilityIndex** - In-memory inverted index for fast lookups
 4. **ResultCache** - TTL-based caching with hit tracking
-5. **EnhancedAgentRouter** - Main orchestration component
+5. **AgentRouter** - Main orchestration component
 
 ### Routing Decision Flow
 
@@ -702,10 +702,10 @@ class NodeMyOperationEffect(NodeEffect):
 ### Usage Example
 
 ```python
-from lib.enhanced_router import EnhancedAgentRouter
+from lib.agent_router import AgentRouter
 
 # Initialize router (loads registry and builds indexes)
-router = EnhancedAgentRouter()
+router = AgentRouter()
 
 # Route user request with context
 recommendations = router.route(

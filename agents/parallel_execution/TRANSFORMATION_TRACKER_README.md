@@ -149,10 +149,10 @@ for event in history:
 ### Enhanced Router Integration
 
 ```python
-from enhanced_router import EnhancedAgentRouter
+from agent_router import AgentRouter
 from transformation_tracker import get_transformation_tracker
 
-router = EnhancedAgentRouter()
+router = AgentRouter()
 tracker = get_transformation_tracker()
 
 # Route request

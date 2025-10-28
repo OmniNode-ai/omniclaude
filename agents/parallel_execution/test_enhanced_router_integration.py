@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test Enhanced Router Integration
+Test Agent Router Integration
 
-Validates that the EnhancedAgentRouter is properly integrated into ParallelCoordinator.
+Validates that the AgentRouter is properly integrated into ParallelCoordinator.
 Tests confidence scoring, fallback strategies, and error handling.
 
 Setup:
