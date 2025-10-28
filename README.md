@@ -372,14 +372,20 @@ cp .env.example .env
 source .env
 ```
 
-2. **Test provider switching**:
+2. **Install shared library**:
+```bash
+# Install shared library to ~/.claude/lib/ for use by hooks and agents
+./shared_lib/setup.sh
+```
+
+3. **Test provider switching**:
 ```bash
 ./toggle-claude-provider.sh status
 ./toggle-claude-provider.sh list
 ./toggle-claude-provider.sh gemini-2.5-flash
 ```
 
-3. **Optional: Setup production infrastructure**:
+4. **Optional: Setup production infrastructure**:
 ```bash
 # Initialize database
 ./scripts/init-db.sh
