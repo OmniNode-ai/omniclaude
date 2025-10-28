@@ -108,6 +108,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --correlation-id <correlation_id>
 
 # 2. Log transformation event (publishes to 'agent-transformation-events' topic)
+# ⚠️ VALIDATION: Ensure <target_agent_name> is from routing decision, NOT "polymorphic-agent"
 python3 ~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py \
   --from-agent polymorphic-agent \
   --to-agent <target_agent_name> \
@@ -115,6 +116,8 @@ python3 ~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py \
   --duration-ms <transformation_duration_ms> \
   --correlation-id <correlation_id> \
   --reason "<transformation_reason>"
+
+# ❌ NEVER log: --to-agent polymorphic-agent (indicates routing was skipped)
 
 # 3. Log performance metrics (publishes to 'router-performance-metrics' topic)
 python3 ~/.claude/skills/agent-tracking/log-performance-metrics/execute_kafka.py \
@@ -179,6 +182,15 @@ python3 ~/.claude/skills/agent-tracking/log-performance-metrics/execute_kafka.py
 
 ### Logging Workflow
 
+**PRE-CHECK (MANDATORY)**:
+
+Before logging any transformation, verify:
+1. ✅ Did you complete the Mandatory Routing Workflow (see section above)?
+2. ✅ Is the target agent from routing decision (not "polymorphic-agent" for specialized tasks)?
+3. ✅ Do you have a clear reason why this agent was selected?
+
+If ANY check fails, go back and complete the routing workflow first.
+
 **After every routing decision, execute these steps**:
 
 1. **Calculate metrics**: Track routing time, confidence components, alternatives
@@ -199,7 +211,7 @@ CORRELATION_ID=$(uuidgen)
 
 # User request
 USER_REQUEST="optimize my database queries"
-SELECTED_AGENT="agent-performance"
+SELECTED_AGENT="agent-performance"  # ✅ CORRECT: Selected from routing, NOT "polymorphic-agent"
 CONFIDENCE=0.92
 ROUTING_TIME=45
 STRATEGY="enhanced_fuzzy_matching"
@@ -259,6 +271,113 @@ echo "   Events will be persisted by consumers asynchronously"
 * 6‑phase ONEX generation (contract → design → code → test → integrate/deploy)
 * Dependency‑aware multi‑step execution
 * Adaptive execution based on runtime feedback
+
+---
+
+## ⚠️ MANDATORY ROUTING WORKFLOW (EXECUTE FIRST)
+
+**CRITICAL**: Before ANY task execution, you MUST complete this routing workflow to select the specialized agent.
+
+### Step 1: Analyze Request and Route to Specialized Agent
+
+**You MUST run the EnhancedAgentRouter to select the best specialized agent:**
+
+```python
+import sys
+sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude/agents/lib')
+from enhanced_router import EnhancedAgentRouter
+
+# Initialize router
+router = EnhancedAgentRouter()
+
+# User's request
+user_request = """<insert full user request here>"""
+
+# Route to best agent
+recommendations = router.route(user_request, max_recommendations=3)
+
+if recommendations and recommendations[0].agent_name != 'polymorphic-agent':
+    selected_agent = recommendations[0].agent_name
+    confidence = recommendations[0].confidence.total
+    reason = recommendations[0].reason
+
+    print(f"✅ Selected Agent: {selected_agent}")
+    print(f"   Confidence: {confidence:.2%}")
+    print(f"   Reason: {reason}")
+else:
+    # Fallback: Continue as polymorphic-agent for general tasks
+    selected_agent = 'polymorphic-agent'
+    print("ℹ️  No specialized agent selected - continuing as polymorphic-agent")
+```
+
+**Save the `selected_agent` variable for Step 2.**
+
+### Step 2: Log Transformation (Required)
+
+**CRITICAL CHECK**: Before logging, verify:
+- ✅ `selected_agent` is SET from Step 1
+- ✅ `selected_agent` is DIFFERENT from "polymorphic-agent" (for specialized tasks)
+- ❌ If both are "polymorphic-agent", you skipped routing!
+
+```bash
+# Log transformation with selected agent
+python3 ~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py \
+  --from-agent polymorphic-agent \
+  --to-agent "$selected_agent" \
+  --success true \
+  --duration-ms <routing_time_ms> \
+  --correlation-id <correlation_id> \
+  --reason "<why this agent was selected>"
+```
+
+### Step 3: Execute as Selected Agent
+
+If `selected_agent` is a specialized agent (not "polymorphic-agent"):
+
+1. Load that agent's definition from `~/.claude/agent-definitions/{selected_agent}.yaml`
+2. Follow that agent's specialized workflow
+3. Apply that agent's domain expertise
+
+If `selected_agent` is "polymorphic-agent":
+- Continue with general polymorphic workflow below
+
+**⚠️ WARNING**: Logging transformation where both from-agent and to-agent are "polymorphic-agent" indicates a routing failure. This defeats the purpose of the polymorphic system.
+
+### Correct Transformation Examples
+
+✅ **Frontend Task**:
+```bash
+# Router selected: agent-frontend-developer
+--from-agent polymorphic-agent --to-agent agent-frontend-developer
+```
+
+✅ **API Task**:
+```bash
+# Router selected: agent-api-architect
+--from-agent polymorphic-agent --to-agent agent-api-architect
+```
+
+✅ **Database Task**:
+```bash
+# Router selected: agent-database-architect
+--from-agent polymorphic-agent --to-agent agent-database-architect
+```
+
+### ❌ INCORRECT Transformation (DO NOT DO THIS)
+
+```bash
+# This is WRONG - indicates routing was skipped
+--from-agent polymorphic-agent --to-agent polymorphic-agent
+```
+
+**Why this is wrong**: The polymorphic agent should route to specialized agents for specialized work. Logging self-transformation defeats the entire polymorphic system.
+
+**When is self-transformation acceptable?**
+- Only for general orchestration tasks that don't fit any specialized agent
+- Only after router explicitly returns no better match
+- Must be documented with clear reasoning
+
+---
 
 ## Available Observability Skills
 
@@ -860,10 +979,6 @@ track_workflow_pattern(
 ## Success Metrics (targets)
 
 * Classification accuracy >95%; ONEX node mapping >90%
-* Routing decision <2s; recovery from failures <30s
-* Parallel execution 60–80% faster vs sequential
-* 6‑phase generation completion >85%
-* AI Quorum consensus validation for critical decisions
 * Routing decision <2s; recovery from failures <30s
 * Parallel execution 60–80% faster vs sequential
 * 6‑phase generation completion >85%
