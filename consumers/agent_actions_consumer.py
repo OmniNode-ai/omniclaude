@@ -130,6 +130,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def send_health_response(self):
         """Send health check response with thread-safe state verification."""
         # Thread-safe atomic health check to prevent TOCTOU race conditions
+        # Keep entire response generation inside lock to prevent state changes
         with self.consumer_instance._health_lock:
             is_healthy = (
                 self.consumer_instance is not None
@@ -137,18 +138,18 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 and not self.consumer_instance.shutdown_event.is_set()
             )
 
-        if is_healthy:
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            response = {"status": "healthy", "consumer": "running"}
-            self.wfile.write(json.dumps(response).encode())
-        else:
-            self.send_response(503)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            response = {"status": "unhealthy", "consumer": "stopped"}
-            self.wfile.write(json.dumps(response).encode())
+            if is_healthy:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                response = {"status": "healthy", "consumer": "running"}
+                self.wfile.write(json.dumps(response).encode())
+            else:
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                response = {"status": "unhealthy", "consumer": "stopped"}
+                self.wfile.write(json.dumps(response).encode())
 
     def send_metrics_response(self):
         """Send metrics response."""
@@ -188,7 +189,7 @@ class AgentActionsConsumer:
         kafka_brokers_str = config.get("kafka_brokers") or os.getenv("KAFKA_BROKERS")
         if not kafka_brokers_str:
             raise ValueError(
-                "KAFKA_BROKERS environment variable must be set. "
+                "KAFKA_BROKERS must be set via config file or environment variable. "
                 "Example: KAFKA_BROKERS=192.168.86.200:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")

@@ -25,11 +25,11 @@ services:
       - "8001:8001"  # Metrics endpoint
     environment:
       # Database configuration
-      - DATABASE_URL=postgresql://omniclaude:${POSTGRES_PASSWORD:-changeme}@postgres:5432/omniclaude
+      - DATABASE_URL=postgresql://omniclaude:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}@postgres:5432/omniclaude
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
       - POSTGRES_DATABASE=omniclaude
 
       # Valkey configuration (Redis-compatible)
@@ -38,7 +38,7 @@ services:
       # Application configuration
       - APP_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - SECRET_KEY=${SECRET_KEY:-changeme-generate-secure-key}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in environment}
 
       # OpenTelemetry configuration
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
@@ -141,7 +141,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
       - POSTGRES_DB=omniclaude
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
       - PGDATA=/var/lib/postgresql/data/pgdata
@@ -245,7 +245,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in environment}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_ANALYTICS_REPORTING_ENABLED=false

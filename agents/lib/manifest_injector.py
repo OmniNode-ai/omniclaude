@@ -10,6 +10,7 @@ Key Features:
 - Request-response pattern with correlation tracking
 - Graceful fallback to minimal manifest on timeout
 - Compatible with existing hook infrastructure
+- Async context manager for proper resource cleanup
 
 Architecture:
     manifest_injector.py
@@ -29,6 +30,16 @@ Integration:
 - Uses IntelligenceEventClient for event bus communication
 - Maintains same format_for_prompt() API for backward compatibility
 - Sync wrapper for use in hooks
+- Async context manager (__aenter__/__aexit__) for resource cleanup
+
+Usage:
+    # Async with context manager (recommended)
+    async with ManifestInjector() as injector:
+        manifest = await injector.generate_dynamic_manifest_async(correlation_id)
+        formatted = injector.format_for_prompt()
+
+    # Sync wrapper (backward compatibility)
+    manifest_text = inject_manifest(correlation_id)
 
 Performance Targets:
 - Query time: <2000ms total (parallel queries)
@@ -36,6 +47,7 @@ Performance Targets:
 - Fallback on timeout: minimal manifest with core info
 
 Created: 2025-10-26
+Updated: 2025-10-28 (added context manager support)
 """
 
 from __future__ import annotations
@@ -552,6 +564,53 @@ class ManifestInjector:
             self._storage = None
 
         self.logger = logging.getLogger(__name__)
+
+    async def __aenter__(self):
+        """
+        Async context manager entry.
+
+        Returns:
+            Self for use in async with statement
+        """
+        self.logger.debug("ManifestInjector context manager entered")
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Async context manager exit with proper resource cleanup.
+
+        Args:
+            exc_type: Exception type if an error occurred
+            exc_val: Exception value if an error occurred
+            exc_tb: Exception traceback if an error occurred
+
+        Returns:
+            False to propagate exceptions (default behavior)
+        """
+        try:
+            # Log cache metrics before cleanup
+            if self.enable_cache and self._cache:
+                self.log_cache_metrics()
+
+            # Clear cache
+            if self.enable_cache and self._cache:
+                invalidated = self._cache.invalidate()
+                self.logger.debug(f"Cleared {invalidated} cache entries")
+
+            # Clear cached data
+            self._manifest_data = None
+            self._cached_formatted = None
+            self._last_update = None
+
+            self.logger.debug("ManifestInjector context manager exited cleanly")
+
+        except Exception as e:
+            self.logger.error(
+                f"Error during ManifestInjector cleanup: {e}", exc_info=True
+            )
+
+        # Return False to propagate any exceptions
+        return False
 
     def generate_dynamic_manifest(
         self,
@@ -2185,13 +2244,13 @@ class ManifestInjector:
                 )
 
 
-# Convenience function for quick access (sync wrapper)
-def inject_manifest(
+# Convenience function for quick access (async with context manager)
+async def inject_manifest_async(
     correlation_id: Optional[str] = None,
     sections: Optional[List[str]] = None,
 ) -> str:
     """
-    Quick function to load and format manifest (synchronous).
+    Quick function to load and format manifest (asynchronous with context manager).
 
     Args:
         correlation_id: Optional correlation ID for tracking
@@ -2204,16 +2263,62 @@ def inject_manifest(
 
     correlation_id = correlation_id or str(uuid4())
 
-    injector = ManifestInjector()
+    async with ManifestInjector() as injector:
+        # Generate manifest (will use cache if valid)
+        try:
+            await injector.generate_dynamic_manifest_async(correlation_id)
+        except Exception as e:
+            logger.error(f"Failed to generate dynamic manifest: {e}")
+            # Will use minimal manifest
 
-    # Generate manifest (will use cache if valid)
+        return injector.format_for_prompt(sections)
+
+
+# Convenience function for quick access (sync wrapper for backward compatibility)
+def inject_manifest(
+    correlation_id: Optional[str] = None,
+    sections: Optional[List[str]] = None,
+) -> str:
+    """
+    Quick function to load and format manifest (synchronous wrapper).
+
+    Note: This is a synchronous wrapper around inject_manifest_async() for
+    backward compatibility. Prefer using inject_manifest_async() directly
+    in async contexts for better resource management.
+
+    Args:
+        correlation_id: Optional correlation ID for tracking
+        sections: Optional list of sections to include
+
+    Returns:
+        Formatted manifest string
+    """
+    from uuid import uuid4
+
+    correlation_id = correlation_id or str(uuid4())
+
+    # Run async version in event loop
     try:
-        injector.generate_dynamic_manifest(correlation_id)
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is already running, create injector without context manager
+            # (not ideal but necessary for sync wrapper in running loop)
+            injector = ManifestInjector()
+            try:
+                injector.generate_dynamic_manifest(correlation_id)
+            except Exception as e:
+                logger.error(f"Failed to generate dynamic manifest: {e}")
+            return injector.format_for_prompt(sections)
+        else:
+            # Run async version with context manager
+            return loop.run_until_complete(
+                inject_manifest_async(correlation_id, sections)
+            )
     except Exception as e:
-        logger.error(f"Failed to generate dynamic manifest: {e}")
-        # Will use minimal manifest
-
-    return injector.format_for_prompt(sections)
+        logger.error(f"Failed to run inject_manifest_async: {e}")
+        # Fallback to minimal manifest
+        injector = ManifestInjector()
+        return injector.format_for_prompt(sections)
 
 
 __all__ = [
@@ -2223,4 +2328,5 @@ __all__ = [
     "ManifestInjector",
     "ManifestInjectionStorage",
     "inject_manifest",
+    "inject_manifest_async",
 ]

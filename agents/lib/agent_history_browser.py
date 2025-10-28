@@ -21,7 +21,7 @@ Usage:
 
 Database:
     Queries PostgreSQL database 'omninode_bridge' table 'agent_manifest_injections'
-    Connection via environment variables or defaults to 192.168.86.200:5436
+    Connection via environment variables (POSTGRES_HOST and POSTGRES_PORT required)
 
 Created: 2025-10-27
 """
@@ -75,21 +75,35 @@ class AgentHistoryBrowser:
         Initialize browser with database connection.
 
         Args:
-            db_host: PostgreSQL host (default: env POSTGRES_HOST or 192.168.86.200)
-            db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
+            db_host: PostgreSQL host (required: from param, env POSTGRES_HOST, or .env)
+            db_port: PostgreSQL port (required: from param, env POSTGRES_PORT, or .env)
             db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
             db_user: Database user (default: env POSTGRES_USER or postgres)
-            db_password: Database password (default: env POSTGRES_PASSWORD)
+            db_password: Database password (required: from param, env POSTGRES_PASSWORD, or .env)
         """
         # Try to load .env file first
         self._load_env_file()
 
-        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
-        self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
+        # Require explicit configuration - no hardcoded defaults
+        self.db_host = db_host or os.environ.get("POSTGRES_HOST")
+        self.db_port = db_port or (
+            int(os.environ.get("POSTGRES_PORT"))
+            if os.environ.get("POSTGRES_PORT")
+            else None
+        )
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
         self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
 
+        # Validate required configuration
+        if not self.db_host:
+            raise ValueError(
+                "Database host not configured! Set POSTGRES_HOST environment variable or add to .env file."
+            )
+        if not self.db_port:
+            raise ValueError(
+                "Database port not configured! Set POSTGRES_PORT environment variable or add to .env file."
+            )
         if not self.db_password:
             raise ValueError(
                 "Database password not found! Set POSTGRES_PASSWORD environment variable or add to .env file."
@@ -130,6 +144,15 @@ class AgentHistoryBrowser:
             True if successful, False otherwise
         """
         try:
+            # Close existing connection if any
+            if self.conn:
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass  # Ignore errors when closing stale connection
+                self.conn = None
+
+            # Create new connection
             self.conn = psycopg2.connect(
                 host=self.db_host,
                 port=self.db_port,
@@ -207,12 +230,25 @@ class AgentHistoryBrowser:
         Get complete details for a specific agent run.
 
         Args:
-            correlation_id: Correlation ID of the run
+            correlation_id: Correlation ID of the run (string or UUID)
 
         Returns:
             Complete run record or None if not found
         """
         cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Convert string to UUID for proper type handling
+        try:
+            if isinstance(correlation_id, str):
+                correlation_id_uuid = UUID(correlation_id)
+            elif isinstance(correlation_id, UUID):
+                correlation_id_uuid = correlation_id
+            else:
+                raise ValueError(f"Invalid correlation_id type: {type(correlation_id)}")
+        except (ValueError, AttributeError) as e:
+            cursor.close()
+            self._print_error(f"Invalid correlation ID format: {e}")
+            return None
 
         query = """
             SELECT *
@@ -220,7 +256,7 @@ class AgentHistoryBrowser:
             WHERE correlation_id = %s
         """
 
-        cursor.execute(query, (correlation_id,))
+        cursor.execute(query, (correlation_id_uuid,))
         run = cursor.fetchone()
         cursor.close()
 
@@ -796,12 +832,14 @@ This enables complete replay of any agent execution for debugging.
 
 DATABASE CONNECTION:
 
-Connection details can be configured via environment variables:
-  POSTGRES_HOST (default: 192.168.86.200)
-  POSTGRES_PORT (default: 5436)
+Connection details must be configured via environment variables or .env file:
+  POSTGRES_HOST (required - no default)
+  POSTGRES_PORT (required - no default)
   POSTGRES_DATABASE (default: omninode_bridge)
   POSTGRES_USER (default: postgres)
-  POSTGRES_PASSWORD (default: omninode-bridge-postgres-dev-2024)
+  POSTGRES_PASSWORD (required - no default)
+
+The tool will search for .env file in current directory and up to 5 parent levels.
 """
 
         if RICH_AVAILABLE:
