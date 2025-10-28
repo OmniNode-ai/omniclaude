@@ -8,8 +8,8 @@ services:
   # ============================================================================
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deployment/Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
     environment:
       # Kafka configuration (remote broker on 192.168.86.200)
-      - KAFKA_BROKERS=192.168.86.200:29102
+      - KAFKA_BROKERS=192.168.86.200:9092
       - KAFKA_GROUP_ID=agent-observability-postgres
 
       # PostgreSQL configuration (connects to remote omninode-bridge database on 192.168.86.200)
@@ -340,12 +340,12 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.22.0.0/16
+        - subnet: 172.30.0.0/16
   monitoring_network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.23.0.0/16
+        - subnet: 172.31.0.0/16
   # omninode_bridge_network:
   #   external: true
   #   name: omninode_bridge_omninode-bridge-network
