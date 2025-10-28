@@ -39,13 +39,20 @@ import asyncio
 import json
 import logging
 import os
+
+# Import centralized Kafka configuration
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from pathlib import Path as PathLib
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
+
+sys.path.insert(0, str(PathLib.home() / ".claude" / "lib"))
+from kafka_config import get_kafka_bootstrap_servers
 
 logger = logging.getLogger(__name__)
 
@@ -106,23 +113,20 @@ class IntelligenceEventClient:
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
-        # Bootstrap servers - use env var if not provided
-        # Priority: constructor arg > KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS > KAFKA_BOOTSTRAP_SERVERS
-        self.bootstrap_servers = (
-            bootstrap_servers
-            or os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS")
-            or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-        )
+        # Bootstrap servers - use centralized configuration if not provided
+        self.bootstrap_servers = bootstrap_servers or get_kafka_bootstrap_servers()
         if not self.bootstrap_servers:
             raise ValueError(
                 "bootstrap_servers must be provided or set via environment variables.\n"
                 "Checked variables (in order):\n"
-                "  1. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (preferred for intelligence)\n"
-                "  2. KAFKA_BOOTSTRAP_SERVERS (fallback)\n"
-                "Example: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
-                "Current values: KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BOOTSTRAP_SERVERS={}".format(
-                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
+                "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
+                "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
+                "  3. KAFKA_BROKERS (legacy compatibility)\n"
+                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
                     os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
+                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
+                    os.getenv("KAFKA_BROKERS", "not set"),
                 )
             )
         self.enable_intelligence = enable_intelligence

@@ -29,6 +29,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
+# Add lib to path for kafka_config
+sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
+from kafka_config import get_kafka_bootstrap_servers
+
 
 # Load .env file from project directory
 def load_env_file():
@@ -89,8 +93,8 @@ def get_kafka_producer():
                 "kafka-python not installed. Install with: pip install kafka-python"
             )
 
-    # Get Kafka brokers from environment
-    brokers = os.environ.get("KAFKA_BROKERS", "localhost:9092").split(",")
+    # Get Kafka brokers from centralized configuration
+    brokers = get_kafka_bootstrap_servers().split(",")
 
     # Create producer with JSON serialization
     producer = KafkaProducer(
