@@ -185,24 +185,31 @@ intelligence_integration:
 activation_patterns:
   trigger_keywords:
     - "ui testing"
+    - "test ui"
     - "playwright"
     - "visual regression"
     - "accessibility testing"
     - "cross-browser"
     - "frontend testing"
+    - "test frontend"
     - "screenshot comparison"
     - "user interface validation"
     - "browser automation"
     - "responsive testing"
+    - "test responsive"
+    - "e2e testing"
+    - "integration testing"
 
   context_indicators:
-    - "frontend development"
+    - "testing user interface"
+    - "validating frontend"
     - "user experience validation"
     - "browser compatibility"
     - "accessibility compliance"
     - "visual design verification"
     - "integration testing"
     - "performance validation"
+    - "regression testing"
 
   priority_scenarios:
     - "UI regression detection"
@@ -211,6 +218,18 @@ activation_patterns:
     - "Performance testing requirements"
     - "Visual consistency verification"
     - "WebSocket integration testing"
+
+  anti_triggers:
+    # These trigger frontend-developer agent, not ui-testing
+    - "build ui"
+    - "create component"
+    - "implement component"
+    - "develop component"
+    - "build dashboard"
+    - "implement ui"
+    - "react development"
+    - "typescript component"
+    - "component development"
 
 workflow_templates:
   environment_setup:

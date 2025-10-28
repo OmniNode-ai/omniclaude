@@ -474,6 +474,87 @@ class ManifestInjectionStorage:
             )
             return False
 
+    def mark_agent_completed(
+        self,
+        correlation_id: UUID,
+        success: bool = True,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """
+        Mark agent execution as completed by updating lifecycle fields.
+
+        This fixes the "Active Agents never reaches 0" bug by properly updating
+        completed_at, executed_at, and agent_execution_success fields.
+
+        Args:
+            correlation_id: Correlation ID linking to manifest injection record
+            success: Whether agent execution succeeded (default: True)
+            error_message: Optional error message if execution failed
+
+        Returns:
+            True if successful, False otherwise
+
+        Example:
+            >>> storage = ManifestInjectionStorage()
+            >>> storage.mark_agent_completed(correlation_id, success=True)
+            True
+        """
+        try:
+            import psycopg2
+
+            # Connect to database
+            conn = psycopg2.connect(
+                host=self.db_host,
+                port=self.db_port,
+                dbname=self.db_name,
+                user=self.db_user,
+                password=self.db_password,
+            )
+
+            # Update lifecycle fields
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE agent_manifest_injections
+                SET
+                    completed_at = NOW(),
+                    executed_at = NOW(),
+                    agent_execution_success = %s,
+                    warnings = CASE
+                        WHEN %s IS NOT NULL THEN array_append(COALESCE(warnings, ARRAY[]::text[]), %s)
+                        ELSE warnings
+                    END
+                WHERE correlation_id = %s
+                """,
+                (
+                    success,
+                    error_message,
+                    error_message,
+                    str(correlation_id),
+                ),
+            )
+
+            rows_updated = cursor.rowcount
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            if rows_updated > 0:
+                logger.info(
+                    f"Marked agent as completed: correlation_id={correlation_id}, "
+                    f"success={success}, rows_updated={rows_updated}"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"No manifest injection record found for correlation_id={correlation_id}"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to mark agent as completed: {e}", exc_info=True)
+            return False
+
 
 class ManifestInjector:
     """
@@ -523,6 +604,7 @@ class ManifestInjector:
             enable_cache: Enable caching of intelligence queries (default: True)
             cache_ttl_seconds: Cache TTL override (default: from env or 300)
             agent_name: Agent name for logging (if known at init time)
+                       Falls back to AGENT_NAME environment variable if not provided
         """
         self.kafka_brokers = kafka_brokers or os.environ.get(
             "KAFKA_BROKERS", "192.168.86.200:29102"
@@ -531,7 +613,8 @@ class ManifestInjector:
         self.query_timeout_ms = query_timeout_ms
         self.enable_storage = enable_storage
         self.enable_cache = enable_cache
-        self.agent_name = agent_name
+        # Read agent_name from parameter or environment variable (fixes "unknown" agent names)
+        self.agent_name = agent_name or os.environ.get("AGENT_NAME")
 
         # Get cache TTL from environment or use default
         default_ttl = int(os.environ.get("MANIFEST_CACHE_TTL_SECONDS", "300"))
@@ -2242,6 +2325,49 @@ class ManifestInjector:
                     f"hit_rate={type_metrics.get('hit_rate_percent', 0):.1f}%, "
                     f"queries={type_metrics.get('total_queries', 0)}"
                 )
+
+    def mark_agent_completed(
+        self,
+        success: bool = True,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """
+        Mark agent execution as completed (lifecycle tracking).
+
+        This fixes the "Active Agents never reaches 0" bug by properly updating
+        the agent_manifest_injections table with completion timestamp.
+
+        Uses the current correlation ID set during manifest generation.
+
+        Args:
+            success: Whether agent execution succeeded (default: True)
+            error_message: Optional error message if execution failed
+
+        Returns:
+            True if successful, False otherwise
+
+        Example:
+            >>> async with ManifestInjector(agent_name="agent-researcher") as injector:
+            ...     await injector.generate_dynamic_manifest_async(correlation_id)
+            ...     # ... do agent work ...
+            ...     injector.mark_agent_completed(success=True)
+        """
+        if not self.enable_storage or not self._storage:
+            self.logger.debug("Agent completion tracking disabled (storage disabled)")
+            return False
+
+        if self._current_correlation_id is None:
+            self.logger.warning(
+                "Cannot mark agent as completed: no correlation ID set. "
+                "Call generate_dynamic_manifest() first."
+            )
+            return False
+
+        return self._storage.mark_agent_completed(
+            correlation_id=self._current_correlation_id,
+            success=success,
+            error_message=error_message,
+        )
 
 
 # Convenience function for quick access (async with context manager)
