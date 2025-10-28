@@ -191,7 +191,7 @@ User Request → Enhanced Router → Agent Selection → YAML Load → Identity 
 2. **ConfidenceScorer** - 4-component weighted confidence
 3. **CapabilityIndex** - In-memory inverted index
 4. **ResultCache** - TTL-based caching with hit tracking
-5. **EnhancedAgentRouter** - Main orchestration
+5. **AgentRouter** - Main orchestration
 
 **Performance targets**:
 - Routing accuracy: >95%

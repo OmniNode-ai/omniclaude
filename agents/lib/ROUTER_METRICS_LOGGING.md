@@ -60,10 +60,10 @@ For each routing decision, the following metrics are logged:
 The router automatically logs metrics when initialized with `enable_db_logging=True` (default):
 
 ```python
-from lib.enhanced_router import EnhancedAgentRouter
+from lib.agent_router import AgentRouter
 
 # Initialize router with DB logging enabled (default)
-router = EnhancedAgentRouter(
+router = AgentRouter(
     registry_path="/path/to/agent-registry.yaml",
     enable_db_logging=True  # Default: True
 )
@@ -80,7 +80,7 @@ await router.shutdown()
 To disable database logging (e.g., for testing):
 
 ```python
-router = EnhancedAgentRouter(
+router = AgentRouter(
     registry_path="/path/to/agent-registry.yaml",
     enable_db_logging=False
 )
@@ -240,7 +240,7 @@ Test coverage:
 ### Architecture
 
 ```
-EnhancedAgentRouter
+AgentRouter
     ↓ (on route())
 RouterMetricsLogger
     ↓ (non-blocking)
@@ -269,7 +269,7 @@ PostgreSQL Database
 ## Files
 
 - `/Users/jonah/.claude/agents/lib/router_metrics_logger.py` - Metrics logger implementation
-- `/Users/jonah/.claude/agents/lib/enhanced_router.py` - Router with integrated logging
+- `/Users/jonah/.claude/agents/lib/agent_router.py` - Router with integrated logging
 - `/Users/jonah/.claude/agents/tests/test_router_metrics_logging.py` - Test suite
 - `/Users/jonah/.claude/agents/.env` - Database configuration
 
