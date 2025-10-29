@@ -77,8 +77,8 @@ class AgentHistoryBrowser:
         Args:
             db_host: PostgreSQL host (required: from param, env POSTGRES_HOST, or .env)
             db_port: PostgreSQL port (required: from param, env POSTGRES_PORT, or .env)
-            db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
-            db_user: Database user (default: env POSTGRES_USER or postgres)
+            db_name: Database name (required: from param, env POSTGRES_DATABASE, or .env)
+            db_user: Database user (required: from param, env POSTGRES_USER, or .env)
             db_password: Database password (required: from param, env POSTGRES_PASSWORD, or .env)
         """
         # Try to load .env file first
@@ -91,11 +91,11 @@ class AgentHistoryBrowser:
             if os.environ.get("POSTGRES_PORT")
             else None
         )
-        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
-        self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
+        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE")
+        self.db_user = db_user or os.environ.get("POSTGRES_USER")
         self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
 
-        # Validate required configuration
+        # Validate required configuration - fail early with clear error messages
         if not self.db_host:
             raise ValueError(
                 "Database host not configured! Set POSTGRES_HOST environment variable or add to .env file."
@@ -103,6 +103,14 @@ class AgentHistoryBrowser:
         if not self.db_port:
             raise ValueError(
                 "Database port not configured! Set POSTGRES_PORT environment variable or add to .env file."
+            )
+        if not self.db_name:
+            raise ValueError(
+                "Database name not configured! Set POSTGRES_DATABASE environment variable or add to .env file."
+            )
+        if not self.db_user:
+            raise ValueError(
+                "Database user not configured! Set POSTGRES_USER environment variable or add to .env file."
             )
         if not self.db_password:
             raise ValueError(
@@ -213,8 +221,8 @@ class AgentHistoryBrowser:
             params.append(f"%{agent_name}%")
 
         if since_hours:
-            query += " AND created_at >= NOW() - INTERVAL '%s hours'"
-            params.append(since_hours)
+            query += " AND created_at >= NOW() - (%s * INTERVAL '1 hour')"
+            params.append(int(since_hours))
 
         query += " ORDER BY created_at DESC LIMIT %s"
         params.append(limit)
@@ -835,8 +843,8 @@ DATABASE CONNECTION:
 Connection details must be configured via environment variables or .env file:
   POSTGRES_HOST (required - no default)
   POSTGRES_PORT (required - no default)
-  POSTGRES_DATABASE (default: omninode_bridge)
-  POSTGRES_USER (default: postgres)
+  POSTGRES_DATABASE (required - no default)
+  POSTGRES_USER (required - no default)
   POSTGRES_PASSWORD (required - no default)
 
 The tool will search for .env file in current directory and up to 5 parent levels.

@@ -92,18 +92,16 @@ services:
     container_name: omniclaude_agent_consumer
     restart: unless-stopped
     environment:
-      # Kafka configuration (remote broker on 192.168.86.200)
-      - KAFKA_BROKERS=192.168.86.200:9092
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
       - KAFKA_GROUP_ID=agent-observability-postgres
 
-      # PostgreSQL configuration (connects to remote omninode-bridge database on 192.168.86.200)
-      # SECURITY WARNING: Change OMNINODE_BRIDGE_POSTGRES_PASSWORD in production!
-      # Default is for local development only - never use in production environments
-      - POSTGRES_HOST=192.168.86.200
-      - POSTGRES_PORT=5436
-      - POSTGRES_DATABASE=omninode_bridge
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-***REDACTED***}
+      # PostgreSQL configuration (connects to remote omninode-bridge database)
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:?OMNINODE_BRIDGE_POSTGRES_PASSWORD must be set in environment}
 
       # Batch processing configuration
       - BATCH_SIZE=100

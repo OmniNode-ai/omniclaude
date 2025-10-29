@@ -371,15 +371,6 @@ class ManifestInjectionStorage:
             import psycopg2
             import psycopg2.extras
 
-            # Connect to database
-            conn = psycopg2.connect(
-                host=self.db_host,
-                port=self.db_port,
-                dbname=self.db_name,
-                user=self.db_user,
-                password=self.db_password,
-            )
-
             # Extract metadata
             metadata = manifest_data.get("manifest_metadata", {})
             manifest_version = metadata.get("version", "unknown")
@@ -407,66 +398,74 @@ class ManifestInjectionStorage:
             # Warnings
             warnings = kwargs.get("warnings", [])
 
-            # Insert record
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO agent_manifest_injections (
-                    correlation_id,
-                    agent_name,
-                    manifest_version,
-                    generation_source,
-                    is_fallback,
-                    sections_included,
-                    patterns_count,
-                    infrastructure_services,
-                    models_count,
-                    database_schemas_count,
-                    debug_intelligence_successes,
-                    debug_intelligence_failures,
-                    collections_queried,
-                    query_times,
-                    total_query_time_ms,
-                    full_manifest_snapshot,
-                    formatted_manifest_text,
-                    manifest_size_bytes,
-                    intelligence_available,
-                    query_failures,
-                    warnings,
-                    created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            # Connect to database with context manager for automatic cleanup
+            with (
+                psycopg2.connect(
+                    host=self.db_host,
+                    port=self.db_port,
+                    dbname=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                ) as conn,
+                conn.cursor() as cursor,
+            ):
+                # Insert record
+                cursor.execute(
+                    """
+                    INSERT INTO agent_manifest_injections (
+                        correlation_id,
+                        agent_name,
+                        manifest_version,
+                        generation_source,
+                        is_fallback,
+                        sections_included,
+                        patterns_count,
+                        infrastructure_services,
+                        models_count,
+                        database_schemas_count,
+                        debug_intelligence_successes,
+                        debug_intelligence_failures,
+                        collections_queried,
+                        query_times,
+                        total_query_time_ms,
+                        full_manifest_snapshot,
+                        formatted_manifest_text,
+                        manifest_size_bytes,
+                        intelligence_available,
+                        query_failures,
+                        warnings,
+                        created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+                    )
+                    """,
+                    (
+                        str(correlation_id),
+                        agent_name,
+                        manifest_version,
+                        generation_source,
+                        is_fallback,
+                        sections_included,
+                        patterns_count,
+                        infrastructure_services,
+                        models_count,
+                        database_schemas_count,
+                        debug_intelligence_successes,
+                        debug_intelligence_failures,
+                        psycopg2.extras.Json(collections_queried),
+                        psycopg2.extras.Json(query_times),
+                        total_query_time_ms,
+                        psycopg2.extras.Json(manifest_data),
+                        formatted_text,
+                        manifest_size_bytes,
+                        not is_fallback,
+                        psycopg2.extras.Json(query_failures),
+                        warnings,
+                    ),
                 )
-                """,
-                (
-                    str(correlation_id),
-                    agent_name,
-                    manifest_version,
-                    generation_source,
-                    is_fallback,
-                    sections_included,
-                    patterns_count,
-                    infrastructure_services,
-                    models_count,
-                    database_schemas_count,
-                    debug_intelligence_successes,
-                    debug_intelligence_failures,
-                    psycopg2.extras.Json(collections_queried),
-                    psycopg2.extras.Json(query_times),
-                    total_query_time_ms,
-                    psycopg2.extras.Json(manifest_data),
-                    formatted_text,
-                    manifest_size_bytes,
-                    not is_fallback,
-                    psycopg2.extras.Json(query_failures),
-                    warnings,
-                ),
-            )
 
-            conn.commit()
-            cursor.close()
-            conn.close()
+                conn.commit()
 
             logger.info(
                 f"Stored manifest injection record: correlation_id={correlation_id}, "
@@ -510,42 +509,41 @@ class ManifestInjectionStorage:
         try:
             import psycopg2
 
-            # Connect to database
-            conn = psycopg2.connect(
-                host=self.db_host,
-                port=self.db_port,
-                dbname=self.db_name,
-                user=self.db_user,
-                password=self.db_password,
-            )
+            # Connect to database with context manager for automatic cleanup
+            with (
+                psycopg2.connect(
+                    host=self.db_host,
+                    port=self.db_port,
+                    dbname=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                ) as conn,
+                conn.cursor() as cursor,
+            ):
+                # Update lifecycle fields
+                cursor.execute(
+                    """
+                    UPDATE agent_manifest_injections
+                    SET
+                        completed_at = NOW(),
+                        executed_at = NOW(),
+                        agent_execution_success = %s,
+                        warnings = CASE
+                            WHEN %s IS NOT NULL THEN array_append(COALESCE(warnings, ARRAY[]::text[]), %s)
+                            ELSE warnings
+                        END
+                    WHERE correlation_id = %s
+                    """,
+                    (
+                        success,
+                        error_message,
+                        error_message,
+                        str(correlation_id),
+                    ),
+                )
 
-            # Update lifecycle fields
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE agent_manifest_injections
-                SET
-                    completed_at = NOW(),
-                    executed_at = NOW(),
-                    agent_execution_success = %s,
-                    warnings = CASE
-                        WHEN %s IS NOT NULL THEN array_append(COALESCE(warnings, ARRAY[]::text[]), %s)
-                        ELSE warnings
-                    END
-                WHERE correlation_id = %s
-                """,
-                (
-                    success,
-                    error_message,
-                    error_message,
-                    str(correlation_id),
-                ),
-            )
-
-            rows_updated = cursor.rowcount
-            conn.commit()
-            cursor.close()
-            conn.close()
+                rows_updated = cursor.rowcount
+                conn.commit()
 
             if rows_updated > 0:
                 logger.info(

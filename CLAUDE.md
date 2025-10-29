@@ -170,13 +170,21 @@ All agents and tests automatically read credentials from `.env`. If you see auth
 
 #### Kafka Configuration
 ```bash
+# REQUIRED: Set based on your deployment environment (no default)
+# See .env.example for detailed port selection guide
+KAFKA_BOOTSTRAP_SERVERS=
+
+# Common configurations:
+# - Docker internal: omninode-bridge-redpanda:9092
+# - Host to Docker (production): localhost:29102 or 192.168.86.200:29102
+# - Host to Docker (test): localhost:29092
+
 # Documentation hooks
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092
 KAFKA_DOC_TOPIC=documentation-changed
 GIT_HOOK_VALIDATE_DOCS=false
 
 # Event-based intelligence (PRIMARY)
-KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=192.168.86.200:9092
+KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=  # Same as KAFKA_BOOTSTRAP_SERVERS
 KAFKA_ENABLE_INTELLIGENCE=true
 ENABLE_EVENT_BASED_DISCOVERY=true
 ENABLE_FILESYSTEM_FALLBACK=true
@@ -190,10 +198,16 @@ KAFKA_REQUEST_TIMEOUT_MS=5000
 - `dev.archon-intelligence.intelligence.code-analysis-failed.v1`
 - `documentation-changed`
 
-**Ports**:
-- External: `192.168.86.200:9092`
-- Docker internal: `omninode-bridge-redpanda:9092`
-- Admin UI: `http://localhost:8080`
+**Port Reference**:
+- **Port 9092**: Internal Docker network (service-to-service communication)
+- **Port 29092**: External host access (test environment)
+- **Port 29102**: External host access (production environment - RECOMMENDED)
+- **Admin UI**: `http://localhost:8080`
+
+**Port Selection**:
+- Use `omninode-bridge-redpanda:9092` for containers within Docker network
+- Use `localhost:29102` or `192.168.86.200:29102` for external access from host (production)
+- Use `localhost:29092` for external access in test environment
 
 #### Qdrant Configuration
 ```bash

@@ -162,7 +162,7 @@ class HookEventProcessor:
                     SELECT *
                     FROM hook_events
                     WHERE processed = FALSE
-                      AND (retry_count < %s OR retry_count IS NULL)
+                      AND COALESCE(retry_count, 0) < %s
                     ORDER BY created_at ASC
                     LIMIT %s
                     FOR UPDATE SKIP LOCKED
@@ -239,6 +239,7 @@ class HookEventProcessor:
         Returns:
             True if database update succeeded, False otherwise
         """
+        conn = None  # Initialize before try to prevent UnboundLocalError
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -263,7 +264,7 @@ class HookEventProcessor:
                     cur.execute(
                         """
                         UPDATE hook_events
-                        SET retry_count = retry_count + 1,
+                        SET retry_count = COALESCE(retry_count, 0) + 1,
                             processing_errors = COALESCE(processing_errors, ARRAY[]::text[]) || %s
                         WHERE id = %s
                         """,
@@ -327,7 +328,7 @@ class HookEventProcessor:
                     else:
                         batch_metrics["failed"] += 1
                         self.metrics["events_failed"] += 1
-                        if event["retry_count"] < self.max_retry_count:
+                        if (event["retry_count"] or 0) < self.max_retry_count:
                             self.metrics["events_retried"] += 1
                 else:
                     logger.error(f"Failed to update event {event_id} in database")
