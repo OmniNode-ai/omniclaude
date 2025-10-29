@@ -66,8 +66,8 @@ business_logic_result = await business_logic_generator.generate_node_stub(
 ```
 User Request
     ↓
-SimplePRDAnalyzer.analyze_prd()
-    ↓ (SimplePRDAnalysisResult)
+PRDAnalyzer.analyze_prd()
+    ↓ (PRDAnalysisResult)
 ContractGenerator.generate_contract_yaml()
     ↓ (contract dict)
 GenerationPipeline._stage_4_generate_code()  [generation_pipeline.py:1778]
@@ -338,7 +338,7 @@ await self._record_pattern_feedback(
 ```
 User Request
     ↓
-SimplePRDAnalyzer.analyze_prd()
+PRDAnalyzer.analyze_prd()
     ↓
 ContractGenerator.generate_contract_yaml()
     ↓
@@ -479,7 +479,7 @@ def generate_pattern_code(pattern_name: str, contract: Dict, node_type: str,
 
 async def generate_node(
     self,
-    analysis_result: SimplePRDAnalysisResult,
+    analysis_result: PRDAnalysisResult,
     node_type: str,
     microservice_name: str,
     domain: str,

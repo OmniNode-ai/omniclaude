@@ -19,7 +19,7 @@ from .models.intelligence_context import IntelligenceContext, get_default_intell
 # Pattern learning imports (KV-002 integration)
 from .pattern_library import PatternLibrary
 from .patterns.pattern_storage import PatternStorage
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .simple_prd_analyzer import PRDAnalysisResult
 from .template_cache import TemplateCache
 from .template_helpers import (
     format_best_practices,
@@ -427,7 +427,7 @@ class OmniNodeTemplateEngine:
 
     def _validate_generation_inputs(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -492,7 +492,7 @@ class OmniNodeTemplateEngine:
 
     async def generate_node(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -751,7 +751,7 @@ class OmniNodeTemplateEngine:
 
     def _prepare_template_context(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -952,7 +952,7 @@ class OmniNodeTemplateEngine:
 
     def _generate_business_logic_stub(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
     ) -> str:
@@ -983,7 +983,7 @@ class OmniNodeTemplateEngine:
 
     async def _generate_additional_files(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -1046,7 +1046,7 @@ class OmniNodeTemplateEngine:
         return files
 
     def _generate_input_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate input model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -1070,7 +1070,7 @@ class Model{pascal_name}Input(BaseModel):
 '''
 
     def _generate_output_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate output model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -1094,7 +1094,7 @@ class Model{pascal_name}Output(BaseModel):
 '''
 
     def _generate_config_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate config model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -1117,7 +1117,7 @@ class Model{pascal_name}Config(BaseModel):
 '''
 
     def _generate_operation_enum(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate operation enum"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -1143,7 +1143,7 @@ class Enum{pascal_name}OperationType(Enum):
         self,
         microservice_name: str,
         node_type: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Generate YAML contract"""
         return f"""# {microservice_name} {node_type.lower()} contract
@@ -1253,7 +1253,7 @@ from .enum_{microservice_name}_operation_type import *
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate contract model (Python Pydantic) following ONEX patterns"""
@@ -1351,7 +1351,7 @@ from .enum_{microservice_name}_operation_type import *
         self,
         microservice_name: str,
         node_type: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Fallback contract model generation if template doesn't exist"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -1410,7 +1410,7 @@ class Model{pascal_name}{node_type_pascal}Contract(BaseModel):
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate comprehensive ONEX-compliant contract YAML"""
@@ -1570,7 +1570,7 @@ definitions:
         return contract_yaml
 
     def _build_actions_list(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+        self, analysis_result: PRDAnalysisResult, node_type: str
     ) -> str:
         """Build actions list for contract"""
         actions = []
@@ -1606,7 +1606,7 @@ definitions:
         words = [w for w in words if w not in ["the", "a", "an", "and", "or", "with"]]
         return "_".join(words[:3])
 
-    def _build_dependencies_list(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_dependencies_list(self, analysis_result: PRDAnalysisResult) -> str:
         """Build dependencies list for contract"""
         if not analysis_result.external_systems:
             return "  []"
@@ -1717,9 +1717,7 @@ algorithm:
 
         return f'["{events[0]}", "{events[1] if len(events) > 1 else events[0]}"]'
 
-    def _build_service_resolution(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_service_resolution(self, analysis_result: PRDAnalysisResult) -> str:
         """Build service resolution configuration"""
         if "Kafka" in analysis_result.external_systems or "EventBus" in str(
             analysis_result.recommended_mixins
@@ -1733,7 +1731,7 @@ algorithm:
         else:
             return "  # No service resolution required"
 
-    def _build_infrastructure(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_infrastructure(self, analysis_result: PRDAnalysisResult) -> str:
         """Build infrastructure configuration"""
         if "Kafka" in analysis_result.external_systems:
             return """  event_bus: {strategy: "hybrid", primary: "kafka", fallback: "http", consul_discovery: true}"""
@@ -1753,7 +1751,7 @@ algorithm:
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate node.manifest.yaml file"""
@@ -1907,7 +1905,7 @@ tags:
         return manifest
 
     def _build_capabilities_list(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+        self, analysis_result: PRDAnalysisResult, node_type: str
     ) -> str:
         """Build capabilities list for manifest"""
         capabilities = []
@@ -1948,9 +1946,7 @@ tags:
 
         return "\n  - " + "\n  - ".join(protocols) if protocols else "  []"
 
-    def _build_dependencies_manifest(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_dependencies_manifest(self, analysis_result: PRDAnalysisResult) -> str:
         """Build dependencies list for node manifest"""
         if not analysis_result.external_systems:
             return "  []"
@@ -1997,9 +1993,7 @@ tags:
         ]
         return "\n".join(test_cases)
 
-    def _build_external_endpoints(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_external_endpoints(self, analysis_result: PRDAnalysisResult) -> str:
         """Build external endpoints list"""
         if not analysis_result.external_systems:
             return "    []"
@@ -2036,7 +2030,7 @@ tags:
         return "\n".join(events)
 
     def _build_tags(
-        self, domain: str, node_type: str, analysis_result: SimplePRDAnalysisResult
+        self, domain: str, node_type: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Build tags list"""
         tags = [
@@ -2057,7 +2051,7 @@ tags:
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate version.manifest.yaml file"""
@@ -2180,7 +2174,7 @@ quality_metrics:
         node_type: str,
         microservice_name: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Generate OmniNode Tool Metadata for generated node"""
         return f"""# === OmniNode:Tool_Metadata ===

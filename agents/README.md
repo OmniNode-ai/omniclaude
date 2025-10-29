@@ -187,7 +187,7 @@ User Request → Enhanced Router → Agent Selection → YAML Load → Identity 
 ### Intelligent Routing System
 
 **Components** (located in `lib/`):
-1. **EnhancedTriggerMatcher** - Fuzzy trigger matching
+1. **TriggerMatcher** - Fuzzy trigger matching
 2. **ConfidenceScorer** - 4-component weighted confidence
 3. **CapabilityIndex** - In-memory inverted index
 4. **ResultCache** - TTL-based caching with hit tracking

@@ -17,7 +17,7 @@ import yaml
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .simple_prd_analyzer import PRDAnalysisResult
 from .version_config import get_config
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class ContractGenerator:
 
     async def generate_contract_yaml(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -271,7 +271,7 @@ class ContractGenerator:
         return subcontracts
 
     async def infer_contract_fields(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+        self, analysis_result: PRDAnalysisResult, node_type: str
     ) -> Dict[str, Any]:
         """
         Use semantic analysis to infer contract fields.

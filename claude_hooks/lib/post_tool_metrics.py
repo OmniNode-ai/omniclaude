@@ -60,8 +60,8 @@ class ExecutionAnalysis:
 
 
 @dataclass
-class EnhancedMetadata:
-    """Complete enhanced metadata for PostToolUse."""
+class Metadata:
+    """Complete metadata for PostToolUse."""
 
     success_classification: str
     quality_metrics: QualityMetrics
@@ -91,7 +91,7 @@ class PostToolMetricsCollector:
         tool_output: Optional[Dict[str, Any]],
         file_path: Optional[str] = None,
         content: Optional[str] = None,
-    ) -> EnhancedMetadata:
+    ) -> Metadata:
         """
         Collect all metrics for PostToolUse event.
 
@@ -103,7 +103,7 @@ class PostToolMetricsCollector:
             content: File content if available
 
         Returns:
-            EnhancedMetadata with all metrics collected
+            Metadata with all metrics collected
         """
         # Success classification
         success = self._classify_success(tool_name, tool_output)
@@ -123,7 +123,7 @@ class PostToolMetricsCollector:
         # Execution analysis
         analysis = self._analyze_execution(tool_output)
 
-        return EnhancedMetadata(
+        return Metadata(
             success_classification=success,
             quality_metrics=quality,
             performance_metrics=performance,

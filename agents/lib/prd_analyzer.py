@@ -1,105 +1,107 @@
 #!/usr/bin/env python3
 """
-PRD Analyzer for Autonomous Code Generation
+PRD Analyzer for Phase 0
 
-Uses omnibase_core and omnibase_spi dependencies to analyze PRDs and extract
-requirements for OmniNode generation.
+A PRD analyzer that doesn't depend on legacy omniagent code.
+Updated for Framework: ML-powered mixin recommendations.
 """
 
 import logging
-from datetime import datetime
+import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 # Import from omnibase_core
-from omnibase_core.errors import CoreErrorCode, OnexError
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-from .legacy.prd_decomposition_service import (
-    PRDDecompositionResult,
-    PRDDecompositionService,
-)
+# Framework: ML-powered mixin compatibility (optional import)
+try:
+    from .mixin_compatibility import MixinCompatibilityManager
 
-# Import legacy omniagent code
-from .legacy.prd_parser import ModelParsedPRD, PRDParser
-from .version_config import get_config
-
-# TODO: Add omnibase_spi imports when available
-# from omnibase_spi.validation.tool_metadata_validator import ToolMetadataValidator
-# from omnibase_spi.validation.one_protocol_compliance import ONEProtocolComplianceChecker
-
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 
-class PRDAnalysisResult:
-    """Result of PRD analysis with intelligence"""
+@dataclass
+class ParsedPRD:
+    """Parsed PRD model"""
 
-    def __init__(
-        self,
-        session_id: UUID,
-        correlation_id: UUID,
-        prd_content: str,
-        parsed_prd: ModelParsedPRD,
-        decomposition_result: PRDDecompositionResult,
-        node_type_hints: Dict[str, float],
-        recommended_mixins: List[str],
-        external_systems: List[str],
-        quality_baseline: float,
-        confidence_score: float,
-    ):
-        self.session_id = session_id
-        self.correlation_id = correlation_id
-        self.prd_content = prd_content
-        self.parsed_prd = parsed_prd
-        self.decomposition_result = decomposition_result
-        self.node_type_hints = node_type_hints
-        self.recommended_mixins = recommended_mixins
-        self.external_systems = external_systems
-        self.quality_baseline = quality_baseline
-        self.confidence_score = confidence_score
-        self.analysis_timestamp = datetime.utcnow()
+    title: str
+    description: str
+    functional_requirements: List[str]
+    features: List[str]
+    success_criteria: List[str]
+    technical_details: List[str]
+    dependencies: List[str]
+    extracted_keywords: List[str]
+    sections: List[str]
+    word_count: int
+
+
+@dataclass
+class DecompositionResult:
+    """Decomposition result"""
+
+    tasks: List[Dict[str, Any]]
+    total_tasks: int
+    verification_successful: bool
 
 
 class PRDAnalyzer:
-    """PRD analyzer using omnibase_core and omnibase_spi"""
+    """PRD analyzer for Phase 0"""
 
-    def __init__(self):
-        self.config = get_config()
-        self.prd_parser = PRDParser()
-        self.decomposition_service = PRDDecompositionService()
-        # TODO: Initialize validators when omnibase_spi is available
-        # self.metadata_validator = ToolMetadataValidator()
-        # self.compliance_checker = ONEProtocolComplianceChecker()
+    def __init__(self, enable_ml_recommendations: bool = True):
+        """
+        Initialize PRD analyzer.
+
+        Args:
+            enable_ml_recommendations: Whether to use ML-powered mixin recommendations
+        """
         self.logger = logging.getLogger(__name__)
+
+        # Framework: Initialize ML-powered mixin compatibility manager
+        self.enable_ml = enable_ml_recommendations and ML_AVAILABLE
+        if self.enable_ml:
+            try:
+                self.mixin_manager = MixinCompatibilityManager(enable_ml=True)
+                self.logger.info("ML-powered mixin recommendations enabled")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize ML recommendations: {e}. Using rule-based fallback."
+                )
+                self.enable_ml = False
+                self.mixin_manager = None
+        else:
+            self.mixin_manager = None
 
     async def analyze_prd(
         self, prd_content: str, workspace_context: Optional[Dict[str, Any]] = None
-    ) -> PRDAnalysisResult:
-        """
-        Analyze PRD content and extract requirements for OmniNode generation.
-
-        Args:
-            prd_content: Raw PRD markdown content
-            workspace_context: Optional workspace context
-
-        Returns:
-            PRDAnalysisResult with analysis and intelligence
-
-        Raises:
-            OnexError: If analysis fails
-        """
+    ) -> "PRDAnalysisResult":
+        """Analyze PRD content and extract requirements"""
         try:
-            # Generate session and correlation IDs
+            # Validate PRD content
+            if not prd_content or not prd_content.strip():
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message="PRD content cannot be empty",
+                    details={"prd_length": len(prd_content) if prd_content else 0},
+                )
+
             session_id = uuid4()
             correlation_id = uuid4()
 
-            self.logger.info(f"Starting PRD analysis for session {session_id}")
+            self.logger.info(f"Starting simple PRD analysis for session {session_id}")
 
             # Parse PRD content
-            parsed_prd = await self._parse_prd_content(prd_content)
+            parsed_prd = self._parse_prd_content(prd_content)
 
             # Decompose into tasks
-            decomposition_result = await self._decompose_prd(parsed_prd)
+            decomposition_result = self._decompose_prd(parsed_prd)
 
             # Extract node type hints
             node_type_hints = self._extract_node_type_hints(parsed_prd)
@@ -138,76 +140,350 @@ class PRDAnalyzer:
             )
 
             self.logger.info(
-                f"PRD analysis completed for session {session_id} with confidence {confidence_score:.2f}"
+                f"Simple PRD analysis completed for session {session_id} with confidence {confidence_score:.2f}"
             )
             return result
 
         except Exception as e:
-            self.logger.error(f"PRD analysis failed: {str(e)}")
+            self.logger.error(f"Simple PRD analysis failed: {str(e)}")
             raise OnexError(
-                code=CoreErrorCode.OPERATION_FAILED,
-                message=f"PRD analysis failed: {str(e)}",
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Simple PRD analysis failed: {str(e)}",
                 details={"prd_length": len(prd_content) if prd_content else 0},
             )
 
-    async def _parse_prd_content(self, prd_content: str) -> ModelParsedPRD:
-        """Parse PRD content using legacy omniagent parser"""
-        try:
-            return self.prd_parser.parse(prd_content)
-        except Exception as e:
-            raise OnexError(
-                code=CoreErrorCode.VALIDATION_ERROR,
-                message=f"PRD parsing failed: {str(e)}",
-                details={"content_length": len(prd_content)},
+    def _parse_prd_content(self, prd_content: str) -> ParsedPRD:
+        """Parse PRD content using simple regex patterns"""
+        # Extract title
+        title_match = re.search(r"^#\s+(.+)$", prd_content, re.MULTILINE)
+        title = title_match.group(1) if title_match else "Untitled PRD"
+
+        # Extract description
+        description_match = re.search(
+            r"## Overview\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        description = description_match.group(1).strip() if description_match else ""
+
+        # Extract functional requirements
+        requirements = []
+        req_match = re.search(
+            r"## Functional Requirements\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        if req_match:
+            req_text = req_match.group(1)
+            requirements = [
+                line.strip("- ").strip()
+                for line in req_text.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+        # Extract features
+        features = []
+        features_match = re.search(
+            r"## Features\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        if features_match:
+            features_text = features_match.group(1)
+            features = [
+                line.strip("- ").strip()
+                for line in features_text.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+        # Extract success criteria
+        success_criteria = []
+        success_match = re.search(
+            r"## Success Criteria\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        if success_match:
+            success_text = success_match.group(1)
+            success_criteria = [
+                line.strip("- ").strip()
+                for line in success_text.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+        # Extract technical details
+        technical_details = []
+        tech_match = re.search(
+            r"## Technical Details\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        if tech_match:
+            tech_text = tech_match.group(1)
+            technical_details = [
+                line.strip("- ").strip()
+                for line in tech_text.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+        # Extract dependencies
+        dependencies = []
+        deps_match = re.search(
+            r"## Dependencies\s*\n(.+?)(?=\n##|\Z)", prd_content, re.DOTALL
+        )
+        if deps_match:
+            deps_text = deps_match.group(1)
+            dependencies = [
+                line.strip("- ").strip()
+                for line in deps_text.split("\n")
+                if line.strip().startswith("-")
+            ]
+
+        # Extract keywords
+        all_text = (
+            title
+            + " "
+            + description
+            + " "
+            + " ".join(requirements)
+            + " "
+            + " ".join(features)
+        )
+        keywords = re.findall(r"\b[A-Z][a-z]+\b", all_text)
+        keywords = list(set(keywords))[:10]  # Top 10 unique keywords
+
+        # Extract sections
+        sections = re.findall(r"^## (.+)$", prd_content, re.MULTILINE)
+
+        # Count words
+        word_count = len(prd_content.split())
+
+        return ParsedPRD(
+            title=title,
+            description=description,
+            functional_requirements=requirements,
+            features=features,
+            success_criteria=success_criteria,
+            technical_details=technical_details,
+            dependencies=dependencies,
+            extracted_keywords=keywords,
+            sections=sections,
+            word_count=word_count,
+        )
+
+    def _decompose_prd(self, parsed_prd: ParsedPRD) -> DecompositionResult:
+        """Decompose PRD into tasks"""
+        tasks = []
+
+        # Create tasks from functional requirements
+        for i, req in enumerate(parsed_prd.functional_requirements):
+            tasks.append(
+                {
+                    "id": f"task_{i+1}",
+                    "title": req,
+                    "description": f"Implement {req}",
+                    "priority": (
+                        "high"
+                        if "authentication" in req.lower() or "security" in req.lower()
+                        else "medium"
+                    ),
+                    "complexity": "high" if len(req.split()) > 10 else "medium",
+                }
             )
 
-    async def _decompose_prd(
-        self, parsed_prd: ModelParsedPRD
-    ) -> PRDDecompositionResult:
-        """Decompose PRD into tasks using legacy omniagent service"""
-        try:
-            # Convert parsed PRD to decomposition input format
-            prd_text = f"# {parsed_prd.title}\n\n{parsed_prd.description}\n\n"
-            prd_text += "## Functional Requirements\n"
-            for req in parsed_prd.functional_requirements:
-                prd_text += f"- {req}\n"
-            prd_text += "\n## Features\n"
-            for feature in parsed_prd.features:
-                prd_text += f"- {feature}\n"
-
-            return await self.decomposition_service.decompose_prd(prd_text)
-        except Exception as e:
-            raise OnexError(
-                code=CoreErrorCode.OPERATION_FAILED,
-                message=f"PRD decomposition failed: {str(e)}",
-                details={"prd_title": parsed_prd.title},
+        # Create tasks from features
+        for i, feature in enumerate(parsed_prd.features):
+            tasks.append(
+                {
+                    "id": f"feature_{i+1}",
+                    "title": feature,
+                    "description": f"Implement {feature}",
+                    "priority": "medium",
+                    "complexity": "medium",
+                }
             )
 
-    def _extract_node_type_hints(self, parsed_prd: ModelParsedPRD) -> Dict[str, float]:
+        return DecompositionResult(
+            tasks=tasks, total_tasks=len(tasks), verification_successful=True
+        )
+
+    def _extract_node_type_hints(self, parsed_prd: ParsedPRD) -> Dict[str, float]:
         """Extract node type hints from parsed PRD"""
         hints = {"EFFECT": 0.0, "COMPUTE": 0.0, "REDUCER": 0.0, "ORCHESTRATOR": 0.0}
 
-        # Use omniagent parser's classification hints
-        classification_hints = self.prd_parser.get_classification_hints(parsed_prd)
+        # Analyze text for node type indicators
+        all_text = (
+            parsed_prd.title
+            + " "
+            + parsed_prd.description
+            + " "
+            + " ".join(parsed_prd.functional_requirements)
+            + " "
+            + " ".join(parsed_prd.features)
+        ).lower()
 
-        # Map to our node types
-        hints["EFFECT"] = classification_hints.get("EFFECT", 0.0)
-        hints["COMPUTE"] = classification_hints.get("COMPUTE", 0.0)
-        hints["REDUCER"] = classification_hints.get("REDUCER", 0.0)
-        hints["ORCHESTRATOR"] = classification_hints.get("ORCHESTRATOR", 0.0)
+        # EFFECT indicators
+        effect_indicators = [
+            "create",
+            "update",
+            "delete",
+            "modify",
+            "change",
+            "write",
+            "store",
+        ]
+        effect_score = sum(
+            1 for indicator in effect_indicators if indicator in all_text
+        )
+        hints["EFFECT"] = min(effect_score / 10.0, 1.0)
+
+        # COMPUTE indicators
+        compute_indicators = [
+            "calculate",
+            "process",
+            "analyze",
+            "compute",
+            "process",
+            "algorithm",
+        ]
+        compute_score = sum(
+            1 for indicator in compute_indicators if indicator in all_text
+        )
+        hints["COMPUTE"] = min(compute_score / 10.0, 1.0)
+
+        # REDUCER indicators
+        reducer_indicators = [
+            "aggregate",
+            "summarize",
+            "reduce",
+            "combine",
+            "merge",
+            "consolidate",
+        ]
+        reducer_score = sum(
+            1 for indicator in reducer_indicators if indicator in all_text
+        )
+        hints["REDUCER"] = min(reducer_score / 10.0, 1.0)
+
+        # ORCHESTRATOR indicators
+        orchestrator_indicators = [
+            "coordinate",
+            "orchestrate",
+            "manage",
+            "workflow",
+            "pipeline",
+            "sequence",
+        ]
+        orchestrator_score = sum(
+            1 for indicator in orchestrator_indicators if indicator in all_text
+        )
+        hints["ORCHESTRATOR"] = min(orchestrator_score / 10.0, 1.0)
+
+        # If no strong hints, default to EFFECT
+        if max(hints.values()) < 0.1:
+            hints["EFFECT"] = 0.5
 
         return hints
 
-    def _recommend_mixins(
-        self, parsed_prd: ModelParsedPRD, decomposition_result: PRDDecompositionResult
+    async def _recommend_mixins_async(
+        self,
+        parsed_prd: ParsedPRD,
+        decomposition_result: DecompositionResult,
+        node_type_hints: Dict[str, float],
     ) -> List[str]:
-        """Recommend mixins based on PRD analysis"""
-        mixins = []
+        """
+        Recommend mixins based on PRD analysis using ML when available.
 
-        # Analyze requirements for mixin needs
+        Args:
+            parsed_prd: Parsed PRD content
+            decomposition_result: Task decomposition result
+            node_type_hints: Node type hints with scores
+
+        Returns:
+            List of recommended mixin names
+        """
+        # Extract required capabilities from PRD
         requirements_text = " ".join(
             parsed_prd.functional_requirements + parsed_prd.features
         ).lower()
+        required_capabilities = self._extract_capabilities(requirements_text)
+
+        # Determine primary node type
+        primary_node_type = (
+            max(node_type_hints.items(), key=lambda x: x[1])[0]
+            if node_type_hints
+            else "EFFECT"
+        )
+
+        # Use ML recommendations if available
+        if self.enable_ml and self.mixin_manager:
+            try:
+                recommendations = await self.mixin_manager.recommend_mixins(
+                    node_type=primary_node_type,
+                    required_capabilities=required_capabilities,
+                    existing_mixins=[],
+                    max_recommendations=8,
+                )
+
+                # Extract mixin names from recommendations
+                mixins = [
+                    rec.mixin_name for rec in recommendations if rec.confidence >= 0.6
+                ]
+
+                # Validate mixin set for compatibility
+                if mixins:
+                    mixin_set = await self.mixin_manager.validate_mixin_set(
+                        mixins, primary_node_type
+                    )
+
+                    if mixin_set.warnings:
+                        self.logger.warning(
+                            f"Mixin compatibility warnings: {mixin_set.warnings}"
+                        )
+
+                self.logger.info(f"ML recommendations: {mixins}")
+                return mixins
+
+            except Exception as e:
+                self.logger.warning(
+                    f"ML recommendation failed: {e}. Using rule-based fallback."
+                )
+                # Fall through to rule-based recommendations
+
+        # Fallback to rule-based recommendations
+        return self._recommend_mixins_rule_based(requirements_text)
+
+    def _extract_capabilities(self, requirements_text: str) -> List[str]:
+        """Extract required capabilities from requirements text"""
+        capabilities = []
+
+        capability_keywords = {
+            "cache": ["cache", "caching", "performance", "speed"],
+            "logging": ["log", "logging", "audit", "trace"],
+            "metrics": ["metric", "monitoring", "analytics", "kpi"],
+            "health": ["health", "monitoring", "status", "alive"],
+            "events": ["event", "notification", "publish", "subscribe"],
+            "retry": ["retry", "resilient", "fault", "error"],
+            "circuit-breaker": ["circuit", "breaker", "fallback", "timeout"],
+            "validation": ["validate", "validation", "check", "verify"],
+            "security": ["security", "auth", "encrypt", "secure"],
+            "transaction": ["transaction", "commit", "rollback", "atomic"],
+        }
+
+        for capability, keywords in capability_keywords.items():
+            if any(keyword in requirements_text for keyword in keywords):
+                capabilities.append(capability)
+
+        return capabilities
+
+    def _recommend_mixins(
+        self,
+        parsed_prd: ParsedPRD,
+        decomposition_result: DecompositionResult,
+    ) -> List[str]:
+        """
+        Synchronous wrapper for mixin recommendations (for backward compatibility).
+
+        Note: This is deprecated. Use _recommend_mixins_async for ML-powered recommendations.
+        """
+        requirements_text = " ".join(
+            parsed_prd.functional_requirements + parsed_prd.features
+        ).lower()
+        return self._recommend_mixins_rule_based(requirements_text)
+
+    def _recommend_mixins_rule_based(self, requirements_text: str) -> List[str]:
+        """Rule-based mixin recommendations (fallback when ML not available)"""
+        mixins = []
 
         # Event-driven patterns
         if any(
@@ -275,7 +551,9 @@ class PRDAnalyzer:
         return mixins
 
     def _identify_external_systems(
-        self, parsed_prd: ModelParsedPRD, decomposition_result: PRDDecompositionResult
+        self,
+        parsed_prd: ParsedPRD,
+        decomposition_result: DecompositionResult,
     ) -> List[str]:
         """Identify external systems from PRD analysis"""
         external_systems = []
@@ -306,7 +584,9 @@ class PRDAnalyzer:
         return list(set(external_systems))  # Remove duplicates
 
     def _calculate_quality_baseline(
-        self, parsed_prd: ModelParsedPRD, decomposition_result: PRDDecompositionResult
+        self,
+        parsed_prd: ParsedPRD,
+        decomposition_result: DecompositionResult,
     ) -> float:
         """Calculate quality baseline for generated code"""
         baseline = 0.5  # Start with 50%
@@ -333,8 +613,8 @@ class PRDAnalyzer:
 
     def _calculate_confidence_score(
         self,
-        parsed_prd: ModelParsedPRD,
-        decomposition_result: PRDDecompositionResult,
+        parsed_prd: ParsedPRD,
+        decomposition_result: DecompositionResult,
         node_type_hints: Dict[str, float],
     ) -> float:
         """Calculate confidence score for the analysis"""
@@ -362,29 +642,23 @@ class PRDAnalyzer:
 
         return min(confidence, 1.0)  # Cap at 100%
 
-    async def validate_generated_metadata(
-        self, metadata_content: str
-    ) -> Dict[str, Any]:
-        """Validate generated node metadata using omnibase_spi"""
-        # TODO: Implement when omnibase_spi is available
-        return {
-            "is_valid": True,
-            "score": 0.8,
-            "violations": [],
-            "warnings": [],
-            "suggestions": [],
-            "compliance_level": "basic",
-        }
 
-    async def validate_code_compliance(
-        self, code_content: str, node_type: str
-    ) -> Dict[str, Any]:
-        """Validate generated code for O.N.E. protocol compliance"""
-        # TODO: Implement when omnibase_spi is available
-        return {
-            "is_compliant": True,
-            "compliance_score": 0.8,
-            "violations": [],
-            "warnings": [],
-            "protocol_version": "0.1",
-        }
+@dataclass
+class PRDAnalysisResult:
+    """Result of PRD analysis"""
+
+    session_id: UUID
+    correlation_id: UUID
+    prd_content: str
+    parsed_prd: ParsedPRD
+    decomposition_result: DecompositionResult
+    node_type_hints: Dict[str, float]
+    recommended_mixins: List[str]
+    external_systems: List[str]
+    quality_baseline: float
+    confidence_score: float
+    analysis_timestamp: datetime = None
+
+    def __post_init__(self):
+        if self.analysis_timestamp is None:
+            self.analysis_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)

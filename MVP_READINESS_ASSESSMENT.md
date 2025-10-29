@@ -67,7 +67,7 @@
 - Agent execution logging complete
 
 **Files**:
-- `agents/lib/enhanced_router.py` - EnhancedAgentRouter class
+- `agents/lib/agent_router.py` - AgentRouter class
 - `agents/lib/confidence_scorer.py` - Confidence calculation
 - `agents/lib/capability_index.py` - Fast capability lookups
 - `agents/lib/agent_execution_logger.py` - Execution tracking
@@ -1036,7 +1036,7 @@ ls -la docker-compose*.yml
 - `agents/lib/intelligence_gatherer.py` - Intelligence gathering orchestration
 - `agents/lib/manifest_injector.py` - Manifest injection system
 - `agents/lib/intelligence_event_client.py` - Event-based intelligence client
-- `agents/lib/enhanced_router.py` - Enhanced agent router
+- `agents/lib/agent_router.py` - Enhanced agent router
 - `agents/lib/confidence_scorer.py` - Confidence calculation
 
 **Hook Files**:

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_NODE_PRD,
     EFFECT_ANALYSIS_RESULT,
@@ -33,7 +33,7 @@ class TestPhase4Integration:
     async def test_full_generation_pipeline_effect_node(self):
         """Test complete generation: PRD → Analysis → Templates for EFFECT node"""
         # 1. Analyze PRD
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
 
         # Verify analysis
@@ -80,7 +80,7 @@ class TestPhase4Integration:
     async def test_full_generation_pipeline_compute_node(self):
         """Test complete generation: PRD → Analysis → Templates for COMPUTE node"""
         # 1. Analyze PRD
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         analysis = await analyzer.analyze_prd(COMPUTE_NODE_PRD)
 
         # Verify analysis
@@ -153,7 +153,7 @@ class TestPhase4Integration:
             ),
         ]
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             for node_type, microservice_name, domain, prd_content in node_configs:
@@ -196,7 +196,7 @@ A basic service with minimal requirements.
 - Perform basic operations
 """
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         analysis = await analyzer.analyze_prd(minimal_prd)
 
         # Should still generate something
@@ -222,7 +222,7 @@ A basic service with minimal requirements.
         """Test error handling with empty PRD"""
         from omnibase_core.errors import OnexError
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
 
         with pytest.raises(OnexError):
             await analyzer.analyze_prd("")
@@ -308,7 +308,7 @@ A basic service with minimal requirements.
         """Test concurrent generation of multiple nodes"""
         import asyncio
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         engine = OmniNodeTemplateEngine()
 
         async def generate_node(prd_content, node_type, name, domain):

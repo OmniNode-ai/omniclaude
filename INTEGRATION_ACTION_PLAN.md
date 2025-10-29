@@ -35,7 +35,7 @@ from typing import Any, Dict, List, Optional
 
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .prd_analyzer import PRDAnalysisResult
 from .version_config import get_config
 ```
 
@@ -98,7 +98,7 @@ print("✅ Pattern components initialized")
 def _generate_capability_methods(
     self,
     contract: Dict[str, Any],
-    analysis_result: SimplePRDAnalysisResult,
+    analysis_result: PRDAnalysisResult,
     node_type: str,
     microservice_name: str,
 ) -> List[str]:
@@ -135,7 +135,7 @@ def _generate_capability_methods(
 def _generate_capability_methods(
     self,
     contract: Dict[str, Any],
-    analysis_result: SimplePRDAnalysisResult,
+    analysis_result: PRDAnalysisResult,
     node_type: str,
     microservice_name: str,
 ) -> List[str]:

@@ -21,7 +21,7 @@ import pytest
 from agents.lib.codegen_workflow import CodegenWorkflow
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.lib.parallel_generator import GenerationJob, ParallelGenerator
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_NODE_PRD,
     EFFECT_ANALYSIS_RESULT,
@@ -201,7 +201,7 @@ class TestParallelPerformance:
 
         Target: Sequential ~8s per node, Parallel <3s per node with 3 workers
         """
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
 
         # Test data: 6 nodes to generate

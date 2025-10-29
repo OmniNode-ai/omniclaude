@@ -49,7 +49,7 @@ from agents.lib.models.intelligence_context import (  # noqa: E402
 )
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine  # noqa: E402
 from agents.lib.simple_prd_analyzer import (  # noqa: E402
-    SimplePRDAnalysisResult,
+    PRDAnalysisResult,
     SimplifiedPRD,
 )
 
@@ -68,7 +68,7 @@ def sample_prd_analysis():
         extracted_keywords=["database", "postgresql", "crud"],
     )
 
-    return SimplePRDAnalysisResult(
+    return PRDAnalysisResult(
         parsed_prd=prd,
         recommended_node_type="EFFECT",
         recommended_mixins=["MixinRetry", "MixinEventBus"],

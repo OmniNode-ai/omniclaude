@@ -14,9 +14,9 @@ from omnibase_core.errors import OnexError
 
 from agents.lib.enum_generator import EnumGenerator, EnumValue, GeneratedEnum
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
 )
 
 
@@ -61,7 +61,7 @@ class TestEnumGenerator:
     @pytest.fixture
     def sample_prd_analysis(self):
         """Create sample PRD analysis for testing"""
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="User Management Service",
             description="Service for managing user accounts and authentication",
             functional_requirements=[
@@ -90,7 +90,7 @@ class TestEnumGenerator:
             word_count=250,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[
                 {
                     "id": "task_1",
@@ -111,7 +111,7 @@ class TestEnumGenerator:
             verification_successful=True,
         )
 
-        return SimplePRDAnalysisResult(
+        return PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Sample PRD content",
@@ -224,7 +224,7 @@ class TestEnumGenerator:
     def test_infer_status_enum_values(self, generator):
         """Test status enum value inference from PRD"""
         # Create PRD with status-related text
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="Order Processing Service",
             description="Process orders through pending, processing, and completed states",
             functional_requirements=[
@@ -242,11 +242,11 @@ class TestEnumGenerator:
             word_count=50,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[], total_tasks=0, verification_successful=True
         )
 
-        prd_analysis = SimplePRDAnalysisResult(
+        prd_analysis = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Sample PRD",
@@ -483,7 +483,7 @@ class EnumTestOperationType(str, Enum):
 
         for node_type in node_types:
             # Create simple PRD for each node type
-            parsed_prd = SimpleParsedPRD(
+            parsed_prd = ParsedPRD(
                 title=f"{node_type} Node Test",
                 description=f"Test {node_type} node operations",
                 functional_requirements=[
@@ -499,11 +499,11 @@ class EnumTestOperationType(str, Enum):
                 word_count=50,
             )
 
-            decomposition_result = SimpleDecompositionResult(
+            decomposition_result = DecompositionResult(
                 tasks=[], total_tasks=0, verification_successful=True
             )
 
-            prd_analysis = SimplePRDAnalysisResult(
+            prd_analysis = PRDAnalysisResult(
                 session_id=uuid4(),
                 correlation_id=uuid4(),
                 prd_content="Test PRD",
@@ -534,7 +534,7 @@ class TestEnumGeneratorEdgeCases:
 
     def test_empty_prd_analysis(self, generator):
         """Test enum generation with minimal PRD"""
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="",
             description="",
             functional_requirements=[],
@@ -547,11 +547,11 @@ class TestEnumGeneratorEdgeCases:
             word_count=0,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[], total_tasks=0, verification_successful=True
         )
 
-        prd_analysis = SimplePRDAnalysisResult(
+        prd_analysis = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="",
@@ -574,7 +574,7 @@ class TestEnumGeneratorEdgeCases:
 
     def test_service_name_with_special_characters(self, generator):
         """Test enum generation with service names containing special chars"""
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="Test",
             description="Test service",
             functional_requirements=["Create items"],
@@ -587,11 +587,11 @@ class TestEnumGeneratorEdgeCases:
             word_count=10,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[], total_tasks=0, verification_successful=True
         )
 
-        prd_analysis = SimplePRDAnalysisResult(
+        prd_analysis = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Test",
@@ -619,7 +619,7 @@ class TestEnumGeneratorEdgeCases:
 
     def test_duplicate_enum_values_are_deduplicated(self, generator):
         """Test that duplicate enum values are handled correctly"""
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="Test Service",
             description="Service with repeated operations",
             functional_requirements=[
@@ -638,11 +638,11 @@ class TestEnumGeneratorEdgeCases:
             word_count=50,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[], total_tasks=0, verification_successful=True
         )
 
-        prd_analysis = SimplePRDAnalysisResult(
+        prd_analysis = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Test",

@@ -16,12 +16,13 @@ OmniClaude is a comprehensive toolkit for enhancing Claude Code capabilities wit
 1. [Intelligence Infrastructure](#intelligence-infrastructure)
 2. [Environment Configuration](#environment-configuration)
 3. [Diagnostic Tools](#diagnostic-tools)
-4. [Container Management](#container-management)
-5. [Provider Management](#provider-management)
-6. [Polymorphic Agent Framework](#polymorphic-agent-framework)
-7. [Event Bus Architecture](#event-bus-architecture)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Quick Reference](#quick-reference)
+4. [Agent Observability & Traceability](#agent-observability--traceability)
+5. [Container Management](#container-management)
+6. [Provider Management](#provider-management)
+7. [Polymorphic Agent Framework](#polymorphic-agent-framework)
+8. [Event Bus Architecture](#event-bus-architecture)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Quick Reference](#quick-reference)
 
 ---
 
@@ -314,6 +315,202 @@ Command [q]: 1
 - **2000-5000ms** → Acceptable performance
 - **>5000ms** → Performance issue (check logs, Qdrant connectivity)
 - **>10000ms** → Critical issue (check archon-intelligence service)
+
+---
+
+## Agent Observability & Traceability
+
+OmniClaude provides complete observability for agent executions with three-layer traceability: routing decisions → manifest injections → execution logs.
+
+### Architecture
+
+**Three-Layer Traceability**:
+```
+USER REQUEST
+  ↓
+LAYER 1: Routing Decision (agent_routing_decisions)
+  - Which agent?
+  - Why selected?
+  - Confidence score?
+  ↓
+LAYER 2: Manifest Injection (agent_manifest_injections)
+  - What context?
+  - Which patterns?
+  - Debug intelligence?
+  ↓
+LAYER 3: Execution Log (agent_execution_logs)
+  - Start/progress/completion
+  - Quality score
+  - Error details
+```
+
+**Key Features**:
+- **Correlation ID Tracking**: Complete trace from user prompt to execution outcome
+- **Dual-Path Logging**: PostgreSQL primary, JSON file fallback
+- **Kafka Event Bus**: All intelligence queries flow through Kafka
+- **Complete Replay**: Full manifest snapshots enable exact reproduction
+- **Debug Intelligence**: Learn from past successes and failures
+
+### AgentExecutionLogger
+
+Every agent execution uses `AgentExecutionLogger` for comprehensive logging:
+
+```python
+from agents.lib.agent_execution_logger import log_agent_execution
+from omnibase_core.enums.enum_operation_status import EnumOperationStatus
+
+# Start logging
+logger = await log_agent_execution(
+    agent_name="agent-researcher",
+    user_prompt="Research ONEX patterns",
+    correlation_id=correlation_id,
+    project_path="/path/to/project"
+)
+
+# Log progress
+await logger.progress(stage="gathering_intelligence", percent=25)
+await logger.progress(stage="analyzing_results", percent=75)
+
+# Complete with success
+await logger.complete(
+    status=EnumOperationStatus.SUCCESS,
+    quality_score=0.92
+)
+```
+
+**Features**:
+- Non-blocking (never fails agent execution)
+- Exponential backoff retry (1m, 2m, 5m, 10m)
+- Platform-aware fallback (uses `tempfile.gettempdir()`)
+- Quality score tracking
+- Project context capture
+
+### Database Tables
+
+#### agent_routing_decisions
+
+Tracks routing decisions with confidence scoring:
+- `correlation_id` - Links to manifest and execution
+- `selected_agent` - Which agent was chosen
+- `confidence_score` - Overall confidence (0.0-1.0)
+- `routing_strategy` - enhanced_fuzzy_matching, explicit, fallback
+- `alternatives` - Other agents considered (JSONB)
+- `reasoning` - Why this agent was selected
+
+#### agent_manifest_injections
+
+Complete manifest snapshots for replay:
+- `correlation_id` - Links to routing and execution
+- `full_manifest_snapshot` - Complete manifest data (JSONB)
+- `formatted_manifest_text` - Exact text injected into prompt
+- `patterns_count` - Number of patterns included
+- `debug_intelligence_successes/failures` - Similar past workflows
+- `query_times` - Performance breakdown per section (JSONB)
+- `total_query_time_ms` - Total manifest generation time
+
+#### agent_execution_logs
+
+Execution lifecycle tracking:
+- `execution_id` - Unique execution identifier
+- `correlation_id` - Links to routing and manifest
+- `agent_name` - Agent that executed
+- `status` - in_progress, success, failed, cancelled
+- `quality_score` - Output quality (0.0-1.0)
+- `duration_ms` - Execution time
+- `error_message/error_type` - Error details if failed
+
+### Analytical Views
+
+```sql
+-- Complete execution trace
+SELECT * FROM v_agent_execution_trace
+WHERE correlation_id = '8b57ec39-45b5-467b-939c-dd1439219f69';
+
+-- Manifest injection performance
+SELECT * FROM v_manifest_injection_performance
+ORDER BY avg_query_time_ms DESC;
+
+-- Routing decision accuracy
+SELECT * FROM v_routing_decision_accuracy
+ORDER BY accuracy_percent DESC;
+```
+
+### Event Flow
+
+```
+1. Agent spawns with correlation_id
+2. AgentExecutionLogger.start() → PostgreSQL INSERT
+3. ManifestInjector queries archon-intelligence via Kafka:
+   - Publish: intelligence.code-analysis-requested.v1
+   - Wait: intelligence.code-analysis-completed.v1
+   - Store: agent_manifest_injections table
+4. Agent executes with injected context
+5. AgentExecutionLogger.progress() → PostgreSQL UPDATE
+6. AgentExecutionLogger.complete() → PostgreSQL UPDATE
+7. Complete trace available via correlation_id
+```
+
+### Fallback Mechanism
+
+When PostgreSQL is unavailable, logs are written to structured JSON files:
+
+```
+{temp}/omniclaude_logs/
+├── 2025-10-29/
+│   ├── 8b57ec39-45b5-467b-939c-dd1439219f69.jsonl
+│   └── 7a44dc28-34a1-456c-8ef6-1cb03ded02ad.jsonl
+└── 2025-10-28/
+    └── ...
+```
+
+**JSONL Format** (one JSON object per line):
+```jsonl
+{"timestamp": "2025-10-29T14:30:00Z", "event_type": "start", "agent_name": "agent-researcher", ...}
+{"timestamp": "2025-10-29T14:30:15Z", "event_type": "progress", "stage": "gathering_intelligence", ...}
+{"timestamp": "2025-10-29T14:30:45Z", "event_type": "complete", "status": "success", "quality_score": 0.92}
+```
+
+### Performance Targets
+
+| Metric | Target | Warning | Critical |
+|--------|--------|---------|----------|
+| Routing decision time | <100ms | >200ms | >500ms |
+| Manifest query time | <2000ms | >3000ms | >5000ms |
+| Log write latency | <50ms | >100ms | >500ms |
+| Fallback activation | <1% | >5% | >10% |
+| Intelligence availability | >95% | <90% | <80% |
+
+### Comprehensive Documentation
+
+**Detailed Guides**:
+- [docs/observability/AGENT_TRACEABILITY.md](docs/observability/AGENT_TRACEABILITY.md) - Architecture, database schemas, query examples
+- [docs/observability/DIAGNOSTIC_SCRIPTS.md](docs/observability/DIAGNOSTIC_SCRIPTS.md) - Tool usage, troubleshooting workflows
+- [docs/observability/LOGGING_PIPELINE.md](docs/observability/LOGGING_PIPELINE.md) - Event flow, integration guide, debugging
+
+**Quick Start**:
+
+```bash
+# Browse agent execution history
+python3 agents/lib/agent_history_browser.py
+
+# Filter by agent
+python3 agents/lib/agent_history_browser.py --agent agent-researcher
+
+# View specific execution
+python3 agents/lib/agent_history_browser.py \
+    --correlation-id 8b57ec39-45b5-467b-939c-dd1439219f69
+
+# Export manifest JSON
+python3 agents/lib/agent_history_browser.py \
+    --correlation-id 8b57ec39... \
+    --export manifest.json
+
+# Check system health
+./scripts/health_check.sh
+
+# Direct database queries
+psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+```
 
 ---
 
@@ -956,6 +1153,18 @@ psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 # Provider management
 ./toggle-claude-provider.sh status
 ./toggle-claude-provider.sh gemini-flash
+
+# Observability and traceability
+python3 agents/lib/agent_history_browser.py                 # Interactive history browser
+python3 agents/lib/agent_history_browser.py --agent <name>  # Filter by agent
+python3 agents/lib/agent_history_browser.py --limit 100     # Show more results
+python3 agents/lib/agent_history_browser.py --correlation-id <id>  # Specific execution
+python3 agents/lib/agent_history_browser.py --correlation-id <id> --export manifest.json  # Export
+
+# Observability queries (SQL)
+psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_agent_execution_trace LIMIT 10;"
+psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_manifest_injection_performance;"
+psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_routing_decision_accuracy;"
 ```
 
 ### Database Connection Strings
@@ -990,6 +1199,11 @@ CLAUDE.md                               # This file
 SECURITY_KEY_ROTATION.md               # API key management
 agents/lib/MANIFEST_TRACEABILITY_GUIDE.md  # Manifest system guide
 agents/lib/AGENT_HISTORY_BROWSER_DEMO.md   # Browser usage examples
+
+# Observability Documentation (NEW)
+docs/observability/AGENT_TRACEABILITY.md    # Architecture, database schemas, correlation tracking
+docs/observability/DIAGNOSTIC_SCRIPTS.md    # Tool usage, troubleshooting workflows
+docs/observability/LOGGING_PIPELINE.md      # Event flow, integration guide, debugging
 ```
 
 ### Performance Targets
@@ -1002,6 +1216,8 @@ agents/lib/AGENT_HISTORY_BROWSER_DEMO.md   # Browser usage examples
 | Quality gate execution | <200ms | >1000ms |
 | Cache hit rate | >60% | <30% |
 | Intelligence availability | >95% | <80% |
+| Log write latency | <50ms | >500ms |
+| Fallback activation rate | <1% | >10% |
 
 ### Environment Variable Quick Check
 
@@ -1055,8 +1271,9 @@ source .env
 
 ---
 
-**Last Updated**: 2025-10-27
-**Documentation Version**: 2.0.0
+**Last Updated**: 2025-10-29
+**Documentation Version**: 2.1.0
 **Intelligence Infrastructure**: Event-driven via Kafka
 **Pattern Count**: 120+ (execution_patterns + code_patterns)
 **Database Tables**: 34 in omninode_bridge
+**Observability**: Complete traceability with correlation ID tracking

@@ -16,7 +16,7 @@ Usage:
     python agent_actions_consumer.py [--config config.json]
 
 Environment Variables:
-    KAFKA_BROKERS: Comma-separated Kafka brokers (REQUIRED - no default)
+    KAFKA_BOOTSTRAP_SERVERS: Comma-separated Kafka brokers (REQUIRED - no default)
     KAFKA_GROUP_ID: Consumer group ID (default: agent-observability-postgres)
     POSTGRES_HOST: PostgreSQL host (REQUIRED - no default)
     POSTGRES_PORT: PostgreSQL port (default: 5436)
@@ -186,11 +186,13 @@ class AgentActionsConsumer:
         self._health_lock = threading.Lock()
 
         # Kafka configuration (no localhost default - must be explicitly configured)
-        kafka_brokers_str = config.get("kafka_brokers") or os.getenv("KAFKA_BROKERS")
+        kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS"
+        )
         if not kafka_brokers_str:
             raise ValueError(
-                "KAFKA_BROKERS must be set via config file or environment variable. "
-                "Example: KAFKA_BROKERS=192.168.86.200:9092"
+                "KAFKA_BOOTSTRAP_SERVERS must be set via config file or environment variable. "
+                "Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = config.get(
@@ -205,6 +207,7 @@ class AgentActionsConsumer:
                 "agent-transformation-events",
                 "router-performance-metrics",
                 "agent-detection-failures",
+                "agent-execution-logs",
             ],
         )
 
@@ -309,6 +312,34 @@ class AgentActionsConsumer:
             self.db_config["database"],
         )
 
+    def _ensure_db_connection(self):
+        """
+        Ensure database connection is healthy, reconnect if needed.
+
+        Fixes: psycopg2.InterfaceError: connection already closed
+        """
+        try:
+            if self.db_conn is None or self.db_conn.closed:
+                logger.warning("Database connection is closed, reconnecting...")
+                self.db_conn = psycopg2.connect(**self.db_config)
+                self.db_conn.autocommit = False
+                logger.info("Database connection re-established")
+            else:
+                # Test connection with simple query
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+        except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
+            logger.warning("Database connection test failed: %s, reconnecting...", e)
+            try:
+                if self.db_conn and not self.db_conn.closed:
+                    self.db_conn.close()
+            except Exception:
+                pass
+            self.db_conn = psycopg2.connect(**self.db_config)
+            self.db_conn.autocommit = False
+            logger.info("Database connection restored after failure")
+
     def setup_health_check(self):
         """Start health check HTTP server."""
         logger.info(
@@ -347,6 +378,9 @@ class AgentActionsConsumer:
         total_duplicates = 0
 
         try:
+            # Ensure database connection is healthy before using it
+            self._ensure_db_connection()
+
             cursor = self.db_conn.cursor()
 
             # Process each topic's events
@@ -372,6 +406,8 @@ class AgentActionsConsumer:
                     inserted, duplicates = self._insert_detection_failures(
                         cursor, events
                     )
+                elif topic == "agent-execution-logs":
+                    inserted, duplicates = self._insert_execution_logs(cursor, events)
                 else:
                     logger.warning(
                         "Unknown topic: %s, skipping %d events", topic, len(events)
@@ -627,6 +663,86 @@ class AgentActionsConsumer:
                     timestamp,
                 )
             )
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
+    def _insert_execution_logs(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_execution_logs events with upsert for start/complete."""
+        insert_sql = """
+            INSERT INTO agent_execution_logs (
+                execution_id, correlation_id, session_id, agent_name,
+                user_prompt, status, metadata, started_at, completed_at,
+                duration_ms, quality_score, error_message, error_type,
+                project_path, project_name, claude_session_id, terminal_id
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (execution_id) DO UPDATE SET
+                completed_at = COALESCE(EXCLUDED.completed_at, agent_execution_logs.completed_at),
+                status = CASE
+                    WHEN EXCLUDED.status IN ('success', 'error', 'cancelled')
+                    THEN EXCLUDED.status
+                    ELSE agent_execution_logs.status
+                END,
+                duration_ms = COALESCE(EXCLUDED.duration_ms, agent_execution_logs.duration_ms),
+                quality_score = COALESCE(EXCLUDED.quality_score, agent_execution_logs.quality_score),
+                error_message = COALESCE(EXCLUDED.error_message, agent_execution_logs.error_message),
+                error_type = COALESCE(EXCLUDED.error_type, agent_execution_logs.error_type),
+                metadata = agent_execution_logs.metadata || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
+        """
+
+        batch_data = []
+        for event in events:
+            execution_id = event.get("execution_id")
+            if not execution_id:
+                logger.warning(
+                    "Skipping event without execution_id: %s",
+                    event.get("correlation_id"),
+                )
+                continue
+
+            # Parse timestamps - may be string or datetime
+            started_at = event.get("started_at")
+            if isinstance(started_at, str):
+                started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            elif not started_at:
+                started_at = datetime.now(timezone.utc)
+
+            completed_at = event.get("completed_at")
+            if isinstance(completed_at, str):
+                completed_at = datetime.fromisoformat(
+                    completed_at.replace("Z", "+00:00")
+                )
+
+            batch_data.append(
+                (
+                    execution_id,
+                    event.get("correlation_id"),
+                    event.get("session_id"),
+                    event.get("agent_name"),
+                    event.get("user_prompt"),
+                    event.get("status", "in_progress"),
+                    json.dumps(event.get("metadata", {})),
+                    started_at,
+                    completed_at,
+                    event.get("duration_ms"),
+                    event.get("quality_score"),
+                    event.get("error_message"),
+                    event.get("error_type"),
+                    event.get("project_path"),
+                    event.get("project_name"),
+                    event.get("claude_session_id"),
+                    event.get("terminal_id"),
+                )
+            )
+
+        if not batch_data:
+            return 0, 0
 
         execute_batch(cursor, insert_sql, batch_data, page_size=100)
         inserted = cursor.rowcount

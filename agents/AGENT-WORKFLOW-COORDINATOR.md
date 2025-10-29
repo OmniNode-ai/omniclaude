@@ -240,7 +240,7 @@ class NodeMyOperationEffect(NodeEffect):
 **Library Location**: `~/.claude/agents/lib/`
 
 **Components**:
-1. **EnhancedTriggerMatcher** - Fuzzy trigger matching with multiple strategies
+1. **TriggerMatcher** - Fuzzy trigger matching with multiple strategies
 2. **ConfidenceScorer** - 4-component weighted confidence calculation
 3. **CapabilityIndex** - In-memory inverted index for fast lookups
 4. **ResultCache** - TTL-based caching with hit tracking

@@ -376,6 +376,26 @@ def test_inject_manifest_with_sections(mock_intelligence_client):
     assert "INFRASTRUCTURE TOPOLOGY" not in formatted
 
 
+def test_inject_manifest_with_agent_name(mock_intelligence_client):
+    """Test convenience function with agent_name parameter."""
+    # Test with agent_name
+    formatted = inject_manifest(agent_name="test-agent")
+
+    assert "SYSTEM MANIFEST" in formatted
+    assert "END SYSTEM MANIFEST" in formatted
+
+    # Test with correlation_id and agent_name (as called by hooks)
+    from uuid import uuid4
+
+    correlation_id = str(uuid4())
+    formatted_with_both = inject_manifest(
+        correlation_id=correlation_id, agent_name="hook-agent"
+    )
+
+    assert "SYSTEM MANIFEST" in formatted_with_both
+    assert "END SYSTEM MANIFEST" in formatted_with_both
+
+
 def test_minimal_manifest_fallback():
     """Test fallback to minimal manifest when intelligence is disabled."""
     injector = ManifestInjector(enable_intelligence=False)

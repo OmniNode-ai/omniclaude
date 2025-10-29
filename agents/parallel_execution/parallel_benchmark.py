@@ -21,7 +21,7 @@ import time
 from uuid import uuid4
 
 from lib.codegen_workflow import CodegenWorkflow
-from lib.simple_prd_analyzer import SimplePRDAnalyzer
+from lib.simple_prd_analyzer import PRDAnalyzer
 
 from tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
 
@@ -39,7 +39,7 @@ async def benchmark_sequential_generation(num_nodes: int = 6) -> float:
     print(f"\n=== Sequential Generation Benchmark ({num_nodes} nodes) ===")
 
     workflow = CodegenWorkflow(enable_parallel=False)
-    analyzer = SimplePRDAnalyzer()
+    analyzer = PRDAnalyzer()
 
     # Analyze PRD once
     analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
@@ -87,7 +87,7 @@ async def benchmark_parallel_generation(
     )
 
     workflow = CodegenWorkflow(enable_parallel=True, max_workers=max_workers)
-    analyzer = SimplePRDAnalyzer()
+    analyzer = PRDAnalyzer()
 
     # Analyze PRD once
     analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)

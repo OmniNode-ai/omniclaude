@@ -597,7 +597,7 @@ class ManifestInjector:
 
         Args:
             kafka_brokers: Kafka bootstrap servers
-                Default: KAFKA_BROKERS env var or "192.168.86.200:29102"
+                Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
             enable_intelligence: Enable event-based queries
             query_timeout_ms: Timeout for intelligence queries (default: 5000ms)
             enable_storage: Enable database storage of manifest injections
@@ -607,7 +607,7 @@ class ManifestInjector:
                        Falls back to AGENT_NAME environment variable if not provided
         """
         self.kafka_brokers = kafka_brokers or os.environ.get(
-            "KAFKA_BROKERS", "192.168.86.200:29102"
+            "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms
@@ -1691,7 +1691,7 @@ class ManifestInjector:
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {
-                        "bootstrap_servers": "192.168.86.200:29102",
+                        "bootstrap_servers": self.kafka_brokers,
                         "note": "Connection details only - topics unavailable",
                     },
                 },
@@ -2374,6 +2374,7 @@ class ManifestInjector:
 async def inject_manifest_async(
     correlation_id: Optional[str] = None,
     sections: Optional[List[str]] = None,
+    agent_name: Optional[str] = None,
 ) -> str:
     """
     Quick function to load and format manifest (asynchronous with context manager).
@@ -2381,6 +2382,7 @@ async def inject_manifest_async(
     Args:
         correlation_id: Optional correlation ID for tracking
         sections: Optional list of sections to include
+        agent_name: Optional agent name for logging/traceability
 
     Returns:
         Formatted manifest string
@@ -2389,7 +2391,7 @@ async def inject_manifest_async(
 
     correlation_id = correlation_id or str(uuid4())
 
-    async with ManifestInjector() as injector:
+    async with ManifestInjector(agent_name=agent_name) as injector:
         # Generate manifest (will use cache if valid)
         try:
             await injector.generate_dynamic_manifest_async(correlation_id)
@@ -2404,6 +2406,7 @@ async def inject_manifest_async(
 def inject_manifest(
     correlation_id: Optional[str] = None,
     sections: Optional[List[str]] = None,
+    agent_name: Optional[str] = None,
 ) -> str:
     """
     Quick function to load and format manifest (synchronous wrapper).
@@ -2415,6 +2418,7 @@ def inject_manifest(
     Args:
         correlation_id: Optional correlation ID for tracking
         sections: Optional list of sections to include
+        agent_name: Optional agent name for logging/traceability
 
     Returns:
         Formatted manifest string
@@ -2429,7 +2433,7 @@ def inject_manifest(
         if loop.is_running():
             # If loop is already running, create injector without context manager
             # (not ideal but necessary for sync wrapper in running loop)
-            injector = ManifestInjector()
+            injector = ManifestInjector(agent_name=agent_name)
             try:
                 injector.generate_dynamic_manifest(correlation_id)
             except Exception as e:
@@ -2438,12 +2442,12 @@ def inject_manifest(
         else:
             # Run async version with context manager
             return loop.run_until_complete(
-                inject_manifest_async(correlation_id, sections)
+                inject_manifest_async(correlation_id, sections, agent_name)
             )
     except Exception as e:
         logger.error(f"Failed to run inject_manifest_async: {e}")
         # Fallback to minimal manifest
-        injector = ManifestInjector()
+        injector = ManifestInjector(agent_name=agent_name)
         return injector.format_for_prompt(sections)
 
 

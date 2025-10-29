@@ -14,7 +14,7 @@ from agents.lib.models.intelligence_context import (
     get_default_intelligence,
 )
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.simple_prd_analyzer import SimplePRDAnalysisResult, SimplifiedPRD
+from agents.lib.simple_prd_analyzer import PRDAnalysisResult, SimplifiedPRD
 
 
 async def example_with_custom_intelligence():
@@ -47,7 +47,7 @@ async def example_with_custom_intelligence():
         extracted_keywords=["database", "postgresql", "crud", "connection-pool"],
     )
 
-    prd_analysis = SimplePRDAnalysisResult(
+    prd_analysis = PRDAnalysisResult(
         parsed_prd=prd,
         recommended_node_type="EFFECT",
         recommended_mixins=["MixinRetry", "MixinEventBus", "MixinConnectionPool"],
@@ -201,7 +201,7 @@ async def example_with_default_intelligence():
         extracted_keywords=["transform", "validate", "compute"],
     )
 
-    prd_analysis = SimplePRDAnalysisResult(
+    prd_analysis = PRDAnalysisResult(
         parsed_prd=prd,
         recommended_node_type="COMPUTE",
         recommended_mixins=["MixinCaching", "MixinValidation"],
@@ -298,7 +298,7 @@ async def example_all_node_types():
             extracted_keywords=["test"],
         )
 
-        prd_analysis = SimplePRDAnalysisResult(
+        prd_analysis = PRDAnalysisResult(
             parsed_prd=prd,
             recommended_node_type=node_type,
             recommended_mixins=[],

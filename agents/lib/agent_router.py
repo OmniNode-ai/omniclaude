@@ -30,13 +30,13 @@ try:
     from capability_index import CapabilityIndex
     from confidence_scorer import ConfidenceScore, ConfidenceScorer
     from result_cache import ResultCache
-    from trigger_matcher import EnhancedTriggerMatcher
+    from trigger_matcher import TriggerMatcher
 except ImportError:
     # Fallback to relative imports if used as a package
     from .capability_index import CapabilityIndex
     from .confidence_scorer import ConfidenceScore, ConfidenceScorer
     from .result_cache import ResultCache
-    from .trigger_matcher import EnhancedTriggerMatcher
+    from .trigger_matcher import TriggerMatcher
 
 
 @dataclass
@@ -84,7 +84,7 @@ class AgentRouter:
             self.registry = yaml.safe_load(f)
 
         # Initialize components
-        self.trigger_matcher = EnhancedTriggerMatcher(self.registry)
+        self.trigger_matcher = TriggerMatcher(self.registry)
         self.confidence_scorer = ConfidenceScorer()
         self.capability_index = CapabilityIndex(registry_path)
         self.cache = ResultCache(default_ttl_seconds=cache_ttl)
@@ -295,7 +295,7 @@ class AgentRouter:
             self.registry = yaml.safe_load(f)
 
         # Rebuild components
-        self.trigger_matcher = EnhancedTriggerMatcher(self.registry)
+        self.trigger_matcher = TriggerMatcher(self.registry)
         self.capability_index = CapabilityIndex(path)
 
         # Clear cache since definitions changed
