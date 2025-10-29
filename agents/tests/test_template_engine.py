@@ -10,9 +10,9 @@ import pytest
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
 )
 
 
@@ -73,7 +73,7 @@ class TestOmniNodeTemplateEngine:
         engine = OmniNodeTemplateEngine()
 
         # Create mock analysis result
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="User Management Service",
             description="Test service for user operations",
             features=["authentication", "authorization"],
@@ -86,7 +86,7 @@ class TestOmniNodeTemplateEngine:
             word_count=150,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[
                 {
                     "title": "Create User",
@@ -112,7 +112,7 @@ class TestOmniNodeTemplateEngine:
         from datetime import datetime
         from uuid import uuid4
 
-        analysis_result = SimplePRDAnalysisResult(
+        analysis_result = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Test PRD content",
@@ -161,7 +161,7 @@ class TestOmniNodeTemplateEngine:
         engine = OmniNodeTemplateEngine()
 
         # Create mock analysis result
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="User Management Service",
             description="Test service for user operations",
             features=["authentication", "authorization"],
@@ -174,7 +174,7 @@ class TestOmniNodeTemplateEngine:
             word_count=100,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[
                 {
                     "title": "Create User",
@@ -192,7 +192,7 @@ class TestOmniNodeTemplateEngine:
         from datetime import datetime
         from uuid import uuid4
 
-        analysis_result = SimplePRDAnalysisResult(
+        analysis_result = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Test PRD content",

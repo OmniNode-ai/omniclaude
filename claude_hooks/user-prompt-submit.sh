@@ -10,6 +10,13 @@ LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
 HOOKS_LIB="$HOME/.claude/hooks/lib"
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# Load environment variables from .env if available
+if [[ -f "/Volumes/PRO-G40/Code/omniclaude/.env" ]]; then
+    set -a  # automatically export all variables
+    source "/Volumes/PRO-G40/Code/omniclaude/.env" 2>/dev/null || true
+    set +a
+fi
+
 export ARCHON_MCP_URL="${ARCHON_MCP_URL:-http://localhost:8051}"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
@@ -17,8 +24,8 @@ export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
 
 # Database credentials for hook event logging (required from .env)
-# Set DB_PASSWORD in your .env file or environment
-export DB_PASSWORD="${DB_PASSWORD:-}"
+# Use POSTGRES_PASSWORD from .env as DB_PASSWORD for hook_event_logger
+export DB_PASSWORD="${DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
 
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 b64() { printf %s "$1" | base64; }
@@ -210,6 +217,46 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         --working-directory "$(pwd)" \
         2>>"$LOG_FILE" || log "WARNING: Failed to log agent action"
   fi
+
+  # Log UserPromptSubmit event to hook_events table
+  log "Logging UserPromptSubmit event to hook_events table..."
+  (
+    PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" \
+    AGENT_NAME="$AGENT_NAME" AGENT_DOMAIN="$AGENT_DOMAIN" \
+    CORRELATION_ID="$CORRELATION_ID" SELECTION_METHOD="$SELECTION_METHOD" \
+    CONFIDENCE="$CONFIDENCE" LATENCY_MS="$LATENCY_MS" \
+    SELECTION_REASONING="$SELECTION_REASONING" \
+    python3 - <<'PYLOG' 2>>"$LOG_FILE" || log "WARNING: Failed to log UserPromptSubmit to hook_events"
+import sys
+import os
+import base64
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks/lib"))
+try:
+    from hook_event_logger import get_logger
+
+    # Decode prompt
+    prompt = base64.b64decode(os.environ.get("PROMPT_B64", "")).decode("utf-8", "replace")
+
+    # Get logger and log event
+    logger = get_logger()
+    event_id = logger.log_userprompt(
+        prompt=prompt,
+        agent_detected=os.environ.get("AGENT_NAME"),
+        agent_domain=os.environ.get("AGENT_DOMAIN"),
+        correlation_id=os.environ.get("CORRELATION_ID"),
+        detection_method=os.environ.get("SELECTION_METHOD"),
+        confidence=float(os.environ.get("CONFIDENCE", "0.0")),
+        latency_ms=float(os.environ.get("LATENCY_MS", "0.0")),
+        reasoning=os.environ.get("SELECTION_REASONING"),
+    )
+    if event_id:
+        print(f"✓ UserPromptSubmit event logged: {event_id}", file=sys.stderr)
+    else:
+        print("✗ Failed to log UserPromptSubmit event", file=sys.stderr)
+except Exception as e:
+    print(f"Error logging UserPromptSubmit: {e}", file=sys.stderr)
+PYLOG
+  ) &
 fi
 
 # -----------------------------

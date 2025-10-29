@@ -1,6 +1,6 @@
 """
-Enhanced Trigger Matcher - Phase 1
-==================================
+Trigger Matcher - Phase 1
+==========================
 
 Provides fuzzy matching and scoring for agent triggers.
 Uses multiple matching strategies:
@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 from typing import Dict, List, Tuple
 
 
-class EnhancedTriggerMatcher:
+class TriggerMatcher:
     """
     Advanced trigger matching with fuzzy logic and scoring.
 
@@ -289,7 +289,7 @@ if __name__ == "__main__":
         with open(registry_path) as f:
             registry = yaml.safe_load(f)
 
-        matcher = EnhancedTriggerMatcher(registry)
+        matcher = TriggerMatcher(registry)
 
         # Test queries
         test_queries = [

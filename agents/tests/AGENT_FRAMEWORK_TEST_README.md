@@ -181,7 +181,7 @@ if diff:
 import pytest
 import tempfile
 from pathlib import Path
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.tests.fixtures import EFFECT_NODE_PRD
 
@@ -189,7 +189,7 @@ from agents.tests.fixtures import EFFECT_NODE_PRD
 async def test_my_integration():
     """Test description"""
     # 1. Analyze PRD
-    analyzer = SimplePRDAnalyzer()
+    analyzer = PRDAnalyzer()
     analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
 
     # 2. Generate node
@@ -325,7 +325,7 @@ async def test_my_performance():
 ### Current Coverage
 
 ```
-simple_prd_analyzer.py:         95%
+prd_analyzer.py:         95%
 omninode_template_engine.py:    97%
 generation_test_helpers.py:     77%
 phase4_fixtures.py:            100%

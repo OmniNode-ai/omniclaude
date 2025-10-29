@@ -274,9 +274,100 @@ echo "   Events will be persisted by consumers asynchronously"
 
 ---
 
+## 🚫 ANTI-PATTERNS: What NOT to Do (CRITICAL)
+
+**These practices VIOLATE the polymorphic agent system and MUST be avoided:**
+
+### ❌ NEVER Skip Routing
+
+**WRONG**:
+```python
+# ❌ BAD: Deciding on your own that task "matches core capabilities"
+if "deployment" in user_request or "workflow" in user_request:
+    selected_agent = "polymorphic-agent"
+    reason = "Direct execution - deployment investigation task matches core coordination capabilities"
+```
+
+**CORRECT**:
+```python
+# ✅ GOOD: Always run router first, let IT decide
+router = AgentRouter()
+recommendations = router.route(user_request)
+selected_agent = recommendations[0].agent_name
+reason = recommendations[0].reason
+```
+
+### ❌ NEVER Use "Direct execution" as Reason
+
+**These transformation reasons are FORBIDDEN**:
+- ❌ "Direct execution - task matches core capabilities"
+- ❌ "Direct execution - simple workflow task"
+- ❌ "Direct execution without routing"
+- ❌ "Skipping routing - obvious coordination task"
+- ❌ "Bypassing routing - matches my capabilities"
+
+**Database Evidence of Bypass (3.57% of transformations)**:
+```sql
+-- Recent bypass events (MUST eliminate these):
+source_agent: agent-workflow-coordinator
+target_agent: agent-workflow-coordinator
+reason: "Direct execution - deployment investigation task matches core coordination capabilities"
+```
+
+**Why This is Wrong**:
+1. Defeats the entire polymorphic agent system
+2. Prevents specialized agents from handling tasks they're better suited for
+3. No confidence scoring or alternatives considered
+4. No observable routing decision in database
+5. Impossible to optimize routing based on historical data
+
+### ❌ NEVER Assume Task is "Too Simple" for Routing
+
+**WRONG Logic**:
+```
+"This is just a deployment investigation, I can handle it myself without routing"
+"This is a simple workflow task, no need to check for specialized agents"
+"Coordination is my core capability, skip the router"
+```
+
+**CORRECT Logic**:
+```
+"Run router ALWAYS, even for tasks that seem to match my capabilities"
+"Let the router decide - it may know of a better specialized agent"
+"Routing takes <100ms, it's never worth skipping"
+```
+
+### ✅ ONLY Valid Self-Transformation Path
+
+**The ONLY way to get `selected_agent = "polymorphic-agent"` is**:
+1. Run `router.route(user_request)`
+2. Router returns `recommendations[0].agent_name == "polymorphic-agent"`
+3. Confidence score included in reason
+4. Step 1.5 validation passes (orchestration keywords, detailed reasoning >50 chars)
+
+**Example of Valid Self-Transformation**:
+```python
+router = AgentRouter()
+recommendations = router.route("Orchestrate parallel execution of API, frontend, and database work")
+
+# Router decides: polymorphic-agent is best match
+selected_agent = recommendations[0].agent_name  # "polymorphic-agent"
+confidence = recommendations[0].confidence.total  # 0.89
+reason = "Multi-agent orchestration task with parallel execution requirements"
+
+# Step 1.5 validates: orchestration keywords present, confidence >0.7, reasoning >50 chars
+# ✅ Valid self-transformation
+```
+
+**Bypass Rate Target**: 0% (currently 3.57%, down from 45.5%)
+
+---
+
 ## ⚠️ MANDATORY ROUTING WORKFLOW (EXECUTE FIRST)
 
 **CRITICAL**: Before ANY task execution, you MUST complete this routing workflow to select the specialized agent.
+
+**NO EXCEPTIONS**: You MUST run Step 1 routing for EVERY task, even if you think you know the answer.
 
 ### Step 1: Analyze Request and Route to Specialized Agent
 
@@ -312,12 +403,73 @@ else:
 
 **Save the `selected_agent` variable for Step 2.**
 
+### Step 1.5: Validate Self-Transformation (MANDATORY)
+
+**CRITICAL**: If `selected_agent == "polymorphic-agent"`, you MUST validate this is a legitimate orchestration task.
+
+**Self-Transformation Validation**:
+
+```python
+# Validate self-transformation
+if selected_agent == "polymorphic-agent":
+    # Check if this is a legitimate orchestration task
+    is_orchestration_task = (
+        "orchestrate" in user_request.lower() or
+        "coordinate" in user_request.lower() or
+        "workflow" in user_request.lower() or
+        "multi-agent" in user_request.lower() or
+        "parallel" in user_request.lower()
+    )
+
+    # Require detailed justification (min 50 chars)
+    if not reason or len(reason) < 50:
+        raise ValueError(
+            "Self-transformation requires detailed reasoning (min 50 chars). "
+            "Most tasks should route to specialized agents. "
+            "Re-run router with better task description."
+        )
+
+    # Warn on low confidence
+    if confidence < 0.7:
+        print(f"⚠️  WARNING: Low confidence ({confidence:.2%}) - may indicate routing failure")
+        print(f"   Consider: Is this truly an orchestration task?")
+        print(f"   Reason: {reason}")
+
+        # For specialized tasks with low confidence, BLOCK self-transformation
+        if not is_orchestration_task:
+            raise ValueError(
+                f"Self-transformation blocked: Low confidence ({confidence:.2%}) "
+                f"for non-orchestration task. Expected specialized agent routing."
+            )
+
+    # Log metrics for monitoring
+    print(f"✅ Self-transformation validated (confidence: {confidence:.2%})")
+    print(f"   Task type: {'Orchestration' if is_orchestration_task else 'General'}")
+    print(f"   Reason: {reason}")
+```
+
+**When Self-Transformation is Acceptable**:
+- ✅ General orchestration tasks (multi-agent coordination, workflow management)
+- ✅ Router explicitly returns no better match with high confidence (>0.8)
+- ✅ Task involves polymorphic capabilities (dynamic transformation, parallel execution)
+- ✅ Detailed reasoning provided (>50 chars) explaining why no specialized agent fits
+
+**When Self-Transformation is INVALID** (will be blocked):
+- ❌ Specialized tasks (API, frontend, database, testing, etc.)
+- ❌ Low confidence (<0.7) with no orchestration keywords
+- ❌ Empty or short reasoning (<50 chars)
+- ❌ Router selected polymorphic-agent due to missing triggers (routing failure)
+
+**Current Self-Transformation Rate**: 45.5% (15/33) - **CRITICAL ISSUE**
+**Target Rate**: <10%
+
 ### Step 2: Log Transformation (Required)
 
 **CRITICAL CHECK**: Before logging, verify:
 - ✅ `selected_agent` is SET from Step 1
 - ✅ `selected_agent` is DIFFERENT from "polymorphic-agent" (for specialized tasks)
-- ❌ If both are "polymorphic-agent", you skipped routing!
+- ✅ If `selected_agent == "polymorphic-agent"`, Step 1.5 validation passed
+- ❌ If both are "polymorphic-agent", you completed Step 1.5 validation!
 
 ```bash
 # Log transformation with selected agent
@@ -664,7 +816,7 @@ class NodeMyOperationEffect(NodeEffect):
 **Library Location**: `/Users/jonah/.claude/agents/lib/`
 
 **Components**:
-1. **EnhancedTriggerMatcher** - Fuzzy trigger matching with multiple strategies
+1. **TriggerMatcher** - Fuzzy trigger matching with multiple strategies
 2. **ConfidenceScorer** - 4-component weighted confidence calculation
 3. **CapabilityIndex** - In-memory inverted index for fast lookups
 4. **ResultCache** - TTL-based caching with hit tracking

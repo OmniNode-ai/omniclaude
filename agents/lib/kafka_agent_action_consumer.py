@@ -53,10 +53,10 @@ class KafkaAgentActionConsumer:
             postgres_dsn: PostgreSQL connection string
         """
         # Kafka brokers - require explicit configuration (no localhost default)
-        kafka_brokers_str = kafka_brokers or os.getenv("KAFKA_BROKERS")
+        kafka_brokers_str = kafka_brokers or os.getenv("KAFKA_BOOTSTRAP_SERVERS")
         if not kafka_brokers_str:
             raise ValueError(
-                "KAFKA_BROKERS must be set. Example: KAFKA_BROKERS=192.168.86.200:9092"
+                "KAFKA_BOOTSTRAP_SERVERS must be set. Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = group_id

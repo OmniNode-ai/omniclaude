@@ -203,8 +203,8 @@ Complete repository organization:
 #### 7. Agent Framework
 
 **Router Components**:
-- `EnhancedAgentRouter`: Main orchestration (<100ms routing)
-- `EnhancedTriggerMatcher`: 4 matching strategies
+- `AgentRouter`: Main orchestration (<100ms routing)
+- `TriggerMatcher`: 4 matching strategies
 - `ConfidenceScorer`: 4-component weighted scoring
 - `CapabilityIndex`: Fast capability lookups
 - `ResultCache`: 1-hour TTL, >60% hit rate target

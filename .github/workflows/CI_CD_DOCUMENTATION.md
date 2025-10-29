@@ -195,7 +195,7 @@ REDIS_URL=redis://localhost:6379/0
 **Purpose**: Test agent coordination and routing framework
 
 **Tests Included**:
-- `test_enhanced_router.py` - Intelligent agent routing
+- `test_agent_router.py` - Intelligent agent routing
 - `test_quality_gates.py` - Quality gate validation
 - `test_performance_thresholds.py` - Performance threshold compliance
 

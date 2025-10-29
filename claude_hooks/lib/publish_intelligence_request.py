@@ -62,17 +62,17 @@ class IntelligenceRequestPublisher:
     def __init__(
         self,
         bootstrap_servers: Optional[str] = None,
-        timeout_ms: int = 500,
+        timeout_ms: int = 2000,
     ):
         """
         Initialize intelligence request publisher.
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-            timeout_ms: Response timeout in milliseconds
+            timeout_ms: Response timeout in milliseconds (default: 2000ms)
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
-            "KAFKA_BROKERS", "192.168.86.200:9092"
+            "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
         self.timeout_ms = timeout_ms
 
@@ -137,14 +137,14 @@ class IntelligenceRequestPublisher:
                     enable_auto_commit=True,
                     # CRITICAL: Timeout hierarchy to prevent hangs
                     # heartbeat < fetch_max_wait < session_timeout < request_timeout < connections_max_idle
-                    heartbeat_interval_ms=500,  # 500ms heartbeat
-                    fetch_max_wait_ms=600,  # 600ms fetch wait
-                    session_timeout_ms=2000,  # 2s session timeout
-                    request_timeout_ms=3000,  # 3s request timeout
-                    connections_max_idle_ms=5000,  # 5s idle before close
-                    metadata_max_age_ms=3000,  # 3s metadata refresh
-                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
-                    max_poll_interval_ms=4000,  # 4s max between polls
+                    heartbeat_interval_ms=1000,  # 1s heartbeat
+                    fetch_max_wait_ms=2000,  # 2s fetch wait
+                    session_timeout_ms=30000,  # 30s session timeout (minimum 6s required by Kafka)
+                    request_timeout_ms=40000,  # 40s request timeout
+                    connections_max_idle_ms=50000,  # 50s idle before close
+                    metadata_max_age_ms=10000,  # 10s metadata refresh
+                    api_version_auto_timeout_ms=2000,  # 2s for API version detection
+                    max_poll_interval_ms=35000,  # 35s max between polls
                 )
                 logger.debug(f"Kafka consumer initialized (group: {group_id})")
             except Exception as e:
@@ -399,14 +399,14 @@ def main():
     parser.add_argument(
         "--timeout-ms",
         type=int,
-        default=500,
-        help="Response timeout in milliseconds (default: 500)",
+        default=2000,
+        help="Response timeout in milliseconds (default: 2000)",
     )
 
     parser.add_argument(
         "--kafka-brokers",
         default=None,
-        help="Kafka bootstrap servers (default: KAFKA_BROKERS env or 192.168.86.200:9092)",
+        help="Kafka bootstrap servers (default: KAFKA_BOOTSTRAP_SERVERS env or omninode-bridge-redpanda:9092)",
     )
 
     parser.add_argument(

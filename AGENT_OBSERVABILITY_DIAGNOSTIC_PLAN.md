@@ -93,7 +93,7 @@ GROUP BY table_name;
    ```
 
 2. **Expected Logging Points**
-   - `enhanced_router.py` - Should log routing decisions to `agent_routing_decisions`
+   - `agent_router.py` - Should log routing decisions to `agent_routing_decisions`
    - Agent execution - Should use `AgentExecutionLogger` → `agent_execution_logs`
    - Hook triggers - Should log to `hook_events`
 
@@ -117,7 +117,7 @@ GROUP BY table_name;
 
 **Check if logging is integrated**:
 
-1. **Enhanced Router** (`agents/lib/enhanced_router.py`)
+1. **Enhanced Router** (`agents/lib/agent_router.py`)
    - Does it log routing decisions?
    - Where should it call `agent_routing_decisions` insert?
    - Is it using the skills/agent-tracking/log-routing-decision?
@@ -257,7 +257,7 @@ async def test_agent_execution_logging():
    - Add lifecycle hooks (start/progress/complete)
 
 2. **If router isn't logging**:
-   - Add routing decision logging to enhanced_router.py
+   - Add routing decision logging to agent_router.py
    - Use agent_routing_decisions table
    - Log: agent_name, confidence, method, triggers matched
 
@@ -376,7 +376,7 @@ cat analyze_with_archon.py | head -50
 - `analyze_with_archon.py` - **TODO: Review for test conversion**
 
 ### Existing Files to Audit
-- `agents/lib/enhanced_router.py` - Does it log routing decisions?
+- `agents/lib/agent_router.py` - Does it log routing decisions?
 - `agents/lib/error_logging.py` - Uses wrong tables (error_events)
 - `agents/lib/success_logging.py` - Uses wrong tables (success_events)
 - `skills/log-execution/execute.py` - ✅ Correct pattern

@@ -59,7 +59,7 @@ The Generation Pipeline orchestrates autonomous node generation from natural lan
          │  uses
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   SimplePRDAnalyzer                             │
+│                   PRDAnalyzer                             │
 │  - Extract metadata from natural language                       │
 │  - Keyword-based heuristics (POC)                               │
 └─────────────────────────────────────────────────────────────────┘
@@ -119,7 +119,7 @@ PipelineResult (success/failure + metadata)
 
 **Processing**:
 1. Convert prompt to PRD format
-2. Analyze PRD using `SimplePRDAnalyzer`
+2. Analyze PRD using `PRDAnalyzer`
 3. Extract node type, service name, domain
 4. Calculate confidence score
 
@@ -139,7 +139,7 @@ PipelineResult (success/failure + metadata)
         "features": ["Feature 1", "Feature 2", "Feature 3"],
         "confidence": 0.85
     },
-    "analysis_result": SimplePRDAnalysisResult(...)
+    "analysis_result": PRDAnalysisResult(...)
 }
 ```
 

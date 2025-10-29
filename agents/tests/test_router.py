@@ -3,7 +3,7 @@ Unit tests for Agent Router - Phase 1
 ======================================
 
 Tests all components of the routing system:
-- EnhancedTriggerMatcher
+- TriggerMatcher
 - ConfidenceScorer
 - CapabilityIndex
 - ResultCache
@@ -13,11 +13,11 @@ Setup:
     Run with pytest from project root:
 
         cd /path/to/omniclaude
-        pytest agents/tests/test_enhanced_router.py -v
+        pytest agents/tests/test_router.py -v
 
     Or use PYTHONPATH:
 
-        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_enhanced_router.py -v
+        PYTHONPATH=/path/to/omniclaude pytest agents/tests/test_router.py -v
 """
 
 import time
@@ -27,7 +27,7 @@ from lib.agent_router import AgentRouter
 from lib.capability_index import CapabilityIndex
 from lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
 from lib.result_cache import ResultCache
-from lib.trigger_matcher import EnhancedTriggerMatcher
+from lib.trigger_matcher import TriggerMatcher
 
 # Sample test registry data
 SAMPLE_REGISTRY = {
@@ -69,13 +69,13 @@ SAMPLE_REGISTRY = {
 # ============================================================================
 
 
-class TestEnhancedTriggerMatcher:
-    """Test EnhancedTriggerMatcher functionality."""
+class TestTriggerMatcher:
+    """Test TriggerMatcher functionality."""
 
     @pytest.fixture
     def matcher(self):
         """Create matcher with sample registry."""
-        return EnhancedTriggerMatcher(SAMPLE_REGISTRY)
+        return TriggerMatcher(SAMPLE_REGISTRY)
 
     def test_exact_match(self, matcher):
         """Test exact trigger matching."""

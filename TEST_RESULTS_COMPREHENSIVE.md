@@ -4,7 +4,7 @@
 
 **Changes Tested**:
 1. Fixed critical bugs in polymorphic-agent.md (confidence.total, reason)
-2. Renamed EnhancedAgentRouter → AgentRouter
+2. Renamed AgentRouter → AgentRouter
 3. Updated imports throughout codebase
 4. Applied database migration (execution_succeeded column)
 
@@ -21,7 +21,7 @@
 - ✅ AgentRouter import works
 - ✅ AgentRouter instantiation works
 - ✅ AgentRouter.route() works (returns recommendations)
-- ✅ Old EnhancedAgentRouter import properly removed
+- ✅ Old AgentRouter import properly removed
 
 ---
 
@@ -140,7 +140,7 @@
 **Total Tests**: 95 passed, 0 failed, 1 skipped
 
 **Critical Changes Verified**:
-- ✅ EnhancedAgentRouter → AgentRouter rename complete
+- ✅ AgentRouter → AgentRouter rename complete
 - ✅ All imports updated correctly
 - ✅ Old imports properly removed
 - ✅ Polymorphic agent documentation fixed

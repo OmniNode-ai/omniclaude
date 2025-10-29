@@ -20,10 +20,10 @@ from .agent_router import AgentRecommendation, AgentRouter
 from .capability_index import CapabilityIndex
 from .confidence_scorer import ConfidenceScore, ConfidenceScorer
 from .result_cache import ResultCache
-from .trigger_matcher import EnhancedTriggerMatcher
+from .trigger_matcher import TriggerMatcher
 
 __all__ = [
-    "EnhancedTriggerMatcher",
+    "TriggerMatcher",
     "ConfidenceScorer",
     "ConfidenceScore",
     "CapabilityIndex",

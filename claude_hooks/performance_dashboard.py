@@ -12,14 +12,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import aiofiles
-from enhanced_pattern_tracker import EnhancedPatternTracker, get_enhanced_tracker
+from pattern_tracker import PatternTracker, get_tracker
 
 
 class PerformanceDashboard:
     """Real-time performance dashboard for pattern tracking."""
 
-    def __init__(self, tracker: Optional[EnhancedPatternTracker] = None):
-        self.tracker = tracker or get_enhanced_tracker()
+    def __init__(self, tracker: Optional[PatternTracker] = None):
+        self.tracker = tracker or get_tracker()
         self.dashboard_file = (
             Path.home() / ".claude" / "hooks" / "logs" / "performance-dashboard.html"
         )
