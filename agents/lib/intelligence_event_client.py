@@ -139,6 +139,7 @@ class IntelligenceEventClient:
         self._consumer: Optional[AIOKafkaConsumer] = None
         self._started = False
         self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
 
@@ -233,6 +234,24 @@ class IntelligenceEventClient:
             # Start background consumer task AFTER partition assignment confirmed
             asyncio.create_task(self._consume_responses())
 
+            # CRITICAL FIX: Wait for consumer task to actually start polling
+            # This prevents race condition where requests are published before
+            # consumer is ready to receive responses
+            self.logger.info("Waiting for consumer task to start polling...")
+            consumer_ready_timeout = 5.0  # 5 seconds
+            try:
+                await asyncio.wait_for(
+                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
+                )
+                self.logger.info("Consumer task confirmed polling - ready for requests")
+            except asyncio.TimeoutError:
+                error_msg = (
+                    f"Consumer task failed to start polling within {consumer_ready_timeout}s.\n"
+                    f"This indicates the consumer loop did not start properly."
+                )
+                self.logger.error(error_msg)
+                raise TimeoutError(error_msg)
+
             self._started = True
             self.logger.info("Intelligence event client started successfully")
 
@@ -271,6 +290,9 @@ class IntelligenceEventClient:
                         RuntimeError("Client stopped while request pending")
                     )
             self._pending_requests.clear()
+
+            # Clear consumer ready flag for restart capability
+            self._consumer_ready.clear()
 
             self._started = False
             self.logger.info("Intelligence event client stopped successfully")
@@ -580,6 +602,10 @@ class IntelligenceEventClient:
         try:
             if self._consumer is None:
                 raise RuntimeError("Consumer not initialized. Call start() first.")
+
+            # Signal that consumer is ready to poll (fixes race condition)
+            self._consumer_ready.set()
+            self.logger.debug("Consumer task entered polling loop - signaling ready")
 
             async for msg in self._consumer:
                 self.logger.debug(
