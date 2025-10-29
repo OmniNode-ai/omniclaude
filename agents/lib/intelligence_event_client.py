@@ -386,7 +386,7 @@ class IntelligenceEventClient:
                 )
 
         # Use PATTERN_EXTRACTION operation type for pattern discovery
-        return await self.request_code_analysis(
+        result = await self.request_code_analysis(
             content=content,
             source_path=source_path,
             language=language,
@@ -397,6 +397,9 @@ class IntelligenceEventClient:
             },
             timeout_ms=timeout,
         )
+
+        # Extract patterns list from result dict
+        return result.get("patterns", [])
 
     async def request_code_analysis(
         self,

@@ -130,13 +130,13 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def send_health_response(self):
         """Send health check response with thread-safe state verification."""
         # Thread-safe atomic health check to prevent TOCTOU race conditions
-        # Keep entire response generation inside lock to prevent state changes
-        with self.consumer_instance._health_lock:
-            is_healthy = (
-                self.consumer_instance is not None
-                and self.consumer_instance.running
-                and not self.consumer_instance.shutdown_event.is_set()
-            )
+        # Check consumer_instance before accessing attributes to prevent NoneType errors
+        ci = self.consumer_instance
+        if ci is not None:
+            with ci._health_lock:
+                is_healthy = ci.running and not ci.shutdown_event.is_set()
+        else:
+            is_healthy = False
 
             if is_healthy:
                 self.send_response(200)
@@ -326,9 +326,8 @@ class AgentActionsConsumer:
                 logger.info("Database connection re-established")
             else:
                 # Test connection with simple query
-                cursor = self.db_conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.close()
+                with self.db_conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
         except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
             logger.warning("Database connection test failed: %s, reconnecting...", e)
             try:
@@ -381,44 +380,46 @@ class AgentActionsConsumer:
             # Ensure database connection is healthy before using it
             self._ensure_db_connection()
 
-            cursor = self.db_conn.cursor()
+            with self.db_conn.cursor() as cursor:
+                # Process each topic's events
+                for topic, events in events_by_topic.items():
+                    if not events:
+                        continue
 
-            # Process each topic's events
-            for topic, events in events_by_topic.items():
-                if not events:
-                    continue
+                    if topic == "agent-actions":
+                        inserted, duplicates = self._insert_agent_actions(
+                            cursor, events
+                        )
+                    elif topic == "agent-routing-decisions":
+                        inserted, duplicates = self._insert_routing_decisions(
+                            cursor, events
+                        )
+                    elif topic == "agent-transformation-events":
+                        inserted, duplicates = self._insert_transformation_events(
+                            cursor, events
+                        )
+                    elif topic == "router-performance-metrics":
+                        inserted, duplicates = self._insert_performance_metrics(
+                            cursor, events
+                        )
+                    elif topic == "agent-detection-failures":
+                        inserted, duplicates = self._insert_detection_failures(
+                            cursor, events
+                        )
+                    elif topic == "agent-execution-logs":
+                        inserted, duplicates = self._insert_execution_logs(
+                            cursor, events
+                        )
+                    else:
+                        logger.warning(
+                            "Unknown topic: %s, skipping %d events", topic, len(events)
+                        )
+                        continue
 
-                if topic == "agent-actions":
-                    inserted, duplicates = self._insert_agent_actions(cursor, events)
-                elif topic == "agent-routing-decisions":
-                    inserted, duplicates = self._insert_routing_decisions(
-                        cursor, events
-                    )
-                elif topic == "agent-transformation-events":
-                    inserted, duplicates = self._insert_transformation_events(
-                        cursor, events
-                    )
-                elif topic == "router-performance-metrics":
-                    inserted, duplicates = self._insert_performance_metrics(
-                        cursor, events
-                    )
-                elif topic == "agent-detection-failures":
-                    inserted, duplicates = self._insert_detection_failures(
-                        cursor, events
-                    )
-                elif topic == "agent-execution-logs":
-                    inserted, duplicates = self._insert_execution_logs(cursor, events)
-                else:
-                    logger.warning(
-                        "Unknown topic: %s, skipping %d events", topic, len(events)
-                    )
-                    continue
+                    total_inserted += inserted
+                    total_duplicates += duplicates
 
-                total_inserted += inserted
-                total_duplicates += duplicates
-
-            self.db_conn.commit()
-            cursor.close()
+                self.db_conn.commit()
 
             logger.info(
                 "Batch insert: %d inserted, %d duplicates (total: %d)",

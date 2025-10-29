@@ -137,7 +137,7 @@ def check_running_services() -> Dict[str, Any]:
     try:
         # Try to check if PostgreSQL container is running
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=postgres", "--format", "json"],
+            ["docker", "ps", "--filter", "name=postgres", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -176,7 +176,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check Memgraph (if available)
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=memgraph", "--format", "json"],
+            ["docker", "ps", "--filter", "name=memgraph", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -215,7 +215,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check Qdrant (if available)
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=qdrant", "--format", "json"],
+            ["docker", "ps", "--filter", "name=qdrant", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
