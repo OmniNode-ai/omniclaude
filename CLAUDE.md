@@ -121,19 +121,19 @@ The `.env` file contains the correct PostgreSQL password for all services. **You
 source .env
 
 # Or use PGPASSWORD directly from .env
-export PGPASSWORD="omninode-bridge-postgres-dev-2024"
+export PGPASSWORD="omninode_remote_2024_secure"
 ```
 
 **Environment Variables in `.env`**:
 ```bash
 # Hook intelligence database (required)
-DB_PASSWORD=omninode-bridge-postgres-dev-2024
+DB_PASSWORD=omninode_remote_2024_secure
 
 # Docker deployment (required for containers)
-OMNINODE_BRIDGE_POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+OMNINODE_BRIDGE_POSTGRES_PASSWORD=omninode_remote_2024_secure
 
 # PostgreSQL password for psql commands (REQUIRED for agents/tests)
-POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+POSTGRES_PASSWORD=omninode_remote_2024_secure
 ```
 
 **Connection details**:
@@ -141,7 +141,7 @@ POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
 - Port: `5436`
 - Database: `omninode_bridge`
 - User: `postgres`
-- Password: `omninode-bridge-postgres-dev-2024` (available in `.env`)
+- Password: `omninode_remote_2024_secure` (available in `.env`)
 
 **Connecting to PostgreSQL**:
 
@@ -151,10 +151,10 @@ source .env
 psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 
 # Method 2: Use PGPASSWORD environment variable
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 
 # Method 3: Connection string
-psql "postgresql://postgres:omninode-bridge-postgres-dev-2024@192.168.86.200:5436/omninode_bridge"
+psql "postgresql://postgres:omninode_remote_2024_secure@192.168.86.200:5436/omninode_bridge"
 ```
 
 **For Polymorphic Agents & Tests**:
@@ -164,7 +164,7 @@ All agents and tests automatically read credentials from `.env`. If you see auth
 1. ✅ Verify `.env` exists: `ls -la .env`
 2. ✅ Verify password in `.env`: `grep POSTGRES_PASSWORD .env`
 3. ✅ Source `.env` in your shell: `source .env`
-4. ✅ Test connection: `PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"`
+4. ✅ Test connection: `PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"`
 
 **⚠️ SECURITY WARNING**: Change default password in production!
 
@@ -1156,18 +1156,18 @@ Start: Agent execution needs intelligence
 source .env
 
 # PostgreSQL password (for all psql commands)
-export PGPASSWORD="omninode-bridge-postgres-dev-2024"
+export PGPASSWORD="omninode_remote_2024_secure"
 ```
 
 **If you see authentication errors:**
 1. Source `.env`: `source .env`
 2. Verify password: `grep POSTGRES_PASSWORD .env`
-3. Test connection: `PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"`
+3. Test connection: `PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"`
 
 **All passwords in `.env`:**
-- `POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024` ← **Use this for psql**
-- `DB_PASSWORD=omninode-bridge-postgres-dev-2024`
-- `OMNINODE_BRIDGE_POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024`
+- `POSTGRES_PASSWORD=omninode_remote_2024_secure` ← **Use this for psql**
+- `DB_PASSWORD=omninode_remote_2024_secure`
+- `OMNINODE_BRIDGE_POSTGRES_PASSWORD=omninode_remote_2024_secure`
 
 ---
 
@@ -1212,7 +1212,7 @@ docker stop archon-intelligence && docker start archon-intelligence
 # Database queries (MUST source .env first or use PGPASSWORD)
 source .env && psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 # OR with inline password:
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 
 # Provider management
 ./toggle-claude-provider.sh status
@@ -1226,9 +1226,9 @@ python3 agents/lib/agent_history_browser.py --correlation-id <id>  # Specific ex
 python3 agents/lib/agent_history_browser.py --correlation-id <id> --export manifest.json  # Export
 
 # Observability queries (SQL) - Use PGPASSWORD from .env
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_agent_execution_trace LIMIT 10;"
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_manifest_injection_performance;"
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_routing_decision_accuracy;"
+PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_agent_execution_trace LIMIT 10;"
+PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_manifest_injection_performance;"
+PGPASSWORD="omninode_remote_2024_secure" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT * FROM v_routing_decision_accuracy;"
 ```
 
 ### Database Connection Strings
@@ -1241,7 +1241,7 @@ postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge
 postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5436/omninode_bridge
 
 # Environment variable
-export POSTGRES_PASSWORD="omninode-bridge-postgres-dev-2024"
+export POSTGRES_PASSWORD="omninode_remote_2024_secure"
 ```
 
 ### Key Files

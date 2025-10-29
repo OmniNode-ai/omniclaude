@@ -60,6 +60,14 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+# Import nest_asyncio for nested event loop support
+try:
+    import nest_asyncio
+
+    nest_asyncio.apply()  # Enable nested event loops globally
+except ImportError:
+    nest_asyncio = None
+
 # Import IntelligenceEventClient for event bus communication
 try:
     from intelligence_event_client import IntelligenceEventClient
@@ -586,7 +594,7 @@ class ManifestInjector:
         self,
         kafka_brokers: Optional[str] = None,
         enable_intelligence: bool = True,
-        query_timeout_ms: int = 5000,
+        query_timeout_ms: int = 10000,
         enable_storage: bool = True,
         enable_cache: bool = True,
         cache_ttl_seconds: Optional[int] = None,
@@ -599,7 +607,8 @@ class ManifestInjector:
             kafka_brokers: Kafka bootstrap servers
                 Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
             enable_intelligence: Enable event-based queries
-            query_timeout_ms: Timeout for intelligence queries (default: 5000ms)
+            query_timeout_ms: Timeout for intelligence queries (default: 10000ms)
+                             Increased from 5000ms to account for Kafka delivery retries
             enable_storage: Enable database storage of manifest injections
             enable_cache: Enable caching of intelligence queries (default: True)
             cache_ttl_seconds: Cache TTL override (default: from env or 300)
@@ -706,6 +715,9 @@ class ManifestInjector:
         This is a synchronous wrapper around generate_dynamic_manifest_async()
         for use in hooks and synchronous contexts.
 
+        Uses nest_asyncio to support nested event loops when called from
+        async contexts (like Claude Code).
+
         Args:
             correlation_id: Correlation ID for tracking
             force_refresh: Force refresh even if cache is valid
@@ -721,20 +733,33 @@ class ManifestInjector:
         # Run async query in event loop
         try:
             loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If loop is already running, we can't use run_until_complete
-                # Fall back to minimal manifest
-                self.logger.warning(
-                    "Event loop already running, falling back to minimal manifest"
+            # With nest_asyncio.apply(), we can run_until_complete even in running loop
+            return loop.run_until_complete(
+                self.generate_dynamic_manifest_async(correlation_id, force_refresh)
+            )
+        except RuntimeError as e:
+            if "no running event loop" in str(e).lower():
+                # Create new event loop if none exists
+                self.logger.debug("Creating new event loop")
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        self.generate_dynamic_manifest_async(
+                            correlation_id, force_refresh
+                        )
+                    )
+                finally:
+                    loop.close()
+            else:
+                self.logger.error(
+                    f"Failed to generate dynamic manifest: {e}", exc_info=True
                 )
                 return self._get_minimal_manifest()
-            else:
-                # Run async query
-                return loop.run_until_complete(
-                    self.generate_dynamic_manifest_async(correlation_id, force_refresh)
-                )
         except Exception as e:
-            self.logger.error(f"Failed to generate dynamic manifest: {e}")
+            self.logger.error(
+                f"Failed to generate dynamic manifest: {e}", exc_info=True
+            )
             return self._get_minimal_manifest()
 
     async def generate_dynamic_manifest_async(
@@ -2415,6 +2440,9 @@ def inject_manifest(
     backward compatibility. Prefer using inject_manifest_async() directly
     in async contexts for better resource management.
 
+    Uses nest_asyncio to support nested event loops when called from
+    async contexts (like Claude Code).
+
     Args:
         correlation_id: Optional correlation ID for tracking
         sections: Optional list of sections to include
@@ -2428,24 +2456,31 @@ def inject_manifest(
     correlation_id = correlation_id or str(uuid4())
 
     # Run async version in event loop
+    # With nest_asyncio, we can always use run_until_complete
     try:
         loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is already running, create injector without context manager
-            # (not ideal but necessary for sync wrapper in running loop)
-            injector = ManifestInjector(agent_name=agent_name)
+        return loop.run_until_complete(
+            inject_manifest_async(correlation_id, sections, agent_name)
+        )
+    except RuntimeError as e:
+        if "no running event loop" in str(e).lower():
+            # Create new event loop if none exists
+            logger.debug("Creating new event loop")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                injector.generate_dynamic_manifest(correlation_id)
-            except Exception as e:
-                logger.error(f"Failed to generate dynamic manifest: {e}")
-            return injector.format_for_prompt(sections)
+                return loop.run_until_complete(
+                    inject_manifest_async(correlation_id, sections, agent_name)
+                )
+            finally:
+                loop.close()
         else:
-            # Run async version with context manager
-            return loop.run_until_complete(
-                inject_manifest_async(correlation_id, sections, agent_name)
-            )
+            logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
+            # Fallback to minimal manifest
+            injector = ManifestInjector(agent_name=agent_name)
+            return injector.format_for_prompt(sections)
     except Exception as e:
-        logger.error(f"Failed to run inject_manifest_async: {e}")
+        logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
         # Fallback to minimal manifest
         injector = ManifestInjector(agent_name=agent_name)
         return injector.format_for_prompt(sections)
