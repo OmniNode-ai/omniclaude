@@ -262,7 +262,7 @@ agents:
     specialization_level: "expert"
 
   polymorphic-agent:
-    name: "agent-polymorphic-agent"
+    name: "polymorphic-agent"
     title: "Polymorphic Agent (Polly)"
     description: "Multi-agent workflow coordination with polymorphic role assumption and intelligent routing for ONEX development. Dynamic transformation agent also known as Polly, poly, or workflow coordinator."
     category: "coordination"

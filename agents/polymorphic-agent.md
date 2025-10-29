@@ -396,9 +396,18 @@ if recommendations and recommendations[0].agent_name != 'polymorphic-agent':
     print(f"   Confidence: {confidence:.2%}")
     print(f"   Reason: {reason}")
 else:
-    # Fallback: Continue as polymorphic-agent for general tasks
+    # Continue as polymorphic-agent for orchestration tasks or when no specialized agent matches
     selected_agent = 'polymorphic-agent'
-    print("ℹ️  No specialized agent selected - continuing as polymorphic-agent")
+    if recommendations and recommendations[0].agent_name == 'polymorphic-agent':
+        # Router explicitly selected polymorphic-agent
+        reason = recommendations[0].reason
+        confidence = recommendations[0].confidence.total
+        print(f"✅ Continuing as polymorphic-agent (Confidence: {confidence:.2%})")
+        print(f"   Reason: {reason}")
+    else:
+        # No recommendations (fallback case)
+        print("ℹ️  Continuing as polymorphic-agent (general orchestration)")
+        reason = "No specialized agent match - suitable for general coordination tasks"
 ```
 
 **Save the `selected_agent` variable for Step 2.**

@@ -185,7 +185,9 @@ class IntelligenceEventClient:
                 bootstrap_servers=self.bootstrap_servers,
                 group_id=self.consumer_group_id,
                 enable_auto_commit=True,
-                auto_offset_reset="latest",
+                auto_offset_reset="earliest",  # CRITICAL: Changed from "latest" to fix race condition
+                # With random consumer groups per request, we need to see
+                # messages published before subscription completes
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             )
             await self._consumer.start()
