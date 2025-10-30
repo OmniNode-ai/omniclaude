@@ -78,6 +78,7 @@ class RoutingAdapterConfig:
         self.routing_timeout_ms = int(os.getenv("ROUTING_TIMEOUT_MS", "5000"))
         self.request_timeout_ms = int(os.getenv("REQUEST_TIMEOUT_MS", "5000"))
         self.max_batch_size = int(os.getenv("MAX_BATCH_SIZE", "100"))
+        self.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 
         # Kafka Topics
         self.topic_routing_request = "dev.routing-adapter.routing.request.v1"
@@ -180,6 +181,7 @@ class RoutingAdapterConfig:
             "routing_timeout_ms": self.routing_timeout_ms,
             "request_timeout_ms": self.request_timeout_ms,
             "max_batch_size": self.max_batch_size,
+            "cache_ttl_seconds": self.cache_ttl_seconds,
             # Topics
             "topic_routing_request": self.topic_routing_request,
             "topic_routing_response": self.topic_routing_response,

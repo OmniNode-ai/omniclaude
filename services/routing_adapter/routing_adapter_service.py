@@ -13,36 +13,24 @@ Follows ONEX v2.0 event-driven architecture patterns:
 - Circuit breaker for resilience
 
 Event Flow:
-    1. Consume routing request from Kafka (topic: dev.routing-adapter.routing.request.v1)
+    1. RouterEventHandler consumes routing request from Kafka
     2. Process with RoutingHandler → AgentRouter
-    3. Publish response to Kafka (topic: dev.routing-adapter.routing.response.v1)
+    3. Publish response to Kafka (completed or failed)
     4. Log routing decision to PostgreSQL (via agent-tracking events)
 
-Implementation: Phase 1 - Event-Driven Routing Adapter
+Implementation: Phase 2 - Event-Driven Routing Adapter with RouterEventHandler
 """
 
 import asyncio
-import json
 import logging
 import signal
 from datetime import UTC, datetime
-from typing import Any, Optional
-from uuid import uuid4
+from typing import Optional
 
 from aiohttp import web
 
-# Kafka imports
-try:
-    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-
-    AIOKAFKA_AVAILABLE = True
-except ImportError:
-    AIOKAFKA_AVAILABLE = False
-    AIOKafkaConsumer = Any  # type: ignore
-    AIOKafkaProducer = Any  # type: ignore
-
 from .config import get_config
-from .routing_handler import RoutingHandler
+from .router_event_handler import RouterEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +40,7 @@ class RoutingAdapterService:
     Routing Adapter Service.
 
     Event-driven service for agent routing requests using Kafka message bus.
+    Uses RouterEventHandler for event processing with envelope pattern.
     """
 
     def __init__(self):
@@ -60,14 +49,9 @@ class RoutingAdapterService:
         self.config = get_config()
 
         # Dependencies
-        self._routing_handler: Optional[RoutingHandler] = None
-        self._kafka_consumer: Optional[AIOKafkaConsumer] = None
-        self._kafka_producer: Optional[AIOKafkaProducer] = None
+        self._router_event_handler: Optional[RouterEventHandler] = None
 
-        # Background tasks
-        self._event_consumption_task: Optional[asyncio.Task] = None
-        self._health_check_task: Optional[asyncio.Task] = None
-        self._is_consuming_events = False
+        # Service state
         self._is_running = False
 
         # Health status
@@ -75,28 +59,21 @@ class RoutingAdapterService:
             "status": "starting",
             "timestamp": datetime.now(UTC).isoformat(),
             "components": {
-                "routing_handler": "initializing",
-                "kafka_consumer": "initializing",
-                "kafka_producer": "initializing",
+                "router_event_handler": "initializing",
             },
         }
 
         # Metrics
         self._started_at: Optional[datetime] = None
-        self._request_count = 0
-        self._success_count = 0
-        self._error_count = 0
 
     async def initialize(self) -> None:
         """
         Initialize service dependencies.
 
         Process:
-            1. Initialize RoutingHandler with AgentRouter
-            2. Initialize Kafka consumer for routing requests
-            3. Initialize Kafka producer for routing responses
-            4. Start background event consumption loop
-            5. Start health check loop
+            1. Initialize RouterEventHandler (which handles Kafka and RoutingHandler)
+            2. Start RouterEventHandler (starts event consumption loop)
+            3. Update health status
 
         Raises:
             RuntimeError: If initialization fails
@@ -112,59 +89,14 @@ class RoutingAdapterService:
         )
 
         try:
-            # Step 1: Initialize RoutingHandler
-            logger.info("Initializing RoutingHandler...")
-            self._routing_handler = RoutingHandler()
-            await self._routing_handler.initialize()
-            self._health_status["components"]["routing_handler"] = "healthy"
-            logger.info("RoutingHandler initialized successfully")
+            # Step 1: Initialize RouterEventHandler
+            logger.info("Initializing RouterEventHandler...")
+            self._router_event_handler = RouterEventHandler()
+            await self._router_event_handler.start()
+            self._health_status["components"]["router_event_handler"] = "healthy"
+            logger.info("RouterEventHandler initialized successfully")
 
-            # Step 2: Initialize Kafka consumer
-            if not AIOKAFKA_AVAILABLE:
-                raise RuntimeError(
-                    "aiokafka not available. Install with: pip install aiokafka"
-                )
-
-            logger.info("Initializing Kafka consumer...")
-            self._kafka_consumer = AIOKafkaConsumer(
-                self.config.topic_routing_request,
-                bootstrap_servers=self.config.kafka_bootstrap_servers.split(","),
-                group_id="routing_adapter_consumers",
-                value_deserializer=lambda m: (
-                    json.loads(m.decode("utf-8")) if m else None
-                ),
-                enable_auto_commit=False,  # Manual commit for safe offset management
-                auto_offset_reset="earliest",
-            )
-            await self._kafka_consumer.start()
-            self._health_status["components"]["kafka_consumer"] = "healthy"
-            logger.info(
-                "Kafka consumer started",
-                extra={
-                    "topics": [self.config.topic_routing_request],
-                    "group_id": "routing_adapter_consumers",
-                },
-            )
-
-            # Step 3: Initialize Kafka producer
-            logger.info("Initializing Kafka producer...")
-            self._kafka_producer = AIOKafkaProducer(
-                bootstrap_servers=self.config.kafka_bootstrap_servers.split(","),
-                value_serializer=lambda v: json.dumps(v).encode("utf-8") if v else b"",
-            )
-            await self._kafka_producer.start()
-            self._health_status["components"]["kafka_producer"] = "healthy"
-            logger.info("Kafka producer started")
-
-            # Step 4: Start background event consumption loop
-            logger.info("Starting event consumption loop...")
-            self._is_consuming_events = True
-            self._event_consumption_task = asyncio.create_task(
-                self._consume_events_loop()
-            )
-            logger.info("Event consumption loop started")
-
-            # Step 5: Update health status
+            # Step 2: Update health status
             self._health_status["status"] = "healthy"
             self._health_status["timestamp"] = datetime.now(UTC).isoformat()
             self._is_running = True
@@ -183,132 +115,12 @@ class RoutingAdapterService:
             self._health_status["error"] = str(e)
             raise RuntimeError(f"Service initialization failed: {e}") from e
 
-    async def _consume_events_loop(self) -> None:
-        """
-        Background event consumption loop.
-
-        Continuously consumes routing request events from Kafka and processes them.
-        Implements at-least-once delivery semantics with manual offset commit.
-
-        Event Processing:
-            1. Consume routing request event
-            2. Call RoutingHandler.handle_routing_request()
-            3. Publish routing response event
-            4. Commit offset on success
-            5. Publish failure event on error (no commit)
-        """
-        if not self._kafka_consumer:
-            logger.error(
-                "Cannot start event consumption - Kafka consumer not initialized"
-            )
-            return
-
-        logger.info(
-            "Event consumption loop started",
-            extra={
-                "topic": self.config.topic_routing_request,
-                "group_id": "routing_adapter_consumers",
-            },
-        )
-
-        try:
-            async for message in self._kafka_consumer:
-                if not self._is_consuming_events:
-                    logger.info("Event consumption loop shutting down")
-                    break
-
-                correlation_id = None
-                try:
-                    # Extract event
-                    event = message.value
-                    correlation_id = event.get("correlation_id", str(uuid4()))
-
-                    logger.debug(
-                        "Processing routing request",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "topic": message.topic,
-                            "partition": message.partition,
-                            "offset": message.offset,
-                        },
-                    )
-
-                    # Process routing request
-                    response = await self._routing_handler.handle_routing_request(event)
-
-                    # Publish response
-                    await self._kafka_producer.send(
-                        self.config.topic_routing_response,
-                        value=response,
-                    )
-
-                    # Commit offset (success)
-                    await self._kafka_consumer.commit()
-
-                    # Update metrics
-                    self._request_count += 1
-                    self._success_count += 1
-
-                    logger.info(
-                        "Routing request processed successfully",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "selected_agent": response.get("selected_agent"),
-                            "confidence": response.get("confidence"),
-                        },
-                    )
-
-                except Exception as e:
-                    # Processing error
-                    self._request_count += 1
-                    self._error_count += 1
-
-                    logger.error(
-                        f"Failed to process routing request: {e}",
-                        extra={"correlation_id": correlation_id},
-                        exc_info=True,
-                    )
-
-                    # Publish failure event
-                    try:
-                        failure_event = {
-                            "correlation_id": correlation_id or str(uuid4()),
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "timestamp": datetime.now(UTC).isoformat(),
-                            "original_event": event if "event" in locals() else None,
-                        }
-                        await self._kafka_producer.send(
-                            self.config.topic_routing_failed,
-                            value=failure_event,
-                        )
-                        # Commit offset (failure published to DLQ)
-                        await self._kafka_consumer.commit()
-                    except Exception as publish_error:
-                        logger.error(
-                            f"Failed to publish failure event: {publish_error}",
-                            extra={"correlation_id": correlation_id},
-                            exc_info=True,
-                        )
-                        # Do NOT commit offset - will be redelivered
-
-        except asyncio.CancelledError:
-            logger.info("Event consumption loop cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"Event consumption loop failed: {e}", exc_info=True)
-            self._health_status["status"] = "unhealthy"
-            self._health_status["error"] = f"Event consumption failed: {e}"
-
     async def shutdown(self) -> None:
         """
         Graceful shutdown of routing adapter service.
 
         Cleanup tasks:
-            1. Stop event consumption loop
-            2. Close Kafka consumer
-            3. Close Kafka producer
-            4. Shutdown routing handler
+            1. Stop RouterEventHandler (which handles Kafka and RoutingHandler cleanup)
         """
         logger.info(
             "Shutting down Routing Adapter Service",
@@ -318,50 +130,19 @@ class RoutingAdapterService:
                     if self._started_at
                     else 0
                 ),
-                "total_requests": self._request_count,
             },
         )
 
         self._is_running = False
 
-        # Step 1: Stop event consumption loop
-        if self._is_consuming_events:
-            logger.info("Stopping event consumption loop...")
-            self._is_consuming_events = False
-
-            if self._event_consumption_task:
-                self._event_consumption_task.cancel()
-                try:
-                    await self._event_consumption_task
-                except asyncio.CancelledError:
-                    logger.info("Event consumption task cancelled")
-
-        # Step 2: Close Kafka consumer
-        if self._kafka_consumer:
+        # Step 1: Stop RouterEventHandler
+        if self._router_event_handler:
             try:
-                logger.info("Closing Kafka consumer...")
-                await self._kafka_consumer.stop()
-                logger.info("Kafka consumer closed")
+                logger.info("Stopping RouterEventHandler...")
+                await self._router_event_handler.stop()
+                logger.info("RouterEventHandler stopped successfully")
             except Exception as e:
-                logger.error(f"Error closing Kafka consumer: {e}", exc_info=True)
-
-        # Step 3: Close Kafka producer
-        if self._kafka_producer:
-            try:
-                logger.info("Closing Kafka producer...")
-                await self._kafka_producer.stop()
-                logger.info("Kafka producer closed")
-            except Exception as e:
-                logger.error(f"Error closing Kafka producer: {e}", exc_info=True)
-
-        # Step 4: Shutdown routing handler
-        if self._routing_handler:
-            try:
-                logger.info("Shutting down routing handler...")
-                await self._routing_handler.shutdown()
-                logger.info("Routing handler shutdown complete")
-            except Exception as e:
-                logger.error(f"Error shutting down routing handler: {e}", exc_info=True)
+                logger.error(f"Error stopping RouterEventHandler: {e}", exc_info=True)
 
         logger.info("Routing Adapter Service shutdown complete")
 
@@ -371,10 +152,14 @@ class RoutingAdapterService:
         HTTP health check endpoint handler.
 
         Returns:
-            JSON response with health status and metrics
+            JSON response with health status and metrics from RouterEventHandler
         """
-        # Update metrics
-        metrics = self._routing_handler.get_metrics() if self._routing_handler else {}
+        # Get metrics from RouterEventHandler
+        metrics = (
+            self._router_event_handler.get_metrics()
+            if self._router_event_handler
+            else {}
+        )
 
         health_response = {
             **self._health_status,
@@ -383,12 +168,7 @@ class RoutingAdapterService:
                 if self._started_at
                 else 0
             ),
-            "metrics": {
-                **metrics,
-                "total_requests": self._request_count,
-                "success_count": self._success_count,
-                "error_count": self._error_count,
-            },
+            "metrics": metrics,
         }
 
         status_code = 200 if self._health_status["status"] == "healthy" else 503

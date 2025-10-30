@@ -322,6 +322,86 @@ class TriggerMatcher:
         trigger_lower = trigger.lower()
         request_lower = user_request.lower()
 
+        # HIGH-CONFIDENCE TECHNICAL TRIGGERS
+        # These domain-specific keywords are unambiguous and don't require action context
+        # They should always match when present in user requests
+        high_confidence_triggers = {
+            # Debugging & Error Handling
+            "debug",
+            "error",
+            "bug",
+            "troubleshoot",
+            "investigate",
+            "diagnose",
+            "fix",
+            "resolve",
+            "issue",
+            "problem",
+            "failure",
+            "crash",
+            # Testing & Quality
+            "test",
+            "testing",
+            "quality",
+            "coverage",
+            "validate",
+            "verify",
+            # Performance & Optimization
+            "optimize",
+            "performance",
+            "benchmark",
+            "bottleneck",
+            "profile",
+            "efficiency",
+            "speed",
+            "slow",
+            "latency",
+            # Security & Compliance
+            "security",
+            "audit",
+            "vulnerability",
+            "penetration",
+            "compliance",
+            "threat",
+            "risk",
+            "secure",
+            # Development Operations
+            "deploy",
+            "deployment",
+            "infrastructure",
+            "devops",
+            "pipeline",
+            "container",
+            "kubernetes",
+            "docker",
+            "monitor",
+            "observability",
+            # Documentation & Research
+            "document",
+            "docs",
+            "research",
+            "analyze",
+            "analysis",
+            "investigate",
+            # API & Architecture
+            "api",
+            "endpoint",
+            "microservice",
+            "architecture",
+            "design",
+            # Frontend & Backend
+            "frontend",
+            "backend",
+            "react",
+            "typescript",
+            "python",
+            "fastapi",
+        }
+
+        # Bypass strict action context requirement for high-confidence triggers
+        if trigger_lower in high_confidence_triggers:
+            return True
+
         # Check for technical/architectural context first (strongest signal)
         # These patterns indicate NOT an agent invocation
         technical_patterns = [
