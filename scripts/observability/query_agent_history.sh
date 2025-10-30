@@ -132,6 +132,9 @@ format_duration() {
     local ms="$1"
     if [ -z "$ms" ] || [ "$ms" = "" ]; then
         echo "N/A"
+    elif [ "$ms" -lt 0 ]; then
+        # Negative duration indicates timezone bug
+        echo -e "${RED}${ms}ms (INVALID - negative duration, timezone bug)${NC}"
     elif [ "$ms" -lt 1000 ]; then
         echo "${ms}ms"
     else
@@ -199,7 +202,7 @@ build_where_clause() {
     local where_parts=()
 
     if [ -n "$CORRELATION_ID" ]; then
-        where_parts+=("correlation_id::text = '$CORRELATION_ID'")
+        where_parts+=("LOWER(correlation_id::text) = LOWER('$CORRELATION_ID')")
     fi
 
     if [ -n "$AGENT_NAME" ]; then
@@ -334,7 +337,7 @@ while IFS='|' read -r corr_id agent status started completed duration prompt err
         to_char(created_at, 'HH24:MI:SS.MS') as time,
         action_details::text
     FROM agent_actions
-    WHERE correlation_id::text = '$corr_id'
+    WHERE LOWER(correlation_id::text) = LOWER('$corr_id')
     ORDER BY created_at;
     "
 
@@ -347,8 +350,8 @@ while IFS='|' read -r corr_id agent status started completed duration prompt err
         echo -e "${CYAN}Actions (${ACTION_COUNT}):${NC}"
 
         while IFS='|' read -r action_type action_name action_duration time details; do
-            local icon=$(format_action_type "$action_type")
-            local duration_fmt=$(format_duration "$action_duration")
+            icon=$(format_action_type "$action_type")
+            duration_fmt=$(format_duration "$action_duration")
 
             echo -e "  $icon $time | ${BLUE}$action_name${NC} ($action_type) - $duration_fmt"
 
@@ -356,16 +359,23 @@ while IFS='|' read -r corr_id agent status started completed duration prompt err
             if [ "$action_type" = "tool_call" ] && [ -n "$details" ] && [ "$details" != "{}" ]; then
                 case "$action_name" in
                     Read|Write|Edit)
-                        local file_path=$(echo "$details" | grep -o '"file_path":"[^"]*"' | cut -d'"' -f4)
-                        [ -n "$file_path" ] && echo -e "     ${CYAN}→${NC} $file_path"
+                        file_path=$(echo "$details" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/' | head -n 1)
+                        [ -n "$file_path" ] && [ "$file_path" != "null" ] && echo -e "     ${CYAN}→${NC} $file_path"
                         ;;
                     Bash)
-                        local command=$(echo "$details" | grep -o '"command":"[^"]*"' | cut -d'"' -f4)
-                        [ -n "$command" ] && echo -e "     ${CYAN}→${NC} $command"
+                        command=$(echo "$details" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/' | head -n 1)
+                        [ -n "$command" ] && [ "$command" != "null" ] && echo -e "     ${CYAN}→${NC} $command"
+                        ;;
+                    Glob|Grep)
+                        pattern=$(echo "$details" | grep -o '"pattern"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/' | head -n 1)
+                        [ -n "$pattern" ] && [ "$pattern" != "null" ] && echo -e "     ${CYAN}→${NC} pattern: $pattern"
                         ;;
                 esac
             fi
         done <<< "$ACTIONS"
+    else
+        echo ""
+        echo -e "  ${YELLOW}⚠️  No tool executions found (check correlation ID format)${NC}"
     fi
 
     # Query manifest injection data
@@ -375,7 +385,7 @@ while IFS='|' read -r corr_id agent status started completed duration prompt err
         total_query_time_ms,
         sections_content::jsonb->'patterns' as patterns
     FROM agent_manifest_injections
-    WHERE correlation_id::text = '$corr_id';
+    WHERE LOWER(correlation_id::text) = LOWER('$corr_id');
     "
 
     MANIFEST=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
@@ -400,7 +410,7 @@ while IFS='|' read -r corr_id agent status started completed duration prompt err
         routing_strategy,
         reasoning
     FROM agent_routing_decisions
-    WHERE correlation_id::text = '$corr_id';
+    WHERE LOWER(correlation_id::text) = LOWER('$corr_id');
     "
 
     ROUTING=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \

@@ -19,11 +19,14 @@ Performance Targets:
 - Cache miss: <100ms
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Use absolute imports to avoid relative import issues
 try:
@@ -79,24 +82,53 @@ class AgentRouter:
             registry_path: Path to agent registry YAML file
             cache_ttl: Cache time-to-live in seconds (default: 1 hour)
         """
-        # Load registry
-        with open(registry_path) as f:
-            self.registry = yaml.safe_load(f)
+        try:
+            # Load registry
+            with open(registry_path) as f:
+                self.registry = yaml.safe_load(f)
 
-        # Initialize components
-        self.trigger_matcher = TriggerMatcher(self.registry)
-        self.confidence_scorer = ConfidenceScorer()
-        self.capability_index = CapabilityIndex(registry_path)
-        self.cache = ResultCache(default_ttl_seconds=cache_ttl)
+            logger.info(
+                f"Loaded agent registry from {registry_path}",
+                extra={"agent_count": len(self.registry.get("agents", {}))},
+            )
 
-        # Track routing stats
-        self.routing_stats = {
-            "total_routes": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "explicit_requests": 0,
-            "fuzzy_matches": 0,
-        }
+            # Initialize components
+            self.trigger_matcher = TriggerMatcher(self.registry)
+            self.confidence_scorer = ConfidenceScorer()
+            self.capability_index = CapabilityIndex(registry_path)
+            self.cache = ResultCache(default_ttl_seconds=cache_ttl)
+
+            # Track routing stats
+            self.routing_stats = {
+                "total_routes": 0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+                "explicit_requests": 0,
+                "fuzzy_matches": 0,
+            }
+
+            logger.info("AgentRouter initialized successfully")
+
+        except FileNotFoundError:
+            logger.error(f"Registry not found: {registry_path}")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(
+                f"Invalid YAML in registry: {registry_path}",
+                exc_info=True,
+                extra={"yaml_error": str(e)},
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "Router initialization failed",
+                exc_info=True,
+                extra={
+                    "registry_path": registry_path,
+                    "error_type": type(e).__name__,
+                },
+            )
+            raise
 
     def route(
         self,
@@ -115,65 +147,128 @@ class AgentRouter:
         Returns:
             List of agent recommendations sorted by confidence (highest first)
         """
-        self.routing_stats["total_routes"] += 1
-        context = context or {}
+        try:
+            self.routing_stats["total_routes"] += 1
+            context = context or {}
 
-        # 1. Check cache
-        cached = self.cache.get(user_request, context)
-        if cached is not None:
-            self.routing_stats["cache_hits"] += 1
-            return cached
-
-        self.routing_stats["cache_misses"] += 1
-
-        # 2. Check for explicit agent request
-        explicit_agent = self._extract_explicit_agent(user_request)
-        if explicit_agent:
-            self.routing_stats["explicit_requests"] += 1
-            recommendation = self._create_explicit_recommendation(explicit_agent)
-            if recommendation:
-                result = [recommendation]
-                self.cache.set(user_request, result, context)
-                return result
-
-        # 3. Trigger-based matching with scoring
-        self.routing_stats["fuzzy_matches"] += 1
-        trigger_matches = self.trigger_matcher.match(user_request)
-
-        # 4. Score each match
-        recommendations = []
-        for agent_name, trigger_score, match_reason in trigger_matches:
-            agent_data = self.registry["agents"][agent_name]
-
-            # Calculate comprehensive confidence
-            confidence = self.confidence_scorer.score(
-                agent_name=agent_name,
-                agent_data=agent_data,
-                user_request=user_request,
-                context=context,
-                trigger_score=trigger_score,
+            logger.debug(
+                f"Routing request: {user_request[:100]}...",
+                extra={"context": context, "max_recommendations": max_recommendations},
             )
 
-            recommendation = AgentRecommendation(
-                agent_name=agent_name,
-                agent_title=agent_data["title"],
-                confidence=confidence,
-                reason=match_reason,
-                definition_path=agent_data["definition_path"],
+            # 1. Check cache
+            cached = self.cache.get(user_request, context)
+            if cached is not None:
+                self.routing_stats["cache_hits"] += 1
+                logger.debug(
+                    "Cache hit - returning cached recommendations",
+                    extra={"cached_count": len(cached)},
+                )
+                return cached
+
+            self.routing_stats["cache_misses"] += 1
+
+            # 2. Check for explicit agent request
+            explicit_agent = self._extract_explicit_agent(user_request)
+            if explicit_agent:
+                self.routing_stats["explicit_requests"] += 1
+                recommendation = self._create_explicit_recommendation(explicit_agent)
+                if recommendation:
+                    result = [recommendation]
+                    self.cache.set(user_request, result, context)
+                    logger.info(
+                        f"Explicit agent request: {explicit_agent}",
+                        extra={"agent_name": explicit_agent},
+                    )
+                    return result
+
+            # 3. Trigger-based matching with scoring
+            self.routing_stats["fuzzy_matches"] += 1
+            trigger_matches = self.trigger_matcher.match(user_request)
+
+            logger.debug(
+                f"Found {len(trigger_matches)} trigger matches",
+                extra={"match_count": len(trigger_matches)},
             )
 
-            recommendations.append(recommendation)
+            # 4. Score each match
+            recommendations = []
+            for agent_name, trigger_score, match_reason in trigger_matches:
+                try:
+                    agent_data = self.registry["agents"][agent_name]
 
-        # 5. Sort by confidence
-        recommendations.sort(key=lambda x: x.confidence.total, reverse=True)
+                    # Calculate comprehensive confidence
+                    confidence = self.confidence_scorer.score(
+                        agent_name=agent_name,
+                        agent_data=agent_data,
+                        user_request=user_request,
+                        context=context,
+                        trigger_score=trigger_score,
+                    )
 
-        # 6. Limit to max recommendations
-        recommendations = recommendations[:max_recommendations]
+                    recommendation = AgentRecommendation(
+                        agent_name=agent_name,
+                        agent_title=agent_data["title"],
+                        confidence=confidence,
+                        reason=match_reason,
+                        definition_path=agent_data["definition_path"],
+                    )
 
-        # 7. Cache results
-        self.cache.set(user_request, recommendations, context)
+                    recommendations.append(recommendation)
 
-        return recommendations
+                except KeyError as e:
+                    logger.warning(
+                        f"Agent {agent_name} missing required field: {e}",
+                        extra={"agent_name": agent_name, "missing_field": str(e)},
+                    )
+                    continue
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to score agent {agent_name}: {type(e).__name__}",
+                        exc_info=True,
+                        extra={"agent_name": agent_name},
+                    )
+                    continue
+
+            # 5. Sort by confidence
+            recommendations.sort(key=lambda x: x.confidence.total, reverse=True)
+
+            # 6. Limit to max recommendations
+            recommendations = recommendations[:max_recommendations]
+
+            # 7. Cache results
+            if recommendations:
+                self.cache.set(user_request, recommendations, context)
+
+            # 8. Log routing decision
+            logger.info(
+                f"Routed request to {len(recommendations)} agents",
+                extra={
+                    "user_request": user_request[:100],
+                    "top_agent": (
+                        recommendations[0].agent_name if recommendations else "none"
+                    ),
+                    "confidence": (
+                        recommendations[0].confidence.total if recommendations else 0.0
+                    ),
+                    "total_candidates": len(trigger_matches),
+                },
+            )
+
+            return recommendations
+
+        except Exception as e:
+            logger.error(
+                f"Routing failed for request: {user_request[:100]}...",
+                exc_info=True,
+                extra={
+                    "user_request": user_request,
+                    "context": context,
+                    "error_type": type(e).__name__,
+                },
+            )
+            # Return empty list on failure (graceful degradation)
+            return []
 
     def _extract_explicit_agent(self, text: str) -> Optional[str]:
         """
@@ -190,24 +285,37 @@ class AgentRouter:
         Returns:
             Agent name if found and valid, None otherwise
         """
-        text_lower = text.lower()
+        try:
+            text_lower = text.lower()
 
-        # Patterns for explicit agent requests
-        patterns = [
-            r"use\s+(agent-[\w-]+)",
-            r"@(agent-[\w-]+)",
-            r"^(agent-[\w-]+)",
-        ]
+            # Patterns for explicit agent requests
+            patterns = [
+                r"use\s+(agent-[\w-]+)",
+                r"@(agent-[\w-]+)",
+                r"^(agent-[\w-]+)",
+            ]
 
-        for pattern in patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                agent_name = match.group(1)
-                # Verify agent exists in registry
-                if agent_name in self.registry["agents"]:
-                    return agent_name
+            for pattern in patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    agent_name = match.group(1)
+                    # Verify agent exists in registry
+                    if agent_name in self.registry["agents"]:
+                        logger.debug(
+                            f"Extracted explicit agent: {agent_name}",
+                            extra={"pattern": pattern, "text_sample": text[:50]},
+                        )
+                        return agent_name
 
-        return None
+            return None
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract explicit agent from: {text[:50]}...",
+                exc_info=True,
+                extra={"error_type": type(e).__name__},
+            )
+            return None
 
     def _create_explicit_recommendation(
         self, agent_name: str
@@ -291,15 +399,44 @@ class AgentRouter:
             or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
         )
 
-        with open(path) as f:
-            self.registry = yaml.safe_load(f)
+        try:
+            logger.info(f"Reloading registry from {path}")
 
-        # Rebuild components
-        self.trigger_matcher = TriggerMatcher(self.registry)
-        self.capability_index = CapabilityIndex(path)
+            with open(path) as f:
+                self.registry = yaml.safe_load(f)
 
-        # Clear cache since definitions changed
-        self.cache.clear()
+            # Rebuild components
+            self.trigger_matcher = TriggerMatcher(self.registry)
+            self.capability_index = CapabilityIndex(path)
+
+            # Clear cache since definitions changed
+            self.cache.clear()
+
+            logger.info(
+                "Registry reloaded successfully",
+                extra={"agent_count": len(self.registry.get("agents", {}))},
+            )
+
+        except FileNotFoundError:
+            logger.error(f"Registry not found during reload: {path}")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(
+                f"Invalid YAML during reload: {path}",
+                exc_info=True,
+                extra={"yaml_error": str(e)},
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                "Registry reload failed",
+                exc_info=True,
+                extra={
+                    "registry_path": path,
+                    "error_type": type(e).__name__,
+                },
+            )
+            raise
 
 
 # Example usage and testing
