@@ -1,0 +1,74 @@
+# Dockerfile.router-consumer - Agent Router Event Consumer Service
+# Kafka-based event consumer for agent routing (replaces HTTP service)
+# Consumes from agent.routing.requested.v1 and publishes to completed/failed topics
+
+FROM python:3.11-slim AS runtime
+
+# Set build arguments for metadata
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=0.2.0
+
+# Metadata labels following OCI image spec
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.authors="OmniClaude Team" \
+      org.opencontainers.image.url="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.source="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="OmniClaude Agent Router Event Consumer" \
+      org.opencontainers.image.description="Kafka event consumer for agent routing with Phase 2 intelligence"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd --system --gid 1000 omniclaude && \
+    useradd --system --uid 1000 --gid omniclaude --shell /bin/bash --create-home omniclaude
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+# aiokafka for Kafka consumer/producer
+# asyncpg for PostgreSQL async logging
+# pyyaml for agent registry
+RUN pip install --no-cache-dir \
+    aiokafka==0.10.0 \
+    asyncpg==0.29.0 \
+    pyyaml==6.0.2
+
+# Copy event consumer service
+COPY --chown=omniclaude:omniclaude agents/services/agent_router_event_service.py ./
+
+# Copy agent router library files
+COPY --chown=omniclaude:omniclaude agents/lib/agent_router.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/trigger_matcher.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/confidence_scorer.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/capability_index.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/result_cache.py ./lib/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app:/app/lib \
+    LOG_LEVEL=INFO \
+    KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092 \
+    KAFKA_GROUP_ID=agent-router-service \
+    POSTGRES_HOST=192.168.86.200 \
+    POSTGRES_PORT=5436 \
+    POSTGRES_DATABASE=omninode_bridge \
+    POSTGRES_USER=postgres
+
+# Switch to non-root user
+USER omniclaude
+
+# Health check configuration
+# Service logs to stdout/stderr - check process is running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD ps aux | grep -v grep | grep agent_router_event_service.py || exit 1
+
+# Run agent router event consumer
+CMD ["python", "agent_router_event_service.py"]

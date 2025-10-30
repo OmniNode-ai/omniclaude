@@ -203,6 +203,67 @@ check_intelligence() {
     unset PGPASSWORD
 }
 
+# Function to check router service
+check_router() {
+    echo ""
+    echo "Router Service:"
+
+    # Check HTTP health endpoint
+    local router_host="${ROUTER_HOST:-localhost}"
+    local router_port="${ROUTER_PORT:-8070}"
+    local health_response=$(curl -s "http://${router_host}:${router_port}/health" 2>/dev/null || echo "")
+
+    if [[ -n "$health_response" ]]; then
+        local status=$(echo "$health_response" | jq -r '.status' 2>/dev/null || echo "unknown")
+        echo "  ✅ Router Service: http://${router_host}:${router_port} (${status})"
+    else
+        echo "  ❌ Router Service: http://${router_host}:${router_port} (connection failed)"
+        add_issue "Router service health check failed"
+    fi
+
+    # Check recent routing decisions (if psql available)
+    if command -v psql &> /dev/null; then
+        export PGPASSWORD="$POSTGRES_PASSWORD"
+
+        # Get recent routing decisions count
+        local routing_count=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '5 minutes'" 2>/dev/null | tr -d ' ' || echo "0")
+
+        if [[ "$routing_count" != "0" && "$routing_count" != "N/A" ]]; then
+            echo "  📊 Recent Routing Decisions (5 min): $routing_count"
+
+            # Get average routing time
+            local avg_routing_time=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT ROUND(AVG(routing_time_ms)) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '5 minutes'" 2>/dev/null | tr -d ' ' || echo "N/A")
+
+            if [[ "$avg_routing_time" != "N/A" && -n "$avg_routing_time" ]]; then
+                echo "  📊 Avg Routing Time: ${avg_routing_time}ms"
+
+                # Check if routing time is too high
+                if [[ $avg_routing_time -gt 100 ]]; then
+                    echo "  ⚠️  Routing Time: ${avg_routing_time}ms (target <100ms)"
+                    add_issue "Router avg time above target (${avg_routing_time}ms > 100ms)"
+                fi
+            fi
+
+            # Get average confidence score
+            local avg_confidence=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT ROUND(AVG(confidence_score) * 100) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '5 minutes'" 2>/dev/null | tr -d ' ' || echo "N/A")
+
+            if [[ "$avg_confidence" != "N/A" && -n "$avg_confidence" ]]; then
+                echo "  📊 Avg Confidence: ${avg_confidence}%"
+
+                # Check if confidence is too low
+                if [[ $avg_confidence -lt 70 ]]; then
+                    echo "  ⚠️  Confidence: ${avg_confidence}% (target >70%)"
+                    add_issue "Router avg confidence below target (${avg_confidence}% < 70%)"
+                fi
+            fi
+        else
+            echo "  ℹ️  No recent routing decisions"
+        fi
+
+        unset PGPASSWORD
+    fi
+}
+
 # Main execution
 {
     echo "=== System Health Check ==="
@@ -218,6 +279,7 @@ check_intelligence() {
     check_service "archon-memgraph"
     check_service "archon-kafka-consumer"
     check_service "archon-server"
+    check_service "archon-router"
 
     # Check Omninode services (if they exist)
     if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then
@@ -235,6 +297,7 @@ check_intelligence() {
     check_qdrant
     check_postgres
     check_intelligence
+    check_router
 
     echo ""
     echo "=== Summary ==="
