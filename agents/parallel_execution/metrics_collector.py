@@ -795,8 +795,13 @@ class RouterMetricsCollector:
                     std = stdev(recent_values)
                     cv = std / current_mean if current_mean > 0 else 0
                     confidence *= max(0, 1 - cv)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Log statistics calculation failure - confidence will remain at base level
+                    print(
+                        f"⚠️  [MetricsCollector] Failed to calculate confidence statistics: {e} "
+                        f"(metric: {metric_type}, sample_size: {len(recent_values)})"
+                    )
+                    # Don't re-raise - use base confidence level instead
 
             # Generate recommendations
             recommendations = []

@@ -132,6 +132,80 @@ if enhanced_metadata:
     ) &
 fi
 
+# ============================================================================
+# TOOL EXECUTION LOGGING TO agent_actions TABLE VIA KAFKA
+# ============================================================================
+
+# Extract correlation context for Kafka logging
+if [[ -f "${SCRIPT_DIR}/lib/correlation_manager.py" ]]; then
+    CORRELATION_DATA=$(python3 -c "
+import sys
+sys.path.insert(0, '${SCRIPT_DIR}/lib')
+from correlation_manager import get_correlation_context
+import json
+
+corr_context = get_correlation_context()
+if corr_context:
+    print(json.dumps({
+        'correlation_id': corr_context.get('correlation_id', ''),
+        'agent_name': corr_context.get('agent_name', 'polymorphic-agent'),
+        'project_path': corr_context.get('project_path', ''),
+        'project_name': corr_context.get('project_name', '')
+    }))
+" 2>/dev/null)
+
+    if [[ -n "$CORRELATION_DATA" ]]; then
+        CORRELATION_ID=$(echo "$CORRELATION_DATA" | jq -r '.correlation_id // empty')
+        AGENT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.agent_name // "polymorphic-agent"')
+        PROJECT_PATH=$(echo "$CORRELATION_DATA" | jq -r '.project_path // empty')
+        PROJECT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.project_name // empty')
+
+        # Log tool execution to agent_actions table via Kafka (non-blocking)
+        if [[ -n "$CORRELATION_ID" ]]; then
+            (
+                # Extract execution time if available
+                DURATION_MS=$(echo "$TOOL_INFO" | jq -r '.execution_time_ms // 0' 2>/dev/null || echo "0")
+
+                # Build enhanced details JSON with file operation information for traceability
+                DETAILS=$(echo "$TOOL_INFO" | jq -c '
+                    .tool_input as $input |
+                    {
+                        file_path: $input.file_path,
+                        content: $input.content,
+                        content_before: (if $input.old_string then $input.old_string else null end),
+                        content_after: (if $input.new_string then $input.new_string else $input.content end),
+                        line_range: (if ($input.offset and $input.limit) then {start: $input.offset, end: ($input.offset + $input.limit)} else null end),
+                        old_string: $input.old_string,
+                        new_string: $input.new_string,
+                        offset: $input.offset,
+                        limit: $input.limit,
+                        pattern: $input.pattern,
+                        glob_pattern: $input.pattern,
+                        tool_input: $input
+                    }
+                ' 2>/dev/null || echo '{"tool_input": {}}')
+
+                # Publish to Kafka via log-agent-action skill
+                python3 ~/.claude/skills/agent-tracking/log-agent-action/execute_kafka.py \
+                    --agent "$AGENT_NAME" \
+                    --action-type "tool_call" \
+                    --action-name "$TOOL_NAME" \
+                    --details "$DETAILS" \
+                    --correlation-id "$CORRELATION_ID" \
+                    --duration-ms "$DURATION_MS" \
+                    --debug-mode \
+                    ${PROJECT_PATH:+--project-path "$PROJECT_PATH"} \
+                    ${PROJECT_NAME:+--project-name "$PROJECT_NAME"} \
+                    2>>"$LOG_FILE"
+
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Published tool_call event to Kafka (action: $TOOL_NAME, correlation: $CORRELATION_ID)" >> "$LOG_FILE"
+            ) &
+        else
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Skipping Kafka logging: no correlation_id available" >> "$LOG_FILE"
+        fi
+    fi
+fi
+
 # Always pass through original output (PostToolUse doesn't modify it)
 # Use printf instead of echo for better reliability with large outputs
 printf '%s\n' "$TOOL_INFO"

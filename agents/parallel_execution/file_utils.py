@@ -9,10 +9,14 @@ Responsible for:
 """
 
 import json
+import logging
 import os
 import shutil
 import time
 from typing import Any, Dict, List, Optional
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 
 class FileUtils:
@@ -172,9 +176,12 @@ class FileUtils:
                     ):
                         rel_path = os.path.relpath(file_full_path, self.base_path)
                         files.append(rel_path)
-            except OSError:
-                # Directory may not be readable
-                pass
+            except OSError as e:
+                # Directory may not be readable - log warning but continue
+                logger.warning(
+                    f"Failed to list directory contents: {e} (path: {full_path})"
+                )
+                # Don't re-raise - return empty list for this directory
 
         return sorted(files)
 
@@ -237,12 +244,16 @@ class FileUtils:
                     # Try to remove empty directory
                     try:
                         os.rmdir(item_path)
-                    except OSError:
-                        # Directory not empty, skip
-                        pass
-        except OSError:
-            # Directory may not be readable
-            pass
+                    except OSError as e:
+                        # Directory not empty or not removable - log at debug level
+                        logger.debug(
+                            f"Could not remove directory (likely not empty): {e} (path: {item_path})"
+                        )
+                        # Don't re-raise - this is expected for non-empty directories
+        except OSError as e:
+            # Directory may not be readable - log warning
+            logger.warning(f"Failed to clean directory: {e} (path: {full_path})")
+            # Don't re-raise - return count of deleted files so far
 
         return deleted_count
 
@@ -381,8 +392,12 @@ class BackupManager:
                     metadata_path = backup_path + ".meta"
                     if os.path.exists(metadata_path):
                         os.remove(metadata_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    # Backup cleanup failed - log warning but continue rotation
+                    logger.warning(
+                        f"Failed to remove old backup file: {e} (path: {backup_path})"
+                    )
+                    # Don't re-raise - continue with remaining backups
 
     def list_backups(self, file_basename: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available backups with metadata."""
@@ -458,7 +473,11 @@ class BackupManager:
                         os.remove(metadata_path)
 
                     removed_count += 1
-            except OSError:
-                pass
+            except OSError as e:
+                # Backup removal failed - log warning but continue cleanup
+                logger.warning(
+                    f"Failed to remove old backup by age: {e} (path: {backup_path})"
+                )
+                # Don't re-raise - continue with remaining backups
 
         return removed_count

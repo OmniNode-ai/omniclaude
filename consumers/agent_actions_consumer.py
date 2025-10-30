@@ -30,6 +30,7 @@ Environment Variables:
 """
 
 import argparse
+import asyncio
 import hashlib
 import json
 import logging
@@ -53,6 +54,19 @@ from psycopg2.extras import execute_batch
 SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
 sys.path.insert(0, str(SHARED_DIR))
+
+# Add agents/lib to path for AgentTraceabilityLogger
+AGENTS_LIB_DIR = SCRIPT_DIR.parent / "agents" / "lib"
+sys.path.insert(0, str(AGENTS_LIB_DIR))
+
+try:
+    from agent_traceability_logger import AgentTraceabilityLogger
+
+    TRACEABILITY_AVAILABLE = True
+except ImportError as e:
+    logger_temp = logging.getLogger("agent_actions_consumer")
+    logger_temp.warning(f"AgentTraceabilityLogger not available: {e}")
+    TRACEABILITY_AVAILABLE = False
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -271,6 +285,101 @@ class AgentActionsConsumer:
             safe["postgres_password"] = "***REDACTED***"
         return safe
 
+    def _log_file_operation_async(
+        self,
+        correlation_id: str,
+        agent_name: str,
+        action_name: str,
+        action_details: Dict[str, Any],
+        duration_ms: Optional[int] = None,
+    ):
+        """
+        Log file operation to agent_file_operations table asynchronously.
+
+        This runs in a background thread to avoid blocking the consumer.
+        If traceability logging fails, it logs a warning but doesn't affect processing.
+
+        Args:
+            correlation_id: Correlation ID for tracing
+            agent_name: Name of the agent
+            action_name: Tool name (Read, Write, Edit, Glob, Grep)
+            action_details: Tool parameters and results
+            duration_ms: Operation duration
+        """
+        if not TRACEABILITY_AVAILABLE:
+            return
+
+        def run_async_logging():
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Create traceability logger
+                tracer = AgentTraceabilityLogger(
+                    agent_name=agent_name,
+                    correlation_id=correlation_id,
+                )
+
+                # Map tool name to operation type
+                operation_type_map = {
+                    "Read": "read",
+                    "Write": "write",
+                    "Edit": "edit",
+                    "Glob": "glob",
+                    "Grep": "grep",
+                    "Delete": "delete",
+                }
+                operation_type = operation_type_map.get(
+                    action_name, action_name.lower()
+                )
+
+                # Extract file path and content
+                file_path = action_details.get("file_path", "unknown")
+                content = action_details.get("content")
+                content_before = action_details.get("content_before")
+                content_after = action_details.get("content_after") or content
+                line_range = action_details.get("line_range")
+
+                # Log the file operation
+                loop.run_until_complete(
+                    tracer.log_file_operation(
+                        operation_type=operation_type,
+                        file_path=file_path,
+                        content_before=content_before,
+                        content_after=content_after,
+                        tool_name=action_name,
+                        line_range=line_range,
+                        operation_params=action_details,
+                        success=True,
+                        duration_ms=duration_ms,
+                    )
+                )
+
+                logger.debug(
+                    f"File operation logged: {operation_type} on {file_path}",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "agent_name": agent_name,
+                    },
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to log file operation traceability: {e}",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "agent_name": agent_name,
+                        "action_name": action_name,
+                    },
+                )
+            finally:
+                loop.close()
+
+        # Run in background thread (fire and forget)
+        thread = Thread(target=run_async_logging, daemon=True)
+        thread.start()
+
     def setup_kafka_consumer(self):
         """Initialize Kafka consumer."""
         logger.info("Setting up Kafka consumer...")
@@ -451,6 +560,8 @@ class AgentActionsConsumer:
         """
 
         batch_data = []
+        file_operations = []  # Track file operations for traceability logging
+
         for event in events:
             event_id = str(uuid.uuid4())
             correlation_id = event.get("correlation_id")
@@ -473,9 +584,43 @@ class AgentActionsConsumer:
                 )
             )
 
+            # Detect file operations for traceability logging
+            action_name = event.get("action_name")
+            if action_name in ["Read", "Write", "Edit", "Glob", "Grep", "Delete"]:
+                file_operations.append(
+                    {
+                        "correlation_id": correlation_id,
+                        "agent_name": event.get("agent_name"),
+                        "action_name": action_name,
+                        "action_details": event.get("action_details", {}),
+                        "duration_ms": event.get("duration_ms"),
+                    }
+                )
+
         execute_batch(cursor, insert_sql, batch_data, page_size=100)
         inserted = cursor.rowcount
         duplicates = len(events) - inserted
+
+        # Log file operations to agent_file_operations table asynchronously
+        if file_operations and TRACEABILITY_AVAILABLE:
+            for file_op in file_operations:
+                try:
+                    self._log_file_operation_async(
+                        correlation_id=file_op["correlation_id"],
+                        agent_name=file_op["agent_name"],
+                        action_name=file_op["action_name"],
+                        action_details=file_op["action_details"],
+                        duration_ms=file_op["duration_ms"],
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to initiate file operation traceability: {e}",
+                        extra={
+                            "correlation_id": file_op["correlation_id"],
+                            "action_name": file_op["action_name"],
+                        },
+                    )
+
         return inserted, duplicates
 
     def _insert_routing_decisions(

@@ -119,8 +119,13 @@ class HookEventLogger:
             try:
                 if self._conn:
                     self._conn.rollback()
-            except Exception:
-                pass
+            except Exception as rollback_error:
+                # Log rollback failure - this is critical for debugging database issues
+                print(
+                    f"⚠️  [HookEventLogger] Failed to rollback transaction: {rollback_error}",
+                    file=sys.stderr,
+                )
+                # Don't re-raise - we already failed to log, don't cascade failures
             return None
 
     def log_pretooluse(
