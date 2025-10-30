@@ -82,7 +82,8 @@ class HookEventProcessor:
         """
         # Database connection
         if connection_string is None:
-            db_password = os.getenv("DB_PASSWORD", "")
+            # Honor POSTGRES_PASSWORD with fallback to DB_PASSWORD for backward compatibility
+            db_password = os.getenv("POSTGRES_PASSWORD") or os.getenv("DB_PASSWORD", "")
             host = os.getenv("POSTGRES_HOST", "localhost")
             port = os.getenv("POSTGRES_PORT", "5436")
             db = os.getenv("POSTGRES_DB", "omninode_bridge")

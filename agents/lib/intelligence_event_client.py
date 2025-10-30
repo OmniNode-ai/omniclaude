@@ -137,6 +137,9 @@ class IntelligenceEventClient:
 
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+        self._consumer_task: Optional[asyncio.Task] = (
+            None  # Track background consumer task
+        )
         self._started = False
         self._pending_requests: Dict[str, asyncio.Future] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
@@ -234,7 +237,7 @@ class IntelligenceEventClient:
             )
 
             # Start background consumer task AFTER partition assignment confirmed
-            asyncio.create_task(self._consume_responses())
+            self._consumer_task = asyncio.create_task(self._consume_responses())
 
             # CRITICAL FIX: Wait for consumer task to actually start polling
             # This prevents race condition where requests are published before
@@ -275,6 +278,16 @@ class IntelligenceEventClient:
         self.logger.info("Stopping intelligence event client")
 
         try:
+            # Cancel background consumer task
+            if self._consumer_task is not None and not self._consumer_task.done():
+                self.logger.debug("Cancelling background consumer task")
+                self._consumer_task.cancel()
+                try:
+                    await self._consumer_task
+                except asyncio.CancelledError:
+                    self.logger.debug("Consumer task cancelled successfully")
+                self._consumer_task = None
+
             # Stop producer
             if self._producer is not None:
                 await self._producer.stop()

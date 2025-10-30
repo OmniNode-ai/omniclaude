@@ -37,7 +37,10 @@ INTELLIGENCE_SERVICE_URL = os.environ.get(
     "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
 )
 MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
-MCP_SERVER_URL = os.environ.get("ARCHON_MCP_URL", "http://localhost:8051")
+# Support both MCP_SERVER_URL and ARCHON_MCP_URL for backward compatibility
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or os.environ.get(
+    "ARCHON_MCP_URL", "http://localhost:8051"
+)
 
 
 def check_running_services() -> Dict[str, Any]:
@@ -296,7 +299,7 @@ def check_network_connectivity() -> Dict[str, Any]:
 
 def check_pattern_tracking_files() -> Dict[str, Any]:
     """Check if pattern tracking files exist and are accessible"""
-    hooks_dir = "/Users/jonah/.claude/hooks"
+    hooks_dir = os.path.expanduser("~/.claude/hooks")
 
     required_files = [
         "pattern_tracker.py",
@@ -453,7 +456,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
 
     # Test 1: Import health checks
     try:
-        sys.path.append("/Users/jonah/.claude/hooks")
+        sys.path.append(os.path.expanduser("~/.claude/hooks"))
         from health_checks import Phase4HealthChecker
 
         checker = Phase4HealthChecker()

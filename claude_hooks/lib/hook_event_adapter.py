@@ -109,6 +109,18 @@ class HookEventAdapter:
         """
         if self._producer is None:
             try:
+                # Configurable timeouts from environment variables
+                request_timeout_ms = int(
+                    os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000")
+                )
+                connections_max_idle_ms = int(
+                    os.environ.get("KAFKA_CONNECTIONS_MAX_IDLE_MS", "5000")
+                )
+                metadata_max_age_ms = int(
+                    os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000")
+                )
+                max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
+
                 self._producer = KafkaProducer(
                     bootstrap_servers=self.bootstrap_servers.split(","),
                     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -120,11 +132,11 @@ class HookEventAdapter:
                     acks=1,  # Wait for leader acknowledgment
                     retries=2,  # Reduced from 3 for faster failure
                     max_in_flight_requests_per_connection=5,
-                    # CRITICAL: Timeout settings to prevent hangs
-                    request_timeout_ms=1000,  # 1s max per request
-                    connections_max_idle_ms=5000,  # Close idle connections after 5s
-                    metadata_max_age_ms=5000,  # Force metadata refresh after 5s
-                    max_block_ms=2000,  # Max 2s block waiting for buffer/metadata
+                    # Configurable timeout settings to prevent hangs
+                    request_timeout_ms=request_timeout_ms,
+                    connections_max_idle_ms=connections_max_idle_ms,
+                    metadata_max_age_ms=metadata_max_age_ms,
+                    max_block_ms=max_block_ms,
                     api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 self._initialized = True
