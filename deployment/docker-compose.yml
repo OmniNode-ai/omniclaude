@@ -129,6 +129,64 @@ services:
           memory: 128M
 
   # ============================================================================
+  # Routing Adapter Service (Event-Driven Agent Routing)
+  # ============================================================================
+  routing-adapter:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.routing-adapter
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.1.0}
+    image: omniclaude-routing-adapter:${VERSION:-latest}
+    container_name: omniclaude_routing_adapter
+    restart: unless-stopped
+    environment:
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
+      - KAFKA_GROUP_ID=agent-routing-service
+      - KAFKA_REQUEST_TOPIC=agent.routing.requested.v1
+      - KAFKA_COMPLETED_TOPIC=agent.routing.completed.v1
+      - KAFKA_FAILED_TOPIC=agent.routing.failed.v1
+
+      # PostgreSQL configuration (for routing decisions logging)
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:?OMNINODE_BRIDGE_POSTGRES_PASSWORD must be set in environment}
+
+      # Agent registry configuration
+      - REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+
+      # Service configuration
+      - HEALTH_CHECK_PORT=8070
+      - LOG_LEVEL=INFO
+      - ROUTING_TIMEOUT_MS=5000
+      - CACHE_TTL_SECONDS=3600
+      - MAX_RECOMMENDATIONS=5
+    volumes:
+      # Mount agent definitions for registry access (read-only)
+      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ============================================================================
   # PostgreSQL Database Service
   # ============================================================================
   postgres:

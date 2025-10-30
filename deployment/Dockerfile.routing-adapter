@@ -1,0 +1,75 @@
+# Dockerfile.routing-adapter - Agent Routing Service via Kafka Events
+# Consumes agent routing requests and responds with agent recommendations
+# Follows event-driven architecture pattern from database adapter
+# Reference: docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md
+
+FROM python:3.12-slim AS runtime
+
+# Set build arguments for metadata
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION=0.1.0
+
+# Metadata labels following OCI image spec
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.authors="OmniClaude Team" \
+      org.opencontainers.image.url="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.source="https://github.com/omniclaude/omniclaude" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="OmniClaude Routing Adapter Service" \
+      org.opencontainers.image.description="Event-driven agent routing service via Kafka"
+
+# Install runtime dependencies
+# ca-certificates for HTTPS, curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd --system --gid 1000 omniclaude && \
+    useradd --system --uid 1000 --gid omniclaude --shell /bin/bash --create-home omniclaude
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies for routing adapter
+# Use --no-cache-dir to minimize image size
+# kafka-python-ng is a maintained fork compatible with Python 3.12
+RUN pip install --no-cache-dir \
+    aiokafka==0.11.0 \
+    pydantic==2.10.6 \
+    pyyaml==6.0.2 \
+    asyncio
+
+# Copy routing adapter service and agent router library
+COPY --chown=omniclaude:omniclaude agents/services/agent-router-service/ ./service/
+COPY --chown=omniclaude:omniclaude agents/lib/agent_router.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/trigger_matcher.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/confidence_scorer.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/capability_index.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/result_cache.py ./lib/
+
+# Copy entrypoint script
+COPY --chown=omniclaude:omniclaude deployment/entrypoint-routing-adapter.sh ./entrypoint.sh
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app:/app/lib:/app/service \
+    LOG_LEVEL=INFO
+
+# Switch to non-root user
+USER omniclaude
+
+# Expose health check port
+EXPOSE 8070
+
+# Health check configuration
+# Service exposes /health endpoint on port 8070
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8070/health || exit 1
+
+# Run routing adapter service via entrypoint script
+ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
