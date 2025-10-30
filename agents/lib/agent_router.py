@@ -22,6 +22,7 @@ Performance Targets:
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -86,6 +87,18 @@ class AgentRouter:
             # Load registry
             with open(registry_path) as f:
                 self.registry = yaml.safe_load(f)
+
+            # Convert relative definition_path to absolute paths
+            registry_dir = Path(registry_path).parent
+            for agent_name, agent_data in self.registry.get("agents", {}).items():
+                if "definition_path" in agent_data:
+                    def_path = agent_data["definition_path"]
+                    # Convert relative path to absolute
+                    if not Path(def_path).is_absolute():
+                        # Strip "agent-definitions/" prefix if present (already in registry_dir)
+                        if def_path.startswith("agent-definitions/"):
+                            def_path = def_path.replace("agent-definitions/", "", 1)
+                        agent_data["definition_path"] = str(registry_dir / def_path)
 
             logger.info(
                 f"Loaded agent registry from {registry_path}",

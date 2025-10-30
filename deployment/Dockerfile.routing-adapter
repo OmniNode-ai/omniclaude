@@ -34,17 +34,19 @@ RUN groupadd --system --gid 1000 omniclaude && \
 # Set working directory
 WORKDIR /app
 
-# Install Python dependencies for routing adapter
+# Install Python dependencies for routing adapter (Phase 2)
 # Use --no-cache-dir to minimize image size
-# kafka-python-ng is a maintained fork compatible with Python 3.12
+# Includes asyncpg for PostgreSQL logging and aiohttp for health checks
 RUN pip install --no-cache-dir \
     aiokafka==0.11.0 \
     pydantic==2.10.6 \
     pyyaml==6.0.2 \
-    asyncio
+    asyncio \
+    asyncpg==0.30.0 \
+    aiohttp==3.11.11
 
-# Copy routing adapter service and agent router library
-COPY --chown=omniclaude:omniclaude agents/services/agent-router-service/ ./service/
+# Copy Phase 2 routing adapter service (event-driven with RouterEventHandler)
+COPY --chown=omniclaude:omniclaude services/routing_adapter/ ./service/
 COPY --chown=omniclaude:omniclaude agents/lib/agent_router.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/trigger_matcher.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/confidence_scorer.py ./lib/

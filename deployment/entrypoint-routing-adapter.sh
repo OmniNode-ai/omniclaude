@@ -48,7 +48,8 @@ REQUIRED_VARS=(
     "POSTGRES_DATABASE"
     "POSTGRES_USER"
     "POSTGRES_PASSWORD"
-    "REGISTRY_PATH"
+    "AGENT_REGISTRY_PATH"
+    "AGENT_DEFINITIONS_PATH"
 )
 
 VALIDATION_FAILED=0
@@ -73,12 +74,12 @@ if [ $VALIDATION_FAILED -eq 1 ]; then
 fi
 
 # Validate registry file exists
-if [ ! -f "${REGISTRY_PATH}" ]; then
-    log_error "Agent registry file not found: ${REGISTRY_PATH}"
+if [ ! -f "${AGENT_REGISTRY_PATH}" ]; then
+    log_error "Agent registry file not found: ${AGENT_REGISTRY_PATH}"
     exit 1
 fi
 
-log_info "Registry file found: ${REGISTRY_PATH}"
+log_info "Registry file found: ${AGENT_REGISTRY_PATH}"
 
 # Check Kafka connectivity (optional, with timeout)
 log_info "Checking Kafka connectivity..."
@@ -108,11 +109,12 @@ log_info "  - Routing Timeout: ${ROUTING_TIMEOUT_MS:-5000}ms"
 log_info "  - Cache TTL: ${CACHE_TTL_SECONDS:-3600}s"
 log_info "  - Max Recommendations: ${MAX_RECOMMENDATIONS:-5}"
 
-# Start routing adapter service
+# Start routing adapter service (Phase 2 implementation)
 log_info "Starting routing adapter service..."
 
-# Run service in background so we can handle signals
-python service/main.py &
+# Run Phase 2 service as module (RouterEventHandler with event-driven architecture)
+# Use -m flag to run as module so relative imports work correctly
+python -m service.routing_adapter_service &
 SERVICE_PID=$!
 
 log_info "Routing adapter service started (PID: $SERVICE_PID)"

@@ -142,6 +142,8 @@ services:
     image: omniclaude-routing-adapter:${VERSION:-latest}
     container_name: omniclaude_routing_adapter
     restart: unless-stopped
+    ports:
+      - "8070:8070"  # Health check and metrics
     environment:
       # Kafka configuration
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
@@ -151,16 +153,18 @@ services:
       - KAFKA_FAILED_TOPIC=agent.routing.failed.v1
 
       # PostgreSQL configuration (for routing decisions logging)
-      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
-      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:?OMNINODE_BRIDGE_POSTGRES_PASSWORD must be set in environment}
+      - POSTGRES_HOST=192.168.86.200
+      - POSTGRES_PORT=5436
+      - POSTGRES_DATABASE=omninode_bridge
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
 
-      # Agent registry configuration
-      - REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+      # Agent registry configuration (Phase 2)
+      - AGENT_REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+      - AGENT_DEFINITIONS_PATH=/agent-definitions
 
       # Service configuration
+      - ROUTING_ADAPTER_PORT=8070
       - HEALTH_CHECK_PORT=8070
       - LOG_LEVEL=INFO
       - ROUTING_TIMEOUT_MS=5000

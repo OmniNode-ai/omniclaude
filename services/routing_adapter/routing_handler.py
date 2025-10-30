@@ -9,20 +9,18 @@ Event Flow:
     2. Extract user request and context
     3. Call AgentRouter.route() to get recommendations
     4. Publish routing response event to Kafka
-    5. Log routing decision to PostgreSQL (via separate event)
+    5. Log routing decision to PostgreSQL (async, non-blocking)
 
-Implementation: Phase 1 - Event-Driven Routing Adapter
+Implementation: Phase 1 & 2 - Event-Driven Routing with PostgreSQL Logging
 """
 
+import asyncio
 import logging
-import sys
 import time
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
-# Add agents/lib to path for AgentRouter import
-sys.path.insert(0, "/Users/jonah/.claude/agents/lib")
-
+# Import AgentRouter (PYTHONPATH includes /app/lib via Dockerfile)
 try:
     from agent_router import AgentRouter
 
@@ -30,6 +28,8 @@ try:
 except ImportError:
     AGENT_ROUTER_AVAILABLE = False
     AgentRouter = None  # type: ignore
+
+from .postgres_logger import PostgresLogger
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +39,27 @@ class RoutingHandler:
     Handler for routing request events.
 
     Integrates with AgentRouter to provide intelligent agent selection
-    based on user requests and context.
+    based on user requests and context. Logs all routing decisions to
+    PostgreSQL for audit trail and analytics.
     """
 
-    def __init__(self):
-        """Initialize routing handler."""
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize routing handler.
+
+        Args:
+            config: Optional configuration dict with PostgreSQL settings:
+                - postgres_host
+                - postgres_port
+                - postgres_database
+                - postgres_user
+                - postgres_password
+                - postgres_pool_min_size
+                - postgres_pool_max_size
+        """
+        self._config = config or {}
         self._agent_router: Optional[AgentRouter] = None
+        self._postgres_logger: Optional[PostgresLogger] = None
         self._initialized = False
         self._request_count = 0
         self._success_count = 0
@@ -53,20 +68,36 @@ class RoutingHandler:
 
     async def initialize(self) -> None:
         """
-        Initialize AgentRouter and dependencies.
+        Initialize AgentRouter, PostgresLogger, and dependencies.
 
         Raises:
-            RuntimeError: If AgentRouter is not available
+            RuntimeError: If AgentRouter is not available or initialization fails
         """
         if not AGENT_ROUTER_AVAILABLE:
             raise RuntimeError(
                 "AgentRouter not available. Ensure agents/lib/agent_router.py exists."
             )
 
-        logger.info("Initializing AgentRouter...")
+        logger.info("Initializing RoutingHandler...")
+
+        # Initialize AgentRouter with registry path from config
         try:
-            self._agent_router = AgentRouter()
-            self._initialized = True
+            registry_path = self._config.get(
+                "agent_registry_path", "/agent-definitions/agent-registry.yaml"
+            )
+            cache_ttl = self._config.get("cache_ttl_seconds", 3600)
+
+            logger.info(
+                "Initializing AgentRouter...",
+                extra={
+                    "registry_path": registry_path,
+                    "cache_ttl": cache_ttl,
+                },
+            )
+            self._agent_router = AgentRouter(
+                registry_path=registry_path,
+                cache_ttl=cache_ttl,
+            )
             logger.info(
                 "AgentRouter initialized successfully",
                 extra={
@@ -77,6 +108,36 @@ class RoutingHandler:
         except Exception as e:
             logger.error(f"Failed to initialize AgentRouter: {e}", exc_info=True)
             raise RuntimeError(f"AgentRouter initialization failed: {e}") from e
+
+        # Initialize PostgresLogger (optional - don't fail if DB unavailable)
+        try:
+            if self._config.get("postgres_password"):
+                logger.info("Initializing PostgresLogger...")
+                self._postgres_logger = PostgresLogger(
+                    host=self._config.get("postgres_host", "192.168.86.200"),
+                    port=self._config.get("postgres_port", 5436),
+                    database=self._config.get("postgres_database", "omninode_bridge"),
+                    user=self._config.get("postgres_user", "postgres"),
+                    password=self._config["postgres_password"],
+                    pool_min_size=self._config.get("postgres_pool_min_size", 2),
+                    pool_max_size=self._config.get("postgres_pool_max_size", 10),
+                )
+                await self._postgres_logger.initialize()
+                logger.info("PostgresLogger initialized successfully")
+            else:
+                logger.warning(
+                    "PostgreSQL password not provided - routing decisions will not be logged to database"
+                )
+        except Exception as e:
+            # Don't fail handler initialization if DB logger fails
+            logger.error(
+                f"Failed to initialize PostgresLogger (continuing without DB logging): {e}",
+                exc_info=True,
+            )
+            self._postgres_logger = None
+
+        self._initialized = True
+        logger.info("RoutingHandler initialized successfully")
 
     async def handle_routing_request(self, event: dict[str, Any]) -> dict[str, Any]:
         """
@@ -149,14 +210,21 @@ class RoutingHandler:
             if not recommendations or len(recommendations) == 0:
                 # No recommendations - fallback to polymorphic-agent
                 selected_agent = "polymorphic-agent"
+                agent_title = "Polymorphic Agent"
                 confidence = 0.0
                 reason = "No specialized agents matched the request"
+                definition_path = (
+                    self._config.get("agent_definitions_path", "/agent-definitions")
+                    + "/polymorphic-agent.yaml"
+                )
                 alternatives = []
             else:
                 best_rec = recommendations[0]
                 selected_agent = best_rec.agent_name
+                agent_title = best_rec.agent_title
                 confidence = best_rec.confidence.total
                 reason = best_rec.reason
+                definition_path = best_rec.definition_path
 
                 # Format alternatives
                 alternatives = [
@@ -165,6 +233,7 @@ class RoutingHandler:
                         "agent_title": rec.agent_title,
                         "confidence": rec.confidence.total,
                         "reason": rec.reason,
+                        "definition_path": rec.definition_path,
                     }
                     for rec in recommendations[1:]
                 ]
@@ -173,10 +242,12 @@ class RoutingHandler:
             response = {
                 "correlation_id": correlation_id,
                 "selected_agent": selected_agent,
+                "agent_title": agent_title,
                 "confidence": confidence,
                 "reason": reason,
+                "definition_path": definition_path,
                 "alternatives": alternatives,
-                "routing_time_ms": round(routing_time_ms, 2),
+                "routing_time_ms": int(round(routing_time_ms)),
                 "timestamp": datetime.now(UTC).isoformat(),
                 "routing_strategy": "enhanced_fuzzy_matching",
             }
@@ -195,6 +266,22 @@ class RoutingHandler:
                     "alternatives_count": len(alternatives),
                 },
             )
+
+            # Log to database (non-blocking)
+            if self._postgres_logger:
+                asyncio.create_task(
+                    self._log_routing_decision_async(
+                        correlation_id=correlation_id,
+                        user_request=user_request,
+                        selected_agent=selected_agent,
+                        confidence=confidence,
+                        reason=reason,
+                        alternatives=alternatives,
+                        routing_time_ms=routing_time_ms,
+                        routing_strategy=response["routing_strategy"],
+                        context=context,
+                    )
+                )
 
             return response
 
@@ -228,6 +315,49 @@ class RoutingHandler:
                 },
             )
 
+    async def _log_routing_decision_async(
+        self,
+        correlation_id: str,
+        user_request: str,
+        selected_agent: str,
+        confidence: float,
+        reason: str,
+        alternatives: list,
+        routing_time_ms: float,
+        routing_strategy: str,
+        context: dict,
+    ) -> None:
+        """
+        Helper method to log routing decision asynchronously.
+
+        This is called as a background task and will not block routing response.
+        All errors are caught and logged internally by PostgresLogger.
+        """
+        try:
+            await self._postgres_logger.log_routing_decision(
+                correlation_id=correlation_id,
+                user_request=user_request,
+                selected_agent=selected_agent,
+                confidence_score=confidence,
+                routing_strategy=routing_strategy,
+                routing_time_ms=routing_time_ms,
+                alternatives=alternatives,
+                reasoning=reason,
+                context=context,
+                # Optional fields - could be extracted from context if available
+                project_path=context.get("project_path"),
+                project_name=context.get("project_name"),
+                claude_session_id=context.get("claude_session_id"),
+            )
+        except Exception as e:
+            # Should never happen (PostgresLogger handles all errors internally)
+            # but log just in case
+            logger.error(
+                f"Unexpected error in background logging task: {e}",
+                extra={"correlation_id": correlation_id},
+                exc_info=True,
+            )
+
     def get_metrics(self) -> dict[str, Any]:
         """
         Get routing handler metrics.
@@ -239,6 +369,7 @@ class RoutingHandler:
             - error_count: Failed requests
             - success_rate: Success percentage
             - avg_routing_time_ms: Average routing time
+            - postgres_logger_metrics: PostgresLogger metrics (if available)
         """
         success_rate = (
             (self._success_count / self._request_count * 100)
@@ -252,13 +383,19 @@ class RoutingHandler:
             else 0.0
         )
 
-        return {
+        metrics = {
             "request_count": self._request_count,
             "success_count": self._success_count,
             "error_count": self._error_count,
             "success_rate": round(success_rate, 2),
             "avg_routing_time_ms": round(avg_routing_time_ms, 2),
         }
+
+        # Include PostgresLogger metrics if available
+        if self._postgres_logger:
+            metrics["postgres_logger_metrics"] = self._postgres_logger.get_metrics()
+
+        return metrics
 
     async def shutdown(self) -> None:
         """Shutdown routing handler and cleanup resources."""
@@ -268,5 +405,14 @@ class RoutingHandler:
                 "final_metrics": self.get_metrics(),
             },
         )
+
+        # Shutdown PostgresLogger if initialized
+        if self._postgres_logger:
+            try:
+                await self._postgres_logger.shutdown()
+            except Exception as e:
+                logger.error(f"Error shutting down PostgresLogger: {e}", exc_info=True)
+
         self._initialized = False
         self._agent_router = None
+        self._postgres_logger = None
