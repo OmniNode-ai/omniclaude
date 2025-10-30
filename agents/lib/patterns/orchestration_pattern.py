@@ -103,7 +103,19 @@ class OrchestrationPattern:
             "import logging",
             "from datetime import datetime",
             "from uuid import UUID, uuid4",
-            "from omnibase_core.errors import OnexError, EnumCoreErrorCode",
+            "# Optional import for ONEX compliance",
+            "try:",
+            "    from omnibase_core.errors import OnexError, EnumCoreErrorCode",
+            "except ImportError:",
+            "    # Fallback when omnibase_core not installed",
+            "    class OnexError(Exception):",
+            "        def __init__(self, code=None, message='', original_exception=None, details=None):",
+            "            super().__init__(message)",
+            "            self.code = code",
+            "            self.original_exception = original_exception",
+            "            self.details = details or {}",
+            "    class EnumCoreErrorCode:",
+            "        OPERATION_FAILED = 'OPERATION_FAILED'",
         ]
 
     def get_required_mixins(self) -> List[str]:

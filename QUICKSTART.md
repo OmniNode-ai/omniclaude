@@ -234,7 +234,59 @@ Skip this section if you only want basic provider switching and agent framework.
 - Docker Desktop installed and running
 - PostgreSQL client tools (optional, for direct DB access)
 
-### Step 1: Initialize Database
+### Step 1: Configure Required Environment Variables
+
+Before running `docker-compose up`, you **MUST** set all required environment variables in `.env`:
+
+```bash
+# Edit .env and set these REQUIRED variables:
+nano .env  # or your preferred editor
+```
+
+**Required variables for production deployment:**
+
+```bash
+# PostgreSQL Configuration (REQUIRED)
+POSTGRES_HOST=192.168.86.200      # or localhost for local setup
+POSTGRES_PORT=5436                # PostgreSQL port
+POSTGRES_DB=omninode_bridge       # Database name
+POSTGRES_USER=postgres            # Database user
+POSTGRES_PASSWORD=your_secure_password_here  # CHANGE THIS!
+
+# Kafka Configuration (REQUIRED)
+KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29102  # or localhost:29102
+
+# Docker Compose Password (REQUIRED - same as POSTGRES_PASSWORD)
+OMNINODE_BRIDGE_POSTGRES_PASSWORD=your_secure_password_here
+
+# Legacy alias (should match POSTGRES_PASSWORD)
+DB_PASSWORD=your_secure_password_here
+```
+
+**Important notes:**
+- ⚠️ **NO defaults provided** - docker-compose will fail if these are not set
+- 🔒 **Change passwords** from development defaults in production
+- 📝 **All three password variables** should typically have the same value
+- 🌐 **Use correct host/port** for your Kafka and PostgreSQL servers
+
+**Verify configuration:**
+```bash
+# Source the environment
+source .env
+
+# Verify all required variables are set
+echo "POSTGRES_HOST: ${POSTGRES_HOST:-(NOT SET - REQUIRED!)}"
+echo "POSTGRES_PORT: ${POSTGRES_PORT:-(NOT SET - REQUIRED!)}"
+echo "POSTGRES_DB: ${POSTGRES_DB:-(NOT SET - REQUIRED!)}"
+echo "POSTGRES_USER: ${POSTGRES_USER:-(NOT SET - REQUIRED!)}"
+echo "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:+(SET)}${POSTGRES_PASSWORD:-(NOT SET - REQUIRED!)}"
+echo "KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-(NOT SET - REQUIRED!)}"
+echo "OMNINODE_BRIDGE_POSTGRES_PASSWORD: ${OMNINODE_BRIDGE_POSTGRES_PASSWORD:+(SET)}${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-(NOT SET - REQUIRED!)}"
+
+# Expected output: All variables should show their values (passwords show "(SET)")
+```
+
+### Step 2: Initialize Database
 
 ```bash
 # Option A: Using Docker Compose (recommended)
@@ -254,7 +306,7 @@ sleep 10
 # Database initialization completed successfully!
 ```
 
-### Step 2: Start All Services
+### Step 3: Start All Services
 
 ```bash
 # Start full stack (database, observability, monitoring)
@@ -272,7 +324,21 @@ docker-compose -f deployment/docker-compose.yml ps
 # Expected: All services show "Up" status
 ```
 
-### Step 3: Verify Health Checks
+**Troubleshooting service startup:**
+```bash
+# If services fail to start, check for missing environment variables
+docker-compose -f deployment/docker-compose.yml logs agent-observability-consumer
+
+# Look for errors like:
+# "Error: KAFKA_BOOTSTRAP_SERVERS must be set in environment"
+# "Error: POSTGRES_HOST must be set in environment"
+
+# Solution: Ensure .env is configured and sourced
+source .env
+docker-compose -f deployment/docker-compose.yml up -d
+```
+
+### Step 4: Verify Health Checks
 
 ```bash
 # Check database connectivity
@@ -303,12 +369,17 @@ GOOGLE_API_KEY=your_key          # Pydantic AI integration
 # Z.ai (required for Z.ai provider)
 ZAI_API_KEY=your_key             # GLM-4.5-Air, GLM-4.5, GLM-4.6
 
-# Database (optional, for production features)
-DB_PASSWORD=omninode-bridge-postgres-dev-2024
-OMNINODE_BRIDGE_POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+# Database (REQUIRED for production features, with NO defaults)
+POSTGRES_HOST=192.168.86.200       # Your PostgreSQL host
+POSTGRES_PORT=5436                 # Your PostgreSQL port
+POSTGRES_DB=omninode_bridge        # Database name
+POSTGRES_USER=postgres             # Database user
+POSTGRES_PASSWORD=your_password    # Database password
+DB_PASSWORD=your_password          # Legacy alias (same as POSTGRES_PASSWORD)
+OMNINODE_BRIDGE_POSTGRES_PASSWORD=your_password  # Docker compose password
 
-# Kafka (optional, for event-based intelligence)
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+# Kafka (REQUIRED for production features, with NO defaults)
+KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29102  # Your Kafka broker
 KAFKA_ENABLE_INTELLIGENCE=true
 
 # Development paths (optional, auto-detected)

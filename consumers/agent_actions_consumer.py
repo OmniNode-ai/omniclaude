@@ -152,18 +152,18 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         else:
             is_healthy = False
 
-            if is_healthy:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                response = {"status": "healthy", "consumer": "running"}
-                self.wfile.write(json.dumps(response).encode())
-            else:
-                self.send_response(503)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                response = {"status": "unhealthy", "consumer": "stopped"}
-                self.wfile.write(json.dumps(response).encode())
+        if is_healthy:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            response = {"status": "healthy", "consumer": "running"}
+            self.wfile.write(json.dumps(response).encode())
+        else:
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            response = {"status": "unhealthy", "consumer": "stopped"}
+            self.wfile.write(json.dumps(response).encode())
 
     def send_metrics_response(self):
         """Send metrics response."""

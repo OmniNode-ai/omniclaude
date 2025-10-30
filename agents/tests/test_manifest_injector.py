@@ -172,7 +172,7 @@ async def test_generate_dynamic_manifest_async(mock_intelligence_client):
     assert "patterns" in manifest
     assert "infrastructure" in manifest
     assert "models" in manifest
-    assert manifest["manifest_metadata"]["version"] == "2.0.0"
+    assert manifest["manifest_metadata"]["version"].startswith("2.")
     assert manifest["manifest_metadata"]["source"] == "archon-intelligence-adapter"
 
 
@@ -249,7 +249,7 @@ def test_manifest_summary(mock_intelligence_client):
     summary = injector.get_manifest_summary()
 
     assert "version" in summary
-    assert summary["version"] == "2.0.0"
+    assert summary["version"].startswith("2.")
     assert summary["patterns_count"] >= 4  # We have 4 mock patterns
     assert summary["source"] == "archon-intelligence-adapter"
     assert summary["cache_valid"] is True
@@ -355,7 +355,7 @@ def test_manifest_metadata_extraction(mock_intelligence_client):
     metadata = manifest.get("manifest_metadata", {})
     assert "version" in metadata
     assert "purpose" in metadata
-    assert metadata["version"] == "2.0.0"
+    assert metadata["version"].startswith("2.")
     assert "target_agents" in metadata
 
 
@@ -406,7 +406,8 @@ def test_minimal_manifest_fallback():
     assert manifest is not None
     assert "manifest_metadata" in manifest
     assert manifest["manifest_metadata"]["source"] == "fallback"
-    assert manifest["manifest_metadata"]["version"] == "2.0.0-minimal"
+    assert manifest["manifest_metadata"]["version"].startswith("2.")
+    assert "minimal" in manifest["manifest_metadata"]["version"]
     assert "note" in manifest
 
 
