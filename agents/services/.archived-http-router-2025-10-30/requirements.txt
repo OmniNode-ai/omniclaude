@@ -1,0 +1,21 @@
+# Agent Router Service Dependencies
+# FastAPI-based REST service for agent routing
+
+# Core web framework
+fastapi==0.104.1
+
+# ASGI server
+uvicorn[standard]==0.24.0
+
+# Data validation and serialization
+pydantic==2.5.0
+
+# Multipart form data parsing
+python-multipart==0.0.6
+
+# YAML parsing (for agent registry)
+pyyaml==6.0.1
+
+# Required by AgentRouter
+# Note: AgentRouter uses only Python standard library
+# No additional dependencies needed for routing logic

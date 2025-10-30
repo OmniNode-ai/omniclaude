@@ -191,6 +191,59 @@ services:
           memory: 128M
 
   # ============================================================================
+  # Agent Router Event Consumer (Kafka-based Agent Routing)
+  # ============================================================================
+  archon-router-consumer:
+    build:
+      context: ..
+      dockerfile: agents/services/Dockerfile.router-consumer
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.2.0}
+    image: omniclaude-archon-router-consumer:${VERSION:-latest}
+    container_name: omniclaude_archon_router_consumer
+    restart: unless-stopped
+    environment:
+      # Kafka configuration (use internal Docker network name)
+      - KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda-dev:9092
+      - KAFKA_GROUP_ID=agent-router-service
+
+      # PostgreSQL configuration (for routing decisions logging)
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
+
+      # Agent registry configuration
+      - REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+
+      # Service configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount agent definitions for registry access (read-only)
+      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+    networks:
+      - app_network
+      - omninode-bridge-network
+    # Note: No external ports needed - pure event consumer
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep agent_router_event_service.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ============================================================================
   # PostgreSQL Database Service
   # ============================================================================
   postgres:
@@ -406,10 +459,9 @@ networks:
     ipam:
       config:
         - subnet: 172.31.0.0/16
-  # omninode_bridge_network:
-  #   external: true
-  #   name: omninode_bridge_omninode-bridge-network
-  # Note: Bridge network not needed - services now remote at 192.168.86.200
+  omninode-bridge-network:
+    external: true
+    name: omninode-bridge-network
 
 # ============================================================================
 # Volumes - Persistent data storage
