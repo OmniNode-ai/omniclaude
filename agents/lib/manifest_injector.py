@@ -94,6 +94,19 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from intelligence_cache import IntelligenceCache
 
+# Import PatternQualityScorer for quality filtering
+try:
+    from pattern_quality_scorer import PatternQualityScorer
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from pattern_quality_scorer import PatternQualityScorer
+
 logger = logging.getLogger(__name__)
 
 
@@ -674,6 +687,16 @@ class ManifestInjector:
         else:
             self._storage = None
 
+        # Quality scoring configuration
+        self.quality_scorer = PatternQualityScorer()
+        self.enable_quality_filtering = os.getenv(
+            "ENABLE_PATTERN_QUALITY_FILTER",
+            "false"
+        ).lower() == "true"
+        self.min_quality_threshold = float(
+            os.getenv("MIN_PATTERN_QUALITY", "0.5")
+        )
+
         self.logger = logging.getLogger(__name__)
 
     async def __aenter__(self):
@@ -753,6 +776,51 @@ class ManifestInjector:
 
         # Return False to propagate any exceptions
         return False
+
+    async def _filter_by_quality(self, patterns: List[Dict]) -> List[Dict]:
+        """
+        Filter patterns by quality score.
+
+        Args:
+            patterns: List of pattern dictionaries from Qdrant
+
+        Returns:
+            Filtered list of patterns meeting quality threshold
+        """
+        if not self.enable_quality_filtering:
+            return patterns
+
+        filtered = []
+        scores_recorded = 0
+
+        for pattern in patterns:
+            try:
+                # Score pattern
+                score = self.quality_scorer.score_pattern(pattern)
+
+                # Store metrics asynchronously (non-blocking)
+                asyncio.create_task(
+                    self.quality_scorer.store_quality_metrics(score)
+                )
+                scores_recorded += 1
+
+                # Filter by threshold
+                if score.composite_score >= self.min_quality_threshold:
+                    filtered.append(pattern)
+            except Exception as e:
+                # Log error but don't fail - include pattern in results
+                self.logger.warning(
+                    f"Failed to score pattern {pattern.get('name', 'unknown')}: {e}"
+                )
+                filtered.append(pattern)  # Include pattern on scoring failure
+
+        # Log filtering statistics
+        self.logger.info(
+            f"Quality filter: {len(filtered)}/{len(patterns)} patterns passed "
+            f"(threshold: {self.min_quality_threshold}, scores recorded: {scores_recorded})"
+        )
+
+        return filtered
 
     def generate_dynamic_manifest(
         self,
@@ -1068,6 +1136,9 @@ class ManifestInjector:
             code_patterns = code_result.get("patterns", []) if code_result else []
 
             all_patterns = exec_patterns + code_patterns
+
+            # Apply quality filtering if enabled
+            all_patterns = await self._filter_by_quality(all_patterns)
 
             # Calculate combined query time
             exec_time = exec_result.get("query_time_ms", 0) if exec_result else 0
