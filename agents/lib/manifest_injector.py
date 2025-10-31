@@ -81,6 +81,19 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from intelligence_event_client import IntelligenceEventClient
 
+# Import IntelligenceCache for Valkey-backed caching
+try:
+    from intelligence_cache import IntelligenceCache
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from intelligence_cache import IntelligenceCache
+
 logger = logging.getLogger(__name__)
 
 
@@ -627,7 +640,7 @@ class ManifestInjector:
         default_ttl = int(os.environ.get("MANIFEST_CACHE_TTL_SECONDS", "300"))
         self.cache_ttl_seconds = cache_ttl_seconds or default_ttl
 
-        # Initialize enhanced caching layer
+        # Initialize enhanced caching layer (in-memory)
         if enable_cache:
             self._cache = ManifestCache(
                 default_ttl_seconds=self.cache_ttl_seconds,
@@ -635,6 +648,14 @@ class ManifestInjector:
             )
         else:
             self._cache = None
+
+        # Initialize Valkey cache (distributed, persistent)
+        # Valkey cache is checked BEFORE in-memory cache for better hit rates
+        self._valkey_cache: Optional[IntelligenceCache] = None
+        if enable_cache:
+            self._valkey_cache = IntelligenceCache()
+        else:
+            self._valkey_cache = None
 
         # Cached manifest data (for backward compatibility)
         self._manifest_data: Optional[Dict[str, Any]] = None
@@ -663,6 +684,16 @@ class ManifestInjector:
             Self for use in async with statement
         """
         self.logger.debug("ManifestInjector context manager entered")
+
+        # Connect to Valkey cache
+        if self._valkey_cache:
+            try:
+                await self._valkey_cache.connect()
+                self.logger.debug("Valkey cache connected")
+            except Exception as e:
+                self.logger.warning(f"Failed to connect to Valkey cache: {e}")
+                self._valkey_cache = None
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -682,10 +713,31 @@ class ManifestInjector:
             if self.enable_cache and self._cache:
                 self.log_cache_metrics()
 
-            # Clear cache
+            # Log Valkey cache stats
+            if self._valkey_cache:
+                try:
+                    stats = await self._valkey_cache.get_stats()
+                    if stats.get("enabled"):
+                        self.logger.info(
+                            f"Valkey cache stats: hit_rate={stats.get('hit_rate_percent', 0)}%, "
+                            f"hits={stats.get('keyspace_hits', 0)}, "
+                            f"misses={stats.get('keyspace_misses', 0)}"
+                        )
+                except Exception as e:
+                    self.logger.warning(f"Failed to get Valkey cache stats: {e}")
+
+            # Close Valkey connection
+            if self._valkey_cache:
+                try:
+                    await self._valkey_cache.close()
+                    self.logger.debug("Valkey cache connection closed")
+                except Exception as e:
+                    self.logger.warning(f"Error closing Valkey cache: {e}")
+
+            # Clear in-memory cache
             if self.enable_cache and self._cache:
                 invalidated = self._cache.invalidate()
-                self.logger.debug(f"Cleared {invalidated} cache entries")
+                self.logger.debug(f"Cleared {invalidated} in-memory cache entries")
 
             # Clear cached data
             self._manifest_data = None
@@ -927,14 +979,37 @@ class ManifestInjector:
 
         start_time = time.time()
 
-        # Check cache first
+        # Check Valkey cache first (distributed, persistent)
+        if self._valkey_cache:
+            cache_params = {
+                "collections": ["execution_patterns", "code_patterns"],
+                "limits": {"execution_patterns": 50, "code_patterns": 100},
+            }
+            try:
+                cached_result = await self._valkey_cache.get(
+                    "pattern_discovery", cache_params
+                )
+                if cached_result is not None:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["patterns"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Pattern query: VALKEY CACHE HIT ({elapsed_ms}ms)"
+                    )
+                    # Also store in in-memory cache for faster subsequent access
+                    if self.enable_cache and self._cache:
+                        self._cache.set("patterns", cached_result)
+                    return cached_result
+            except Exception as e:
+                self.logger.warning(f"Valkey cache check failed: {e}")
+
+        # Check in-memory cache second (local, fast)
         if self.enable_cache and self._cache:
             cached_result = self._cache.get("patterns")
             if cached_result is not None:
                 elapsed_ms = int((time.time() - start_time) * 1000)
                 self._current_query_times["patterns"] = elapsed_ms
                 self.logger.info(
-                    f"[{correlation_id}] Pattern query: CACHE HIT ({elapsed_ms}ms)"
+                    f"[{correlation_id}] Pattern query: IN-MEMORY CACHE HIT ({elapsed_ms}ms)"
                 )
                 return cached_result
 
@@ -1028,7 +1103,24 @@ class ManifestInjector:
                 },
             }
 
-            # Cache the result
+            # Cache the result in both Valkey and in-memory caches
+            # Valkey cache (distributed, persistent)
+            if self._valkey_cache:
+                cache_params = {
+                    "collections": ["execution_patterns", "code_patterns"],
+                    "limits": {"execution_patterns": 50, "code_patterns": 100},
+                }
+                try:
+                    await self._valkey_cache.set(
+                        "pattern_discovery", cache_params, result
+                    )
+                    self.logger.debug(
+                        f"[{correlation_id}] Stored patterns in Valkey cache"
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to store in Valkey cache: {e}")
+
+            # In-memory cache (local, fast)
             if self.enable_cache and self._cache:
                 self._cache.set("patterns", result)
 
