@@ -221,6 +221,7 @@ activation_patterns:
     # Action triggers
     - "spawn poly"
     - "spawn polly"
+    - "dispatch"
     - "dispatch for polly"
     - "dispatch 4 pollys"
     - "coordinate"
