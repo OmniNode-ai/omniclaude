@@ -229,6 +229,17 @@ activation_patterns:
     - "workflow orchestration"
     - "agent coordination"
 
+    # Generic agent invocation (fallback triggers)
+    # These provide backup routing when explicit agent names aren't used
+    - "use an agent"
+    - "use a poly"
+    - "spawn an agent"
+    - "spawn a poly"
+    - "dispatch an agent"
+    - "dispatch a poly"
+    - "call an agent"
+    - "invoke an agent"
+
   context_requirements:
     - "Task complexity assessment data"
     - "Available agent capabilities and status"

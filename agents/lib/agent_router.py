@@ -73,7 +73,9 @@ class AgentRouter:
 
     def __init__(
         self,
-        registry_path: str = "/Users/jonah/.claude/agent-definitions/agent-registry.yaml",
+        registry_path: str = (
+            "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        ),
         cache_ttl: int = 3600,
     ):
         """
@@ -95,7 +97,8 @@ class AgentRouter:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
                     if not Path(def_path).is_absolute():
-                        # Strip "agent-definitions/" prefix if present (already in registry_dir)
+                        # Strip "agent-definitions/" prefix if present
+                        # (already in registry_dir)
                         if def_path.startswith("agent-definitions/"):
                             def_path = def_path.replace("agent-definitions/", "", 1)
                         agent_data["definition_path"] = str(registry_dir / def_path)
@@ -288,9 +291,10 @@ class AgentRouter:
         Extract explicit agent name from request.
 
         Supports patterns:
-        - "use agent-X"
-        - "@agent-X"
-        - "agent-X" at start of text
+        - "use agent-X" - Specific agent request
+        - "@agent-X" - Specific agent request
+        - "agent-X" at start of text - Specific agent request
+        - "use an agent", "spawn an agent", etc. - Generic request → polymorphic-agent
 
         Args:
             text: User's input text
@@ -301,14 +305,15 @@ class AgentRouter:
         try:
             text_lower = text.lower()
 
-            # Patterns for explicit agent requests
-            patterns = [
-                r"use\s+(agent-[\w-]+)",
-                r"@(agent-[\w-]+)",
-                r"^(agent-[\w-]+)",
+            # Patterns for specific agent requests (with agent name)
+            specific_patterns = [
+                r"use\s+(agent-[\w-]+)",  # "use agent-researcher"
+                r"@(agent-[\w-]+)",  # "@agent-researcher"
+                r"^(agent-[\w-]+)",  # "agent-researcher" at start
             ]
 
-            for pattern in patterns:
+            # Check specific patterns first
+            for pattern in specific_patterns:
                 match = re.search(pattern, text_lower)
                 if match:
                     agent_name = match.group(1)
@@ -319,6 +324,38 @@ class AgentRouter:
                             extra={"pattern": pattern, "text_sample": text[:50]},
                         )
                         return agent_name
+
+            # Patterns for generic agent requests (no specific agent name)
+            # These should default to polymorphic-agent
+            generic_patterns = [
+                r"use\s+an?\s+agent",  # "use an agent" or "use a agent"
+                r"spawn\s+an?\s+agent",  # "spawn an agent" or "spawn a agent"
+                r"spawn\s+an?\s+poly",  # "spawn a poly" or "spawn an poly"
+                r"dispatch\s+an?\s+agent",  # "dispatch an agent" or "dispatch a agent"
+                r"call\s+an?\s+agent",  # "call an agent" or "call a agent"
+                r"invoke\s+an?\s+agent",  # "invoke an agent" or "invoke a agent"
+            ]
+
+            # Check generic patterns
+            for pattern in generic_patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    # Default to polymorphic-agent
+                    default_agent = "polymorphic-agent"
+                    # Verify polymorphic-agent exists in registry
+                    if default_agent in self.registry["agents"]:
+                        logger.debug(
+                            f"Generic agent request matched, "
+                            f"using default: {default_agent}",
+                            extra={"pattern": pattern, "text_sample": text[:50]},
+                        )
+                        return default_agent
+                    else:
+                        logger.warning(
+                            f"Generic agent request matched but "
+                            f"{default_agent} not found in registry",
+                            extra={"pattern": pattern},
+                        )
 
             return None
 
