@@ -725,12 +725,32 @@ def hello():
     )
     @pytest.mark.asyncio
     async def test_refine_code_integration(self, sample_code):
-        """Integration test for code refinement (requires API key)."""
+        """
+        Integration test for code refinement with AI model.
+
+        SKIP REASON: Requires GEMINI_API_KEY environment variable
+        ---------------------------------------------------------------
+        Status: OPTIONAL - External API dependency
+        Priority: P2 - Integration testing
+
+        Requirements:
+            1. OMNIARCHON_PATH environment variable or ../omniarchon directory
+            2. GEMINI_API_KEY environment variable with valid API key
+
+        To enable this test:
+            export GEMINI_API_KEY="your-api-key-here"
+            pytest agents/tests/test_code_refiner.py::TestCodeRefiner::test_refine_code_integration -v
+
+        Note: This test makes actual API calls to Google's Gemini service
+        and may incur costs or rate limiting.
+        """
         import os
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            pytest.skip("GEMINI_API_KEY not set")
+            pytest.skip(
+                "GEMINI_API_KEY not set - set environment variable to enable this test"
+            )
 
         refiner = CodeRefiner()
 

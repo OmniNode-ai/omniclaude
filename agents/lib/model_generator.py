@@ -129,7 +129,7 @@ class ModelGenerator:
     async def generate_all_models(
         self,
         service_name: str,
-        prd_analysis: Any,  # SimplePRDAnalysisResult
+        prd_analysis: Any,  # PRDAnalysisResult
         session_id: Optional[UUID] = None,
         correlation_id: Optional[UUID] = None,
     ) -> ModelGenerationResult:
@@ -138,7 +138,7 @@ class ModelGenerator:
 
         Args:
             service_name: Name of the service (e.g., "UserAuthentication")
-            prd_analysis: PRD analysis result from SimplePRDAnalyzer
+            prd_analysis: PRD analysis result from PRDAnalyzer
             session_id: Optional session identifier
             correlation_id: Optional correlation identifier
 

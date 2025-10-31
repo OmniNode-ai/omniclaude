@@ -15,8 +15,9 @@ Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.1
 """
 
 import asyncio
+import os
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -58,6 +59,17 @@ def mock_consumer():
     consumer = AsyncMock()
     consumer.start = AsyncMock()
     consumer.stop = AsyncMock()
+
+    # Mock assignment() as a regular method (not async) that returns a set
+    # Initially returns a set with a partition to simulate ready consumer
+    from kafka import TopicPartition
+
+    consumer.assignment = MagicMock(
+        return_value={
+            TopicPartition("omniclaude.intelligence.analysis.completed", 0),
+            TopicPartition("omniclaude.intelligence.analysis.failed", 0),
+        }
+    )
 
     # Mock async iteration for background consumer task
     async def mock_aiter():
@@ -173,8 +185,8 @@ class TestIntelligenceEventClientLifecycle:
 
     def test_init_generates_consumer_group_id(self):
         """Test initialization generates unique consumer group ID."""
-        client1 = IntelligenceEventClient()
-        client2 = IntelligenceEventClient()
+        client1 = IntelligenceEventClient(bootstrap_servers="localhost:29092")
+        client2 = IntelligenceEventClient(bootstrap_servers="localhost:29092")
 
         assert client1.consumer_group_id.startswith("omniclaude-intelligence-")
         assert client2.consumer_group_id.startswith("omniclaude-intelligence-")
@@ -183,7 +195,9 @@ class TestIntelligenceEventClientLifecycle:
     def test_init_accepts_custom_consumer_group_id(self):
         """Test initialization accepts custom consumer group ID."""
         custom_id = "custom-consumer-group"
-        client = IntelligenceEventClient(consumer_group_id=custom_id)
+        client = IntelligenceEventClient(
+            bootstrap_servers="localhost:29092", consumer_group_id=custom_id
+        )
 
         assert client.consumer_group_id == custom_id
 
@@ -230,13 +244,26 @@ class TestIntelligenceEventClientLifecycle:
                 "agents.lib.intelligence_event_client.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
-            patch("asyncio.create_task") as mock_create_task,
         ):
             client = IntelligenceEventClient(bootstrap_servers="localhost:29092")
-            await client.start()
 
-            # Verify background task created
-            mock_create_task.assert_called_once()
+            # Mock the _consume_responses method to immediately set the ready event
+            # This simulates the consumer task starting without requiring real polling
+            async def mock_consume_responses():
+                client._consumer_ready.set()
+                # Keep task alive briefly
+                await asyncio.sleep(0.1)
+
+            with patch.object(
+                client, "_consume_responses", side_effect=mock_consume_responses
+            ):
+                await client.start()
+
+                # Verify consumer ready flag was set (proves background task ran)
+                assert client._consumer_ready.is_set()
+
+                # Verify client is started
+                assert client._started is True
 
             await client.stop()
 
@@ -357,10 +384,12 @@ class TestRequestResponsePattern:
         """Test request_pattern_discovery publishes correct event."""
         # Mock response to prevent timeout
         future = asyncio.Future()
-        future.set_result([])
+        future.set_result({"patterns": []})
         event_client._pending_requests[sample_correlation_id] = future
 
-        with patch.object(event_client, "_publish_and_wait", return_value=[]):
+        with patch.object(
+            event_client, "_publish_and_wait", return_value={"patterns": []}
+        ):
             await event_client.request_pattern_discovery(
                 source_path="node_*_effect.py",
                 language="python",
@@ -371,7 +400,7 @@ class TestRequestResponsePattern:
     async def test_request_pattern_discovery_creates_correlation_id(self, event_client):
         """Test request creates unique correlation ID."""
         with patch.object(
-            event_client, "_publish_and_wait", return_value=[]
+            event_client, "_publish_and_wait", return_value={"patterns": []}
         ) as mock_publish:
             await event_client.request_pattern_discovery(
                 source_path="test.py",
@@ -425,7 +454,7 @@ class TestRequestResponsePattern:
         custom_timeout = 10000
 
         with patch.object(
-            event_client, "_publish_and_wait", return_value=[]
+            event_client, "_publish_and_wait", return_value={"patterns": []}
         ) as mock_publish:
             await event_client.request_pattern_discovery(
                 source_path="test.py",
@@ -809,7 +838,9 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_patterns_response(self, event_client):
         """Test handling empty patterns in response."""
-        with patch.object(event_client, "_publish_and_wait", return_value=[]):
+        with patch.object(
+            event_client, "_publish_and_wait", return_value={"patterns": []}
+        ):
             patterns = await event_client.request_pattern_discovery(
                 source_path="nonexistent.py",
                 language="python",
@@ -825,7 +856,7 @@ class TestEdgeCases:
         ]
 
         with patch.object(
-            event_client, "_publish_and_wait", return_value=large_patterns
+            event_client, "_publish_and_wait", return_value={"patterns": large_patterns}
         ):
             result = await event_client.request_pattern_discovery(
                 source_path="*.py",
@@ -840,7 +871,7 @@ class TestEdgeCases:
 
         async def mock_publish_and_wait(correlation_id, payload, timeout_ms):
             await asyncio.sleep(0.05)  # Simulate processing
-            return []
+            return {"patterns": []}
 
         with patch.object(
             event_client, "_publish_and_wait", side_effect=mock_publish_and_wait
@@ -891,6 +922,11 @@ class TestIntelligenceIntegration:
     - Run with: pytest -m integration agents/tests/test_intelligence_event_client.py
     """
 
+    @pytest.mark.integration
+    @pytest.mark.skipif(
+        not os.getenv("RUN_INTEGRATION_TESTS"),
+        reason="Integration tests require RUN_INTEGRATION_TESTS=1 and running Kafka infrastructure",
+    )
     async def test_stub_responses_removed(self):
         """
         Verify archon returns real analysis, not stub responses.
@@ -944,6 +980,11 @@ class TestIntelligenceIntegration:
         finally:
             await client.stop()
 
+    @pytest.mark.integration
+    @pytest.mark.skipif(
+        not os.getenv("RUN_INTEGRATION_TESTS"),
+        reason="Integration tests require RUN_INTEGRATION_TESTS=1 and running Kafka infrastructure",
+    )
     async def test_file_content_sent(self):
         """Verify client sends file content, not empty strings."""
         from pathlib import Path

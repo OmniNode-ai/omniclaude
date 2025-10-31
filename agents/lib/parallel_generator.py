@@ -19,7 +19,7 @@ from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .persistence import CodegenPersistence
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .simple_prd_analyzer import PRDAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class GenerationJob:
     node_type: str
     microservice_name: str
     domain: str
-    analysis_result: SimplePRDAnalysisResult
+    analysis_result: PRDAnalysisResult
     output_directory: str
 
 

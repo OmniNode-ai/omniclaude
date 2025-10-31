@@ -10,12 +10,28 @@ LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
 HOOKS_LIB="$HOME/.claude/hooks/lib"
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 
-export ARCHON_MCP_URL="${ARCHON_MCP_URL:-http://localhost:8051}"
+# Load environment variables from .env if available
+if [[ -f "/Volumes/PRO-G40/Code/omniclaude/.env" ]]; then
+    set -a  # automatically export all variables
+    source "/Volumes/PRO-G40/Code/omniclaude/.env" 2>/dev/null || true
+    set +a
+fi
+
+# Load database credentials for all scripts (sets PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE)
+if [[ -f "/Volumes/PRO-G40/Code/omniclaude/scripts/db-credentials.sh" ]]; then
+    source "/Volumes/PRO-G40/Code/omniclaude/scripts/db-credentials.sh" --silent
+fi
+
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
+# Kafka/Redpanda configuration for event-based routing
+# Use remote Kafka at 192.168.86.200:29092 (from .env)
+export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}"
+export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29092}"
+
 # Database credentials for hook event logging (required from .env)
-# Set DB_PASSWORD in your .env file or environment
-export DB_PASSWORD="${DB_PASSWORD:-}"
+# Use POSTGRES_PASSWORD from .env as DB_PASSWORD for hook_event_logger
+export DB_PASSWORD="${DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
 
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 b64() { printf %s "$1" | base64; }
@@ -58,19 +74,55 @@ if [[ "$WORKFLOW_TRIGGER" == "AUTOMATED_WORKFLOW_DETECTED" ]]; then
 fi
 
 # -----------------------------
-# Agent detection (prompt via stdin)
+# Correlation ID (generated before agent detection)
 # -----------------------------
-AGENT_DETECTION="$(
-  printf %s "$PROMPT" | python3 "${HOOKS_LIB}/hybrid_agent_selector.py" - \
-    --enable-ai "${ENABLE_AI_AGENT_SELECTION:-true}" \
-    --model-preference "${AI_MODEL_PREFERENCE:-5090}" \
-    --confidence-threshold "${AI_AGENT_CONFIDENCE_THRESHOLD:-0.8}" \
-    --timeout "${AI_SELECTION_TIMEOUT_MS:-3000}" \
-    2>>"$LOG_FILE" || echo "NO_AGENT_DETECTED"
-)"
-log "Detection result: $AGENT_DETECTION"
+# Use uuidgen if available, fallback to Python
+if command -v uuidgen >/dev/null 2>&1; then
+    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+else
+    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
 
-if [[ "$AGENT_DETECTION" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_DETECTION" ]]; then
+# -----------------------------
+# Agent detection via Event-Based Routing
+# -----------------------------
+log "Calling event-based routing service via Kafka..."
+
+# Call event-based routing wrapper (replaces HTTP call to port 8055)
+ROUTING_RESULT="$(python3 "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" 2>>"$LOG_FILE" || echo "")"
+
+# Check if routing call succeeded
+ROUTING_EXIT_CODE=$?
+if [ $ROUTING_EXIT_CODE -ne 0 ] || [ -z "$ROUTING_RESULT" ]; then
+  log "Event-based routing unavailable (exit code: $ROUTING_EXIT_CODE), using fallback"
+  ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"Event-based routing unavailable - using fallback","method":"fallback","latency_ms":0,"domain":"workflow_coordination","purpose":"Intelligent coordinator for development workflows"}'
+  SERVICE_USED="false"
+else
+  log "Event-based routing responded successfully"
+  SERVICE_USED="true"
+fi
+
+log "Routing result: ${ROUTING_RESULT:0:200}..."
+
+# Parse JSON response
+AGENT_NAME="$(echo "$ROUTING_RESULT" | jq -r '.selected_agent // "NO_AGENT_DETECTED"')"
+CONFIDENCE="$(echo "$ROUTING_RESULT" | jq -r '.confidence // "0.5"')"
+SELECTION_METHOD="$(echo "$ROUTING_RESULT" | jq -r '.method // "fallback"')"
+SELECTION_REASONING="$(echo "$ROUTING_RESULT" | jq -r '.reasoning // ""')"
+LATENCY_MS="$(echo "$ROUTING_RESULT" | jq -r '.latency_ms // "0"')"
+AGENT_DOMAIN="$(echo "$ROUTING_RESULT" | jq -r '.domain // "general"')"
+AGENT_PURPOSE="$(echo "$ROUTING_RESULT" | jq -r '.purpose // ""')"
+
+# Extract queries if available
+DOMAIN_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.domain_query // ""')"
+IMPL_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.implementation_query // ""')"
+
+log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATENCY_MS}ms (service=${SERVICE_USED})"
+log "Domain: $AGENT_DOMAIN"
+log "Reasoning: ${SELECTION_REASONING:0:120}..."
+
+# Handle no agent detected
+if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
   log "No agent detected, logging failure..."
 
   # Log detection failure
@@ -78,7 +130,7 @@ if [[ "$AGENT_DETECTION" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_DETECTION" ]
   FAILURE_PROMPT_B64="$(printf %s "${PROMPT:0:500}" | base64)"
   PROMPT_B64="$FAILURE_PROMPT_B64" FAILURE_CORRELATION_ID="$FAILURE_CORRELATION_ID" \
     PROJECT_PATH="${PROJECT_PATH:-}" PROJECT_NAME="${PROJECT_NAME:-}" SESSION_ID="${SESSION_ID:-}" \
-    ENABLE_AI="$ENABLE_AI_AGENT_SELECTION" \
+    SERVICE_USED="$SERVICE_USED" \
     python3 - <<'PYFAIL' 2>>"$LOG_FILE" || log "WARNING: Failed to log detection failure"
 import sys
 import os
@@ -93,8 +145,8 @@ try:
     adapter = get_hook_event_adapter()
     adapter.publish_detection_failure(
         user_request=user_request,
-        failure_reason="No agent detected by hybrid selector",
-        attempted_methods=["ai" if os.environ.get("ENABLE_AI") == "true" else "trigger", "fuzzy"],
+        failure_reason="No agent detected by router service" if os.environ.get("SERVICE_USED") == "true" else "Router service unavailable",
+        attempted_methods=["router_service" if os.environ.get("SERVICE_USED") == "true" else "fallback"],
         correlation_id=os.environ.get("FAILURE_CORRELATION_ID"),
         project_path=os.environ.get("PROJECT_PATH"),
         project_name=os.environ.get("PROJECT_NAME"),
@@ -110,25 +162,6 @@ PYFAIL
 fi
 
 # -----------------------------
-# Parse selector output
-# -----------------------------
-field() { printf %s "$AGENT_DETECTION" | grep "$1" | cut -d: -f2- || echo ""; }
-
-AGENT_NAME="$(field "AGENT_DETECTED:" | tr -d " ")"
-CONFIDENCE="$(field "CONFIDENCE:" | tr -d " ")"
-SELECTION_METHOD="$(field "METHOD:" | tr -d " ")"
-SELECTION_REASONING="$(field "REASONING:")"
-LATENCY_MS="$(field "LATENCY_MS:" | tr -d " ")"
-DOMAIN_QUERY="$(field "DOMAIN_QUERY:")"
-IMPL_QUERY="$(field "IMPLEMENTATION_QUERY:")"
-AGENT_DOMAIN="$(field "AGENT_DOMAIN:")"
-AGENT_PURPOSE="$(field "AGENT_PURPOSE:")"
-
-log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATENCY_MS}ms"
-log "Domain: $AGENT_DOMAIN"
-log "Reasoning: ${SELECTION_REASONING:0:120}..."
-
-# -----------------------------
 # Project Context Extraction
 # -----------------------------
 PROJECT_PATH="${CLAUDE_PROJECT_DIR:-$(pwd)}"
@@ -140,17 +173,7 @@ else
     SESSION_ID="${CLAUDE_SESSION_ID:-$(python3 -c 'import uuid; print(str(uuid.uuid4()))')}"
 fi
 
-log "Project: $PROJECT_NAME, Session: ${SESSION_ID:0:8}..."
-
-# -----------------------------
-# Correlation ID
-# -----------------------------
-# Use uuidgen if available, fallback to Python
-if command -v uuidgen >/dev/null 2>&1; then
-    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-else
-    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
-fi
+log "Project: $PROJECT_NAME, Session: ${SESSION_ID:0:8}..., Correlation: ${CORRELATION_ID:0:8}..."
 
 # -----------------------------
 # Log Routing Decision with Project Context
@@ -207,6 +230,46 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         --working-directory "$(pwd)" \
         2>>"$LOG_FILE" || log "WARNING: Failed to log agent action"
   fi
+
+  # Log UserPromptSubmit event to hook_events table
+  log "Logging UserPromptSubmit event to hook_events table..."
+  (
+    PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" \
+    AGENT_NAME="$AGENT_NAME" AGENT_DOMAIN="$AGENT_DOMAIN" \
+    CORRELATION_ID="$CORRELATION_ID" SELECTION_METHOD="$SELECTION_METHOD" \
+    CONFIDENCE="$CONFIDENCE" LATENCY_MS="$LATENCY_MS" \
+    SELECTION_REASONING="$SELECTION_REASONING" \
+    python3 - <<'PYLOG' 2>>"$LOG_FILE" || log "WARNING: Failed to log UserPromptSubmit to hook_events"
+import sys
+import os
+import base64
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks/lib"))
+try:
+    from hook_event_logger import get_logger
+
+    # Decode prompt
+    prompt = base64.b64decode(os.environ.get("PROMPT_B64", "")).decode("utf-8", "replace")
+
+    # Get logger and log event
+    logger = get_logger()
+    event_id = logger.log_userprompt(
+        prompt=prompt,
+        agent_detected=os.environ.get("AGENT_NAME"),
+        agent_domain=os.environ.get("AGENT_DOMAIN"),
+        correlation_id=os.environ.get("CORRELATION_ID"),
+        detection_method=os.environ.get("SELECTION_METHOD"),
+        confidence=float(os.environ.get("CONFIDENCE", "0.0")),
+        latency_ms=float(os.environ.get("LATENCY_MS", "0.0")),
+        reasoning=os.environ.get("SELECTION_REASONING"),
+    )
+    if event_id:
+        print(f"✓ UserPromptSubmit event logged: {event_id}", file=sys.stderr)
+    else:
+        print("✗ Failed to log UserPromptSubmit event", file=sys.stderr)
+except Exception as e:
+    print(f"Error logging UserPromptSubmit: {e}", file=sys.stderr)
+PYLOG
+  ) &
 fi
 
 # -----------------------------
@@ -257,28 +320,59 @@ if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_
 fi
 
 # -----------------------------
-# Background RAG queries
+# Event Bus Intelligence Requests
 # -----------------------------
 if [[ -n "${DOMAIN_QUERY:-}" ]]; then
-  log "RAG domain query"
+  log "Publishing domain intelligence request to event bus"
   (
-    JSON="$(jq -n --arg q "$DOMAIN_QUERY" --arg ctx "general" --argjson n 5 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
-      -H "Content-Type: application/json" \
-      --data-binary "$JSON" \
-      > "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" 2>&1
+    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+      --query-type "domain" \
+      --query "$DOMAIN_QUERY" \
+      --correlation-id "$CORRELATION_ID" \
+      --agent-name "${AGENT_NAME:-unknown}" \
+      --agent-domain "${AGENT_DOMAIN:-general}" \
+      --output-file "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
+      --match-count 5 \
+      --timeout-ms 500 \
+      2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
   ) &
 fi
 
 if [[ -n "${IMPL_QUERY:-}" ]]; then
-  log "RAG implementation query"
+  log "Publishing implementation intelligence request to event bus"
   (
-    JSON="$(jq -n --arg q "$IMPL_QUERY" --arg ctx "general" --argjson n 3 '{query:$q, match_count:$n, context:$ctx}')"
-    curl -s --max-time 2 -X POST "${ARCHON_MCP_URL}/api/rag/query" \
-      -H "Content-Type: application/json" \
-      --data-binary "$JSON" \
-      > "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" 2>&1
+    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+      --query-type "implementation" \
+      --query "$IMPL_QUERY" \
+      --correlation-id "$CORRELATION_ID" \
+      --agent-name "${AGENT_NAME:-unknown}" \
+      --agent-domain "${AGENT_DOMAIN:-general}" \
+      --output-file "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
+      --match-count 3 \
+      --timeout-ms 500 \
+      2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
   ) &
+fi
+
+# -----------------------------
+# System Manifest Injection
+# -----------------------------
+log "Loading system manifest for agent context..."
+
+# Use manifest_loader.py to avoid heredoc quoting issues
+MANIFEST_LOADER="$HOME/.claude/hooks/lib/manifest_loader.py"
+if [[ ! -f "$MANIFEST_LOADER" ]]; then
+  # Fallback to hooks directory
+  MANIFEST_LOADER="${HOOKS_LIB}/../manifest_loader.py"
+fi
+
+SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" AGENT_NAME="${AGENT_NAME:-unknown}" python3 "$MANIFEST_LOADER" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
+
+if [[ -n "$SYSTEM_MANIFEST" ]]; then
+  log "System manifest loaded successfully (${#SYSTEM_MANIFEST} chars)"
+else
+  log "System manifest not available, continuing without it"
+  SYSTEM_MANIFEST="System Manifest: Not available"
 fi
 
 # -----------------------------
@@ -299,43 +393,34 @@ Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
-REQUIRED ACTION: Use the Task tool to dispatch to polymorphic-agent
+ROUTING COMPLETE - Execute as detected agent (polymorphic agent will read this directive automatically).
 
-Task Tool Configuration:
+Intelligence Context Available:
 ┌────────────────────────────────────────────────────────────────────┐
-│ description: "${AGENT_DOMAIN} task execution"                       │
-│ subagent_type: "polymorphic-agent"                                  │
-│ prompt: "Load configuration for role '${AGENT_ROLE}' and execute:   │
+│ Requested Role: ${AGENT_ROLE}                                       │
+│ Agent: ${AGENT_NAME}                                                │
+│ Domain: ${AGENT_DOMAIN}                                             │
+│ Detection Confidence: ${CONFIDENCE}                                 │
+│ Detection Method: ${SELECTION_METHOD}                               │
+│ Detection Reasoning: ${SELECTION_REASONING:0:150}                   │
 │                                                                      │
-│   ${PROMPT:0:200}...                                                │
+│ RAG Intelligence:                                                   │
+│   - Domain: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json   │
+│   - Implementation: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
 │                                                                      │
-│   Intelligence Context (pre-gathered by hooks):                    │
-│   - Requested Role: ${AGENT_ROLE}                                   │
-│   - Agent: ${AGENT_NAME}                                            │
-│   - Domain: ${AGENT_DOMAIN}                                         │
-│   - Purpose: ${AGENT_PURPOSE}                                       │
-│   - Detection Confidence: ${CONFIDENCE}                             │
-│   - Detection Method: ${SELECTION_METHOD}                           │
-│   - Detection Reasoning: ${SELECTION_REASONING:0:120}...            │
-│   - RAG Domain Intelligence: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json │
-│   - RAG Implementation Intelligence: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
-│   - Correlation ID: ${CORRELATION_ID}                               │
-│   - Archon MCP: ${ARCHON_MCP_URL}                                   │
+│ Correlation ID: ${CORRELATION_ID}                                   │
 │                                                                      │
-│   Framework Requirements:                                            │
+│ Framework Requirements:                                              │
 │   - 47 mandatory functions (IC-001 to FI-004)                       │
 │   - 23 quality gates validation                                     │
 │   - Performance thresholds compliance                                │
-│                                                                      │
-│   The agent will handle execution and intelligence integration       │
-│   for this task."                                                    │
 └────────────────────────────────────────────────────────────────────┘
 
-Why this dispatch is recommended:
-- ${SELECTION_REASONING:0:200}
+Routing Reasoning: ${SELECTION_REASONING:0:200}
+========================================================================
 
-Alternative: If you prefer manual execution, the above intelligence context
-is available for your direct use.
+${SYSTEM_MANIFEST}
+
 ========================================================================
 EOF
 )"

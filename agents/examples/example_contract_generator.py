@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 
 from agents.lib.contract_generator import ContractGenerator
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 
 
 async def main():
@@ -73,7 +73,7 @@ and session management.
 
     # Step 1: Analyze PRD
     print("Step 1: Analyzing PRD...")
-    prd_analyzer = SimplePRDAnalyzer()
+    prd_analyzer = PRDAnalyzer()
     analysis_result = await prd_analyzer.analyze_prd(sample_prd)
     print(
         f"  ✓ PRD analyzed with confidence score: {analysis_result.confidence_score:.2f}"

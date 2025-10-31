@@ -182,10 +182,84 @@ class AggregationPattern:
         operation: str,
         initial_value: Optional[Any]
     ) -> Any:
-        """Apply custom reduction operation"""
-        # TODO: Implement custom reduction logic
-        self.logger.warning(f"Custom reduction not implemented: {{operation}}")
-        return initial_value if initial_value is not None else items[0] if items else None
+        """
+        Apply custom reduction operation.
+
+        Supports custom operations beyond standard aggregations.
+        Override this method for domain-specific reductions.
+
+        Args:
+            items: List of items to reduce
+            operation: Custom operation name
+            initial_value: Initial accumulator value
+
+        Returns:
+            Reduced result
+        """
+        # Standard deviation
+        if operation == "stddev" or operation == "std":
+            if not items:
+                return 0
+            mean = sum(items) / len(items)
+            variance = sum((x - mean) ** 2 for x in items) / len(items)
+            return variance ** 0.5
+
+        # Median
+        elif operation == "median":
+            if not items:
+                return initial_value
+            sorted_items = sorted(items)
+            n = len(sorted_items)
+            mid = n // 2
+            if n % 2 == 0:
+                return (sorted_items[mid - 1] + sorted_items[mid]) / 2
+            return sorted_items[mid]
+
+        # Mode (most frequent value)
+        elif operation == "mode":
+            if not items:
+                return initial_value
+            from collections import Counter
+            counter = Counter(items)
+            return counter.most_common(1)[0][0]
+
+        # Distinct/unique count
+        elif operation == "distinct" or operation == "unique":
+            return len(set(items))
+
+        # Collect unique values
+        elif operation == "collect_set":
+            return list(set(items))
+
+        # Collect all values (including duplicates)
+        elif operation == "collect_list":
+            return items
+
+        # Join strings
+        elif operation == "join":
+            return ", ".join(str(item) for item in items)
+
+        # Product (multiply all values)
+        elif operation == "product":
+            result = initial_value if initial_value is not None else 1
+            for item in items:
+                result *= item
+            return result
+
+        # Percentile
+        elif operation.startswith("percentile_"):
+            try:
+                percentile = int(operation.split("_")[1])
+                sorted_items = sorted(items)
+                index = int(len(sorted_items) * percentile / 100)
+                return sorted_items[min(index, len(sorted_items) - 1)]
+            except (ValueError, IndexError):
+                self.logger.warning(f"Invalid percentile operation: {{operation}}")
+                return initial_value
+
+        else:
+            self.logger.warning(f"Custom reduction not implemented: {{operation}}")
+            return initial_value if initial_value is not None else items[0] if items else None
 '''
 
     def _generate_group_by_method(
@@ -358,17 +432,128 @@ class AggregationPattern:
         time_field: str,
         window_seconds: int
     ) -> List[Dict[str, Any]]:
-        """Aggregate items by time windows"""
-        # TODO: Implement time-based windowing
-        return []
+        """
+        Aggregate items by time windows.
+
+        Groups items into time-based windows and aggregates each window.
+
+        Args:
+            items: List of items with timestamp field
+            time_field: Field containing timestamp
+            window_seconds: Window duration in seconds
+
+        Returns:
+            List of aggregated window results
+        """
+        from datetime import datetime, timedelta
+        from collections import defaultdict
+
+        # Parse timestamps and group by window
+        windows = defaultdict(list)
+
+        for item in items:
+            if time_field not in item:
+                self.logger.warning(f"Item missing time field '{{time_field}}': {{item}}")
+                continue
+
+            # Parse timestamp
+            timestamp_value = item[time_field]
+            try:
+                if isinstance(timestamp_value, str):
+                    # Try parsing ISO format
+                    timestamp = datetime.fromisoformat(timestamp_value.replace("Z", "+00:00"))
+                elif isinstance(timestamp_value, datetime):
+                    timestamp = timestamp_value
+                elif isinstance(timestamp_value, (int, float)):
+                    # Assume Unix timestamp
+                    timestamp = datetime.fromtimestamp(timestamp_value)
+                else:
+                    self.logger.warning(f"Invalid timestamp format: {{timestamp_value}}")
+                    continue
+
+                # Calculate window start
+                epoch = datetime(1970, 1, 1)
+                seconds_since_epoch = (timestamp - epoch).total_seconds()
+                window_index = int(seconds_since_epoch // window_seconds)
+                window_start = epoch + timedelta(seconds=window_index * window_seconds)
+
+                windows[window_start].append(item)
+
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"Failed to parse timestamp: {{timestamp_value}}, error: {{e}}")
+                continue
+
+        # Aggregate each window
+        results = []
+        for window_start, window_items in sorted(windows.items()):
+            window_end = window_start + timedelta(seconds=window_seconds)
+
+            window_result = {{
+                "window_start": window_start.isoformat(),
+                "window_end": window_end.isoformat(),
+                "window_seconds": window_seconds,
+                "item_count": len(window_items),
+                "aggregated_data": await self._aggregate_window(window_items)
+            }}
+
+            results.append(window_result)
+
+        return results
 
     async def _aggregate_window(self, window: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Aggregate items within a single window"""
-        # TODO: Implement window aggregation logic
-        return {{
+        """
+        Aggregate items within a single window.
+
+        Computes standard aggregate metrics for all numeric fields in the window.
+        Override this method for custom window-level aggregations.
+
+        Args:
+            window: List of items in the window
+
+        Returns:
+            Dictionary of aggregated metrics
+        """
+        if not window:
+            return {{"count": 0}}
+
+        # Initialize result
+        result = {{
             "count": len(window),
-            "items": window
+            "first_item": window[0],
+            "last_item": window[-1]
         }}
+
+        # Identify numeric fields
+        numeric_fields = set()
+        for item in window:
+            for key, value in item.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    numeric_fields.add(key)
+
+        # Compute aggregates for numeric fields
+        for field in numeric_fields:
+            values = [item[field] for item in window if field in item and isinstance(item[field], (int, float))]
+
+            if values:
+                result[f"{{field}}_sum"] = sum(values)
+                result[f"{{field}}_avg"] = sum(values) / len(values)
+                result[f"{{field}}_min"] = min(values)
+                result[f"{{field}}_max"] = max(values)
+                result[f"{{field}}_count"] = len(values)
+
+        # Identify categorical fields for counting
+        categorical_fields = set()
+        for item in window:
+            for key, value in item.items():
+                if isinstance(value, str) and key not in numeric_fields:
+                    categorical_fields.add(key)
+
+        # Count distinct values for categorical fields
+        for field in list(categorical_fields)[:5]:  # Limit to 5 fields to avoid bloat
+            values = [item[field] for item in window if field in item]
+            result[f"{{field}}_distinct"] = len(set(values))
+
+        return result
 '''
 
     def _generate_stateful_aggregation(
@@ -437,26 +622,121 @@ class AggregationPattern:
             )
 
     async def _load_aggregation_state(self, state_key: str) -> Dict[str, Any]:
-        """Load aggregation state from storage"""
-        # TODO: Implement state loading from MixinStateManagement
-        return {{
+        """
+        Load aggregation state from storage.
+
+        Uses MixinStateManagement if available, otherwise uses in-memory storage.
+
+        Args:
+            state_key: Unique key to identify the state
+
+        Returns:
+            Dictionary containing aggregation state
+        """
+        # Try using MixinStateManagement if available
+        if hasattr(self, "load_state"):
+            try:
+                state = await self.load_state(state_key)
+                if state:
+                    return state
+            except Exception as e:
+                self.logger.warning(f"Failed to load state from MixinStateManagement: {{e}}")
+
+        # Fallback to in-memory storage (class-level cache)
+        if not hasattr(self.__class__, "_state_cache"):
+            self.__class__._state_cache = {{}}
+
+        return self.__class__._state_cache.get(state_key, {{
             "total_count": 0,
             "items": [],
             "aggregates": {{}}
-        }}
+        }})
 
     async def _save_aggregation_state(self, state_key: str, state: Dict[str, Any]):
-        """Save aggregation state to storage"""
-        # TODO: Implement state saving via MixinStateManagement
-        pass
+        """
+        Save aggregation state to storage.
+
+        Uses MixinStateManagement if available, otherwise uses in-memory storage.
+
+        Args:
+            state_key: Unique key to identify the state
+            state: State dictionary to save
+        """
+        # Try using MixinStateManagement if available
+        if hasattr(self, "save_state"):
+            try:
+                await self.save_state(state_key, state)
+                return
+            except Exception as e:
+                self.logger.warning(f"Failed to save state via MixinStateManagement: {{e}}")
+
+        # Fallback to in-memory storage (class-level cache)
+        if not hasattr(self.__class__, "_state_cache"):
+            self.__class__._state_cache = {{}}
+
+        self.__class__._state_cache[state_key] = state
 
     async def _compute_aggregates(self, items: List[Any]) -> Dict[str, Any]:
-        """Compute aggregate metrics from items"""
-        # TODO: Implement aggregate computation logic
-        return {{
-            "count": len(items),
-            "sum": sum(items) if all(isinstance(x, (int, float)) for x in items) else 0
-        }}
+        """
+        Compute aggregate metrics from items.
+
+        Computes standard statistics for numeric items or counts for other types.
+
+        Args:
+            items: List of items to aggregate
+
+        Returns:
+            Dictionary of computed aggregate metrics
+        """
+        if not items:
+            return {{"count": 0}}
+
+        result = {{"count": len(items)}}
+
+        # Check if all items are numeric
+        numeric_items = [x for x in items if isinstance(x, (int, float)) and not isinstance(x, bool)]
+
+        if numeric_items:
+            result.update({{
+                "sum": sum(numeric_items),
+                "avg": sum(numeric_items) / len(numeric_items),
+                "min": min(numeric_items),
+                "max": max(numeric_items),
+                "numeric_count": len(numeric_items)
+            }})
+
+            # Standard deviation
+            if len(numeric_items) > 1:
+                mean = result["avg"]
+                variance = sum((x - mean) ** 2 for x in numeric_items) / len(numeric_items)
+                result["stddev"] = variance ** 0.5
+
+        # For dict items, aggregate by fields
+        dict_items = [x for x in items if isinstance(x, dict)]
+        if dict_items:
+            # Find numeric fields
+            numeric_fields = set()
+            for item in dict_items:
+                for key, value in item.items():
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        numeric_fields.add(key)
+
+            # Aggregate each numeric field
+            field_aggregates = {{}}
+            for field in numeric_fields:
+                values = [item[field] for item in dict_items if field in item]
+                if values:
+                    field_aggregates[field] = {{
+                        "sum": sum(values),
+                        "avg": sum(values) / len(values),
+                        "min": min(values),
+                        "max": max(values)
+                    }}
+
+            if field_aggregates:
+                result["fields"] = field_aggregates
+
+        return result
 '''
 
     def _generate_generic_aggregation(
@@ -485,12 +765,60 @@ class AggregationPattern:
         try:
             self.logger.info(f"Aggregating {{len(items)}} items")
 
-            # TODO: Implement aggregation logic based on requirements
-
+            # Initialize result with basic stats
             result = {{
                 "count": len(items),
                 "items": items
             }}
+
+            if not items:
+                return result
+
+            # Detect item type and apply appropriate aggregations
+            first_item = items[0]
+
+            # Numeric items - compute statistical aggregates
+            if isinstance(first_item, (int, float)) and not isinstance(first_item, bool):
+                numeric_items = [x for x in items if isinstance(x, (int, float))]
+                if numeric_items:
+                    result.update({{
+                        "sum": sum(numeric_items),
+                        "average": sum(numeric_items) / len(numeric_items),
+                        "min": min(numeric_items),
+                        "max": max(numeric_items),
+                        "numeric_count": len(numeric_items)
+                    }})
+
+                    # Standard deviation
+                    if len(numeric_items) > 1:
+                        mean = result["average"]
+                        variance = sum((x - mean) ** 2 for x in numeric_items) / len(numeric_items)
+                        result["stddev"] = variance ** 0.5
+
+            # Dictionary items - aggregate by fields
+            elif isinstance(first_item, dict):
+                # Compute aggregates using existing helper method
+                result["aggregates"] = await self._compute_aggregates(items)
+
+            # String items - collect unique values and counts
+            elif isinstance(first_item, str):
+                from collections import Counter
+                counter = Counter(items)
+                result.update({{
+                    "unique_count": len(counter),
+                    "most_common": counter.most_common(10),
+                    "all_values": list(counter.keys())
+                }})
+
+            # Boolean items - count true/false
+            elif isinstance(first_item, bool):
+                true_count = sum(1 for x in items if x is True)
+                false_count = sum(1 for x in items if x is False)
+                result.update({{
+                    "true_count": true_count,
+                    "false_count": false_count,
+                    "true_percentage": (true_count / len(items) * 100) if items else 0
+                }})
 
             self.logger.info(f"Aggregation completed: {{len(result)}} fields")
 

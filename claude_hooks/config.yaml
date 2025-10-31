@@ -60,6 +60,7 @@ pattern_tracking:
   enabled: true
 
   # Intelligence service URL for pattern analysis
+  # Can be overridden with INTELLIGENCE_SERVICE_URL environment variable
   intelligence_service_url: "http://localhost:8053"
 
   # Timeout for pattern tracking operations (seconds)
@@ -72,7 +73,9 @@ pattern_tracking:
 # Phase 2: ENABLED - RAG-based intelligence for context-aware corrections
 rag:
   enabled: true  # Phase 2: RAG intelligence active
-  base_url: "http://localhost:8181"  # Main Archon server RAG API
+  # Main Archon server RAG API
+  # Can be overridden with MAIN_SERVER_URL environment variable
+  base_url: "http://localhost:8181"
   timeout_seconds: 0.5
   cache_ttl_seconds: 3600  # 1 hour cache for RAG results
 

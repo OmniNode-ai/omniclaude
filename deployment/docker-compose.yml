@@ -8,8 +8,8 @@ services:
   # ============================================================================
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deployment/Dockerfile
       args:
         BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
@@ -25,11 +25,11 @@ services:
       - "8001:8001"  # Metrics endpoint
     environment:
       # Database configuration
-      - DATABASE_URL=postgresql://omniclaude:${POSTGRES_PASSWORD:-changeme}@postgres:5432/omniclaude
+      - DATABASE_URL=postgresql://omniclaude:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}@postgres:5432/omniclaude
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
       - POSTGRES_DATABASE=omniclaude
 
       # Valkey configuration (Redis-compatible)
@@ -38,7 +38,7 @@ services:
       # Application configuration
       - APP_ENV=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - SECRET_KEY=${SECRET_KEY:-changeme-generate-secure-key}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in environment}
 
       # OpenTelemetry configuration
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
@@ -92,18 +92,16 @@ services:
     container_name: omniclaude_agent_consumer
     restart: unless-stopped
     environment:
-      # Kafka configuration (remote broker on 192.168.86.200)
-      - KAFKA_BROKERS=192.168.86.200:29102
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
       - KAFKA_GROUP_ID=agent-observability-postgres
 
-      # PostgreSQL configuration (connects to remote omninode-bridge database on 192.168.86.200)
-      # SECURITY WARNING: Change OMNINODE_BRIDGE_POSTGRES_PASSWORD in production!
-      # Default is for local development only - never use in production environments
-      - POSTGRES_HOST=192.168.86.200
-      - POSTGRES_PORT=5436
-      - POSTGRES_DATABASE=omninode_bridge
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:-omninode-bridge-postgres-dev-2024}
+      # PostgreSQL configuration (connects to remote omninode-bridge database)
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
+      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:?OMNINODE_BRIDGE_POSTGRES_PASSWORD must be set in environment}
 
       # Batch processing configuration
       - BATCH_SIZE=100
@@ -131,6 +129,121 @@ services:
           memory: 128M
 
   # ============================================================================
+  # Routing Adapter Service (Event-Driven Agent Routing)
+  # ============================================================================
+  routing-adapter:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.routing-adapter
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.1.0}
+    image: omniclaude-routing-adapter:${VERSION:-latest}
+    container_name: omniclaude_routing_adapter
+    restart: unless-stopped
+    ports:
+      - "8070:8070"  # Health check and metrics
+    environment:
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
+      - KAFKA_GROUP_ID=agent-routing-service
+      - KAFKA_REQUEST_TOPIC=agent.routing.requested.v1
+      - KAFKA_COMPLETED_TOPIC=agent.routing.completed.v1
+      - KAFKA_FAILED_TOPIC=agent.routing.failed.v1
+
+      # PostgreSQL configuration (for routing decisions logging)
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
+
+      # Agent registry configuration (Phase 2)
+      - AGENT_REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+      - AGENT_DEFINITIONS_PATH=/agent-definitions
+
+      # Service configuration
+      - ROUTING_ADAPTER_PORT=8070
+      - HEALTH_CHECK_PORT=8070
+      - LOG_LEVEL=INFO
+      - ROUTING_TIMEOUT_MS=5000
+      - CACHE_TTL_SECONDS=3600
+      - MAX_RECOMMENDATIONS=5
+    volumes:
+      # Mount agent definitions for registry access (read-only)
+      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ============================================================================
+  # Agent Router Event Consumer (Kafka-based Agent Routing)
+  # ============================================================================
+  archon-router-consumer:
+    build:
+      context: ..
+      dockerfile: agents/services/Dockerfile.router-consumer
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.2.0}
+    image: omniclaude-archon-router-consumer:${VERSION:-latest}
+    container_name: omniclaude_archon_router_consumer
+    restart: unless-stopped
+    environment:
+      # Kafka configuration (use internal Docker network name)
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
+      - KAFKA_GROUP_ID=agent-router-service
+
+      # PostgreSQL configuration (for routing decisions logging)
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
+
+      # Agent registry configuration
+      - REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+
+      # Service configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount agent definitions for registry access (read-only)
+      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+    networks:
+      - app_network
+      - omninode-bridge-network
+    # Note: No external ports needed - pure event consumer
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep agent_router_event_service.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ============================================================================
   # PostgreSQL Database Service
   # ============================================================================
   postgres:
@@ -141,7 +254,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
       - POSTGRES_DB=omniclaude
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
       - PGDATA=/var/lib/postgresql/data/pgdata
@@ -245,7 +358,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in environment}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
       - GF_SERVER_ROOT_URL=http://localhost:3000
       - GF_ANALYTICS_REPORTING_ENABLED=false
@@ -340,16 +453,15 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.22.0.0/16
+        - subnet: 172.30.0.0/16
   monitoring_network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.23.0.0/16
-  # omninode_bridge_network:
-  #   external: true
-  #   name: omninode_bridge_omninode-bridge-network
-  # Note: Bridge network not needed - services now remote at 192.168.86.200
+        - subnet: 172.31.0.0/16
+  omninode-bridge-network:
+    external: true
+    name: omninode-bridge-network
 
 # ============================================================================
 # Volumes - Persistent data storage

@@ -14,7 +14,7 @@ from typing import List, Optional, Set
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .simple_prd_analyzer import PRDAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class EnumGenerator:
 
     def generate_operation_type_enum(
         self,
-        prd_analysis: SimplePRDAnalysisResult,
+        prd_analysis: PRDAnalysisResult,
         service_name: str,
         additional_operations: Optional[List[str]] = None,
     ) -> GeneratedEnum:
@@ -206,7 +206,7 @@ class EnumGenerator:
     def generate_status_enum(
         self,
         service_name: str,
-        prd_analysis: Optional[SimplePRDAnalysisResult] = None,
+        prd_analysis: Optional[PRDAnalysisResult] = None,
         additional_statuses: Optional[List[str]] = None,
     ) -> GeneratedEnum:
         """
@@ -281,7 +281,7 @@ class EnumGenerator:
             )
 
     def infer_enum_values(
-        self, prd_analysis: SimplePRDAnalysisResult, enum_type: str = "operation"
+        self, prd_analysis: PRDAnalysisResult, enum_type: str = "operation"
     ) -> Set[EnumValue]:
         """
         Extract enum values from PRD functional requirements using NLP.
@@ -363,7 +363,7 @@ class EnumGenerator:
 
     # Private helper methods
 
-    def _gather_text_from_prd(self, prd_analysis: SimplePRDAnalysisResult) -> str:
+    def _gather_text_from_prd(self, prd_analysis: PRDAnalysisResult) -> str:
         """Gather all text from PRD for analysis"""
         parsed = prd_analysis.parsed_prd
 

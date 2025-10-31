@@ -134,14 +134,14 @@ assert result.correlation_id == correlation_id
 assert result.session_id == session_id
 ```
 
-### Integration with SimplePRDAnalysisResult
+### Integration with PRDAnalysisResult
 
 ```python
 from agents.lib.prompt_parser import PromptParser
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.prd_analyzer import PRDAnalyzer
 
 parser = PromptParser()
-prd_analyzer = SimplePRDAnalyzer()
+prd_analyzer = PRDAnalyzer()
 
 # Parse prompt
 prompt_result = parser.parse("EFFECT node for email notifications")
@@ -732,7 +732,7 @@ Confidence: 0.52
 
 - **POC Pipeline Architecture**: `docs/POC_PIPELINE_ARCHITECTURE.md`
 - **ONEX Node Paradigm**: `OMNIBASE_CORE_NODE_PARADIGM.md`
-- **SimplePRDAnalyzer**: `agents/lib/simple_prd_analyzer.py`
+- **PRDAnalyzer**: `agents/lib/prd_analyzer.py`
 
 ### Glossary
 

@@ -16,9 +16,9 @@ Usage:
     python agent_actions_consumer.py [--config config.json]
 
 Environment Variables:
-    KAFKA_BROKERS: Comma-separated Kafka brokers (default: localhost:9092)
+    KAFKA_BOOTSTRAP_SERVERS: Comma-separated Kafka brokers (REQUIRED - no default)
     KAFKA_GROUP_ID: Consumer group ID (default: agent-observability-postgres)
-    POSTGRES_HOST: PostgreSQL host (default: localhost)
+    POSTGRES_HOST: PostgreSQL host (REQUIRED - no default)
     POSTGRES_PORT: PostgreSQL port (default: 5436)
     POSTGRES_DATABASE: Database name (default: omninode_bridge)
     POSTGRES_USER: Database user (default: postgres)
@@ -30,6 +30,7 @@ Environment Variables:
 """
 
 import argparse
+import asyncio
 import hashlib
 import json
 import logging
@@ -39,7 +40,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Event, Thread
@@ -53,6 +54,19 @@ from psycopg2.extras import execute_batch
 SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
 sys.path.insert(0, str(SHARED_DIR))
+
+# Add agents/lib to path for AgentTraceabilityLogger
+AGENTS_LIB_DIR = SCRIPT_DIR.parent / "agents" / "lib"
+sys.path.insert(0, str(AGENTS_LIB_DIR))
+
+try:
+    from agent_traceability_logger import AgentTraceabilityLogger
+
+    TRACEABILITY_AVAILABLE = True
+except ImportError as e:
+    logger_temp = logging.getLogger("agent_actions_consumer")
+    logger_temp.warning(f"AgentTraceabilityLogger not available: {e}")
+    TRACEABILITY_AVAILABLE = False
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -73,8 +87,8 @@ class ConsumerMetrics:
         self.messages_failed = 0
         self.batches_processed = 0
         self.total_processing_time_ms = 0
-        self.last_commit_time = datetime.utcnow()
-        self.started_at = datetime.utcnow()
+        self.last_commit_time = datetime.now(timezone.utc)
+        self.started_at = datetime.now(timezone.utc)
 
     def record_batch(
         self, consumed: int, inserted: int, failed: int, processing_time_ms: float
@@ -85,11 +99,11 @@ class ConsumerMetrics:
         self.messages_failed += failed
         self.batches_processed += 1
         self.total_processing_time_ms += processing_time_ms
-        self.last_commit_time = datetime.utcnow()
+        self.last_commit_time = datetime.now(timezone.utc)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get current statistics."""
-        uptime_seconds = (datetime.utcnow() - self.started_at).total_seconds()
+        uptime_seconds = (datetime.now(timezone.utc) - self.started_at).total_seconds()
         avg_processing_time = (
             self.total_processing_time_ms / self.batches_processed
             if self.batches_processed > 0
@@ -130,12 +144,13 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
     def send_health_response(self):
         """Send health check response with thread-safe state verification."""
         # Thread-safe atomic health check to prevent TOCTOU race conditions
-        with self.consumer_instance._health_lock:
-            is_healthy = (
-                self.consumer_instance is not None
-                and self.consumer_instance.running
-                and not self.consumer_instance.shutdown_event.is_set()
-            )
+        # Check consumer_instance before accessing attributes to prevent NoneType errors
+        ci = self.consumer_instance
+        if ci is not None:
+            with ci._health_lock:
+                is_healthy = ci.running and not ci.shutdown_event.is_set()
+        else:
+            is_healthy = False
 
         if is_healthy:
             self.send_response(200)
@@ -184,10 +199,16 @@ class AgentActionsConsumer:
         # Thread safety for health checks
         self._health_lock = threading.Lock()
 
-        # Kafka configuration
-        self.kafka_brokers = config.get(
-            "kafka_brokers", os.getenv("KAFKA_BROKERS", "localhost:9092")
-        ).split(",")
+        # Kafka configuration (no localhost default - must be explicitly configured)
+        kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS"
+        )
+        if not kafka_brokers_str:
+            raise ValueError(
+                "KAFKA_BOOTSTRAP_SERVERS must be set via config file or environment variable. "
+                "Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
+            )
+        self.kafka_brokers = kafka_brokers_str.split(",")
         self.group_id = config.get(
             "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
         )
@@ -200,6 +221,7 @@ class AgentActionsConsumer:
                 "agent-transformation-events",
                 "router-performance-metrics",
                 "agent-detection-failures",
+                "agent-execution-logs",
             ],
         )
 
@@ -221,10 +243,16 @@ class AgentActionsConsumer:
                 "Set it in your environment or .env file before starting the consumer."
             )
 
+        # Database host (no localhost default - must be explicitly configured)
+        postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
+        if not postgres_host:
+            raise ValueError(
+                "POSTGRES_HOST environment variable must be set. "
+                "Example: POSTGRES_HOST=192.168.86.200"
+            )
+
         self.db_config = {
-            "host": config.get(
-                "postgres_host", os.getenv("POSTGRES_HOST", "localhost")
-            ),
+            "host": postgres_host,
             "port": int(
                 config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
             ),
@@ -256,6 +284,101 @@ class AgentActionsConsumer:
         if "postgres_password" in safe:
             safe["postgres_password"] = "***REDACTED***"
         return safe
+
+    def _log_file_operation_async(
+        self,
+        correlation_id: str,
+        agent_name: str,
+        action_name: str,
+        action_details: Dict[str, Any],
+        duration_ms: Optional[int] = None,
+    ):
+        """
+        Log file operation to agent_file_operations table asynchronously.
+
+        This runs in a background thread to avoid blocking the consumer.
+        If traceability logging fails, it logs a warning but doesn't affect processing.
+
+        Args:
+            correlation_id: Correlation ID for tracing
+            agent_name: Name of the agent
+            action_name: Tool name (Read, Write, Edit, Glob, Grep)
+            action_details: Tool parameters and results
+            duration_ms: Operation duration
+        """
+        if not TRACEABILITY_AVAILABLE:
+            return
+
+        def run_async_logging():
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Create traceability logger
+                tracer = AgentTraceabilityLogger(
+                    agent_name=agent_name,
+                    correlation_id=correlation_id,
+                )
+
+                # Map tool name to operation type
+                operation_type_map = {
+                    "Read": "read",
+                    "Write": "write",
+                    "Edit": "edit",
+                    "Glob": "glob",
+                    "Grep": "grep",
+                    "Delete": "delete",
+                }
+                operation_type = operation_type_map.get(
+                    action_name, action_name.lower()
+                )
+
+                # Extract file path and content
+                file_path = action_details.get("file_path", "unknown")
+                content = action_details.get("content")
+                content_before = action_details.get("content_before")
+                content_after = action_details.get("content_after") or content
+                line_range = action_details.get("line_range")
+
+                # Log the file operation
+                loop.run_until_complete(
+                    tracer.log_file_operation(
+                        operation_type=operation_type,
+                        file_path=file_path,
+                        content_before=content_before,
+                        content_after=content_after,
+                        tool_name=action_name,
+                        line_range=line_range,
+                        operation_params=action_details,
+                        success=True,
+                        duration_ms=duration_ms,
+                    )
+                )
+
+                logger.debug(
+                    f"File operation logged: {operation_type} on {file_path}",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "agent_name": agent_name,
+                    },
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to log file operation traceability: {e}",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "agent_name": agent_name,
+                        "action_name": action_name,
+                    },
+                )
+            finally:
+                loop.close()
+
+        # Run in background thread (fire and forget)
+        thread = Thread(target=run_async_logging, daemon=True)
+        thread.start()
 
     def setup_kafka_consumer(self):
         """Initialize Kafka consumer."""
@@ -298,6 +421,33 @@ class AgentActionsConsumer:
             self.db_config["database"],
         )
 
+    def _ensure_db_connection(self):
+        """
+        Ensure database connection is healthy, reconnect if needed.
+
+        Fixes: psycopg2.InterfaceError: connection already closed
+        """
+        try:
+            if self.db_conn is None or self.db_conn.closed:
+                logger.warning("Database connection is closed, reconnecting...")
+                self.db_conn = psycopg2.connect(**self.db_config)
+                self.db_conn.autocommit = False
+                logger.info("Database connection re-established")
+            else:
+                # Test connection with simple query
+                with self.db_conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+        except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
+            logger.warning("Database connection test failed: %s, reconnecting...", e)
+            try:
+                if self.db_conn and not self.db_conn.closed:
+                    self.db_conn.close()
+            except Exception:
+                pass
+            self.db_conn = psycopg2.connect(**self.db_config)
+            self.db_conn.autocommit = False
+            logger.info("Database connection restored after failure")
+
     def setup_health_check(self):
         """Start health check HTTP server."""
         logger.info(
@@ -336,42 +486,49 @@ class AgentActionsConsumer:
         total_duplicates = 0
 
         try:
-            cursor = self.db_conn.cursor()
+            # Ensure database connection is healthy before using it
+            self._ensure_db_connection()
 
-            # Process each topic's events
-            for topic, events in events_by_topic.items():
-                if not events:
-                    continue
+            with self.db_conn.cursor() as cursor:
+                # Process each topic's events
+                for topic, events in events_by_topic.items():
+                    if not events:
+                        continue
 
-                if topic == "agent-actions":
-                    inserted, duplicates = self._insert_agent_actions(cursor, events)
-                elif topic == "agent-routing-decisions":
-                    inserted, duplicates = self._insert_routing_decisions(
-                        cursor, events
-                    )
-                elif topic == "agent-transformation-events":
-                    inserted, duplicates = self._insert_transformation_events(
-                        cursor, events
-                    )
-                elif topic == "router-performance-metrics":
-                    inserted, duplicates = self._insert_performance_metrics(
-                        cursor, events
-                    )
-                elif topic == "agent-detection-failures":
-                    inserted, duplicates = self._insert_detection_failures(
-                        cursor, events
-                    )
-                else:
-                    logger.warning(
-                        "Unknown topic: %s, skipping %d events", topic, len(events)
-                    )
-                    continue
+                    if topic == "agent-actions":
+                        inserted, duplicates = self._insert_agent_actions(
+                            cursor, events
+                        )
+                    elif topic == "agent-routing-decisions":
+                        inserted, duplicates = self._insert_routing_decisions(
+                            cursor, events
+                        )
+                    elif topic == "agent-transformation-events":
+                        inserted, duplicates = self._insert_transformation_events(
+                            cursor, events
+                        )
+                    elif topic == "router-performance-metrics":
+                        inserted, duplicates = self._insert_performance_metrics(
+                            cursor, events
+                        )
+                    elif topic == "agent-detection-failures":
+                        inserted, duplicates = self._insert_detection_failures(
+                            cursor, events
+                        )
+                    elif topic == "agent-execution-logs":
+                        inserted, duplicates = self._insert_execution_logs(
+                            cursor, events
+                        )
+                    else:
+                        logger.warning(
+                            "Unknown topic: %s, skipping %d events", topic, len(events)
+                        )
+                        continue
 
-                total_inserted += inserted
-                total_duplicates += duplicates
+                    total_inserted += inserted
+                    total_duplicates += duplicates
 
-            self.db_conn.commit()
-            cursor.close()
+                self.db_conn.commit()
 
             logger.info(
                 "Batch insert: %d inserted, %d duplicates (total: %d)",
@@ -403,10 +560,12 @@ class AgentActionsConsumer:
         """
 
         batch_data = []
+        file_operations = []  # Track file operations for traceability logging
+
         for event in events:
             event_id = str(uuid.uuid4())
             correlation_id = event.get("correlation_id")
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -425,9 +584,43 @@ class AgentActionsConsumer:
                 )
             )
 
+            # Detect file operations for traceability logging
+            action_name = event.get("action_name")
+            if action_name in ["Read", "Write", "Edit", "Glob", "Grep", "Delete"]:
+                file_operations.append(
+                    {
+                        "correlation_id": correlation_id,
+                        "agent_name": event.get("agent_name"),
+                        "action_name": action_name,
+                        "action_details": event.get("action_details", {}),
+                        "duration_ms": event.get("duration_ms"),
+                    }
+                )
+
         execute_batch(cursor, insert_sql, batch_data, page_size=100)
         inserted = cursor.rowcount
         duplicates = len(events) - inserted
+
+        # Log file operations to agent_file_operations table asynchronously
+        if file_operations and TRACEABILITY_AVAILABLE:
+            for file_op in file_operations:
+                try:
+                    self._log_file_operation_async(
+                        correlation_id=file_op["correlation_id"],
+                        agent_name=file_op["agent_name"],
+                        action_name=file_op["action_name"],
+                        action_details=file_op["action_details"],
+                        duration_ms=file_op["duration_ms"],
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to initiate file operation traceability: {e}",
+                        extra={
+                            "correlation_id": file_op["correlation_id"],
+                            "action_name": file_op["action_name"],
+                        },
+                    )
+
         return inserted, duplicates
 
     def _insert_routing_decisions(
@@ -447,7 +640,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -488,7 +681,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -530,7 +723,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
                 (
@@ -594,7 +787,7 @@ class AgentActionsConsumer:
             user_request = event.get("user_request", "")
             prompt_length = len(user_request)
             prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
-            timestamp = event.get("timestamp", datetime.utcnow().isoformat())
+            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             # Derive detection status from failure reason using helper method
             failure_reason = event.get("failure_reason", "")
@@ -622,6 +815,86 @@ class AgentActionsConsumer:
         duplicates = len(events) - inserted
         return inserted, duplicates
 
+    def _insert_execution_logs(
+        self, cursor, events: List[Dict[str, Any]]
+    ) -> tuple[int, int]:
+        """Insert agent_execution_logs events with upsert for start/complete."""
+        insert_sql = """
+            INSERT INTO agent_execution_logs (
+                execution_id, correlation_id, session_id, agent_name,
+                user_prompt, status, metadata, started_at, completed_at,
+                duration_ms, quality_score, error_message, error_type,
+                project_path, project_name, claude_session_id, terminal_id
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            ON CONFLICT (execution_id) DO UPDATE SET
+                completed_at = COALESCE(EXCLUDED.completed_at, agent_execution_logs.completed_at),
+                status = CASE
+                    WHEN EXCLUDED.status IN ('success', 'error', 'cancelled')
+                    THEN EXCLUDED.status
+                    ELSE agent_execution_logs.status
+                END,
+                duration_ms = COALESCE(EXCLUDED.duration_ms, agent_execution_logs.duration_ms),
+                quality_score = COALESCE(EXCLUDED.quality_score, agent_execution_logs.quality_score),
+                error_message = COALESCE(EXCLUDED.error_message, agent_execution_logs.error_message),
+                error_type = COALESCE(EXCLUDED.error_type, agent_execution_logs.error_type),
+                metadata = agent_execution_logs.metadata || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
+        """
+
+        batch_data = []
+        for event in events:
+            execution_id = event.get("execution_id")
+            if not execution_id:
+                logger.warning(
+                    "Skipping event without execution_id: %s",
+                    event.get("correlation_id"),
+                )
+                continue
+
+            # Parse timestamps - may be string or datetime
+            started_at = event.get("started_at")
+            if isinstance(started_at, str):
+                started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            elif not started_at:
+                started_at = datetime.now(timezone.utc)
+
+            completed_at = event.get("completed_at")
+            if isinstance(completed_at, str):
+                completed_at = datetime.fromisoformat(
+                    completed_at.replace("Z", "+00:00")
+                )
+
+            batch_data.append(
+                (
+                    execution_id,
+                    event.get("correlation_id"),
+                    event.get("session_id"),
+                    event.get("agent_name"),
+                    event.get("user_prompt"),
+                    event.get("status", "in_progress"),
+                    json.dumps(event.get("metadata", {})),
+                    started_at,
+                    completed_at,
+                    event.get("duration_ms"),
+                    event.get("quality_score"),
+                    event.get("error_message"),
+                    event.get("error_type"),
+                    event.get("project_path"),
+                    event.get("project_name"),
+                    event.get("claude_session_id"),
+                    event.get("terminal_id"),
+                )
+            )
+
+        if not batch_data:
+            return 0, 0
+
+        execute_batch(cursor, insert_sql, batch_data, page_size=100)
+        inserted = cursor.rowcount
+        duplicates = len(events) - inserted
+        return inserted, duplicates
+
     def send_to_dlq(
         self,
         events: List[Dict[str, Any]],
@@ -636,7 +909,7 @@ class AgentActionsConsumer:
                 dlq_event = {
                     "original_event": event,
                     "error": str(error),
-                    "failed_at": datetime.utcnow().isoformat(),
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
                     "consumer_group": self.group_id,
                 }
 

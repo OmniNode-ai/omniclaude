@@ -731,7 +731,7 @@ class GenerationJob:
     node_type: str
     microservice_name: str
     domain: str
-    analysis_result: SimplePRDAnalysisResult
+    analysis_result: PRDAnalysisResult
     output_directory: str
 ```
 

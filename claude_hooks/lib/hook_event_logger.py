@@ -29,10 +29,14 @@ class HookEventLogger:
             import os
 
             db_password = os.getenv("DB_PASSWORD", "")
+            host = os.getenv("POSTGRES_HOST", "localhost")
+            port = os.getenv("POSTGRES_PORT", "5436")
+            db = os.getenv("POSTGRES_DB", "omninode_bridge")
+            user = os.getenv("POSTGRES_USER", "postgres")
             connection_string = (
-                "host=localhost port=5436 "
-                "dbname=omninode_bridge "
-                "user=postgres "
+                f"host={host} port={port} "
+                f"dbname={db} "
+                f"user={user} "
                 f"password={db_password}"
             )
 
@@ -115,8 +119,13 @@ class HookEventLogger:
             try:
                 if self._conn:
                     self._conn.rollback()
-            except Exception:
-                pass
+            except Exception as rollback_error:
+                # Log rollback failure - this is critical for debugging database issues
+                print(
+                    f"⚠️  [HookEventLogger] Failed to rollback transaction: {rollback_error}",
+                    file=sys.stderr,
+                )
+                # Don't re-raise - we already failed to log, don't cascade failures
             return None
 
     def log_pretooluse(

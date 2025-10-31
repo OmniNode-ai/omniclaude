@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+from .simple_prd_analyzer import PRDAnalysisResult
 from .version_config import get_config
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class BusinessLogicGenerator:
     async def generate_node_implementation(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -188,7 +188,7 @@ class BusinessLogicGenerator:
     def _generate_class_definition(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -301,7 +301,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
     def _generate_init_method(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
     ) -> str:
@@ -358,7 +358,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
     def _generate_primary_method(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
     ) -> str:
@@ -647,7 +647,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
     def _generate_capability_methods(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
     ) -> List[str]:
@@ -841,7 +841,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
     def _infer_method_logic_hints(
         self,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
     ) -> str:
         """Generate TODO comments with implementation guidance"""
@@ -897,7 +897,7 @@ class Node{pascal_name}{node_type.capitalize()}({inheritance_str}):
         mixin_methods: List[str],
         capability_methods: List[str],
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -1053,7 +1053,7 @@ if __name__ == "__main__":
         microservice_name: str,
         domain: str,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         pattern_hint: Optional[str] = None,
         include_error_handling: bool = True,
         validation_feedback: Optional[List[str]] = None,
@@ -1105,7 +1105,7 @@ if __name__ == "__main__":
         microservice_name: str,
         domain: str,
         contract: Dict[str, Any],
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         output_directory: str,
     ) -> Dict[str, Any]:
         """

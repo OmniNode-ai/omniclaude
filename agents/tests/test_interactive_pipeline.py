@@ -5,17 +5,27 @@ Test Interactive Checkpoints in Generation Pipeline
 This test verifies that interactive checkpoints are properly integrated
 into the generation pipeline.
 
-NOTE: These tests are currently skipped due to pytest import resolution issues
-during test collection. The GenerationPipeline functionality works correctly
-when run directly, but pytest's test discovery phase has trouble resolving
-the omnibase_core.models.contracts imports through the generation pipeline's
-eager import chain.
+SKIP REASON: Missing external dependency 'omnibase_core' module
+-----------------------------------------------------------------------------
+Status: BLOCKED - Cannot be fixed without external dependency
+Priority: P1 - MVP Blocker
+Tracking: Week 4 full pipeline integration
 
-Issue: generation_pipeline -> contract_builder_factory -> generation/__init__.py
-       -> ComputeContractBuilder -> omnibase_core.models.contracts (fails during collection)
+Root Cause:
+    ModuleNotFoundError: No module named 'omnibase_core'
 
-This will be resolved in Week 4 when the generation pipeline is fully integrated.
-For now, these tests verify the underlying functionality works when executed directly.
+Import Chain:
+    test → generation_pipeline → contract_builder_factory → generation/__init__.py
+    → ComputeContractBuilder → omnibase_core.models.contracts (fails during collection)
+
+Resolution:
+    1. Install omnibase_core package (not available in pyproject.toml)
+    2. Remove --ignore flag from pyproject.toml [tool.pytest.ini_options]
+    3. Run: pytest agents/tests/test_interactive_pipeline.py -v
+
+Alternative:
+    The GenerationPipeline functionality works correctly when run directly
+    outside of pytest's import collection phase.
 
 Setup:
     Run with pytest from project root:
@@ -35,10 +45,12 @@ from pathlib import Path
 
 import pytest
 
-# Skip entire test module due to pytest collection import issues
+# Skip entire test module due to missing omnibase_core dependency
+# TODO(Week 4): Install omnibase_core package and remove --ignore from pyproject.toml
 pytestmark = pytest.mark.skip(
-    reason="Pytest collection import issue with omnibase_core.models.contracts - "
-    "functionality works, will be fixed in Week 4 pipeline integration"
+    reason="Missing external dependency 'omnibase_core' - ModuleNotFoundError. "
+    "Install omnibase_core package to enable these tests. "
+    "Tracking: Week 4 pipeline integration"
 )
 
 from lib.generation_pipeline import GenerationPipeline  # noqa: E402

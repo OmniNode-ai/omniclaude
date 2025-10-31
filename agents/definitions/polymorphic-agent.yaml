@@ -144,7 +144,7 @@ onex_integration:
     effect:
       responsibilities: "External interactions, API design, UI components, parameter handling"
       routing_criteria: "API requests, UI updates, external system integration"
-      agent_types: ["agent-api-architect", "agent-ui-testing", "agent-parameter-collector"]
+      agent_types: ["agent-api-architect", "agent-frontend-developer", "agent-ui-testing", "agent-parameter-collector"]
 
     compute:
       responsibilities: "Data processing, business logic, calculations, transformations"

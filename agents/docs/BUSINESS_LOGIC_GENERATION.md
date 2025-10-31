@@ -425,7 +425,7 @@ Phase 5 consumes Phase 4 outputs:
 
 ```
 Phase 3 (PRD Analysis)
-    └── SimplePRDAnalysisResult
+    └── PRDAnalysisResult
            ↓
 Phase 4 (Contract Generation)
     ├── Contract YAML

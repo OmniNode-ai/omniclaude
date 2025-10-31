@@ -5,16 +5,28 @@ Tests for Template Intelligence Injection
 Tests that intelligence context is properly injected into templates
 and generates enhanced node code.
 
-NOTE: These tests are currently skipped due to pytest import resolution issues
-during test collection. The template intelligence functionality works correctly
-when run directly, but pytest's test discovery phase has trouble with the import chain.
+SKIP REASON: Missing external dependency 'omnibase_core' module
+-----------------------------------------------------------------------------
+Status: BLOCKED - Cannot be fixed without external dependency
+Priority: P1 - MVP Blocker
+Tracking: Week 4 full pipeline integration
 
-The SimplePRDAnalysisResult and related models work correctly when imported directly,
-but pytest's eager import resolution during test collection encounters issues with
-the underlying generation pipeline dependencies.
+Root Cause:
+    ModuleNotFoundError: No module named 'omnibase_core'
 
-This will be resolved in Week 4 when the generation pipeline is fully integrated.
-For now, these tests verify the template intelligence injection works correctly.
+Import Chain:
+    test → omninode_template_engine → generation_pipeline → contract_builder_factory
+    → generation/__init__.py → ComputeContractBuilder → omnibase_core.models.contracts
+    (fails during collection)
+
+Resolution:
+    1. Install omnibase_core package (not available in pyproject.toml)
+    2. Remove --ignore flag from pyproject.toml [tool.pytest.ini_options]
+    3. Run: pytest agents/tests/test_template_intelligence.py -v
+
+Alternative:
+    The template intelligence functionality works correctly when run directly
+    outside of pytest's import collection phase.
 """
 
 import shutil
@@ -23,10 +35,12 @@ from pathlib import Path
 
 import pytest
 
-# Skip entire test module due to pytest collection import issues
+# Skip entire test module due to missing omnibase_core dependency
+# TODO(Week 4): Install omnibase_core package and remove --ignore from pyproject.toml
 pytestmark = pytest.mark.skip(
-    reason="Pytest collection import issue with generation pipeline dependencies - "
-    "functionality works, will be fixed in Week 4 pipeline integration"
+    reason="Missing external dependency 'omnibase_core' - ModuleNotFoundError. "
+    "Install omnibase_core package to enable these tests. "
+    "Tracking: Week 4 pipeline integration"
 )
 
 from agents.lib.models.intelligence_context import (  # noqa: E402
@@ -35,7 +49,7 @@ from agents.lib.models.intelligence_context import (  # noqa: E402
 )
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine  # noqa: E402
 from agents.lib.simple_prd_analyzer import (  # noqa: E402
-    SimplePRDAnalysisResult,
+    PRDAnalysisResult,
     SimplifiedPRD,
 )
 
@@ -54,7 +68,7 @@ def sample_prd_analysis():
         extracted_keywords=["database", "postgresql", "crud"],
     )
 
-    return SimplePRDAnalysisResult(
+    return PRDAnalysisResult(
         parsed_prd=prd,
         recommended_node_type="EFFECT",
         recommended_mixins=["MixinRetry", "MixinEventBus"],

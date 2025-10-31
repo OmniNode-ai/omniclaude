@@ -298,3 +298,4 @@ CLEANUP_*.md
 **/traces/
 *observability_report.txt
 SYSTEM_DASHBOARD.md
+db_dumps/

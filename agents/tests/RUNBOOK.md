@@ -64,7 +64,7 @@ psql -h localhost -d archon_db -c "\dt agent_*"
 #### 1.3 Verify Enhanced Router
 ```python
 # Test enhanced router import
-python -c "from agents.lib.enhanced_router import EnhancedAgentRouter; print('✅ Enhanced router available')"
+python -c "from agents.lib.agent_router import AgentRouter; print('✅ Enhanced router available')"
 ```
 
 #### 1.4 Verify Agent Loader
@@ -93,7 +93,7 @@ pytest tests/test_database_integration.py -v
 #### 2.2 Enhanced Router Integration
 ```bash
 # Test routing decisions
-pytest tests/test_enhanced_router.py -v
+pytest tests/test_agent_router.py -v
 ```
 
 **Validates**:

@@ -1,6 +1,6 @@
 """
-Enhanced Trigger Matcher - Phase 1
-==================================
+Trigger Matcher - Phase 1
+==========================
 
 Provides fuzzy matching and scoring for agent triggers.
 Uses multiple matching strategies:
@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 from typing import Dict, List, Tuple
 
 
-class EnhancedTriggerMatcher:
+class TriggerMatcher:
     """
     Advanced trigger matching with fuzzy logic and scoring.
 
@@ -55,8 +55,8 @@ class EnhancedTriggerMatcher:
         Match user request against agent triggers.
 
         Uses multiple scoring strategies:
-        1. Exact trigger match (score: 1.0)
-        2. Fuzzy trigger match (score: 0.7-0.9 based on similarity)
+        1. Exact trigger match (score: 1.0) with word boundary checks
+        2. Fuzzy trigger match (score: 0.7-0.9 based on similarity) with context filtering
         3. Keyword overlap (score: 0.5-0.8 based on overlap)
         4. Capability match (score: 0.5-0.7 based on capability alignment)
 
@@ -79,21 +79,25 @@ class EnhancedTriggerMatcher:
             # Calculate match scores
             scores = []
 
-            # 1. Exact trigger match
+            # 1. Exact trigger match with word boundary checks
             for trigger in triggers:
-                if trigger.lower() in user_lower:
-                    scores.append((1.0, f"Exact match: '{trigger}'"))
+                if self._exact_match_with_word_boundaries(trigger, user_lower):
+                    # Apply context filtering for short triggers
+                    if self._is_context_appropriate(trigger, user_request, agent_name):
+                        scores.append((1.0, f"Exact match: '{trigger}'"))
 
-            # 2. Fuzzy trigger match
+            # 2. Fuzzy trigger match with context filtering
             for trigger in triggers:
                 similarity = self._fuzzy_match(trigger.lower(), user_lower)
                 if similarity > 0.7:
-                    scores.append(
-                        (
-                            similarity * 0.9,
-                            f"Fuzzy match: '{trigger}' ({similarity:.0%})",
+                    # Apply context filtering for short triggers
+                    if self._is_context_appropriate(trigger, user_request, agent_name):
+                        scores.append(
+                            (
+                                similarity * 0.9,
+                                f"Fuzzy match: '{trigger}' ({similarity:.0%})",
+                            )
                         )
-                    )
 
             # 3. Keyword overlap
             keyword_score = self._keyword_overlap_score(keywords, triggers)
@@ -211,8 +215,8 @@ class EnhancedTriggerMatcher:
         Returns:
             Similarity score (0.0-1.0)
         """
-        # Check if trigger is substring first
-        if trigger in text:
+        # Check if trigger matches with word boundaries first
+        if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
 
         # Use SequenceMatcher for similarity
@@ -274,6 +278,186 @@ class EnhancedTriggerMatcher:
 
         return overlap / len(keyword_set) if keyword_set else 0.0
 
+    def _exact_match_with_word_boundaries(self, trigger: str, text: str) -> bool:
+        """
+        Check if trigger matches with word boundaries.
+
+        Prevents matching "poly" in "polymorphic" or "polly" in "pollyanna".
+
+        Args:
+            trigger: Trigger phrase to match
+            text: User input text (lowercase)
+
+        Returns:
+            True if trigger matches as whole word(s), False otherwise
+        """
+        trigger_lower = trigger.lower()
+
+        # For multi-word triggers, check if entire phrase appears
+        if " " in trigger_lower:
+            return trigger_lower in text
+
+        # For single-word triggers, use word boundary regex
+        # This prevents "poly" from matching "polymorphic"
+        pattern = r"\b" + re.escape(trigger_lower) + r"\b"
+        return bool(re.search(pattern, text))
+
+    def _is_context_appropriate(
+        self, trigger: str, user_request: str, agent_name: str
+    ) -> bool:
+        """
+        Check if trigger match is contextually appropriate.
+
+        Filters out false positives where triggers like "poly" or "polly"
+        appear in technical terms or casual references rather than agent invocations.
+
+        Args:
+            trigger: Matched trigger
+            user_request: Full user request
+            agent_name: Agent name being evaluated
+
+        Returns:
+            True if context suggests agent invocation, False for technical/casual usage
+        """
+        trigger_lower = trigger.lower()
+        request_lower = user_request.lower()
+
+        # HIGH-CONFIDENCE TECHNICAL TRIGGERS
+        # These domain-specific keywords are unambiguous and don't require action context
+        # They should always match when present in user requests
+        high_confidence_triggers = {
+            # Debugging & Error Handling
+            "debug",
+            "error",
+            "bug",
+            "troubleshoot",
+            "investigate",
+            "diagnose",
+            "fix",
+            "resolve",
+            "issue",
+            "problem",
+            "failure",
+            "crash",
+            # Testing & Quality
+            "test",
+            "testing",
+            "quality",
+            "coverage",
+            "validate",
+            "verify",
+            # Performance & Optimization
+            "optimize",
+            "performance",
+            "benchmark",
+            "bottleneck",
+            "profile",
+            "efficiency",
+            "speed",
+            "slow",
+            "latency",
+            # Security & Compliance
+            "security",
+            "audit",
+            "vulnerability",
+            "penetration",
+            "compliance",
+            "threat",
+            "risk",
+            "secure",
+            # Development Operations
+            "deploy",
+            "deployment",
+            "infrastructure",
+            "devops",
+            "pipeline",
+            "container",
+            "kubernetes",
+            "docker",
+            "monitor",
+            "observability",
+            # Documentation & Research
+            "document",
+            "docs",
+            "research",
+            "analyze",
+            "analysis",
+            "investigate",
+            # API & Architecture
+            "api",
+            "endpoint",
+            "microservice",
+            "architecture",
+            "design",
+            # Frontend & Backend
+            "frontend",
+            "backend",
+            "react",
+            "typescript",
+            "python",
+            "fastapi",
+        }
+
+        # Bypass strict action context requirement for high-confidence triggers
+        if trigger_lower in high_confidence_triggers:
+            return True
+
+        # Check for technical/architectural context first (strongest signal)
+        # These patterns indicate NOT an agent invocation
+        technical_patterns = [
+            r"\bpolymorphic\s+(architecture|design|pattern|approach|system|code|style)\b",
+            r"\bpolymorphism\b",
+            r"\bpollyanna\b",
+            r"\b(the|a|an)\s+polymorphic\s+(design|pattern|architecture|approach)\b",
+            r"\busing\s+polymorphi",  # "using polymorphism"
+            r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b",  # Casual reference
+        ]
+
+        for pattern in technical_patterns:
+            if re.search(pattern, request_lower):
+                return False  # Strong signal of technical/casual usage
+
+        # For multi-word triggers, allow them (high confidence they're agent references)
+        if len(trigger_lower.split()) > 1:
+            return True
+
+        # For longer single-word triggers (>6 chars), check if they're part of trigger list
+        # "polymorphic" is 11 chars, but only allow if in action context
+        if len(trigger_lower) > 6:
+            # Must have action context to match
+            action_patterns = [
+                r"\b(use|spawn|dispatch|coordinate|invoke|call|run|execute|trigger)\b.*\b"
+                + re.escape(trigger_lower)
+                + r"\b",
+                r"\b"
+                + re.escape(trigger_lower)
+                + r"\b.*(agent|coordinator|for workflow)",
+            ]
+            for pattern in action_patterns:
+                if re.search(pattern, request_lower):
+                    return True
+            # No action context found for long trigger
+            return False
+
+        # For short triggers like "poly" or "polly":
+        # Require action/invocation context
+        action_patterns = [
+            r"\b(use|spawn|dispatch|coordinate|invoke|call|run|execute|trigger)\b.*\b"
+            + re.escape(trigger_lower)
+            + r"\b",
+            r"\b"
+            + re.escape(trigger_lower)
+            + r"\b.*(coordinate|manage|handle|execute|for workflow)",
+        ]
+
+        for pattern in action_patterns:
+            if re.search(pattern, request_lower):
+                return True  # Strong signal of agent invocation
+
+        # Default for short triggers without action context: REJECT
+        # This is more conservative but prevents false positives
+        return False
+
 
 # Standalone test
 if __name__ == "__main__":
@@ -289,7 +473,7 @@ if __name__ == "__main__":
         with open(registry_path) as f:
             registry = yaml.safe_load(f)
 
-        matcher = EnhancedTriggerMatcher(registry)
+        matcher = TriggerMatcher(registry)
 
         # Test queries
         test_queries = [

@@ -29,6 +29,41 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
 
+# Add lib to path for kafka_config and transformation_validator
+sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
+from kafka_config import get_kafka_bootstrap_servers
+
+# Add agents/lib to path for transformation_validator
+agents_lib_path = Path(__file__).parent.parent.parent.parent / "agents" / "lib"
+if agents_lib_path.exists():
+    sys.path.insert(0, str(agents_lib_path))
+    from transformation_validator import validate_transformation
+
+
+# Load .env file from project directory
+def load_env_file():
+    """Load environment variables from project .env file."""
+    env_paths = [
+        Path("/Volumes/PRO-G40/Code/omniclaude/.env"),
+        Path.home() / "Code" / "omniclaude" / ".env",
+    ]
+
+    for env_path in env_paths:
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        # Only set if not already in environment
+                        if key not in os.environ:
+                            os.environ[key] = value.strip('"').strip("'")
+            return
+
+
+# Load .env on import
+load_env_file()
+
 # Kafka imports (lazy loaded)
 KafkaProducer = None
 _producer_instance = None  # Cached producer instance for singleton pattern
@@ -64,8 +99,8 @@ def get_kafka_producer():
                 "kafka-python not installed. Install with: pip install kafka-python"
             )
 
-    # Get Kafka brokers from environment
-    brokers = os.environ.get("KAFKA_BROKERS", "localhost:29102").split(",")
+    # Get Kafka brokers from centralized configuration
+    brokers = get_kafka_bootstrap_servers().split(",")
 
     # Create producer with JSON serialization
     producer = KafkaProducer(
@@ -141,6 +176,64 @@ def log_transformation_kafka(args):
             }
             print(json.dumps(error), file=sys.stderr)
             return 1
+
+    # Check for forbidden "Direct execution" bypass patterns
+    reason = args.reason if hasattr(args, "reason") and args.reason else ""
+
+    # CRITICAL: Detect routing bypass attempts
+    forbidden_patterns = [
+        "direct execution",
+        "skip routing",
+        "bypass routing",
+        "without routing",
+        "skipping router",
+    ]
+
+    reason_lower = reason.lower() if reason else ""
+    for pattern in forbidden_patterns:
+        if pattern in reason_lower:
+            error = {
+                "success": False,
+                "error": (
+                    f"ROUTING BYPASS DETECTED: Transformation reason contains forbidden pattern '{pattern}'. "
+                    f"The polymorphic agent MUST run router.route() for ALL tasks. "
+                    f"See agents/polymorphic-agent.md § 'ANTI-PATTERNS: What NOT to Do' for details. "
+                    f"Reason provided: {reason}"
+                ),
+                "from_agent": args.from_agent,
+                "to_agent": args.to_agent,
+                "forbidden_pattern": pattern,
+                "bypass_rate_target": "0%",
+            }
+            print(json.dumps(error), file=sys.stderr)
+            return 1
+
+    # Validate self-transformation using shared validator
+    # Only validate if transformation_validator is available
+    if "validate_transformation" in globals():
+        validation_result = validate_transformation(
+            from_agent=args.from_agent,
+            to_agent=args.to_agent,
+            reason=reason,
+            confidence=confidence,
+        )
+
+        # Check if validation failed
+        if not validation_result.is_valid:
+            error = {
+                "success": False,
+                "error": f"Self-transformation validation failed: {validation_result.error_message}",
+                "from_agent": args.from_agent,
+                "to_agent": args.to_agent,
+                "confidence": confidence,
+                "metrics": validation_result.metrics,
+            }
+            print(json.dumps(error), file=sys.stderr)
+            return 1
+
+        # Print warning if present
+        if validation_result.warning_message:
+            print(f"WARNING: {validation_result.warning_message}", file=sys.stderr)
 
     # Build event
     event = {
