@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from typing import Dict, Optional, List
+from uuid import UUID
 
 try:
     import psycopg2
@@ -348,6 +349,11 @@ class PatternQualityScorer:
         Store quality metrics to pattern_quality_metrics table.
 
         Uses upsert (INSERT ... ON CONFLICT UPDATE) to handle duplicate pattern_ids.
+        Requires UNIQUE constraint on pattern_id (added in migration 014).
+
+        Upsert Behavior:
+        - If pattern_id doesn't exist: Creates new record
+        - If pattern_id exists: Updates quality_score, confidence, timestamp, version, metadata
 
         Args:
             score: PatternQualityScore object to store
@@ -378,7 +384,9 @@ class PatternQualityScorer:
                 "complexity_score": score.complexity_score,
             }
 
-            # Insert query (simple INSERT without upsert to avoid constraint issues)
+            # Upsert query with ON CONFLICT on pattern_id
+            # Uses UNIQUE constraint added in migration 014
+            # Explicit cast to UUID for proper constraint matching
             query = """
                 INSERT INTO pattern_quality_metrics (
                     pattern_id,
@@ -387,7 +395,13 @@ class PatternQualityScorer:
                     measurement_timestamp,
                     version,
                     metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ) VALUES (%s::uuid, %s, %s, %s, %s, %s)
+                ON CONFLICT (pattern_id) DO UPDATE SET
+                    quality_score = EXCLUDED.quality_score,
+                    confidence = EXCLUDED.confidence,
+                    measurement_timestamp = EXCLUDED.measurement_timestamp,
+                    version = EXCLUDED.version,
+                    metadata = EXCLUDED.metadata
             """
 
             cursor.execute(
@@ -411,11 +425,6 @@ class PatternQualityScorer:
             if conn:
                 conn.rollback()
             return  # Skip if FK constraint is ever re-added
-        except psycopg2.errors.UniqueViolation:
-            # Duplicate pattern - skip silently
-            if conn:
-                conn.rollback()
-            return  # Silently skip duplicates
         except Exception as e:
             if conn:
                 conn.rollback()

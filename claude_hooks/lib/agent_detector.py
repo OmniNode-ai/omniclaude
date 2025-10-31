@@ -33,6 +33,16 @@ class AgentDetector:
         r"(?:use|invoke)\s+(?:the\s+)?agent\s+workflow\s+coordination",  # "use agent workflow coordination"
     ]
 
+    # Context-aware generic patterns - extract task description for intelligent routing
+    GENERIC_AGENT_PATTERNS = [
+        r"use\s+(?:an?\s+)?agent\s+(?:to\s+|for\s+)?(.+)",  # "use an agent to verify Qdrant"
+        r"dispatch\s+(?:an?\s+)?agent\s+(?:to\s+|for\s+)?(.+)",  # "dispatch an agent to check logs"
+        r"Task\(([^)]+)\)",  # Task(description) - bare task calls
+        r"spawn\s+(?:an?\s+)?agent\s+(?:to\s+|for\s+)?(.+)",  # "spawn an agent to analyze"
+        r"call\s+(?:an?\s+)?agent\s+(?:to\s+|for\s+)?(.+)",  # "call an agent to investigate"
+        r"invoke\s+(?:an?\s+)?agent\s+(?:to\s+|for\s+)?(.+)",  # "invoke an agent for testing"
+    ]
+
     # Automated workflow trigger patterns - launch dispatch_runner.py
     AUTOMATED_WORKFLOW_PATTERNS = [
         r"coordinate\s+(?:a\s+)?workflow",  # "coordinate a workflow", "coordinate workflow"
@@ -120,6 +130,31 @@ class AgentDetector:
 
         return False
 
+    def detect_generic_agent_invocation(self, prompt: str) -> Optional[Dict[str, str]]:
+        """
+        Detect generic agent invocation patterns that require context-aware routing.
+
+        Patterns like "use an agent to X" or "Task(X)" don't specify an agent,
+        so we extract the task description and let the router analyze context.
+
+        Args:
+            prompt: User prompt text
+
+        Returns:
+            Dict with 'type': 'generic' and 'task_description' if matched, None otherwise
+        """
+        for pattern in self.GENERIC_AGENT_PATTERNS:
+            match = re.search(pattern, prompt, re.IGNORECASE)
+            if match and match.groups():
+                task_description = match.group(1).strip()
+                return {
+                    'type': 'generic',
+                    'task_description': task_description,
+                    'original_prompt': prompt
+                }
+
+        return None
+
     def detect_agent(self, prompt: str) -> Optional[str]:
         """
         Detect agent invocation pattern in prompt using explicit patterns only.
@@ -129,8 +164,14 @@ class AgentDetector:
             prompt: User prompt text
 
         Returns:
-            Agent name if detected, None otherwise
+            Agent name if detected, 'CONTEXT_AWARE_ROUTING' for generic patterns, None otherwise
         """
+        # First check for generic patterns that need context-aware routing
+        generic_match = self.detect_generic_agent_invocation(prompt)
+        if generic_match:
+            # Return special marker to signal context-aware routing needed
+            return "CONTEXT_AWARE_ROUTING"
+
         # Try explicit pattern matching (case-insensitive)
         for i, pattern in enumerate(self.AGENT_PATTERNS):
             match = re.search(
