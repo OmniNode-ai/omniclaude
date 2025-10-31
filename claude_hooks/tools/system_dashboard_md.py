@@ -23,9 +23,12 @@ class SystemDashboard:
         password = db_password or os.getenv(
             "OMNINODE_BRIDGE_PASSWORD", "omninode-bridge-postgres-dev-2024"
         )
+        host = os.getenv("POSTGRES_HOST", "localhost")
+        port = os.getenv("POSTGRES_PORT", "5436")
+        db = os.getenv("POSTGRES_DB", "omninode_bridge")
+        user = os.getenv("POSTGRES_USER", "postgres")
         self.conn_string = (
-            f"host=localhost port=5436 dbname=omninode_bridge "
-            f"user=postgres password={password}"
+            f"host={host} port={port} dbname={db} " f"user={user} password={password}"
         )
         self.output_file = output_file
 

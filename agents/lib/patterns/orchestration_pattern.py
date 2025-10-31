@@ -103,7 +103,19 @@ class OrchestrationPattern:
             "import logging",
             "from datetime import datetime",
             "from uuid import UUID, uuid4",
-            "from omnibase_core.errors import OnexError, EnumCoreErrorCode",
+            "# Optional import for ONEX compliance",
+            "try:",
+            "    from omnibase_core.errors import OnexError, EnumCoreErrorCode",
+            "except ImportError:",
+            "    # Fallback when omnibase_core not installed",
+            "    class OnexError(Exception):",
+            "        def __init__(self, code=None, message='', original_exception=None, details=None):",
+            "            super().__init__(message)",
+            "            self.code = code",
+            "            self.original_exception = original_exception",
+            "            self.details = details or {}",
+            "    class EnumCoreErrorCode:",
+            "        OPERATION_FAILED = 'OPERATION_FAILED'",
         ]
 
     def get_required_mixins(self) -> List[str]:
@@ -231,12 +243,48 @@ class OrchestrationPattern:
             )
 
     def _get_workflow_steps(self) -> List[Dict[str, Any]]:
-        """Get workflow step definitions"""
-        # TODO: Implement workflow step configuration
+        """
+        Get workflow step definitions.
+
+        Override this method to define custom workflow steps.
+        Each step should specify name, handler, criticality, and optional dependencies.
+
+        Returns:
+            List of workflow step definitions
+        """
+        # Default workflow steps - override in generated nodes for specific workflows
         return [
-            {{"name": "step_1", "handler": "handle_step_1", "critical": True}},
-            {{"name": "step_2", "handler": "handle_step_2", "critical": False}},
-            {{"name": "step_3", "handler": "handle_step_3", "critical": True}},
+            {{
+                "name": "initialize",
+                "handler": "handle_initialize",
+                "critical": True,
+                "description": "Initialize workflow resources",
+                "timeout_seconds": 30
+            }},
+            {{
+                "name": "process",
+                "handler": "handle_process",
+                "critical": True,
+                "description": "Execute main processing logic",
+                "timeout_seconds": 300,
+                "depends_on": ["initialize"]
+            }},
+            {{
+                "name": "validate",
+                "handler": "handle_validate",
+                "critical": False,
+                "description": "Validate processing results",
+                "timeout_seconds": 60,
+                "depends_on": ["process"]
+            }},
+            {{
+                "name": "finalize",
+                "handler": "handle_finalize",
+                "critical": False,
+                "description": "Cleanup and finalize workflow",
+                "timeout_seconds": 30,
+                "depends_on": ["validate"]
+            }},
         ]
 
     async def _execute_step(
@@ -245,14 +293,83 @@ class OrchestrationPattern:
         workflow_state: Dict[str, Any],
         workflow_input: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Execute a single workflow step"""
-        # TODO: Implement step execution logic
-        return {{"step_result": "completed"}}
+        """
+        Execute a single workflow step.
+
+        Calls the handler method specified in the step definition.
+        Override step handlers (handle_*) in generated nodes for custom logic.
+
+        Args:
+            step: Step definition dictionary
+            workflow_state: Current workflow state
+            workflow_input: Original workflow input data
+
+        Returns:
+            Step execution result
+        """
+        handler_name = step.get("handler")
+        step_name = step.get("name", "unknown")
+
+        self.logger.info(f"Executing workflow step: {{step_name}} (handler: {{handler_name}})")
+
+        # Get handler method if it exists
+        if handler_name and hasattr(self, handler_name):
+            handler = getattr(self, handler_name)
+            try:
+                # Call handler with context
+                result = await handler(workflow_input, workflow_state)
+                return {{
+                    "step_name": step_name,
+                    "status": "completed",
+                    "result": result
+                }}
+            except Exception as e:
+                self.logger.error(f"Step handler failed: {{handler_name}}, error: {{str(e)}}")
+                return {{
+                    "step_name": step_name,
+                    "status": "failed",
+                    "error": str(e)
+                }}
+        else:
+            # Default implementation if handler not found
+            self.logger.warning(
+                f"Handler not found: {{handler_name}}, using default step implementation"
+            )
+            return {{
+                "step_name": step_name,
+                "status": "completed",
+                "result": {{"message": f"Step {{step_name}} completed with default handler"}},
+                "warning": f"Handler {{handler_name}} not implemented"
+            }}
 
     async def _save_workflow_state(self, workflow_id: str, state: Dict[str, Any]):
-        """Save workflow state to storage"""
-        # TODO: Implement state persistence via MixinStateManagement
-        pass
+        """
+        Save workflow state to storage.
+
+        Uses MixinStateManagement if available, otherwise uses in-memory storage.
+
+        Args:
+            workflow_id: Unique workflow identifier
+            state: Current workflow state to persist
+        """
+        # Try using MixinStateManagement if available
+        if hasattr(self, "save_state"):
+            try:
+                await self.save_state(f"workflow_{{workflow_id}}", state)
+                self.logger.debug(f"Saved workflow state via MixinStateManagement: {{workflow_id}}")
+                return
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to save workflow state via MixinStateManagement: {{e}}, "
+                    "falling back to in-memory storage"
+                )
+
+        # Fallback to in-memory storage (class-level cache)
+        if not hasattr(self.__class__, "_workflow_state_cache"):
+            self.__class__._workflow_state_cache = {{}}
+
+        self.__class__._workflow_state_cache[workflow_id] = state
+        self.logger.debug(f"Saved workflow state to in-memory cache: {{workflow_id}}")
 '''
 
     def _generate_parallel_orchestration(
@@ -366,9 +483,79 @@ class OrchestrationPattern:
         workflow_input: Dict[str, Any],
         workflow_id: str
     ) -> Dict[str, Any]:
-        """Execute a single parallel task"""
-        # TODO: Implement parallel task execution logic
-        return {{"task_result": "completed"}}
+        """
+        Execute a single parallel task.
+
+        Calls the handler method specified in the task definition.
+        Handles timeouts and errors gracefully.
+
+        Args:
+            task: Task definition dictionary
+            workflow_input: Original workflow input data
+            workflow_id: Workflow identifier for tracking
+
+        Returns:
+            Task execution result
+        """
+        import asyncio
+
+        task_name = task.get("name", "unknown")
+        handler_name = task.get("handler")
+        timeout_seconds = task.get("timeout_seconds", 300)
+
+        self.logger.info(
+            f"Executing parallel task: {{task_name}} "
+            f"(handler: {{handler_name}}, timeout: {{timeout_seconds}}s)"
+        )
+
+        try:
+            # Get handler method if it exists
+            if handler_name and hasattr(self, handler_name):
+                handler = getattr(self, handler_name)
+
+                # Execute with timeout
+                result = await asyncio.wait_for(
+                    handler(workflow_input),
+                    timeout=timeout_seconds
+                )
+
+                return {{
+                    "task_name": task_name,
+                    "status": "completed",
+                    "result": result,
+                    "workflow_id": workflow_id
+                }}
+
+            else:
+                # Default implementation if handler not found
+                self.logger.warning(
+                    f"Task handler not found: {{handler_name}}, using default implementation"
+                )
+                return {{
+                    "task_name": task_name,
+                    "status": "completed",
+                    "result": {{"message": f"Task {{task_name}} completed with default handler"}},
+                    "warning": f"Handler {{handler_name}} not implemented",
+                    "workflow_id": workflow_id
+                }}
+
+        except asyncio.TimeoutError:
+            self.logger.error(f"Task timeout: {{task_name}} ({{timeout_seconds}}s)")
+            return {{
+                "task_name": task_name,
+                "status": "timeout",
+                "error": f"Task exceeded timeout of {{timeout_seconds}} seconds",
+                "workflow_id": workflow_id
+            }}
+
+        except Exception as e:
+            self.logger.error(f"Task execution failed: {{task_name}}, error: {{str(e)}}")
+            return {{
+                "task_name": task_name,
+                "status": "failed",
+                "error": str(e),
+                "workflow_id": workflow_id
+            }}
 '''
 
     def _generate_compensating_orchestration(

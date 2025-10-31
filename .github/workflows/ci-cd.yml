@@ -52,14 +52,14 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction --no-root || {
+          poetry install --no-interaction --no-root --with dev || {
             echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
       - name: Install project
         run: |
-          poetry install --no-interaction || {
+          poetry install --no-interaction --with dev || {
             echo "⚠️  Warning: Project install failed - continuing with available packages"
             true
           }
@@ -200,7 +200,7 @@ jobs:
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction || {
+          poetry install --no-interaction --with dev || {
             echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
             true
           }

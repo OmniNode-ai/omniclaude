@@ -13,10 +13,10 @@ import pytest
 # Import the classes we need
 from agents.lib.model_generator import ModelGenerator
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
-    SimplePRDAnalyzer,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
+    PRDAnalyzer,
 )
 
 
@@ -73,7 +73,7 @@ A secure authentication service for user login and registration.
 @pytest.fixture
 async def prd_analysis(sample_prd_content):
     """Create PRD analysis from sample content"""
-    analyzer = SimplePRDAnalyzer()
+    analyzer = PRDAnalyzer()
     return await analyzer.analyze_prd(sample_prd_content)
 
 
@@ -557,7 +557,7 @@ class TestErrorHandling:
     async def test_handle_empty_prd(self, model_generator):
         """Test handling of empty PRD analysis"""
         # Create minimal PRD analysis
-        empty_prd = SimpleParsedPRD(
+        empty_prd = ParsedPRD(
             title="Empty",
             description="",
             functional_requirements=[],
@@ -570,12 +570,12 @@ class TestErrorHandling:
             word_count=0,
         )
 
-        empty_analysis = SimplePRDAnalysisResult(
+        empty_analysis = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="",
             parsed_prd=empty_prd,
-            decomposition_result=SimpleDecompositionResult(
+            decomposition_result=DecompositionResult(
                 tasks=[], total_tasks=0, verification_successful=True
             ),
             node_type_hints={},

@@ -15,7 +15,7 @@ from agents.lib.business_logic_generator import BusinessLogicGenerator
 from agents.lib.contract_generator import ContractGenerator
 from agents.lib.pattern_library import PatternLibrary
 from agents.lib.quality_validator import QualityValidator
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_NODE_PRD,
     EFFECT_ANALYSIS_RESULT,
@@ -31,7 +31,7 @@ from agents.tests.fixtures.phase4_fixtures import (
 @pytest.fixture
 def prd_analyzer():
     """Create PRD analyzer instance"""
-    return SimplePRDAnalyzer()
+    return PRDAnalyzer()
 
 
 @pytest.fixture

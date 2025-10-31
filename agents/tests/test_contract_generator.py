@@ -17,9 +17,9 @@ from omnibase_core.errors import OnexError
 
 from agents.lib.contract_generator import ContractGenerator
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
 )
 
 
@@ -27,7 +27,7 @@ from agents.lib.simple_prd_analyzer import (
 @pytest.fixture
 def sample_prd_analysis():
     """Create a sample PRD analysis result"""
-    parsed_prd = SimpleParsedPRD(
+    parsed_prd = ParsedPRD(
         title="User Authentication Service",
         description="Service for authenticating users and managing sessions",
         functional_requirements=[
@@ -61,7 +61,7 @@ def sample_prd_analysis():
         word_count=250,
     )
 
-    decomposition_result = SimpleDecompositionResult(
+    decomposition_result = DecompositionResult(
         tasks=[
             {
                 "id": "task_1",
@@ -89,7 +89,7 @@ def sample_prd_analysis():
         verification_successful=True,
     )
 
-    return SimplePRDAnalysisResult(
+    return PRDAnalysisResult(
         session_id=uuid4(),
         correlation_id=uuid4(),
         prd_content="Sample PRD content",

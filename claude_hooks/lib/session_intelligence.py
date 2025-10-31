@@ -271,12 +271,16 @@ def query_session_statistics() -> Dict[str, Any]:
         import os
 
         db_password = os.getenv("DB_PASSWORD", "")
+        host = os.getenv("POSTGRES_HOST", "localhost")
+        port = os.getenv("POSTGRES_PORT", "5436")
+        db = os.getenv("POSTGRES_DB", "omninode_bridge")
+        user = os.getenv("POSTGRES_USER", "postgres")
 
         # Connect to database
         connection_string = (
-            "host=localhost port=5436 "
-            "dbname=omninode_bridge "
-            "user=postgres "
+            f"host={host} port={port} "
+            f"dbname={db} "
+            f"user={user} "
             f"password={db_password}"
         )
         conn = psycopg2.connect(connection_string)

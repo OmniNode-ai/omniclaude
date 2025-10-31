@@ -31,6 +31,7 @@ from uuid import UUID, uuid4
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
 from .db import get_pg_pool
+from .kafka_rpk_client import RpkKafkaClient
 from .structured_logger import StructuredLogger
 
 # Lazy initialization for fallback log directory (platform-appropriate)
@@ -148,6 +149,22 @@ class AgentExecutionLogger:
         self._db_retry_count = 0
         self._last_retry_time = 0.0  # Unix timestamp of last retry attempt
 
+        # Kafka event publishing (optional - graceful degradation if unavailable)
+        self._kafka_enabled = (
+            os.getenv("KAFKA_ENABLE_LOGGING", "true").lower() == "true"
+        )
+        self._kafka_client = None
+        if self._kafka_enabled:
+            try:
+                self._kafka_client = RpkKafkaClient()
+                self.logger.debug("Kafka event publishing enabled")
+            except Exception as e:
+                self.logger.warning(
+                    "Kafka client initialization failed, disabling event publishing",
+                    metadata={"error": str(e)},
+                )
+                self._kafka_enabled = False
+
     def _should_retry_db(self) -> bool:
         """
         Check if enough time has passed to retry database connection.
@@ -229,6 +246,47 @@ class AgentExecutionLogger:
         self._db_retry_count = 0
         self._last_retry_time = 0.0
 
+    def _publish_kafka_event(self, event_data: Dict[str, Any]):
+        """
+        Publish event to Kafka topic 'agent-execution-logs'.
+
+        Args:
+            event_data: Event payload to publish
+
+        Note:
+            Non-blocking - failures are logged but don't affect execution
+        """
+        if not self._kafka_enabled or not self._kafka_client:
+            return
+
+        try:
+            # Add correlation tracking to all events
+            event_payload = {
+                "correlation_id": self.correlation_id,
+                "session_id": self.session_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **event_data,
+            }
+
+            self._kafka_client.publish("agent-execution-logs", event_payload)
+            self.logger.debug(
+                "Published event to Kafka",
+                metadata={
+                    "topic": "agent-execution-logs",
+                    "execution_id": self.execution_id,
+                },
+            )
+
+        except Exception as e:
+            # Non-blocking - log but don't fail the execution
+            self.logger.warning(
+                "Failed to publish event to Kafka",
+                metadata={
+                    "error": str(e),
+                    "execution_id": self.execution_id,
+                },
+            )
+
     async def start(self) -> str:
         """
         Log execution start.
@@ -303,6 +361,22 @@ class AgentExecutionLogger:
                 self._write_fallback_log("start", log_data)
         else:
             self._write_fallback_log("start", log_data)
+
+        # Publish to Kafka (async, non-blocking)
+        self._publish_kafka_event(
+            {
+                "execution_id": self.execution_id,
+                "agent_name": self.agent_name,
+                "user_prompt": self.user_prompt,
+                "status": "in_progress",
+                "started_at": self.started_at.isoformat(),
+                "metadata": self.metadata,
+                "project_path": self.project_path,
+                "project_name": self.project_name,
+                "claude_session_id": self.claude_session_id,
+                "terminal_id": self.terminal_id,
+            }
+        )
 
         return self.execution_id
 
@@ -382,6 +456,16 @@ class AgentExecutionLogger:
                 self._write_fallback_log("progress", log_data)
         else:
             self._write_fallback_log("progress", log_data)
+
+        # Publish to Kafka (async, non-blocking)
+        self._publish_kafka_event(
+            {
+                "execution_id": self.execution_id,
+                "agent_name": self.agent_name,
+                "status": "in_progress",
+                "metadata": {"progress": progress_data},
+            }
+        )
 
     async def complete(
         self,
@@ -487,6 +571,21 @@ class AgentExecutionLogger:
                 self._write_fallback_log("complete", log_data)
         else:
             self._write_fallback_log("complete", log_data)
+
+        # Publish to Kafka (async, non-blocking)
+        self._publish_kafka_event(
+            {
+                "execution_id": self.execution_id,
+                "agent_name": self.agent_name,
+                "status": status_value,
+                "completed_at": completed_at.isoformat(),
+                "duration_ms": duration_ms,
+                "quality_score": quality_score,
+                "error_message": error_message,
+                "error_type": error_type,
+                "metadata": final_metadata,
+            }
+        )
 
     def _write_fallback_log(self, event_type: str, data: Dict[str, Any]):
         """

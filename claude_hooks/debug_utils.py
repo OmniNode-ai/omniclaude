@@ -32,6 +32,16 @@ from typing import Any, Dict
 
 import requests
 
+# Service URL configuration from environment
+INTELLIGENCE_SERVICE_URL = os.environ.get(
+    "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
+)
+MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
+# Support both MCP_SERVER_URL and ARCHON_MCP_URL for backward compatibility
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or os.environ.get(
+    "ARCHON_MCP_URL", "http://localhost:8051"
+)
+
 
 def check_running_services() -> Dict[str, Any]:
     """Check which required services are running"""
@@ -42,7 +52,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check intelligence service (Phase 4)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8053/health"],
+            ["curl", "-s", f"{INTELLIGENCE_SERVICE_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -83,7 +93,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check main server (Port 8181)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8181/health"],
+            ["curl", "-s", f"{MAIN_SERVER_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -106,7 +116,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check MCP server (Port 8051)
     try:
         result = subprocess.run(
-            ["curl", "-s", "http://localhost:8051/health"],
+            ["curl", "-s", f"{MCP_SERVER_URL}/health"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -130,7 +140,7 @@ def check_running_services() -> Dict[str, Any]:
     try:
         # Try to check if PostgreSQL container is running
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=postgres", "--format", "json"],
+            ["docker", "ps", "--filter", "name=postgres", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -169,7 +179,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check Memgraph (if available)
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=memgraph", "--format", "json"],
+            ["docker", "ps", "--filter", "name=memgraph", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -208,7 +218,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check Qdrant (if available)
     try:
         result = subprocess.run(
-            ["docker", "ps", "--filter", "name=qdrant", "--format", "json"],
+            ["docker", "ps", "--filter", "name=qdrant", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -250,12 +260,12 @@ def check_running_services() -> Dict[str, Any]:
 def check_network_connectivity() -> Dict[str, Any]:
     """Check network connectivity to required endpoints"""
     endpoints = [
-        ("Intelligence Service", "http://localhost:8053/health"),
-        ("Main Server", "http://localhost:8181/health"),
-        ("MCP Server", "http://localhost:8051/health"),
+        ("Intelligence Service", f"{INTELLIGENCE_SERVICE_URL}/health"),
+        ("Main Server", f"{MAIN_SERVER_URL}/health"),
+        ("MCP Server", f"{MCP_SERVER_URL}/health"),
         (
             "Pattern Lineage API",
-            "http://localhost:8053/api/pattern-traceability/health",
+            f"{INTELLIGENCE_SERVICE_URL}/api/pattern-traceability/health",
         ),
     ]
 
@@ -289,7 +299,7 @@ def check_network_connectivity() -> Dict[str, Any]:
 
 def check_pattern_tracking_files() -> Dict[str, Any]:
     """Check if pattern tracking files exist and are accessible"""
-    hooks_dir = "/Users/jonah/.claude/hooks"
+    hooks_dir = os.path.expanduser("~/.claude/hooks")
 
     required_files = [
         "pattern_tracker.py",
@@ -446,7 +456,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
 
     # Test 1: Import health checks
     try:
-        sys.path.append("/Users/jonah/.claude/hooks")
+        sys.path.append(os.path.expanduser("~/.claude/hooks"))
         from health_checks import Phase4HealthChecker
 
         checker = Phase4HealthChecker()
@@ -512,7 +522,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
         }
 
         response = requests.post(
-            "http://localhost:8053/api/pattern-traceability/lineage/track",
+            f"{INTELLIGENCE_SERVICE_URL}/api/pattern-traceability/lineage/track",
             json=test_payload,
             timeout=5,
         )

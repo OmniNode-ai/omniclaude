@@ -10,9 +10,9 @@ from typing import List
 from uuid import uuid4
 
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
 )
 
 # ============================================================================
@@ -214,19 +214,19 @@ def create_mock_analysis_result(
     node_type: str,
     mixins: List[str] = None,
     external_systems: List[str] = None,
-) -> SimplePRDAnalysisResult:
-    """Create a mock SimplePRDAnalysisResult for testing"""
+) -> PRDAnalysisResult:
+    """Create a mock PRDAnalysisResult for testing"""
 
     # Parse the PRD content
-    from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+    from agents.lib.simple_prd_analyzer import PRDAnalyzer
 
-    SimplePRDAnalyzer()
+    PRDAnalyzer()
 
     # Extract basic info for parsed PRD
     title_line = prd_content.split("\n")[0].strip("# ")
 
     # Create basic parsed PRD
-    parsed_prd = SimpleParsedPRD(
+    parsed_prd = ParsedPRD(
         title=title_line,
         description=f"Test {node_type} node for {title_line}",
         features=["Feature 1", "Feature 2", "Feature 3"],
@@ -240,7 +240,7 @@ def create_mock_analysis_result(
     )
 
     # Create decomposition
-    decomposition_result = SimpleDecompositionResult(
+    decomposition_result = DecompositionResult(
         tasks=[
             {
                 "id": "task_1",
@@ -270,7 +270,7 @@ def create_mock_analysis_result(
     }
     node_type_hints[node_type] = 0.9
 
-    return SimplePRDAnalysisResult(
+    return PRDAnalysisResult(
         session_id=uuid4(),
         correlation_id=uuid4(),
         prd_content=prd_content,

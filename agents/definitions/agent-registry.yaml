@@ -4,9 +4,9 @@
 # Integration: agent-polymorphic-agent (Polly) dynamic transformation system
 
 schema_version: "1.0.0"
-total_agents: 50
+total_agents: 51
 registry_type: "dynamic_role_system"
-last_updated: "2025-10-20"
+last_updated: "2025-10-28"
 
 # Registry Metadata
 registry_info:
@@ -20,7 +20,7 @@ registry_info:
 categories:
   development:
     description: "Core development and coding agents"
-    count: 13
+    count: 14
     priority: "high"
 
   architecture:
@@ -77,6 +77,20 @@ agents:
     capabilities: ["debugging", "root_cause_analysis", "error_investigation", "performance_correlation", "system_behavior"]
     activation_triggers: ["debug", "error", "troubleshoot", "investigate", "root cause", "bug"]
     domain_context: "debugging"
+    specialization_level: "expert"
+
+  frontend-developer:
+    name: "agent-frontend-developer"
+    title: "Frontend Developer Specialist"
+    description: "React/TypeScript UI component development specialist with visual validation, component scaffolding, and accessibility-first design for building modern web applications"
+    category: "development"
+    color: "cyan"
+    task_agent_type: "frontend_developer"
+    definition_path: "agent-definitions/frontend-developer.yaml"
+    priority: "high"
+    capabilities: ["react_development", "typescript_mastery", "ui_component_building", "responsive_design", "api_integration_frontend", "state_management", "accessibility_implementation", "visual_validation"]
+    activation_triggers: ["frontend", "frontend development", "frontend task", "frontend integration", "react", "typescript", "ui", "ui component", "ui implementation", "build dashboard", "create component", "implement ui", "responsive design", "build interface", "develop component", "component development", "chat page", "chat ui", "page implementation", "interface implementation", "build page", "create page", "develop ui"]
+    domain_context: "frontend_development"
     specialization_level: "expert"
 
   commit:
@@ -248,7 +262,7 @@ agents:
     specialization_level: "expert"
 
   polymorphic-agent:
-    name: "agent-polymorphic-agent"
+    name: "polymorphic-agent"
     title: "Polymorphic Agent (Polly)"
     description: "Multi-agent workflow coordination with polymorphic role assumption and intelligent routing for ONEX development. Dynamic transformation agent also known as Polly, poly, or workflow coordinator."
     category: "coordination"

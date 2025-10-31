@@ -79,8 +79,8 @@ from .models.quorum_config import QuorumConfig  # noqa: E402
 from .omninode_template_engine import OmniNodeTemplateEngine  # noqa: E402
 from .prompt_parser import PromptParser  # noqa: E402
 from .simple_prd_analyzer import (  # noqa: E402
-    SimplePRDAnalysisResult,
-    SimplePRDAnalyzer,
+    PRDAnalysisResult,
+    PRDAnalyzer,
 )
 from .validators.coordination_validators import (  # noqa: E402
     AgentCoordinationValidator,
@@ -185,7 +185,7 @@ class GenerationPipeline:
         self.template_engine = template_engine or OmniNodeTemplateEngine(
             enable_cache=True
         )
-        self.prd_analyzer = SimplePRDAnalyzer(enable_ml_recommendations=False)
+        self.prd_analyzer = PRDAnalyzer(enable_ml_recommendations=False)
         self.prompt_parser = PromptParser()
         self.enable_compilation_testing = enable_compilation_testing
         self.enable_intelligence_gathering = enable_intelligence_gathering
@@ -1381,7 +1381,7 @@ class GenerationPipeline:
             )
 
     async def _stage_1_5_gather_intelligence(
-        self, parsed_data: Dict[str, Any], analysis_result: SimplePRDAnalysisResult
+        self, parsed_data: Dict[str, Any], analysis_result: PRDAnalysisResult
     ) -> Tuple[PipelineStage, IntelligenceContext]:
         """
         Stage 1.5: Gather intelligence for enhanced generation.
@@ -1777,7 +1777,7 @@ class GenerationPipeline:
 
     async def _stage_4_generate_code(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         service_name: str,
         domain: str,
@@ -3310,7 +3310,7 @@ except ImportError:
         return node_type
 
     def _extract_service_name(
-        self, prompt: str, analysis_result: SimplePRDAnalysisResult
+        self, prompt: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Extract service name from prompt."""
         # Strategy 1: Explicit name patterns (similar to PromptParser logic)
@@ -3356,9 +3356,7 @@ except ImportError:
         # Ultimate fallback
         return "generated_service"
 
-    def _extract_domain(
-        self, prompt: str, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _extract_domain(self, prompt: str, analysis_result: PRDAnalysisResult) -> str:
         """Extract domain from prompt."""
         prompt_lower = prompt.lower()
 

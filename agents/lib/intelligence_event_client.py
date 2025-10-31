@@ -38,13 +38,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+
+# Import centralized Kafka configuration
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from pathlib import Path as PathLib
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
+
+sys.path.insert(0, str(PathLib.home() / ".claude" / "lib"))
+from kafka_config import get_kafka_bootstrap_servers
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +70,7 @@ class IntelligenceEventClient:
 
     Usage:
         client = IntelligenceEventClient(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:9092",
             enable_intelligence=True,
             request_timeout_ms=5000,
         )
@@ -89,7 +97,7 @@ class IntelligenceEventClient:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:29102",
+        bootstrap_servers: Optional[str] = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
         consumer_group_id: Optional[str] = None,
@@ -99,13 +107,28 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:29102" (Redpanda port mapping)
+                - External host: "localhost:9092" or "192.168.86.200:9092"
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
-        self.bootstrap_servers = bootstrap_servers
+        # Bootstrap servers - use centralized configuration if not provided
+        self.bootstrap_servers = bootstrap_servers or get_kafka_bootstrap_servers()
+        if not self.bootstrap_servers:
+            raise ValueError(
+                "bootstrap_servers must be provided or set via environment variables.\n"
+                "Checked variables (in order):\n"
+                "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
+                "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
+                "  3. KAFKA_BROKERS (legacy compatibility)\n"
+                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
+                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
+                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
+                    os.getenv("KAFKA_BROKERS", "not set"),
+                )
+            )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = (
@@ -114,8 +137,12 @@ class IntelligenceEventClient:
 
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
+        self._consumer_task: Optional[asyncio.Task] = (
+            None  # Track background consumer task
+        )
         self._started = False
         self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
 
@@ -161,13 +188,74 @@ class IntelligenceEventClient:
                 bootstrap_servers=self.bootstrap_servers,
                 group_id=self.consumer_group_id,
                 enable_auto_commit=True,
-                auto_offset_reset="latest",
+                auto_offset_reset="earliest",  # CRITICAL: Changed from "latest" to fix race condition
+                # With random consumer groups per request, we need to see
+                # messages published before subscription completes
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             )
             await self._consumer.start()
 
-            # Start background consumer task
-            asyncio.create_task(self._consume_responses())
+            # CRITICAL: Wait for consumer to have partition assignments
+            # This ensures consumer is ready to receive messages BEFORE we return
+            # Without this, there's a race condition where requests are published
+            # before the consumer finishes subscribing, causing missed responses
+            self.logger.info(
+                f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
+            )
+            max_wait_seconds = 10  # Increased from 5s for slow networks
+            start_time = asyncio.get_event_loop().time()
+            check_count = 0
+
+            while not self._consumer.assignment():
+                check_count += 1
+                await asyncio.sleep(0.1)
+                elapsed = asyncio.get_event_loop().time() - start_time
+
+                # Log progress every 1 second
+                if check_count % 10 == 0:
+                    self.logger.debug(
+                        f"Still waiting for partition assignment... ({elapsed:.1f}s elapsed)"
+                    )
+
+                if elapsed > max_wait_seconds:
+                    # Provide detailed error with troubleshooting guidance
+                    error_msg = (
+                        f"Consumer failed to get partition assignment after {max_wait_seconds}s.\n"
+                        f"Troubleshooting:\n"
+                        f"  1. Check Kafka broker is accessible: {self.bootstrap_servers}\n"
+                        f"  2. Verify topics exist: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}\n"
+                        f"  3. Check consumer group permissions: {self.consumer_group_id}\n"
+                        f"  4. Review Kafka broker logs for connection issues\n"
+                        f"  5. Verify network connectivity to Kafka cluster"
+                    )
+                    self.logger.error(error_msg)
+                    raise TimeoutError(error_msg)
+
+            partition_count = len(self._consumer.assignment())
+            self.logger.info(
+                f"Consumer ready with {partition_count} partition(s): {self._consumer.assignment()}"
+            )
+
+            # Start background consumer task AFTER partition assignment confirmed
+            self._consumer_task = asyncio.create_task(self._consume_responses())
+
+            # CRITICAL FIX: Wait for consumer task to actually start polling
+            # This prevents race condition where requests are published before
+            # consumer is ready to receive responses
+            self.logger.info("Waiting for consumer task to start polling...")
+            consumer_ready_timeout = 5.0  # 5 seconds
+            try:
+                await asyncio.wait_for(
+                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
+                )
+                self.logger.info("Consumer task confirmed polling - ready for requests")
+            except asyncio.TimeoutError:
+                error_msg = (
+                    f"Consumer task failed to start polling within {consumer_ready_timeout}s.\n"
+                    f"This indicates the consumer loop did not start properly."
+                )
+                self.logger.error(error_msg)
+                raise TimeoutError(error_msg)
 
             self._started = True
             self.logger.info("Intelligence event client started successfully")
@@ -190,6 +278,16 @@ class IntelligenceEventClient:
         self.logger.info("Stopping intelligence event client")
 
         try:
+            # Cancel background consumer task
+            if self._consumer_task is not None and not self._consumer_task.done():
+                self.logger.debug("Cancelling background consumer task")
+                self._consumer_task.cancel()
+                try:
+                    await self._consumer_task
+                except asyncio.CancelledError:
+                    self.logger.debug("Consumer task cancelled successfully")
+                self._consumer_task = None
+
             # Stop producer
             if self._producer is not None:
                 await self._producer.stop()
@@ -207,6 +305,9 @@ class IntelligenceEventClient:
                         RuntimeError("Client stopped while request pending")
                     )
             self._pending_requests.clear()
+
+            # Clear consumer ready flag for restart capability
+            self._consumer_ready.clear()
 
             self._started = False
             self.logger.info("Intelligence event client stopped successfully")
@@ -298,7 +399,7 @@ class IntelligenceEventClient:
                 )
 
         # Use PATTERN_EXTRACTION operation type for pattern discovery
-        return await self.request_code_analysis(
+        result = await self.request_code_analysis(
             content=content,
             source_path=source_path,
             language=language,
@@ -309,6 +410,9 @@ class IntelligenceEventClient:
             },
             timeout_ms=timeout,
         )
+
+        # Extract patterns list from result dict
+        return result.get("patterns", [])
 
     async def request_code_analysis(
         self,
@@ -508,13 +612,23 @@ class IntelligenceEventClient:
 
         This task runs in the background for the lifetime of the client.
         """
-        self.logger.debug("Starting response consumer task")
+        self.logger.info("Starting response consumer task")
+        self.logger.info(
+            f"Consumer subscribed to topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}"
+        )
 
         try:
             if self._consumer is None:
                 raise RuntimeError("Consumer not initialized. Call start() first.")
 
+            # Signal that consumer is ready to poll (fixes race condition)
+            self._consumer_ready.set()
+            self.logger.debug("Consumer task entered polling loop - signaling ready")
+
             async for msg in self._consumer:
+                self.logger.debug(
+                    f"[CONSUMER] Received message: topic={msg.topic}, partition={msg.partition}, offset={msg.offset}"
+                )
                 try:
                     # Parse response
                     response = msg.value
@@ -600,7 +714,7 @@ class IntelligenceEventClientContext:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:29092",
+        bootstrap_servers: Optional[str] = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
     ):

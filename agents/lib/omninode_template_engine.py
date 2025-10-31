@@ -15,7 +15,11 @@ from typing import Any, Dict, List, Optional, Set
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
 from .models.intelligence_context import IntelligenceContext, get_default_intelligence
-from .simple_prd_analyzer import SimplePRDAnalysisResult
+
+# Pattern learning imports (KV-002 integration)
+from .pattern_library import PatternLibrary
+from .patterns.pattern_storage import PatternStorage
+from .simple_prd_analyzer import PRDAnalysisResult
 from .template_cache import TemplateCache
 from .template_helpers import (
     format_best_practices,
@@ -48,16 +52,108 @@ class NodeTemplate:
         pattern = r"\{([A-Z_]+)\}"
         return set(re.findall(pattern, self.template_content))
 
+    def validate_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate template context before rendering.
+
+        Args:
+            context: Template context variables
+
+        Returns:
+            Validation result with missing/extra placeholders
+
+        Raises:
+            ModelOnexError: If validation fails critically
+        """
+        missing = self.placeholders - set(context.keys())
+        extra = set(context.keys()) - self.placeholders
+
+        validation_result = {
+            "valid": len(missing) == 0,
+            "missing_placeholders": list(missing),
+            "extra_variables": list(extra),
+            "total_placeholders": len(self.placeholders),
+            "provided_variables": len(context),
+        }
+
+        # Log warnings for extra variables (not critical)
+        if extra:
+            logger.debug(f"Extra context variables provided (will be ignored): {extra}")
+
+        # Critical error for missing placeholders
+        if missing:
+            logger.error(
+                f"Missing required placeholders: {missing}. "
+                f"Required: {self.placeholders}, Provided: {set(context.keys())}"
+            )
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Template validation failed: Missing required placeholders",
+                context={
+                    "missing_placeholders": list(missing),
+                    "required_placeholders": list(self.placeholders),
+                    "provided_keys": list(context.keys()),
+                },
+            )
+
+        return validation_result
+
     def render(self, context: Dict[str, Any]) -> str:
-        """Render template with context variables"""
+        """
+        Render template with context variables after validation.
+
+        Args:
+            context: Template context variables
+
+        Returns:
+            Rendered template content
+
+        Raises:
+            ModelOnexError: If validation or rendering fails
+        """
+        # Validate context before rendering
+        validation_result = self.validate_context(context)
+        logger.debug(
+            f"Template validation passed: {validation_result['total_placeholders']} "
+            f"placeholders, {validation_result['provided_variables']} variables"
+        )
+
+        # Render template
         rendered = self.template_content
 
         for key, value in context.items():
             placeholder = f"{{{key}}}"
             if placeholder in rendered:
+                # Validate value is not None
+                if value is None:
+                    logger.warning(
+                        f"Placeholder {key} has None value, using empty string"
+                    )
+                    value = ""
+
                 rendered = rendered.replace(placeholder, str(value))
 
+        # Post-render validation: Check for unresolved placeholders
+        unresolved = self._extract_placeholders_from_text(rendered)
+        if unresolved:
+            logger.error(
+                f"Template rendering left unresolved placeholders: {unresolved}"
+            )
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Template rendering incomplete: Unresolved placeholders remain",
+                context={
+                    "unresolved_placeholders": list(unresolved),
+                    "node_type": self.node_type,
+                },
+            )
+
         return rendered
+
+    def _extract_placeholders_from_text(self, text: str) -> Set[str]:
+        """Extract placeholders from rendered text to detect unresolved ones"""
+        pattern = r"\{([A-Z_]+)\}"
+        return set(re.findall(pattern, text))
 
 
 class OmniNodeTemplateEngine:
@@ -75,7 +171,13 @@ class OmniNodeTemplateEngine:
     the template engine instance safely.
     """
 
-    def __init__(self, enable_cache: bool = True):
+    # Valid node types (ONEX 4-node architecture)
+    VALID_NODE_TYPES = {"EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"}
+
+    # Dangerous path patterns
+    DANGEROUS_PATH_PATTERNS = {"..", "~", "/etc", "/var", "/sys", "/proc", "\\"}
+
+    def __init__(self, enable_cache: bool = True, enable_pattern_learning: bool = True):
         self.config = get_config()
         self.templates_dir = Path(self.config.template_directory)
         # TODO: Initialize validator when omnibase_spi is available
@@ -95,6 +197,31 @@ class OmniNodeTemplateEngine:
         else:
             self.template_cache = None
             self.logger.info("Template caching disabled")
+
+        # Initialize pattern learning (KV-002 integration)
+        self.enable_pattern_learning = enable_pattern_learning
+        if enable_pattern_learning:
+            try:
+                self.pattern_library = PatternLibrary()
+                self.pattern_storage = PatternStorage(
+                    qdrant_url=getattr(
+                        self.config, "qdrant_url", "http://localhost:6333"
+                    ),
+                    collection_name="code_generation_patterns",
+                    use_in_memory=False,  # Try Qdrant first, fallback to in-memory if unavailable
+                )
+                self.logger.info("Pattern learning enabled (KV-002)")
+            except Exception as e:
+                self.logger.warning(
+                    f"Pattern learning initialization failed (non-critical): {e}"
+                )
+                self.pattern_library = None
+                self.pattern_storage = None
+                self.enable_pattern_learning = False
+        else:
+            self.pattern_library = None
+            self.pattern_storage = None
+            self.logger.info("Pattern learning disabled")
 
         # Load templates (with caching if enabled)
         self.templates = self._load_templates()
@@ -194,9 +321,178 @@ class OmniNodeTemplateEngine:
                 self.template_cache.invalidate_all()
                 self.logger.info("Invalidated all cached templates")
 
+    def _validate_node_type(self, node_type: str):
+        """
+        Validate node type is one of the 4 ONEX types.
+
+        Args:
+            node_type: Node type to validate
+
+        Raises:
+            ModelOnexError: If node type is invalid
+        """
+        if node_type not in self.VALID_NODE_TYPES:
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid node type: {node_type}",
+                context={
+                    "provided_type": node_type,
+                    "valid_types": list(self.VALID_NODE_TYPES),
+                },
+            )
+
+    def _validate_output_path(self, output_directory: str):
+        """
+        Validate output directory path for security.
+
+        Args:
+            output_directory: Directory path to validate
+
+        Raises:
+            ModelOnexError: If path is unsafe or invalid
+        """
+        # Check for dangerous patterns
+        for pattern in self.DANGEROUS_PATH_PATTERNS:
+            if pattern in output_directory:
+                raise ModelOnexError(
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Unsafe path detected: Contains dangerous pattern '{pattern}'",
+                    context={
+                        "output_directory": output_directory,
+                        "dangerous_pattern": pattern,
+                    },
+                )
+
+        # Ensure path is not absolute to system directories
+        path = Path(output_directory)
+        try:
+            # Resolve to absolute path safely
+            resolved_path = path.resolve()
+
+            # Check if path tries to escape to system directories
+            system_dirs = ["/etc", "/var", "/sys", "/proc", "/boot", "/root"]
+            for system_dir in system_dirs:
+                if str(resolved_path).startswith(system_dir):
+                    raise ModelOnexError(
+                        error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                        message=f"Cannot write to system directory: {system_dir}",
+                        context={
+                            "output_directory": output_directory,
+                            "resolved_path": str(resolved_path),
+                        },
+                    )
+        except Exception as e:
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid output path: {str(e)}",
+                context={"output_directory": output_directory},
+            ) from e
+
+    def _validate_file_path(self, file_path: str, base_directory: Path):
+        """
+        Validate file path is within base directory (prevent directory traversal).
+
+        Args:
+            file_path: File path to validate
+            base_directory: Base directory that file must be within
+
+        Raises:
+            ModelOnexError: If path escapes base directory
+        """
+        try:
+            # Resolve both paths
+            full_path = (base_directory / file_path).resolve()
+            base_path = base_directory.resolve()
+
+            # Check if full_path is within base_path
+            if not str(full_path).startswith(str(base_path)):
+                raise ModelOnexError(
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message="File path escapes base directory (directory traversal attempt)",
+                    context={
+                        "file_path": file_path,
+                        "base_directory": str(base_directory),
+                        "resolved_path": str(full_path),
+                    },
+                )
+        except Exception as e:
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid file path: {str(e)}",
+                context={
+                    "file_path": file_path,
+                    "base_directory": str(base_directory),
+                },
+            ) from e
+
+    def _validate_generation_inputs(
+        self,
+        analysis_result: PRDAnalysisResult,
+        node_type: str,
+        microservice_name: str,
+        domain: str,
+        output_directory: str,
+    ):
+        """
+        Validate all generation inputs before processing.
+
+        Args:
+            analysis_result: PRD analysis result
+            node_type: Node type
+            microservice_name: Microservice name
+            domain: Domain name
+            output_directory: Output directory
+
+        Raises:
+            ModelOnexError: If any validation fails
+        """
+        # Validate node type
+        self._validate_node_type(node_type)
+
+        # Validate output path
+        self._validate_output_path(output_directory)
+
+        # Validate names don't contain dangerous characters
+        name_pattern = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+        if not name_pattern.match(microservice_name):
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Microservice name contains invalid characters",
+                context={
+                    "microservice_name": microservice_name,
+                    "allowed_pattern": "alphanumeric, underscore, hyphen only",
+                },
+            )
+
+        if not name_pattern.match(domain):
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Domain name contains invalid characters",
+                context={
+                    "domain": domain,
+                    "allowed_pattern": "alphanumeric, underscore, hyphen only",
+                },
+            )
+
+        # Validate analysis result has required fields
+        if not analysis_result.parsed_prd:
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Analysis result missing parsed PRD",
+                context={"analysis_result": "parsed_prd is None or empty"},
+            )
+
+        if not analysis_result.parsed_prd.description:
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="PRD description is required but missing",
+                context={"parsed_prd": "description field is empty"},
+            )
+
     async def generate_node(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -223,6 +519,12 @@ class OmniNodeTemplateEngine:
         try:
             self.logger.info(f"Generating {node_type} node: {microservice_name}")
 
+            # VALIDATION PHASE: Validate all inputs before processing
+            self._validate_generation_inputs(
+                analysis_result, node_type, microservice_name, domain, output_directory
+            )
+            self.logger.debug("Input validation passed")
+
             # Use default intelligence if not provided
             if intelligence is None:
                 self.logger.info(f"Using default intelligence for {node_type} node")
@@ -241,6 +543,53 @@ class OmniNodeTemplateEngine:
             context = self._prepare_template_context(
                 analysis_result, node_type, microservice_name, domain, intelligence
             )
+
+            # === PRE-GENERATION PATTERN QUERY (KV-002 Integration) ===
+            # Query learned patterns to enhance code generation
+            if self.enable_pattern_learning and self.pattern_library:
+                try:
+                    # Detect patterns from contract/context
+                    detected_pattern = self.pattern_library.detect_pattern(
+                        {
+                            "capabilities": context.get("OPERATIONS", []),
+                            "node_type": node_type,
+                            "service_name": microservice_name,
+                            "features": context.get("FEATURES", []),
+                        },
+                        min_confidence=0.7,
+                    )
+
+                    if detected_pattern and detected_pattern.get("matched"):
+                        self.logger.info(
+                            f"Pattern detected: {detected_pattern['pattern_name']} "
+                            f"(confidence: {detected_pattern['confidence']:.2f})"
+                        )
+
+                        # Generate pattern-specific code
+                        pattern_code_result = self.pattern_library.generate_pattern_code(
+                            pattern_name=detected_pattern["pattern_name"],
+                            contract=context,
+                            node_type=node_type,
+                            class_name=f"Node{self._to_pascal_case(microservice_name)}{node_type.capitalize()}",
+                        )
+
+                        if pattern_code_result and pattern_code_result.get("code"):
+                            context["PATTERN_CODE"] = pattern_code_result["code"]
+                            context["PATTERN_NAME"] = detected_pattern["pattern_name"]
+                            context["PATTERN_CONFIDENCE"] = detected_pattern[
+                                "confidence"
+                            ]
+                            self.logger.debug(
+                                f"Added pattern code to context: {detected_pattern['pattern_name']}"
+                            )
+                    else:
+                        self.logger.debug(
+                            "No high-confidence patterns detected, using default generation"
+                        )
+
+                except Exception as e:
+                    # Pattern detection failure should NOT break generation (non-blocking)
+                    self.logger.warning(f"Pattern detection failed (non-critical): {e}")
 
             # Generate node implementation
             node_content = template.render(context)
@@ -263,12 +612,25 @@ class OmniNodeTemplateEngine:
             with open(main_file_path, "w") as f:
                 f.write(node_content)
 
-            # Write additional files
+            # Write additional files with validation
             for file_path, content in generated_files.items():
+                # Validate file path doesn't escape node directory
+                self._validate_file_path(file_path, node_path)
+
                 full_path = node_path / file_path
                 full_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Additional validation: ensure content is not empty
+                if not content or not content.strip():
+                    self.logger.warning(
+                        f"Generated file {file_path} has empty content, skipping"
+                    )
+                    continue
+
                 with open(full_path, "w") as f:
                     f.write(content)
+
+                self.logger.debug(f"Written file: {full_path} ({len(content)} bytes)")
 
             # Generate metadata
             metadata = self._generate_node_metadata(
@@ -279,6 +641,84 @@ class OmniNodeTemplateEngine:
             full_file_paths = [
                 str(node_path / file_path) for file_path in generated_files.keys()
             ]
+
+            # === POST-GENERATION PATTERN EXTRACTION (KV-002 Integration) ===
+            # Extract and store patterns from high-quality generations for future reuse
+            quality_score = analysis_result.confidence_score
+            if (
+                self.enable_pattern_learning
+                and self.pattern_storage
+                and quality_score >= 0.8
+            ):
+                try:
+                    # Import PatternExtractor dynamically to avoid circular imports
+                    from .patterns.pattern_extractor import PatternExtractor
+
+                    self.logger.debug(
+                        f"Extracting patterns from high-quality generation (score: {quality_score:.2f})"
+                    )
+
+                    # Extract patterns from generated code
+                    extractor = PatternExtractor(min_confidence=0.5)
+                    extraction_result = extractor.extract_patterns(
+                        generated_code=node_content,
+                        context={
+                            "framework": "onex",
+                            "node_type": node_type,
+                            "service_name": microservice_name,
+                            "domain": domain,
+                            "quality_score": quality_score,
+                            "generation_date": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
+
+                    # Store high-confidence patterns asynchronously (non-blocking)
+                    import asyncio
+
+                    high_confidence_patterns = (
+                        extraction_result.high_confidence_patterns
+                    )
+
+                    if high_confidence_patterns:
+                        self.logger.info(
+                            f"Extracted {len(high_confidence_patterns)} high-confidence patterns "
+                            f"for storage ({extraction_result.extraction_time_ms}ms)"
+                        )
+
+                        # Store patterns asynchronously (fire-and-forget style)
+                        # Note: We use a simple embedding (zeros) for now - in production,
+                        # you would use a real embedding model (e.g., sentence-transformers)
+                        for pattern in high_confidence_patterns:
+                            try:
+                                # Generate a simple embedding (384 dimensions, all zeros for now)
+                                # TODO: Replace with real embedding model
+                                simple_embedding = [0.0] * 384
+
+                                # Store pattern asynchronously
+                                asyncio.create_task(
+                                    self.pattern_storage.store_pattern(
+                                        pattern, simple_embedding
+                                    )
+                                )
+                            except Exception as store_error:
+                                # Individual pattern storage failure should not break the process
+                                self.logger.warning(
+                                    f"Failed to store pattern {pattern.pattern_name} (non-critical): {store_error}"
+                                )
+                    else:
+                        self.logger.debug(
+                            "No high-confidence patterns extracted for storage"
+                        )
+
+                except Exception as e:
+                    # Pattern extraction failure should NOT break generation (non-blocking)
+                    self.logger.warning(
+                        f"Pattern extraction failed (non-critical): {e}"
+                    )
+            elif quality_score < 0.8:
+                self.logger.debug(
+                    f"Skipping pattern extraction for low-quality generation (score: {quality_score:.2f} < 0.8)"
+                )
 
             return {
                 "node_type": node_type,
@@ -311,7 +751,7 @@ class OmniNodeTemplateEngine:
 
     def _prepare_template_context(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -512,7 +952,7 @@ class OmniNodeTemplateEngine:
 
     def _generate_business_logic_stub(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
     ) -> str:
@@ -543,7 +983,7 @@ class OmniNodeTemplateEngine:
 
     async def _generate_additional_files(
         self,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         node_type: str,
         microservice_name: str,
         domain: str,
@@ -606,7 +1046,7 @@ class OmniNodeTemplateEngine:
         return files
 
     def _generate_input_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate input model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -630,7 +1070,7 @@ class Model{pascal_name}Input(BaseModel):
 '''
 
     def _generate_output_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate output model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -654,7 +1094,7 @@ class Model{pascal_name}Output(BaseModel):
 '''
 
     def _generate_config_model(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate config model"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -677,7 +1117,7 @@ class Model{pascal_name}Config(BaseModel):
 '''
 
     def _generate_operation_enum(
-        self, microservice_name: str, analysis_result: SimplePRDAnalysisResult
+        self, microservice_name: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Generate operation enum"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -703,7 +1143,7 @@ class Enum{pascal_name}OperationType(Enum):
         self,
         microservice_name: str,
         node_type: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Generate YAML contract"""
         return f"""# {microservice_name} {node_type.lower()} contract
@@ -813,7 +1253,7 @@ from .enum_{microservice_name}_operation_type import *
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate contract model (Python Pydantic) following ONEX patterns"""
@@ -911,7 +1351,7 @@ from .enum_{microservice_name}_operation_type import *
         self,
         microservice_name: str,
         node_type: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Fallback contract model generation if template doesn't exist"""
         pascal_name = self._to_pascal_case(microservice_name)
@@ -970,7 +1410,7 @@ class Model{pascal_name}{node_type_pascal}Contract(BaseModel):
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate comprehensive ONEX-compliant contract YAML"""
@@ -1130,7 +1570,7 @@ definitions:
         return contract_yaml
 
     def _build_actions_list(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+        self, analysis_result: PRDAnalysisResult, node_type: str
     ) -> str:
         """Build actions list for contract"""
         actions = []
@@ -1166,7 +1606,7 @@ definitions:
         words = [w for w in words if w not in ["the", "a", "an", "and", "or", "with"]]
         return "_".join(words[:3])
 
-    def _build_dependencies_list(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_dependencies_list(self, analysis_result: PRDAnalysisResult) -> str:
         """Build dependencies list for contract"""
         if not analysis_result.external_systems:
             return "  []"
@@ -1277,9 +1717,7 @@ algorithm:
 
         return f'["{events[0]}", "{events[1] if len(events) > 1 else events[0]}"]'
 
-    def _build_service_resolution(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_service_resolution(self, analysis_result: PRDAnalysisResult) -> str:
         """Build service resolution configuration"""
         if "Kafka" in analysis_result.external_systems or "EventBus" in str(
             analysis_result.recommended_mixins
@@ -1293,7 +1731,7 @@ algorithm:
         else:
             return "  # No service resolution required"
 
-    def _build_infrastructure(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _build_infrastructure(self, analysis_result: PRDAnalysisResult) -> str:
         """Build infrastructure configuration"""
         if "Kafka" in analysis_result.external_systems:
             return """  event_bus: {strategy: "hybrid", primary: "kafka", fallback: "http", consul_discovery: true}"""
@@ -1313,7 +1751,7 @@ algorithm:
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate node.manifest.yaml file"""
@@ -1467,7 +1905,7 @@ tags:
         return manifest
 
     def _build_capabilities_list(
-        self, analysis_result: SimplePRDAnalysisResult, node_type: str
+        self, analysis_result: PRDAnalysisResult, node_type: str
     ) -> str:
         """Build capabilities list for manifest"""
         capabilities = []
@@ -1508,9 +1946,7 @@ tags:
 
         return "\n  - " + "\n  - ".join(protocols) if protocols else "  []"
 
-    def _build_dependencies_manifest(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_dependencies_manifest(self, analysis_result: PRDAnalysisResult) -> str:
         """Build dependencies list for node manifest"""
         if not analysis_result.external_systems:
             return "  []"
@@ -1557,9 +1993,7 @@ tags:
         ]
         return "\n".join(test_cases)
 
-    def _build_external_endpoints(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _build_external_endpoints(self, analysis_result: PRDAnalysisResult) -> str:
         """Build external endpoints list"""
         if not analysis_result.external_systems:
             return "    []"
@@ -1596,7 +2030,7 @@ tags:
         return "\n".join(events)
 
     def _build_tags(
-        self, domain: str, node_type: str, analysis_result: SimplePRDAnalysisResult
+        self, domain: str, node_type: str, analysis_result: PRDAnalysisResult
     ) -> str:
         """Build tags list"""
         tags = [
@@ -1617,7 +2051,7 @@ tags:
         microservice_name: str,
         node_type: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
         context: Dict[str, Any],
     ) -> str:
         """Generate version.manifest.yaml file"""
@@ -1740,7 +2174,7 @@ quality_metrics:
         node_type: str,
         microservice_name: str,
         domain: str,
-        analysis_result: SimplePRDAnalysisResult,
+        analysis_result: PRDAnalysisResult,
     ) -> str:
         """Generate OmniNode Tool Metadata for generated node"""
         return f"""# === OmniNode:Tool_Metadata ===

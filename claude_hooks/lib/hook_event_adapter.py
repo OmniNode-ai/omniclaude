@@ -82,13 +82,13 @@ class HookEventAdapter:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - Default: KAFKA_BROKERS env var or "localhost:29102"
-                - External host: "localhost:29102" (Redpanda port mapping)
+                - Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
+                - Remote broker: "192.168.86.200:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
-            "KAFKA_BROKERS", "localhost:29102"
+            "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
         self.enable_events = enable_events
 
@@ -109,6 +109,18 @@ class HookEventAdapter:
         """
         if self._producer is None:
             try:
+                # Configurable timeouts from environment variables
+                request_timeout_ms = int(
+                    os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000")
+                )
+                connections_max_idle_ms = int(
+                    os.environ.get("KAFKA_CONNECTIONS_MAX_IDLE_MS", "5000")
+                )
+                metadata_max_age_ms = int(
+                    os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000")
+                )
+                max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
+
                 self._producer = KafkaProducer(
                     bootstrap_servers=self.bootstrap_servers.split(","),
                     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -118,8 +130,14 @@ class HookEventAdapter:
                     batch_size=16384,  # 16KB batches
                     # Reliability settings
                     acks=1,  # Wait for leader acknowledgment
-                    retries=3,
+                    retries=2,  # Reduced from 3 for faster failure
                     max_in_flight_requests_per_connection=5,
+                    # Configurable timeout settings to prevent hangs
+                    request_timeout_ms=request_timeout_ms,
+                    connections_max_idle_ms=connections_max_idle_ms,
+                    metadata_max_age_ms=metadata_max_age_ms,
+                    max_block_ms=max_block_ms,
+                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 self._initialized = True
                 self.logger.debug(

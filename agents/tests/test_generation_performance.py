@@ -13,7 +13,7 @@ from typing import Any, Dict
 import pytest
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.simple_prd_analyzer import SimplePRDAnalyzer
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_NODE_PRD,
     EFFECT_NODE_PRD,
@@ -30,7 +30,7 @@ class TestGenerationLatency:
     @pytest.mark.asyncio
     async def test_prd_analysis_latency(self):
         """Test that PRD analysis completes within expected time"""
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
 
         start_time = time.time()
         analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
@@ -77,7 +77,7 @@ class TestGenerationLatency:
     @pytest.mark.asyncio
     async def test_full_pipeline_latency(self):
         """Test that full pipeline completes within expected time"""
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         engine = OmniNodeTemplateEngine()
 
         start_time = time.time()
@@ -113,7 +113,7 @@ class TestGenerationLatency:
     @pytest.mark.asyncio
     async def test_large_prd_analysis_performance(self):
         """Test analysis performance with large PRD"""
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
 
         start_time = time.time()
         analysis = await analyzer.analyze_prd(LARGE_PRD_CONTENT)
@@ -134,7 +134,7 @@ class TestParallelGenerationSpeedup:
     @pytest.mark.asyncio
     async def test_parallel_vs_sequential_generation(self):
         """Test that parallel generation is faster than sequential"""
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         OmniNodeTemplateEngine()
 
         prds = [EFFECT_NODE_PRD, COMPUTE_NODE_PRD, REDUCER_NODE_PRD]
@@ -219,7 +219,7 @@ class TestMemoryUsage:
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         engine = OmniNodeTemplateEngine()
 
         analysis = await analyzer.analyze_prd(EFFECT_NODE_PRD)
@@ -251,7 +251,7 @@ class TestMemoryUsage:
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
 
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         await analyzer.analyze_prd(LARGE_PRD_CONTENT)
 
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -429,7 +429,7 @@ class TestBenchmarks:
     @pytest.mark.asyncio
     async def test_benchmark_full_pipeline(self):
         """Benchmark full pipeline from PRD to generated code"""
-        analyzer = SimplePRDAnalyzer()
+        analyzer = PRDAnalyzer()
         engine = OmniNodeTemplateEngine()
 
         phases = {}

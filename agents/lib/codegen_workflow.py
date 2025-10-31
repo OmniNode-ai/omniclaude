@@ -19,7 +19,7 @@ from .persistence import CodegenPersistence
 from .prd_intelligence_client import PRDIntelligenceClient
 
 # Local imports
-from .simple_prd_analyzer import SimplePRDAnalysisResult, SimplePRDAnalyzer
+from .simple_prd_analyzer import PRDAnalysisResult, PRDAnalyzer
 from .version_config import get_config
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class CodegenWorkflowResult:
         self,
         session_id: UUID,
         correlation_id: UUID,
-        prd_analysis: SimplePRDAnalysisResult,
+        prd_analysis: PRDAnalysisResult,
         generated_nodes: List[Dict[str, Any]],
         total_files: int,
         success: bool,
@@ -53,7 +53,7 @@ class CodegenWorkflow:
 
     def __init__(self, enable_parallel: bool = True, max_workers: int = 3):
         self.config = get_config()
-        self.prd_analyzer = SimplePRDAnalyzer()
+        self.prd_analyzer = PRDAnalyzer()
         self.template_engine = OmniNodeTemplateEngine()
         self.logger = logging.getLogger(__name__)
         self.persistence = CodegenPersistence()
@@ -272,7 +272,7 @@ class CodegenWorkflow:
         self,
         session_id: UUID,
         node_types: List[str],
-        prd_analysis: SimplePRDAnalysisResult,
+        prd_analysis: PRDAnalysisResult,
         microservice_name: str,
         domain: str,
         output_directory: str,
@@ -361,7 +361,7 @@ class CodegenWorkflow:
         self,
         session_id: UUID,
         node_types: List[str],
-        prd_analysis: SimplePRDAnalysisResult,
+        prd_analysis: PRDAnalysisResult,
         microservice_name: str,
         domain: str,
         output_directory: str,
@@ -435,9 +435,7 @@ class CodegenWorkflow:
 
         return generated_nodes, total_files
 
-    def _determine_node_types(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> List[str]:
+    def _determine_node_types(self, analysis_result: PRDAnalysisResult) -> List[str]:
         """Determine which node types to generate based on analysis"""
         node_types = []
 
@@ -456,9 +454,7 @@ class CodegenWorkflow:
         # Limit to 2 nodes max for MVP
         return node_types[:2]
 
-    def _extract_microservice_name(
-        self, analysis_result: SimplePRDAnalysisResult
-    ) -> str:
+    def _extract_microservice_name(self, analysis_result: PRDAnalysisResult) -> str:
         """Extract microservice name from PRD analysis"""
         # Use first word of title as microservice name
         title = analysis_result.parsed_prd.title
@@ -475,7 +471,7 @@ class CodegenWorkflow:
 
         return "microservice"
 
-    def _extract_domain(self, analysis_result: SimplePRDAnalysisResult) -> str:
+    def _extract_domain(self, analysis_result: PRDAnalysisResult) -> str:
         """Extract domain from PRD analysis"""
         # Use second word of title as domain, or default
         title = analysis_result.parsed_prd.title
@@ -603,9 +599,9 @@ class CodegenWorkflow:
         """
         try:
             # Create mock analysis result using simple models
-            from .simple_prd_analyzer import SimpleDecompositionResult, SimpleParsedPRD
+            from .simple_prd_analyzer import DecompositionResult, ParsedPRD
 
-            mock_parsed_prd = SimpleParsedPRD(
+            mock_parsed_prd = ParsedPRD(
                 title=f"{microservice_name} {node_type}",
                 description=business_description,
                 functional_requirements=[
@@ -622,11 +618,11 @@ class CodegenWorkflow:
                 word_count=len(business_description.split()),
             )
 
-            mock_decomposition = SimpleDecompositionResult(
+            mock_decomposition = DecompositionResult(
                 tasks=[], total_tasks=0, verification_successful=True
             )
 
-            mock_analysis = SimplePRDAnalysisResult(
+            mock_analysis = PRDAnalysisResult(
                 session_id=uuid4(),
                 correlation_id=uuid4(),
                 prd_content=business_description,

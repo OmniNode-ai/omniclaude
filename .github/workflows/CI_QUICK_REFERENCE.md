@@ -30,7 +30,7 @@ docker-compose down
 poetry run pytest claude_hooks/tests/ -v
 
 # Agent framework tests
-poetry run pytest agents/tests/test_enhanced_router.py \
+poetry run pytest agents/tests/test_agent_router.py \
   agents/tests/test_quality_gates.py \
   agents/tests/test_performance_thresholds.py -v
 ```

@@ -32,7 +32,7 @@ import argparse
 import json
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add _shared to path
@@ -143,7 +143,7 @@ def log_progress(args):
             "percent": (
                 args.percent if hasattr(args, "percent") and args.percent else None
             ),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
 
@@ -198,7 +198,7 @@ def log_complete(args):
         if hasattr(args, "metadata") and args.metadata
         else {}
     )
-    metadata["completed_at"] = datetime.utcnow().isoformat()
+    metadata["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     # Determine status
     status = args.status if hasattr(args, "status") and args.status else "success"

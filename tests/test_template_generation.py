@@ -35,9 +35,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
 from agents.lib.simple_prd_analyzer import (
-    SimpleDecompositionResult,
-    SimpleParsedPRD,
-    SimplePRDAnalysisResult,
+    DecompositionResult,
+    ParsedPRD,
+    PRDAnalysisResult,
 )
 
 # Configure logging
@@ -95,11 +95,11 @@ class TemplateGenerationTester:
         else:
             logger.info(f"Test artifacts preserved in {self.output_dir}")
 
-    def create_test_fixture(self) -> SimplePRDAnalysisResult:
+    def create_test_fixture(self) -> PRDAnalysisResult:
         """Create minimal test fixture for PRD analysis"""
         logger.info("Creating test fixture for PRD analysis")
 
-        parsed_prd = SimpleParsedPRD(
+        parsed_prd = ParsedPRD(
             title="Database Writer Service",
             description="A service that writes data to PostgreSQL database with validation and error handling",
             functional_requirements=[
@@ -135,7 +135,7 @@ class TemplateGenerationTester:
             word_count=250,
         )
 
-        decomposition_result = SimpleDecompositionResult(
+        decomposition_result = DecompositionResult(
             tasks=[
                 {
                     "title": "Implement database connection",
@@ -157,7 +157,7 @@ class TemplateGenerationTester:
             verification_successful=True,
         )
 
-        result = SimplePRDAnalysisResult(
+        result = PRDAnalysisResult(
             session_id=uuid4(),
             correlation_id=uuid4(),
             prd_content="Test PRD content for database writer service",

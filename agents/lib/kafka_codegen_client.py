@@ -50,11 +50,9 @@ class KafkaCodegenClient:
         cfg = get_config()
         self.bootstrap_servers = bootstrap_servers or cfg.kafka_bootstrap_servers
         self.group_id = group_id or "omniclaude-codegen-consumer"
-        # Default host rewrite to smooth local Redpanda dev: container host -> localhost mapped port
-        default_rewrite = {
-            "omninode-bridge-redpanda:9092": "localhost:29092",
-        }
-        self.host_rewrite = {**default_rewrite, **(host_rewrite or {})}
+        # Host rewrite for development environments (disabled by default - use remote broker)
+        # Only enable if explicitly provided via host_rewrite parameter
+        self.host_rewrite = host_rewrite or {}
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
 
