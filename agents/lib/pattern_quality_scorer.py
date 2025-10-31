@@ -406,10 +406,11 @@ class PatternQualityScorer:
             cursor.close()
 
         except psycopg2.errors.ForeignKeyViolation:
-            # Pattern ID doesn't exist in pattern_lineage_nodes - skip silently
+            # Defensive: FK constraint was removed in migration 013,
+            # but keeping this handler for safety
             if conn:
                 conn.rollback()
-            return  # Silently skip patterns not in lineage table
+            return  # Skip if FK constraint is ever re-added
         except psycopg2.errors.UniqueViolation:
             # Duplicate pattern - skip silently
             if conn:
