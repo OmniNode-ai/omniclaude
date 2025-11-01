@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-# Import from omnibase_core
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
+# Import from omnibase_core mock
+from agents.tests.mocks.omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 # Framework: ML-powered mixin compatibility (optional import)
 try:

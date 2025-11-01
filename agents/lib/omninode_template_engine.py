@@ -19,7 +19,7 @@ from .models.intelligence_context import IntelligenceContext, get_default_intell
 # Pattern learning imports (KV-002 integration)
 from .pattern_library import PatternLibrary
 from .patterns.pattern_storage import PatternStorage
-from .simple_prd_analyzer import PRDAnalysisResult
+from .prd_analyzer import PRDAnalysisResult
 from .template_cache import TemplateCache
 from .template_helpers import (
     format_best_practices,

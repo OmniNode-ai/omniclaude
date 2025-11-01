@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
+from agents.tests.mocks.omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 

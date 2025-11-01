@@ -12,7 +12,7 @@ import pytest
 
 # Import the classes we need
 from agents.lib.model_generator import ModelGenerator
-from agents.lib.simple_prd_analyzer import (
+from agents.lib.prd_analyzer import (
     DecompositionResult,
     ParsedPRD,
     PRDAnalysisResult,
