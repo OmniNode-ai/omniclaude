@@ -14,9 +14,8 @@ Composite Score: Weighted average of dimensions
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime, UTC
-from typing import Dict, Optional, List
-from uuid import UUID
+from datetime import UTC, datetime
+from typing import Dict, List, Optional
 
 try:
     import psycopg2
@@ -366,8 +365,10 @@ class PatternQualityScorer:
         if psycopg2 is None:
             raise ImportError("psycopg2 is required for database operations")
 
-        connection_string = db_connection_string or os.getenv(
-            "DATABASE_URL", "postgresql://localhost/omniclaude"
+        connection_string = (
+            db_connection_string
+            or os.getenv("HOST_DATABASE_URL")
+            or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude")
         )
 
         conn = None

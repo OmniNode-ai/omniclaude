@@ -41,7 +41,11 @@ except ImportError as e:
 
 
 async def process_agent_invocation(
-    prompt: str, correlation_id: str, session_id: str, context: Dict[str, Any]
+    prompt: str,
+    correlation_id: str,
+    session_id: str,
+    context: Dict[str, Any],
+    detected_agent: str = None,
 ) -> Dict[str, Any]:
     """
     Process agent invocation from hook.
@@ -51,6 +55,7 @@ async def process_agent_invocation(
         correlation_id: Request correlation ID
         session_id: Claude session ID
         context: Additional context from hook
+        detected_agent: Agent name detected by routing (forces direct_single pathway)
 
     Returns:
         Result dictionary with pathway-specific data
@@ -64,8 +69,24 @@ async def process_agent_invocation(
     )
 
     try:
-        # Invoke agent
-        result = await invoker.invoke(prompt, context)
+        # If agent was detected by routing, force direct_single pathway with that agent
+        if detected_agent:
+            # Force direct_single pathway with detected agent
+            from agent_pathway_detector import PathwayDetection
+
+            detection = PathwayDetection(
+                pathway="direct_single",
+                agents=[detected_agent],
+                task=prompt,
+                confidence=1.0,
+                trigger_pattern="hook_routing",
+            )
+
+            # Directly invoke the single agent
+            result = await invoker._invoke_direct_single(detection, context)
+        else:
+            # Fall back to automatic pathway detection
+            result = await invoker.invoke(prompt, context)
 
         # Handle pathway-specific processing
         if result.get("pathway") == "direct_single":
@@ -217,6 +238,7 @@ def main():
         correlation_id = data.get("correlation_id", "")
         session_id = data.get("session_id", "")
         context = data.get("context", {})
+        detected_agent = data.get("detected_agent")  # Agent detected by hook routing
 
         if not prompt:
             print(
@@ -237,6 +259,7 @@ def main():
                 correlation_id=correlation_id,
                 session_id=session_id,
                 context=context,
+                detected_agent=detected_agent,
             )
         )
 

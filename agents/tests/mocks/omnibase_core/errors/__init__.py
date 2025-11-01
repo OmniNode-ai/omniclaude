@@ -10,6 +10,8 @@ class EnumCoreErrorCode(str, Enum):
     """Mock error codes for testing"""
 
     VALIDATION_ERROR = "VALIDATION_ERROR"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    INVALID_INPUT = "INVALID_INPUT"
     OPERATION_FAILED = "OPERATION_FAILED"
     INITIALIZATION_ERROR = "INITIALIZATION_ERROR"
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
@@ -61,3 +63,4 @@ class ModelOnexError(OnexError):
             context: Optional error context dictionary
         """
         super().__init__(code=error_code, message=message, details=context)
+        self.error_code = error_code  # Add error_code attribute for compatibility

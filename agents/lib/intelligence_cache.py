@@ -77,10 +77,10 @@ class IntelligenceCache:
             logger.info("Intelligence cache disabled via configuration")
             return
 
-        # Valkey is already running at archon-valkey:6379 with password auth
+        # Valkey connection - use localhost for external clients, archon-valkey for Docker internal
         self.redis_url = redis_url or os.getenv(
             "VALKEY_URL",
-            "redis://:archon_cache_2025@archon-valkey:6379/0",  # Use existing service
+            "redis://:archon_cache_2025@localhost:6379/0",  # External access
         )
         self._client: Optional[Any] = None
 

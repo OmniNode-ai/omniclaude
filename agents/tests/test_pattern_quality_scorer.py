@@ -6,11 +6,12 @@ code patterns across completeness, documentation, ONEX compliance,
 metadata richness, and complexity appropriateness.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, UTC
-from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
 
 # ============================================================================
 # Test Fixtures
@@ -67,18 +68,18 @@ class NodeUserAuthEffect:
             "domain": "auth",
             "version": "1.0",
             "author": "team",
-            "reviewed": True
+            "reviewed": True,
         },
         "use_cases": [
             "user login authentication",
             "API authentication",
-            "session management"
+            "session management",
         ],
         "examples": [
             "await effect.execute_effect('user123')",
-            "effect.execute_effect(request.user_id)"
+            "effect.execute_effect(request.user_id)",
         ],
-        "confidence": 0.95
+        "confidence": 0.95,
     }
 
 
@@ -109,7 +110,7 @@ class NodeDataProcessorCompute:
         "metadata": {"complexity": "medium", "domain": "data"},
         "use_cases": ["data transformation"],
         "examples": ["await compute.execute_compute(data)"],
-        "confidence": 0.80
+        "confidence": 0.80,
     }
 
 
@@ -119,18 +120,18 @@ def stub_pattern():
     return {
         "pattern_id": "test-stub-003",
         "pattern_name": "IncompleteNode",
-        "code": '''def process():
+        "code": """def process():
     # TODO: implement logic
     pass
     raise NotImplementedError
     ...
-''',
+""",
         "text": "Stub",
         "node_type": None,
         "metadata": {},
         "use_cases": [],
         "examples": [],
-        "confidence": 0.3
+        "confidence": 0.3,
     }
 
 
@@ -146,7 +147,7 @@ def poor_pattern():
         "metadata": {},
         "use_cases": [],
         "examples": [],
-        "confidence": 0.4
+        "confidence": 0.4,
     }
 
 
@@ -175,7 +176,7 @@ def test_pattern_quality_score_instantiation():
         complexity_score=0.95,
         confidence=0.90,
         measurement_timestamp=timestamp,
-        version="1.0.0"
+        version="1.0.0",
     )
 
     assert score.pattern_id == "test-001"
@@ -203,7 +204,7 @@ def test_pattern_quality_score_default_version():
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     assert score.version == "1.0.0"
@@ -284,7 +285,7 @@ def test_score_pattern_with_missing_fields(scorer):
     """Test scoring handles missing fields gracefully."""
     minimal_pattern = {
         "pattern_id": "test-minimal",
-        "pattern_name": "Minimal"
+        "pattern_name": "Minimal",
         # Missing: code, text, metadata, etc.
     }
 
@@ -302,11 +303,11 @@ def test_score_pattern_weighted_composite(scorer, excellent_pattern):
 
     # Manually calculate weighted composite
     expected_composite = (
-        score.completeness_score * 0.30 +
-        score.documentation_score * 0.25 +
-        score.onex_compliance_score * 0.20 +
-        score.metadata_richness_score * 0.15 +
-        score.complexity_score * 0.10
+        score.completeness_score * 0.30
+        + score.documentation_score * 0.25
+        + score.onex_compliance_score * 0.20
+        + score.metadata_richness_score * 0.15
+        + score.complexity_score * 0.10
     )
 
     # Should match within floating point precision
@@ -332,13 +333,13 @@ def test_score_pattern_all_scores_in_range(scorer, excellent_pattern):
 
 def test_score_completeness_with_stubs(scorer):
     """Test completeness penalizes stub indicators."""
-    stub_code = '''
+    stub_code = """
 def process():
     pass
     # TODO: implement
     raise NotImplementedError
     ...
-'''
+"""
 
     score = scorer._score_completeness(stub_code, "")
 
@@ -348,13 +349,13 @@ def process():
 
 def test_score_completeness_with_logic(scorer):
     """Test completeness rewards meaningful logic."""
-    logic_code = '''
+    logic_code = """
 async def process(data):
     if data:
         for item in data:
             while item.is_valid():
                 yield item
-'''
+"""
 
     score = scorer._score_completeness(logic_code, "")
 
@@ -364,13 +365,13 @@ async def process(data):
 
 def test_score_completeness_with_imports(scorer):
     """Test completeness adds bonus for imports."""
-    code_with_imports = '''
+    code_with_imports = """
 import asyncio
 from typing import Dict
 
 def process():
     return {}
-'''
+"""
 
     score = scorer._score_completeness(code_with_imports, "")
 
@@ -382,7 +383,9 @@ def test_score_completeness_line_count_bonus(scorer):
     """Test completeness scales with line count."""
     # Use code with pass to ensure base score is not already maxed
     short_code = "def run():\n    pass"
-    long_code = "def run():\n    pass\n" + "\n".join([f"    # line {i}" for i in range(50)])
+    long_code = "def run():\n    pass\n" + "\n".join(
+        [f"    # line {i}" for i in range(50)]
+    )
 
     short_score = scorer._score_completeness(short_code, "")
     long_score = scorer._score_completeness(long_code, "")
@@ -441,10 +444,10 @@ def test_score_documentation_with_inline_comments(scorer):
 
 def test_score_documentation_with_type_hints(scorer):
     """Test documentation adds bonus for type hints."""
-    code_with_types = '''
+    code_with_types = """
 def process(data: str) -> int:
     return len(data)
-'''
+"""
 
     score = scorer._score_documentation(code_with_types, "")
 
@@ -488,7 +491,9 @@ def process(data: Dict) -> Dict:
     return result
 '''
 
-    score = scorer._score_documentation(comprehensive_code, "Detailed description " * 20)
+    score = scorer._score_documentation(
+        comprehensive_code, "Detailed description " * 20
+    )
 
     # Should combine: docstring (0.4) + comments (varies) + type hints (0.2) + text (0.2)
     # Should be close to 1.0 but capped
@@ -625,7 +630,7 @@ def test_score_metadata_richness_with_rich_metadata(scorer):
         "field1": "value1",
         "field2": "value2",
         "field3": "value3",
-        "field4": "value4"
+        "field4": "value4",
     }
 
     score_poor = scorer._score_metadata_richness([], [], poor_metadata)
@@ -675,13 +680,13 @@ def test_score_complexity_low_matching(scorer):
 
 def test_score_complexity_medium_matching(scorer):
     """Test complexity scoring with matching medium complexity."""
-    medium_complexity_code = '''
+    medium_complexity_code = """
 def process(data):
     if data:
         for item in data:
             if item.valid:
                 return item
-'''
+"""
 
     score = scorer._score_complexity(medium_complexity_code, "medium")
 
@@ -691,7 +696,7 @@ def process(data):
 
 def test_score_complexity_high_matching(scorer):
     """Test complexity scoring with matching high complexity."""
-    high_complexity_code = '''
+    high_complexity_code = """
 def process(data):
     if data:
         for item in data:
@@ -704,7 +709,7 @@ def process(data):
                                     pass
                     except Exception:
                         pass
-'''
+"""
 
     score = scorer._score_complexity(high_complexity_code, "high")
 
@@ -771,7 +776,7 @@ async def test_store_quality_metrics_success(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     # Mock psycopg2
@@ -779,7 +784,7 @@ async def test_store_quality_metrics_success(scorer):
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
 
         # Should not raise
@@ -807,14 +812,14 @@ async def test_store_quality_metrics_upsert(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
 
         await scorer.store_quality_metrics(score, "postgresql://test")
@@ -838,14 +843,14 @@ async def test_store_quality_metrics_json_serialization(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_Json = MagicMock()
         mock_psycopg2.extras.Json = mock_Json
         mock_psycopg2.connect.return_value = mock_conn
@@ -853,8 +858,7 @@ async def test_store_quality_metrics_json_serialization(scorer):
         await scorer.store_quality_metrics(score, "postgresql://test")
 
         # Verify Json() was called with dimension scores
-        call_args = mock_cursor.execute.call_args
-        params = call_args[0][1]
+        # params would be mock_cursor.execute.call_args[0][1]
         # metadata parameter (params[5]) should be a Json object
         # In real code, it would be psycopg2.extras.Json(dict)
 
@@ -872,10 +876,10 @@ async def test_store_quality_metrics_connection_error(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.side_effect = Exception("Connection failed")
 
         # Should raise exception
@@ -898,7 +902,7 @@ async def test_store_quality_metrics_query_error_rollback(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     mock_cursor = MagicMock()
@@ -906,7 +910,7 @@ async def test_store_quality_metrics_query_error_rollback(scorer):
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
 
         with pytest.raises(Exception) as exc_info:
@@ -931,10 +935,10 @@ async def test_store_quality_metrics_missing_psycopg2(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2', None):
+    with patch("agents.lib.pattern_quality_scorer.psycopg2", None):
         with pytest.raises(ImportError) as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
 
@@ -954,21 +958,21 @@ async def test_store_quality_metrics_default_connection_string(scorer):
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     mock_cursor = MagicMock()
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch('agents.lib.pattern_quality_scorer.psycopg2') as mock_psycopg2:
+    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
 
-        with patch.dict('os.environ', {'DATABASE_URL': 'postgresql://env_url'}):
+        with patch.dict("os.environ", {"DATABASE_URL": "postgresql://env_url"}):
             await scorer.store_quality_metrics(score)  # No connection string
 
             # Should use environment variable
-            mock_psycopg2.connect.assert_called_once_with('postgresql://env_url')
+            mock_psycopg2.connect.assert_called_once_with("postgresql://env_url")
 
 
 # ============================================================================
@@ -1025,7 +1029,9 @@ def test_full_scoring_workflow(scorer, excellent_pattern):
     assert score.version == "1.0.0"
 
 
-def test_scoring_multiple_patterns(scorer, excellent_pattern, good_pattern, poor_pattern):
+def test_scoring_multiple_patterns(
+    scorer, excellent_pattern, good_pattern, poor_pattern
+):
     """Test scoring multiple patterns maintains consistency."""
     score_excellent = scorer.score_pattern(excellent_pattern)
     score_good = scorer.score_pattern(good_pattern)
@@ -1078,19 +1084,21 @@ class NodePerfectEffect:
 
         # Return result
         return result
-''' + "\n" * 50,  # Add extra lines for line count bonus
-        "text": "This is a highly detailed and comprehensive description that provides extensive context and explanation for the pattern implementation, architecture, design decisions, and use cases." * 2,
+'''
+        + "\n" * 50,  # Add extra lines for line count bonus
+        "text": "This is a highly detailed and comprehensive description that provides extensive context and explanation for the pattern implementation, architecture, design decisions, and use cases."
+        * 2,
         "node_type": "effect",
         "metadata": {
             "complexity": "low",
             "domain": "processing",
             "version": "2.0",
             "author": "team",
-            "reviewed": True
+            "reviewed": True,
         },
         "use_cases": ["use_case_1", "use_case_2", "use_case_3"],
         "examples": ["example_1", "example_2"],
-        "confidence": 1.0
+        "confidence": 1.0,
     }
 
     score = scorer.score_pattern(perfect_pattern)

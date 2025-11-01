@@ -22,23 +22,23 @@ Requirements:
     - psycopg2-binary: Already installed
 """
 
-import asyncio
 import argparse
+import asyncio
 import os
 import sys
 import time
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+import uuid
 from collections import defaultdict
+from typing import Any, Dict, List, Optional
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
+from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import ScrollResult, Record
+    from qdrant_client.models import Record, ScrollResult
 except ImportError:
     print("Error: qdrant-client not installed")
     print("Install with: poetry install --with patterns")
@@ -48,6 +48,7 @@ except ImportError:
 # Try to import tqdm for progress bar
 try:
     from tqdm import tqdm
+
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
@@ -70,38 +71,35 @@ class QualityStats:
         """Record a successful score."""
         self.total_processed += 1
         self.scores.append(score.composite_score)
-        self.dimension_scores['completeness'].append(score.completeness_score)
-        self.dimension_scores['documentation'].append(score.documentation_score)
-        self.dimension_scores['onex_compliance'].append(score.onex_compliance_score)
-        self.dimension_scores['metadata_richness'].append(score.metadata_richness_score)
-        self.dimension_scores['complexity'].append(score.complexity_score)
+        self.dimension_scores["completeness"].append(score.completeness_score)
+        self.dimension_scores["documentation"].append(score.documentation_score)
+        self.dimension_scores["onex_compliance"].append(score.onex_compliance_score)
+        self.dimension_scores["metadata_richness"].append(score.metadata_richness_score)
+        self.dimension_scores["complexity"].append(score.complexity_score)
 
     def add_failure(self, pattern_id: str, error: str):
         """Record a failed pattern."""
         self.total_failed += 1
-        self.failed_patterns.append({
-            'pattern_id': pattern_id,
-            'error': error
-        })
+        self.failed_patterns.append({"pattern_id": pattern_id, "error": error})
 
     def get_score_distribution(self) -> Dict[str, int]:
         """Calculate score distribution across quality tiers."""
         distribution = {
-            'excellent': 0,  # >= 0.9
-            'good': 0,       # >= 0.7
-            'fair': 0,       # >= 0.5
-            'poor': 0        # < 0.5
+            "excellent": 0,  # >= 0.9
+            "good": 0,  # >= 0.7
+            "fair": 0,  # >= 0.5
+            "poor": 0,  # < 0.5
         }
 
         for score in self.scores:
             if score >= PatternQualityScorer.EXCELLENT_THRESHOLD:
-                distribution['excellent'] += 1
+                distribution["excellent"] += 1
             elif score >= PatternQualityScorer.GOOD_THRESHOLD:
-                distribution['good'] += 1
+                distribution["good"] += 1
             elif score >= PatternQualityScorer.FAIR_THRESHOLD:
-                distribution['fair'] += 1
+                distribution["fair"] += 1
             else:
-                distribution['poor'] += 1
+                distribution["poor"] += 1
 
         return distribution
 
@@ -147,63 +145,70 @@ Examples:
 
   # Process in smaller batches
   python3 scripts/backfill_pattern_quality.py --batch-size 50
-        """
+        """,
     )
 
     parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Show what would be done without writing to database'
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without writing to database",
     )
 
     parser.add_argument(
-        '--collection',
+        "--collection",
         type=str,
-        choices=['code_patterns', 'execution_patterns', 'all'],
-        default='all',
-        help='Qdrant collection to process (default: all)'
+        choices=[
+            "archon_vectors",
+            "quality_vectors",
+            "code_patterns",
+            "execution_patterns",
+            "all",
+        ],
+        default="archon_vectors",
+        help="Qdrant collection to process (default: archon_vectors)",
     )
 
     parser.add_argument(
-        '--limit',
+        "--limit",
         type=int,
         default=None,
-        help='Maximum patterns to process (default: no limit)'
+        help="Maximum patterns to process (default: no limit)",
     )
 
     parser.add_argument(
-        '--min-confidence',
+        "--min-confidence",
         type=float,
         default=0.0,
-        help='Minimum confidence threshold (default: 0.0)'
+        help="Minimum confidence threshold (default: 0.0)",
     )
 
     parser.add_argument(
-        '--batch-size',
+        "--batch-size",
         type=int,
         default=100,
-        help='Process patterns in batches (default: 100)'
+        help="Process patterns in batches (default: 100)",
     )
 
     parser.add_argument(
-        '--delay',
+        "--delay",
         type=float,
         default=0.5,
-        help='Delay in seconds between batches to prevent overwhelming system (default: 0.5)'
+        help="Delay in seconds between batches to prevent overwhelming system (default: 0.5)",
     )
 
     parser.add_argument(
-        '--qdrant-url',
+        "--qdrant-url",
         type=str,
-        default=os.getenv('QDRANT_URL', 'http://localhost:6333'),
-        help='Qdrant server URL (default: env QDRANT_URL or http://localhost:6333)'
+        default=os.getenv("QDRANT_URL", "http://localhost:6333"),
+        help="Qdrant server URL (default: env QDRANT_URL or http://localhost:6333)",
     )
 
     parser.add_argument(
-        '--database-url',
+        "--database-url",
         type=str,
-        default=os.getenv('DATABASE_URL', 'postgresql://localhost/omniclaude'),
-        help='PostgreSQL connection string (default: env DATABASE_URL or postgresql://localhost/omniclaude)'
+        default=os.getenv("HOST_DATABASE_URL")
+        or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude"),
+        help="PostgreSQL connection string (default: env HOST_DATABASE_URL, DATABASE_URL, or postgresql://localhost/omniclaude)",
     )
 
     return parser.parse_args()
@@ -228,21 +233,47 @@ def extract_pattern_from_record(record: Record) -> Dict[str, Any]:
     """
     Extract pattern data from Qdrant record.
 
-    Handles both code_patterns and execution_patterns collections.
+    Handles multiple collection types:
+    - archon_vectors: has content_preview, pattern_confidence, integer IDs
+    - quality_vectors: similar to archon_vectors
+    - code_patterns: has code, metadata, UUID IDs
+    - execution_patterns: has code, metadata, UUID IDs
+
+    Note: For integer IDs from Qdrant, generates deterministic UUIDs using UUID v5
     """
     payload = record.payload or {}
 
+    # Convert record ID to UUID format
+    # If ID is already a UUID string, use it; otherwise generate UUID v5 from integer
+    record_id_str = str(record.id)
+    try:
+        # Try to parse as UUID
+        pattern_id = str(uuid.UUID(record_id_str))
+    except ValueError:
+        # Not a valid UUID, generate one using UUID v5 (name-based)
+        # Use a namespace UUID for Qdrant patterns
+        namespace = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+        pattern_id = str(uuid.uuid5(namespace, f"qdrant-pattern-{record_id_str}"))
+
     # Common fields
     pattern = {
-        'pattern_id': str(record.id),
-        'pattern_name': payload.get('pattern_name', 'unnamed_pattern'),
-        'code': payload.get('code', ''),
-        'text': payload.get('text', payload.get('description', '')),
-        'metadata': payload.get('metadata', {}),
-        'node_type': payload.get('node_type'),
-        'use_cases': payload.get('use_cases', []),
-        'examples': payload.get('examples', []),
-        'confidence': payload.get('confidence', 0.0),
+        "pattern_id": pattern_id,
+        "pattern_name": payload.get("pattern_name", "unnamed_pattern"),
+        # Handle different code field names
+        "code": payload.get("code") or payload.get("content_preview", ""),
+        # Handle different text field names
+        "text": payload.get("text") or payload.get("description", ""),
+        "metadata": payload.get("metadata", {}),
+        # Handle different node type field names
+        "node_type": payload.get("node_type")
+        or (
+            payload.get("node_types", [None])[0] if payload.get("node_types") else None
+        ),
+        "use_cases": payload.get("use_cases", []),
+        "examples": payload.get("examples", []),
+        # Handle different confidence field names
+        "confidence": payload.get("confidence")
+        or payload.get("pattern_confidence", 0.0),
     }
 
     return pattern
@@ -252,7 +283,7 @@ async def query_patterns(
     client: QdrantClient,
     collection_name: str,
     min_confidence: float,
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Query patterns from Qdrant collection."""
     patterns = []
@@ -277,7 +308,7 @@ async def query_patterns(
                 limit=100,  # Scroll batch size
                 offset=offset,
                 with_payload=True,
-                with_vectors=False  # We don't need vectors
+                with_vectors=False,  # We don't need vectors
             )
 
             if not result[0]:  # No more records
@@ -288,7 +319,7 @@ async def query_patterns(
                 pattern = extract_pattern_from_record(record)
 
                 # Filter by confidence
-                if pattern['confidence'] >= min_confidence:
+                if pattern["confidence"] >= min_confidence:
                     patterns.append(pattern)
                     processed_count += 1
 
@@ -310,16 +341,18 @@ async def query_patterns(
 
 
 async def score_patterns(
-    patterns: List[Dict[str, Any]],
-    stats: QualityStats,
-    show_progress: bool = True
+    patterns: List[Dict[str, Any]], stats: QualityStats, show_progress: bool = True
 ) -> List[PatternQualityScore]:
     """Score patterns using PatternQualityScorer."""
     scorer = PatternQualityScorer()
     scores = []
 
     # Create progress bar if available
-    iterator = tqdm(patterns, desc="Scoring patterns") if HAS_TQDM and show_progress else patterns
+    iterator = (
+        tqdm(patterns, desc="Scoring patterns")
+        if HAS_TQDM and show_progress
+        else patterns
+    )
 
     for pattern in iterator:
         try:
@@ -327,7 +360,7 @@ async def score_patterns(
             scores.append(score)
             stats.add_score(score)
         except Exception as e:
-            pattern_id = pattern.get('pattern_id', 'unknown')
+            pattern_id = pattern.get("pattern_id", "unknown")
             stats.add_failure(pattern_id, str(e))
 
     return scores
@@ -339,7 +372,7 @@ async def store_scores(
     batch_size: int,
     stats: QualityStats,
     delay: float = 0.5,
-    dry_run: bool = False
+    dry_run: bool = False,
 ) -> None:
     """Store quality scores in PostgreSQL with rate limiting."""
     if dry_run:
@@ -352,7 +385,7 @@ async def store_scores(
 
     # Process in batches
     for i in range(0, len(scores), batch_size):
-        batch = scores[i:i + batch_size]
+        batch = scores[i : i + batch_size]
 
         for score in batch:
             try:
@@ -385,7 +418,9 @@ def print_summary(stats: QualityStats, dry_run: bool = False):
     # Overview
     print(f"\nTotal Patterns Processed: {stats.total_processed}")
     print(f"Failed Patterns: {stats.total_failed}")
-    print(f"Success Rate: {(stats.total_processed / (stats.total_processed + stats.total_failed) * 100):.1f}%")
+    print(
+        f"Success Rate: {(stats.total_processed / (stats.total_processed + stats.total_failed) * 100):.1f}%"
+    )
 
     # Performance
     elapsed = stats.get_elapsed_time()
@@ -400,10 +435,18 @@ def print_summary(stats: QualityStats, dry_run: bool = False):
 
         print(f"\nAverage Quality Score: {avg_score:.3f}")
         print("\nScore Distribution:")
-        print(f"  Excellent (≥0.9): {distribution['excellent']:4d} ({distribution['excellent']/len(stats.scores)*100:5.1f}%)")
-        print(f"  Good      (≥0.7): {distribution['good']:4d} ({distribution['good']/len(stats.scores)*100:5.1f}%)")
-        print(f"  Fair      (≥0.5): {distribution['fair']:4d} ({distribution['fair']/len(stats.scores)*100:5.1f}%)")
-        print(f"  Poor      (<0.5): {distribution['poor']:4d} ({distribution['poor']/len(stats.scores)*100:5.1f}%)")
+        print(
+            f"  Excellent (≥0.9): {distribution['excellent']:4d} ({distribution['excellent']/len(stats.scores)*100:5.1f}%)"
+        )
+        print(
+            f"  Good      (≥0.7): {distribution['good']:4d} ({distribution['good']/len(stats.scores)*100:5.1f}%)"
+        )
+        print(
+            f"  Fair      (≥0.5): {distribution['fair']:4d} ({distribution['fair']/len(stats.scores)*100:5.1f}%)"
+        )
+        print(
+            f"  Poor      (<0.5): {distribution['poor']:4d} ({distribution['poor']/len(stats.scores)*100:5.1f}%)"
+        )
 
         # Dimension averages
         dimension_avgs = stats.get_dimension_averages()
@@ -442,13 +485,18 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
 
     # Connect to Qdrant
     print("\n1. Connecting to Qdrant...")
-    qdrant_api_key = os.getenv('QDRANT_API_KEY')
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
     client = connect_to_qdrant(args.qdrant_url, qdrant_api_key)
 
     # Determine collections to process
     collections = []
-    if args.collection == 'all':
-        collections = ['code_patterns', 'execution_patterns']
+    if args.collection == "all":
+        collections = [
+            "archon_vectors",
+            "quality_vectors",
+            "code_patterns",
+            "execution_patterns",
+        ]
     else:
         collections = [args.collection]
 
@@ -459,16 +507,13 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
     for collection in collections:
         print(f"\n   Processing collection: {collection}")
         patterns = await query_patterns(
-            client,
-            collection,
-            args.min_confidence,
-            args.limit
+            client, collection, args.min_confidence, args.limit
         )
         all_patterns.extend(patterns)
 
         # Check if we've hit the limit
         if args.limit and len(all_patterns) >= args.limit:
-            all_patterns = all_patterns[:args.limit]
+            all_patterns = all_patterns[: args.limit]
             break
 
     if not all_patterns:
@@ -487,7 +532,7 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
 
     # Store scores in database
     if scores:
-        print(f"\n4. Storing quality metrics...")
+        print("\n4. Storing quality metrics...")
         print(f"  Rate limiting: {args.delay}s delay between batches")
         await store_scores(
             scores,
@@ -495,7 +540,7 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
             args.batch_size,
             stats,
             delay=args.delay,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
         )
 
     # Print summary
@@ -517,6 +562,7 @@ def main():
     except Exception as e:
         print(f"\n✗ Fatal error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

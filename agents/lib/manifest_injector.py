@@ -365,7 +365,7 @@ class ManifestInjectionStorage:
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
         self.db_password = db_password or os.environ.get(
-            "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
+            "POSTGRES_PASSWORD", "***REDACTED***"
         )
 
     def store_manifest_injection(
@@ -689,13 +689,10 @@ class ManifestInjector:
 
         # Quality scoring configuration
         self.quality_scorer = PatternQualityScorer()
-        self.enable_quality_filtering = os.getenv(
-            "ENABLE_PATTERN_QUALITY_FILTER",
-            "false"
-        ).lower() == "true"
-        self.min_quality_threshold = float(
-            os.getenv("MIN_PATTERN_QUALITY", "0.5")
+        self.enable_quality_filtering = (
+            os.getenv("ENABLE_PATTERN_QUALITY_FILTER", "false").lower() == "true"
         )
+        self.min_quality_threshold = float(os.getenv("MIN_PATTERN_QUALITY", "0.5"))
 
         self.logger = logging.getLogger(__name__)
 
@@ -799,9 +796,7 @@ class ManifestInjector:
                 score = self.quality_scorer.score_pattern(pattern)
 
                 # Store metrics asynchronously (non-blocking)
-                asyncio.create_task(
-                    self.quality_scorer.store_quality_metrics(score)
-                )
+                asyncio.create_task(self.quality_scorer.store_quality_metrics(score))
                 scores_recorded += 1
 
                 # Filter by threshold
@@ -935,7 +930,7 @@ class ManifestInjector:
 
         # Always query filesystem (local operation, doesn't require intelligence service)
         # Create a dummy client for filesystem query (not actually used)
-        from intelligence_event_client import IntelligenceEventClient
+        # Note: IntelligenceEventClient already imported at module level
 
         dummy_client = IntelligenceEventClient(
             bootstrap_servers=self.kafka_brokers,
@@ -1897,12 +1892,6 @@ class ManifestInjector:
                 },
             },
             "models": {
-                "ai_models": {
-                    "providers": [
-                        {"name": "Anthropic", "note": "Claude models available"},
-                        {"name": "Google Gemini", "note": "Gemini models available"},
-                    ]
-                },
                 "onex_models": {
                     "node_types": [
                         {"name": "EFFECT", "naming_pattern": "Node<Name>Effect"},
@@ -2046,22 +2035,25 @@ class ManifestInjector:
         """Format models section."""
         output = ["AI MODELS & DATA MODELS:"]
 
-        # AI Models
+        # AI Models - skip if no providers (removed hardcoded data)
         if "ai_models" in models_data:
-            output.append("  AI Providers:")
             providers = models_data["ai_models"].get("providers", [])
-            for provider in providers:
-                name = provider.get("name", "Unknown")
-                note = provider.get("note", "")
-                if note:
-                    output.append(f"    • {name}: {note}")
-                else:
-                    models = provider.get("models", [])
-                    if models:
-                        models_str = (
-                            ", ".join(models) if isinstance(models, list) else models
-                        )
-                        output.append(f"    • {name}: {models_str}")
+            if providers:  # Only show if we have actual provider data
+                output.append("  AI Providers:")
+                for provider in providers:
+                    name = provider.get("name", "Unknown")
+                    note = provider.get("note", "")
+                    if note:
+                        output.append(f"    • {name}: {note}")
+                    else:
+                        models = provider.get("models", [])
+                        if models:
+                            models_str = (
+                                ", ".join(models)
+                                if isinstance(models, list)
+                                else models
+                            )
+                            output.append(f"    • {name}: {models_str}")
 
         # ONEX Models
         if "onex_models" in models_data:

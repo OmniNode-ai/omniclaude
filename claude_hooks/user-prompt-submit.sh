@@ -121,6 +121,43 @@ log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATE
 log "Domain: $AGENT_DOMAIN"
 log "Reasoning: ${SELECTION_REASONING:0:120}..."
 
+# -----------------------------
+# Agent Invocation (NEW - Migration 015)
+# -----------------------------
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+  log "Loading agent YAML via simple_agent_loader.py..."
+
+  # Prepare invocation input JSON with detected agent name
+  INVOKE_INPUT="$(jq -n \
+    --arg agent "$AGENT_NAME" \
+    '{agent_name: $agent}')"
+
+  # Call simple agent loader (lightweight, no framework dependencies)
+  INVOKE_RESULT="$(echo "$INVOKE_INPUT" | timeout 3 python3 "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
+
+  # Check if invocation succeeded
+  INVOKE_SUCCESS="$(echo "$INVOKE_RESULT" | jq -r '.success // false')"
+
+  if [[ "$INVOKE_SUCCESS" == "true" ]]; then
+    # Extract agent YAML injection
+    AGENT_YAML_INJECTION="$(echo "$INVOKE_RESULT" | jq -r '.context_injection // ""')"
+
+    if [[ -n "$AGENT_YAML_INJECTION" ]]; then
+      log "Agent YAML loaded successfully (${#AGENT_YAML_INJECTION} chars)"
+    else
+      log "WARNING: Agent invocation succeeded but no YAML returned"
+      AGENT_YAML_INJECTION=""
+    fi
+  else
+    log "WARNING: Agent invocation failed, using directive-only mode"
+    INVOKE_ERROR="$(echo "$INVOKE_RESULT" | jq -r '.error // "Unknown error"')"
+    log "Agent invocation error: ${INVOKE_ERROR}"
+    AGENT_YAML_INJECTION=""
+  fi
+else
+  AGENT_YAML_INJECTION=""
+fi
+
 # Handle no agent detected
 if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
   log "No agent detected, logging failure..."
@@ -382,10 +419,13 @@ fi
 AGENT_ROLE="${AGENT_NAME#agent-}"
 
 AGENT_CONTEXT="$(cat <<EOF
+${AGENT_YAML_INJECTION}
 
 ========================================================================
-🎯 AGENT DISPATCH DIRECTIVE (Auto-detected by hooks)
+🎯 MANDATORY AGENT DISPATCH DIRECTIVE
 ========================================================================
+
+⚠️  CRITICAL INSTRUCTION: DO NOT USE TASK TOOL
 
 DETECTED AGENT: ${AGENT_NAME}
 Detected Role: ${AGENT_ROLE}
@@ -393,7 +433,32 @@ Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
-ROUTING COMPLETE - Execute as detected agent (polymorphic agent will read this directive automatically).
+$(if [[ -n "$AGENT_YAML_INJECTION" ]]; then
+  echo "✅ AGENT IDENTITY LOADED - Polymorphic transformation active"
+  echo "   Complete agent configuration injected above"
+else
+  echo "⚠️  AGENT IDENTITY NOT LOADED - Directive mode only"
+  echo "   Agent detected but YAML not available (check logs)"
+fi)
+
+========================================================================
+⚠️  EXECUTION MODE: DIRECT AGENT RESPONSE REQUIRED
+========================================================================
+
+You MUST respond directly as the ${AGENT_NAME} agent.
+
+DO NOT:
+  ❌ Use the Task tool to delegate
+  ❌ Launch a separate agent
+  ❌ Dispatch this to another process
+
+DO:
+  ✅ Assume the ${AGENT_ROLE} identity immediately
+  ✅ Use the agent capabilities defined above
+  ✅ Respond directly using agent expertise
+  ✅ Apply agent-specific workflows and methods
+
+ROUTING COMPLETE - You are now ${AGENT_NAME}.
 
 Intelligence Context Available:
 ┌────────────────────────────────────────────────────────────────────┐

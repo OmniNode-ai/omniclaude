@@ -6,16 +6,16 @@ for the pattern_quality_metrics table. These tests help prevent regressions
 related to constraint errors, type casting issues, and transaction handling.
 """
 
-import pytest
-import uuid
 import os
-from datetime import datetime, UTC
-from typing import Optional
+import uuid
+from datetime import UTC, datetime
+
+import pytest
 
 # Skip all tests if no database connection available
 pytestmark = pytest.mark.skipif(
-    not os.getenv('DATABASE_URL') and not os.getenv('POSTGRES_PASSWORD'),
-    reason="Database connection not configured"
+    not os.getenv("DATABASE_URL") and not os.getenv("POSTGRES_PASSWORD"),
+    reason="Database connection not configured",
 )
 
 
@@ -23,14 +23,14 @@ pytestmark = pytest.mark.skipif(
 def db_connection_string():
     """Get database connection string from environment."""
     # Priority: DATABASE_URL > construct from POSTGRES_PASSWORD
-    if os.getenv('DATABASE_URL'):
-        return os.getenv('DATABASE_URL')
+    if os.getenv("DATABASE_URL"):
+        return os.getenv("DATABASE_URL")
 
-    password = os.getenv('POSTGRES_PASSWORD', '***REDACTED***')
-    host = os.getenv('POSTGRES_HOST', '192.168.86.200')
-    port = os.getenv('POSTGRES_PORT', '5436')
-    database = os.getenv('POSTGRES_DATABASE', 'omninode_bridge')
-    user = os.getenv('POSTGRES_USER', 'postgres')
+    password = os.getenv("POSTGRES_PASSWORD", "***REDACTED***")
+    host = os.getenv("POSTGRES_HOST", "192.168.86.200")
+    port = os.getenv("POSTGRES_PORT", "5436")
+    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+    user = os.getenv("POSTGRES_USER", "postgres")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
@@ -52,13 +52,14 @@ async def cleanup_test_pattern(db_connection_string):
     # Cleanup after test
     try:
         import psycopg2
+
         conn = psycopg2.connect(db_connection_string)
         cursor = conn.cursor()
 
         for pattern_id in test_pattern_ids:
             cursor.execute(
                 "DELETE FROM pattern_quality_metrics WHERE pattern_id = %s",
-                (pattern_id,)
+                (pattern_id,),
             )
 
         conn.commit()
@@ -84,20 +85,22 @@ async def test_unique_constraint_exists(db_connection_string):
 
     try:
         # Query for UNIQUE constraints
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT constraint_name, constraint_type
             FROM information_schema.table_constraints
             WHERE table_name = 'pattern_quality_metrics'
             AND constraint_type = 'UNIQUE'
             AND constraint_name = 'pattern_quality_metrics_pattern_id_unique'
-        """)
+        """
+        )
 
         result = cursor.fetchone()
 
         # Constraint must exist
         assert result is not None, "UNIQUE constraint on pattern_id not found"
-        assert result[0] == 'pattern_quality_metrics_pattern_id_unique'
-        assert result[1] == 'UNIQUE'
+        assert result[0] == "pattern_quality_metrics_pattern_id_unique"
+        assert result[1] == "UNIQUE"
 
     finally:
         cursor.close()
@@ -115,20 +118,24 @@ async def test_check_constraints_exist(db_connection_string):
 
     try:
         # Query for CHECK constraints
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT constraint_name
             FROM information_schema.table_constraints
             WHERE table_name = 'pattern_quality_metrics'
             AND constraint_type = 'CHECK'
-        """)
+        """
+        )
 
         constraints = [row[0] for row in cursor.fetchall()]
 
         # Should have constraints for quality_score and confidence
-        assert any('quality_score' in c for c in constraints), \
-            "quality_score CHECK constraint not found"
-        assert any('confidence' in c for c in constraints), \
-            "confidence CHECK constraint not found"
+        assert any(
+            "quality_score" in c for c in constraints
+        ), "quality_score CHECK constraint not found"
+        assert any(
+            "confidence" in c for c in constraints
+        ), "confidence CHECK constraint not found"
 
     finally:
         cursor.close()
@@ -137,9 +144,14 @@ async def test_check_constraints_exist(db_connection_string):
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_insert_with_valid_uuid(db_connection_string, test_pattern_id, cleanup_test_pattern):
+async def test_insert_with_valid_uuid(
+    db_connection_string, test_pattern_id, cleanup_test_pattern
+):
     """Test inserting quality metrics with valid UUID pattern_id."""
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
+    from agents.lib.pattern_quality_scorer import (
+        PatternQualityScore,
+        PatternQualityScorer,
+    )
 
     cleanup_test_pattern.append(test_pattern_id)
     scorer = PatternQualityScorer()
@@ -154,7 +166,7 @@ async def test_insert_with_valid_uuid(db_connection_string, test_pattern_id, cle
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     # Should not raise
@@ -162,13 +174,14 @@ async def test_insert_with_valid_uuid(db_connection_string, test_pattern_id, cle
 
     # Verify it was stored
     import psycopg2
+
     conn = psycopg2.connect(db_connection_string)
     cursor = conn.cursor()
 
     try:
         cursor.execute(
             "SELECT pattern_id, quality_score FROM pattern_quality_metrics WHERE pattern_id = %s",
-            (test_pattern_id,)
+            (test_pattern_id,),
         )
         result = cursor.fetchone()
 
@@ -183,9 +196,14 @@ async def test_insert_with_valid_uuid(db_connection_string, test_pattern_id, cle
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_upsert_updates_existing_record(db_connection_string, test_pattern_id, cleanup_test_pattern):
+async def test_upsert_updates_existing_record(
+    db_connection_string, test_pattern_id, cleanup_test_pattern
+):
     """Test ON CONFLICT DO UPDATE actually updates existing record."""
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
+    from agents.lib.pattern_quality_scorer import (
+        PatternQualityScore,
+        PatternQualityScorer,
+    )
 
     cleanup_test_pattern.append(test_pattern_id)
     scorer = PatternQualityScorer()
@@ -201,7 +219,7 @@ async def test_upsert_updates_existing_record(db_connection_string, test_pattern
         metadata_richness_score=0.70,
         complexity_score=0.70,
         confidence=0.80,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     await scorer.store_quality_metrics(score1, db_connection_string)
@@ -217,20 +235,21 @@ async def test_upsert_updates_existing_record(db_connection_string, test_pattern
         metadata_richness_score=0.90,
         complexity_score=0.90,
         confidence=0.95,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     await scorer.store_quality_metrics(score2, db_connection_string)
 
     # Verify only one record exists with updated score
     import psycopg2
+
     conn = psycopg2.connect(db_connection_string)
     cursor = conn.cursor()
 
     try:
         cursor.execute(
             "SELECT COUNT(*), MAX(quality_score) FROM pattern_quality_metrics WHERE pattern_id = %s",
-            (test_pattern_id,)
+            (test_pattern_id,),
         )
         count, max_score = cursor.fetchone()
 
@@ -244,7 +263,9 @@ async def test_upsert_updates_existing_record(db_connection_string, test_pattern
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_constraint_violation_on_invalid_score_range(db_connection_string, test_pattern_id, cleanup_test_pattern):
+async def test_constraint_violation_on_invalid_score_range(
+    db_connection_string, test_pattern_id, cleanup_test_pattern
+):
     """Test CHECK constraint prevents invalid score values."""
     import psycopg2
 
@@ -254,11 +275,14 @@ async def test_constraint_violation_on_invalid_score_range(db_connection_string,
 
     try:
         # Try to insert score > 1.0 (should fail)
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO pattern_quality_metrics (
                 pattern_id, quality_score, confidence, measurement_timestamp
             ) VALUES (%s, %s, %s, %s)
-        """, (test_pattern_id, 1.5, 0.9, datetime.now(UTC)))
+        """,
+            (test_pattern_id, 1.5, 0.9, datetime.now(UTC)),
+        )
 
         conn.commit()
 
@@ -276,10 +300,16 @@ async def test_constraint_violation_on_invalid_score_range(db_connection_string,
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_concurrent_upserts_handle_conflicts(db_connection_string, cleanup_test_pattern):
+async def test_concurrent_upserts_handle_conflicts(
+    db_connection_string, cleanup_test_pattern
+):
     """Test concurrent upserts for same pattern_id don't cause deadlocks."""
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
     import asyncio
+
+    from agents.lib.pattern_quality_scorer import (
+        PatternQualityScore,
+        PatternQualityScorer,
+    )
 
     test_pattern_id = str(uuid.uuid4())
     cleanup_test_pattern.append(test_pattern_id)
@@ -298,23 +328,24 @@ async def test_concurrent_upserts_handle_conflicts(db_connection_string, cleanup
             metadata_richness_score=score_value,
             complexity_score=score_value,
             confidence=score_value,
-            measurement_timestamp=datetime.now(UTC)
+            measurement_timestamp=datetime.now(UTC),
         )
         await scorer.store_quality_metrics(score, db_connection_string)
 
     # Run concurrently
-    scores_to_store = [0.70 + i*0.01 for i in range(10)]
+    scores_to_store = [0.70 + i * 0.01 for i in range(10)]
     await asyncio.gather(*[store_score(s) for s in scores_to_store])
 
     # Verify only one record exists
     import psycopg2
+
     conn = psycopg2.connect(db_connection_string)
     cursor = conn.cursor()
 
     try:
         cursor.execute(
             "SELECT COUNT(*) FROM pattern_quality_metrics WHERE pattern_id = %s",
-            (test_pattern_id,)
+            (test_pattern_id,),
         )
         count = cursor.fetchone()[0]
 
@@ -333,7 +364,9 @@ async def test_concurrent_upserts_handle_conflicts(db_connection_string, cleanup
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_uuid_type_casting_in_query(db_connection_string, test_pattern_id, cleanup_test_pattern):
+async def test_uuid_type_casting_in_query(
+    db_connection_string, test_pattern_id, cleanup_test_pattern
+):
     """Test UUID type casting doesn't interfere with constraint resolution."""
     import psycopg2
     from psycopg2.extras import Json
@@ -360,28 +393,31 @@ async def test_uuid_type_casting_in_query(db_connection_string, test_pattern_id,
             ) VALUES (%s::uuid, %s, %s, %s, %s, %s)
             ON CONFLICT (pattern_id) DO UPDATE SET
                 quality_score = EXCLUDED.quality_score
-            """
+            """,
         ]
 
         for query_idx, query in enumerate(queries):
             # Use different score for each attempt
             score = 0.70 + query_idx * 0.10
 
-            cursor.execute(query, (
-                test_pattern_id,
-                score,
-                0.90,
-                datetime.now(UTC),
-                "1.0.0",
-                Json({"test": "metadata"})
-            ))
+            cursor.execute(
+                query,
+                (
+                    test_pattern_id,
+                    score,
+                    0.90,
+                    datetime.now(UTC),
+                    "1.0.0",
+                    Json({"test": "metadata"}),
+                ),
+            )
 
             conn.commit()
 
         # Verify final score (should be from second query)
         cursor.execute(
             "SELECT quality_score FROM pattern_quality_metrics WHERE pattern_id = %s",
-            (test_pattern_id,)
+            (test_pattern_id,),
         )
         result = cursor.fetchone()
 
@@ -404,11 +440,14 @@ async def test_invalid_uuid_format_rejected(db_connection_string):
 
     try:
         # Try to insert invalid UUID format
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO pattern_quality_metrics (
                 pattern_id, quality_score, confidence, measurement_timestamp
             ) VALUES (%s, %s, %s, %s)
-        """, ("not-a-valid-uuid", 0.85, 0.90, datetime.now(UTC)))
+        """,
+            ("not-a-valid-uuid", 0.85, 0.90, datetime.now(UTC)),
+        )
 
         conn.commit()
 
@@ -431,9 +470,14 @@ async def test_invalid_uuid_format_rejected(db_connection_string):
 
 @pytest.mark.database
 @pytest.mark.asyncio
-async def test_metadata_jsonb_storage(db_connection_string, test_pattern_id, cleanup_test_pattern):
+async def test_metadata_jsonb_storage(
+    db_connection_string, test_pattern_id, cleanup_test_pattern
+):
     """Test metadata is correctly stored as JSONB."""
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
+    from agents.lib.pattern_quality_scorer import (
+        PatternQualityScore,
+        PatternQualityScorer,
+    )
 
     cleanup_test_pattern.append(test_pattern_id)
     scorer = PatternQualityScorer()
@@ -448,33 +492,34 @@ async def test_metadata_jsonb_storage(db_connection_string, test_pattern_id, cle
         metadata_richness_score=0.75,
         complexity_score=0.95,
         confidence=0.90,
-        measurement_timestamp=datetime.now(UTC)
+        measurement_timestamp=datetime.now(UTC),
     )
 
     await scorer.store_quality_metrics(score, db_connection_string)
 
     # Verify metadata structure
     import psycopg2
+
     conn = psycopg2.connect(db_connection_string)
     cursor = conn.cursor()
 
     try:
         cursor.execute(
             "SELECT metadata FROM pattern_quality_metrics WHERE pattern_id = %s",
-            (test_pattern_id,)
+            (test_pattern_id,),
         )
         metadata = cursor.fetchone()[0]
 
         # Should have all dimension scores
-        assert 'completeness_score' in metadata
-        assert 'documentation_score' in metadata
-        assert 'onex_compliance_score' in metadata
-        assert 'metadata_richness_score' in metadata
-        assert 'complexity_score' in metadata
+        assert "completeness_score" in metadata
+        assert "documentation_score" in metadata
+        assert "onex_compliance_score" in metadata
+        assert "metadata_richness_score" in metadata
+        assert "complexity_score" in metadata
 
         # Verify values
-        assert metadata['completeness_score'] == 0.90
-        assert metadata['documentation_score'] == 0.80
+        assert metadata["completeness_score"] == 0.90
+        assert metadata["documentation_score"] == 0.80
 
     finally:
         cursor.close()
@@ -491,8 +536,12 @@ async def test_metadata_jsonb_storage(db_connection_string, test_pattern_id, cle
 @pytest.mark.slow
 async def test_bulk_upsert_performance(db_connection_string, cleanup_test_pattern):
     """Test performance of bulk pattern upserts."""
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer, PatternQualityScore
     import time
+
+    from agents.lib.pattern_quality_scorer import (
+        PatternQualityScore,
+        PatternQualityScorer,
+    )
 
     scorer = PatternQualityScorer()
 
@@ -511,7 +560,7 @@ async def test_bulk_upsert_performance(db_connection_string, cleanup_test_patter
             metadata_richness_score=0.80,
             complexity_score=0.80,
             confidence=0.80,
-            measurement_timestamp=datetime.now(UTC)
+            measurement_timestamp=datetime.now(UTC),
         )
         for i, pattern_id in enumerate(test_pattern_ids)
     ]
@@ -529,13 +578,14 @@ async def test_bulk_upsert_performance(db_connection_string, cleanup_test_patter
 
     # Verify all were inserted
     import psycopg2
+
     conn = psycopg2.connect(db_connection_string)
     cursor = conn.cursor()
 
     try:
         cursor.execute(
             "SELECT COUNT(*) FROM pattern_quality_metrics WHERE pattern_id = ANY(%s)",
-            (test_pattern_ids,)
+            (test_pattern_ids,),
         )
         count = cursor.fetchone()[0]
 
