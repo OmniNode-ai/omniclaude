@@ -214,9 +214,10 @@ class ViolationsLogger:
                     -self.max_violations_history :
                 ]
 
-            # Write updated summary
+            # Write updated summary with trailing newline
             with open(self.violations_summary, "w", encoding="utf-8") as f:
                 json.dump(summary, f, indent=2)
+                f.write("\n")  # Add trailing newline
 
         except Exception as e:
             print(

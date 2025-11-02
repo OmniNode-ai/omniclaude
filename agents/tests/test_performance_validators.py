@@ -291,18 +291,28 @@ class TestResourceUtilizationValidator:
     @pytest.mark.asyncio
     async def test_normal_memory_growth(self, validator):
         """Test normal memory growth doesn't trigger leak detection."""
-        # Get current memory usage
-        import psutil
+        # Use fixed baseline to avoid flaky tests due to varying process memory
+        # Simulate: baseline 50MB, current 52MB = 2MB growth (within 5MB expected)
+        baseline_mb = 50.0
 
-        process = psutil.Process()
-        current_mb = process.memory_info().rss / (1024 * 1024)
+        # Mock the validator's process instance to return controlled memory value
+        from unittest.mock import Mock
+
+        mock_process = Mock()
+        mock_process.memory_info.return_value = Mock(rss=int(52 * 1024 * 1024))  # 52MB
+        mock_process.cpu_percent.return_value = 10.0  # 10% CPU
+        mock_process.num_fds.return_value = 50  # Normal file descriptor count
+        mock_process.num_threads.return_value = 5  # Normal thread count
+
+        # Replace the validator's process with our mock
+        validator.process = mock_process
 
         # Simulate normal growth
         context = {
             "max_memory_mb": 100.0,
             "check_memory_leaks": True,
-            "baseline_memory_mb": current_mb - 2,  # Small 2MB growth
-            "expected_memory_growth_mb": 5.0,  # Expected 5MB
+            "baseline_memory_mb": baseline_mb,  # 50MB baseline
+            "expected_memory_growth_mb": 5.0,  # Expected 5MB (actual: 2MB)
         }
         result = await validator.validate(context)
 
@@ -312,18 +322,28 @@ class TestResourceUtilizationValidator:
     @pytest.mark.asyncio
     async def test_high_memory_growth_warning(self, validator):
         """Test warning for high but not critical memory growth."""
-        # Get current memory usage
-        import psutil
+        # Use fixed baseline to avoid flaky tests due to varying process memory
+        # Simulate: baseline 50MB, current 58MB = 8MB growth (1.6x expected 5MB)
+        baseline_mb = 50.0
 
-        process = psutil.Process()
-        current_mb = process.memory_info().rss / (1024 * 1024)
+        # Mock the validator's process instance to return controlled memory value
+        from unittest.mock import Mock
+
+        mock_process = Mock()
+        mock_process.memory_info.return_value = Mock(rss=int(58 * 1024 * 1024))  # 58MB
+        mock_process.cpu_percent.return_value = 10.0  # 10% CPU
+        mock_process.num_fds.return_value = 50  # Normal file descriptor count
+        mock_process.num_threads.return_value = 5  # Normal thread count
+
+        # Replace the validator's process with our mock
+        validator.process = mock_process
 
         # Simulate moderate growth
         context = {
             "max_memory_mb": 100.0,
             "check_memory_leaks": True,
-            "baseline_memory_mb": current_mb - 8,  # 8MB growth
-            "expected_memory_growth_mb": 5.0,  # Expected 5MB (1.6x)
+            "baseline_memory_mb": baseline_mb,  # 50MB baseline
+            "expected_memory_growth_mb": 5.0,  # Expected 5MB (actual: 8MB = 1.6x)
         }
         result = await validator.validate(context)
 

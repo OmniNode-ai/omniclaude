@@ -219,8 +219,21 @@ class TriggerMatcher:
         if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
 
-        # Use SequenceMatcher for similarity
-        return SequenceMatcher(None, trigger, text).ratio()
+        # For better fuzzy matching, check against individual words in the text
+        # not just the entire text (which fails for length differences)
+        words = re.findall(r"\b\w+\b", text.lower())
+
+        # Check similarity against each word
+        best_word_score = 0.0
+        for word in words:
+            word_score = SequenceMatcher(None, trigger, word).ratio()
+            best_word_score = max(best_word_score, word_score)
+
+        # Also check against entire text (for multi-word triggers)
+        full_text_score = SequenceMatcher(None, trigger, text).ratio()
+
+        # Return the best score
+        return max(best_word_score, full_text_score)
 
     def _keyword_overlap_score(self, keywords: List[str], triggers: List[str]) -> float:
         """

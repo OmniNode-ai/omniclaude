@@ -277,7 +277,9 @@ def create_mock_analysis_result(
         parsed_prd=parsed_prd,
         decomposition_result=decomposition_result,
         node_type_hints=node_type_hints,
-        recommended_mixins=mixins or ["MixinEventBus", "MixinHealthCheck"],
+        recommended_mixins=(
+            mixins if mixins is not None else ["MixinEventBus", "MixinHealthCheck"]
+        ),
         external_systems=external_systems or ["PostgreSQL", "Redis"],
         quality_baseline=0.85,
         confidence_score=0.90,
@@ -289,28 +291,33 @@ def create_mock_analysis_result(
 EFFECT_ANALYSIS_RESULT = create_mock_analysis_result(
     EFFECT_NODE_PRD,
     "EFFECT",
-    mixins=["MixinEventBus", "MixinHealthCheck", "MixinCaching"],
+    mixins=["MixinEventBus", "MixinHealthCheck"],  # Only use available mixins
     external_systems=["PostgreSQL", "Redis", "Kafka"],
 )
 
 COMPUTE_ANALYSIS_RESULT = create_mock_analysis_result(
     COMPUTE_NODE_PRD,
     "COMPUTE",
-    mixins=["MixinValidation", "MixinMetrics"],
+    mixins=["MixinValidation"],  # COMPUTE nodes often need validation
     external_systems=[],
 )
 
 REDUCER_ANALYSIS_RESULT = create_mock_analysis_result(
     REDUCER_NODE_PRD,
     "REDUCER",
-    mixins=["MixinEventBus", "MixinCaching", "MixinMetrics"],
+    mixins=["MixinEventBus"],  # Only use available mixins
     external_systems=["PostgreSQL", "Redis"],
 )
 
 ORCHESTRATOR_ANALYSIS_RESULT = create_mock_analysis_result(
     ORCHESTRATOR_NODE_PRD,
     "ORCHESTRATOR",
-    mixins=["MixinEventBus", "MixinHealthCheck", "MixinCircuitBreaker", "MixinRetry"],
+    mixins=[
+        "MixinEventBus",
+        "MixinHealthCheck",
+        "MixinCircuitBreaker",
+        "MixinRetry",
+    ],  # Orchestrators need resilience patterns
     external_systems=["Kafka", "PostgreSQL", "Redis"],
 )
 

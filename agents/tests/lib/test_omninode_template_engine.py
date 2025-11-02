@@ -230,7 +230,9 @@ class TestNodeTemplate:
         error = exc_info.value
         assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
         assert "Missing required placeholders" in error.message
-        assert "missing_placeholders" in error.details
+        # Error details are nested under 'context' key
+        assert "context" in error.details
+        assert "missing_placeholders" in error.details["context"]
 
     def test_validate_context_extra_variables(
         self, sample_template_content, sample_context
@@ -842,9 +844,21 @@ class TestHelperMethods:
                 enable_cache=False, enable_pattern_learning=False
             )
 
-            # Currently returns empty string (TODO in code)
+            # Test with available mixins
             imports = engine._generate_mixin_imports(["MixinEventBus", "MixinRetry"])
-            assert imports == ""
+            # MixinEventBus is available, MixinRetry is not
+            assert imports == "from omnibase_core.mixins import MixinEventBus"
+
+            # Test with no available mixins
+            imports_none = engine._generate_mixin_imports(["MixinRetry"])
+            assert imports_none == ""
+
+            # Test with multiple available mixins
+            imports_multi = engine._generate_mixin_imports(
+                ["MixinEventBus", "MixinHealthCheck"]
+            )
+            assert "MixinEventBus" in imports_multi
+            assert "MixinHealthCheck" in imports_multi
 
     def test_generate_mixin_inheritance(self, temp_templates_dir):
         """Test mixin inheritance generation"""
@@ -855,11 +869,24 @@ class TestHelperMethods:
                 enable_cache=False, enable_pattern_learning=False
             )
 
-            # Currently returns empty string (TODO in code)
+            # Test with available mixins
             inheritance = engine._generate_mixin_inheritance(
                 ["MixinEventBus", "MixinRetry"]
             )
-            assert inheritance == ""
+            # MixinEventBus is available, MixinRetry is not
+            # Returns comma-prefixed string for class inheritance
+            assert inheritance == ", MixinEventBus"
+
+            # Test with no available mixins
+            inheritance_none = engine._generate_mixin_inheritance(["MixinRetry"])
+            assert inheritance_none == ""
+
+            # Test with multiple available mixins
+            inheritance_multi = engine._generate_mixin_inheritance(
+                ["MixinEventBus", "MixinHealthCheck"]
+            )
+            assert "MixinEventBus" in inheritance_multi
+            assert "MixinHealthCheck" in inheritance_multi
 
     def test_generate_mixin_initialization(self, temp_templates_dir):
         """Test mixin initialization generation"""

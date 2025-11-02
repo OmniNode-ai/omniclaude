@@ -256,11 +256,11 @@ A basic service with minimal requirements.
     @pytest.mark.asyncio
     async def test_mixin_integration(self):
         """Test that mixins are properly integrated in generated code"""
-        # Create analysis with specific mixins
+        # Create analysis with specific mixins (only use available mixins)
         analysis = create_mock_analysis_result(
             EFFECT_NODE_PRD,
             "EFFECT",
-            mixins=["MixinEventBus", "MixinCaching", "MixinHealthCheck"],
+            mixins=["MixinEventBus", "MixinHealthCheck"],  # Only available mixins
             external_systems=["PostgreSQL"],
         )
 
@@ -278,10 +278,16 @@ A basic service with minimal requirements.
             with open(result["main_file"], "r") as f:
                 content = f.read()
 
-            # Verify mixin imports
-            assert "from omnibase_core.mixins" in content or "MixinEventBus" in content
-            assert "MixinCaching" in content
-            assert "MixinHealthCheck" in content
+            # Verify mixin imports and usage
+            assert (
+                "from omnibase_core.mixins import" in content
+            ), "Mixin import statement not found"
+            assert (
+                "MixinEventBus" in content
+            ), "MixinEventBus not found in generated code"
+            assert (
+                "MixinHealthCheck" in content
+            ), "MixinHealthCheck not found in generated code"
 
     @pytest.mark.asyncio
     async def test_metadata_preservation(self):

@@ -94,8 +94,6 @@ def test_uuid_conversion_consistency_across_collections():
 @pytest.mark.asyncio
 async def test_store_quality_metrics_with_unique_constraint_violation():
     """Test handling of unique constraint violation on pattern_id."""
-    import psycopg2.errors
-
     from agents.lib.pattern_quality_scorer import (
         PatternQualityScore,
         PatternQualityScorer,
@@ -115,9 +113,21 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
         measurement_timestamp=datetime.now(UTC),
     )
 
+    # Create a mock ForeignKeyViolation error (needed for mock setup)
+    class MockForeignKeyViolation(Exception):
+        """Mock for psycopg2.errors.ForeignKeyViolation."""
+
+        pass
+
+    # Create a mock for general database error
+    class MockDatabaseError(Exception):
+        """Mock for database errors."""
+
+        pass
+
     mock_cursor = MagicMock()
-    # Simulate unique constraint violation
-    mock_cursor.execute.side_effect = psycopg2.errors.UniqueViolation(
+    # Simulate a database error
+    mock_cursor.execute.side_effect = MockDatabaseError(
         "duplicate key value violates unique constraint"
     )
     mock_conn = MagicMock()
@@ -125,14 +135,17 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
-        mock_psycopg2.errors.UniqueViolation = psycopg2.errors.UniqueViolation
+        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolation
 
-        # Should handle gracefully (ON CONFLICT should prevent this, but test defensive handling)
-        with pytest.raises(Exception):
+        # Should handle gracefully and raise wrapped exception
+        with pytest.raises(Exception) as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
 
+        # Verify error message
+        assert "Failed to store quality metrics" in str(exc_info.value)
+
         # Verify rollback was called
-        mock_conn.rollback.assert_called_once()
+        mock_conn.rollback.assert_called()
 
 
 @pytest.mark.asyncio
@@ -212,6 +225,12 @@ async def test_store_quality_metrics_with_invalid_uuid_format():
         measurement_timestamp=datetime.now(UTC),
     )
 
+    # Create a mock ForeignKeyViolation error
+    class MockForeignKeyViolation(Exception):
+        """Mock for psycopg2.errors.ForeignKeyViolation."""
+
+        pass
+
     mock_cursor = MagicMock()
     mock_cursor.execute.side_effect = Exception("invalid input syntax for type uuid")
     mock_conn = MagicMock()
@@ -219,6 +238,7 @@ async def test_store_quality_metrics_with_invalid_uuid_format():
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolation
 
         with pytest.raises(Exception) as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
@@ -404,17 +424,19 @@ def test_extract_pattern_handles_node_types_array():
 @pytest.mark.timeout(5)
 async def test_query_patterns_performance_with_pagination():
     """Test pattern querying handles large collections efficiently."""
-    from qdrant_client.models import ScrollResult
-
     from scripts.backfill_pattern_quality import query_patterns
 
     # Mock Qdrant client with pagination
     mock_client = Mock()
     mock_collections = Mock()
-    mock_collections.collections = [Mock(name="code_patterns")]
+    # Create mock collection with .name attribute
+    mock_collection = Mock()
+    mock_collection.name = "code_patterns"
+    mock_collections.collections = [mock_collection]
     mock_client.get_collections.return_value = mock_collections
 
     # Simulate 3 pages of results (100 per page)
+    # scroll() returns tuple (points, next_offset)
     page_results = []
     for page in range(3):
         records = []
@@ -430,7 +452,7 @@ async def test_query_patterns_performance_with_pagination():
 
         # Last page has offset=None to stop pagination
         offset = f"page_{page+1}" if page < 2 else None
-        page_results.append(ScrollResult(points=records, next_page_offset=offset))
+        page_results.append((records, offset))
 
     mock_client.scroll.side_effect = page_results
 
@@ -447,16 +469,18 @@ async def test_query_patterns_performance_with_pagination():
 @pytest.mark.asyncio
 async def test_query_patterns_respects_limit():
     """Test pattern querying respects limit parameter."""
-    from qdrant_client.models import ScrollResult
-
     from scripts.backfill_pattern_quality import query_patterns
 
     mock_client = Mock()
     mock_collections = Mock()
-    mock_collections.collections = [Mock(name="code_patterns")]
+    # Create mock collection with .name attribute
+    mock_collection = Mock()
+    mock_collection.name = "code_patterns"
+    mock_collections.collections = [mock_collection]
     mock_client.get_collections.return_value = mock_collections
 
     # Return 150 patterns
+    # scroll() returns tuple (points, next_offset)
     records = [
         Mock(
             id=str(uuid.uuid4()),
@@ -464,9 +488,7 @@ async def test_query_patterns_respects_limit():
         )
         for i in range(150)
     ]
-    mock_client.scroll.return_value = ScrollResult(
-        points=records, next_page_offset=None
-    )
+    mock_client.scroll.return_value = (records, None)
 
     patterns = await query_patterns(
         mock_client,

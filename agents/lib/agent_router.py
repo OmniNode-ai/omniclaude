@@ -252,9 +252,8 @@ class AgentRouter:
             # 6. Limit to max recommendations
             recommendations = recommendations[:max_recommendations]
 
-            # 7. Cache results
-            if recommendations:
-                self.cache.set(user_request, recommendations, context)
+            # 7. Cache results (even empty results to avoid recomputation)
+            self.cache.set(user_request, recommendations, context)
 
             # 8. Log routing decision
             logger.info(

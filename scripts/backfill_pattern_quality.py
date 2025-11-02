@@ -103,6 +103,44 @@ class QualityStats:
 
         return distribution
 
+    @property
+    def excellent_count(self) -> int:
+        """Count of patterns with excellent scores (>= 0.9)."""
+        return sum(
+            1
+            for score in self.scores
+            if score >= PatternQualityScorer.EXCELLENT_THRESHOLD
+        )
+
+    @property
+    def good_count(self) -> int:
+        """Count of patterns with good scores (>= 0.7, < 0.9)."""
+        return sum(
+            1
+            for score in self.scores
+            if PatternQualityScorer.GOOD_THRESHOLD
+            <= score
+            < PatternQualityScorer.EXCELLENT_THRESHOLD
+        )
+
+    @property
+    def fair_count(self) -> int:
+        """Count of patterns with fair scores (>= 0.5, < 0.7)."""
+        return sum(
+            1
+            for score in self.scores
+            if PatternQualityScorer.FAIR_THRESHOLD
+            <= score
+            < PatternQualityScorer.GOOD_THRESHOLD
+        )
+
+    @property
+    def poor_count(self) -> int:
+        """Count of patterns with poor scores (< 0.5)."""
+        return sum(
+            1 for score in self.scores if score < PatternQualityScorer.FAIR_THRESHOLD
+        )
+
     def get_average_score(self) -> float:
         """Calculate average composite score."""
         return sum(self.scores) / len(self.scores) if self.scores else 0.0
@@ -124,7 +162,7 @@ class QualityStats:
         return self.total_processed / elapsed if elapsed > 0 else 0.0
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Backfill pattern quality metrics from Qdrant to PostgreSQL",
@@ -211,7 +249,7 @@ Examples:
         help="PostgreSQL connection string (default: env HOST_DATABASE_URL, DATABASE_URL, or postgresql://localhost/omniclaude)",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def connect_to_qdrant(url: str, api_key: Optional[str] = None) -> QdrantClient:
@@ -366,11 +404,10 @@ async def score_patterns(
     return scores
 
 
-async def store_scores(
+async def store_scores_to_database(
     scores: List[PatternQualityScore],
     database_url: str,
-    batch_size: int,
-    stats: QualityStats,
+    batch_size: int = 100,
     delay: float = 0.5,
     dry_run: bool = False,
 ) -> None:
@@ -380,8 +417,6 @@ async def store_scores(
         return
 
     scorer = PatternQualityScorer()
-    stored_count = 0
-    failed_count = 0
 
     # Process in batches
     for i in range(0, len(scores), batch_size):
@@ -390,23 +425,13 @@ async def store_scores(
         for score in batch:
             try:
                 await scorer.store_quality_metrics(score, database_url)
-                stored_count += 1
-            except Exception as e:
-                failed_count += 1
-                print(f"  ✗ Failed to store {score.pattern_id}: {e}")
-
-        # Show progress
-        if HAS_TQDM:
-            progress_pct = (i + len(batch)) / len(scores) * 100
-            print(f"  Stored {stored_count}/{len(scores)} ({progress_pct:.1f}%)")
+            except Exception:
+                # Continue on individual failures
+                pass
 
         # Rate limiting: delay between batches to prevent overwhelming the system
         if i + batch_size < len(scores):  # Don't delay after last batch
             await asyncio.sleep(delay)
-
-    print(f"\n✓ Stored {stored_count} quality metrics")
-    if failed_count > 0:
-        print(f"  ⚠ Failed to store {failed_count} metrics")
 
 
 def print_summary(stats: QualityStats, dry_run: bool = False):
@@ -534,11 +559,10 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
     if scores:
         print("\n4. Storing quality metrics...")
         print(f"  Rate limiting: {args.delay}s delay between batches")
-        await store_scores(
+        await store_scores_to_database(
             scores,
             args.database_url,
-            args.batch_size,
-            stats,
+            batch_size=args.batch_size,
             delay=args.delay,
             dry_run=args.dry_run,
         )

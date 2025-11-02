@@ -422,7 +422,7 @@ async def test_uuid_type_casting_in_query(
         result = cursor.fetchone()
 
         assert result is not None
-        assert result[0] == 0.80  # Score from second upsert
+        assert abs(result[0] - 0.80) < 0.0001  # Score from second upsert (approx)
 
     finally:
         cursor.close()
@@ -583,8 +583,9 @@ async def test_bulk_upsert_performance(db_connection_string, cleanup_test_patter
     cursor = conn.cursor()
 
     try:
+        # Cast text array to uuid array for proper type matching
         cursor.execute(
-            "SELECT COUNT(*) FROM pattern_quality_metrics WHERE pattern_id = ANY(%s)",
+            "SELECT COUNT(*) FROM pattern_quality_metrics WHERE pattern_id = ANY(%s::uuid[])",
             (test_pattern_ids,),
         )
         count = cursor.fetchone()[0]

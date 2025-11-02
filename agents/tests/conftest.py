@@ -21,11 +21,23 @@ to the test execution environment.
 import sys
 from pathlib import Path
 
+# Load environment variables from .env file before any tests run
+# This ensures database credentials and other config are available
+from dotenv import load_dotenv
+
 # Ensure project root is on sys.path for test imports
 # This allows tests to import from the agents package
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Load .env from project root
+env_path = PROJECT_ROOT / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    # Fallback: try to load from current directory
+    load_dotenv()
 
 # Add mocks directory for omnibase_core stub
 # This allows tests to use mock implementations of external dependencies

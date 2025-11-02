@@ -174,8 +174,9 @@ class OmniNodeTemplateEngine:
     # Valid node types (ONEX 4-node architecture)
     VALID_NODE_TYPES = {"EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"}
 
-    # Dangerous path patterns
-    DANGEROUS_PATH_PATTERNS = {"..", "~", "/etc", "/var", "/sys", "/proc", "\\"}
+    # Dangerous path patterns (simplified - more sophisticated checks below)
+    # Note: /var removed from here since macOS temp dirs use /var/folders
+    DANGEROUS_PATH_PATTERNS = {"..", "~", "/etc", "/sys", "/proc", "\\"}
 
     def __init__(self, enable_cache: bool = True, enable_pattern_learning: bool = True):
         self.config = get_config()
@@ -368,25 +369,48 @@ class OmniNodeTemplateEngine:
         try:
             # Resolve to absolute path safely
             resolved_path = path.resolve()
-
-            # Check if path tries to escape to system directories
-            system_dirs = ["/etc", "/var", "/sys", "/proc", "/boot", "/root"]
-            for system_dir in system_dirs:
-                if str(resolved_path).startswith(system_dir):
-                    raise ModelOnexError(
-                        error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                        message=f"Cannot write to system directory: {system_dir}",
-                        context={
-                            "output_directory": output_directory,
-                            "resolved_path": str(resolved_path),
-                        },
-                    )
         except Exception as e:
+            # Only catch path resolution errors
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Invalid output path: {str(e)}",
                 context={"output_directory": output_directory},
             ) from e
+
+        # Allow temporary directories (macOS uses /var/folders, Linux uses /tmp)
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir()).resolve()
+        if str(resolved_path).startswith(str(temp_dir)):
+            # This is a legitimate temporary directory
+            return
+
+        # Check if path tries to escape to system directories
+        # Note: Blocking /var/log, /var/www etc but allowing /var/folders (temp)
+        dangerous_system_dirs = ["/etc", "/sys", "/proc", "/boot", "/root"]
+        # Add specific /var subdirectories that should be blocked
+        # On macOS, /var is a symlink to /private/var, so check both
+        dangerous_var_dirs = [
+            "/var/log",
+            "/private/var/log",
+            "/var/www",
+            "/private/var/www",
+            "/var/lib",
+            "/private/var/lib",
+            "/var/cache",
+            "/private/var/cache",
+        ]
+
+        for system_dir in dangerous_system_dirs + dangerous_var_dirs:
+            if str(resolved_path).startswith(system_dir):
+                raise ModelOnexError(
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Cannot write to system directory: {system_dir}",
+                    context={
+                        "output_directory": output_directory,
+                        "resolved_path": str(resolved_path),
+                    },
+                )
 
     def _validate_file_path(self, file_path: str, base_directory: Path):
         """
@@ -924,25 +948,52 @@ class OmniNodeTemplateEngine:
         if not mixins:
             return ""
 
-        # TODO: Re-enable when omnibase_core supports mixins
-        # Temporarily disabled to avoid importing non-existent modules
-        return ""
+        # Filter to only include mixins that exist in omnibase_core
+        AVAILABLE_MIXINS = {
+            "MixinEventBus",
+            "MixinHealthCheck",
+            "MixinEventListener",
+            "MixinEventHandler",
+            "MixinServiceRegistry",
+            "MixinNodeLifecycle",
+            "MixinNodeIntrospection",
+            "MixinIntrospectionPublisher",
+            "MixinFailFast",
+        }
 
-        # imports = []
-        # for mixin in mixins:
-        #     imports.append(f"from omnibase_core.mixins.{mixin.lower()} import {mixin}")
-        # return "\n".join(imports)
+        available_mixins = [m for m in mixins if m in AVAILABLE_MIXINS]
+
+        if not available_mixins:
+            return ""
+
+        # Generate import statement
+        mixin_list = ", ".join(available_mixins)
+        return f"from omnibase_core.mixins import {mixin_list}"
 
     def _generate_mixin_inheritance(self, mixins: List[str]) -> str:
         """Generate mixin inheritance chain"""
         if not mixins:
             return ""
 
-        # TODO: Re-enable when omnibase_core supports mixins
-        # Temporarily disabled to avoid using non-existent mixin classes
-        return ""
+        # Filter to only include mixins that exist in omnibase_core
+        AVAILABLE_MIXINS = {
+            "MixinEventBus",
+            "MixinHealthCheck",
+            "MixinEventListener",
+            "MixinEventHandler",
+            "MixinServiceRegistry",
+            "MixinNodeLifecycle",
+            "MixinNodeIntrospection",
+            "MixinIntrospectionPublisher",
+            "MixinFailFast",
+        }
 
-        # return ", " + ", ".join(mixins)
+        available_mixins = [m for m in mixins if m in AVAILABLE_MIXINS]
+
+        if not available_mixins:
+            return ""
+
+        return ", " + ", ".join(available_mixins)
 
     def _generate_mixin_initialization(self, mixins: List[str]) -> str:
         """Generate mixin initialization code"""

@@ -70,7 +70,7 @@ def sample_config():
 class TestIntelligenceConfigDefaults:
     """Test default configuration values."""
 
-    def test_default_values(self):
+    def test_default_values(self, clean_env):
         """Test all default configuration values are set correctly."""
         config = IntelligenceConfig()
 
@@ -459,7 +459,7 @@ class TestEdgeCases:
         config = IntelligenceConfig(kafka_bootstrap_servers="[::1]:9092")
         assert config.kafka_bootstrap_servers == "[::1]:9092"
 
-    def test_config_immutability_with_pydantic(self):
+    def test_config_immutability_with_pydantic(self, clean_env):
         """Test configuration is immutable after creation."""
         config = IntelligenceConfig()
         # Pydantic models are mutable by default, but we can test field access

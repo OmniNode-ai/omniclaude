@@ -880,6 +880,10 @@ async def test_store_quality_metrics_connection_error(scorer):
     )
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
+        # Mock the errors module to avoid "catching classes that do not inherit from BaseException"
+        mock_errors = MagicMock()
+        mock_errors.ForeignKeyViolation = type("ForeignKeyViolation", (Exception,), {})
+        mock_psycopg2.errors = mock_errors
         mock_psycopg2.connect.side_effect = Exception("Connection failed")
 
         # Should raise exception
@@ -911,6 +915,10 @@ async def test_store_quality_metrics_query_error_rollback(scorer):
     mock_conn.cursor.return_value = mock_cursor
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
+        # Mock the errors module
+        mock_errors = MagicMock()
+        mock_errors.ForeignKeyViolation = type("ForeignKeyViolation", (Exception,), {})
+        mock_psycopg2.errors = mock_errors
         mock_psycopg2.connect.return_value = mock_conn
 
         with pytest.raises(Exception) as exc_info:
@@ -966,12 +974,21 @@ async def test_store_quality_metrics_default_connection_string(scorer):
     mock_conn.cursor.return_value = mock_cursor
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
+        # Mock the errors module
+        mock_errors = MagicMock()
+        mock_errors.ForeignKeyViolation = type("ForeignKeyViolation", (Exception,), {})
+        mock_psycopg2.errors = mock_errors
         mock_psycopg2.connect.return_value = mock_conn
 
-        with patch.dict("os.environ", {"DATABASE_URL": "postgresql://env_url"}):
+        # Clear HOST_DATABASE_URL so DATABASE_URL is used instead
+        with patch.dict(
+            "os.environ",
+            {"DATABASE_URL": "postgresql://env_url", "HOST_DATABASE_URL": ""},
+            clear=False,
+        ):
             await scorer.store_quality_metrics(score)  # No connection string
 
-            # Should use environment variable
+            # Should use DATABASE_URL environment variable
             mock_psycopg2.connect.assert_called_once_with("postgresql://env_url")
 
 
