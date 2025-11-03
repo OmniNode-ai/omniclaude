@@ -326,13 +326,14 @@ class AgentRouter:
 
             # Patterns for generic agent requests (no specific agent name)
             # These should default to polymorphic-agent
+            # Word boundaries (\b) prevent false positives like "misuse an agent"
             generic_patterns = [
-                r"use\s+an?\s+agent",  # "use an agent" or "use a agent"
-                r"spawn\s+an?\s+agent",  # "spawn an agent" or "spawn a agent"
-                r"spawn\s+an?\s+poly",  # "spawn a poly" or "spawn an poly"
-                r"dispatch\s+an?\s+agent",  # "dispatch an agent" or "dispatch a agent"
-                r"call\s+an?\s+agent",  # "call an agent" or "call a agent"
-                r"invoke\s+an?\s+agent",  # "invoke an agent" or "invoke a agent"
+                r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
+                r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
+                r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
+                r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
+                r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
+                r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
             ]
 
             # Check generic patterns

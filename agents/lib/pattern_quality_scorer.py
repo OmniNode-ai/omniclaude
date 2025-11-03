@@ -11,6 +11,7 @@ Scoring Dimensions:
 Composite Score: Weighted average of dimensions
 """
 
+import asyncio
 import os
 import re
 from dataclasses import dataclass
@@ -341,36 +342,22 @@ class PatternQualityScorer:
 
         return 0.6
 
-    async def store_quality_metrics(
-        self, score: PatternQualityScore, db_connection_string: Optional[str] = None
+    def _store_quality_metrics_sync(
+        self, score: PatternQualityScore, connection_string: str
     ) -> None:
         """
-        Store quality metrics to pattern_quality_metrics table.
+        Synchronous database operations for storing quality metrics.
 
-        Uses upsert (INSERT ... ON CONFLICT UPDATE) to handle duplicate pattern_ids.
-        Requires UNIQUE constraint on pattern_id (added in migration 014).
-
-        Upsert Behavior:
-        - If pattern_id doesn't exist: Creates new record
-        - If pattern_id exists: Updates quality_score, confidence, timestamp, version, metadata
+        This method runs in a thread pool via asyncio.to_thread() to avoid
+        blocking the event loop with synchronous psycopg2 operations.
 
         Args:
             score: PatternQualityScore object to store
-            db_connection_string: PostgreSQL connection string (defaults to env var)
+            connection_string: PostgreSQL connection string
 
         Raises:
-            ImportError: If psycopg2 is not installed
             Exception: Database connection or query errors
         """
-        if psycopg2 is None:
-            raise ImportError("psycopg2 is required for database operations")
-
-        connection_string = (
-            db_connection_string
-            or os.getenv("HOST_DATABASE_URL")
-            or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude")
-        )
-
         conn = None
         try:
             conn = psycopg2.connect(connection_string)
@@ -434,3 +421,41 @@ class PatternQualityScorer:
         finally:
             if conn:
                 conn.close()
+
+    async def store_quality_metrics(
+        self, score: PatternQualityScore, db_connection_string: Optional[str] = None
+    ) -> None:
+        """
+        Store quality metrics to pattern_quality_metrics table (async wrapper).
+
+        Uses upsert (INSERT ... ON CONFLICT UPDATE) to handle duplicate pattern_ids.
+        Requires UNIQUE constraint on pattern_id (added in migration 014).
+
+        This method runs synchronous psycopg2 operations in a thread pool to avoid
+        blocking the event loop. All callers can continue using await.
+
+        Upsert Behavior:
+        - If pattern_id doesn't exist: Creates new record
+        - If pattern_id exists: Updates quality_score, confidence, timestamp, version, metadata
+
+        Args:
+            score: PatternQualityScore object to store
+            db_connection_string: PostgreSQL connection string (defaults to env var)
+
+        Raises:
+            ImportError: If psycopg2 is not installed
+            Exception: Database connection or query errors
+        """
+        if psycopg2 is None:
+            raise ImportError("psycopg2 is required for database operations")
+
+        connection_string = (
+            db_connection_string
+            or os.getenv("HOST_DATABASE_URL")
+            or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude")
+        )
+
+        # Run synchronous database operations in thread pool to avoid blocking event loop
+        await asyncio.to_thread(
+            self._store_quality_metrics_sync, score, connection_string
+        )

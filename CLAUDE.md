@@ -116,16 +116,27 @@ ZAI_API_KEY=your_zai_api_key_here
 
 **⚠️ IMPORTANT: Source `.env` before running psql commands**
 
+**🔒 SECURITY WARNING**: Never hardcode passwords in documentation. Always use environment variables from `.env`.
+
 ```bash
-source .env  # Loads POSTGRES_PASSWORD=***REDACTED***
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+# REQUIRED: Load credentials from .env first
+source .env
+
+# Verify password is loaded
+echo "Password loaded: ${POSTGRES_PASSWORD:+YES}"
+
+# Connect to database using environment variables
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}
 ```
 
 **Connection Details**:
 - Host: `192.168.86.200` | Port: `5436` | Database: `omninode_bridge`
-- Password in `.env`: `POSTGRES_PASSWORD=***REDACTED***`
+- Password in `.env`: `POSTGRES_PASSWORD=<set_in_env>` (NEVER commit real passwords)
 
-**If auth fails**: Verify `.env` exists and is sourced: `source .env && grep POSTGRES_PASSWORD .env`
+**If auth fails**:
+1. Verify `.env` exists: `ls -la .env`
+2. Verify password is set: `source .env && echo "Password: ${POSTGRES_PASSWORD:+SET}"` (don't echo actual value!)
+3. Check `.env` format: `grep POSTGRES_PASSWORD .env` (value should be unquoted)
 
 #### Kafka Configuration
 ```bash
@@ -393,8 +404,8 @@ docker-compose -f deployment/docker-compose.yml up -d archon-router-consumer
 docker restart omniclaude_archon_router_consumer
 docker logs -f omniclaude_archon_router_consumer
 
-# Query routing decisions
-source .env && psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
+# Query routing decisions (using environment variables)
+source .env && psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
   -c "SELECT * FROM agent_routing_decisions ORDER BY created_at DESC LIMIT 10;"
 
 # Test routing
@@ -734,7 +745,9 @@ Agent receives manifest
 ./scripts/health_check.sh                                    # Comprehensive check
 curl http://localhost:6333/collections                       # Qdrant
 curl http://localhost:8053/health                            # archon-intelligence
-source .env && psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
+
+# Database verification (using environment variables)
+source .env && psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -c "SELECT 1"
 ```
 
 ---
@@ -742,7 +755,7 @@ source .env && psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c 
 ## Quick Reference
 
 ### 🔑 Credentials
-**⚠️ Always source `.env` first**: `source .env` (contains `POSTGRES_PASSWORD=***REDACTED***`)
+**⚠️ Always source `.env` first**: `source .env` (loads `POSTGRES_PASSWORD` - NEVER hardcode passwords in documentation)
 
 ### Service URLs
 - Intelligence: `http://localhost:8053/health`, `http://localhost:6333/collections`
@@ -759,9 +772,11 @@ python3 agents/lib/agent_history_browser.py --agent <name>
 docker restart archon-intelligence
 docker logs -f omniclaude_archon_router_consumer
 
-# Database (after source .env)
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
-psql ... -c "SELECT * FROM v_agent_execution_trace LIMIT 10;"
+# Database (ALWAYS source .env first)
+source .env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -c "SELECT * FROM v_agent_execution_trace LIMIT 10;"
 
 # Provider switching
 ./toggle-claude-provider.sh gemini-flash
@@ -790,14 +805,16 @@ python3 agents/services/test_router_service.py -v
 
 ### Security Best Practices
 
-1. **Never commit API keys** to version control
-2. **Use `.env.example`** as a template for your local `.env` file
-3. **Rotate keys regularly** (every 30-90 days recommended)
-4. **Use separate keys** for development and production
-5. **Enable IP restrictions** in provider dashboards
-6. **Set usage quotas** to limit damage from leaks
-7. **Monitor API usage** regularly
-8. **Change default passwords** in production (especially PostgreSQL)
+1. **Never commit secrets to version control** (API keys, passwords, tokens)
+2. **Never hardcode passwords in documentation** - always use placeholders like `<set_in_env>` or `${POSTGRES_PASSWORD}`
+3. **Use `.env.example`** as a template for your local `.env` file
+4. **Rotate keys and passwords regularly** (every 30-90 days recommended)
+5. **Use separate credentials** for development and production
+6. **Enable IP restrictions** in provider dashboards and database configs
+7. **Set usage quotas** to limit damage from leaks
+8. **Monitor API usage** and database access regularly
+9. **Change ALL default passwords** immediately in production (especially PostgreSQL)
+10. **Use environment variables** for all sensitive configuration values
 
 **See [SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md)** for:
 - Obtaining API keys from provider dashboards

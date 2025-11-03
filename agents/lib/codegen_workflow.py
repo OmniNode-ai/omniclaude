@@ -10,8 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-# Import from omnibase_core mock
-from agents.lib.errors import EnumCoreErrorCode, OnexError
+from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .parallel_generator import GenerationJob, ParallelGenerator

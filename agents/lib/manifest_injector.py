@@ -817,14 +817,18 @@ class ManifestInjector:
 
         filtered = []
         scores_recorded = 0
+        metric_tasks = []
 
         for pattern in patterns:
             try:
                 # Score pattern
                 score = self.quality_scorer.score_pattern(pattern)
 
-                # Store metrics asynchronously (non-blocking)
-                asyncio.create_task(self.quality_scorer.store_quality_metrics(score))
+                # Store metrics asynchronously (collect tasks to await later)
+                task = asyncio.create_task(
+                    self.quality_scorer.store_quality_metrics(score)
+                )
+                metric_tasks.append(task)
                 scores_recorded += 1
 
                 # Filter by threshold
@@ -836,6 +840,29 @@ class ManifestInjector:
                     f"Failed to score pattern {pattern.get('name', 'unknown')}: {e}"
                 )
                 filtered.append(pattern)  # Include pattern on scoring failure
+
+        # Await all metric storage tasks to ensure data persistence
+        if metric_tasks:
+            self.logger.debug(f"Awaiting {len(metric_tasks)} metric storage tasks...")
+            results = await asyncio.gather(*metric_tasks, return_exceptions=True)
+
+            # Log any exceptions from metric storage
+            failed_tasks = 0
+            for idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    failed_tasks += 1
+                    self.logger.warning(
+                        f"Metric storage task {idx + 1} failed: {result}"
+                    )
+
+            if failed_tasks > 0:
+                self.logger.warning(
+                    f"{failed_tasks}/{len(metric_tasks)} metric storage tasks failed"
+                )
+            else:
+                self.logger.debug(
+                    f"All {len(metric_tasks)} metric storage tasks completed successfully"
+                )
 
         # Log filtering statistics
         self.logger.info(
