@@ -296,6 +296,7 @@ class TriggerMatcher:
         Check if trigger matches with word boundaries.
 
         Prevents matching "poly" in "polymorphic" or "polly" in "pollyanna".
+        Also prevents "use an agent" from matching "misuse an agent".
 
         Args:
             trigger: Trigger phrase to match
@@ -306,12 +307,11 @@ class TriggerMatcher:
         """
         trigger_lower = trigger.lower()
 
-        # For multi-word triggers, check if entire phrase appears
-        if " " in trigger_lower:
-            return trigger_lower in text
-
-        # For single-word triggers, use word boundary regex
-        # This prevents "poly" from matching "polymorphic"
+        # Use word boundary regex for both single-word and multi-word triggers
+        # This prevents false positives like:
+        # - "use an agent" matching "misuse an agent"
+        # - "spawn an agent" matching "respawn an agent"
+        # - "poly" matching "polymorphic"
         pattern = r"\b" + re.escape(trigger_lower) + r"\b"
         return bool(re.search(pattern, text))
 
