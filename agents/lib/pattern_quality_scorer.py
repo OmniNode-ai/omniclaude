@@ -59,7 +59,7 @@ class PatternQualityScorer:
         "complexity": 0.10,
     }
 
-    def score_pattern(self, pattern: Dict) -> PatternQualityScore:
+    def score_pattern(self, pattern: dict) -> PatternQualityScore:
         """
         Score a pattern across all quality dimensions.
 
@@ -218,7 +218,7 @@ class PatternQualityScorer:
         return min(1.0, score)
 
     def _score_onex_compliance(
-        self, code: str, node_type: Optional[str], pattern_name: str
+        self, code: str, node_type: str | None, pattern_name: str
     ) -> float:
         """
         Score ONEX architecture compliance.
@@ -265,7 +265,7 @@ class PatternQualityScorer:
         return min(1.0, score)
 
     def _score_metadata_richness(
-        self, use_cases: List, examples: List, metadata: Dict
+        self, use_cases: list, examples: list, metadata: dict
     ) -> float:
         """
         Score metadata richness.
@@ -299,7 +299,7 @@ class PatternQualityScorer:
 
         return min(1.0, score)
 
-    def _score_complexity(self, code: str, declared_complexity: Optional[str]) -> float:
+    def _score_complexity(self, code: str, declared_complexity: str | None) -> float:
         """
         Score complexity appropriateness.
 
@@ -374,7 +374,6 @@ class PatternQualityScorer:
 
             # Upsert query with ON CONFLICT on pattern_id
             # Uses UNIQUE constraint added in migration 014
-            # Explicit cast to UUID for proper constraint matching
             query = """
                 INSERT INTO pattern_quality_metrics (
                     pattern_id,
@@ -383,7 +382,7 @@ class PatternQualityScorer:
                     measurement_timestamp,
                     version,
                     metadata
-                ) VALUES (%s::uuid, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (pattern_id) DO UPDATE SET
                     quality_score = EXCLUDED.quality_score,
                     confidence = EXCLUDED.confidence,
@@ -392,6 +391,7 @@ class PatternQualityScorer:
                     metadata = EXCLUDED.metadata
             """
 
+            # Pass pattern_id directly - psycopg2 handles string-to-UUID conversion
             cursor.execute(
                 query,
                 (
@@ -423,7 +423,7 @@ class PatternQualityScorer:
                 conn.close()
 
     async def store_quality_metrics(
-        self, score: PatternQualityScore, db_connection_string: Optional[str] = None
+        self, score: PatternQualityScore, db_connection_string: str | None = None
     ) -> None:
         """
         Store quality metrics to pattern_quality_metrics table (async wrapper).
