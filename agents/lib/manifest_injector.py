@@ -120,6 +120,19 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from task_classifier import TaskClassifier, TaskContext, TaskIntent
 
+# Import RelevanceScorer for pattern relevance filtering
+try:
+    from relevance_scorer import RelevanceScorer
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from relevance_scorer import RelevanceScorer
+
 logger = logging.getLogger(__name__)
 
 
@@ -1007,7 +1020,9 @@ class ManifestInjector:
             query_tasks = {}
 
             if "patterns" in sections_to_query:
-                query_tasks["patterns"] = self._query_patterns(client, correlation_id)
+                query_tasks["patterns"] = self._query_patterns(
+                    client, correlation_id, task_context, user_prompt
+                )
 
             if "infrastructure" in sections_to_query:
                 query_tasks["infrastructure"] = self._query_infrastructure(client, correlation_id)
@@ -1073,6 +1088,8 @@ class ManifestInjector:
         correlation_id: str,
         collections: List[str] = None,
         limit_per_collection: int = 20,
+        task_context: Optional[TaskContext] = None,
+        user_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Direct fallback: Query Qdrant HTTP API directly for patterns.
@@ -1084,6 +1101,8 @@ class ManifestInjector:
             correlation_id: Correlation ID for tracking
             collections: List of collection names (default: ["code_generation_patterns"])
             limit_per_collection: Number of patterns to retrieve per collection
+            task_context: Classified task context for relevance filtering (optional)
+            user_prompt: Original user prompt for relevance filtering (optional)
 
         Returns:
             Patterns data dictionary with results from Qdrant
@@ -1192,6 +1211,39 @@ class ManifestInjector:
                         )
                         continue
 
+            # Apply relevance filtering if task_context and user_prompt are provided
+            if task_context and user_prompt and all_patterns:
+                original_count = len(all_patterns)
+                scorer = RelevanceScorer()
+
+                scored_patterns = []
+                for pattern in all_patterns:
+                    score = scorer.score_pattern_relevance(
+                        pattern=pattern,
+                        task_context=task_context,
+                        user_prompt=user_prompt,
+                    )
+
+                    # Only include patterns above threshold
+                    if score > 0.3:
+                        scored_patterns.append((pattern, score))
+
+                # Sort by score (descending) and take top-N
+                scored_patterns.sort(key=lambda x: x[1], reverse=True)
+                all_patterns = [p for p, score in scored_patterns[:limit_per_collection]]
+
+                if scored_patterns:
+                    avg_score = sum(s for _, s in scored_patterns) / len(scored_patterns)
+                    self.logger.info(
+                        f"[{correlation_id}] Filtered patterns by relevance: "
+                        f"{len(all_patterns)} relevant (from {original_count} total), "
+                        f"avg_score={avg_score:.2f}"
+                    )
+                else:
+                    self.logger.warning(
+                        f"[{correlation_id}] No patterns met relevance threshold (>0.3)"
+                    )
+
             elapsed_ms = int((time.time() - start_time) * 1000)
 
             result = {
@@ -1224,6 +1276,8 @@ class ManifestInjector:
         self,
         client: IntelligenceEventClient,
         correlation_id: str,
+        task_context: Optional[TaskContext] = None,
+        user_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query available code generation patterns from BOTH collections.
@@ -1236,6 +1290,8 @@ class ManifestInjector:
         Args:
             client: Intelligence event client
             correlation_id: Correlation ID for tracking
+            task_context: Classified task context for relevance filtering (optional)
+            user_prompt: Original user prompt for relevance filtering (optional)
 
         Returns:
             Patterns data dictionary with merged results from both collections
@@ -1370,6 +1426,8 @@ class ManifestInjector:
                         correlation_id=correlation_id,
                         collections=["code_generation_patterns"],
                         limit_per_collection=20,
+                        task_context=task_context,
+                        user_prompt=user_prompt,
                     )
 
                     if fallback_result.get("patterns"):
@@ -1436,6 +1494,8 @@ class ManifestInjector:
                     correlation_id=correlation_id,
                     collections=["code_generation_patterns"],
                     limit_per_collection=20,
+                    task_context=task_context,
+                    user_prompt=user_prompt,
                 )
 
                 if fallback_result.get("patterns"):
