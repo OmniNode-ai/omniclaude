@@ -120,9 +120,9 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from task_classifier import TaskClassifier, TaskContext, TaskIntent
 
-# Import RelevanceScorer for pattern relevance filtering
+# Import ArchonHybridScorer for pattern relevance filtering via Archon Intelligence API
 try:
-    from relevance_scorer import RelevanceScorer
+    from archon_hybrid_scorer import ArchonHybridScorer
 except ImportError:
     # Handle imports when module is installed in ~/.claude/agents/lib/
     import sys
@@ -131,7 +131,7 @@ except ImportError:
     lib_path = Path(__file__).parent
     if str(lib_path) not in sys.path:
         sys.path.insert(0, str(lib_path))
-    from relevance_scorer import RelevanceScorer
+    from archon_hybrid_scorer import ArchonHybridScorer
 
 logger = logging.getLogger(__name__)
 
@@ -971,7 +971,7 @@ class ManifestInjector:
             except Exception as e:
                 self.logger.warning(
                     f"[{correlation_id}] Failed to classify task: {e}. Proceeding with default sections.",
-                    exc_info=True
+                    exc_info=True,
                 )
 
         # Always query filesystem (local operation, doesn't require intelligence service)
@@ -1014,7 +1014,9 @@ class ManifestInjector:
 
             # Select sections based on task context
             sections_to_query = self._select_sections_for_task(task_context)
-            self.logger.info(f"[{correlation_id}] Selected sections: {sections_to_query}")
+            self.logger.info(
+                f"[{correlation_id}] Selected sections: {sections_to_query}"
+            )
 
             # Build query_tasks based on selected sections
             query_tasks = {}
@@ -1025,7 +1027,9 @@ class ManifestInjector:
                 )
 
             if "infrastructure" in sections_to_query:
-                query_tasks["infrastructure"] = self._query_infrastructure(client, correlation_id)
+                query_tasks["infrastructure"] = self._query_infrastructure(
+                    client, correlation_id
+                )
 
             if "models" in sections_to_query:
                 query_tasks["models"] = self._query_models(client, correlation_id)
@@ -1083,6 +1087,47 @@ class ManifestInjector:
             # Stop client
             await client.stop()
 
+    async def _embed_text(self, text: str, model: str = None) -> Optional[List[float]]:
+        """
+        Embed text using Ollama embedding model.
+
+        Args:
+            text: Text to embed
+            model: Embedding model name (default: rjmalagon/gte-qwen2-1.5b-instruct-embed-f16 for 1536-dim)
+
+        Returns:
+            Embedding vector as list of floats, or None on error
+        """
+        import aiohttp
+
+        if model is None:
+            # Default to model that matches archon_vectors collection (1536 dimensions)
+            model = "rjmalagon/gte-qwen2-1.5b-instruct-embed-f16"
+
+        try:
+            ollama_url = os.environ.get(
+                "OLLAMA_BASE_URL", "http://192.168.86.200:11434"
+            )
+            url = f"{ollama_url}/api/embeddings"
+
+            payload = {"model": model, "prompt": text}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get("embedding")
+                    else:
+                        self.logger.warning(
+                            f"Ollama embedding failed with status {response.status}"
+                        )
+                        return None
+        except Exception as e:
+            self.logger.warning(f"Failed to embed text: {e}")
+            return None
+
     async def _query_patterns_direct_qdrant(
         self,
         correlation_id: str,
@@ -1095,26 +1140,45 @@ class ManifestInjector:
         Direct fallback: Query Qdrant HTTP API directly for patterns.
 
         This method bypasses the event bus and queries Qdrant directly via HTTP.
-        Used as a fallback when event-based approach fails or times out.
+        Uses vector search API for semantic similarity when user_prompt is provided.
+        Falls back to scroll API when no prompt is available.
 
         Args:
             correlation_id: Correlation ID for tracking
             collections: List of collection names (default: ["code_generation_patterns"])
             limit_per_collection: Number of patterns to retrieve per collection
             task_context: Classified task context for relevance filtering (optional)
-            user_prompt: Original user prompt for relevance filtering (optional)
+            user_prompt: Original user prompt for semantic search (optional)
 
         Returns:
             Patterns data dictionary with results from Qdrant
         """
         import time
+
         import aiohttp
 
         if collections is None:
-            collections = ["code_generation_patterns"]
+            # Use archon_vectors which has 1536-dim vectors (matches gte-qwen2 model)
+            collections = ["archon_vectors"]
 
         start_time = time.time()
         all_patterns = []
+
+        # Embed user prompt for semantic search
+        query_vector = None
+        if user_prompt:
+            self.logger.info(
+                f"[{correlation_id}] Embedding user prompt for semantic search"
+            )
+            query_vector = await self._embed_text(user_prompt)
+            if query_vector:
+                self.logger.info(
+                    f"[{correlation_id}] Generated embedding vector (dim={len(query_vector)})"
+                )
+            else:
+                self.logger.warning(
+                    f"[{correlation_id}] Failed to embed prompt, falling back to scroll API"
+                )
 
         try:
             qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
@@ -1122,126 +1186,297 @@ class ManifestInjector:
             async with aiohttp.ClientSession() as session:
                 for collection_name in collections:
                     try:
-                        # Query Qdrant scroll API to get patterns
-                        url = f"{qdrant_url}/collections/{collection_name}/points/scroll"
-                        payload = {
-                            "limit": limit_per_collection,
-                            "with_payload": True,
-                            "with_vector": False,
-                        }
+                        # Use search API if we have a query vector, otherwise use scroll
+                        if query_vector:
+                            # Vector search for semantic similarity
+                            url = f"{qdrant_url}/collections/{collection_name}/points/search"
+                            payload = {
+                                "vector": query_vector,
+                                "limit": limit_per_collection,
+                                "with_payload": True,
+                                "with_vector": False,
+                            }
+                            search_method = "search (vector)"
+                        else:
+                            # Fallback to scroll API
+                            url = f"{qdrant_url}/collections/{collection_name}/points/scroll"
+                            payload = {
+                                "limit": limit_per_collection,
+                                "with_payload": True,
+                                "with_vector": False,
+                            }
+                            search_method = "scroll"
 
                         async with session.post(url, json=payload) as response:
                             if response.status == 200:
                                 data = await response.json()
-                                points = data.get("result", {}).get("points", [])
+                                result = data.get("result", [])
+
+                                # Handle different response structures:
+                                # - search API returns result as direct list: {"result": [...]}
+                                # - scroll API returns result as dict with points: {"result": {"points": [...]}}
+                                if isinstance(result, list):
+                                    points = result
+                                elif isinstance(result, dict):
+                                    points = result.get("points", [])
+                                else:
+                                    points = []
 
                                 # Transform Qdrant points to pattern format
                                 for point in points:
-                                    payload = point.get("payload", {})
-                                    source_context = payload.get("source_context", {})
-                                    metadata = payload.get("metadata", {})
+                                    try:
+                                        point_payload = point.get("payload", {})
 
-                                    # Extract node_types - check multiple locations
-                                    node_types = payload.get("node_types", [])
-                                    if not node_types:
-                                        node_types = metadata.get("node_types", [])
-                                    if not node_types and source_context.get("node_type"):
-                                        node_types = [source_context.get("node_type")]
+                                        # Handle different collection structures
+                                        # archon_vectors: has quality_score, pattern_confidence at top level
+                                        # code_generation_patterns: has source_context.quality_score
+                                        source_context = point_payload.get(
+                                            "source_context", {}
+                                        )
+                                        metadata = point_payload.get("metadata", {})
 
-                                    # Extract use_cases - check multiple locations
-                                    use_cases = payload.get("use_cases", [])
-                                    if not use_cases:
-                                        use_cases = metadata.get("use_cases", [])
-                                    if not use_cases:
-                                        use_cases = payload.get("reuse_conditions", [])
+                                        # Extract node_types - check multiple locations
+                                        node_types = point_payload.get("node_types", [])
+                                        if not node_types and isinstance(
+                                            metadata, dict
+                                        ):
+                                            node_types = metadata.get("node_types", [])
+                                        if (
+                                            not node_types
+                                            and isinstance(source_context, dict)
+                                            and source_context.get("node_type")
+                                        ):
+                                            node_types = [
+                                                source_context.get("node_type")
+                                            ]
 
-                                    # Extract file_path - check both payload and metadata
-                                    file_path = payload.get("file_path", "")
-                                    if not file_path:
-                                        file_path = metadata.get("file_path", "")
+                                        # Extract use_cases - check multiple locations
+                                        use_cases = point_payload.get("use_cases", [])
+                                        if not use_cases and isinstance(metadata, dict):
+                                            use_cases = metadata.get("use_cases", [])
+                                        if not use_cases:
+                                            reuse_conds = point_payload.get(
+                                                "reuse_conditions", []
+                                            )
+                                            if isinstance(reuse_conds, list):
+                                                use_cases = reuse_conds
 
-                                    # Extract confidence - prioritize point score, then metadata, then payload
-                                    confidence = point.get("score", 0.0)
-                                    if confidence == 0.0:
-                                        confidence = metadata.get("confidence", 0.0)
-                                    if confidence == 0.0:
-                                        confidence = payload.get("confidence_score", 0.0)
+                                        # Extract file_path - check both payload and metadata
+                                        file_path = point_payload.get("file_path", "")
+                                        if not file_path and isinstance(metadata, dict):
+                                            file_path = metadata.get("file_path", "")
 
-                                    pattern = {
-                                        "name": payload.get(
-                                            "pattern_name", payload.get("name", "Unknown Pattern")
-                                        ),
-                                        "description": payload.get(
-                                            "pattern_description", payload.get("description", "")
-                                        ),
-                                        "file_path": file_path,
-                                        "node_types": node_types,
-                                        "confidence": confidence,
-                                        "use_cases": use_cases,
-                                        "pattern_id": payload.get("pattern_id", ""),
-                                        "pattern_type": payload.get("pattern_type", ""),
-                                        "confidence_score": payload.get(
-                                            "confidence_score", 0.0
-                                        ),
-                                        "usage_count": payload.get("usage_count", 0),
-                                        "success_rate": payload.get("success_rate", 0.0),
-                                        "source_context": source_context,
-                                        "example_usage": payload.get(
-                                            "example_usage", []
-                                        ),
-                                        "pattern_template": payload.get(
-                                            "pattern_template", ""
-                                        ),
-                                        "reuse_conditions": payload.get(
+                                        # Extract semantic score from point.score (for search API)
+                                        # This is the vector similarity score from Qdrant search
+                                        semantic_score = point.get("score", 0.5)
+
+                                        # Extract quality score - prioritize source_context, then top-level
+                                        if (
+                                            isinstance(source_context, dict)
+                                            and "quality_score" in source_context
+                                        ):
+                                            quality_score = source_context.get(
+                                                "quality_score", 0.5
+                                            )
+                                        else:
+                                            quality_score = point_payload.get(
+                                                "quality_score", 0.5
+                                            )
+
+                                        # Extract confidence - use pattern_confidence or confidence_score
+                                        confidence = point_payload.get(
+                                            "pattern_confidence", 0.0
+                                        )
+                                        if confidence == 0.0:
+                                            confidence = point_payload.get(
+                                                "confidence_score", 0.0
+                                            )
+                                        if confidence == 0.0 and isinstance(
+                                            metadata, dict
+                                        ):
+                                            confidence = metadata.get("confidence", 0.0)
+                                        if confidence == 0.0:
+                                            # If using vector search, semantic_score is meaningful
+                                            confidence = semantic_score
+
+                                        # Extract keywords - from reuse_conditions, concepts, or themes
+                                        keywords = point_payload.get(
                                             "reuse_conditions", []
-                                        ),
-                                    }
-                                    all_patterns.append(pattern)
+                                        )
+                                        if not keywords:
+                                            keywords = point_payload.get("concepts", [])
+                                        if not keywords:
+                                            keywords = point_payload.get("themes", [])
+                                        if not isinstance(keywords, list):
+                                            keywords = []
+
+                                        pattern = {
+                                            "name": point_payload.get(
+                                                "pattern_name",
+                                                point_payload.get(
+                                                    "title",
+                                                    point_payload.get(
+                                                        "name", "Unknown Pattern"
+                                                    ),
+                                                ),
+                                            ),
+                                            "description": point_payload.get(
+                                                "pattern_description",
+                                                point_payload.get(
+                                                    "content",
+                                                    point_payload.get(
+                                                        "description", ""
+                                                    ),
+                                                )[
+                                                    :500
+                                                ],  # Limit content length
+                                            ),
+                                            "file_path": file_path,
+                                            "node_types": (
+                                                node_types
+                                                if isinstance(node_types, list)
+                                                else []
+                                            ),
+                                            "confidence": confidence,
+                                            "use_cases": (
+                                                use_cases
+                                                if isinstance(use_cases, list)
+                                                else []
+                                            ),
+                                            "pattern_id": point_payload.get(
+                                                "pattern_id",
+                                                point_payload.get("entity_id", ""),
+                                            ),
+                                            "pattern_type": point_payload.get(
+                                                "pattern_type",
+                                                point_payload.get("entity_type", ""),
+                                            ),
+                                            "confidence_score": point_payload.get(
+                                                "confidence_score",
+                                                point_payload.get(
+                                                    "pattern_confidence", 0.0
+                                                ),
+                                            ),
+                                            "usage_count": point_payload.get(
+                                                "usage_count", 0
+                                            ),
+                                            "success_rate": point_payload.get(
+                                                "success_rate", 0.0
+                                            ),
+                                            "source_context": (
+                                                source_context
+                                                if isinstance(source_context, dict)
+                                                else {}
+                                            ),
+                                            "example_usage": point_payload.get(
+                                                "example_usage",
+                                                point_payload.get("examples", []),
+                                            ),
+                                            "pattern_template": point_payload.get(
+                                                "pattern_template", ""
+                                            ),
+                                            "reuse_conditions": point_payload.get(
+                                                "reuse_conditions", []
+                                            ),
+                                            # Keywords from various sources
+                                            "keywords": keywords,
+                                            # Proper metadata extraction
+                                            "metadata": {
+                                                # Use quality_score from source_context or top-level
+                                                "quality_score": quality_score,
+                                                "confidence_score": point_payload.get(
+                                                    "confidence_score",
+                                                    point_payload.get(
+                                                        "pattern_confidence", 0.5
+                                                    ),
+                                                ),
+                                                "success_rate": point_payload.get(
+                                                    "success_rate", 0.5
+                                                ),
+                                                "usage_count": point_payload.get(
+                                                    "usage_count", 0
+                                                ),
+                                                "pattern_type": point_payload.get(
+                                                    "pattern_type",
+                                                    point_payload.get(
+                                                        "entity_type", ""
+                                                    ),
+                                                ),
+                                                "node_type": (
+                                                    source_context.get("node_type", "")
+                                                    if isinstance(source_context, dict)
+                                                    else ""
+                                                ),
+                                                "onex_type": point_payload.get(
+                                                    "onex_type", ""
+                                                ),
+                                                "onex_compliance": point_payload.get(
+                                                    "onex_compliance", 0.0
+                                                ),
+                                                # FIXED: Extract semantic_score from point.score (vector similarity)
+                                                # When using search API, this is the cosine similarity (0.0-1.0)
+                                                # When using scroll API, defaults to 0.5 (neutral)
+                                                "semantic_score": semantic_score,
+                                            },
+                                        }
+                                        all_patterns.append(pattern)
+                                    except Exception as e:
+                                        self.logger.warning(
+                                            f"[{correlation_id}] Failed to parse pattern from {collection_name}: {e}"
+                                        )
+                                        continue
 
                                 self.logger.info(
-                                    f"[{correlation_id}] Direct Qdrant query: Retrieved {len(points)} patterns from {collection_name}"
+                                    f"[{correlation_id}] Direct Qdrant query ({search_method}): Retrieved {len(points)} patterns from {collection_name}"
                                 )
                             else:
                                 self.logger.warning(
-                                    f"[{correlation_id}] Qdrant query failed for {collection_name}: HTTP {response.status}"
+                                    f"[{correlation_id}] Qdrant query ({search_method}) failed for {collection_name}: HTTP {response.status}"
                                 )
                     except Exception as e:
+                        import traceback
+
                         self.logger.warning(
-                            f"[{correlation_id}] Failed to query {collection_name}: {e}"
+                            f"[{correlation_id}] Failed to query {collection_name}: {e}\n{traceback.format_exc()}"
                         )
                         continue
 
             # Apply relevance filtering if task_context and user_prompt are provided
             if task_context and user_prompt and all_patterns:
                 original_count = len(all_patterns)
-                scorer = RelevanceScorer()
+                scorer = ArchonHybridScorer()
 
-                scored_patterns = []
-                for pattern in all_patterns:
-                    score = scorer.score_pattern_relevance(
-                        pattern=pattern,
-                        task_context=task_context,
-                        user_prompt=user_prompt,
-                    )
+                # Use batch scoring for better performance
+                scored_patterns_list = await scorer.score_patterns_batch(
+                    patterns=all_patterns,
+                    user_prompt=user_prompt,
+                    task_context=task_context,
+                    max_concurrent=50,
+                )
 
-                    # Only include patterns above threshold
-                    if score > 0.3:
-                        scored_patterns.append((pattern, score))
+                # Filter by threshold (>0.3)
+                RELEVANCE_THRESHOLD = 0.3
+                filtered_patterns = [
+                    p
+                    for p in scored_patterns_list
+                    if p.get("hybrid_score", 0.0) > RELEVANCE_THRESHOLD
+                ]
 
-                # Sort by score (descending) and take top-N
-                scored_patterns.sort(key=lambda x: x[1], reverse=True)
-                all_patterns = [p for p, score in scored_patterns[:limit_per_collection]]
+                # Already sorted by score (descending) from batch scoring
+                all_patterns = filtered_patterns[:limit_per_collection]
 
-                if scored_patterns:
-                    avg_score = sum(s for _, s in scored_patterns) / len(scored_patterns)
+                if filtered_patterns:
+                    avg_score = sum(
+                        p.get("hybrid_score", 0.0) for p in filtered_patterns
+                    ) / len(filtered_patterns)
                     self.logger.info(
-                        f"[{correlation_id}] Filtered patterns by relevance: "
+                        f"[{correlation_id}] Filtered patterns by relevance (Archon Hybrid Scoring): "
                         f"{len(all_patterns)} relevant (from {original_count} total), "
-                        f"avg_score={avg_score:.2f}"
+                        f"threshold={RELEVANCE_THRESHOLD}, avg_score={avg_score:.2f}"
                     )
                 else:
                     self.logger.warning(
-                        f"[{correlation_id}] No patterns met relevance threshold (>0.3)"
+                        f"[{correlation_id}] No patterns met relevance threshold (>{RELEVANCE_THRESHOLD})"
                     )
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -1251,9 +1486,7 @@ class ManifestInjector:
                 "query_time_ms": elapsed_ms,
                 "total_count": len(all_patterns),
                 "collections_queried": {
-                    collection: len(
-                        [p for p in all_patterns if collection in str(p)]
-                    )
+                    collection: len([p for p in all_patterns if collection in str(p)])
                     for collection in collections
                 },
                 "fallback_method": "direct_qdrant_http",
@@ -1267,9 +1500,7 @@ class ManifestInjector:
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
-            self.logger.error(
-                f"[{correlation_id}] Direct Qdrant fallback failed: {e}"
-            )
+            self.logger.error(f"[{correlation_id}] Direct Qdrant fallback failed: {e}")
             return {"patterns": [], "error": str(e), "query_time_ms": elapsed_ms}
 
     async def _query_patterns(
@@ -1549,9 +1780,14 @@ class ManifestInjector:
             docker_task = self._query_docker_services()
 
             # Wait for all queries to complete
-            postgres_info, kafka_info, qdrant_info, docker_services = await asyncio.gather(
-                postgres_task, kafka_task, qdrant_task, docker_task,
-                return_exceptions=True
+            postgres_info, kafka_info, qdrant_info, docker_services = (
+                await asyncio.gather(
+                    postgres_task,
+                    kafka_task,
+                    qdrant_task,
+                    docker_task,
+                    return_exceptions=True,
+                )
             )
 
             # Handle exceptions from gather
@@ -1573,18 +1809,15 @@ class ManifestInjector:
 
             # Build infrastructure result
             result = {
-                "remote_services": {
-                    "postgresql": postgres_info,
-                    "kafka": kafka_info
-                },
+                "remote_services": {"postgresql": postgres_info, "kafka": kafka_info},
                 "local_services": {
                     "qdrant": qdrant_info,
                     "archon_mcp": {
                         "url": "http://192.168.86.101:8151/mcp",
-                        "note": "Archon MCP server with 114 intelligence tools"
-                    }
+                        "note": "Archon MCP server with 114 intelligence tools",
+                    },
                 },
-                "docker_services": docker_services
+                "docker_services": docker_services,
             }
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -1604,7 +1837,7 @@ class ManifestInjector:
                 "remote_services": {"postgresql": {}, "kafka": {}},
                 "local_services": {"qdrant": {}, "archon_mcp": {}},
                 "docker_services": [],
-                "error": str(e)
+                "error": str(e),
             }
 
     async def _query_postgresql(self) -> Dict[str, Any]:
@@ -1614,6 +1847,7 @@ class ManifestInjector:
         Returns:
             Dictionary with PostgreSQL connection info, status, and table count
         """
+
         def _blocking_query():
             """Blocking PostgreSQL operations."""
             import psycopg2
@@ -1631,7 +1865,7 @@ class ManifestInjector:
                     "port": port,
                     "database": database,
                     "status": "unavailable",
-                    "error": "POSTGRES_PASSWORD not set in environment"
+                    "error": "POSTGRES_PASSWORD not set in environment",
                 }
 
             # Try to connect and query table count
@@ -1641,7 +1875,7 @@ class ManifestInjector:
                 database=database,
                 user=user,
                 password=password,
-                connect_timeout=2
+                connect_timeout=2,
             )
 
             cursor = conn.cursor()
@@ -1658,7 +1892,7 @@ class ManifestInjector:
                 "database": database,
                 "status": "connected",
                 "tables": table_count,
-                "note": f"Connected with {table_count} tables in public schema"
+                "note": f"Connected with {table_count} tables in public schema",
             }
 
         try:
@@ -1668,13 +1902,10 @@ class ManifestInjector:
         except ImportError:
             return {
                 "status": "unavailable",
-                "error": "psycopg2 not installed (pip install psycopg2-binary)"
+                "error": "psycopg2 not installed (pip install psycopg2-binary)",
             }
         except Exception as e:
-            return {
-                "status": "unavailable",
-                "error": f"Connection failed: {str(e)}"
-            }
+            return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
     async def _query_kafka(self) -> Dict[str, Any]:
         """
@@ -1683,18 +1914,21 @@ class ManifestInjector:
         Returns:
             Dictionary with Kafka connection info, status, and topic count
         """
+
         def _blocking_query():
             """Blocking Kafka operations."""
             from kafka import KafkaAdminClient
 
             # Get bootstrap servers from environment
-            bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092")
+            bootstrap_servers = os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
+            )
 
             # Try to connect and list topics
             admin = KafkaAdminClient(
                 bootstrap_servers=bootstrap_servers,
                 request_timeout_ms=2000,
-                api_version_auto_timeout_ms=2000
+                api_version_auto_timeout_ms=2000,
             )
 
             topics = admin.list_topics()
@@ -1704,7 +1938,7 @@ class ManifestInjector:
                 "bootstrap_servers": bootstrap_servers,
                 "status": "connected",
                 "topics": len(topics),
-                "note": f"Connected with {len(topics)} topics"
+                "note": f"Connected with {len(topics)} topics",
             }
 
         try:
@@ -1714,13 +1948,10 @@ class ManifestInjector:
         except ImportError:
             return {
                 "status": "unavailable",
-                "error": "kafka-python not installed (pip install kafka-python)"
+                "error": "kafka-python not installed (pip install kafka-python)",
             }
         except Exception as e:
-            return {
-                "status": "unavailable",
-                "error": f"Connection failed: {str(e)}"
-            }
+            return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
     async def _query_qdrant(self) -> Dict[str, Any]:
         """
@@ -1738,8 +1969,7 @@ class ManifestInjector:
             # Try to fetch collections
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{qdrant_url}/collections",
-                    timeout=aiohttp.ClientTimeout(total=2)
+                    f"{qdrant_url}/collections", timeout=aiohttp.ClientTimeout(total=2)
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -1756,25 +1986,22 @@ class ManifestInjector:
                             "status": "available",
                             "collections": len(collections),
                             "vectors": total_vectors,
-                            "note": f"Connected with {len(collections)} collections, {total_vectors} vectors"
+                            "note": f"Connected with {len(collections)} collections, {total_vectors} vectors",
                         }
                     else:
                         return {
                             "url": qdrant_url,
                             "status": "unavailable",
-                            "error": f"HTTP {response.status}"
+                            "error": f"HTTP {response.status}",
                         }
 
         except ImportError:
             return {
                 "status": "unavailable",
-                "error": "aiohttp not installed (pip install aiohttp)"
+                "error": "aiohttp not installed (pip install aiohttp)",
             }
         except Exception as e:
-            return {
-                "status": "unavailable",
-                "error": f"Connection failed: {str(e)}"
-            }
+            return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
     async def _query_docker_services(self) -> List[Dict[str, Any]]:
         """
@@ -1783,6 +2010,7 @@ class ManifestInjector:
         Returns:
             List of Docker service info dictionaries
         """
+
         def _blocking_query():
             """Blocking Docker operations."""
             import docker
@@ -1795,15 +2023,25 @@ class ManifestInjector:
             for container in containers:
                 name = container.name
                 if name.startswith("archon-") or name.startswith("omninode-"):
-                    services.append({
-                        "name": name,
-                        "status": container.status,
-                        "image": container.image.tags[0] if container.image.tags else "unknown",
-                        "ports": [
-                            f"{k}/{v[0]['HostPort']}" if v else str(k)
-                            for k, v in container.ports.items()
-                        ] if container.ports else []
-                    })
+                    services.append(
+                        {
+                            "name": name,
+                            "status": container.status,
+                            "image": (
+                                container.image.tags[0]
+                                if container.image.tags
+                                else "unknown"
+                            ),
+                            "ports": (
+                                [
+                                    f"{k}/{v[0]['HostPort']}" if v else str(k)
+                                    for k, v in container.ports.items()
+                                ]
+                                if container.ports
+                                else []
+                            ),
+                        }
+                    )
 
             return services
 
@@ -1838,8 +2076,8 @@ class ManifestInjector:
         Returns:
             Models data dictionary
         """
-        import time
         import json
+        import time
         from pathlib import Path
 
         start_time = time.time()
@@ -1866,14 +2104,18 @@ class ManifestInjector:
             }
 
             # 2. Try to load claude-providers.json for provider configuration
-            providers_file = Path(__file__).parent.parent.parent / "claude-providers.json"
+            providers_file = (
+                Path(__file__).parent.parent.parent / "claude-providers.json"
+            )
             provider_config = {}
             if providers_file.exists():
                 try:
                     with open(providers_file, "r") as f:
                         provider_config = json.load(f).get("providers", {})
                 except Exception as e:
-                    self.logger.warning(f"[{correlation_id}] Failed to load provider config: {e}")
+                    self.logger.warning(
+                        f"[{correlation_id}] Failed to load provider config: {e}"
+                    )
 
             # 3. Build AI models section
             # Check Anthropic provider
@@ -1894,11 +2136,14 @@ class ManifestInjector:
                 gemini_config = provider_config.get("gemini-2.5-flash", {})
                 ai_models["gemini"] = {
                     "provider": "google",
-                    "models": gemini_config.get("models", {
-                        "haiku": "gemini-2.5-flash",
-                        "sonnet": "gemini-2.5-flash",
-                        "opus": "gemini-2.5-pro",
-                    }),
+                    "models": gemini_config.get(
+                        "models",
+                        {
+                            "haiku": "gemini-2.5-flash",
+                            "sonnet": "gemini-2.5-flash",
+                            "opus": "gemini-2.5-pro",
+                        },
+                    ),
                     "available": True,
                     "api_key_set": True,
                 }
@@ -1908,11 +2153,14 @@ class ManifestInjector:
                 zai_config = provider_config.get("zai", {})
                 ai_models["zai"] = {
                     "provider": "z.ai",
-                    "models": zai_config.get("models", {
-                        "haiku": "glm-4.5-air",
-                        "sonnet": "glm-4.5",
-                        "opus": "glm-4.6",
-                    }),
+                    "models": zai_config.get(
+                        "models",
+                        {
+                            "haiku": "glm-4.5-air",
+                            "sonnet": "glm-4.5",
+                            "opus": "glm-4.6",
+                        },
+                    ),
                     "available": True,
                     "api_key_set": True,
                     "rate_limits": zai_config.get("rate_limits", {}),
@@ -2004,6 +2252,7 @@ class ManifestInjector:
             Database schemas dictionary
         """
         import time
+
         import asyncpg
 
         start_time = time.time()
@@ -2146,12 +2395,18 @@ class ManifestInjector:
                     f"[{correlation_id}] Event-based schema query returned 0 schemas, trying direct PostgreSQL fallback..."
                 )
                 try:
-                    fallback_result = await self._query_database_schemas_direct_postgres(
-                        correlation_id=correlation_id
+                    fallback_result = (
+                        await self._query_database_schemas_direct_postgres(
+                            correlation_id=correlation_id
+                        )
                     )
 
                     if fallback_result.get("schemas") or fallback_result.get("tables"):
-                        table_count = len(fallback_result.get("tables", fallback_result.get("schemas", [])))
+                        table_count = len(
+                            fallback_result.get(
+                                "tables", fallback_result.get("schemas", [])
+                            )
+                        )
                         self.logger.info(
                             f"[{correlation_id}] Direct PostgreSQL fallback succeeded: {table_count} tables"
                         )
@@ -2242,7 +2497,9 @@ class ManifestInjector:
                         "include_successes": True,  # Get successful workflows as examples
                         "limit": 20,  # Get recent similar workflows
                     },
-                    timeout_ms=min(self.query_timeout_ms, 3000),  # Shorter timeout for first attempt
+                    timeout_ms=min(
+                        self.query_timeout_ms, 3000
+                    ),  # Shorter timeout for first attempt
                 )
 
                 if result and result.get("similar_workflows"):
@@ -2355,12 +2612,21 @@ class ManifestInjector:
                             "feedback_type": row["feedback_type"],
                             "contract_json": row["contract_json"],
                             "actual_pattern": row["actual_pattern"],
-                            "detected_confidence": float(row["detected_confidence"]) if row["detected_confidence"] else None,
-                            "timestamp": row["created_at"].isoformat()
-                            if row["created_at"]
-                            else None,
+                            "detected_confidence": (
+                                float(row["detected_confidence"])
+                                if row["detected_confidence"]
+                                else None
+                            ),
+                            "timestamp": (
+                                row["created_at"].isoformat()
+                                if row["created_at"]
+                                else None
+                            ),
                             "success": row["feedback_type"]
-                            in ("correct", "adjusted"),  # Correct feedback types per schema
+                            in (
+                                "correct",
+                                "adjusted",
+                            ),  # Correct feedback types per schema
                         }
                     )
 
@@ -2378,8 +2644,8 @@ class ManifestInjector:
             List of workflow dictionaries with execution data
         """
         import json
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         try:
             # Check fallback log directory (same as AgentExecutionLogger)
@@ -2391,7 +2657,9 @@ class ManifestInjector:
 
             workflows = []
             # Read recent log files (last 50)
-            log_files = sorted(log_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:50]
+            log_files = sorted(
+                log_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+            )[:50]
 
             for log_file in log_files:
                 try:
@@ -2411,7 +2679,9 @@ class ManifestInjector:
                         }
                     )
                 except Exception as file_error:
-                    self.logger.debug(f"Failed to parse log file {log_file}: {file_error}")
+                    self.logger.debug(
+                        f"Failed to parse log file {log_file}: {file_error}"
+                    )
                     continue
 
             return workflows
@@ -2435,7 +2705,9 @@ class ManifestInjector:
         for workflow in workflows[:20]:  # Top 20 workflows
             confidence_info = ""
             if workflow.get("detected_confidence"):
-                confidence_info = f" (confidence: {workflow['detected_confidence']:.2f})"
+                confidence_info = (
+                    f" (confidence: {workflow['detected_confidence']:.2f})"
+                )
 
             actual_pattern = workflow.get("actual_pattern")
             actual_info = f" -> {actual_pattern}" if actual_pattern else ""
@@ -2446,7 +2718,11 @@ class ManifestInjector:
                     "success": workflow.get("success", False),
                     "tool_name": workflow.get("pattern_name", "unknown"),
                     "reasoning": f"Pattern marked as {workflow.get('feedback_type', 'correct')}{confidence_info}{actual_info}",
-                    "error": f"Detected as {workflow.get('pattern_name')}, should be {actual_pattern}" if actual_pattern else None,
+                    "error": (
+                        f"Detected as {workflow.get('pattern_name')}, should be {actual_pattern}"
+                        if actual_pattern
+                        else None
+                    ),
                     "timestamp": workflow.get("timestamp"),
                 }
             )
@@ -2479,7 +2755,11 @@ class ManifestInjector:
                     "success": workflow.get("success", False),
                     "tool_name": workflow.get("agent_name", "unknown"),
                     "reasoning": f"{workflow.get('user_prompt', 'Task completed')}{quality_info}",
-                    "error": f"Execution failed: {workflow.get('status', 'error')}" if not workflow.get("success") else None,
+                    "error": (
+                        f"Execution failed: {workflow.get('status', 'error')}"
+                        if not workflow.get("success")
+                        else None
+                    ),
                     "timestamp": workflow.get("timestamp"),
                 }
             )
@@ -2756,13 +3036,16 @@ class ManifestInjector:
             sections.append("patterns")
 
         # Database schemas: Include for database tasks or if tables mentioned
-        if task_context.primary_intent == TaskIntent.DATABASE or \
-           any(kw in task_context.keywords for kw in ["table", "schema", "query", "sql"]):
+        if task_context.primary_intent == TaskIntent.DATABASE or any(
+            kw in task_context.keywords for kw in ["table", "schema", "query", "sql"]
+        ):
             sections.append("database_schemas")
 
         # Infrastructure: Include for debug tasks or if services mentioned
-        if task_context.primary_intent == TaskIntent.DEBUG or \
-           len(task_context.mentioned_services) > 0:
+        if (
+            task_context.primary_intent == TaskIntent.DEBUG
+            or len(task_context.mentioned_services) > 0
+        ):
             sections.append("infrastructure")
 
         # Debug intelligence: Include for debug/troubleshoot tasks
@@ -2770,8 +3053,9 @@ class ManifestInjector:
             sections.append("debug_intelligence")
 
         # Models: Include if ONEX nodes mentioned
-        if len(task_context.mentioned_node_types) > 0 or \
-           "onex" in " ".join(task_context.keywords):
+        if len(task_context.mentioned_node_types) > 0 or "onex" in " ".join(
+            task_context.keywords
+        ):
             sections.append("models")
 
         # Fallback: If no sections selected, include patterns + infrastructure
@@ -3206,9 +3490,13 @@ class ManifestInjector:
                     # Add rate limits if available
                     rate_limits = provider_config.get("rate_limits", {})
                     if rate_limits:
-                        output.append(f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})")
+                        output.append(
+                            f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})"
+                        )
                     else:
-                        output.append(f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})")
+                        output.append(
+                            f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})"
+                        )
 
         # ONEX Models
         if "onex_models" in models_data:
@@ -3229,9 +3517,13 @@ class ManifestInjector:
                     model_id = model.get("model", "unknown")
                     weight = model.get("weight", 0)
                     use_case = model.get("use_case", "")
-                    output.append(f"    • {name} ({model_id}): weight={weight} - {use_case}")
+                    output.append(
+                        f"    • {name} ({model_id}): weight={weight} - {use_case}"
+                    )
                 if len(intelligence_models) > 3:
-                    output.append(f"    ... and {len(intelligence_models) - 3} more (total weight: {total_weight})")
+                    output.append(
+                        f"    ... and {len(intelligence_models) - 3} more (total weight: {total_weight})"
+                    )
 
         return "\n".join(output)
 
