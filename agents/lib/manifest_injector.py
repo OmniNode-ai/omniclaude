@@ -107,6 +107,19 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from pattern_quality_scorer import PatternQualityScorer
 
+# Import TaskClassifier for task-aware section selection
+try:
+    from task_classifier import TaskClassifier, TaskContext, TaskIntent
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from task_classifier import TaskClassifier, TaskContext, TaskIntent
+
 logger = logging.getLogger(__name__)
 
 
@@ -880,6 +893,7 @@ class ManifestInjector:
     async def generate_dynamic_manifest_async(
         self,
         correlation_id: str,
+        user_prompt: Optional[str] = None,
         force_refresh: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -895,6 +909,7 @@ class ManifestInjector:
 
         Args:
             correlation_id: Correlation ID for tracking
+            user_prompt: User's task prompt for task-aware section selection (optional)
             force_refresh: Force refresh even if cache is valid
 
         Returns:
@@ -929,6 +944,22 @@ class ManifestInjector:
         self.logger.info(
             f"[{correlation_id}] Generating dynamic manifest for agent '{self.agent_name or 'unknown'}'"
         )
+
+        # Task classification for section selection
+        task_context = None
+        if user_prompt:
+            try:
+                classifier = TaskClassifier()
+                task_context = classifier.classify(user_prompt)
+                self.logger.info(
+                    f"[{correlation_id}] Task classified: {task_context.primary_intent.value} "
+                    f"(confidence: {task_context.confidence:.2f})"
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"[{correlation_id}] Failed to classify task: {e}. Proceeding with default sections.",
+                    exc_info=True
+                )
 
         # Always query filesystem (local operation, doesn't require intelligence service)
         # Create a dummy client for filesystem query (not actually used)
@@ -967,17 +998,32 @@ class ManifestInjector:
 
             # Execute parallel queries for different manifest sections
             # Note: filesystem already queried above
-            query_tasks = {
-                "patterns": self._query_patterns(client, correlation_id),
-                "infrastructure": self._query_infrastructure(client, correlation_id),
-                "models": self._query_models(client, correlation_id),
-                "database_schemas": self._query_database_schemas(
+
+            # Select sections based on task context
+            sections_to_query = self._select_sections_for_task(task_context)
+            self.logger.info(f"[{correlation_id}] Selected sections: {sections_to_query}")
+
+            # Build query_tasks based on selected sections
+            query_tasks = {}
+
+            if "patterns" in sections_to_query:
+                query_tasks["patterns"] = self._query_patterns(client, correlation_id)
+
+            if "infrastructure" in sections_to_query:
+                query_tasks["infrastructure"] = self._query_infrastructure(client, correlation_id)
+
+            if "models" in sections_to_query:
+                query_tasks["models"] = self._query_models(client, correlation_id)
+
+            if "database_schemas" in sections_to_query:
+                query_tasks["database_schemas"] = self._query_database_schemas(
                     client, correlation_id
-                ),
-                "debug_intelligence": self._query_debug_intelligence(
+                )
+
+            if "debug_intelligence" in sections_to_query:
+                query_tasks["debug_intelligence"] = self._query_debug_intelligence(
                     client, correlation_id
-                ),
-            }
+                )
 
             # Wait for all queries with timeout
             results = await asyncio.gather(
@@ -2611,6 +2657,75 @@ class ManifestInjector:
                 "file_tree": [],
                 "error": str(e),
             }
+
+    def _select_sections_for_task(
+        self,
+        task_context: Optional[TaskContext],
+    ) -> List[str]:
+        """
+        Select manifest sections based on task intent.
+
+        Dynamically determines which manifest sections to include based on
+        the classified task intent, reducing token usage by excluding
+        irrelevant sections.
+
+        Args:
+            task_context: Classified task context (None if classification failed)
+
+        Returns:
+            List of section names to include in manifest
+
+        Example:
+            >>> context = TaskContext(primary_intent=TaskIntent.DEBUG, ...)
+            >>> sections = self._select_sections_for_task(context)
+            >>> # Returns: ["debug_intelligence", "infrastructure"]
+        """
+        if not task_context:
+            # No context - include minimal set
+            self.logger.debug("No task context available, using minimal sections")
+            return ["patterns", "infrastructure"]
+
+        sections = []
+
+        # Patterns: Include for code-related tasks
+        if task_context.primary_intent in [
+            TaskIntent.IMPLEMENT,
+            TaskIntent.REFACTOR,
+            TaskIntent.TEST,
+        ]:
+            sections.append("patterns")
+
+        # Database schemas: Include for database tasks or if tables mentioned
+        if task_context.primary_intent == TaskIntent.DATABASE or \
+           any(kw in task_context.keywords for kw in ["table", "schema", "query", "sql"]):
+            sections.append("database_schemas")
+
+        # Infrastructure: Include for debug tasks or if services mentioned
+        if task_context.primary_intent == TaskIntent.DEBUG or \
+           len(task_context.mentioned_services) > 0:
+            sections.append("infrastructure")
+
+        # Debug intelligence: Include for debug/troubleshoot tasks
+        if task_context.primary_intent == TaskIntent.DEBUG:
+            sections.append("debug_intelligence")
+
+        # Models: Include if ONEX nodes mentioned
+        if len(task_context.mentioned_node_types) > 0 or \
+           "onex" in " ".join(task_context.keywords):
+            sections.append("models")
+
+        # Fallback: If no sections selected, include patterns + infrastructure
+        if not sections:
+            self.logger.debug(
+                f"No sections matched for intent {task_context.primary_intent.value}, "
+                f"using fallback sections"
+            )
+            sections = ["patterns", "infrastructure"]
+
+        self.logger.debug(
+            f"Selected {len(sections)} sections for intent {task_context.primary_intent.value}: {sections}"
+        )
+        return sections
 
     def _build_manifest_from_results(
         self,
