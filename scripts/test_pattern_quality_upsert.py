@@ -33,7 +33,16 @@ async def test_upsert():
     )
 
     # Database connection string (use correct hostname for host machine)
-    database_url = "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+    import os
+
+    password = os.environ.get("POSTGRES_PASSWORD")
+    if not password:
+        raise ValueError(
+            "POSTGRES_PASSWORD environment variable not set. Run: source .env"
+        )
+    database_url = (
+        f"postgresql://postgres:{password}@192.168.86.200:5436/omninode_bridge"
+    )
 
     # Store the score
     scorer = PatternQualityScorer()

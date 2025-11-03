@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 # Import from omnibase_core mock
-from agents.tests.mocks.omnibase_core.errors import EnumCoreErrorCode, OnexError
+from agents.lib.errors import EnumCoreErrorCode, OnexError
 
 from .omninode_template_engine import OmniNodeTemplateEngine
 from .parallel_generator import GenerationJob, ParallelGenerator

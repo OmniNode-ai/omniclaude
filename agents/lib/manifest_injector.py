@@ -364,9 +364,11 @@ class ManifestInjectionStorage:
         self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
-        self.db_password = db_password or os.environ.get(
-            "POSTGRES_PASSWORD", "***REDACTED***"
-        )
+        self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
+        if not self.db_password:
+            raise ValueError(
+                "POSTGRES_PASSWORD environment variable not set. Run: source .env"
+            )
 
     def store_manifest_injection(
         self,
@@ -1020,6 +1022,158 @@ class ManifestInjector:
             # Stop client
             await client.stop()
 
+    async def _query_patterns_direct_qdrant(
+        self,
+        correlation_id: str,
+        collections: List[str] = None,
+        limit_per_collection: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Direct fallback: Query Qdrant HTTP API directly for patterns.
+
+        This method bypasses the event bus and queries Qdrant directly via HTTP.
+        Used as a fallback when event-based approach fails or times out.
+
+        Args:
+            correlation_id: Correlation ID for tracking
+            collections: List of collection names (default: ["code_generation_patterns"])
+            limit_per_collection: Number of patterns to retrieve per collection
+
+        Returns:
+            Patterns data dictionary with results from Qdrant
+        """
+        import time
+        import aiohttp
+
+        if collections is None:
+            collections = ["code_generation_patterns"]
+
+        start_time = time.time()
+        all_patterns = []
+
+        try:
+            qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+
+            async with aiohttp.ClientSession() as session:
+                for collection_name in collections:
+                    try:
+                        # Query Qdrant scroll API to get patterns
+                        url = f"{qdrant_url}/collections/{collection_name}/points/scroll"
+                        payload = {
+                            "limit": limit_per_collection,
+                            "with_payload": True,
+                            "with_vector": False,
+                        }
+
+                        async with session.post(url, json=payload) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                points = data.get("result", {}).get("points", [])
+
+                                # Transform Qdrant points to pattern format
+                                for point in points:
+                                    payload = point.get("payload", {})
+                                    source_context = payload.get("source_context", {})
+                                    metadata = payload.get("metadata", {})
+
+                                    # Extract node_types - check multiple locations
+                                    node_types = payload.get("node_types", [])
+                                    if not node_types:
+                                        node_types = metadata.get("node_types", [])
+                                    if not node_types and source_context.get("node_type"):
+                                        node_types = [source_context.get("node_type")]
+
+                                    # Extract use_cases - check multiple locations
+                                    use_cases = payload.get("use_cases", [])
+                                    if not use_cases:
+                                        use_cases = metadata.get("use_cases", [])
+                                    if not use_cases:
+                                        use_cases = payload.get("reuse_conditions", [])
+
+                                    # Extract file_path - check both payload and metadata
+                                    file_path = payload.get("file_path", "")
+                                    if not file_path:
+                                        file_path = metadata.get("file_path", "")
+
+                                    # Extract confidence - prioritize point score, then metadata, then payload
+                                    confidence = point.get("score", 0.0)
+                                    if confidence == 0.0:
+                                        confidence = metadata.get("confidence", 0.0)
+                                    if confidence == 0.0:
+                                        confidence = payload.get("confidence_score", 0.0)
+
+                                    pattern = {
+                                        "name": payload.get(
+                                            "pattern_name", payload.get("name", "Unknown Pattern")
+                                        ),
+                                        "description": payload.get(
+                                            "pattern_description", payload.get("description", "")
+                                        ),
+                                        "file_path": file_path,
+                                        "node_types": node_types,
+                                        "confidence": confidence,
+                                        "use_cases": use_cases,
+                                        "pattern_id": payload.get("pattern_id", ""),
+                                        "pattern_type": payload.get("pattern_type", ""),
+                                        "confidence_score": payload.get(
+                                            "confidence_score", 0.0
+                                        ),
+                                        "usage_count": payload.get("usage_count", 0),
+                                        "success_rate": payload.get("success_rate", 0.0),
+                                        "source_context": source_context,
+                                        "example_usage": payload.get(
+                                            "example_usage", []
+                                        ),
+                                        "pattern_template": payload.get(
+                                            "pattern_template", ""
+                                        ),
+                                        "reuse_conditions": payload.get(
+                                            "reuse_conditions", []
+                                        ),
+                                    }
+                                    all_patterns.append(pattern)
+
+                                self.logger.info(
+                                    f"[{correlation_id}] Direct Qdrant query: Retrieved {len(points)} patterns from {collection_name}"
+                                )
+                            else:
+                                self.logger.warning(
+                                    f"[{correlation_id}] Qdrant query failed for {collection_name}: HTTP {response.status}"
+                                )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"[{correlation_id}] Failed to query {collection_name}: {e}"
+                        )
+                        continue
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            result = {
+                "patterns": all_patterns,
+                "query_time_ms": elapsed_ms,
+                "total_count": len(all_patterns),
+                "collections_queried": {
+                    collection: len(
+                        [p for p in all_patterns if collection in str(p)]
+                    )
+                    for collection in collections
+                },
+                "fallback_method": "direct_qdrant_http",
+            }
+
+            self.logger.info(
+                f"[{correlation_id}] Direct Qdrant fallback completed: {len(all_patterns)} patterns in {elapsed_ms}ms"
+            )
+
+            return result
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self.logger.error(
+                f"[{correlation_id}] Direct Qdrant fallback failed: {e}"
+            )
+            return {"patterns": [], "error": str(e), "query_time_ms": elapsed_ms}
+
     async def _query_patterns(
         self,
         client: IntelligenceEventClient,
@@ -1030,6 +1184,8 @@ class ManifestInjector:
 
         Queries both execution_patterns (ONEX templates) and code_patterns
         (real code implementations) from Qdrant vector database.
+
+        Uses event-based approach first, falls back to direct Qdrant HTTP queries if needed.
 
         Args:
             client: Intelligence event client
@@ -1158,6 +1314,34 @@ class ManifestInjector:
                 self.logger.debug(
                     f"[{correlation_id}] First pattern: {all_patterns[0].get('name', 'unknown')}"
                 )
+            else:
+                # No patterns returned from event-based approach - try direct fallback
+                self.logger.warning(
+                    f"[{correlation_id}] Event-based pattern query returned 0 patterns, trying direct Qdrant fallback..."
+                )
+                try:
+                    fallback_result = await self._query_patterns_direct_qdrant(
+                        correlation_id=correlation_id,
+                        collections=["code_generation_patterns"],
+                        limit_per_collection=20,
+                    )
+
+                    if fallback_result.get("patterns"):
+                        self.logger.info(
+                            f"[{correlation_id}] Direct Qdrant fallback succeeded: {len(fallback_result.get('patterns', []))} patterns"
+                        )
+                        # Cache and return fallback result
+                        if self.enable_cache and self._cache:
+                            self._cache.set("patterns", fallback_result)
+                        return fallback_result
+                    else:
+                        self.logger.warning(
+                            f"[{correlation_id}] Direct Qdrant fallback also returned no patterns"
+                        )
+                except Exception as fallback_error:
+                    self.logger.error(
+                        f"[{correlation_id}] Direct Qdrant fallback failed: {fallback_error}"
+                    )
 
             result = {
                 "patterns": all_patterns,
@@ -1196,7 +1380,32 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["patterns"] = elapsed_ms
             self._current_query_failures["patterns"] = str(e)
-            self.logger.warning(f"[{correlation_id}] Pattern query failed: {e}")
+            self.logger.warning(
+                f"[{correlation_id}] Pattern query via events failed ({e}), trying direct Qdrant fallback..."
+            )
+
+            # Try direct Qdrant fallback
+            try:
+                fallback_result = await self._query_patterns_direct_qdrant(
+                    correlation_id=correlation_id,
+                    collections=["code_generation_patterns"],
+                    limit_per_collection=20,
+                )
+
+                if fallback_result.get("patterns"):
+                    self.logger.info(
+                        f"[{correlation_id}] Direct Qdrant fallback succeeded: {len(fallback_result.get('patterns', []))} patterns"
+                    )
+                    return fallback_result
+                else:
+                    self.logger.warning(
+                        f"[{correlation_id}] Direct Qdrant fallback returned no patterns"
+                    )
+            except Exception as fallback_error:
+                self.logger.error(
+                    f"[{correlation_id}] Direct Qdrant fallback also failed: {fallback_error}"
+                )
+
             return {"patterns": [], "error": str(e)}
 
     async def _query_infrastructure(
@@ -1218,7 +1427,7 @@ class ManifestInjector:
             correlation_id: Correlation ID for tracking
 
         Returns:
-            Infrastructure data dictionary
+            Infrastructure data dictionary with actual service connection details
         """
         import time
 
@@ -1227,19 +1436,50 @@ class ManifestInjector:
         try:
             self.logger.debug(f"[{correlation_id}] Querying infrastructure topology")
 
-            result = await client.request_code_analysis(
-                content="",  # Empty content for infrastructure scan
-                source_path="infrastructure",
-                language="yaml",
-                options={
-                    "operation_type": "INFRASTRUCTURE_SCAN",
-                    "include_databases": True,
-                    "include_kafka_topics": True,
-                    "include_qdrant_collections": True,
-                    "include_docker_services": True,
-                },
-                timeout_ms=self.query_timeout_ms,
+            # Query all services in parallel
+            postgres_task = self._query_postgresql()
+            kafka_task = self._query_kafka()
+            qdrant_task = self._query_qdrant()
+            docker_task = self._query_docker_services()
+
+            # Wait for all queries to complete
+            postgres_info, kafka_info, qdrant_info, docker_services = await asyncio.gather(
+                postgres_task, kafka_task, qdrant_task, docker_task,
+                return_exceptions=True
             )
+
+            # Handle exceptions from gather
+            if isinstance(postgres_info, Exception):
+                self.logger.warning(f"PostgreSQL query failed: {postgres_info}")
+                postgres_info = {"status": "unavailable", "error": str(postgres_info)}
+
+            if isinstance(kafka_info, Exception):
+                self.logger.warning(f"Kafka query failed: {kafka_info}")
+                kafka_info = {"status": "unavailable", "error": str(kafka_info)}
+
+            if isinstance(qdrant_info, Exception):
+                self.logger.warning(f"Qdrant query failed: {qdrant_info}")
+                qdrant_info = {"status": "unavailable", "error": str(qdrant_info)}
+
+            if isinstance(docker_services, Exception):
+                self.logger.warning(f"Docker query failed: {docker_services}")
+                docker_services = []
+
+            # Build infrastructure result
+            result = {
+                "remote_services": {
+                    "postgresql": postgres_info,
+                    "kafka": kafka_info
+                },
+                "local_services": {
+                    "qdrant": qdrant_info,
+                    "archon_mcp": {
+                        "url": "http://192.168.86.101:8151/mcp",
+                        "note": "Archon MCP server with 114 intelligence tools"
+                    }
+                },
+                "docker_services": docker_services
+            }
 
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["infrastructure"] = elapsed_ms
@@ -1254,7 +1494,223 @@ class ManifestInjector:
             self._current_query_times["infrastructure"] = elapsed_ms
             self._current_query_failures["infrastructure"] = str(e)
             self.logger.warning(f"[{correlation_id}] Infrastructure query failed: {e}")
-            return {"infrastructure": {}, "error": str(e)}
+            return {
+                "remote_services": {"postgresql": {}, "kafka": {}},
+                "local_services": {"qdrant": {}, "archon_mcp": {}},
+                "docker_services": [],
+                "error": str(e)
+            }
+
+    async def _query_postgresql(self) -> Dict[str, Any]:
+        """
+        Query PostgreSQL for connection details and statistics.
+
+        Returns:
+            Dictionary with PostgreSQL connection info, status, and table count
+        """
+        def _blocking_query():
+            """Blocking PostgreSQL operations."""
+            import psycopg2
+
+            # Get connection details from environment
+            host = os.getenv("POSTGRES_HOST", "192.168.86.200")
+            port = int(os.getenv("POSTGRES_PORT", "5436"))
+            database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+            user = os.getenv("POSTGRES_USER", "postgres")
+            password = os.getenv("POSTGRES_PASSWORD", "")
+
+            if not password:
+                return {
+                    "host": host,
+                    "port": port,
+                    "database": database,
+                    "status": "unavailable",
+                    "error": "POSTGRES_PASSWORD not set in environment"
+                }
+
+            # Try to connect and query table count
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                database=database,
+                user=user,
+                password=password,
+                connect_timeout=2
+            )
+
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
+            )
+            table_count = cursor.fetchone()[0]
+            cursor.close()
+            conn.close()
+
+            return {
+                "host": host,
+                "port": port,
+                "database": database,
+                "status": "connected",
+                "tables": table_count,
+                "note": f"Connected with {table_count} tables in public schema"
+            }
+
+        try:
+            # Run blocking I/O in thread pool
+            return await asyncio.to_thread(_blocking_query)
+
+        except ImportError:
+            return {
+                "status": "unavailable",
+                "error": "psycopg2 not installed (pip install psycopg2-binary)"
+            }
+        except Exception as e:
+            return {
+                "status": "unavailable",
+                "error": f"Connection failed: {str(e)}"
+            }
+
+    async def _query_kafka(self) -> Dict[str, Any]:
+        """
+        Query Kafka/Redpanda for connection details and topic count.
+
+        Returns:
+            Dictionary with Kafka connection info, status, and topic count
+        """
+        def _blocking_query():
+            """Blocking Kafka operations."""
+            from kafka import KafkaAdminClient
+
+            # Get bootstrap servers from environment
+            bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092")
+
+            # Try to connect and list topics
+            admin = KafkaAdminClient(
+                bootstrap_servers=bootstrap_servers,
+                request_timeout_ms=2000,
+                api_version_auto_timeout_ms=2000
+            )
+
+            topics = admin.list_topics()
+            admin.close()
+
+            return {
+                "bootstrap_servers": bootstrap_servers,
+                "status": "connected",
+                "topics": len(topics),
+                "note": f"Connected with {len(topics)} topics"
+            }
+
+        try:
+            # Run blocking I/O in thread pool
+            return await asyncio.to_thread(_blocking_query)
+
+        except ImportError:
+            return {
+                "status": "unavailable",
+                "error": "kafka-python not installed (pip install kafka-python)"
+            }
+        except Exception as e:
+            return {
+                "status": "unavailable",
+                "error": f"Connection failed: {str(e)}"
+            }
+
+    async def _query_qdrant(self) -> Dict[str, Any]:
+        """
+        Query Qdrant for connection details and collection statistics.
+
+        Returns:
+            Dictionary with Qdrant connection info, status, and collection stats
+        """
+        try:
+            import aiohttp
+
+            # Get Qdrant URL from environment
+            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+
+            # Try to fetch collections
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{qdrant_url}/collections",
+                    timeout=aiohttp.ClientTimeout(total=2)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        collections = data.get("result", {}).get("collections", [])
+
+                        # Count total vectors across all collections
+                        total_vectors = 0
+                        for collection in collections:
+                            if isinstance(collection, dict):
+                                total_vectors += collection.get("points_count", 0)
+
+                        return {
+                            "url": qdrant_url,
+                            "status": "available",
+                            "collections": len(collections),
+                            "vectors": total_vectors,
+                            "note": f"Connected with {len(collections)} collections, {total_vectors} vectors"
+                        }
+                    else:
+                        return {
+                            "url": qdrant_url,
+                            "status": "unavailable",
+                            "error": f"HTTP {response.status}"
+                        }
+
+        except ImportError:
+            return {
+                "status": "unavailable",
+                "error": "aiohttp not installed (pip install aiohttp)"
+            }
+        except Exception as e:
+            return {
+                "status": "unavailable",
+                "error": f"Connection failed: {str(e)}"
+            }
+
+    async def _query_docker_services(self) -> List[Dict[str, Any]]:
+        """
+        Query Docker for running archon-* services.
+
+        Returns:
+            List of Docker service info dictionaries
+        """
+        def _blocking_query():
+            """Blocking Docker operations."""
+            import docker
+
+            client = docker.from_env()
+            containers = client.containers.list()
+
+            # Filter for archon-* and omninode-* services
+            services = []
+            for container in containers:
+                name = container.name
+                if name.startswith("archon-") or name.startswith("omninode-"):
+                    services.append({
+                        "name": name,
+                        "status": container.status,
+                        "image": container.image.tags[0] if container.image.tags else "unknown",
+                        "ports": [
+                            f"{k}/{v[0]['HostPort']}" if v else str(k)
+                            for k, v in container.ports.items()
+                        ] if container.ports else []
+                    })
+
+            return services
+
+        try:
+            # Run blocking I/O in thread pool
+            return await asyncio.to_thread(_blocking_query)
+
+        except ImportError:
+            self.logger.debug("docker library not installed (pip install docker)")
+            return []
+        except Exception as e:
+            self.logger.debug(f"Docker query failed: {e}")
+            return []
 
     async def _query_models(
         self,
@@ -1277,29 +1733,136 @@ class ManifestInjector:
             Models data dictionary
         """
         import time
+        import json
+        from pathlib import Path
 
         start_time = time.time()
 
         try:
             self.logger.debug(f"[{correlation_id}] Querying available models")
 
-            result = await client.request_code_analysis(
-                content="",  # Empty content for model discovery
-                source_path="models",
-                language="python",
-                options={
-                    "operation_type": "MODEL_DISCOVERY",
-                    "include_ai_models": True,
-                    "include_onex_models": True,
-                    "include_quorum_config": True,
+            # Initialize result structure
+            ai_models = {}
+            onex_models = {
+                "effect": "Available",
+                "compute": "Available",
+                "reducer": "Available",
+                "orchestrator": "Available",
+            }
+            intelligence_models = []
+
+            # 1. Read environment variables for API keys
+            env_keys = {
+                "gemini": os.environ.get("GEMINI_API_KEY", ""),
+                "google": os.environ.get("GOOGLE_API_KEY", ""),
+                "zai": os.environ.get("ZAI_API_KEY", ""),
+                "anthropic": os.environ.get("ANTHROPIC_API_KEY", ""),
+            }
+
+            # 2. Try to load claude-providers.json for provider configuration
+            providers_file = Path(__file__).parent.parent.parent / "claude-providers.json"
+            provider_config = {}
+            if providers_file.exists():
+                try:
+                    with open(providers_file, "r") as f:
+                        provider_config = json.load(f).get("providers", {})
+                except Exception as e:
+                    self.logger.warning(f"[{correlation_id}] Failed to load provider config: {e}")
+
+            # 3. Build AI models section
+            # Check Anthropic provider
+            if env_keys.get("anthropic"):
+                ai_models["anthropic"] = {
+                    "provider": "anthropic",
+                    "models": {
+                        "haiku": "claude-3-5-haiku-20241022",
+                        "sonnet": "claude-3-5-sonnet-20241022",
+                        "opus": "claude-3-opus-20240229",
+                    },
+                    "available": True,
+                    "api_key_set": True,
+                }
+
+            # Check Gemini provider
+            if env_keys.get("gemini") or env_keys.get("google"):
+                gemini_config = provider_config.get("gemini-2.5-flash", {})
+                ai_models["gemini"] = {
+                    "provider": "google",
+                    "models": gemini_config.get("models", {
+                        "haiku": "gemini-2.5-flash",
+                        "sonnet": "gemini-2.5-flash",
+                        "opus": "gemini-2.5-pro",
+                    }),
+                    "available": True,
+                    "api_key_set": True,
+                }
+
+            # Check Z.ai provider
+            if env_keys.get("zai"):
+                zai_config = provider_config.get("zai", {})
+                ai_models["zai"] = {
+                    "provider": "z.ai",
+                    "models": zai_config.get("models", {
+                        "haiku": "glm-4.5-air",
+                        "sonnet": "glm-4.5",
+                        "opus": "glm-4.6",
+                    }),
+                    "available": True,
+                    "api_key_set": True,
+                    "rate_limits": zai_config.get("rate_limits", {}),
+                }
+
+            # 4. Add intelligence models (AI Quorum configuration)
+            intelligence_models = [
+                {
+                    "name": "Gemini Flash",
+                    "model": "gemini-1.5-flash",
+                    "provider": "google",
+                    "weight": 1.0,
+                    "use_case": "Fast analysis, quick validation",
                 },
-                timeout_ms=self.query_timeout_ms,
-            )
+                {
+                    "name": "Codestral",
+                    "model": "codestral-latest",
+                    "provider": "mistral",
+                    "weight": 1.5,
+                    "use_case": "Code generation, ONEX compliance",
+                },
+                {
+                    "name": "DeepSeek Lite",
+                    "model": "deepseek-coder-lite",
+                    "provider": "deepseek",
+                    "weight": 1.0,
+                    "use_case": "Code understanding, pattern matching",
+                },
+                {
+                    "name": "Llama 3.1",
+                    "model": "llama-3.1-70b",
+                    "provider": "together",
+                    "weight": 2.0,
+                    "use_case": "Architectural decisions, quality assessment",
+                },
+                {
+                    "name": "DeepSeek Full",
+                    "model": "deepseek-coder-33b",
+                    "provider": "deepseek",
+                    "weight": 2.0,
+                    "use_case": "Critical validation, complex analysis",
+                },
+            ]
+
+            # Build result
+            result = {
+                "ai_models": ai_models,
+                "onex_models": onex_models,
+                "intelligence_models": intelligence_models,
+            }
 
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["models"] = elapsed_ms
             self.logger.info(
-                f"[{correlation_id}] Models query completed in {elapsed_ms}ms"
+                f"[{correlation_id}] Models query completed in {elapsed_ms}ms - "
+                f"Found {len(ai_models)} AI providers, {len(onex_models)} ONEX node types"
             )
 
             return result
@@ -1309,7 +1872,118 @@ class ManifestInjector:
             self._current_query_times["models"] = elapsed_ms
             self._current_query_failures["models"] = str(e)
             self.logger.warning(f"[{correlation_id}] Model query failed: {e}")
-            return {"models": {}, "error": str(e)}
+            return {
+                "ai_models": {},
+                "onex_models": {
+                    "effect": "Available",
+                    "compute": "Available",
+                    "reducer": "Available",
+                    "orchestrator": "Available",
+                },
+                "intelligence_models": [],
+                "error": str(e),
+            }
+
+    async def _query_database_schemas_direct_postgres(
+        self,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Direct fallback: Query PostgreSQL directly for database schemas.
+
+        Args:
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Database schemas dictionary
+        """
+        import time
+        import asyncpg
+
+        start_time = time.time()
+        schemas = []
+
+        try:
+            # Get PostgreSQL connection details from environment
+            pg_host = os.environ.get("POSTGRES_HOST", "192.168.86.200")
+            pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
+            pg_user = os.environ.get("POSTGRES_USER", "postgres")
+            pg_password = os.environ.get("POSTGRES_PASSWORD", "")
+            pg_database = os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
+
+            if not pg_password:
+                self.logger.warning(
+                    f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                )
+
+            # Connect to PostgreSQL
+            conn = await asyncpg.connect(
+                host=pg_host,
+                port=pg_port,
+                user=pg_user,
+                password=pg_password,
+                database=pg_database,
+                timeout=5,
+            )
+
+            try:
+                # Query table schemas
+                query = """
+                    SELECT
+                        table_name,
+                        column_name,
+                        data_type,
+                        is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name, ordinal_position
+                    LIMIT 500;
+                """
+
+                rows = await conn.fetch(query)
+
+                # Group columns by table
+                tables = {}
+                for row in rows:
+                    table_name = row["table_name"]
+                    if table_name not in tables:
+                        tables[table_name] = {"name": table_name, "columns": []}
+
+                    tables[table_name]["columns"].append(
+                        {
+                            "name": row["column_name"],
+                            "type": row["data_type"],
+                            "nullable": row["is_nullable"] == "YES",
+                        }
+                    )
+
+                schemas = list(tables.values())
+
+                self.logger.info(
+                    f"[{correlation_id}] Direct PostgreSQL query: Retrieved {len(schemas)} table schemas"
+                )
+
+            finally:
+                await conn.close()
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+
+            result = {
+                "tables": schemas,  # Use "tables" key to match _format_schemas_result
+                "schemas": schemas,  # Also keep "schemas" for backward compatibility
+                "query_time_ms": elapsed_ms,
+                "total_tables": len(schemas),
+                "fallback_method": "direct_postgres",
+            }
+
+            return result
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self.logger.error(
+                f"[{correlation_id}] Direct PostgreSQL fallback failed: {e}"
+            )
+            return {"schemas": [], "error": str(e), "query_time_ms": elapsed_ms}
 
     async def _query_database_schemas(
         self,
@@ -1323,6 +1997,8 @@ class ManifestInjector:
         - Table schemas
         - Column definitions
         - Indexes and constraints
+
+        Uses event-based approach first, falls back to direct PostgreSQL queries if needed.
 
         Args:
             client: Intelligence event client
@@ -1357,13 +2033,62 @@ class ManifestInjector:
                 f"[{correlation_id}] Database schemas query completed in {elapsed_ms}ms"
             )
 
+            # Check if result has actual schemas, trigger fallback if empty
+            schemas = result.get("schemas", result.get("database_schemas", []))
+            if not schemas or len(schemas) == 0:
+                self.logger.warning(
+                    f"[{correlation_id}] Event-based schema query returned 0 schemas, trying direct PostgreSQL fallback..."
+                )
+                try:
+                    fallback_result = await self._query_database_schemas_direct_postgres(
+                        correlation_id=correlation_id
+                    )
+
+                    if fallback_result.get("schemas") or fallback_result.get("tables"):
+                        table_count = len(fallback_result.get("tables", fallback_result.get("schemas", [])))
+                        self.logger.info(
+                            f"[{correlation_id}] Direct PostgreSQL fallback succeeded: {table_count} tables"
+                        )
+                        return fallback_result
+                    else:
+                        self.logger.warning(
+                            f"[{correlation_id}] Direct PostgreSQL fallback also returned no schemas"
+                        )
+                except Exception as fallback_error:
+                    self.logger.error(
+                        f"[{correlation_id}] Direct PostgreSQL fallback failed: {fallback_error}"
+                    )
+
             return result
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["database_schemas"] = elapsed_ms
             self._current_query_failures["database_schemas"] = str(e)
-            self.logger.warning(f"[{correlation_id}] Database schema query failed: {e}")
+            self.logger.warning(
+                f"[{correlation_id}] Database schema query via events failed ({e}), trying direct PostgreSQL fallback..."
+            )
+
+            # Try direct PostgreSQL fallback
+            try:
+                fallback_result = await self._query_database_schemas_direct_postgres(
+                    correlation_id=correlation_id
+                )
+
+                if fallback_result.get("schemas"):
+                    self.logger.info(
+                        f"[{correlation_id}] Direct PostgreSQL fallback succeeded: {len(fallback_result.get('schemas', []))} tables"
+                    )
+                    return fallback_result
+                else:
+                    self.logger.warning(
+                        f"[{correlation_id}] Direct PostgreSQL fallback returned no schemas"
+                    )
+            except Exception as fallback_error:
+                self.logger.error(
+                    f"[{correlation_id}] Direct PostgreSQL fallback also failed: {fallback_error}"
+                )
+
             return {"schemas": {}, "error": str(e)}
 
     async def _query_debug_intelligence(
@@ -1376,11 +2101,11 @@ class ManifestInjector:
 
         Retrieves similar past issues/workflows to avoid retrying failed approaches.
 
-        Queries workflow_events collection in Qdrant for:
-        - Similar workflows that failed (what didn't work)
-        - Similar workflows that succeeded (what worked)
-        - Common error patterns
-        - Successful resolution patterns
+        Multi-layered approach:
+        1. Try Qdrant workflow_events collection (if exists)
+        2. Query PostgreSQL pattern_quality_metrics + pattern_feedback_log
+        3. Check AgentExecutionLogger fallback logs (JSON files)
+        4. Return minimal empty structure if nothing available
 
         Args:
             client: Intelligence event client
@@ -1395,34 +2120,81 @@ class ManifestInjector:
 
         try:
             self.logger.debug(
-                f"[{correlation_id}] Querying debug intelligence from workflow_events"
+                f"[{correlation_id}] Querying debug intelligence from multiple sources"
             )
 
-            # Query workflow_events collection for similar issues
-            result = await client.request_code_analysis(
-                content="",  # Empty content for workflow discovery
-                source_path="workflow_events",
-                language="json",
-                options={
-                    "operation_type": "DEBUG_INTELLIGENCE_QUERY",
-                    "collection_name": "workflow_events",
-                    "include_failures": True,  # Get failed workflows to avoid retrying
-                    "include_successes": True,  # Get successful workflows as examples
-                    "limit": 20,  # Get recent similar workflows
-                },
-                timeout_ms=self.query_timeout_ms,
-            )
-
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            self._current_query_times["debug_intelligence"] = elapsed_ms
-
-            if result:
-                self.logger.info(
-                    f"[{correlation_id}] Debug intelligence query completed in {elapsed_ms}ms: "
-                    f"{len(result.get('similar_workflows', []))} similar workflows"
+            # Try event bus query first (Qdrant workflow_events)
+            try:
+                result = await client.request_code_analysis(
+                    content="",  # Empty content for workflow discovery
+                    source_path="workflow_events",
+                    language="json",
+                    options={
+                        "operation_type": "DEBUG_INTELLIGENCE_QUERY",
+                        "collection_name": "workflow_events",
+                        "include_failures": True,  # Get failed workflows to avoid retrying
+                        "include_successes": True,  # Get successful workflows as examples
+                        "limit": 20,  # Get recent similar workflows
+                    },
+                    timeout_ms=min(self.query_timeout_ms, 3000),  # Shorter timeout for first attempt
                 )
 
-            return result
+                if result and result.get("similar_workflows"):
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["debug_intelligence"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Debug intelligence from Qdrant: "
+                        f"{len(result.get('similar_workflows', []))} workflows in {elapsed_ms}ms"
+                    )
+                    return result
+            except Exception as qdrant_error:
+                self.logger.debug(
+                    f"[{correlation_id}] Qdrant workflow_events unavailable: {qdrant_error}"
+                )
+
+            # Fallback: Query PostgreSQL for pattern feedback
+            try:
+                db_workflows = await self._query_pattern_feedback_from_db()
+                if db_workflows:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["debug_intelligence"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Debug intelligence from PostgreSQL: "
+                        f"{len(db_workflows)} workflows in {elapsed_ms}ms"
+                    )
+                    return self._format_db_workflows(db_workflows)
+            except Exception as db_error:
+                self.logger.debug(
+                    f"[{correlation_id}] PostgreSQL pattern feedback unavailable: {db_error}"
+                )
+
+            # Fallback: Check local JSON logs from AgentExecutionLogger
+            try:
+                log_workflows = await self._query_local_execution_logs()
+                if log_workflows:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["debug_intelligence"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Debug intelligence from local logs: "
+                        f"{len(log_workflows)} workflows in {elapsed_ms}ms"
+                    )
+                    return self._format_log_workflows(log_workflows)
+            except Exception as log_error:
+                self.logger.debug(
+                    f"[{correlation_id}] Local execution logs unavailable: {log_error}"
+                )
+
+            # No data available - return empty structure
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["debug_intelligence"] = elapsed_ms
+            self.logger.info(
+                f"[{correlation_id}] No debug intelligence available - first run or no history"
+            )
+            return {
+                "similar_workflows": [],
+                "query_time_ms": elapsed_ms,
+                "note": "No historical workflow data available yet",
+            }
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -1432,7 +2204,184 @@ class ManifestInjector:
                 f"[{correlation_id}] Debug intelligence query failed: {e}"
             )
             # Not critical - return empty result
-            return {"similar_workflows": [], "error": str(e)}
+            return {
+                "similar_workflows": [],
+                "error": str(e),
+                "query_time_ms": elapsed_ms,
+            }
+
+    async def _query_pattern_feedback_from_db(self) -> List[Dict[str, Any]]:
+        """
+        Query pattern feedback from PostgreSQL pattern_feedback_log table.
+
+        Returns:
+            List of workflow dictionaries with success/failure data
+        """
+        try:
+            from .db import get_pg_pool
+
+            pool = await get_pg_pool()
+            if pool is None:
+                return []
+
+            async with pool.acquire() as conn:
+                # Query recent pattern feedback (last 100 entries)
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        pattern_name,
+                        feedback_type,
+                        contract_json,
+                        actual_pattern,
+                        detected_confidence,
+                        created_at
+                    FROM pattern_feedback_log
+                    ORDER BY created_at DESC
+                    LIMIT 100
+                    """
+                )
+
+                workflows = []
+                for row in rows:
+                    workflows.append(
+                        {
+                            "pattern_name": row["pattern_name"],
+                            "feedback_type": row["feedback_type"],
+                            "contract_json": row["contract_json"],
+                            "actual_pattern": row["actual_pattern"],
+                            "detected_confidence": float(row["detected_confidence"]) if row["detected_confidence"] else None,
+                            "timestamp": row["created_at"].isoformat()
+                            if row["created_at"]
+                            else None,
+                            "success": row["feedback_type"]
+                            in ("correct", "adjusted"),  # Correct feedback types per schema
+                        }
+                    )
+
+                return workflows
+
+        except Exception as e:
+            self.logger.debug(f"PostgreSQL pattern feedback query failed: {e}")
+            return []
+
+    async def _query_local_execution_logs(self) -> List[Dict[str, Any]]:
+        """
+        Query local JSON execution logs from AgentExecutionLogger fallback directory.
+
+        Returns:
+            List of workflow dictionaries with execution data
+        """
+        import json
+        from pathlib import Path
+        import tempfile
+
+        try:
+            # Check fallback log directory (same as AgentExecutionLogger)
+            log_dir = Path(tempfile.gettempdir()) / "omniclaude_logs"
+            if not log_dir.exists():
+                log_dir = Path.cwd() / ".omniclaude_logs"
+                if not log_dir.exists():
+                    return []
+
+            workflows = []
+            # Read recent log files (last 50)
+            log_files = sorted(log_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:50]
+
+            for log_file in log_files:
+                try:
+                    with open(log_file, "r") as f:
+                        log_data = json.load(f)
+
+                    # Extract workflow info
+                    workflows.append(
+                        {
+                            "agent_name": log_data.get("agent_name", "unknown"),
+                            "user_prompt": log_data.get("user_prompt", "")[:100],
+                            "status": log_data.get("status", "unknown"),
+                            "quality_score": log_data.get("quality_score"),
+                            "duration_ms": log_data.get("duration_ms"),
+                            "timestamp": log_data.get("start_time"),
+                            "success": log_data.get("status") == "success",
+                        }
+                    )
+                except Exception as file_error:
+                    self.logger.debug(f"Failed to parse log file {log_file}: {file_error}")
+                    continue
+
+            return workflows
+
+        except Exception as e:
+            self.logger.debug(f"Local execution logs query failed: {e}")
+            return []
+
+    def _format_db_workflows(self, workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Format database workflow results for debug intelligence.
+
+        Args:
+            workflows: List of workflow dicts from pattern_feedback_log
+
+        Returns:
+            Raw format compatible with _format_debug_intelligence_result
+        """
+        # Format workflows with enriched information
+        formatted_workflows = []
+        for workflow in workflows[:20]:  # Top 20 workflows
+            confidence_info = ""
+            if workflow.get("detected_confidence"):
+                confidence_info = f" (confidence: {workflow['detected_confidence']:.2f})"
+
+            actual_pattern = workflow.get("actual_pattern")
+            actual_info = f" -> {actual_pattern}" if actual_pattern else ""
+
+            # Add tool_name for display and success flag for filtering
+            formatted_workflows.append(
+                {
+                    "success": workflow.get("success", False),
+                    "tool_name": workflow.get("pattern_name", "unknown"),
+                    "reasoning": f"Pattern marked as {workflow.get('feedback_type', 'correct')}{confidence_info}{actual_info}",
+                    "error": f"Detected as {workflow.get('pattern_name')}, should be {actual_pattern}" if actual_pattern else None,
+                    "timestamp": workflow.get("timestamp"),
+                }
+            )
+
+        return {
+            "similar_workflows": formatted_workflows,
+            "query_time_ms": 0,
+        }
+
+    def _format_log_workflows(self, workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Format local log workflow results for debug intelligence.
+
+        Args:
+            workflows: List of workflow dicts from execution logs
+
+        Returns:
+            Raw format compatible with _format_debug_intelligence_result
+        """
+        # Format workflows with enriched information
+        formatted_workflows = []
+        for workflow in workflows[:20]:  # Top 20 workflows
+            quality_info = ""
+            if workflow.get("quality_score"):
+                quality_info = f" (quality: {workflow['quality_score']:.2f})"
+
+            # Add tool_name for display and success flag for filtering
+            formatted_workflows.append(
+                {
+                    "success": workflow.get("success", False),
+                    "tool_name": workflow.get("agent_name", "unknown"),
+                    "reasoning": f"{workflow.get('user_prompt', 'Task completed')}{quality_info}",
+                    "error": f"Execution failed: {workflow.get('status', 'error')}" if not workflow.get("success") else None,
+                    "timestamp": workflow.get("timestamp"),
+                }
+            )
+
+        return {
+            "similar_workflows": formatted_workflows,
+            "query_time_ms": 0,
+        }
 
     async def _query_filesystem(
         self,
@@ -1768,6 +2717,12 @@ class ManifestInjector:
 
     def _format_infrastructure_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format infrastructure query result into manifest structure."""
+        # Check if result already has the correct structure (new direct query format)
+        if "remote_services" in result or "local_services" in result:
+            # Result already in correct format from direct queries
+            return result
+
+        # Handle old event-based format (services at top level)
         return {
             "remote_services": {
                 "postgresql": result.get("postgresql", {}),
@@ -1790,9 +2745,28 @@ class ManifestInjector:
 
     def _format_schemas_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format database schemas query result into manifest structure."""
+        # Check both "tables" and "schemas" keys for compatibility
+        # Event-based queries return "schemas", direct PostgreSQL returns "tables"
+        tables = result.get("tables", result.get("schemas", []))
+
+        # Normalize table structure: ensure each table has a "name" key
+        # Some sources use "table_name" instead of "name"
+        normalized_tables = []
+        for table in tables:
+            if isinstance(table, dict):
+                # If "name" is missing but "table_name" exists, normalize it
+                if "name" not in table and "table_name" in table:
+                    normalized_table = dict(table)  # Create a copy
+                    normalized_table["name"] = table["table_name"]
+                    normalized_tables.append(normalized_table)
+                else:
+                    normalized_tables.append(table)
+            else:
+                normalized_tables.append(table)
+
         return {
-            "tables": result.get("tables", []),
-            "total_tables": len(result.get("tables", [])),
+            "tables": normalized_tables,
+            "total_tables": len(normalized_tables),
         }
 
     def _format_debug_intelligence_result(
@@ -2035,34 +3009,54 @@ class ManifestInjector:
         """Format models section."""
         output = ["AI MODELS & DATA MODELS:"]
 
-        # AI Models - skip if no providers (removed hardcoded data)
+        # AI Models
         if "ai_models" in models_data:
-            providers = models_data["ai_models"].get("providers", [])
-            if providers:  # Only show if we have actual provider data
+            ai_models = models_data["ai_models"]
+            if ai_models:  # Only show if we have actual provider data
                 output.append("  AI Providers:")
-                for provider in providers:
-                    name = provider.get("name", "Unknown")
-                    note = provider.get("note", "")
-                    if note:
-                        output.append(f"    • {name}: {note}")
+                for provider_key, provider_config in ai_models.items():
+                    provider_name = provider_config.get("provider", provider_key)
+                    models = provider_config.get("models", {})
+                    api_key_set = provider_config.get("api_key_set", False)
+
+                    # Format models list
+                    if isinstance(models, dict):
+                        model_names = list(models.values())
+                        models_str = ", ".join(model_names[:2])  # Show first 2 models
+                        if len(model_names) > 2:
+                            models_str += f", +{len(model_names) - 2} more"
                     else:
-                        models = provider.get("models", [])
-                        if models:
-                            models_str = (
-                                ", ".join(models)
-                                if isinstance(models, list)
-                                else models
-                            )
-                            output.append(f"    • {name}: {models_str}")
+                        models_str = str(models)
+
+                    # Add rate limits if available
+                    rate_limits = provider_config.get("rate_limits", {})
+                    if rate_limits:
+                        output.append(f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})")
+                    else:
+                        output.append(f"    • {provider_name.title()}: {models_str} (API key: {'✓' if api_key_set else '✗'})")
 
         # ONEX Models
         if "onex_models" in models_data:
-            output.append("  ONEX Node Types:")
-            node_types = models_data["onex_models"].get("node_types", [])
-            for node_type in node_types:
-                name = node_type.get("name", "Unknown")
-                pattern = node_type.get("naming_pattern", "")
-                output.append(f"    • {name}: {pattern}")
+            onex_models = models_data["onex_models"]
+            if onex_models:
+                output.append("  ONEX Node Types:")
+                for node_type, status in onex_models.items():
+                    output.append(f"    • {node_type.title()}: {status}")
+
+        # Intelligence Models (AI Quorum)
+        if "intelligence_models" in models_data:
+            intelligence_models = models_data["intelligence_models"]
+            if intelligence_models:
+                output.append("  AI Quorum Models:")
+                total_weight = sum(m.get("weight", 0) for m in intelligence_models)
+                for model in intelligence_models[:3]:  # Show first 3
+                    name = model.get("name", "Unknown")
+                    model_id = model.get("model", "unknown")
+                    weight = model.get("weight", 0)
+                    use_case = model.get("use_case", "")
+                    output.append(f"    • {name} ({model_id}): weight={weight} - {use_case}")
+                if len(intelligence_models) > 3:
+                    output.append(f"    ... and {len(intelligence_models) - 3} more (total weight: {total_weight})")
 
         return "\n".join(output)
 
@@ -2075,11 +3069,15 @@ class ManifestInjector:
         # PostgreSQL
         if "postgresql" in remote:
             pg = remote["postgresql"]
-            if pg is not None:
+            if pg is not None and pg:  # Check not empty dict
                 host = pg.get("host", "unknown")
                 port = pg.get("port", "unknown")
                 db = pg.get("database", "unknown")
-                output.append(f"  PostgreSQL: {host}:{port}/{db}")
+                status = pg.get("status", "unknown")
+                tables = pg.get("tables", 0)
+                output.append(f"  PostgreSQL: {host}:{port}/{db} ({status})")
+                if tables > 0:
+                    output.append(f"    Tables: {tables}")
                 if "note" in pg:
                     output.append(f"    Note: {pg['note']}")
             else:
@@ -2088,9 +3086,13 @@ class ManifestInjector:
         # Kafka
         if "kafka" in remote:
             kafka = remote["kafka"]
-            if kafka is not None:
+            if kafka is not None and kafka:  # Check not empty dict
                 bootstrap = kafka.get("bootstrap_servers", "unknown")
-                output.append(f"  Kafka: {bootstrap}")
+                status = kafka.get("status", "unknown")
+                topics = kafka.get("topics", 0)
+                output.append(f"  Kafka: {bootstrap} ({status})")
+                if topics > 0:
+                    output.append(f"    Topics: {topics}")
                 if "note" in kafka:
                     output.append(f"    Note: {kafka['note']}")
             else:
@@ -2100,9 +3102,14 @@ class ManifestInjector:
         local = infra_data.get("local_services", {})
         if "qdrant" in local:
             qdrant = local["qdrant"]
-            if qdrant is not None:
-                endpoint = qdrant.get("endpoint", "unknown")
-                output.append(f"  Qdrant: {endpoint}")
+            if qdrant is not None and qdrant:  # Check not empty dict
+                endpoint = qdrant.get("url", qdrant.get("endpoint", "unknown"))
+                status = qdrant.get("status", "unknown")
+                collections = qdrant.get("collections", 0)
+                vectors = qdrant.get("vectors", 0)
+                output.append(f"  Qdrant: {endpoint} ({status})")
+                if collections > 0 or vectors > 0:
+                    output.append(f"    Collections: {collections}, Vectors: {vectors}")
                 if "note" in qdrant:
                     output.append(f"    Note: {qdrant['note']}")
             else:
@@ -2111,8 +3118,8 @@ class ManifestInjector:
         # Archon MCP
         if "archon_mcp" in local:
             archon = local["archon_mcp"]
-            if archon is not None:
-                endpoint = archon.get("endpoint", "unknown")
+            if archon is not None and archon:  # Check not empty dict
+                endpoint = archon.get("url", archon.get("endpoint", "unknown"))
                 output.append(f"  Archon MCP: {endpoint}")
                 if "note" in archon:
                     output.append(f"    Note: {archon['note']}")
@@ -2189,116 +3196,15 @@ class ManifestInjector:
         return "\n".join(output)
 
     def _format_filesystem(self, filesystem_data: Dict) -> str:
-        """Format filesystem section."""
-        output = ["FILESYSTEM STRUCTURE:"]
+        """
+        Format filesystem section.
 
-        root_path = filesystem_data.get("root_path", "unknown")
-        total_files = filesystem_data.get("total_files", 0)
-        total_dirs = filesystem_data.get("total_directories", 0)
-        total_size_bytes = filesystem_data.get("total_size_bytes", 0)
-        file_types = filesystem_data.get("file_types", {})
-        onex_files = filesystem_data.get("onex_files", {})
-        file_tree = filesystem_data.get("file_tree", [])
+        REMOVED: Filesystem tree dumps are 100% noise (1,309 files, ~2,000 tokens).
+        Agents should use Glob/Grep tools for targeted file discovery.
 
-        if "error" in filesystem_data:
-            output.append(f"  Error: {filesystem_data['error']}")
-            return "\n".join(output)
-
-        # Format total size
-        if total_size_bytes < 1024 * 1024:
-            size_str = f"{total_size_bytes / 1024:.1f}KB"
-        else:
-            size_str = f"{total_size_bytes / (1024 * 1024):.1f}MB"
-
-        output.append(f"  Root: {root_path}")
-        output.append(f"  Total Files: {total_files}")
-        output.append(f"  Total Directories: {total_dirs}")
-        output.append(f"  Total Size: {size_str}")
-        output.append("")
-
-        # Show key directories (top level only)
-        if file_tree:
-            output.append("  Key Directories:")
-            key_dirs = [item for item in file_tree if item.get("type") == "directory"]
-            for directory in sorted(key_dirs, key=lambda x: x.get("name", ""))[:15]:
-                dir_name = directory.get("name", "unknown")
-                children = directory.get("children", [])
-                file_count = sum(1 for child in children if child.get("type") == "file")
-                subdir_count = sum(
-                    1 for child in children if child.get("type") == "directory"
-                )
-
-                if file_count > 0 or subdir_count > 0:
-                    output.append(
-                        f"    {dir_name}/ ({file_count} files, {subdir_count} subdirs)"
-                    )
-                else:
-                    output.append(f"    {dir_name}/")
-
-            output.append("")
-
-        # Show file types
-        if file_types:
-            output.append("  File Types:")
-            # Sort by count descending, show top 10
-            sorted_types = sorted(file_types.items(), key=lambda x: x[1], reverse=True)[
-                :10
-            ]
-            for ext, count in sorted_types:
-                ext_display = ext if ext != "no_extension" else "(no extension)"
-                output.append(f"    {ext_display}: {count} files")
-
-            if len(file_types) > 10:
-                output.append(f"    ... and {len(file_types) - 10} more file types")
-
-            output.append("")
-
-        # Show ONEX compliance
-        onex_total = sum(len(files) for files in onex_files.values())
-        if onex_total > 0:
-            output.append("  ONEX Compliance:")
-            for node_type, files in onex_files.items():
-                if files:
-                    output.append(f"    {node_type.upper()} nodes: {len(files)} files")
-            output.append("")
-
-        # Add duplicate prevention guidance
-        output.append("  ⚠️  DUPLICATE PREVENTION GUIDANCE:")
-        output.append("  Before creating new files, check if similar files exist in:")
-
-        # Suggest key directories to check based on common patterns
-        check_dirs = []
-        if any("agents" in d.get("name", "") for d in file_tree):
-            check_dirs.append("    • agents/ - Agent implementations and patterns")
-        if any("lib" in d.get("name", "") for d in file_tree):
-            check_dirs.append("    • lib/ - Library modules and utilities")
-        if any("tests" in d.get("name", "") for d in file_tree):
-            check_dirs.append("    • tests/ - Test files")
-        if any(
-            "hooks" in d.get("name", "").lower() or "claude" in d.get("name", "")
-            for d in file_tree
-        ):
-            check_dirs.append("    • claude_hooks/ - Hook scripts")
-        if any(
-            d.get("name", "").endswith(".md")
-            for d in file_tree
-            if d.get("type") == "file"
-        ):
-            check_dirs.append("    • Root *.md files - Documentation")
-
-        if check_dirs:
-            for check_dir in check_dirs:
-                output.append(check_dir)
-        else:
-            output.append("    • Review file tree above before creating new files")
-
-        output.append("")
-        output.append("  💡 TIP: Use Glob or Grep tools to search for existing files")
-        output.append(
-            "       before creating duplicates with similar names or purposes."
-        )
-
-        return "\n".join(output)
+        This method now returns an empty string to eliminate token waste.
+        """
+        return ""  # Return empty string instead of full tree
 
     def get_manifest_summary(self) -> Dict[str, Any]:
         """
