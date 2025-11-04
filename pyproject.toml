@@ -84,6 +84,7 @@ namespace_packages = true
 exclude = [
     "^agents/templates/",  # Template files with placeholder syntax
     "^agents/parallel_execution/templates/",  # More template files
+    "^skills/",  # Third-party skills - not our code to lint
 ]
 
 [tool.ruff]
@@ -95,6 +96,7 @@ exclude = [
     "**/archive/**",
     "**/__pycache__/**",
     "**/site-packages/**",
+    "skills/**",  # Third-party skills - not our code to lint
 ]
 
 [tool.ruff.lint]
@@ -162,6 +164,7 @@ exclude_dirs = [
     "agents/parallel_execution/templates",
     "agents/tests",
     "claude_hooks/tests",
+    "skills",  # Third-party skills - not our code to scan
     ".venv",
     "__pycache__",
     "build",
