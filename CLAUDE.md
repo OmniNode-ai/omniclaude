@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **📋 Documentation Restructured (Phase 2)**: This file was reorganized for clarity (reduced from 1,087 lines to 851 lines).
+> Content has been moved to specialized files:
+> - Infrastructure setup → `~/.claude/CLAUDE.md` (shared OmniNode infrastructure)
+> - Agent framework → `agents/polymorphic-agent.md`
+> - Test coverage → `TEST_COVERAGE_PLAN.md`
+> - Security audit → `SECURITY_AUDIT_HARDCODED_PASSWORDS.md`
+> - Migration details → `CLAUDE_MD_MIGRATION.md`
+
 > **📚 Shared Infrastructure**: For common OmniNode infrastructure (PostgreSQL, Kafka/Redpanda, remote server topology, Docker networking, environment variables), see **`~/.claude/CLAUDE.md`**. This file contains OmniClaude-specific architecture, agents, and services only.
 
 ## Overview
