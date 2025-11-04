@@ -1115,42 +1115,50 @@ class TestAsyncDatabaseWrites:
         """Test async database write."""
         optimizer = PerformanceOptimizer()
 
-        # Test async write
-        test_data = {
-            "id": str(uuid.uuid4()),
-            "name": "test_record",
-            "value": 42,
-        }
+        try:
+            # Test async write
+            test_data = {
+                "id": str(uuid.uuid4()),
+                "name": "test_record",
+                "value": 42,
+            }
 
-        write_id = await optimizer.async_database_write(
-            table="test_table", data=test_data
-        )
+            write_id = await optimizer.async_database_write(
+                table="test_table", data=test_data
+            )
 
-        assert isinstance(write_id, str)
-        assert write_id.startswith("write_")
-        assert optimizer._background_writer is not None
+            assert isinstance(write_id, str)
+            assert write_id.startswith("write_")
+            assert optimizer._background_writer is not None
+        finally:
+            # Cleanup background tasks
+            await optimizer.close()
 
     @pytest.mark.asyncio
     async def test_async_database_write_queue(self):
         """Test async write queue management."""
         optimizer = PerformanceOptimizer()
 
-        # Queue multiple writes
-        write_ids = []
-        for i in range(5):
-            write_id = await optimizer.async_database_write(
-                table="test_table", data={"id": str(uuid.uuid4()), "index": i}
-            )
-            write_ids.append(write_id)
+        try:
+            # Queue multiple writes
+            write_ids = []
+            for i in range(5):
+                write_id = await optimizer.async_database_write(
+                    table="test_table", data={"id": str(uuid.uuid4()), "index": i}
+                )
+                write_ids.append(write_id)
 
-        assert len(write_ids) == 5
-        assert all(wid.startswith("write_") for wid in write_ids)
+            assert len(write_ids) == 5
+            assert all(wid.startswith("write_") for wid in write_ids)
 
-        # Wait for background worker to process some items
-        await asyncio.sleep(0.1)
+            # Wait for background worker to process some items
+            await asyncio.sleep(0.1)
 
-        # Background writer should be running
-        assert optimizer._background_writer is not None
+            # Background writer should be running
+            assert optimizer._background_writer is not None
+        finally:
+            # Cleanup background tasks
+            await optimizer.close()
 
 
 class TestBatchOperations:
@@ -1546,16 +1554,20 @@ class TestEdgeCasesAndErrorHandling:
         """Test performance metrics include queue sizes."""
         optimizer = PerformanceOptimizer()
 
-        # Add some items to queues
-        await optimizer.async_database_write("test_table", {"id": "test1"})
-        await optimizer.async_database_write("test_table", {"id": "test2"})
+        try:
+            # Add some items to queues
+            await optimizer.async_database_write("test_table", {"id": "test1"})
+            await optimizer.async_database_write("test_table", {"id": "test2"})
 
-        # Get metrics
-        metrics = await optimizer.get_performance_metrics()
+            # Get metrics
+            metrics = await optimizer.get_performance_metrics()
 
-        # Should have queue size info if metrics available
-        if metrics:
-            assert "write_queue_size" in metrics or "batch_queue_size" in metrics
+            # Should have queue size info if metrics available
+            if metrics:
+                assert "write_queue_size" in metrics or "batch_queue_size" in metrics
+        finally:
+            # Cleanup background tasks
+            await optimizer.close()
 
     @pytest.mark.asyncio
     async def test_batch_write_grouping_logic(self):

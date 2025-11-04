@@ -506,9 +506,23 @@ async def test_exception_handling_in_queries():
         async def request_code_analysis(self, *args, **kwargs):
             raise Exception("Mock query failure")
 
+    # Mock the direct Qdrant fallback to also return empty results
+    async def mock_query_patterns_direct_qdrant(*args, **kwargs):
+        """Mock direct Qdrant query to return empty results."""
+        return {
+            "patterns": [],
+            "total_count": 0,
+            "query_time_ms": 0,
+            "collections_queried": []
+        }
+
     with patch(
         "agents.lib.manifest_injector.IntelligenceEventClient",
         FailingMockClient,
+    ), patch.object(
+        ManifestInjector,
+        "_query_patterns_direct_qdrant",
+        mock_query_patterns_direct_qdrant,
     ):
         injector = ManifestInjector(enable_intelligence=True)
         correlation_id = str(uuid.uuid4())
