@@ -146,6 +146,8 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["agents/tests"]
 markers = [
     "integration: integration tests that may hit external services",
+    "database: marks tests that require database connectivity",
+    "slow: marks tests that take a long time to run",
 ]
 # Skip tests with import collection issues (will be fixed in Week 4)
 # These tests have detailed documentation explaining the import issues

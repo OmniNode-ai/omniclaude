@@ -20,7 +20,7 @@ import statistics
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.enum_performance_threshold import EnumPerformanceThreshold
 
@@ -51,10 +51,7 @@ class ThresholdBreach(BaseModel):
         default_factory=dict, description="Additional breach context"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class StageTiming(BaseModel):
@@ -70,10 +67,7 @@ class StageTiming(BaseModel):
         default_factory=datetime.utcnow, description="Timing timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class MetricsSummary(BaseModel):
@@ -126,10 +120,7 @@ class MetricsSummary(BaseModel):
         default=0.0, description="Time taken to compute aggregation"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class MetricsCollector:

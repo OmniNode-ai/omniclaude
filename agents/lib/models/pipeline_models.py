@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StageStatus(str, Enum):
@@ -53,10 +53,7 @@ class ValidationGate(BaseModel):
         default_factory=datetime.utcnow, description="Gate execution timestamp"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class PipelineStage(BaseModel):
@@ -102,10 +99,7 @@ class PipelineStage(BaseModel):
         description="Performance ratio (actual/target) - <1.0 is good, >1.0 is slow",
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
     def calculate_performance_ratio(self) -> float:
         """
@@ -179,10 +173,7 @@ class PipelineResult(BaseModel):
         default=None, description="High-level error summary if pipeline failed"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {datetime: lambda v: v.isoformat(), UUID: str}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat(), UUID: str})
 
     @property
     def success(self) -> bool:

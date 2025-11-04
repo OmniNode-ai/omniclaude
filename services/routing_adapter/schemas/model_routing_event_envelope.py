@@ -50,7 +50,7 @@ from datetime import UTC, datetime
 from typing import Any, Dict, Generic, TypeVar, Union
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .model_routing_error import ModelRoutingError
 from .model_routing_request import ModelRoutingRequest
@@ -346,8 +346,8 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             payload=payload,
         )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "event_id": "def-456",
                 "event_type": "AGENT_ROUTING_REQUESTED",
@@ -369,6 +369,7 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
                 "version": "v1",
             }
         }
+    )
 
 
 __all__ = [

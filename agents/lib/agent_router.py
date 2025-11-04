@@ -35,7 +35,7 @@ try:
     from confidence_scorer import ConfidenceScore, ConfidenceScorer
     from result_cache import ResultCache
     from trigger_matcher import TriggerMatcher
-except ImportError:
+except ImportError:  # pragma: no cover
     # Fallback to relative imports if used as a package
     from .capability_index import CapabilityIndex
     from .confidence_scorer import ConfidenceScore, ConfidenceScorer
@@ -490,7 +490,7 @@ class AgentRouter:
 
 
 # Example usage and testing
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     from pathlib import Path
 
     registry_path = (
