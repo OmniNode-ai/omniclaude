@@ -17,20 +17,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-from lib.alert_manager import (
+
+from agents.lib.alert_manager import (
     AlertChannel,
     AlertManager,
     AlertRule,
     AlertStatus,
     EscalationPolicy,
 )
-from lib.health_checker import (
+from agents.lib.health_checker import (
     HealthCheckConfig,
     HealthChecker,
     HealthCheckResult,
     HealthCheckStatus,
 )
-from lib.monitoring import (
+from agents.lib.monitoring import (
     AlertSeverity,
     MetricType,
     MonitoringAlert,
@@ -236,7 +237,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_database_health_check_success(self, health_checker):
         """Test successful database health check."""
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             # Mock successful database connection
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
@@ -266,7 +267,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_database_health_check_failure(self, health_checker):
         """Test database health check failure."""
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             # Mock database connection failure
             mock_pool.return_value = None
 
@@ -279,7 +280,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_template_cache_health_check(self, health_checker):
         """Test template cache health check."""
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
             mock_conn.fetchrow = AsyncMock(
                 return_value={
@@ -308,7 +309,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_system_health_check(self, health_checker):
         """Test full system health check."""
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             # Mock database available
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
@@ -348,7 +349,7 @@ class TestHealthChecker:
     @pytest.mark.asyncio
     async def test_health_check_performance(self, health_checker):
         """Test that health checks complete within performance target."""
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
 
@@ -633,7 +634,7 @@ class TestIntegration:
         checker = HealthChecker()
 
         # Mock database for health check
-        with patch("lib.health_checker.get_pg_pool") as mock_pool:
+        with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
             mock_conn.fetchval = AsyncMock(return_value=1)
             mock_conn.fetchrow = AsyncMock(

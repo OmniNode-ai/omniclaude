@@ -21,14 +21,15 @@ Setup:
 
 
 import pytest
-from lib.aggregators.gate_result_aggregator import GateResultAggregator
-from lib.models.model_gate_aggregation import (
+
+from agents.lib.aggregators.gate_result_aggregator import GateResultAggregator
+from agents.lib.models.model_gate_aggregation import (
     EnumGateCategory,
     ModelCategorySummary,
     ModelGateAggregation,
     ModelPipelineQualityReport,
 )
-from lib.models.model_quality_gate import (  # noqa: E402
+from agents.lib.models.model_quality_gate import (  # noqa: E402
     EnumQualityGate,
     ModelQualityGateResult,
     QualityGateRegistry,

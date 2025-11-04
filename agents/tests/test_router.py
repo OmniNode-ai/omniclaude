@@ -23,11 +23,12 @@ Setup:
 import time
 
 import pytest
-from lib.agent_router import AgentRouter
-from lib.capability_index import CapabilityIndex
-from lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
-from lib.result_cache import ResultCache
-from lib.trigger_matcher import TriggerMatcher
+
+from agents.lib.agent_router import AgentRouter
+from agents.lib.capability_index import CapabilityIndex
+from agents.lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
+from agents.lib.result_cache import ResultCache
+from agents.lib.trigger_matcher import TriggerMatcher
 
 # Sample test registry data
 SAMPLE_REGISTRY = {

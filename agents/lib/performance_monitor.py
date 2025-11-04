@@ -73,6 +73,9 @@ class PerformanceMonitor:
         self.thresholds: Dict[str, PerformanceThreshold] = {}
         self.alerts: List[Dict[str, Any]] = []
         self._lock = asyncio.Lock()
+        self._start_times: Dict[str, float] = (
+            {}
+        )  # Track start times for automatic timing
 
         # Default thresholds for common phases
         self._setup_default_thresholds()
@@ -112,10 +115,11 @@ class PerformanceMonitor:
     async def track_phase_performance(
         self,
         phase: str,
-        duration_ms: float,
-        success: bool,
+        duration_ms: Optional[float] = None,
+        success: Optional[bool] = None,
         error_type: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ):
         """
         Track performance metrics for a phase execution.
@@ -126,7 +130,32 @@ class PerformanceMonitor:
             success: Whether execution was successful
             error_type: Type of error if failed
             metadata: Additional metadata
+            run_id: Run ID for tracking specific executions
         """
+        # If no duration/success provided, handle automatic timing
+        if duration_ms is None or success is None:
+            # Initialize metrics if needed for this phase
+            if phase not in self.metrics:
+                self.metrics[phase] = PerformanceMetrics(phase=phase)
+
+            # Check if this is a start or end tracking call
+            timing_key = f"{run_id or 'default'}:{phase}"
+
+            if timing_key not in self._start_times:
+                # This is a start call - record start time
+                import time
+
+                self._start_times[timing_key] = time.time()
+                return
+            else:
+                # This is an end call - calculate duration and track
+                import time
+
+                start_time = self._start_times.pop(timing_key)
+                duration_ms = (time.time() - start_time) * 1000
+                success = metadata.get("completed", True) if metadata else True
+                # Continue to normal tracking below
+
         async with self._lock:
             if phase not in self.metrics:
                 self.metrics[phase] = PerformanceMetrics(phase=phase)
@@ -230,6 +259,70 @@ class PerformanceMonitor:
             self.alerts = self.alerts[-1000:]
 
         print(f"[PerformanceMonitor] {level} ALERT: {message}", file=sys.stderr)
+
+    async def track_agent_performance(
+        self,
+        agent_id: str,
+        task_type: str,
+        duration_ms: Optional[float] = None,
+        success: Optional[bool] = None,
+        error_type: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+    ):
+        """
+        Track agent performance metrics.
+
+        Args:
+            agent_id: Agent identifier
+            task_type: Type of task executed
+            duration_ms: Execution duration in milliseconds
+            success: Whether execution was successful
+            error_type: Type of error if failed
+            metadata: Additional metadata
+            run_id: Run ID for tracking specific executions
+        """
+        # Track as a phase with agent-specific naming
+        phase = f"{agent_id}:{task_type}"
+        await self.track_phase_performance(
+            phase=phase,
+            duration_ms=duration_ms,
+            success=success,
+            error_type=error_type,
+            metadata=metadata,
+            run_id=run_id,
+        )
+
+    async def get_performance_metrics(
+        self, run_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get performance metrics, optionally filtered by run_id.
+
+        Args:
+            run_id: Optional run ID to filter by
+
+        Returns:
+            List of performance metrics
+        """
+        metrics = []
+        for phase, phase_metrics in self.metrics.items():
+            metrics.append(
+                {
+                    "phase": phase,
+                    "total_executions": phase_metrics.total_executions,
+                    "successful_executions": phase_metrics.successful_executions,
+                    "failed_executions": phase_metrics.failed_executions,
+                    "avg_duration_ms": phase_metrics.avg_duration_ms,
+                    "min_duration_ms": phase_metrics.min_duration_ms,
+                    "max_duration_ms": phase_metrics.max_duration_ms,
+                    "p50_duration_ms": phase_metrics.p50_duration_ms,
+                    "p90_duration_ms": phase_metrics.p90_duration_ms,
+                    "p95_duration_ms": phase_metrics.p95_duration_ms,
+                    "p99_duration_ms": phase_metrics.p99_duration_ms,
+                }
+            )
+        return metrics
 
     async def check_performance_threshold(self, phase: str, duration_ms: float) -> bool:
         """

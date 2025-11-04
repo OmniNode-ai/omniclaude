@@ -213,6 +213,9 @@ class CircuitBreaker:
 
         if self.state == CircuitState.HALF_OPEN:
             self.success_count += 1
+            # Check if we should close circuit after recording success
+            if self._should_close_circuit():
+                self._close_circuit()
         elif self.state == CircuitState.CLOSED:
             self.failure_count = 0  # Reset failure count on success
 
@@ -223,6 +226,9 @@ class CircuitBreaker:
 
         if self.state == CircuitState.CLOSED:
             self.failure_count += 1
+            # Check if we should open circuit after recording failure
+            if self._should_open_circuit():
+                self._open_circuit()
         elif self.state == CircuitState.HALF_OPEN:
             # Any failure in half-open state opens the circuit
             self._open_circuit()
@@ -321,11 +327,19 @@ async def call_with_breaker(
     *args,
     config: Optional[CircuitBreakerConfig] = None,
     **kwargs,
-) -> Tuple[bool, Any]:
+) -> Any:
     """Execute function with circuit breaker protection."""
-    return await circuit_breaker_manager.call_with_breaker(
+    success, result = await circuit_breaker_manager.call_with_breaker(
         breaker_name, func, *args, config=config, **kwargs
     )
+    if success:
+        return result
+    else:
+        # Raise the exception if execution failed
+        if isinstance(result, Exception):
+            raise result
+        else:
+            raise CircuitBreakerError(str(result))
 
 
 def get_breaker_stats(breaker_name: str) -> Optional[Dict[str, Any]]:
