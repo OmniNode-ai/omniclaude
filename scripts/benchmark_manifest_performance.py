@@ -39,13 +39,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
+
     env_path = Path(__file__).parent.parent / ".env"
     load_dotenv(env_path)
 except ImportError:
-    print("⚠️  Warning: python-dotenv not installed. Using environment variables from shell.")
+    print(
+        "⚠️  Warning: python-dotenv not installed. Using environment variables from shell."
+    )
     print("   Install with: pip install python-dotenv")
 
 # Add agents/lib to Python path for imports
@@ -133,7 +137,12 @@ class PerformanceBenchmark:
         if missing:
             print(f"❌ Missing required environment variables: {', '.join(missing)}")
             print("   Available variables:")
-            for var in ["POSTGRES_HOST", "POSTGRES_PORT", "KAFKA_BOOTSTRAP_SERVERS", "QDRANT_URL"]:
+            for var in [
+                "POSTGRES_HOST",
+                "POSTGRES_PORT",
+                "KAFKA_BOOTSTRAP_SERVERS",
+                "QDRANT_URL",
+            ]:
                 value = os.environ.get(var, "(not set)")
                 print(f"      {var}={value}")
             print("\n   Ensure .env file exists with proper configuration")
@@ -350,9 +359,13 @@ class PerformanceBenchmark:
         print(f"      Pattern query: {result.pattern_query_time_ms:.2f}ms")
         print(f"      Relevance scoring: {result.relevance_scoring_time_ms:.2f}ms")
         print(f"      Schema query: {result.schema_query_time_ms:.2f}ms")
-        print(f"      Infrastructure query: {result.infrastructure_query_time_ms:.2f}ms")
+        print(
+            f"      Infrastructure query: {result.infrastructure_query_time_ms:.2f}ms"
+        )
         print(f"      Total time: {result.total_time_ms:.2f}ms")
-        print(f"      Patterns: {result.patterns_retrieved} retrieved, {result.patterns_after_filtering} after filtering")
+        print(
+            f"      Patterns: {result.patterns_retrieved} retrieved, {result.patterns_after_filtering} after filtering"
+        )
 
         # Performance indicators
         if result.total_time_ms < 2000:
@@ -391,7 +404,9 @@ class PerformanceBenchmark:
 
         # Per-prompt-type statistics
         for prompt_type, prompt_results in by_prompt_type.items():
-            summary["by_prompt_type"][prompt_type] = self._calculate_stats(prompt_results)
+            summary["by_prompt_type"][prompt_type] = self._calculate_stats(
+                prompt_results
+            )
 
         # Overall statistics
         summary["overall"] = self._calculate_stats(valid_results)
@@ -406,8 +421,12 @@ class PerformanceBenchmark:
         return {
             "count": len(results),
             "task_classification_ms": {
-                "mean": statistics.mean([r.task_classification_time_ms for r in results]),
-                "median": statistics.median([r.task_classification_time_ms for r in results]),
+                "mean": statistics.mean(
+                    [r.task_classification_time_ms for r in results]
+                ),
+                "median": statistics.median(
+                    [r.task_classification_time_ms for r in results]
+                ),
                 "min": min([r.task_classification_time_ms for r in results]),
                 "max": max([r.task_classification_time_ms for r in results]),
             },
@@ -419,7 +438,9 @@ class PerformanceBenchmark:
             },
             "relevance_scoring_ms": {
                 "mean": statistics.mean([r.relevance_scoring_time_ms for r in results]),
-                "median": statistics.median([r.relevance_scoring_time_ms for r in results]),
+                "median": statistics.median(
+                    [r.relevance_scoring_time_ms for r in results]
+                ),
                 "min": min([r.relevance_scoring_time_ms for r in results]),
                 "max": max([r.relevance_scoring_time_ms for r in results]),
             },
@@ -430,10 +451,16 @@ class PerformanceBenchmark:
                 "max": max([r.total_time_ms for r in results]),
             },
             "patterns": {
-                "mean_retrieved": statistics.mean([r.patterns_retrieved for r in results]),
-                "mean_after_filtering": statistics.mean([r.patterns_after_filtering for r in results]),
+                "mean_retrieved": statistics.mean(
+                    [r.patterns_retrieved for r in results]
+                ),
+                "mean_after_filtering": statistics.mean(
+                    [r.patterns_after_filtering for r in results]
+                ),
             },
-            "cache_hit_rate": sum([1 for r in results if r.cache_hit]) / len(results) * 100,
+            "cache_hit_rate": sum([1 for r in results if r.cache_hit])
+            / len(results)
+            * 100,
         }
 
     def _assess_performance(self, results: List[BenchmarkResult]) -> Dict[str, Any]:
@@ -449,7 +476,9 @@ class PerformanceBenchmark:
         }
 
         # Check each target
-        avg_classification = statistics.mean([r.task_classification_time_ms for r in results])
+        avg_classification = statistics.mean(
+            [r.task_classification_time_ms for r in results]
+        )
         avg_scoring = statistics.mean([r.relevance_scoring_time_ms for r in results])
         avg_pattern_query = statistics.mean([r.pattern_query_time_ms for r in results])
         avg_total = statistics.mean([r.total_time_ms for r in results])
@@ -504,21 +533,35 @@ class PerformanceBenchmark:
         # Overall performance
         overall = summary["overall"]
         print("\n⏱️  Average Timings (across all prompts):")
-        print(f"   Task classification: {overall['task_classification_ms']['mean']:.2f}ms (median: {overall['task_classification_ms']['median']:.2f}ms)")
-        print(f"   Pattern query: {overall['pattern_query_ms']['mean']:.2f}ms (median: {overall['pattern_query_ms']['median']:.2f}ms)")
-        print(f"   Relevance scoring: {overall['relevance_scoring_ms']['mean']:.2f}ms (median: {overall['relevance_scoring_ms']['median']:.2f}ms)")
-        print(f"   Total time: {overall['total_time_ms']['mean']:.2f}ms (median: {overall['total_time_ms']['median']:.2f}ms)")
+        print(
+            f"   Task classification: {overall['task_classification_ms']['mean']:.2f}ms (median: {overall['task_classification_ms']['median']:.2f}ms)"
+        )
+        print(
+            f"   Pattern query: {overall['pattern_query_ms']['mean']:.2f}ms (median: {overall['pattern_query_ms']['median']:.2f}ms)"
+        )
+        print(
+            f"   Relevance scoring: {overall['relevance_scoring_ms']['mean']:.2f}ms (median: {overall['relevance_scoring_ms']['median']:.2f}ms)"
+        )
+        print(
+            f"   Total time: {overall['total_time_ms']['mean']:.2f}ms (median: {overall['total_time_ms']['median']:.2f}ms)"
+        )
         print(f"\n   Cache hit rate: {overall['cache_hit_rate']:.1f}%")
 
         # Per-prompt-type breakdown
         print("\n📝 Breakdown by Prompt Type:")
         for prompt_type, stats in summary["by_prompt_type"].items():
             print(f"\n   {prompt_type.upper()}:")
-            print(f"      Classification: {stats['task_classification_ms']['mean']:.2f}ms")
+            print(
+                f"      Classification: {stats['task_classification_ms']['mean']:.2f}ms"
+            )
             print(f"      Pattern query: {stats['pattern_query_ms']['mean']:.2f}ms")
-            print(f"      Relevance scoring: {stats['relevance_scoring_ms']['mean']:.2f}ms")
+            print(
+                f"      Relevance scoring: {stats['relevance_scoring_ms']['mean']:.2f}ms"
+            )
             print(f"      Total: {stats['total_time_ms']['mean']:.2f}ms")
-            print(f"      Patterns: {stats['patterns']['mean_retrieved']:.0f} retrieved → {stats['patterns']['mean_after_filtering']:.0f} after filtering")
+            print(
+                f"      Patterns: {stats['patterns']['mean_retrieved']:.0f} retrieved → {stats['patterns']['mean_after_filtering']:.0f} after filtering"
+            )
 
         # Performance assessment
         print("\n🎯 Performance Target Assessment:")
@@ -535,7 +578,9 @@ class PerformanceBenchmark:
         if all_pass:
             print("✅ VERDICT: All performance targets met!")
         else:
-            print("⚠️  VERDICT: Some performance targets not met. Review bottlenecks above.")
+            print(
+                "⚠️  VERDICT: Some performance targets not met. Review bottlenecks above."
+            )
         print("=" * 80 + "\n")
 
         # Export to JSON

@@ -12,12 +12,12 @@ import asyncio
 import logging
 import sys
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
+
 
 # Configure logging to catch asyncio warnings
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 # Enable asyncio debug mode to catch unawaited tasks
@@ -35,32 +35,29 @@ async def verify_manifest_injector_async_fix():
     """
     try:
         import os
+
         from agents.lib.manifest_injector import ManifestInjector
         from agents.lib.pattern_quality_scorer import PatternQualityScorer
 
         logger.info("✅ Starting verification of async metric persistence fix")
 
         # Enable quality filtering via environment variable
-        os.environ['ENABLE_PATTERN_QUALITY_FILTER'] = 'true'
-        os.environ['MIN_PATTERN_QUALITY'] = '0.0'  # Accept all patterns for testing
+        os.environ["ENABLE_PATTERN_QUALITY_FILTER"] = "true"
+        os.environ["MIN_PATTERN_QUALITY"] = "0.0"  # Accept all patterns for testing
 
         # Create manifest injector (quality filtering controlled by env vars)
         injector = ManifestInjector(
-            enable_cache=False,
-            enable_storage=False  # Disable storage for testing
+            enable_cache=False, enable_storage=False  # Disable storage for testing
         )
 
         # Create mock patterns for testing
         test_patterns = [
             {
-                'id': f'test-pattern-{i}',
-                'name': f'Test Pattern {i}',
-                'file_path': f'test_pattern_{i}.py',
-                'node_types': ['EFFECT', 'COMPUTE'],
-                'metadata': {
-                    'complexity': 'medium',
-                    'usage_count': 10 + i
-                }
+                "id": f"test-pattern-{i}",
+                "name": f"Test Pattern {i}",
+                "file_path": f"test_pattern_{i}.py",
+                "node_types": ["EFFECT", "COMPUTE"],
+                "metadata": {"complexity": "medium", "usage_count": 10 + i},
             }
             for i in range(5)
         ]
@@ -73,7 +70,9 @@ async def verify_manifest_injector_async_fix():
         elapsed_ms = (datetime.now() - start_time).total_seconds() * 1000
 
         logger.info(f"✅ Pattern filtering completed in {elapsed_ms:.2f}ms")
-        logger.info(f"📊 Filtered: {len(filtered_patterns)}/{len(test_patterns)} patterns")
+        logger.info(
+            f"📊 Filtered: {len(filtered_patterns)}/{len(test_patterns)} patterns"
+        )
 
         # Wait a moment to catch any delayed task warnings
         await asyncio.sleep(0.5)

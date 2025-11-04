@@ -20,22 +20,24 @@ Success Criteria:
 
 import sys
 import time
-from pathlib import Path
-from typing import List, Dict, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Tuple
+
 
 # Add agents/lib to path
 lib_path = Path(__file__).parent.parent / "agents" / "lib"
 if str(lib_path) not in sys.path:
     sys.path.insert(0, str(lib_path))
 
-from task_classifier import TaskClassifier, TaskIntent
 from relevance_scorer import RelevanceScorer
+from task_classifier import TaskClassifier, TaskIntent
 
 
 @dataclass
 class TestResult:
     """Result from testing a single prompt."""
+
     prompt: str
     expected_task: TaskIntent
     classified_task: TaskIntent
@@ -69,9 +71,12 @@ SAMPLE_PATTERNS = [
         "description": "Kafka event publishing with schema validation and delivery guarantees for ONEX Effect nodes",
         "node_types": ["EFFECT"],
         "tags": ["kafka", "events", "publishing", "async", "onex"],
-        "use_cases": ["Event publishing", "Message queuing", "Event-driven architecture"],
+        "use_cases": [
+            "Event publishing",
+            "Message queuing",
+            "Event-driven architecture",
+        ],
     },
-
     # ONEX Compute Node Patterns
     {
         "name": "Data Transformation Compute Pattern",
@@ -87,7 +92,6 @@ SAMPLE_PATTERNS = [
         "tags": ["aggregation", "merge", "conflict-resolution", "onex"],
         "use_cases": ["Data aggregation", "Merging results", "Conflict resolution"],
     },
-
     # ONEX Reducer Node Patterns
     {
         "name": "State Management Reducer Pattern",
@@ -101,32 +105,46 @@ SAMPLE_PATTERNS = [
         "description": "Aggregating results from parallel operations with quality scoring for ONEX Reducer nodes",
         "node_types": ["REDUCER"],
         "tags": ["aggregation", "parallel", "quality", "onex"],
-        "use_cases": ["Result aggregation", "Parallel coordination", "Quality assessment"],
+        "use_cases": [
+            "Result aggregation",
+            "Parallel coordination",
+            "Quality assessment",
+        ],
     },
-
     # ONEX Orchestrator Node Patterns
     {
         "name": "Workflow Orchestrator Pattern",
         "description": "Coordinating multi-step workflows with dependency management for ONEX Orchestrator nodes",
         "node_types": ["ORCHESTRATOR"],
         "tags": ["workflow", "coordination", "dependencies", "onex"],
-        "use_cases": ["Workflow coordination", "Dependency management", "Multi-step processes"],
+        "use_cases": [
+            "Workflow coordination",
+            "Dependency management",
+            "Multi-step processes",
+        ],
     },
-
     # Debugging and Error Handling Patterns
     {
         "name": "Error Debugging and Logging Pattern",
         "description": "Comprehensive error handling with structured logging and debugging utilities",
         "node_types": ["EFFECT", "COMPUTE"],
         "tags": ["error", "debug", "logging", "exception", "troubleshooting"],
-        "use_cases": ["Error debugging", "Issue investigation", "System troubleshooting"],
+        "use_cases": [
+            "Error debugging",
+            "Issue investigation",
+            "System troubleshooting",
+        ],
     },
     {
         "name": "Connection Troubleshooting Pattern",
         "description": "Diagnosing and fixing connection issues for PostgreSQL, Kafka, and other services",
         "node_types": ["EFFECT"],
         "tags": ["connection", "troubleshooting", "postgresql", "kafka", "debug"],
-        "use_cases": ["Connection issues", "Service connectivity", "Infrastructure debugging"],
+        "use_cases": [
+            "Connection issues",
+            "Service connectivity",
+            "Infrastructure debugging",
+        ],
     },
     {
         "name": "Exception Handling Best Practices",
@@ -135,7 +153,6 @@ SAMPLE_PATTERNS = [
         "tags": ["exception", "error", "retry", "fallback"],
         "use_cases": ["Exception handling", "Error recovery", "Resilient systems"],
     },
-
     # Database Schema Patterns
     {
         "name": "Schema Design Pattern",
@@ -149,32 +166,46 @@ SAMPLE_PATTERNS = [
         "description": "Optimizing SQL queries with indexes, explain plans, and performance tuning",
         "node_types": ["EFFECT"],
         "tags": ["query", "optimization", "performance", "sql", "postgresql"],
-        "use_cases": ["Query optimization", "Performance tuning", "Database efficiency"],
+        "use_cases": [
+            "Query optimization",
+            "Performance tuning",
+            "Database efficiency",
+        ],
     },
-
     # Performance Patterns
     {
         "name": "Performance Monitoring Pattern",
         "description": "Monitoring and analyzing system performance with metrics and profiling",
         "node_types": ["EFFECT", "REDUCER"],
         "tags": ["performance", "monitoring", "metrics", "profiling"],
-        "use_cases": ["Performance monitoring", "System profiling", "Bottleneck detection"],
+        "use_cases": [
+            "Performance monitoring",
+            "System profiling",
+            "Bottleneck detection",
+        ],
     },
     {
         "name": "Query Performance Analysis",
         "description": "Analyzing slow database queries with explain plans and optimization recommendations",
         "node_types": ["EFFECT"],
         "tags": ["query", "performance", "analysis", "postgresql", "optimization"],
-        "use_cases": ["Query analysis", "Performance diagnosis", "Slow query debugging"],
+        "use_cases": [
+            "Query analysis",
+            "Performance diagnosis",
+            "Slow query debugging",
+        ],
     },
     {
         "name": "Caching Strategy Pattern",
         "description": "Implementing caching layers with TTL, invalidation, and cache warming strategies",
         "node_types": ["COMPUTE", "EFFECT"],
         "tags": ["caching", "performance", "optimization", "ttl"],
-        "use_cases": ["Performance optimization", "Caching", "Response time improvement"],
+        "use_cases": [
+            "Performance optimization",
+            "Caching",
+            "Response time improvement",
+        ],
     },
-
     # Documentation Patterns
     {
         "name": "API Documentation Pattern",
@@ -195,14 +226,22 @@ SAMPLE_PATTERNS = [
         "description": "Updating existing documentation files, README, and CLAUDE.md with new features and intelligence",
         "node_types": ["COMPUTE"],
         "tags": ["documentation", "update", "readme", "features", "intelligence"],
-        "use_cases": ["Documentation updates", "README updates", "Feature documentation"],
+        "use_cases": [
+            "Documentation updates",
+            "README updates",
+            "Feature documentation",
+        ],
     },
     {
         "name": "Intelligence Documentation Pattern",
         "description": "Documenting intelligence infrastructure, event flows, and system capabilities",
         "node_types": ["COMPUTE"],
         "tags": ["documentation", "intelligence", "infrastructure", "events"],
-        "use_cases": ["Intelligence docs", "Infrastructure documentation", "System capabilities"],
+        "use_cases": [
+            "Intelligence docs",
+            "Infrastructure documentation",
+            "System capabilities",
+        ],
     },
 ]
 
@@ -247,9 +286,7 @@ class RealPromptTester:
             scored_patterns.append((pattern, score))
 
         # 3. Filter by relevance threshold (>0.3)
-        filtered_patterns = [
-            (p, s) for p, s in scored_patterns if s > 0.3
-        ]
+        filtered_patterns = [(p, s) for p, s in scored_patterns if s > 0.3]
 
         # 4. Sort by score descending and take top 5
         sorted_patterns = sorted(
@@ -275,9 +312,7 @@ class RealPromptTester:
             classification_correct=task_context.primary_intent == expected_task,
             num_patterns_total=len(self.patterns),
             num_patterns_filtered=len(filtered_patterns),
-            top_5_patterns=[
-                (p["name"], s) for p, s in top_5
-            ],
+            top_5_patterns=[(p["name"], s) for p, s in top_5],
             query_time_ms=query_time_ms,
             relevance_assessment=relevance_assessment,
         )
@@ -307,7 +342,13 @@ class RealPromptTester:
 
             # Task-specific relevance checks
             if expected_task == TaskIntent.DEBUG:
-                relevant_tags = {"error", "debug", "exception", "troubleshooting", "logging"}
+                relevant_tags = {
+                    "error",
+                    "debug",
+                    "exception",
+                    "troubleshooting",
+                    "logging",
+                }
                 if pattern_tags & relevant_tags:
                     return "EXCELLENT - High score + relevant tags for DEBUG task"
 
@@ -348,10 +389,12 @@ def print_test_result(result: TestResult, test_num: int):
     print(f"\n{'='*80}")
     print(f"TEST {test_num}: {result.expected_task.value.upper()} Task")
     print(f"{'='*80}")
-    print(f"\nPrompt: \"{result.prompt}\"")
+    print(f'\nPrompt: "{result.prompt}"')
     print(f"\nExpected Task: {result.expected_task.value}")
     print(f"Classified Task: {result.classified_task.value}")
-    print(f"Classification: {'✅ CORRECT' if result.classification_correct else '❌ INCORRECT'}")
+    print(
+        f"Classification: {'✅ CORRECT' if result.classification_correct else '❌ INCORRECT'}"
+    )
 
     print("\nPattern Filtering:")
     print(f"  Total Patterns: {result.num_patterns_total}")
@@ -419,7 +462,9 @@ def main():
     # Classification accuracy
     correct_classifications = sum(1 for r in results if r.classification_correct)
     classification_accuracy = correct_classifications / len(results) * 100
-    print(f"\nClassification Accuracy: {correct_classifications}/{len(results)} ({classification_accuracy:.1f}%)")
+    print(
+        f"\nClassification Accuracy: {correct_classifications}/{len(results)} ({classification_accuracy:.1f}%)"
+    )
 
     if classification_accuracy == 100:
         print("✅ SUCCESS: All tasks classified correctly!")
@@ -427,14 +472,20 @@ def main():
         print("❌ FAILED: Some tasks misclassified")
         for i, result in enumerate(results, 1):
             if not result.classification_correct:
-                print(f"  Test {i}: Expected {result.expected_task.value}, got {result.classified_task.value}")
+                print(
+                    f"  Test {i}: Expected {result.expected_task.value}, got {result.classified_task.value}"
+                )
 
     # Pattern relevance quality
     print("\nPattern Relevance Quality:")
     excellent_count = sum(1 for r in results if "EXCELLENT" in r.relevance_assessment)
     good_count = sum(1 for r in results if "GOOD" in r.relevance_assessment)
     acceptable_count = sum(1 for r in results if "ACCEPTABLE" in r.relevance_assessment)
-    poor_count = sum(1 for r in results if "POOR" in r.relevance_assessment or "NO_PATTERNS" in r.relevance_assessment)
+    poor_count = sum(
+        1
+        for r in results
+        if "POOR" in r.relevance_assessment or "NO_PATTERNS" in r.relevance_assessment
+    )
 
     print(f"  Excellent: {excellent_count}/{len(results)}")
     print(f"  Good: {good_count}/{len(results)}")
@@ -462,16 +513,24 @@ def main():
     if classification_accuracy == 100 and relevance_accuracy >= 80:
         print("✅ PHASE 4.1 TESTS PASSED")
         print("\nAll success criteria met:")
-        print(f"  ✅ Task classification accuracy: {classification_accuracy:.1f}% (expected: 100%)")
-        print(f"  ✅ Pattern relevance accuracy: {relevance_accuracy:.1f}% (expected: >80%)")
+        print(
+            f"  ✅ Task classification accuracy: {classification_accuracy:.1f}% (expected: 100%)"
+        )
+        print(
+            f"  ✅ Pattern relevance accuracy: {relevance_accuracy:.1f}% (expected: >80%)"
+        )
         return 0
     else:
         print("❌ PHASE 4.1 TESTS FAILED")
         print("\nSuccess criteria not met:")
         if classification_accuracy < 100:
-            print(f"  ❌ Task classification accuracy: {classification_accuracy:.1f}% (expected: 100%)")
+            print(
+                f"  ❌ Task classification accuracy: {classification_accuracy:.1f}% (expected: 100%)"
+            )
         if relevance_accuracy < 80:
-            print(f"  ❌ Pattern relevance accuracy: {relevance_accuracy:.1f}% (expected: >80%)")
+            print(
+                f"  ❌ Pattern relevance accuracy: {relevance_accuracy:.1f}% (expected: >80%)"
+            )
         return 1
 
 

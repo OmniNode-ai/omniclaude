@@ -13,10 +13,10 @@ Part of Phase 4.3: Data Quality Spot Checks
 """
 
 import sys
-from pathlib import Path
-from typing import Any, List, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
+from typing import Any, List, Tuple
 
 # Add agents/lib to path for imports
 lib_path = Path(__file__).parent.parent / "agents" / "lib"
@@ -29,6 +29,7 @@ from task_classifier import TaskClassifier, TaskIntent
 @dataclass
 class ValidationResult:
     """Result of a validation test."""
+
     test_name: str
     passed: bool
     expected: Any
@@ -40,6 +41,7 @@ class ValidationResult:
 @dataclass
 class QualityReport:
     """Comprehensive quality report."""
+
     timestamp: datetime = field(default_factory=datetime.now)
     pattern_relevance_accuracy: float = 0.0
     schema_filtering_precision: float = 0.0
@@ -109,7 +111,9 @@ class DataQualityValidator:
 
         # Calculate summary statistics
         self.report.total_tests = len(self.report.validation_results)
-        self.report.passed_tests = sum(1 for r in self.report.validation_results if r.passed)
+        self.report.passed_tests = sum(
+            1 for r in self.report.validation_results if r.passed
+        )
         self.report.failed_tests = self.report.total_tests - self.report.passed_tests
 
         # Print summary
@@ -246,7 +250,9 @@ class DataQualityValidator:
             task_context = self.classifier.classify(prompt)
 
             print(f"\nTest Prompt: '{prompt}'")
-            print(f"Classification: {task_context.primary_intent.value} (confidence: {task_context.confidence:.2f})")
+            print(
+                f"Classification: {task_context.primary_intent.value} (confidence: {task_context.confidence:.2f})"
+            )
             print(f"Keywords: {', '.join(task_context.keywords)}")
             print()
 
@@ -271,7 +277,7 @@ class DataQualityValidator:
                 expected_relevant = pattern["expected_relevant"]
                 predicted_relevant = score > 0.3  # Threshold from manifest_injector.py
 
-                is_correct = (predicted_relevant == expected_relevant)
+                is_correct = predicted_relevant == expected_relevant
                 total_predictions += 1
                 if is_correct:
                     correct_predictions += 1
@@ -279,21 +285,27 @@ class DataQualityValidator:
                 result_icon = "✓" if is_correct else "✗"
                 expected_str = "Relevant" if expected_relevant else "Irrelevant"
 
-                print(f"{pattern['name']:<50} {score:<10.3f} {expected_str:<15} {result_icon}")
+                print(
+                    f"{pattern['name']:<50} {score:<10.3f} {expected_str:<15} {result_icon}"
+                )
 
                 # Record validation result
-                self.report.validation_results.append(ValidationResult(
-                    test_name=f"Pattern Relevance: {pattern['name'][:40]}",
-                    passed=is_correct,
-                    expected=expected_relevant,
-                    actual=predicted_relevant,
-                    score=score,
-                    details=f"Prompt: '{prompt[:50]}...' | Score: {score:.3f}",
-                ))
+                self.report.validation_results.append(
+                    ValidationResult(
+                        test_name=f"Pattern Relevance: {pattern['name'][:40]}",
+                        passed=is_correct,
+                        expected=expected_relevant,
+                        actual=predicted_relevant,
+                        score=score,
+                        details=f"Prompt: '{prompt[:50]}...' | Score: {score:.3f}",
+                    )
+                )
 
             print()
 
-        accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0.0
+        accuracy = (
+            correct_predictions / total_predictions if total_predictions > 0 else 0.0
+        )
         return accuracy
 
     def _validate_schema_filtering(self) -> Tuple[float, float]:
@@ -313,10 +325,22 @@ class DataQualityValidator:
             {
                 "prompt": "Show me agent routing decisions from the database",
                 "schemas": [
-                    {"table_name": "agent_routing_decisions", "expected_relevant": True},
-                    {"table_name": "agent_transformation_events", "expected_relevant": True},
-                    {"table_name": "router_performance_metrics", "expected_relevant": True},
-                    {"table_name": "agent_manifest_injections", "expected_relevant": False},
+                    {
+                        "table_name": "agent_routing_decisions",
+                        "expected_relevant": True,
+                    },
+                    {
+                        "table_name": "agent_transformation_events",
+                        "expected_relevant": True,
+                    },
+                    {
+                        "table_name": "router_performance_metrics",
+                        "expected_relevant": True,
+                    },
+                    {
+                        "table_name": "agent_manifest_injections",
+                        "expected_relevant": False,
+                    },
                     {"table_name": "workflow_events", "expected_relevant": False},
                     {"table_name": "user_preferences", "expected_relevant": False},
                     {"table_name": "llm_calls", "expected_relevant": False},
@@ -326,10 +350,19 @@ class DataQualityValidator:
             {
                 "prompt": "Query the intelligence manifest injection data",
                 "schemas": [
-                    {"table_name": "agent_manifest_injections", "expected_relevant": True},
+                    {
+                        "table_name": "agent_manifest_injections",
+                        "expected_relevant": True,
+                    },
                     {"table_name": "intelligence_queries", "expected_relevant": True},
-                    {"table_name": "pattern_discovery_events", "expected_relevant": True},
-                    {"table_name": "agent_routing_decisions", "expected_relevant": False},
+                    {
+                        "table_name": "pattern_discovery_events",
+                        "expected_relevant": True,
+                    },
+                    {
+                        "table_name": "agent_routing_decisions",
+                        "expected_relevant": False,
+                    },
                     {"table_name": "user_sessions", "expected_relevant": False},
                     {"table_name": "api_rate_limits", "expected_relevant": False},
                 ],
@@ -341,8 +374,14 @@ class DataQualityValidator:
                     {"table_name": "workflow_events", "expected_relevant": True},
                     {"table_name": "error_events", "expected_relevant": True},
                     {"table_name": "workflow_steps", "expected_relevant": True},
-                    {"table_name": "agent_routing_decisions", "expected_relevant": False},
-                    {"table_name": "pattern_quality_scores", "expected_relevant": False},
+                    {
+                        "table_name": "agent_routing_decisions",
+                        "expected_relevant": False,
+                    },
+                    {
+                        "table_name": "pattern_quality_scores",
+                        "expected_relevant": False,
+                    },
                 ],
             },
         ]
@@ -386,27 +425,39 @@ class DataQualityValidator:
                 else:
                     true_negatives += 1
 
-                is_correct = (predicted_relevant == expected_relevant)
+                is_correct = predicted_relevant == expected_relevant
                 result_icon = "✓" if is_correct else "✗"
                 expected_str = "Relevant" if expected_relevant else "Irrelevant"
 
-                print(f"{schema['table_name']:<40} {score:<10.3f} {expected_str:<15} {result_icon}")
+                print(
+                    f"{schema['table_name']:<40} {score:<10.3f} {expected_str:<15} {result_icon}"
+                )
 
                 # Record validation result
-                self.report.validation_results.append(ValidationResult(
-                    test_name=f"Schema Filtering: {schema['table_name']}",
-                    passed=is_correct,
-                    expected=expected_relevant,
-                    actual=predicted_relevant,
-                    score=score,
-                    details=f"Prompt: '{prompt[:50]}...' | Score: {score:.3f}",
-                ))
+                self.report.validation_results.append(
+                    ValidationResult(
+                        test_name=f"Schema Filtering: {schema['table_name']}",
+                        passed=is_correct,
+                        expected=expected_relevant,
+                        actual=predicted_relevant,
+                        score=score,
+                        details=f"Prompt: '{prompt[:50]}...' | Score: {score:.3f}",
+                    )
+                )
 
             print()
 
         # Calculate precision and recall
-        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0.0
-        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0.0
+        precision = (
+            true_positives / (true_positives + false_positives)
+            if (true_positives + false_positives) > 0
+            else 0.0
+        )
+        recall = (
+            true_positives / (true_positives + false_negatives)
+            if (true_positives + false_negatives) > 0
+            else 0.0
+        )
 
         return precision, recall
 
@@ -489,7 +540,9 @@ class DataQualityValidator:
         correct_classifications = 0
         total_classifications = len(test_cases)
 
-        print(f"\n{'Prompt':<60} {'Expected':<15} {'Actual':<15} {'Confidence':<12} {'Result'}")
+        print(
+            f"\n{'Prompt':<60} {'Expected':<15} {'Actual':<15} {'Confidence':<12} {'Result'}"
+        )
         print("-" * 110)
 
         for test_case in test_cases:
@@ -500,23 +553,27 @@ class DataQualityValidator:
             task_context = self.classifier.classify(prompt)
 
             # Check if classification is correct
-            is_correct = (task_context.primary_intent == expected_intent)
+            is_correct = task_context.primary_intent == expected_intent
             if is_correct:
                 correct_classifications += 1
 
             result_icon = "✓" if is_correct else "✗"
 
-            print(f"{prompt:<60} {expected_intent.value:<15} {task_context.primary_intent.value:<15} {task_context.confidence:<12.2f} {result_icon}")
+            print(
+                f"{prompt:<60} {expected_intent.value:<15} {task_context.primary_intent.value:<15} {task_context.confidence:<12.2f} {result_icon}"
+            )
 
             # Record validation result
-            self.report.validation_results.append(ValidationResult(
-                test_name=f"Task Classification: {prompt[:50]}",
-                passed=is_correct,
-                expected=expected_intent.value,
-                actual=task_context.primary_intent.value,
-                score=task_context.confidence,
-                details=f"Keywords: {', '.join(task_context.keywords[:5])}",
-            ))
+            self.report.validation_results.append(
+                ValidationResult(
+                    test_name=f"Task Classification: {prompt[:50]}",
+                    passed=is_correct,
+                    expected=expected_intent.value,
+                    actual=task_context.primary_intent.value,
+                    score=task_context.confidence,
+                    details=f"Keywords: {', '.join(task_context.keywords[:5])}",
+                )
+            )
 
         print()
 
@@ -609,12 +666,22 @@ class DataQualityValidator:
         print(f"Timestamp: {self.report.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
         print()
         print("Metrics:")
-        print(f"  • Pattern Relevance Accuracy:     {self.report.pattern_relevance_accuracy:.1%}")
-        print(f"  • Schema Filtering Precision:     {self.report.schema_filtering_precision:.1%}")
-        print(f"  • Schema Filtering Recall:        {self.report.schema_filtering_recall:.1%}")
-        print(f"  • Task Classification Accuracy:   {self.report.task_classification_accuracy:.1%}")
+        print(
+            f"  • Pattern Relevance Accuracy:     {self.report.pattern_relevance_accuracy:.1%}"
+        )
+        print(
+            f"  • Schema Filtering Precision:     {self.report.schema_filtering_precision:.1%}"
+        )
+        print(
+            f"  • Schema Filtering Recall:        {self.report.schema_filtering_recall:.1%}"
+        )
+        print(
+            f"  • Task Classification Accuracy:   {self.report.task_classification_accuracy:.1%}"
+        )
         print()
-        print(f"Test Results: {self.report.passed_tests}/{self.report.total_tests} passed ({self.report.passed_tests/self.report.total_tests*100:.1f}%)")
+        print(
+            f"Test Results: {self.report.passed_tests}/{self.report.total_tests} passed ({self.report.passed_tests/self.report.total_tests*100:.1f}%)"
+        )
         print()
         print("Recommendations:")
         for rec in self.report.recommendations:
@@ -623,15 +690,17 @@ class DataQualityValidator:
 
         # Overall status
         all_passed = (
-            self.report.pattern_relevance_accuracy >= 0.8 and
-            self.report.schema_filtering_precision >= 0.9 and
-            self.report.task_classification_accuracy >= 0.95
+            self.report.pattern_relevance_accuracy >= 0.8
+            and self.report.schema_filtering_precision >= 0.9
+            and self.report.task_classification_accuracy >= 0.95
         )
 
         if all_passed:
             print("✅ SUCCESS: All quality metrics meet or exceed targets!")
         else:
-            print("⚠️  WARNING: Some quality metrics are below targets. See recommendations above.")
+            print(
+                "⚠️  WARNING: Some quality metrics are below targets. See recommendations above."
+            )
         print()
         print("=" * 80)
 
@@ -652,11 +721,21 @@ class DataQualityValidator:
             # Summary metrics
             f.write("SUMMARY METRICS\n")
             f.write("-" * 80 + "\n")
-            f.write(f"Pattern Relevance Accuracy:     {self.report.pattern_relevance_accuracy:.1%}\n")
-            f.write(f"Schema Filtering Precision:     {self.report.schema_filtering_precision:.1%}\n")
-            f.write(f"Schema Filtering Recall:        {self.report.schema_filtering_recall:.1%}\n")
-            f.write(f"Task Classification Accuracy:   {self.report.task_classification_accuracy:.1%}\n")
-            f.write(f"\nTests Passed: {self.report.passed_tests}/{self.report.total_tests} ({self.report.passed_tests/self.report.total_tests*100:.1f}%)\n")
+            f.write(
+                f"Pattern Relevance Accuracy:     {self.report.pattern_relevance_accuracy:.1%}\n"
+            )
+            f.write(
+                f"Schema Filtering Precision:     {self.report.schema_filtering_precision:.1%}\n"
+            )
+            f.write(
+                f"Schema Filtering Recall:        {self.report.schema_filtering_recall:.1%}\n"
+            )
+            f.write(
+                f"Task Classification Accuracy:   {self.report.task_classification_accuracy:.1%}\n"
+            )
+            f.write(
+                f"\nTests Passed: {self.report.passed_tests}/{self.report.total_tests} ({self.report.passed_tests/self.report.total_tests*100:.1f}%)\n"
+            )
             f.write("\n")
 
             # Detailed results
@@ -698,9 +777,9 @@ def main():
 
     # Exit with appropriate code
     all_passed = (
-        report.pattern_relevance_accuracy >= 0.8 and
-        report.schema_filtering_precision >= 0.9 and
-        report.task_classification_accuracy >= 0.95
+        report.pattern_relevance_accuracy >= 0.8
+        and report.schema_filtering_precision >= 0.9
+        and report.task_classification_accuracy >= 0.95
     )
 
     sys.exit(0 if all_passed else 1)

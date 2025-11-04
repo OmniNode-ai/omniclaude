@@ -4,9 +4,10 @@ Show real file paths from actual patterns in Qdrant.
 """
 
 import asyncio
-import sys
 import os
+import sys
 from pathlib import Path
+
 
 # Add agents to path
 sys.path.insert(0, str(Path(__file__).parent / "agents"))
@@ -24,7 +25,9 @@ async def show_real_file_paths():
     print()
 
     # Query for orchestrator-related patterns
-    user_prompt = "Create an orchestrator node to orchestrate our node generation pipeline"
+    user_prompt = (
+        "Create an orchestrator node to orchestrate our node generation pipeline"
+    )
 
     classifier = TaskClassifier()
     task_context = classifier.classify(user_prompt)
@@ -36,6 +39,7 @@ async def show_real_file_paths():
     injector = ManifestInjector()
 
     import uuid
+
     correlation_id = str(uuid.uuid4())
 
     print("🔍 Querying archon_vectors collection...")
@@ -44,7 +48,7 @@ async def show_real_file_paths():
         collections=["archon_vectors"],
         limit_per_collection=50,
         task_context=task_context,
-        user_prompt=user_prompt
+        user_prompt=user_prompt,
     )
 
     patterns = result.get("patterns", [])
@@ -89,9 +93,11 @@ async def show_real_file_paths():
                 print("    ✅ File exists")
             else:
                 # Try relative to different base paths
-                for base in ["/Volumes/PRO-G40/Code/omniarchon",
-                            "/Volumes/PRO-G40/Code/omniclaude",
-                            "/Volumes/PRO-G40/Code/omninode_bridge"]:
+                for base in [
+                    "/Volumes/PRO-G40/Code/omniarchon",
+                    "/Volumes/PRO-G40/Code/omniclaude",
+                    "/Volumes/PRO-G40/Code/omninode_bridge",
+                ]:
                     test_path = Path(base) / file_path
                     if test_path.exists():
                         print(f"    ✅ File exists at: {test_path}")

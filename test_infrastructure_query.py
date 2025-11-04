@@ -11,6 +11,7 @@ import json
 import sys
 from pathlib import Path
 
+
 # Add agents/lib to path
 lib_path = Path(__file__).parent / "agents" / "lib"
 sys.path.insert(0, str(lib_path))
@@ -27,6 +28,7 @@ async def test_infrastructure_query():
 
     # Load environment variables
     from dotenv import load_dotenv
+
     env_file = Path(__file__).parent / ".env"
     if env_file.exists():
         load_dotenv(env_file)
@@ -46,7 +48,9 @@ async def test_infrastructure_query():
             pg_info = await injector._query_postgresql()
             print(f"   Status: {pg_info.get('status', 'unknown')}")
             if pg_info.get("status") == "connected":
-                print(f"   ✓ Connected to {pg_info['host']}:{pg_info['port']}/{pg_info['database']}")
+                print(
+                    f"   ✓ Connected to {pg_info['host']}:{pg_info['port']}/{pg_info['database']}"
+                )
                 print(f"   ✓ Tables: {pg_info.get('tables', 0)}")
             else:
                 print(f"   ✗ Error: {pg_info.get('error', 'unknown')}")
@@ -112,8 +116,7 @@ async def test_infrastructure_query():
             client = IntelligenceEventClient()
 
             result = await injector._query_infrastructure(
-                client=client,
-                correlation_id="test-infra-query"
+                client=client, correlation_id="test-infra-query"
             )
 
             print("   Full infrastructure result:")
@@ -153,6 +156,7 @@ async def test_infrastructure_query():
         except Exception as e:
             print(f"   ✗ Full query failed: {e}")
             import traceback
+
             traceback.print_exc()
 
 

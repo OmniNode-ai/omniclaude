@@ -383,7 +383,11 @@ class InputValidator:
             for pattern in patterns:
                 if re.search(pattern, input_str, re.IGNORECASE):
                     # Skip path_traversal "//" pattern if it's part of a URL protocol (://)
-                    if threat_type == "path_traversal" and pattern == r"//" and "://" in input_str:
+                    if (
+                        threat_type == "path_traversal"
+                        and pattern == r"//"
+                        and "://" in input_str
+                    ):
                         continue
                     threats.append(f"Security threat detected: {threat_type} pattern")
                     break

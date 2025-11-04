@@ -6,6 +6,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+
 # Add agents to path
 sys.path.insert(0, str(Path(__file__).parent / "agents"))
 
@@ -31,10 +32,7 @@ async def show_manifest():
     manifest = await injector.generate_dynamic_manifest_async(
         correlation_id="test-show-manifest",
         user_prompt=user_prompt,
-        task_context={
-            "task_type": "DEBUG",
-            "priority": "high"
-        }
+        task_context={"task_type": "DEBUG", "priority": "high"},
     )
 
     print("=" * 80)

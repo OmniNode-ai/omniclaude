@@ -7,11 +7,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+
 # Add agents to path
 sys.path.insert(0, str(Path(__file__).parent / "agents"))
 
-from lib.task_classifier import TaskClassifier
 from lib.relevance_scorer import RelevanceScorer
+from lib.task_classifier import TaskClassifier
 
 
 async def show_llm_effect_manifest():
@@ -48,7 +49,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "node_llm_api_effect.py",
             "keywords": ["effect", "api", "external", "calls", "llm"],
-            "confidence": 0.95
+            "confidence": 0.95,
         },
         {
             "name": "LLM API Integration Pattern",
@@ -56,7 +57,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "node_llm_service_effect.py",
             "keywords": ["llm", "api", "integration", "openai", "anthropic"],
-            "confidence": 0.92
+            "confidence": 0.92,
         },
         {
             "name": "HTTP Effect Node Pattern",
@@ -64,7 +65,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "node_http_client_effect.py",
             "keywords": ["http", "client", "api", "requests", "async"],
-            "confidence": 0.88
+            "confidence": 0.88,
         },
         {
             "name": "Model Contract Effect Pattern",
@@ -72,7 +73,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "model_contract_effect.py",
             "keywords": ["contract", "effect", "validation", "types"],
-            "confidence": 0.85
+            "confidence": 0.85,
         },
         {
             "name": "Dependency Injection Pattern",
@@ -80,7 +81,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT", "COMPUTE", "REDUCER"],
             "file_path": "node_service_effect.py",
             "keywords": ["dependency", "injection", "config", "constructor"],
-            "confidence": 0.80
+            "confidence": 0.80,
         },
         {
             "name": "Error Handling Pattern",
@@ -88,7 +89,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT", "COMPUTE"],
             "file_path": "node_error_handler.py",
             "keywords": ["error", "exception", "handling", "retry"],
-            "confidence": 0.78
+            "confidence": 0.78,
         },
         {
             "name": "Async Event Bus Pattern",
@@ -96,7 +97,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "node_event_publisher_effect.py",
             "keywords": ["event", "bus", "kafka", "async", "publish"],
-            "confidence": 0.75
+            "confidence": 0.75,
         },
         {
             "name": "Database Query Pattern",
@@ -104,7 +105,7 @@ async def show_llm_effect_manifest():
             "node_types": ["REDUCER"],
             "file_path": "node_database_reducer.py",
             "keywords": ["database", "sql", "query", "transaction"],
-            "confidence": 0.60
+            "confidence": 0.60,
         },
         {
             "name": "React Component Pattern",
@@ -112,7 +113,7 @@ async def show_llm_effect_manifest():
             "node_types": ["EFFECT"],
             "file_path": "component_llm_chat.tsx",
             "keywords": ["react", "component", "frontend", "ui"],
-            "confidence": 0.40
+            "confidence": 0.40,
         },
         {
             "name": "Data Processing Pipeline",
@@ -120,7 +121,7 @@ async def show_llm_effect_manifest():
             "node_types": ["COMPUTE"],
             "file_path": "node_data_pipeline_compute.py",
             "keywords": ["pipeline", "etl", "transform", "data"],
-            "confidence": 0.35
+            "confidence": 0.35,
         },
     ]
 
@@ -130,9 +131,7 @@ async def show_llm_effect_manifest():
     scored_patterns = []
     for pattern in sample_patterns:
         score = scorer.score_pattern_relevance(
-            pattern=pattern,
-            user_prompt=user_prompt,
-            task_context=task_result
+            pattern=pattern, user_prompt=user_prompt, task_context=task_result
         )
         scored_patterns.append({**pattern, "relevance_score": score})
 
@@ -170,7 +169,9 @@ async def show_llm_effect_manifest():
     # Show filtered out patterns
     filtered_out = [p for p in scored_patterns if p["relevance_score"] <= THRESHOLD]
     if filtered_out:
-        print(f"\n\n❌ FILTERED OUT ({len(filtered_out)} patterns with score ≤ {THRESHOLD}):")
+        print(
+            f"\n\n❌ FILTERED OUT ({len(filtered_out)} patterns with score ≤ {THRESHOLD}):"
+        )
         print("-" * 80)
         for pattern in filtered_out[:3]:
             print(f"  • {pattern['name']}: {pattern['relevance_score']:.3f}")
@@ -179,7 +180,8 @@ async def show_llm_effect_manifest():
     print("\n\n" + "=" * 80)
     print("📋 COMPLETE MANIFEST STRUCTURE")
     print("=" * 80)
-    print("""
+    print(
+        """
 ✅ INCLUDED SECTIONS (Phase 2 - Dynamic Selection):
 
   1. AVAILABLE PATTERNS (7 patterns with score >0.3)
@@ -233,7 +235,8 @@ async def show_llm_effect_manifest():
   • Total: ~2,000 tokens, 70% relevant ✅
 
   Improvement: -76% tokens, +600% relevance! 🎉
-""")
+"""
+    )
 
     print("\n" + "=" * 80)
     print("✅ MANIFEST GENERATION COMPLETE")

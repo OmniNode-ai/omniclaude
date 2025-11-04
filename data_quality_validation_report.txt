@@ -214,7 +214,7 @@ DETAILED VALIDATION RESULTS
   Score:    0.000
   Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.000
 
-[PASS] Task Classification: Fix the PostgreSQL connection error in the Effect 
+[PASS] Task Classification: Fix the PostgreSQL connection error in the Effect
   Expected: debug
   Actual:   debug
   Score:    0.200

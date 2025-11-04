@@ -9,6 +9,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+
 # Add agents/lib to path
 lib_path = Path(__file__).parent / "agents" / "lib"
 sys.path.insert(0, str(lib_path))
@@ -27,6 +28,7 @@ async def test_infrastructure_manifest():
 
     # Load environment variables
     from dotenv import load_dotenv
+
     env_file = Path(__file__).parent / ".env"
     if env_file.exists():
         load_dotenv(env_file)

@@ -17,6 +17,7 @@ import sys
 import uuid
 from pathlib import Path
 
+
 # Add agents directory to path
 repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root / "agents"))
@@ -52,14 +53,16 @@ async def test_basic_backward_compatibility():
 async def test_optional_user_prompt():
     """Test that user_prompt parameter works"""
     print("\n=== Test 2: Optional user_prompt Parameter ===")
-    print("Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=...)")
+    print(
+        "Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=...)"
+    )
 
     injector = ManifestInjector()
 
     try:
         manifest = await injector.generate_dynamic_manifest_async(
             correlation_id=str(uuid.uuid4()),
-            user_prompt="Fix PostgreSQL connection error in workflow"
+            user_prompt="Fix PostgreSQL connection error in workflow",
         )
 
         if manifest:
@@ -78,14 +81,15 @@ async def test_optional_user_prompt():
 async def test_optional_force_refresh():
     """Test that force_refresh parameter works"""
     print("\n=== Test 3: Optional force_refresh Parameter ===")
-    print("Testing: generate_dynamic_manifest_async(correlation_id=..., force_refresh=True)")
+    print(
+        "Testing: generate_dynamic_manifest_async(correlation_id=..., force_refresh=True)"
+    )
 
     injector = ManifestInjector()
 
     try:
         manifest = await injector.generate_dynamic_manifest_async(
-            correlation_id=str(uuid.uuid4()),
-            force_refresh=True
+            correlation_id=str(uuid.uuid4()), force_refresh=True
         )
 
         if manifest:
@@ -104,7 +108,9 @@ async def test_optional_force_refresh():
 async def test_all_optional_parameters():
     """Test that all optional parameters work together"""
     print("\n=== Test 4: All Optional Parameters Combined ===")
-    print("Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=..., force_refresh=...)")
+    print(
+        "Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=..., force_refresh=...)"
+    )
 
     injector = ManifestInjector()
 
@@ -112,7 +118,7 @@ async def test_all_optional_parameters():
         manifest = await injector.generate_dynamic_manifest_async(
             correlation_id=str(uuid.uuid4()),
             user_prompt="Create a new database migration for user_sessions table",
-            force_refresh=False
+            force_refresh=False,
         )
 
         if manifest:
@@ -142,14 +148,15 @@ async def test_all_optional_parameters():
 async def test_none_optional_parameters():
     """Test that explicitly passing None for optional parameters works"""
     print("\n=== Test 5: Explicit None for Optional Parameters ===")
-    print("Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=None)")
+    print(
+        "Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=None)"
+    )
 
     injector = ManifestInjector()
 
     try:
         manifest = await injector.generate_dynamic_manifest_async(
-            correlation_id=str(uuid.uuid4()),
-            user_prompt=None
+            correlation_id=str(uuid.uuid4()), user_prompt=None
         )
 
         if manifest:
@@ -168,14 +175,15 @@ async def test_none_optional_parameters():
 async def test_empty_user_prompt():
     """Test that empty user_prompt works"""
     print("\n=== Test 6: Empty user_prompt String ===")
-    print("Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt=\"\")")
+    print(
+        'Testing: generate_dynamic_manifest_async(correlation_id=..., user_prompt="")'
+    )
 
     injector = ManifestInjector()
 
     try:
         manifest = await injector.generate_dynamic_manifest_async(
-            correlation_id=str(uuid.uuid4()),
-            user_prompt=""
+            correlation_id=str(uuid.uuid4()), user_prompt=""
         )
 
         if manifest:

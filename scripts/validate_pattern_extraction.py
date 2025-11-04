@@ -10,9 +10,11 @@ Tests that the _query_patterns_direct_qdrant() method correctly extracts:
 """
 
 import asyncio
-import sys
 import os
+import sys
+
 from dotenv import load_dotenv
+
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -79,7 +81,9 @@ async def validate_pattern_extraction():
             print(f"❌ {field_name}: MISSING (None)")
             all_valid = False
         elif not isinstance(value, expected_type):
-            print(f"❌ {field_name}: WRONG TYPE (expected {expected_type}, got {type(value)})")
+            print(
+                f"❌ {field_name}: WRONG TYPE (expected {expected_type}, got {type(value)})"
+            )
             all_valid = False
         elif isinstance(value, str) and value == "":
             print(f"⚠️  {field_name}: EMPTY STRING ('{value}')")
