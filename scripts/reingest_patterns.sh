@@ -29,7 +29,14 @@ DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
 DB_PORT="${POSTGRES_PORT:-5436}"
 DB_USER="${POSTGRES_USER:-postgres}"
 DB_NAME="${POSTGRES_DATABASE:-omninode_bridge}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-omninode_remote_2024_secure}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+
+# Verify password is set
+if [ -z "$DB_PASSWORD" ]; then
+    echo -e "${RED}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
+    echo "   Please run: source .env"
+    exit 1
+fi
 
 # Source directories for pattern extraction
 SOURCE_DIRS=(

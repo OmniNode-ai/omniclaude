@@ -35,7 +35,7 @@ try:
     from confidence_scorer import ConfidenceScore, ConfidenceScorer
     from result_cache import ResultCache
     from trigger_matcher import TriggerMatcher
-except ImportError:
+except ImportError:  # pragma: no cover
     # Fallback to relative imports if used as a package
     from .capability_index import CapabilityIndex
     from .confidence_scorer import ConfidenceScore, ConfidenceScorer
@@ -73,7 +73,9 @@ class AgentRouter:
 
     def __init__(
         self,
-        registry_path: str = "/Users/jonah/.claude/agent-definitions/agent-registry.yaml",
+        registry_path: str = (
+            "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
+        ),
         cache_ttl: int = 3600,
     ):
         """
@@ -95,7 +97,8 @@ class AgentRouter:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
                     if not Path(def_path).is_absolute():
-                        # Strip "agent-definitions/" prefix if present (already in registry_dir)
+                        # Strip "agent-definitions/" prefix if present
+                        # (already in registry_dir)
                         if def_path.startswith("agent-definitions/"):
                             def_path = def_path.replace("agent-definitions/", "", 1)
                         agent_data["definition_path"] = str(registry_dir / def_path)
@@ -249,9 +252,8 @@ class AgentRouter:
             # 6. Limit to max recommendations
             recommendations = recommendations[:max_recommendations]
 
-            # 7. Cache results
-            if recommendations:
-                self.cache.set(user_request, recommendations, context)
+            # 7. Cache results (even empty results to avoid recomputation)
+            self.cache.set(user_request, recommendations, context)
 
             # 8. Log routing decision
             logger.info(
@@ -288,9 +290,10 @@ class AgentRouter:
         Extract explicit agent name from request.
 
         Supports patterns:
-        - "use agent-X"
-        - "@agent-X"
-        - "agent-X" at start of text
+        - "use agent-X" - Specific agent request
+        - "@agent-X" - Specific agent request
+        - "agent-X" at start of text - Specific agent request
+        - "use an agent", "spawn an agent", etc. - Generic request → polymorphic-agent
 
         Args:
             text: User's input text
@@ -301,14 +304,15 @@ class AgentRouter:
         try:
             text_lower = text.lower()
 
-            # Patterns for explicit agent requests
-            patterns = [
-                r"use\s+(agent-[\w-]+)",
-                r"@(agent-[\w-]+)",
-                r"^(agent-[\w-]+)",
+            # Patterns for specific agent requests (with agent name)
+            specific_patterns = [
+                r"use\s+(agent-[\w-]+)",  # "use agent-researcher"
+                r"@(agent-[\w-]+)",  # "@agent-researcher"
+                r"^(agent-[\w-]+)",  # "agent-researcher" at start
             ]
 
-            for pattern in patterns:
+            # Check specific patterns first
+            for pattern in specific_patterns:
                 match = re.search(pattern, text_lower)
                 if match:
                     agent_name = match.group(1)
@@ -319,6 +323,39 @@ class AgentRouter:
                             extra={"pattern": pattern, "text_sample": text[:50]},
                         )
                         return agent_name
+
+            # Patterns for generic agent requests (no specific agent name)
+            # These should default to polymorphic-agent
+            # Word boundaries (\b) prevent false positives like "misuse an agent"
+            generic_patterns = [
+                r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
+                r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
+                r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
+                r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
+                r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
+                r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
+            ]
+
+            # Check generic patterns
+            for pattern in generic_patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    # Default to polymorphic-agent
+                    default_agent = "polymorphic-agent"
+                    # Verify polymorphic-agent exists in registry
+                    if default_agent in self.registry["agents"]:
+                        logger.debug(
+                            f"Generic agent request matched, "
+                            f"using default: {default_agent}",
+                            extra={"pattern": pattern, "text_sample": text[:50]},
+                        )
+                        return default_agent
+                    else:
+                        logger.warning(
+                            f"Generic agent request matched but "
+                            f"{default_agent} not found in registry",
+                            extra={"pattern": pattern},
+                        )
 
             return None
 
@@ -453,7 +490,7 @@ class AgentRouter:
 
 
 # Example usage and testing
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     from pathlib import Path
 
     registry_path = (

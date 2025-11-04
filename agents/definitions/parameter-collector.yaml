@@ -73,6 +73,11 @@ framework_integration:
     - "prompt_user_selection() - Prompt User Selection"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@api-design-principles - REST and GraphQL API Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in parameter collection code"
   error_handling: "OnexError with proper exception chaining for all parameter validation errors"

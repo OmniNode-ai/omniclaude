@@ -10,9 +10,9 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from omnibase_core.errors import OnexError
 
 from agents.lib.business_logic_generator import BusinessLogicGenerator
+from omnibase_core.errors import OnexError
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_ANALYSIS_RESULT,
     EFFECT_ANALYSIS_RESULT,

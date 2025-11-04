@@ -70,7 +70,7 @@ Success rate: 100%
 **Connection Details**:
 - Host: 192.168.86.200:5436
 - Database: omninode_bridge
-- Password: omninode_remote_2024_secure (from .env)
+- Password: <set_in_env> (from .env)
 
 **Result**:
 ```

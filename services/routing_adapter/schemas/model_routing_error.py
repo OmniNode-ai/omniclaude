@@ -38,7 +38,7 @@ Reference: database_event_client.py (error handling pattern)
 
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelFallbackRecommendation(BaseModel):
@@ -68,14 +68,15 @@ class ModelFallbackRecommendation(BaseModel):
         description="Confidence score for fallback (default: 0.5)",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "agent_name": "polymorphic-agent",
                 "reason": "Fallback to polymorphic agent due to routing service failure",
                 "confidence": 0.5,
             }
         }
+    )
 
 
 class ModelRoutingError(BaseModel):
@@ -193,8 +194,8 @@ class ModelRoutingError(BaseModel):
             )
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "correlation_id": "a2f33abd-34c2-4d63-bfe7-2cb14ded13fd",
                 "error_code": "REGISTRY_LOAD_FAILED",
@@ -214,6 +215,7 @@ class ModelRoutingError(BaseModel):
                 "timestamp": "2025-10-30T14:30:00.100Z",
             }
         }
+    )
 
 
 # Error code constants for convenience

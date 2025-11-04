@@ -18,12 +18,13 @@ fi
 export PGHOST="${POSTGRES_HOST:-192.168.86.200}"
 export PGPORT="${POSTGRES_PORT:-5436}"
 export PGUSER="${POSTGRES_USER:-postgres}"
-export PGPASSWORD="${POSTGRES_PASSWORD:-omninode_remote_2024_secure}"
+export PGPASSWORD="${POSTGRES_PASSWORD}"  # Must be set in .env
 export PGDATABASE="${POSTGRES_DATABASE:-omninode_bridge}"
 
 # Verify credentials are set
 if [ -z "$PGPASSWORD" ]; then
-    echo "ERROR: POSTGRES_PASSWORD not found in .env" >&2
+    echo "❌ ERROR: POSTGRES_PASSWORD not found in .env" >&2
+    echo "   Please run: source .env" >&2
     return 1 2>/dev/null || exit 1
 fi
 

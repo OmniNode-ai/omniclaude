@@ -73,6 +73,12 @@ framework_integration:
     - "generate_quality_report() - Generate Quality Report"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types, enforce strict type checking"
   error_handling: "OnexError with proper exception chaining for quality issues"

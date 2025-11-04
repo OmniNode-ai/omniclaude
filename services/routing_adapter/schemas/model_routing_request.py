@@ -41,7 +41,7 @@ Reference: database_event_client.py (proven pattern)
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelRoutingOptions(BaseModel):
@@ -167,8 +167,8 @@ class ModelRoutingRequest(BaseModel):
             raise ValueError("user_request must not be empty or whitespace-only")
         return v.strip()
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "user_request": "optimize my database queries",
                 "correlation_id": "a2f33abd-34c2-4d63-bfe7-2cb14ded13fd",
@@ -186,6 +186,7 @@ class ModelRoutingRequest(BaseModel):
                 "timeout_ms": 5000,
             }
         }
+    )
 
 
 __all__ = [

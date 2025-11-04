@@ -138,6 +138,12 @@ framework_integration:
     template_integration: true
     pattern_caching: true
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+  - "@research - Multi-Source Research"
+
 onex_integration:
   compliance_level: "mandatory"
   architectural_patterns:

@@ -52,6 +52,14 @@ class TestOmniNodeTemplateEngine:
             "BUSINESS_LOGIC_STUB": "        # TODO: Implement user management logic",
             "OPERATIONS": ["create_user", "update_user", "delete_user"],
             "FEATURES": ["authentication", "authorization", "profile_management"],
+            # Intelligence-driven placeholders (defaults)
+            "BEST_PRACTICES_FORMATTED": "    - Standard ONEX patterns",
+            "ERROR_SCENARIOS_FORMATTED": "    - Standard error handling",
+            "PERFORMANCE_TARGETS_FORMATTED": "    - Standard performance requirements",
+            "DOMAIN_PATTERNS_FORMATTED": "    - Standard domain patterns",
+            "PATTERN_CODE_BLOCKS": "",
+            "TESTING_SECTION": "        pass  # Add tests here",
+            "SECURITY_SECTION": "        pass  # Add security validations here",
         }
 
         rendered = effect_template.render(context)
@@ -138,14 +146,10 @@ class TestOmniNodeTemplateEngine:
         assert context["NODE_TYPE"] == "EFFECT"
         assert context["BUSINESS_DESCRIPTION"] == "Test service for user operations"
 
-        # Check mixin context - currently disabled until omnibase_core supports mixins
-        # TODO: Re-enable when omnibase_core supports mixins
-        assert (
-            context["MIXIN_IMPORTS"] == ""
-        )  # Disabled - waiting for omnibase_core support
-        assert (
-            context["MIXIN_INHERITANCE"] == ""
-        )  # Disabled - waiting for omnibase_core support
+        # Check mixin context - omnibase_core now supports mixins
+        # MixinEventBus is available, MixinCaching is not (not in AVAILABLE_MIXINS)
+        assert "MixinEventBus" in context["MIXIN_IMPORTS"]
+        assert "MixinEventBus" in context["MIXIN_INHERITANCE"]
 
         # Check operations
         assert "Create User" in context["OPERATIONS"]
@@ -256,13 +260,19 @@ class TestOmniNodeTemplateEngine:
 
         mixins = ["MixinEventBus", "MixinCaching", "MixinHealthCheck"]
 
-        # Test mixin imports - currently disabled until omnibase_core supports mixins
+        # Test mixin imports - omnibase_core now supports mixins
         imports = engine._generate_mixin_imports(mixins)
-        assert imports == ""  # Disabled - waiting for omnibase_core support
+        # MixinEventBus and MixinHealthCheck are available, MixinCaching is not
+        assert "MixinEventBus" in imports
+        assert "MixinHealthCheck" in imports
+        assert "MixinCaching" not in imports  # Not in AVAILABLE_MIXINS
 
-        # Test mixin inheritance - currently disabled until omnibase_core supports mixins
+        # Test mixin inheritance - omnibase_core now supports mixins
         inheritance = engine._generate_mixin_inheritance(mixins)
-        assert inheritance == ""  # Disabled - waiting for omnibase_core support
+        # Returns comma-prefixed string for class inheritance
+        assert "MixinEventBus" in inheritance
+        assert "MixinHealthCheck" in inheritance
+        assert inheritance.startswith(", ")  # Should start with comma
 
         # Test mixin initialization (ONEX compliant - mixins handle their own init)
         initialization = engine._generate_mixin_initialization(mixins)

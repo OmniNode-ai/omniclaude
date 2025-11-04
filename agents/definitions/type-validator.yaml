@@ -111,6 +111,12 @@ framework_integration:
     orchestrated_intelligence_research: "Multi-service intelligence with type validation patterns"
     unified_knowledge_capture: "Comprehensive validation results and pattern documentation"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@async-python-patterns - Python Asyncio Mastery"
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+
 onex_integration:
   type_system_standards:
     compliance_level: "100% Any type elimination required"

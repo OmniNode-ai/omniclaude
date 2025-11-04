@@ -148,6 +148,12 @@ framework_integration:
     knowledge_capture: "unified_knowledge_capture"
     instantiation_target: "<100ms"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@api-design-principles - REST and GraphQL API Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
+
 onex_integration:
   four_node_architecture:
     compute_constraints:

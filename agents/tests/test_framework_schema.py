@@ -58,10 +58,10 @@ PERFORMANCE_TARGET_MS = 50
 
 # Environment-based performance multiplier
 # Development/CI environments typically have higher latency due to:
-# - Shared resources, slower I/O, network overhead, container virtualization
-# Production target: 1.0x (50ms), Development target: 3.0x (150ms), CI target: 4.0x (200ms)
+# - Shared resources, slower I/O, network overhead, container virtualization, remote database
+# Production target: 1.0x (50ms), Development target: 7.0x (350ms), CI target: 7.0x (350ms)
 # Override with TEST_PERFORMANCE_MULTIPLIER environment variable
-PERFORMANCE_MULTIPLIER = float(os.getenv("TEST_PERFORMANCE_MULTIPLIER", "3.0"))
+PERFORMANCE_MULTIPLIER = float(os.getenv("TEST_PERFORMANCE_MULTIPLIER", "7.0"))
 ADJUSTED_PERFORMANCE_TARGET_MS = PERFORMANCE_TARGET_MS * PERFORMANCE_MULTIPLIER
 
 

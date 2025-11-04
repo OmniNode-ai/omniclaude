@@ -117,6 +117,12 @@ framework_integration:
       confidence_threshold: 0.6
       optimization_level: "enhanced"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@research - Multi-Source Research"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   compliance_standards:
     - "ONEX operational excellence standards"

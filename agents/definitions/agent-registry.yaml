@@ -79,6 +79,12 @@ agents:
     domain_context: "debugging"
     specialization_level: "expert"
 
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
+
+
   frontend-developer:
     name: "agent-frontend-developer"
     title: "Frontend Developer Specialist"

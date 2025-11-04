@@ -72,6 +72,13 @@ framework_integration:
     - "implement_python_best_practices() - Implement Python Best Practices"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@async-python-patterns - Python Asyncio Mastery"
+  - "@api-design-principles - REST and GraphQL API Design"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in Python code"
   error_handling: "OnexError with proper exception chaining for all Python errors"

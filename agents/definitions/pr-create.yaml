@@ -73,6 +73,11 @@ framework_integration:
     - "agent_lifecycle_cleanup() - Proper resource management and cleanup"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in PR validation processes"
   error_handling: "OnexError with proper exception chaining for PR creation failures"

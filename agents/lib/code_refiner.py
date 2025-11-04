@@ -118,19 +118,19 @@ class ProductionPatternMatcher:
     NODE_TYPE_PATHS = {
         "effect": [
             "services/intelligence/onex/effects",
-            "services/intelligence/src/services/pattern_learning",
+            "services/intelligence/src/archon_services/pattern_learning",
         ],
         "compute": [
-            "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction",
-            "services/intelligence/src/services/pattern_learning/phase3_validation",
+            "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction",
+            "services/intelligence/src/archon_services/pattern_learning/phase3_validation",
         ],
         "reducer": [
-            "services/intelligence/src/services/pattern_learning/phase4_traceability",
+            "services/intelligence/src/archon_services/pattern_learning/phase4_traceability",
         ],
         "orchestrator": [
-            "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction",
-            "services/intelligence/src/services/pattern_learning/phase3_validation",
-            "services/intelligence/src/services/pattern_learning/phase4_traceability",
+            "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction",
+            "services/intelligence/src/archon_services/pattern_learning/phase3_validation",
+            "services/intelligence/src/archon_services/pattern_learning/phase4_traceability",
         ],
     }
 
@@ -142,16 +142,16 @@ class ProductionPatternMatcher:
             "services/intelligence/src/pattern_learning/node_pattern_storage_effect.py",
         ],
         "compute": [
-            "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py",
-            "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_keyword_extractor_compute.py",
-            "services/intelligence/src/services/pattern_learning/phase3_validation/node_onex_validator_compute.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction/node_keyword_extractor_compute.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase3_validation/node_onex_validator_compute.py",
         ],
         "reducer": [
-            "services/intelligence/src/services/pattern_learning/phase4_traceability/node_usage_analytics_reducer.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase4_traceability/node_usage_analytics_reducer.py",
         ],
         "orchestrator": [
-            "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_pattern_assembler_orchestrator.py",
-            "services/intelligence/src/services/pattern_learning/phase3_validation/node_quality_gate_orchestrator.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction/node_pattern_assembler_orchestrator.py",
+            "services/intelligence/src/archon_services/pattern_learning/phase3_validation/node_quality_gate_orchestrator.py",
         ],
     }
 

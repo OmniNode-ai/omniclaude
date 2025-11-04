@@ -59,6 +59,7 @@ pytest-cov = "^7.0.0"
 psutil = "^6.1.0"
 isort = "^7.0.0"
 pre-commit = "^4.3.0"
+tabulate = "^0.9.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -83,6 +84,7 @@ namespace_packages = true
 exclude = [
     "^agents/templates/",  # Template files with placeholder syntax
     "^agents/parallel_execution/templates/",  # More template files
+    "^skills/",  # Third-party skills - not our code to lint
 ]
 
 [tool.ruff]
@@ -90,6 +92,52 @@ line-length = 88
 target-version = "py312"
 exclude = [
     "agents/templates/*.py",  # Template files with placeholder syntax
+    "**/archived/**",
+    "**/archive/**",
+    "**/__pycache__/**",
+    "**/site-packages/**",
+    "skills/**",  # Third-party skills - not our code to lint
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "C4", "PT", "RUF"]
+ignore = [
+    "S101",      # Allow assert statements in tests
+    "E501",      # Line too long (technical debt - will fix incrementally)
+    "E402",      # Module level import not at top (technical debt)
+    "F841",      # Unused variable (technical debt - demo files)
+    "F401",      # Unused import (technical debt)
+    "F541",      # F-string without placeholders (technical debt)
+    "T201",      # Print statements (technical debt - scripts)
+    "UP017",     # datetime.UTC alias (technical debt)
+    "UP024",     # OSError aliases (technical debt)
+    "UP035",     # Deprecated imports (typing.Dict → dict, etc.)
+    "UP006",     # Type annotation upgrades (technical debt)
+    "UP007",     # Use X | Y for type annotations (technical debt)
+    "UP015",     # Unnecessary open mode parameters (technical debt)
+    "UP038",     # isinstance with tuple (technical debt)
+    "UP041",     # Replace aliased errors with builtin (technical debt)
+    "S110",      # Try except pass (technical debt)
+    "S603",      # Subprocess without shell (technical debt)
+    "S607",      # Start process with partial path (technical debt)
+    "S105",      # Hardcoded password string (technical debt)
+    "S108",      # Insecure temp file usage (technical debt)
+    "S608",      # SQL injection (false positives in parameterized queries)
+    "RUF001",    # Ambiguous unicode characters (technical debt)
+    "RUF005",    # Collection literal concatenation (technical debt)
+    "RUF006",    # Asyncio task reference (technical debt)
+    "RUF012",    # Mutable class attributes should use ClassVar (technical debt)
+    "RUF010",    # Use explicit conversion flag (technical debt)
+    "RUF013",    # PEP 484 prohibits implicit Optional (technical debt)
+    "RUF100",    # Unused noqa directive (technical debt)
+    "B007",      # Unused loop variable (technical debt)
+    "B904",      # Raise from exception (technical debt)
+    "B905",      # Zip without explicit strict (technical debt)
+    "C401",      # Unnecessary generator (technical debt)
+    "C416",      # Unnecessary list comprehension (technical debt)
+    "PT001",     # Pytest fixture parentheses (technical debt)
+    "PT017",     # Pytest raises in except (technical debt)
+    "PT023",     # Pytest mark parentheses (technical debt)
 ]
 
 [tool.pytest.ini_options]
@@ -98,6 +146,8 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["agents/tests"]
 markers = [
     "integration: integration tests that may hit external services",
+    "database: marks tests that require database connectivity",
+    "slow: marks tests that take a long time to run",
 ]
 # Skip tests with import collection issues (will be fixed in Week 4)
 # These tests have detailed documentation explaining the import issues
@@ -116,6 +166,7 @@ exclude_dirs = [
     "agents/parallel_execution/templates",
     "agents/tests",
     "claude_hooks/tests",
+    "skills",  # Third-party skills - not our code to scan
     ".venv",
     "__pycache__",
     "build",

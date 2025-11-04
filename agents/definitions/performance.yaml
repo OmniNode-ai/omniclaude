@@ -78,6 +78,12 @@ analysis_tools:
       scope: "Memory optimization"
     - name: "line_profiler"
       purpose: "Line-by-line code performance analysis"
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@async-python-patterns - Python Asyncio Mastery"
+  - "@senior-architect - Software Architecture Design"
+
       scope: "Detailed code performance"
 
   system_monitoring:

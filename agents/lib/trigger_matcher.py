@@ -219,8 +219,21 @@ class TriggerMatcher:
         if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
 
-        # Use SequenceMatcher for similarity
-        return SequenceMatcher(None, trigger, text).ratio()
+        # For better fuzzy matching, check against individual words in the text
+        # not just the entire text (which fails for length differences)
+        words = re.findall(r"\b\w+\b", text.lower())
+
+        # Check similarity against each word
+        best_word_score = 0.0
+        for word in words:
+            word_score = SequenceMatcher(None, trigger, word).ratio()
+            best_word_score = max(best_word_score, word_score)
+
+        # Also check against entire text (for multi-word triggers)
+        full_text_score = SequenceMatcher(None, trigger, text).ratio()
+
+        # Return the best score
+        return max(best_word_score, full_text_score)
 
     def _keyword_overlap_score(self, keywords: List[str], triggers: List[str]) -> float:
         """
@@ -283,6 +296,7 @@ class TriggerMatcher:
         Check if trigger matches with word boundaries.
 
         Prevents matching "poly" in "polymorphic" or "polly" in "pollyanna".
+        Also prevents "use an agent" from matching "misuse an agent".
 
         Args:
             trigger: Trigger phrase to match
@@ -293,12 +307,11 @@ class TriggerMatcher:
         """
         trigger_lower = trigger.lower()
 
-        # For multi-word triggers, check if entire phrase appears
-        if " " in trigger_lower:
-            return trigger_lower in text
-
-        # For single-word triggers, use word boundary regex
-        # This prevents "poly" from matching "polymorphic"
+        # Use word boundary regex for both single-word and multi-word triggers
+        # This prevents false positives like:
+        # - "use an agent" matching "misuse an agent"
+        # - "spawn an agent" matching "respawn an agent"
+        # - "poly" matching "polymorphic"
         pattern = r"\b" + re.escape(trigger_lower) + r"\b"
         return bool(re.search(pattern, text))
 

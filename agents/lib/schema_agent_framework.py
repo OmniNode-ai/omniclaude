@@ -20,7 +20,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # Enums
@@ -96,9 +96,10 @@ class MixinCompatibilityMatrix(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
     @property
     def total_tests(self) -> int:
@@ -159,9 +160,10 @@ class PatternFeedbackLog(BaseModel):
 
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class PatternFeedbackCreate(BaseModel):
@@ -208,9 +210,10 @@ class GenerationPerformanceMetrics(BaseModel):
 
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class GenerationPerformanceCreate(BaseModel):
@@ -258,8 +261,7 @@ class TemplateCacheMetadata(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @property
     def total_accesses(self) -> int:
@@ -321,8 +323,7 @@ class EventProcessingMetrics(BaseModel):
 
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EventProcessingCreate(BaseModel):
@@ -354,9 +355,10 @@ class MixinCompatibilitySummary(BaseModel):
     total_failures: int
     success_rate: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class PatternFeedbackAnalysis(BaseModel):
@@ -369,9 +371,10 @@ class PatternFeedbackAnalysis(BaseModel):
     user_provided_count: int
     avg_learning_weight: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class PerformanceMetricsSummary(BaseModel):
@@ -386,9 +389,10 @@ class PerformanceMetricsSummary(BaseModel):
     parallel_executions: int
     avg_workers: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class TemplateCacheEfficiency(BaseModel):
@@ -402,9 +406,10 @@ class TemplateCacheEfficiency(BaseModel):
     avg_load_time_ms: Optional[Decimal]
     total_size_mb: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )
 
 
 class EventProcessingHealth(BaseModel):
@@ -420,6 +425,7 @@ class EventProcessingHealth(BaseModel):
     avg_wait_ms: Optional[Decimal]
     avg_retries: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
-        json_encoders = {Decimal: lambda v: float(v) if v is not None else None}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={Decimal: lambda v: float(v) if v is not None else None},
+    )

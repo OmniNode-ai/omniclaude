@@ -137,6 +137,12 @@ framework_integration:
     initialization_time: "<300ms"
     test_execution_setup: "<2000ms"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@shadcn-ui - UI Component Guide"
+  - "@tailwindcss - Tailwind CSS Guide"
+
 onex_integration:
   compliance_level: "full"
   architecture_alignment: "UI Testing following ONEX operational excellence standards"

@@ -21,9 +21,10 @@ from typing import Any, Dict, List
 from uuid import uuid4
 
 import pytest
-from lib.pattern_feedback import PatternFeedback, PatternFeedbackCollector
-from lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
-from lib.patterns.pattern_matcher import PatternMatcher, PatternType
+
+from agents.lib.pattern_feedback import PatternFeedback, PatternFeedbackCollector
+from agents.lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
+from agents.lib.patterns.pattern_matcher import PatternMatcher, PatternType
 
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration

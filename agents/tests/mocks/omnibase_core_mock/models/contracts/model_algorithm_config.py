@@ -1,14 +1,24 @@
-"""Mock for model_algorithm_config - imports from real package."""
+"""Mock for model_algorithm_config."""
 
-# ruff: noqa: E402, F401, F403
-# Import from the actual installed package by manipulating sys.path
-import sys
-from pathlib import Path
+from typing import Any
 
-# Remove mock directory from path temporarily
-mock_root = Path(__file__).parent.parent.parent.parent
-if str(mock_root) in sys.path:
-    sys.path.remove(str(mock_root))
+from pydantic import BaseModel
 
-# Now import from real package
-from omnibase_core.models.contracts.model_algorithm_config import *  # noqa: F401, F403
+
+class ModelAlgorithmConfig(BaseModel):
+    """
+    Mock for ModelAlgorithmConfig.
+
+    Configuration for algorithm-based computations.
+    """
+
+    algorithm_type: str
+    factors: list[str] = []
+    normalization_method: str = "min_max"
+    precision_digits: int = 6
+    metadata: dict[str, Any] = {}
+
+    class Config:
+        """Pydantic config."""
+
+        extra = "allow"

@@ -941,7 +941,7 @@ async def query_executions():
         port=5436,
         database="omninode_bridge",
         user="postgres",
-        password="omninode_remote_2024_secure",
+        password=os.getenv("POSTGRES_PASSWORD"),
     )
 
     try:

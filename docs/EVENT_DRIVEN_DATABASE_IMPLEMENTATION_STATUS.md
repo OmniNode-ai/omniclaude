@@ -89,7 +89,7 @@ POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode_remote_2024_secure
+POSTGRES_PASSWORD=<set_in_env>
 ```
 
 ### 4. Documentation Created

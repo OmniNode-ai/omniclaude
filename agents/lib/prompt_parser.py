@@ -140,18 +140,18 @@ class PromptParser:
         # Validate prompt
         if not prompt or not prompt.strip():
             raise OnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Prompt cannot be empty",
-                context={"prompt_length": len(prompt) if prompt else 0},
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                prompt_length=len(prompt) if prompt else 0,
             )
 
         prompt = prompt.strip()
 
         if len(prompt) < 10:
             raise OnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Prompt too short. Please provide more context (minimum 10 characters)",
-                context={"prompt": prompt},
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                prompt=prompt,
             )
 
         try:
@@ -196,15 +196,15 @@ class PromptParser:
 
         except ValueError as e:
             raise OnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Failed to parse prompt: {str(e)}",
-                context={"prompt": prompt[:100]},
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                prompt=prompt[:100],
             ) from e
         except Exception as e:
             raise OnexError(
-                error_code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Unexpected error during prompt parsing: {str(e)}",
-                context={"prompt": prompt[:100]},
+                error_code=EnumCoreErrorCode.OPERATION_FAILED,
+                prompt=prompt[:100],
             ) from e
 
     def _extract_node_type(self, prompt: str) -> Tuple[str, float]:

@@ -86,6 +86,11 @@ framework_integration:
       - "refresh_context_selectively"
       - "context_dependency_tracking"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   node_classification: "reducer"
   four_node_architecture:

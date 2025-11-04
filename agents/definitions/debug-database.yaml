@@ -72,6 +72,12 @@ framework_integration:
     - "validate_onex_compliance() - Database code compliance validation"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@async-python-patterns - Python Asyncio Mastery"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in database debugging code"
   error_handling: "OnexError with proper exception chaining for all database operations"

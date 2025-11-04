@@ -10,9 +10,9 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
-from omnibase_core.errors import OnexError
 
 from agents.lib.enum_generator import EnumGenerator, EnumValue, GeneratedEnum
+from omnibase_core.errors import OnexError
 from agents.lib.simple_prd_analyzer import (
     DecompositionResult,
     ParsedPRD,

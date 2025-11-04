@@ -73,6 +73,12 @@ framework_integration:
     - "capture_logging_intelligence() - Capture Logging Intelligence"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@async-python-patterns - Python Asyncio Mastery"
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+
 onex_integration:
   strong_typing: "Strongly typed logging models and configuration structures"
   error_handling: "OnexError integration with structured logging for error traceability"

@@ -70,12 +70,12 @@ def sample_config():
 class TestIntelligenceConfigDefaults:
     """Test default configuration values."""
 
-    def test_default_values(self):
+    def test_default_values(self, clean_env):
         """Test all default configuration values are set correctly."""
         config = IntelligenceConfig()
 
         # Kafka configuration defaults
-        assert config.kafka_bootstrap_servers == "localhost:29092"
+        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
         assert config.kafka_enable_intelligence is True
         assert config.kafka_request_timeout_ms == 5000
         assert config.kafka_pattern_discovery_timeout_ms == 5000
@@ -166,7 +166,7 @@ class TestEnvironmentVariableLoading:
     def test_from_env_uses_defaults_when_not_set(self, clean_env):
         """Test from_env() uses default values when env vars not set."""
         config = IntelligenceConfig.from_env()
-        assert config.kafka_bootstrap_servers == "localhost:29092"
+        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
         assert config.kafka_enable_intelligence is True
 
 
@@ -459,12 +459,12 @@ class TestEdgeCases:
         config = IntelligenceConfig(kafka_bootstrap_servers="[::1]:9092")
         assert config.kafka_bootstrap_servers == "[::1]:9092"
 
-    def test_config_immutability_with_pydantic(self):
+    def test_config_immutability_with_pydantic(self, clean_env):
         """Test configuration is immutable after creation."""
         config = IntelligenceConfig()
         # Pydantic models are mutable by default, but we can test field access
         assert hasattr(config, "kafka_bootstrap_servers")
-        assert config.kafka_bootstrap_servers == "localhost:29092"
+        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
 
 
 # =============================================================================

@@ -13,9 +13,9 @@ from uuid import uuid4
 
 import pytest
 import yaml
-from omnibase_core.errors import OnexError
 
 from agents.lib.contract_generator import ContractGenerator
+from omnibase_core.errors import OnexError
 from agents.lib.simple_prd_analyzer import (
     DecompositionResult,
     ParsedPRD,

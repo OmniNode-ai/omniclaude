@@ -78,6 +78,12 @@ workflow_integration:
       implementation_query: "Docker Kubernetes CI/CD implementation patterns"
       context: "architecture"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
+
     execution:
       progress_phases:
         1: "Initialization - Context establishment and project association"

@@ -110,6 +110,11 @@ framework_integration:
     template_instantiation: "<100ms"
     configuration_overlay: "zero_overhead"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+
 onex_integration:
   compliance_level: "full"
   standards_validation: "automatic"

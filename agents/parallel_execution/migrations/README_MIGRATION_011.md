@@ -50,7 +50,7 @@ The `actual_success` column is **kept** during this migration for backward compa
 
 ### Apply Migration
 ```bash
-PGPASSWORD='omninode_remote_2024_secure' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -f agents/parallel_execution/migrations/011_add_execution_succeeded_column.sql
 ```
@@ -58,17 +58,17 @@ PGPASSWORD='omninode_remote_2024_secure' psql \
 ### Verify Migration
 ```bash
 # Check column exists
-PGPASSWORD='omninode_remote_2024_secure' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "\d agent_routing_decisions" | grep execution_succeeded
 
 # Check indexes created
-PGPASSWORD='omninode_remote_2024_secure' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "\di idx_routing_decisions_execution_succeeded"
 
 # Verify data copied correctly
-PGPASSWORD='omninode_remote_2024_secure' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT
     COUNT(*) as total,
@@ -80,7 +80,7 @@ PGPASSWORD='omninode_remote_2024_secure' psql \
 
 ### Rollback Migration
 ```bash
-PGPASSWORD='omninode_remote_2024_secure' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -f agents/parallel_execution/migrations/011_rollback_execution_succeeded_column.sql
 ```

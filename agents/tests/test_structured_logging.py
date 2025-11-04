@@ -23,9 +23,19 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from lib.log_context import LogContext, async_log_context, log_context, with_log_context
-from lib.log_rotation import LogRotationConfig, configure_file_rotation, get_log_stats
-from lib.structured_logger import (
+
+from agents.lib.log_context import (
+    LogContext,
+    async_log_context,
+    log_context,
+    with_log_context,
+)
+from agents.lib.log_rotation import (
+    LogRotationConfig,
+    configure_file_rotation,
+    get_log_stats,
+)
+from agents.lib.structured_logger import (
     StructuredLogger,
     get_correlation_id,
     get_logger,
@@ -88,7 +98,7 @@ class TestJSONOutput:
         # Add handler with string buffer
         self.log_output = StringIO()
         handler = logging.StreamHandler(self.log_output)
-        from lib.structured_logger import JSONFormatter
+        from agents.lib.structured_logger import JSONFormatter
 
         handler.setFormatter(JSONFormatter())
         self.logger.logger.addHandler(handler)
@@ -135,7 +145,7 @@ class TestJSONOutput:
 
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
-        from lib.structured_logger import JSONFormatter
+        from agents.lib.structured_logger import JSONFormatter
 
         handler.setFormatter(JSONFormatter())
         logger.logger.addHandler(handler)

@@ -17,8 +17,15 @@ NC='\033[0m'
 POSTGRES_HOST=${POSTGRES_HOST:-"192.168.86.200"}
 POSTGRES_PORT=${POSTGRES_PORT:-"5436"}
 POSTGRES_USER=${POSTGRES_USER:-"postgres"}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"omninode_remote_2024_secure"}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}  # Must be set in environment
 POSTGRES_DB=${POSTGRES_DATABASE:-"omninode_bridge"}
+
+# Verify password is set
+if [ -z "$POSTGRES_PASSWORD" ]; then
+    echo -e "${RED}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
+    echo "   Please run: source .env"
+    exit 1
+fi
 
 # Usage
 if [ $# -lt 1 ]; then

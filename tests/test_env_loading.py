@@ -14,7 +14,12 @@ def test_env_configuration_loaded():
     assert os.getenv("KAFKA_BOOTSTRAP_SERVERS") == "omninode-bridge-redpanda:9092"
     assert os.getenv("TRACEABILITY_DB_HOST") == "omninode-bridge-postgres"
     assert os.getenv("TRACEABILITY_DB_PORT") == "5436"
-    assert os.getenv("TRACEABILITY_DB_PASSWORD") == "omninode_remote_2024_secure"
+
+    # Verify password exists (without checking specific value for security)
+    password = os.getenv("TRACEABILITY_DB_PASSWORD")
+    assert password is not None, "TRACEABILITY_DB_PASSWORD must be set"
+    assert len(password) > 0, "TRACEABILITY_DB_PASSWORD cannot be empty"
+
     assert os.getenv("TRACEABILITY_DB_NAME") == "omninode_bridge"
     assert os.getenv("TRACEABILITY_DB_USER") == "postgres"
 
@@ -22,8 +27,9 @@ def test_env_configuration_loaded():
     pg_dsn = os.getenv("PG_DSN")
     assert pg_dsn is not None
     assert "omninode-bridge-postgres:5436" in pg_dsn
-    assert "omninode_remote_2024_secure" in pg_dsn
     assert "omninode_bridge" in pg_dsn
+    # Verify DSN contains a password (without checking specific value)
+    assert ":@" not in pg_dsn, "PG_DSN should contain a password"
 
 
 def test_postgres_dsn_construction():
@@ -34,14 +40,15 @@ def test_postgres_dsn_construction():
         host = os.getenv("TRACEABILITY_DB_HOST", "localhost")
         port = os.getenv("TRACEABILITY_DB_PORT", "5436")
         user = os.getenv("TRACEABILITY_DB_USER", "postgres")
-        password = os.getenv("TRACEABILITY_DB_PASSWORD", "omninode_remote_2024_secure")
+        password = os.getenv("TRACEABILITY_DB_PASSWORD", "")
         database = os.getenv("TRACEABILITY_DB_NAME", "omninode_bridge")
         dsn = f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
     assert "omninode-bridge-postgres:5436" in dsn
-    assert "omninode_remote_2024_secure" in dsn
     assert "omninode_bridge" in dsn
-    print(f"\n✅ PostgreSQL DSN: {dsn}")
+    # Verify DSN contains a password (without checking specific value)
+    assert ":@" not in dsn, "DSN should contain a password"
+    print("\n✅ PostgreSQL DSN constructed (password present)")
 
 
 def test_kafka_brokers_configuration():

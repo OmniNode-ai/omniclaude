@@ -102,6 +102,13 @@ framework_integration:
       - "delegation_handoff_protocol: Coordinate with specialized generation agents"
       - "coordination_result_aggregation: Aggregate results from workflow phases"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@architecture-patterns - Backend Architecture Patterns"
+  - "@senior-architect - Software Architecture Design"
+  - "@brainstorming - Collaborative Design"
+
 onex_integration:
   compliance_level: "mandatory"
   operational_excellence: true

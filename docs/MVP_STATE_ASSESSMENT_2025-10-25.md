@@ -42,7 +42,7 @@
 
 **Credentials**:
 - .env.example shows: `omninode-bridge-postgres-dev-2024` (development default)
-- Actual .env uses: `omninode_remote_2024_secure` (production credential)
+- Actual .env uses: `<production_password>` (set in .env, NEVER commit)
 - Documentation should reference .env.example pattern, NOT hardcoded passwords
 
 **Configuration Files Updated**:

@@ -99,6 +99,13 @@ framework_integration:
     template_instantiation_ms: 100
     configuration_overlay_ms: 0
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+  - "@research - Multi-Source Research"
+  - "@claude-code-analyzer - Claude Code Usage Analysis"
+
 onex_integration:
   architecture_compliance: true
   four_node_classification:

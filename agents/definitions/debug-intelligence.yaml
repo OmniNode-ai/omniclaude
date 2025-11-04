@@ -72,6 +72,13 @@ framework_integration:
     - "execute_circuit_breaker_pattern() - Failure prevention"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@research - Multi-Source Research"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in debugging code"
   error_handling: "OnexError with proper exception chaining for all debug operations"

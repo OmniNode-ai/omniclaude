@@ -56,6 +56,33 @@ class ContextOptimizer:
         self._cache_ttl = 3600  # 1 hour
         self._last_cache_update = 0
 
+    async def learn_from_success(
+        self,
+        prompt: str,
+        context_types: List[str],
+        success_rate: float,
+        avg_duration: float,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Learn from a successful context execution.
+
+        Args:
+            prompt: User prompt that was successful
+            context_types: Context types that were used
+            success_rate: Success rate achieved
+            avg_duration: Average duration in milliseconds
+            metadata: Additional metadata
+        """
+        # Delegate to learn_from_execution with success=True
+        await self.learn_from_execution(
+            task_type="prompt_execution",
+            context_keys=context_types,
+            success=success_rate >= 0.8,  # Consider 80%+ as success
+            duration_ms=avg_duration,
+            metadata=metadata,
+        )
+
     async def learn_from_execution(
         self,
         task_type: str,

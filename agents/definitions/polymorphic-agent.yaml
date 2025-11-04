@@ -137,6 +137,13 @@ framework_integration:
       - "Load balancing and resource optimization"
       - "State synchronization and consistency management"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@skill-writer - Creating Agent Skills"
+  - "@brainstorming - Collaborative Design"
+  - "@pr-review - Comprehensive PR Feedback Collection"
+
 onex_integration:
   architecture_reference: "@ONEX_4_Node_System_Developer_Guide.md"
 
@@ -221,6 +228,7 @@ activation_patterns:
     # Action triggers
     - "spawn poly"
     - "spawn polly"
+    - "dispatch"
     - "dispatch for polly"
     - "dispatch 4 pollys"
     - "coordinate"
@@ -228,6 +236,17 @@ activation_patterns:
     - "multi-agent"
     - "workflow orchestration"
     - "agent coordination"
+
+    # Generic agent invocation (fallback triggers)
+    # These provide backup routing when explicit agent names aren't used
+    - "use an agent"
+    - "use a poly"
+    - "spawn an agent"
+    - "spawn a poly"
+    - "dispatch an agent"
+    - "dispatch a poly"
+    - "call an agent"
+    - "invoke an agent"
 
   context_requirements:
     - "Task complexity assessment data"

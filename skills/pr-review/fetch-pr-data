@@ -1,0 +1,247 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# PR Review Data Fetcher
+# ============================================================================
+# Fetches ALL PR review data from the 4 GitHub API endpoints where comments
+# and reviews can appear:
+#   1. Reviews API - Formal PR reviews (approve/request changes/comment)
+#   2. Pull Comments API - Inline code review comments (file:line specific)
+#   3. PR Comments API - PR conversation thread comments
+#   4. Issue Comments API - Where bots (including Claude Code bot) post
+#
+# This ensures no reviews or comments are missed during PR analysis.
+# ============================================================================
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored status (to stderr to keep stdout clean for JSON)
+print_status() {
+    echo -e "${BLUE}[PR-FETCH]${NC} $1" >&2
+}
+
+print_success() {
+    echo -e "${GREEN}✓${NC} $1" >&2
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${NC} $1" >&2
+}
+
+print_error() {
+    echo -e "${RED}✗${NC} $1" >&2
+}
+
+# Usage
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <PR_NUMBER>
+
+Fetch all PR review data from GitHub API (4 endpoints).
+
+Arguments:
+  PR_NUMBER    PR number (e.g., 20) or full GitHub URL
+
+Examples:
+  $(basename "$0") 20
+  $(basename "$0") https://github.com/OmniNode-ai/omniclaude/pull/20
+
+Output:
+  JSON object with 4 arrays:
+  {
+    "reviews": [...],           # Formal PR reviews
+    "inline_comments": [...],   # File:line specific comments
+    "pr_comments": [...],       # PR conversation thread
+    "issue_comments": [...]     # Issue comments (WHERE CLAUDE BOT POSTS!)
+  }
+
+Exit codes:
+  0 - Success
+  1 - Missing dependencies or arguments
+  2 - GitHub API error
+EOF
+    exit 1
+}
+
+# Check dependencies
+check_dependencies() {
+    local missing_deps=()
+
+    if ! command -v gh &> /dev/null; then
+        missing_deps+=("gh (GitHub CLI)")
+    fi
+
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        print_error "Missing required dependencies:"
+        for dep in "${missing_deps[@]}"; do
+            echo "  - $dep"
+        done
+        echo ""
+        echo "Install with:"
+        echo "  brew install gh jq"
+        exit 1
+    fi
+}
+
+# Extract PR number from argument (handles URLs)
+extract_pr_number() {
+    local input="$1"
+
+    # If it's a URL, extract the PR number
+    if [[ "$input" =~ pull/([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    # If it's already a number, use it
+    elif [[ "$input" =~ ^[0-9]+$ ]]; then
+        echo "$input"
+    else
+        print_error "Invalid PR number or URL: $input"
+        exit 1
+    fi
+}
+
+# Get repository name (owner/repo format)
+get_repo_name() {
+    gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || {
+        print_error "Failed to get repository name. Are you in a git repository?"
+        exit 2
+    }
+}
+
+# Main fetch function
+fetch_pr_data() {
+    local pr_number="$1"
+    local repo_name
+
+    print_status "Fetching PR #$pr_number data from all endpoints..."
+
+    # Get repo name
+    repo_name=$(get_repo_name)
+    print_status "Repository: $repo_name"
+
+    # Create temporary files for parallel fetching
+    local tmp_dir=$(mktemp -d)
+    local reviews_file="$tmp_dir/reviews.json"
+    local inline_file="$tmp_dir/inline.json"
+    local pr_comments_file="$tmp_dir/pr_comments.json"
+    local issue_comments_file="$tmp_dir/issue_comments.json"
+
+    # Fetch in parallel for speed
+    print_status "Fetching from 4 endpoints in parallel..."
+
+    # 1. Formal PR reviews (approve/request changes/comment)
+    (
+        gh api "repos/$repo_name/pulls/$pr_number/reviews" \
+            --jq '[.[] | {
+                author: .user.login,
+                state: .state,
+                body: .body,
+                submitted_at: .submitted_at,
+                id: .id
+            }]' > "$reviews_file" 2>/dev/null || echo "[]" > "$reviews_file"
+        print_success "Reviews API (formal reviews)"
+    ) &
+
+    # 2. Inline code review comments (file:line specific)
+    (
+        gh api "repos/$repo_name/pulls/$pr_number/comments" \
+            --jq '[.[] | {
+                author: .user.login,
+                path: .path,
+                line: .line,
+                body: .body,
+                created_at: .created_at,
+                id: .id
+            }]' > "$inline_file" 2>/dev/null || echo "[]" > "$inline_file"
+        print_success "Pull Comments API (inline comments)"
+    ) &
+
+    # 3. PR conversation comments (native PR thread)
+    (
+        gh pr view "$pr_number" --json comments \
+            --jq '[.comments[] | {
+                author: .author.login,
+                body: .body,
+                created_at: .createdAt,
+                id: .id
+            }]' > "$pr_comments_file" 2>/dev/null || echo "[]" > "$pr_comments_file"
+        print_success "PR Comments (conversation thread)"
+    ) &
+
+    # 4. Issue comments (WHERE CLAUDE CODE BOT AND OTHER BOTS POST!)
+    (
+        gh api "repos/$repo_name/issues/$pr_number/comments" \
+            --jq '[.[] | {
+                author: .user.login,
+                body: .body,
+                created_at: .created_at,
+                id: .id
+            }]' > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
+        print_success "Issue Comments API (WHERE CLAUDE BOT POSTS!)"
+    ) &
+
+    # Wait for all parallel fetches to complete
+    wait
+
+    print_status "All endpoints fetched successfully"
+
+    # Combine into single JSON object
+    print_status "Combining results..."
+
+    jq -n \
+        --arg pr_num "$pr_number" \
+        --arg repo "$repo_name" \
+        --argjson reviews "$(cat "$reviews_file")" \
+        --argjson inline "$(cat "$inline_file")" \
+        --argjson pr_comments "$(cat "$pr_comments_file")" \
+        --argjson issue_comments "$(cat "$issue_comments_file")" \
+        '{
+            pr_number: ($pr_num | tonumber),
+            repository: $repo,
+            fetched_at: (now | todate),
+            reviews: $reviews,
+            inline_comments: $inline,
+            pr_comments: $pr_comments,
+            issue_comments: $issue_comments,
+            summary: {
+                total_reviews: ($reviews | length),
+                total_inline_comments: ($inline | length),
+                total_pr_comments: ($pr_comments | length),
+                total_issue_comments: ($issue_comments | length),
+                total_all_comments: (
+                    ($reviews | length) +
+                    ($inline | length) +
+                    ($pr_comments | length) +
+                    ($issue_comments | length)
+                )
+            }
+        }'
+
+    # Cleanup
+    rm -rf "$tmp_dir"
+}
+
+# Main
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+    fi
+
+    check_dependencies
+
+    local pr_number
+    pr_number=$(extract_pr_number "$1")
+
+    fetch_pr_data "$pr_number"
+}
+
+main "$@"

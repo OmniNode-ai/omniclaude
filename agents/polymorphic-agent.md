@@ -117,12 +117,32 @@ Use when task benefits from:
 - ❌ Log transformation as polymorphic→polymorphic (defeats routing)
 - ❌ Use Task tool unless truly delegating to another agent
 - ❌ Execute quality gates unless explicitly needed
+- ❌ Use shell redirection (cat/echo) for file creation (use write tool)
 
 **Always**:
 - ✅ Trust hook's routing decision
 - ✅ Execute concisely without verbose output
 - ✅ Dispatch parallel tasks in single message
 - ✅ Use specialized agents when available
+- ✅ Use write tool directly for file creation (not heredoc/cat)
+
+## ⚠️ File Writing Best Practices
+
+**NEVER use shell redirection for file creation:**
+
+❌ **WRONG** (wastes tokens, error-prone):
+```bash
+cat > file.py << 'EOF'
+class Example:
+    pass
+EOF
+```
+
+✅ **CORRECT** (use write tool):
+- Faster, safer, more reliable
+- Handles encoding and permissions
+- No heredoc syntax issues
+- More concise
 
 ## Parallel Execution Best Practices
 

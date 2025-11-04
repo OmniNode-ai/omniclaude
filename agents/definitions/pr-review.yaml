@@ -72,6 +72,13 @@ framework_integration:
     - "determine_merge_readiness() - Determine Merge Readiness"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in PR review code"
   error_handling: "OnexError with proper exception chaining for all PR review exceptions"

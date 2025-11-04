@@ -71,11 +71,14 @@ class KafkaAgentActionConsumer:
         self.shutdown_event = asyncio.Event()
 
     def _build_postgres_dsn(self) -> str:
-        """Build PostgreSQL DSN from environment variables."""
+        """Build PostgreSQL DSN from environment variables.
+
+        Requires POSTGRES_PASSWORD to be set in environment (source .env file).
+        """
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         user = os.getenv("POSTGRES_USER", "postgres")
-        password = os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024")
+        password = os.getenv("POSTGRES_PASSWORD", "")  # Require explicit configuration
         database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
 
         return f"postgresql://{user}:{password}@{host}:{port}/{database}"

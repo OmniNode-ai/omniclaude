@@ -180,7 +180,7 @@ class TestProductionPatternMatcher:
         # Use known production Compute node
         node_path = (
             matcher.OMNIARCHON_PATH
-            / "services/intelligence/src/services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py"
+            / "services/intelligence/src/archon_services/pattern_learning/phase1_foundation/extraction/node_intent_classifier_compute.py"
         )
 
         if not node_path.exists():

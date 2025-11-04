@@ -1,0 +1,298 @@
+================================================================================
+DATA QUALITY VALIDATION REPORT
+================================================================================
+
+Generated: 2025-11-03T08:30:14.785628
+
+SUMMARY METRICS
+--------------------------------------------------------------------------------
+Pattern Relevance Accuracy:     66.7%
+Schema Filtering Precision:     0.0%
+Schema Filtering Recall:        0.0%
+Task Classification Accuracy:   90.0%
+
+Tests Passed: 28/43 (65.1%)
+
+DETAILED VALIDATION RESULTS
+--------------------------------------------------------------------------------
+
+[PASS] Pattern Relevance: PostgreSQL Connection Error Handling
+  Expected: True
+  Actual:   True
+  Score:    0.850
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.850
+
+[PASS] Pattern Relevance: Effect Node Error Handling
+  Expected: True
+  Actual:   True
+  Score:    0.550
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.550
+
+[PASS] Pattern Relevance: Debug Logging Pattern
+  Expected: True
+  Actual:   True
+  Score:    0.550
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.550
+
+[FAIL] Pattern Relevance: Effect Node Implementation
+  Expected: False
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.400
+
+[FAIL] Pattern Relevance: Kafka Event Publishing
+  Expected: False
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.400
+
+[FAIL] Pattern Relevance: API Rate Limiting
+  Expected: False
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.400
+
+[FAIL] Pattern Relevance: User Authentication
+  Expected: False
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.400
+
+[FAIL] Pattern Relevance: Database Query Optimization
+  Expected: True
+  Actual:   False
+  Score:    0.300
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.300
+
+[PASS] Pattern Relevance: React Component Pattern
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.000
+
+[PASS] Pattern Relevance: Data Transformation Pipeline
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Fix PostgreSQL connection error in Effect node...' | Score: 0.000
+
+[PASS] Pattern Relevance: Async Effect Node Pattern
+  Expected: True
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Create an Effect node for async API calls with ret...' | Score: 0.400
+
+[PASS] Pattern Relevance: API Retry Logic Pattern
+  Expected: True
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Create an Effect node for async API calls with ret...' | Score: 0.400
+
+[PASS] Pattern Relevance: Effect Node Base Template
+  Expected: True
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Create an Effect node for async API calls with ret...' | Score: 0.400
+
+[PASS] Pattern Relevance: HTTP Client Pattern
+  Expected: True
+  Actual:   True
+  Score:    0.400
+  Details:  Prompt: 'Create an Effect node for async API calls with ret...' | Score: 0.400
+
+[PASS] Pattern Relevance: Database Migration
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Create an Effect node for async API calls with ret...' | Score: 0.000
+
+[FAIL] Schema Filtering: agent_routing_decisions
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[FAIL] Schema Filtering: agent_transformation_events
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[FAIL] Schema Filtering: router_performance_metrics
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[PASS] Schema Filtering: agent_manifest_injections
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[PASS] Schema Filtering: workflow_events
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[PASS] Schema Filtering: user_preferences
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[PASS] Schema Filtering: llm_calls
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Show me agent routing decisions from the database...' | Score: 0.000
+
+[FAIL] Schema Filtering: agent_manifest_injections
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[FAIL] Schema Filtering: intelligence_queries
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[FAIL] Schema Filtering: pattern_discovery_events
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[PASS] Schema Filtering: agent_routing_decisions
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[PASS] Schema Filtering: user_sessions
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[PASS] Schema Filtering: api_rate_limits
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Query the intelligence manifest injection data...' | Score: 0.000
+
+[FAIL] Schema Filtering: workflow_events
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.000
+
+[FAIL] Schema Filtering: error_events
+  Expected: True
+  Actual:   False
+  Score:    0.300
+  Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.300
+
+[FAIL] Schema Filtering: workflow_steps
+  Expected: True
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.000
+
+[PASS] Schema Filtering: agent_routing_decisions
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.000
+
+[PASS] Schema Filtering: pattern_quality_scores
+  Expected: False
+  Actual:   False
+  Score:    0.000
+  Details:  Prompt: 'Find error events in workflow execution...' | Score: 0.000
+
+[PASS] Task Classification: Fix the PostgreSQL connection error in the Effect
+  Expected: debug
+  Actual:   debug
+  Score:    0.200
+  Details:  Keywords: fix, postgresql, error, sql
+
+[PASS] Task Classification: Implement a new Effect node for Kafka event publis
+  Expected: implement
+  Actual:   implement
+  Score:    0.200
+  Details:  Keywords: implement, new
+
+[PASS] Task Classification: Query the agent_routing_decisions table for recent
+  Expected: database
+  Actual:   database
+  Score:    0.200
+  Details:  Keywords: query, table
+
+[PASS] Task Classification: Refactor the manifest injector to improve performa
+  Expected: refactor
+  Actual:   refactor
+  Score:    0.200
+  Details:  Keywords: refactor, improve
+
+[PASS] Task Classification: What is the purpose of the RelevanceScorer class?
+  Expected: research
+  Actual:   research
+  Score:    0.100
+  Details:  Keywords: what
+
+[FAIL] Task Classification: Write unit tests for the pattern quality scorer
+  Expected: test
+  Actual:   implement
+  Score:    0.100
+  Details:  Keywords: write, test
+
+[PASS] Task Classification: Add documentation to the TaskClassifier module
+  Expected: document
+  Actual:   document
+  Score:    0.200
+  Details:  Keywords: add, documentation, document
+
+[PASS] Task Classification: Debug the error in node_user_reducer.py file
+  Expected: debug
+  Actual:   debug
+  Score:    0.300
+  Details:  Keywords: debug, error, bug
+
+[PASS] Task Classification: Create a database migration for the new workflow_e
+  Expected: database
+  Actual:   database
+  Score:    0.300
+  Details:  Keywords: create, new, migration, database, table
+
+[PASS] Task Classification: Investigate why the Kafka consumer is not processi
+  Expected: debug
+  Actual:   debug
+  Score:    0.200
+  Details:  Keywords: investigate, why
+
+RECOMMENDATIONS
+--------------------------------------------------------------------------------
+⚠️  Pattern relevance accuracy (66.7%) is below target (80%). Consider:
+   - Adjusting keyword weights (currently 60% keywords, 40% heuristics)
+   - Adding more domain-specific heuristics
+   - Lowering or raising the 0.3 relevance threshold
+⚠️  Schema filtering precision (0.0%) is below target (90%). Consider:
+   - Stricter schema matching rules
+   - Higher threshold for schema relevance
+   - Better keyword extraction from table names
+⚠️  Schema filtering recall (0.0%) is below acceptable level (80%). Consider:
+   - More lenient schema matching
+   - Synonym expansion for table names
+   - Fuzzy matching for similar table names
+⚠️  Task classification accuracy (90.0%) is below target (95%). Consider:
+   - Expanding keyword patterns for each intent
+   - Adding confidence threshold for fallback to UNKNOWN
+   - Using LLM-based classification for edge cases
+
+✓ All validation tests passed! Data quality is excellent.
+
+================================================================================

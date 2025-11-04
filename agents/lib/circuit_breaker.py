@@ -85,6 +85,7 @@ class CircuitBreaker:
         """
         async with self._lock:
             self.total_calls += 1
+            just_transitioned_to_half_open = False
 
             # Check if circuit should be opened
             if self.state == CircuitState.CLOSED and self._should_open_circuit():
@@ -98,11 +99,12 @@ class CircuitBreaker:
             if self.state == CircuitState.OPEN:
                 if self._should_attempt_reset():
                     self._half_open_circuit()
+                    just_transitioned_to_half_open = True
                 else:
                     return False, CircuitBreakerError(f"Circuit {self.name} is OPEN")
 
             # Execute the function with retry logic
-            return await self._execute_with_retry(func, *args, **kwargs)
+            return await self._execute_with_retry(func, just_transitioned_to_half_open, *args, **kwargs)
 
     def _should_open_circuit(self) -> bool:
         """Check if circuit should be opened."""
@@ -143,7 +145,7 @@ class CircuitBreaker:
         print(f"[CircuitBreaker] {self.name} circuit HALF-OPEN")
 
     async def _execute_with_retry(
-        self, func: Callable, *args, **kwargs
+        self, func: Callable, just_transitioned: bool, *args, **kwargs
     ) -> Tuple[bool, Any]:
         """Execute function with retry logic."""
         last_exception = None
@@ -157,7 +159,7 @@ class CircuitBreaker:
                     result = func(*args, **kwargs)
 
                 # Success - update circuit state
-                self._record_success()
+                self._record_success(just_transitioned)
                 return True, result
 
             except Exception as e:
@@ -206,13 +208,16 @@ class CircuitBreaker:
         error_str = str(error).lower()
         return any(pattern in error_str for pattern in transient_patterns)
 
-    def _record_success(self):
+    def _record_success(self, just_transitioned: bool = False):
         """Record a successful call."""
         self.total_successes += 1
         self.last_success_time = time.time()
 
         if self.state == CircuitState.HALF_OPEN:
             self.success_count += 1
+            # Don't close circuit on the same call that transitioned to HALF_OPEN
+            if not just_transitioned and self._should_close_circuit():
+                self._close_circuit()
         elif self.state == CircuitState.CLOSED:
             self.failure_count = 0  # Reset failure count on success
 
@@ -223,6 +228,9 @@ class CircuitBreaker:
 
         if self.state == CircuitState.CLOSED:
             self.failure_count += 1
+            # Check if we should open circuit after recording failure
+            if self._should_open_circuit():
+                self._open_circuit()
         elif self.state == CircuitState.HALF_OPEN:
             # Any failure in half-open state opens the circuit
             self._open_circuit()
@@ -322,7 +330,12 @@ async def call_with_breaker(
     config: Optional[CircuitBreakerConfig] = None,
     **kwargs,
 ) -> Tuple[bool, Any]:
-    """Execute function with circuit breaker protection."""
+    """Execute function with circuit breaker protection.
+
+    Returns:
+        Tuple[bool, Any]: (success, result) where success is True if the call
+        succeeded, and result is the return value or exception.
+    """
     return await circuit_breaker_manager.call_with_breaker(
         breaker_name, func, *args, config=config, **kwargs
     )

@@ -51,12 +51,19 @@ def publish_to_kafka(topic, payload):
 def verify_in_database(execution_id):
     """Check if execution exists in database."""
     try:
+        import os
+
+        password = os.getenv("POSTGRES_PASSWORD", "")
+        if not password:
+            print("⚠️  POSTGRES_PASSWORD not set, skipping database verification")
+            return None
+
         conn = psycopg2.connect(
             host="192.168.86.200",
             port=5436,
             database="omninode_bridge",
             user="postgres",
-            password="omninode_remote_2024_secure",
+            password=password,
         )
 
         cursor = conn.cursor()

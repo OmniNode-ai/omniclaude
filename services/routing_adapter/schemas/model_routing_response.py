@@ -42,7 +42,7 @@ Reference: database_event_client.py, agent_router.py
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelRoutingConfidence(BaseModel):
@@ -94,8 +94,8 @@ class ModelRoutingConfidence(BaseModel):
         description="Human-readable explanation of confidence calculation",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "total": 0.92,
                 "trigger_score": 0.95,
@@ -105,6 +105,7 @@ class ModelRoutingConfidence(BaseModel):
                 "explanation": "High confidence match on 'optimize' and 'database' triggers with strong context alignment",
             }
         }
+    )
 
 
 class ModelAgentRecommendation(BaseModel):
@@ -149,8 +150,8 @@ class ModelAgentRecommendation(BaseModel):
         description="Optional list of alternative agents considered",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "agent_name": "agent-performance",
                 "agent_title": "Performance Optimization Specialist",
@@ -167,6 +168,7 @@ class ModelAgentRecommendation(BaseModel):
                 "alternatives": ["agent-database-architect", "agent-test-generator"],
             }
         }
+    )
 
 
 class ModelRoutingMetadata(BaseModel):
@@ -205,8 +207,8 @@ class ModelRoutingMetadata(BaseModel):
         description="Optional routing service version",
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "routing_time_ms": 45,
                 "cache_hit": False,
@@ -215,6 +217,7 @@ class ModelRoutingMetadata(BaseModel):
                 "service_version": "1.0.0",
             }
         }
+    )
 
 
 class ModelRoutingResponse(BaseModel):
@@ -295,8 +298,8 @@ class ModelRoutingResponse(BaseModel):
                     )
         return v
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "correlation_id": "a2f33abd-34c2-4d63-bfe7-2cb14ded13fd",
                 "recommendations": [
@@ -329,6 +332,7 @@ class ModelRoutingResponse(BaseModel):
                 "selected_agent": "agent-performance",
             }
         }
+    )
 
 
 __all__ = [

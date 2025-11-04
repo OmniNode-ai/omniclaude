@@ -79,6 +79,11 @@ for (comment in pr_comments) {
     user_impact_score * 0.05
   )
 
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+
+
   comment.priority = priority_score
   comment.classification = classification
 }

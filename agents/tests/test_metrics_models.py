@@ -17,12 +17,13 @@ Setup:
 
 
 import pytest
-from lib.models.model_performance_tracking import (
+
+from agents.lib.models.model_performance_tracking import (
     MetricsCollector,
     ModelPerformanceMetric,
     ModelPerformanceThreshold,
 )
-from lib.models.model_quality_gate import (  # noqa: E402
+from agents.lib.models.model_quality_gate import (  # noqa: E402
     EnumQualityGate,
     ModelQualityGateResult,
     QualityGateRegistry,

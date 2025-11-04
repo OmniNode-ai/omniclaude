@@ -73,6 +73,11 @@ framework_integration:
       - "assess_code_quality_metrics"
       - "validate_anti_yolo_compliance"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+
 onex_integration:
   four_node_architecture:
     primary_node: "reducer"

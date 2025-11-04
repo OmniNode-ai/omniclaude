@@ -24,10 +24,15 @@ class DummyProducer:
 
 
 def test_rewrite_bootstrap_mapping():
-    client = KafkaCodegenClient(bootstrap_servers="omninode-bridge-redpanda:9092")
+    # Test that host_rewrite mapping works correctly
+    host_rewrite = {"omninode-bridge-redpanda": "localhost"}
+    client = KafkaCodegenClient(
+        bootstrap_servers="omninode-bridge-redpanda:9092", host_rewrite=host_rewrite
+    )
     # Private helper validation
     rewritten = client._rewrite_bootstrap(client.bootstrap_servers)
     assert "localhost:" in rewritten
+    assert rewritten == "localhost:9092"
 
 
 @pytest.mark.asyncio

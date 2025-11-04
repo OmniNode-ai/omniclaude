@@ -286,7 +286,7 @@ fi
 
 5. **Check database connectivity**:
    ```bash
-   PGPASSWORD="omninode_remote_2024_secure" psql \
+   PGPASSWORD="${POSTGRES_PASSWORD}" psql \
      -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
      -c "SELECT COUNT(*) FROM agent_manifest_injections;"
    # Should show count

@@ -190,6 +190,8 @@ class InputValidator:
                 r"(\b(EXEC|EXECUTE)\b)",
                 r"(\b(UNION|OR|AND)\b.*\b(SELECT|INSERT|UPDATE|DELETE)\b)",
                 r"(\b(UNION|OR|AND)\b.*\b(SELECT|INSERT|UPDATE|DELETE)\b)",
+                r"(\d+\s*(=|!=|<|>)\s*\d+)",  # Numeric comparisons like "1=1"
+                r"(\'\s*(OR|AND)\s*\'\s*=\s*\')",  # String comparisons like "' OR ''='"
             ],
             "path_traversal": [
                 r"\.\./",
@@ -218,10 +220,12 @@ class InputValidator:
 
     async def validate_and_sanitize(
         self,
-        user_input: Union[str, Dict, List],
-        input_type: InputType,
+        user_input: Optional[Union[str, Dict, List]] = None,
+        input_type: Optional[InputType] = None,
         strict_mode: bool = True,
-    ) -> ValidationResult:
+        user_prompt: Optional[str] = None,
+        tasks_data: Optional[Dict] = None,
+    ) -> Union[ValidationResult, Dict[str, Any]]:
         """
         Validate and sanitize user input.
 
@@ -229,10 +233,52 @@ class InputValidator:
             user_input: Input to validate
             input_type: Type of input for appropriate validation
             strict_mode: Whether to use strict validation
+            user_prompt: User prompt (alternative calling pattern)
+            tasks_data: Tasks data (alternative calling pattern)
 
         Returns:
-            ValidationResult with validation status and sanitized input
+            ValidationResult with validation status and sanitized input, or dict for prompt/tasks pattern
         """
+        # Handle alternative calling pattern with user_prompt and tasks_data
+        if user_prompt is not None or tasks_data is not None:
+            deficiencies = []
+
+            # Validate prompt
+            if user_prompt is not None:
+                if not user_prompt or not user_prompt.strip():
+                    deficiencies.append("User prompt cannot be empty")
+                sanitized_prompt = (
+                    self._sanitize_string(user_prompt, InputType.USER_PROMPT)
+                    if user_prompt
+                    else ""
+                )
+            else:
+                deficiencies.append("User prompt is required")
+                sanitized_prompt = ""
+
+            # Validate tasks data
+            if tasks_data is not None:
+                sanitized_tasks = (
+                    self._sanitize_dict(tasks_data, InputType.TASK_DATA)
+                    if tasks_data
+                    else {}
+                )
+            else:
+                sanitized_tasks = {}
+
+            return {
+                "is_valid": len(deficiencies) == 0,
+                "sanitized_prompt": sanitized_prompt,
+                "sanitized_tasks": sanitized_tasks,
+                "deficiencies": deficiencies,
+            }
+
+        # Original calling pattern
+        if user_input is None or input_type is None:
+            raise ValueError(
+                "user_input and input_type are required if not using prompt/tasks pattern"
+            )
+
         issues = []
         warnings = []
         errors = []
@@ -306,8 +352,14 @@ class InputValidator:
 
         # Pattern validation
         if rule.pattern:
-            if not re.match(rule.pattern, input_str):
-                return f"{rule.description}: pattern mismatch"
+            # Use search for patterns that don't anchor to start (e.g., file extensions)
+            # Use match for patterns that anchor to start with ^
+            if rule.pattern.startswith("^"):
+                if not re.match(rule.pattern, input_str):
+                    return f"{rule.description}: pattern mismatch"
+            else:
+                if not re.search(rule.pattern, input_str):
+                    return f"{rule.description}: pattern mismatch"
 
         # Forbidden patterns
         if rule.forbidden_patterns:
@@ -330,6 +382,13 @@ class InputValidator:
         for threat_type, patterns in self.security_patterns.items():
             for pattern in patterns:
                 if re.search(pattern, input_str, re.IGNORECASE):
+                    # Skip path_traversal "//" pattern if it's part of a URL protocol (://)
+                    if (
+                        threat_type == "path_traversal"
+                        and pattern == r"//"
+                        and "://" in input_str
+                    ):
+                        continue
                     threats.append(f"Security threat detected: {threat_type} pattern")
                     break
 
@@ -424,7 +483,7 @@ class InputValidator:
 
         return sanitized
 
-    def sanitize_prompt(self, prompt: str) -> str:
+    async def sanitize_prompt(self, prompt: str) -> str:
         """
         Sanitize user prompt for safe processing.
 
@@ -434,10 +493,10 @@ class InputValidator:
         Returns:
             Sanitized prompt
         """
-        result = self.validate_and_sanitize(prompt, InputType.USER_PROMPT)
+        result = await self.validate_and_sanitize(prompt, InputType.USER_PROMPT)
         return result.sanitized_input
 
-    def validate_json_input(self, json_str: str) -> Tuple[bool, Any]:
+    async def validate_json_input(self, json_str: str) -> Tuple[bool, Any]:
         """
         Validate and parse JSON input.
 
@@ -449,12 +508,12 @@ class InputValidator:
         """
         try:
             parsed = json.loads(json_str)
-            result = self.validate_and_sanitize(parsed, InputType.JSON_DATA)
+            result = await self.validate_and_sanitize(parsed, InputType.JSON_DATA)
             return result.is_valid, result.sanitized_input
         except json.JSONDecodeError:
             return False, None
 
-    def validate_file_path(self, file_path: str) -> Tuple[bool, str]:
+    async def validate_file_path(self, file_path: str) -> Tuple[bool, str]:
         """
         Validate file path for security.
 
@@ -464,10 +523,10 @@ class InputValidator:
         Returns:
             Tuple of (is_valid, sanitized_path)
         """
-        result = self.validate_and_sanitize(file_path, InputType.FILE_PATH)
+        result = await self.validate_and_sanitize(file_path, InputType.FILE_PATH)
         return result.is_valid, result.sanitized_input
 
-    def validate_url(self, url: str) -> Tuple[bool, str]:
+    async def validate_url(self, url: str) -> Tuple[bool, str]:
         """
         Validate URL for security.
 
@@ -477,7 +536,7 @@ class InputValidator:
         Returns:
             Tuple of (is_valid, sanitized_url)
         """
-        result = self.validate_and_sanitize(url, InputType.URL)
+        result = await self.validate_and_sanitize(url, InputType.URL)
         return result.is_valid, result.sanitized_input
 
     def _get_timestamp(self) -> str:
@@ -512,24 +571,24 @@ async def validate_and_sanitize(
     )
 
 
-def sanitize_prompt(prompt: str) -> str:
+async def sanitize_prompt(prompt: str) -> str:
     """Sanitize user prompt for safe processing."""
-    return input_validator.sanitize_prompt(prompt)
+    return await input_validator.sanitize_prompt(prompt)
 
 
-def validate_json_input(json_str: str) -> Tuple[bool, Any]:
+async def validate_json_input(json_str: str) -> Tuple[bool, Any]:
     """Validate and parse JSON input."""
-    return input_validator.validate_json_input(json_str)
+    return await input_validator.validate_json_input(json_str)
 
 
-def validate_file_path(file_path: str) -> Tuple[bool, str]:
+async def validate_file_path(file_path: str) -> Tuple[bool, str]:
     """Validate file path for security."""
-    return input_validator.validate_file_path(file_path)
+    return await input_validator.validate_file_path(file_path)
 
 
-def validate_url(url: str) -> Tuple[bool, str]:
+async def validate_url(url: str) -> Tuple[bool, str]:
     """Validate URL for security."""
-    return input_validator.validate_url(url)
+    return await input_validator.validate_url(url)
 
 
 def get_validation_stats() -> Dict[str, Any]:

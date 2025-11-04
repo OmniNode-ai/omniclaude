@@ -8,11 +8,19 @@ Tests that correlation_id propagates through:
 3. Query retrieval
 
 Run with:
+    # Source .env file first to load credentials
+    source .env
+    python3 test_manifest_traceability.py
+
+    # Or set password explicitly
+    export POSTGRES_PASSWORD=your_password
     python3 test_manifest_traceability.py
 """
 
 import asyncio
 import logging
+import os
+import sys
 import uuid
 
 # Configure logging
@@ -27,10 +35,15 @@ async def test_manifest_traceability():
     """
     Test end-to-end manifest injection traceability.
     """
-    import os
-
     import psycopg2
     from manifest_injector import ManifestInjector
+
+    # Verify database password is set
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        logger.error("POSTGRES_PASSWORD environment variable not set")
+        logger.error("Please run: source .env")
+        logger.error("Or set: export POSTGRES_PASSWORD=your_password")
+        sys.exit(1)
 
     # Generate test correlation ID
     correlation_id = str(uuid.uuid4())
@@ -70,9 +83,7 @@ async def test_manifest_traceability():
             port=int(os.environ.get("POSTGRES_PORT", "5436")),
             dbname=os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
             user=os.environ.get("POSTGRES_USER", "postgres"),
-            password=os.environ.get(
-                "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
-            ),
+            password=os.environ.get("POSTGRES_PASSWORD"),  # Required from environment
         )
 
         cursor = conn.cursor()
@@ -199,9 +210,7 @@ async def test_query_reconstruction():
             port=int(os.environ.get("POSTGRES_PORT", "5436")),
             dbname=os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
             user=os.environ.get("POSTGRES_USER", "postgres"),
-            password=os.environ.get(
-                "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
-            ),
+            password=os.environ.get("POSTGRES_PASSWORD"),  # Required from environment
         )
 
         cursor = conn.cursor()

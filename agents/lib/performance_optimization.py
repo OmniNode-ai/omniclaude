@@ -37,6 +37,7 @@ class PerformanceOptimizer:
         self._connection_pool_size = 10
         self._write_queue = asyncio.Queue()
         self._background_writer = None
+        self._shutdown = False
 
     async def _get_pool(self):
         """Get database pool."""
@@ -667,7 +668,7 @@ class PerformanceOptimizer:
         batch_size = 100
         batch_timeout = 5.0
 
-        while True:
+        while not self._shutdown:
             try:
                 # Get item from queue with timeout
                 item = await asyncio.wait_for(
@@ -685,6 +686,11 @@ class PerformanceOptimizer:
                 if batch:
                     await self._process_write_batch(batch)
                     batch = []
+            except asyncio.CancelledError:
+                # Process remaining batch on cancellation
+                if batch:
+                    await self._process_write_batch(batch)
+                break
             except Exception as e:
                 print(f"Warning: Background write worker error: {e}")
                 await asyncio.sleep(1)
@@ -767,6 +773,38 @@ class PerformanceOptimizer:
                 metrics["pool_size"] = "unknown"
 
         return metrics
+
+    async def close(self):
+        """
+        Cleanup method to properly shutdown background tasks.
+
+        Should be called when the optimizer is no longer needed.
+        """
+        # Set shutdown flag
+        self._shutdown = True
+
+        # Cancel background writer task if it exists
+        if self._background_writer is not None:
+            self._background_writer.cancel()
+            try:
+                await self._background_writer
+            except asyncio.CancelledError:
+                pass
+            self._background_writer = None
+
+        # Close database pool if it exists
+        if self.pool is not None:
+            await self.pool.close()
+            self.pool = None
+
+    async def __aenter__(self):
+        """Context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
+        await self.close()
+        return False
 
 
 # Global performance optimizer instance

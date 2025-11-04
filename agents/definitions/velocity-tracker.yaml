@@ -123,6 +123,11 @@ framework_integration:
     match_count: 5
     confidence_threshold: 0.6
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   compliance_requirements:
     - "ONEX operational excellence standards adherence"

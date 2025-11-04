@@ -74,6 +74,12 @@ framework_integration:
   quality_gates: "@QUALITY_GATES.md"
 
 # Template Configuration
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@brainstorming - Collaborative Design"
+
 templates:
   intelligence_research:
     template: "orchestrated_intelligence_research"

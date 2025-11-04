@@ -118,7 +118,7 @@ POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode_remote_2024_secure
+POSTGRES_PASSWORD=<set_in_env>
 
 # Connection Pool (optional)
 POSTGRES_POOL_MIN_SIZE=2
@@ -151,7 +151,7 @@ python3 services/routing_adapter/test_postgres_logger.py
 
 ```bash
 # Check recent routing decisions
-PGPASSWORD=omninode_remote_2024_secure psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT id, selected_agent, confidence_score, routing_strategy, routing_time_ms, created_at FROM agent_routing_decisions ORDER BY created_at DESC LIMIT 10;"
 ```

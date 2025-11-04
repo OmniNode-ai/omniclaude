@@ -72,6 +72,12 @@ framework_integration:
     - "validate_workflow_transitions() - Validate Workflow Transitions"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@architecture-patterns - Backend Architecture Patterns"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in workflow orchestration code"
   error_handling: "OnexError with proper exception chaining for all workflow errors"
