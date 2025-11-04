@@ -117,6 +117,12 @@ framework_integration:
       confidence_threshold: 0.6
       processing_level: "comprehensive"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@research - Multi-Source Research"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   compliance_level: "mandatory"
   architecture_adherence: "4_node_onex"

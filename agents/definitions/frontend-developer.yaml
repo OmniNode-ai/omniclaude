@@ -168,6 +168,13 @@ framework_integration:
     component_scaffold_time: "<2000ms"
     visual_validation_time: "<3000ms"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@shadcn-ui - UI Component Guide"
+  - "@tailwindcss - Tailwind CSS Guide"
+  - "@nextjs - Next.js Implementation Guide"
+
 onex_integration:
   compliance_level: "full"
   architecture_alignment: "Frontend development following ONEX operational excellence standards"

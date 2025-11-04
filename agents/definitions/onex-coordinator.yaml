@@ -122,6 +122,12 @@ framework_integration:
       - "Load balancing and resource optimization"
       - "State synchronization and consistency management"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
+
 onex_integration:
   architecture_reference: "@ONEX_4_Node_System_Developer_Guide.md"
 

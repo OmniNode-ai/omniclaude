@@ -104,6 +104,12 @@ framework_integration:
     uuid_correlation_ms: 100
     quality_assessment_ms: 300
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   four_node_classification: "effect"  # External PR ticket interactions
 

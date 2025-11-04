@@ -72,6 +72,12 @@ framework_integration:
     - "generate_test_documentation() - Test Documentation Generation"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@research - Multi-Source Research"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in testing code"
   error_handling: "OnexError with proper exception chaining for all testing errors"

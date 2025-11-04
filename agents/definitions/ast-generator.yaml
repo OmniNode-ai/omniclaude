@@ -141,6 +141,11 @@ framework_integration:
       - "extract_reusable_patterns"
       - "contribute_to_collective_intelligence"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   compliance_level: "full"
   architecture_awareness:

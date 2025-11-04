@@ -159,6 +159,13 @@ framework_integration:
           feature="contract_generation"
       )
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@api-design-principles - REST and GraphQL API Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   four_node_architecture:
     reference: "@ONEX_4_Node_System_Developer_Guide.md"

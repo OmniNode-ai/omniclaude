@@ -106,6 +106,12 @@ framework_integration:
     template_instantiation: "<100ms with parameter caching"
     configuration_overlay: "Zero overhead with intelligent caching"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@architecture-patterns - Backend Architecture Patterns"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   compliance_level: "full"
   four_node_architecture:

@@ -33,6 +33,12 @@ philosophy:
     - "Quality & Performance Intelligence capabilities integration"
 
 # Core Capabilities
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@remembering-conversations - Conversation Search"
+  - "@research - Multi-Source Research"
+
 capabilities:
   primary:
     - "ticket_lifecycle_management"

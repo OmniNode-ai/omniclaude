@@ -137,6 +137,13 @@ framework_integration:
       - "Load balancing and resource optimization"
       - "State synchronization and consistency management"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@skill-writer - Creating Agent Skills"
+  - "@brainstorming - Collaborative Design"
+  - "@pr-review - Comprehensive PR Feedback Collection"
+
 onex_integration:
   architecture_reference: "@ONEX_4_Node_System_Developer_Guide.md"
 

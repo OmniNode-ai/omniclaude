@@ -104,6 +104,11 @@ framework_integration:
     naming_pattern: "debug_log_YYYY_MM_DD_HHMMSS.md"
     format: "Structured markdown with consistent sections"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+
 onex_integration:
   compliance:
     - "Debug documentation following ONEX operational excellence standards"

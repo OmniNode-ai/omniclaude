@@ -77,6 +77,12 @@ framework_integration:
     - "manage_incident_response() - Manage Incident Response"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in monitoring code"
   error_handling: "OnexError with proper exception chaining for all monitoring errors"

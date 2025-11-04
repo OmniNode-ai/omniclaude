@@ -72,6 +72,12 @@ framework_integration:
     - "optimize_repository_workflow() - Optimize Repository Workflow"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in repository setup code"
   error_handling: "OnexError with proper exception chaining for setup errors"

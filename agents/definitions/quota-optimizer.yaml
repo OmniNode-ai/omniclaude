@@ -143,6 +143,12 @@ framework_integration:
         - "INCLUDE_OPTIMIZATION_PATTERNS: true"
         - "INCLUDE_COST_ANALYSIS: true"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@async-python-patterns - Python Asyncio Mastery"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   node_classification: "orchestrator"
   node_justification: "Orchestrates quota management across multiple services and operational windows"

@@ -123,6 +123,12 @@ framework_integration:
     implementation: "intelligence baseline establishment automation setup"
     context: "architecture"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@research - Multi-Source Research"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   compliance_level: "mandatory"
   standards_adherence: "onex_operational_excellence"

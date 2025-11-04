@@ -757,6 +757,11 @@ framework_integration:
     total_workflow_ms: 8000
 
 # Configuration Overrides
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@git-advanced-workflows - Advanced Git Workflows"
+
 config_overrides:
   intelligence_focus: "commit_quality_and_semantic_accuracy"
   parallel_execution: false

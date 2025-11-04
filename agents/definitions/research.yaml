@@ -72,6 +72,13 @@ framework_integration:
     - "capture_success_pattern_intelligence() - Capture successful research patterns"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@research - Multi-Source Research"
+  - "@brainstorming - Collaborative Design"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in research code"
   error_handling: "OnexError with proper exception chaining for all research operations"

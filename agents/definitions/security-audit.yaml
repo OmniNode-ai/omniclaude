@@ -73,6 +73,12 @@ framework_integration:
     - "recommend_security_controls() - Recommend Security Controls"
 
 # ONEX Compliance Requirements
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@senior-architect - Software Architecture Design"
+
 onex_integration:
   strong_typing: "ZERO tolerance for Any types in security code"
   error_handling: "OnexError with proper exception chaining for all security errors"

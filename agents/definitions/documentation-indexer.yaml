@@ -121,6 +121,12 @@ framework_integration:
       knowledge_capture_focus: "indexing_patterns_processing_strategies_optimization_approaches"
       documentation_type: "comprehensive_processing_analysis"
 
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@research - Multi-Source Research"
+  - "@remembering-conversations - Conversation Search"
+
 onex_integration:
   compliance_level: "full"
   architecture_pattern: "Effect Node (External Documentation Interaction)"

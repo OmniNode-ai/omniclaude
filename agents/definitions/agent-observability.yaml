@@ -70,6 +70,12 @@ framework_integration:
     - "capture_health_metrics() - Track system health indicators"
 
 # Skills Available
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@systematic-debugging - Four-Phase Debugging Framework"
+  - "@senior-architect - Software Architecture Design"
+
 skills_available:
   check_health:
     skill_name: "agent-observability/check-health"
