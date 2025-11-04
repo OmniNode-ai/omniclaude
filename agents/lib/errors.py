@@ -56,6 +56,7 @@ class OnexError(Exception):
             details: Optional error details dictionary
         """
         self.code = code
+        self.error_code = code  # Alias for backward compatibility
         self.message = message
         self.details = details or {}
         self.context = {"additional_context": {"details": self.details}}
