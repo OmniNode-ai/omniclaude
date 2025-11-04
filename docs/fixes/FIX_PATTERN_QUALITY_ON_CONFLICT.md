@@ -52,7 +52,7 @@ ADD CONSTRAINT pattern_quality_metrics_pattern_id_unique UNIQUE (pattern_id);
 
 **Applied**:
 ```bash
-PGPASSWORD="***REDACTED***" psql \
+PGPASSWORD="${POSTGRES_PASSWORD}" psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -f migrations/014_add_pattern_quality_unique_constraint.sql
 ```
@@ -204,12 +204,12 @@ HAVING COUNT(*) > 1;
 # First run: Inserts all patterns
 python3 scripts/backfill_pattern_quality.py \
   --batch-size 100 \
-  --database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+  --database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
 
 # Second run: Updates existing patterns (no duplicates!)
 python3 scripts/backfill_pattern_quality.py \
   --batch-size 100 \
-  --database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+  --database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
 ```
 
 ### Programmatic Usage

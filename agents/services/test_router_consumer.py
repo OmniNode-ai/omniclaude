@@ -6,7 +6,7 @@ Tests routing accuracy by sending various prompts via Kafka events
 and verifying routing decisions in the database.
 
 Requirements:
-- Kafka/Redpanda running (192.168.86.200:29092)
+- Kafka/Redpanda running (192.168.86.200:9092)
 - PostgreSQL running (192.168.86.200:5436)
 - Environment variables configured in .env
 
@@ -49,7 +49,7 @@ class RouterConsumerTester:
     def __init__(self):
         # Load configuration from environment
         self.kafka_bootstrap = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"
+            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
         )
         self.postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
         self.postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))

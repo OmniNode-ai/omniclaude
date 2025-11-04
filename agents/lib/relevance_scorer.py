@@ -8,7 +8,7 @@ Scores patterns and schemas by relevance to user's task using:
 Part of Phase 3: Relevance Scoring implementation.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict
 
 # Import TaskClassifier types with fallback for different import contexts
 try:
@@ -56,13 +56,17 @@ class RelevanceScorer:
         """
         score = 0.0
 
-        # 1. Keyword matching (60% weight)
+        # 1. Keyword matching (50% weight)
         keyword_score = self._compute_keyword_match(pattern, task_context)
-        score += keyword_score * 0.6
+        score += keyword_score * 0.5
 
-        # 2. Task-specific heuristics (40% weight)
+        # 2. Task-specific heuristics (30% weight)
         heuristic_score = self._compute_heuristic_score(pattern, task_context)
-        score += heuristic_score * 0.4
+        score += heuristic_score * 0.3
+
+        # 3. Entity matching (20% weight) - NEW
+        entity_score = self._compute_entity_match(pattern, task_context, user_prompt)
+        score += entity_score * 0.2
 
         return min(score, 1.0)
 
@@ -118,21 +122,100 @@ class RelevanceScorer:
         Returns:
             Score between 0.0 and 1.0
         """
-        pattern_text = (
-            pattern.get("name", "") + " " +
-            pattern.get("description", "")
-        ).lower()
+        pattern_name = pattern.get("name", "").lower()
+        pattern_description = pattern.get("description", "").lower()
+        pattern_text = pattern_name + " " + pattern_description
 
         if not task_context.keywords:
             return 0.0
 
-        matches = sum(
-            1 for kw in task_context.keywords
-            if kw in pattern_text
-        )
+        # Count matches in full text
+        matches = sum(1 for kw in task_context.keywords if kw in pattern_text)
 
-        # Normalize by total keywords
-        return matches / len(task_context.keywords)
+        # Bonus for matches in pattern name (more significant)
+        name_matches = sum(1 for kw in task_context.keywords if kw in pattern_name)
+
+        # Base score from all matches
+        base_score = matches / len(task_context.keywords)
+
+        # Boost score if keywords appear in pattern name (30% bonus)
+        if name_matches > 0:
+            name_boost = (name_matches / len(task_context.keywords)) * 0.3
+            return min(base_score + name_boost, 1.0)
+
+        return base_score
+
+    def _compute_entity_match(
+        self,
+        pattern: Dict[str, Any],
+        task_context: TaskContext,
+        user_prompt: str,
+    ) -> float:
+        """
+        Compute entity match score.
+
+        Checks if entities (file names, table names, service names) from the prompt
+        appear in the pattern name or description.
+
+        Args:
+            pattern: Pattern dict with name, description, etc.
+            task_context: Classified task context
+            user_prompt: Original user prompt
+
+        Returns:
+            Score between 0.0 and 1.0
+        """
+        pattern_name = pattern.get("name", "").lower()
+        pattern_description = pattern.get("description", "").lower()
+        pattern_text = pattern_name + " " + pattern_description
+        prompt_lower = user_prompt.lower()
+
+        score = 0.0
+
+        # Check for entity matches in pattern text
+        if task_context.entities:
+            entity_matches = sum(
+                1 for entity in task_context.entities if entity.lower() in pattern_text
+            )
+            if entity_matches > 0:
+                score += 0.5
+
+        # Check for service mentions (PostgreSQL, Kafka, etc.)
+        if task_context.mentioned_services:
+            service_matches = sum(
+                1
+                for service in task_context.mentioned_services
+                if service.lower() in pattern_text
+            )
+            if service_matches > 0:
+                score += 0.5
+
+        # Bonus: Direct keyword from prompt appears in pattern name
+        # (e.g., "connection" in prompt → "Connection" in pattern name)
+        prompt_words = set(prompt_lower.split())
+        # Filter out common words
+        common_words = {
+            "the",
+            "a",
+            "an",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "from",
+            "by",
+        }
+        significant_words = prompt_words - common_words
+
+        name_word_matches = sum(
+            1 for word in significant_words if len(word) > 3 and word in pattern_name
+        )
+        if name_word_matches > 0:
+            score += 0.3
+
+        return min(score, 1.0)
 
     def _compute_heuristic_score(
         self,
@@ -158,19 +241,32 @@ class RelevanceScorer:
         # Node type matching (for IMPLEMENT tasks)
         if task_context.mentioned_node_types:
             pattern_node_types = pattern.get("node_types", [])
-            if any(nt in pattern_node_types for nt in task_context.mentioned_node_types):
+            if any(
+                nt in pattern_node_types for nt in task_context.mentioned_node_types
+            ):
                 score += 1.0
 
         # DEBUG task heuristics
         if task_context.primary_intent == TaskIntent.DEBUG:
             pattern_name = pattern.get("name", "").lower()
-            if any(term in pattern_name for term in ["error", "debug", "exception", "logging"]):
+            if any(
+                term in pattern_name
+                for term in [
+                    "error",
+                    "debug",
+                    "exception",
+                    "logging",
+                    "troubleshooting",
+                ]
+            ):
                 score += 0.5
 
         # DATABASE task heuristics
         if task_context.primary_intent == TaskIntent.DATABASE:
             pattern_name = pattern.get("name", "").lower()
-            if any(term in pattern_name for term in ["database", "sql", "query", "schema"]):
+            if any(
+                term in pattern_name for term in ["database", "sql", "query", "schema"]
+            ):
                 score += 0.5
 
         return min(score, 1.0)

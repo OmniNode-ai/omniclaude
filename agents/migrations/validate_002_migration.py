@@ -8,6 +8,15 @@ Validates data quality before and after migration:
 3. Reports metrics distribution and quality
 
 Correlation ID: fe9bbe61-39d7-4124-b6ec-d61de1e0ee41-P2
+
+Usage:
+    # Source .env file first to load credentials
+    source .env
+    python3 validate_002_migration.py [pre|post]
+
+    # Or set password explicitly
+    export POSTGRES_PASSWORD=your_password
+    python3 validate_002_migration.py [pre|post]
 """
 
 import os
@@ -23,9 +32,19 @@ class MigrationValidator:
     """Validate migration 002 data quality"""
 
     def __init__(self, db_password: str = None):
-        password = db_password or os.getenv(
-            "OMNINODE_BRIDGE_PASSWORD", "omninode-bridge-postgres-dev-2024"
+        # Priority: explicit password > POSTGRES_PASSWORD env var (no hardcoded default)
+        password = (
+            db_password
+            or os.getenv("POSTGRES_PASSWORD")
+            or os.getenv("OMNINODE_BRIDGE_PASSWORD", "")
         )
+
+        if not password:
+            print("❌ ERROR: Database password not configured")
+            print("   Please run: source .env")
+            print("   Or set: export POSTGRES_PASSWORD=your_password")
+            sys.exit(1)
+
         self.conn_string = (
             f"host=localhost port=5436 dbname=omninode_bridge "
             f"user=postgres password={password}"

@@ -233,7 +233,12 @@ async def show_orchestrator_manifest():
 
 
 if __name__ == "__main__":
-    # Set required env var
-    os.environ["POSTGRES_PASSWORD"] = "***REDACTED***"
+    import sys
+
+    # Verify POSTGRES_PASSWORD is set
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        print("❌ ERROR: POSTGRES_PASSWORD environment variable not set")
+        print("   Please run: source .env")
+        sys.exit(1)
 
     asyncio.run(show_orchestrator_manifest())

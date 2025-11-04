@@ -6,7 +6,7 @@ Follows ONEX v2.0 patterns for configuration management.
 
 Environment Variables:
     # Kafka Configuration
-    KAFKA_BOOTSTRAP_SERVERS - Kafka broker addresses (default: 192.168.86.200:29092)
+    KAFKA_BOOTSTRAP_SERVERS - Kafka broker addresses (default: 192.168.86.200:9092)
 
     # PostgreSQL Configuration (for logging routing decisions)
     POSTGRES_HOST - PostgreSQL host (default: 192.168.86.200)
@@ -47,7 +47,7 @@ class RoutingAdapterConfig:
         """Initialize configuration from environment variables."""
         # Kafka Configuration
         self.kafka_bootstrap_servers = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"
+            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
         )
 
         # PostgreSQL Configuration

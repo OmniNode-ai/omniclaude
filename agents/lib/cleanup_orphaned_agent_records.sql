@@ -13,7 +13,7 @@
 --
 -- Database: omninode_bridge
 -- Table: agent_manifest_injections
--- Connection: postgresql://postgres:***REDACTED***@omninode-bridge-postgres:5436/omninode_bridge
+-- Connection: postgresql://postgres:${POSTGRES_PASSWORD}@omninode-bridge-postgres:5436/omninode_bridge
 
 -- Display current orphaned records status BEFORE cleanup
 SELECT

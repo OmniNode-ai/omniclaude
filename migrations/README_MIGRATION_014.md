@@ -83,12 +83,12 @@ query = """
 
 ```bash
 # Apply migration
-PGPASSWORD="***REDACTED***" psql \
+PGPASSWORD="${POSTGRES_PASSWORD}" psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -f migrations/014_add_pattern_quality_unique_constraint.sql
 
 # Verify constraint exists
-PGPASSWORD="***REDACTED***" psql \
+PGPASSWORD="${POSTGRES_PASSWORD}" psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT constraint_name, constraint_type
       FROM information_schema.table_constraints
@@ -157,10 +157,10 @@ Run backfill twice to verify no duplicates:
 # First run
 python3 scripts/backfill_pattern_quality.py \
   --limit 10 \
-  --database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+  --database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
 
 # Check count
-PGPASSWORD="***REDACTED***" psql \
+PGPASSWORD="${POSTGRES_PASSWORD}" psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT COUNT(*) FROM pattern_quality_metrics;"
 # Expected: 10 rows
@@ -168,10 +168,10 @@ PGPASSWORD="***REDACTED***" psql \
 # Second run (should update, not duplicate)
 python3 scripts/backfill_pattern_quality.py \
   --limit 10 \
-  --database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+  --database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
 
 # Check count again
-PGPASSWORD="***REDACTED***" psql \
+PGPASSWORD="${POSTGRES_PASSWORD}" psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT COUNT(*) FROM pattern_quality_metrics;"
 # Expected: Still 10 rows (upserted, not duplicated)

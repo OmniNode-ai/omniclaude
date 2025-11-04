@@ -296,7 +296,7 @@ self.db_password = db_password or os.environ.get(
 **After**:
 ```python
 self.db_password = db_password or os.environ.get(
-    "POSTGRES_PASSWORD", "***REDACTED***"  ← CORRECT
+    "POSTGRES_PASSWORD"  ← CORRECT
 )
 ```
 

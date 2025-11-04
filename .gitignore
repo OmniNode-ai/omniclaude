@@ -198,6 +198,7 @@ container_security_validation.json
 phase*_*.json
 PHASE*_*.md
 DESIGN_*.md
+MANIFEST_*.md
 PR_DESCRIPTION.md
 
 # Ruff stuff:

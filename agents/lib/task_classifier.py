@@ -7,12 +7,13 @@ Used to guide manifest section selection and relevance filtering.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
 from enum import Enum
+from typing import List
 
 
 class TaskIntent(Enum):
     """Primary task intent categories."""
+
     DEBUG = "debug"
     IMPLEMENT = "implement"
     DATABASE = "database"
@@ -26,6 +27,7 @@ class TaskIntent(Enum):
 @dataclass
 class TaskContext:
     """Extracted task context from user prompt."""
+
     primary_intent: TaskIntent
     keywords: List[str]
     entities: List[str]  # File names, table names, pattern names mentioned
@@ -44,39 +46,101 @@ class TaskClassifier:
     # Keyword patterns for intent classification
     INTENT_KEYWORDS = {
         TaskIntent.DEBUG: [
-            "error", "failing", "broken", "not working", "issue", "bug",
-            "fix", "debug", "troubleshoot", "investigate", "why",
+            "error",
+            "failing",
+            "broken",
+            "not working",
+            "issue",
+            "bug",
+            "fix",
+            "debug",
+            "troubleshoot",
+            "investigate",
+            "why",
         ],
         TaskIntent.IMPLEMENT: [
-            "create", "implement", "add", "new", "build", "develop",
-            "write", "make", "generate",
+            "create",
+            "implement",
+            "add",
+            "new",
+            "build",
+            "develop",
+            "write",
+            "make",
+            "generate",
         ],
         TaskIntent.DATABASE: [
-            "database", "sql", "table", "query", "schema", "postgresql",
-            "insert", "update", "select", "delete", "migration",
+            "database",
+            "sql",
+            "table",
+            "query",
+            "schema",
+            "postgresql",
+            "insert",
+            "update",
+            "select",
+            "delete",
+            "migration",
         ],
         TaskIntent.REFACTOR: [
-            "refactor", "improve", "optimize", "clean up", "restructure",
-            "reorganize", "simplify", "enhance",
+            "refactor",
+            "improve",
+            "optimize",
+            "clean up",
+            "restructure",
+            "reorganize",
+            "simplify",
+            "enhance",
+            "performance",
+            "slow",
+            "fast",
         ],
         TaskIntent.RESEARCH: [
-            "what", "how", "where", "when", "which", "explain",
-            "find", "search", "locate", "show me", "tell me",
+            "what",
+            "how",
+            "where",
+            "when",
+            "which",
+            "explain",
+            "find",
+            "search",
+            "locate",
+            "show me",
+            "tell me",
         ],
         TaskIntent.TEST: [
-            "test", "testing", "unittest", "pytest", "validate",
-            "verify", "check", "assert",
+            "test",
+            "testing",
+            "unittest",
+            "pytest",
+            "validate",
+            "verify",
+            "check",
+            "assert",
         ],
         TaskIntent.DOCUMENT: [
-            "document", "documentation", "readme", "docstring",
-            "comment", "explain", "describe",
+            "document",
+            "documentation",
+            "readme",
+            "docstring",
+            "comment",
+            "explain",
+            "describe",
+            "update",
         ],
     }
 
     # Service name patterns
     SERVICE_PATTERNS = [
-        "kafka", "redpanda", "postgresql", "postgres", "qdrant",
-        "docker", "consul", "vault", "archon",
+        "kafka",
+        "redpanda",
+        "postgresql",
+        "postgres",
+        "qdrant",
+        "docker",
+        "consul",
+        "vault",
+        "archon",
     ]
 
     # ONEX node type patterns
@@ -109,29 +173,101 @@ class TaskClassifier:
             primary_intent = TaskIntent.UNKNOWN
             confidence = 0.0
 
-        # Extract keywords (words mentioned in intent patterns)
+        # Extract keywords (intent keywords + domain terms + significant words)
         keywords = []
+
+        # 1. Extract intent keywords (action verbs)
         for intent, kws in self.INTENT_KEYWORDS.items():
             keywords.extend([kw for kw in kws if kw in prompt_lower])
+
+        # 2. Extract node type keywords
+        for nt in self.NODE_TYPE_PATTERNS:
+            if nt in prompt_lower:
+                keywords.append(nt)
+
+        # 3. Extract service keywords
+        for svc in self.SERVICE_PATTERNS:
+            if svc in prompt_lower:
+                keywords.append(svc)
+
+        # 4. Extract domain-specific terms (technology, patterns)
+        domain_terms = [
+            # Technology terms
+            "llm",
+            "api",
+            "http",
+            "rest",
+            "graphql",
+            "websocket",
+            "async",
+            "sync",
+            "event",
+            "stream",
+            "batch",
+            # Pattern terms
+            "pattern",
+            "template",
+            "mixin",
+            "contract",
+            "model",
+            "node",
+            "service",
+            "client",
+            "server",
+            "handler",
+            # Data terms
+            "data",
+            "schema",
+            "migration",
+            "index",
+            "cache",
+            # Operation terms
+            "request",
+            "response",
+            "call",
+            "query",
+            "command",
+        ]
+        for term in domain_terms:
+            if term in prompt_lower:
+                keywords.append(term)
+
+        # 5. Extract significant nouns (simple heuristic: words 3+ chars, not stopwords)
+        stopwords = {
+            "the",
+            "for",
+            "and",
+            "with",
+            "that",
+            "this",
+            "from",
+            "into",
+            "your",
+        }
+        import re
+
+        words = re.findall(r"\w+", prompt_lower)
+        significant_words = [
+            w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()
+        ]
+        keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
         # Extract entities (file names, table names)
         entities = self._extract_entities(user_prompt)
 
         # Extract mentioned services
         mentioned_services = [
-            svc for svc in self.SERVICE_PATTERNS
-            if svc in prompt_lower
+            svc for svc in self.SERVICE_PATTERNS if svc in prompt_lower
         ]
 
         # Extract mentioned node types
         mentioned_node_types = [
-            nt.upper() for nt in self.NODE_TYPE_PATTERNS
-            if nt in prompt_lower
+            nt.upper() for nt in self.NODE_TYPE_PATTERNS if nt in prompt_lower
         ]
 
         return TaskContext(
             primary_intent=primary_intent,
-            keywords=list(set(keywords)),
+            keywords=list(set(keywords)),  # Remove duplicates
             entities=entities,
             mentioned_services=mentioned_services,
             mentioned_node_types=mentioned_node_types,
@@ -152,7 +288,7 @@ class TaskClassifier:
         # Match file names with extensions (including underscores in name)
         # OR words with underscores (table names, module names, etc.)
         # Pattern priority: files with extensions first, then underscore words
-        pattern = r'\b\w+(?:_\w+)*\.\w+\b|\b\w+(?:_\w+)+\b'
+        pattern = r"\b\w+(?:_\w+)*\.\w+\b|\b\w+(?:_\w+)+\b"
         matches = re.findall(pattern, prompt)
 
         return list(set(matches))

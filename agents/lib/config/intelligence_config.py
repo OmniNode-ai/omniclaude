@@ -23,7 +23,7 @@ Configuration precedence:
 2. Default values (lowest)
 
 Environment Variables:
-    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: localhost:29092)
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: 192.168.86.200:9092)
     KAFKA_ENABLE_INTELLIGENCE: Enable event-based intelligence (default: true)
     KAFKA_REQUEST_TIMEOUT_MS: Request timeout in milliseconds (default: 5000)
     ENABLE_EVENT_BASED_DISCOVERY: Enable event discovery (default: true)
@@ -67,7 +67,9 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default_factory=lambda: os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
+        default_factory=lambda: os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
+        ),
         description="Kafka bootstrap servers (set via KAFKA_BOOTSTRAP_SERVERS env var)",
     )
 
@@ -202,7 +204,7 @@ class IntelligenceConfig(BaseModel):
         """
         return cls(
             kafka_bootstrap_servers=os.getenv(
-                "KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"
+                "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
             ),
             kafka_enable_intelligence=_parse_bool(
                 os.getenv("KAFKA_ENABLE_INTELLIGENCE", "true")

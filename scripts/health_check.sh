@@ -41,9 +41,16 @@ POSTGRES_HOST="${TRACEABILITY_DB_HOST:-192.168.86.200}"
 POSTGRES_PORT="${TRACEABILITY_DB_PORT:-5436}"
 POSTGRES_DB="${TRACEABILITY_DB_NAME:-omninode_bridge}"
 POSTGRES_USER="${TRACEABILITY_DB_USER:-postgres}"
-POSTGRES_PASSWORD="${TRACEABILITY_DB_PASSWORD:-***REDACTED***}"
+POSTGRES_PASSWORD="${TRACEABILITY_DB_PASSWORD}"  # Must be set in environment
 QDRANT_HOST="${QDRANT_HOST:-localhost}"
 QDRANT_PORT="${QDRANT_PORT:-6333}"
+
+# Verify password is set (warning only, allow to continue for health check)
+if [ -z "$POSTGRES_PASSWORD" ]; then
+    echo "⚠️  WARNING: TRACEABILITY_DB_PASSWORD not set, database checks will be skipped"
+    echo "   Please run: source .env"
+    POSTGRES_PASSWORD="NOT_SET"  # Set to avoid empty variable errors
+fi
 
 # Initialize results
 ISSUES_FOUND=0

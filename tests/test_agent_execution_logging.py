@@ -95,7 +95,12 @@ async def test_agent_execution_logging():
         import psycopg2
 
         # Connect to database
-        password = os.getenv("POSTGRES_PASSWORD", "***REDACTED***")
+        password = os.getenv("POSTGRES_PASSWORD", "")
+        if not password:
+            print("⚠️  POSTGRES_PASSWORD not set in environment")
+            print("   Please run: source .env")
+            return
+
         conn = psycopg2.connect(
             host="192.168.86.200",
             port=5436,

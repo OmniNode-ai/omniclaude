@@ -178,7 +178,7 @@ psql -h omninode-bridge-postgres -p 5436 -U postgres -d omninode_bridge \
   -f /Volumes/PRO-G40/Code/omniclaude/agents/lib/cleanup_orphaned_agent_records.sql
 
 # Or with password environment variable
-export PGPASSWORD=***REDACTED***
+export PGPASSWORD=${POSTGRES_PASSWORD}
 psql -h omninode-bridge-postgres -p 5436 -U postgres -d omninode_bridge \
   -f /Volumes/PRO-G40/Code/omniclaude/agents/lib/cleanup_orphaned_agent_records.sql
 ```
@@ -260,7 +260,7 @@ The lifecycle tracking uses the same database connection as manifest storage:
 - **Port**: `5436`
 - **Database**: `omninode_bridge`
 - **User**: `postgres`
-- **Password**: `***REDACTED***` (from env or default)
+- **Password**: `${POSTGRES_PASSWORD}` (from .env, required)
 
 Environment variables used:
 - `POSTGRES_HOST` (default: "192.168.86.200")

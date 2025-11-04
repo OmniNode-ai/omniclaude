@@ -14,7 +14,14 @@ DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
 DB_PORT="${POSTGRES_PORT:-5436}"
 DB_NAME="${POSTGRES_DATABASE:-omninode_bridge}"
 DB_USER="${POSTGRES_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-***REDACTED***}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+
+# Verify password is set
+if [ -z "$DB_PASSWORD" ]; then
+    echo -e "${YELLOW}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
+    echo "   Please run: source .env"
+    exit 1
+fi
 
 # Output directory
 DUMP_DIR="${DUMP_DIR:-./db_dumps}"
@@ -244,7 +251,7 @@ Environment Variables:
     POSTGRES_PORT       Database port (default: 5436)
     POSTGRES_DATABASE   Database name (default: omninode_bridge)
     POSTGRES_USER       Database user (default: postgres)
-    POSTGRES_PASSWORD   Database password (default: ***REDACTED***)
+    POSTGRES_PASSWORD   Database password (REQUIRED - must be set via .env)
     DUMP_DIR            Output directory (default: ./db_dumps)
 
 Examples:

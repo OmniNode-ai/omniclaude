@@ -223,7 +223,7 @@ curl -s http://localhost:6333/collections/execution_patterns/points/scroll \
 # (stop any services that write to pattern_lineage_nodes)
 
 # Clean database
-PGPASSWORD='***REDACTED***' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge << 'EOF'
 TRUNCATE TABLE pattern_lineage_nodes CASCADE;
 TRUNCATE TABLE pattern_lineage_edges CASCADE;
@@ -349,7 +349,7 @@ scripts/migrate_patterns_from_qdrant.py
 ### Pre-migration Backup
 ```bash
 # Backup current state (even if failed)
-PGPASSWORD='***REDACTED***' pg_dump \
+PGPASSWORD=${POSTGRES_PASSWORD} pg_dump \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -t pattern_lineage_nodes -t pattern_lineage_edges \
   > pattern_backup_20251028.sql
@@ -358,7 +358,7 @@ PGPASSWORD='***REDACTED***' pg_dump \
 ### Rollback Plan
 ```bash
 # If migration fails, restore backup
-PGPASSWORD='***REDACTED***' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   < pattern_backup_20251028.sql
 ```

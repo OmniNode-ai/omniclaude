@@ -6,6 +6,12 @@ Tests the new mark_agent_completed() method to verify it properly updates
 the agent_manifest_injections table with completion timestamps.
 
 Usage:
+    # Source .env file first to load credentials
+    source .env
+    python3 test_lifecycle_tracking.py
+
+    # Or set password explicitly
+    export POSTGRES_PASSWORD=your_password
     python3 test_lifecycle_tracking.py
 """
 
@@ -30,8 +36,12 @@ async def test_lifecycle_tracking():
     print("=" * 70)
     print()
 
-    # Set database password for remote host (outside Docker)
-    os.environ["POSTGRES_PASSWORD"] = "***REDACTED***"
+    # Verify database password is set
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        print("❌ ERROR: POSTGRES_PASSWORD environment variable not set")
+        print("   Please run: source .env")
+        print("   Or set: export POSTGRES_PASSWORD=your_password")
+        sys.exit(1)
 
     # Set agent name (fixes "unknown" issue)
     agent_name = "test-lifecycle-agent"
@@ -87,7 +97,7 @@ async def test_lifecycle_tracking():
             port=int(os.environ.get("POSTGRES_PORT", "5436")),
             dbname=os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
             user=os.environ.get("POSTGRES_USER", "postgres"),
-            password=os.environ.get("POSTGRES_PASSWORD", "***REDACTED***"),
+            password=os.environ.get("POSTGRES_PASSWORD"),  # Required from environment
         )
 
         cursor = conn.cursor()
@@ -155,8 +165,11 @@ async def test_error_case():
     print("=" * 70)
     print()
 
-    # Set database password for remote host (outside Docker)
-    os.environ["POSTGRES_PASSWORD"] = "***REDACTED***"
+    # Verify database password is set
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        print("❌ ERROR: POSTGRES_PASSWORD environment variable not set")
+        print("   Please run: source .env")
+        sys.exit(1)
 
     agent_name = "test-lifecycle-agent-error"
     os.environ["AGENT_NAME"] = agent_name
@@ -190,8 +203,8 @@ async def test_error_case():
                 dbname=os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
                 user=os.environ.get("POSTGRES_USER", "postgres"),
                 password=os.environ.get(
-                    "POSTGRES_PASSWORD", "***REDACTED***"
-                ),
+                    "POSTGRES_PASSWORD"
+                ),  # Required from environment
             )
 
             cursor = conn.cursor()

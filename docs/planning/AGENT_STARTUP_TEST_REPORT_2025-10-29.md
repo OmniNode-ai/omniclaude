@@ -28,7 +28,7 @@
 **Result**: SUCCESS
 
 ```bash
-PG_DSN: postgresql://postgres:***REDACTED***@omninode-bridge-postgres:5436/omninode_bridge
+PG_DSN: postgresql://postgres:${POSTGRES_PASSWORD}@omninode-bridge-postgres:5436/omninode_bridge
 ✅ Database connection successful (result: 1)
 ```
 
@@ -63,8 +63,8 @@ But the .env file provides:
 - `TRACEABILITY_DB_PORT=5436`
 - `TRACEABILITY_DB_NAME=omninode_bridge`
 - `TRACEABILITY_DB_USER=postgres`
-- `TRACEABILITY_DB_PASSWORD=***REDACTED***`
-- `POSTGRES_PASSWORD=***REDACTED***` (only this one matches)
+- `TRACEABILITY_DB_PASSWORD=<set_in_env>`
+- `POSTGRES_PASSWORD=<set_in_env>` (only this one matches)
 
 **Impact**:
 - agent_history_browser.py cannot start
@@ -285,7 +285,7 @@ Our 13 file modifications did not break these files:
 
 ### Test 1: Database Connection
 ```bash
-export PG_DSN="postgresql://postgres:***REDACTED***@omninode-bridge-postgres:5436/omninode_bridge"
+export PG_DSN="postgresql://postgres:${POSTGRES_PASSWORD}@omninode-bridge-postgres:5436/omninode_bridge"
 python3 -c "import asyncio, asyncpg; asyncio.run(asyncpg.connect(dsn='$PG_DSN').fetchval('SELECT 1'))"
 ```
 
@@ -303,7 +303,7 @@ python3 -c "from agents.lib.manifest_injector import ManifestInjector; from uuid
 ### Test 4: agent_execution_logger.py
 ```bash
 export PYTHONPATH="/Volumes/PRO-G40/Code/omnibase_core/src:$PYTHONPATH"
-export PG_DSN="postgresql://postgres:***REDACTED***@omninode-bridge-postgres:5436/omninode_bridge"
+export PG_DSN="postgresql://postgres:${POSTGRES_PASSWORD}@omninode-bridge-postgres:5436/omninode_bridge"
 python3 -c "from agents.lib.agent_execution_logger import log_agent_execution; from uuid import uuid4; import asyncio; asyncio.run(log_agent_execution('test', 'test', str(uuid4()), '/tmp'))"
 ```
 

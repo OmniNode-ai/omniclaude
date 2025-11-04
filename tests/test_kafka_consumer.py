@@ -48,7 +48,7 @@ def postgres_dsn():
     host = os.getenv("TRACEABILITY_DB_HOST", "localhost")
     port = os.getenv("TRACEABILITY_DB_PORT", "5436")
     user = os.getenv("TRACEABILITY_DB_USER", "postgres")
-    password = os.getenv("TRACEABILITY_DB_PASSWORD", "***REDACTED***")
+    password = os.getenv("TRACEABILITY_DB_PASSWORD", "")  # Must be set in environment
     database = os.getenv("TRACEABILITY_DB_NAME", "omninode_bridge")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"

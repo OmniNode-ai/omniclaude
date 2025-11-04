@@ -191,7 +191,11 @@ async def test_p0_with_real_patterns():
 if __name__ == "__main__":
     import os
 
-    os.environ["POSTGRES_PASSWORD"] = "***REDACTED***"
+    # Verify POSTGRES_PASSWORD is set
+    if not os.environ.get("POSTGRES_PASSWORD"):
+        print("❌ ERROR: POSTGRES_PASSWORD environment variable not set")
+        print("   Please run: source .env")
+        sys.exit(1)
 
     success = asyncio.run(test_p0_with_real_patterns())
     sys.exit(0 if success else 1)

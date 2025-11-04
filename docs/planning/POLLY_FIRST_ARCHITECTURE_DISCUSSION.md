@@ -179,7 +179,7 @@ POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=***REDACTED***
+POSTGRES_PASSWORD=<set_in_env>
 
 # asyncpg connection pooling
 pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5)

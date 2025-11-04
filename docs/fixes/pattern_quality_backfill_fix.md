@@ -25,7 +25,7 @@ When running the pattern quality backfill script, users encountered:
 **Fix**:
 ```bash
 # Added HOST_DATABASE_URL for scripts running from host
-export HOST_DATABASE_URL=postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge
+export HOST_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge
 ```
 
 ### 2. Collection Name Mismatch
@@ -71,7 +71,7 @@ export HOST_DATABASE_URL=postgresql://...
 
 ```bash
 # Added HOST_DATABASE_URL with export
-export HOST_DATABASE_URL=postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge
+export HOST_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge
 ```
 
 ### 2. `scripts/backfill_pattern_quality.py`
@@ -261,7 +261,7 @@ python3 scripts/backfill_pattern_quality.py --collection all
 ```bash
 # If you prefer not to source .env
 python3 scripts/backfill_pattern_quality.py \
-  --database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge" \
+  --database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge" \
   --collection archon_vectors
 ```
 
@@ -298,7 +298,7 @@ python3 scripts/backfill_pattern_quality.py \
 source .env
 
 # Or use explicit database URL
---database-url "postgresql://postgres:***REDACTED***@192.168.86.200:5436/omninode_bridge"
+--database-url "postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge"
 ```
 
 ### Issue: Collection not found

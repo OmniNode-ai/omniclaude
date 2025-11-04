@@ -554,12 +554,12 @@ cd /Volumes/PRO-G40/Code/Omniarchon
 find services/intelligence -name "*pattern*" -type f -name "*.py"
 
 # Check database schema
-PGPASSWORD='***REDACTED***' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "\d pattern_lineage_nodes"
 
 # Check current data
-PGPASSWORD='***REDACTED***' psql \
+PGPASSWORD=${POSTGRES_PASSWORD} psql \
   -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
   -c "SELECT pattern_name, pattern_type, quality_score, usage_count
       FROM pattern_lineage_nodes

@@ -175,10 +175,10 @@ export PGPASSWORD="$POSTGRES_PASSWORD"
 ./scripts/observability/dashboard_stats.sh
 
 # Method 2: Inline password
-PGPASSWORD="***REDACTED***" ./scripts/observability/dashboard_stats.sh
+PGPASSWORD="${POSTGRES_PASSWORD}" ./scripts/observability/dashboard_stats.sh
 
 # Method 3: Export first
-export PGPASSWORD="***REDACTED***"
+export PGPASSWORD="${POSTGRES_PASSWORD}"
 ./scripts/observability/dashboard_stats.sh
 ```
 
@@ -426,7 +426,7 @@ source .env
 export PGPASSWORD="$POSTGRES_PASSWORD"
 
 # Or use inline
-PGPASSWORD="***REDACTED***" ./scripts/observability/dashboard_stats.sh
+PGPASSWORD="${POSTGRES_PASSWORD}" ./scripts/observability/dashboard_stats.sh
 ```
 
 ### Empty Results

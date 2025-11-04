@@ -10,7 +10,14 @@ DB_HOST="${DB_HOST:-192.168.86.200}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-***REDACTED***}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+
+# Verify password is set
+if [ -z "$DB_PASSWORD" ]; then
+    echo "❌ ERROR: POSTGRES_PASSWORD environment variable not set"
+    echo "   Please run: source .env"
+    exit 1
+fi
 
 export PGPASSWORD="$DB_PASSWORD"
 

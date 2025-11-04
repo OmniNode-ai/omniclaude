@@ -10,6 +10,7 @@ Tests RelevanceScorer's ability to:
 """
 
 import pytest
+
 from agents.lib.relevance_scorer import RelevanceScorer
 from agents.lib.task_classifier import TaskContext, TaskIntent
 
@@ -99,8 +100,8 @@ class TestPatternRelevanceScoring:
             user_prompt="Implement EFFECT node",
         )
 
-        # Should have non-zero score due to node type heuristic (40% of 1.0 = 0.4)
-        assert score >= 0.4, f"Expected heuristic boost (>=0.4), got {score}"
+        # Should have non-zero score due to node type heuristic (30% of 1.0 = 0.3) + entity matching
+        assert score >= 0.3, f"Expected heuristic boost (>=0.3), got {score}"
 
     def test_score_pattern_partial_keyword_match(self):
         """Test pattern with partial keyword matches."""
@@ -400,8 +401,9 @@ class TestTaskSpecificHeuristics:
         )
 
         # Error pattern should score higher due to heuristic boost
-        assert error_score > normal_score, \
-            f"Error pattern ({error_score}) should score higher than normal pattern ({normal_score})"
+        assert (
+            error_score > normal_score
+        ), f"Error pattern ({error_score}) should score higher than normal pattern ({normal_score})"
 
     def test_debug_task_exception_heuristic(self):
         """Test DEBUG task boosts exception-related patterns."""
@@ -428,8 +430,8 @@ class TestTaskSpecificHeuristics:
             user_prompt="Troubleshoot the system",
         )
 
-        # Should get heuristic boost for "exception" keyword
-        assert score >= 0.2, f"Expected heuristic boost (>=0.2), got {score}"
+        # Should get heuristic boost for "exception" keyword (30% of 0.5 = 0.15)
+        assert score >= 0.15, f"Expected heuristic boost (>=0.15), got {score}"
 
     def test_implement_task_heuristics(self):
         """Test IMPLEMENT task boosts patterns with matching node types."""
@@ -469,8 +471,9 @@ class TestTaskSpecificHeuristics:
         )
 
         # Effect pattern should score higher due to node type match
-        assert effect_score > compute_score, \
-            f"Effect pattern ({effect_score}) should score higher than Compute pattern ({compute_score})"
+        assert (
+            effect_score > compute_score
+        ), f"Effect pattern ({effect_score}) should score higher than Compute pattern ({compute_score})"
 
     def test_database_task_heuristics(self):
         """Test DATABASE task boosts database-related patterns."""
@@ -510,8 +513,9 @@ class TestTaskSpecificHeuristics:
         )
 
         # Database pattern should score higher due to heuristic boost
-        assert db_score > api_score, \
-            f"DB pattern ({db_score}) should score higher than API pattern ({api_score})"
+        assert (
+            db_score > api_score
+        ), f"DB pattern ({db_score}) should score higher than API pattern ({api_score})"
 
 
 class TestKeywordMatching:
@@ -543,8 +547,8 @@ class TestKeywordMatching:
         )
 
         # With 3/3 keywords matching, keyword score = 1.0
-        # Total = 1.0 * 0.6 (keyword weight) = 0.6 (no heuristics)
-        assert score >= 0.6, f"Expected high keyword match score, got {score}"
+        # Total = 1.0 * 0.5 (keyword weight) + entity matching
+        assert score >= 0.5, f"Expected high keyword match score, got {score}"
 
     def test_no_keywords_low_score(self):
         """Test pattern with no keywords scores low without heuristics."""
@@ -688,8 +692,8 @@ class TestEdgeCases:
             user_prompt="Implement Compute node",
         )
 
-        # Should get heuristic boost for matching one node type
-        assert score >= 0.4, f"Expected node type match boost, got {score}"
+        # Should get heuristic boost for matching one node type (30% of 1.0 = 0.3) + entity matching
+        assert score >= 0.3, f"Expected node type match boost, got {score}"
 
 
 class TestRealWorldScenarios:

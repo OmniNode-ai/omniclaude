@@ -82,7 +82,7 @@ Successfully configured the routing adapter service in docker-compose.yml for Ph
 ### 5. Environment Variables (.env)
 
 **Added**:
-- ✅ OMNINODE_BRIDGE_POSTGRES_PASSWORD=***REDACTED***
+- ✅ OMNINODE_BRIDGE_POSTGRES_PASSWORD=<set_in_env>
 
 This variable is required by the agent-observability-consumer service and was missing from .env.
 

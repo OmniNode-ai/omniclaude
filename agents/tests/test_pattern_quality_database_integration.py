@@ -21,12 +21,25 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def db_connection_string():
-    """Get database connection string from environment."""
+    """Get database connection string from environment.
+
+    Configuration priority:
+    1. DATABASE_URL environment variable (complete connection string)
+    2. Individual POSTGRES_* environment variables
+
+    For local testing:
+    - Source .env file before running tests: `source .env`
+    - Or set POSTGRES_PASSWORD explicitly: `export POSTGRES_PASSWORD=your_password`
+
+    For CI/test environments:
+    - Use empty password or set test-specific credentials
+    """
     # Priority: DATABASE_URL > construct from POSTGRES_PASSWORD
     if os.getenv("DATABASE_URL"):
         return os.getenv("DATABASE_URL")
 
-    password = os.getenv("POSTGRES_PASSWORD", "***REDACTED***")
+    # Require explicit password configuration (no hardcoded defaults)
+    password = os.getenv("POSTGRES_PASSWORD", "")
     host = os.getenv("POSTGRES_HOST", "192.168.86.200")
     port = os.getenv("POSTGRES_PORT", "5436")
     database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
