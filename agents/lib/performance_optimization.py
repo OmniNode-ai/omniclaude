@@ -792,6 +792,11 @@ class PerformanceOptimizer:
                 pass
             self._background_writer = None
 
+        # Close database pool if it exists
+        if self.pool is not None:
+            await self.pool.close()
+            self.pool = None
+
     async def __aenter__(self):
         """Context manager entry."""
         return self

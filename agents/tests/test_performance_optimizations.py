@@ -217,10 +217,11 @@ class TestCircuitBreaker:
         async def successful_operation():
             return "success"
 
-        result = await call_with_breaker(
+        success, result = await call_with_breaker(
             breaker_name="test_breaker", config=config, func=successful_operation
         )
 
+        assert success is True
         assert result == "success"
         assert breaker.state.value == "CLOSED"
 
@@ -238,16 +239,19 @@ class TestCircuitBreaker:
             raise Exception("Test failure")
 
         # First failure
-        with pytest.raises(Exception, match="Test failure"):
-            await call_with_breaker(
-                breaker_name="test_breaker_fail", config=config, func=failing_operation
-            )
+        success, error = await call_with_breaker(
+            breaker_name="test_breaker_fail", config=config, func=failing_operation
+        )
+        assert success is False
+        assert isinstance(error, Exception)
+        assert "Test failure" in str(error)
 
         # Second failure should open the circuit
-        with pytest.raises(Exception, match="Test failure"):
-            await call_with_breaker(
-                breaker_name="test_breaker_fail", config=config, func=failing_operation
-            )
+        success, error = await call_with_breaker(
+            breaker_name="test_breaker_fail", config=config, func=failing_operation
+        )
+        assert success is False
+        assert isinstance(error, Exception)
 
         # Get the breaker from manager and check state
         breaker = circuit_breaker_manager.get_breaker("test_breaker_fail", config)
@@ -269,12 +273,14 @@ class TestCircuitBreaker:
         async def failing_operation():
             raise Exception("Test failure")
 
-        with pytest.raises(Exception, match="Test failure"):
-            await call_with_breaker(
-                breaker_name="test_breaker_timeout",
-                config=config,
-                func=failing_operation,
-            )
+        success, error = await call_with_breaker(
+            breaker_name="test_breaker_timeout",
+            config=config,
+            func=failing_operation,
+        )
+        assert success is False
+        assert isinstance(error, Exception)
+        assert "Test failure" in str(error)
 
         # Get the breaker from manager and check state
         breaker = circuit_breaker_manager.get_breaker("test_breaker_timeout", config)
@@ -283,17 +289,31 @@ class TestCircuitBreaker:
         # Wait for timeout
         await asyncio.sleep(0.2)
 
-        # Test successful operation after timeout
+        # Test successful operation after timeout (transitions to HALF_OPEN)
         async def successful_operation():
             return "success"
 
-        result = await call_with_breaker(
+        success, result = await call_with_breaker(
             breaker_name="test_breaker_timeout",
             config=config,
             func=successful_operation,
         )
 
+        assert success is True
         assert result == "success"
+        # After first success, circuit should be in HALF_OPEN state
+        assert breaker.state.value == "HALF_OPEN"
+
+        # Make another successful call to fully close the circuit
+        success, result = await call_with_breaker(
+            breaker_name="test_breaker_timeout",
+            config=config,
+            func=successful_operation,
+        )
+
+        assert success is True
+        assert result == "success"
+        # Now circuit should be CLOSED
         assert breaker.state.value == "CLOSED"
 
 
@@ -704,10 +724,11 @@ class TestIntegrationScenarios:
             return f"Success on attempt {attempt_count}"
 
         # Test with circuit breaker
-        result = await call_with_breaker(
+        success, result = await call_with_breaker(
             breaker_name="test_integration", config=config, func=flaky_operation
         )
 
+        assert success is True
         assert result == "Success on attempt 2"
         assert attempt_count == 2
 
@@ -1137,28 +1158,40 @@ class TestAsyncDatabaseWrites:
     @pytest.mark.asyncio
     async def test_async_database_write_queue(self):
         """Test async write queue management."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         optimizer = PerformanceOptimizer()
 
-        try:
-            # Queue multiple writes
-            write_ids = []
-            for i in range(5):
-                write_id = await optimizer.async_database_write(
-                    table="test_table", data={"id": str(uuid.uuid4()), "index": i}
-                )
-                write_ids.append(write_id)
+        # Mock the database pool to avoid real connection attempts
+        mock_pool = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.execute = AsyncMock()
+        mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_pool.close = AsyncMock()
 
-            assert len(write_ids) == 5
-            assert all(wid.startswith("write_") for wid in write_ids)
+        # Keep the patch active for the entire test including cleanup
+        with patch.object(optimizer, "_get_pool", return_value=mock_pool):
+            try:
+                # Queue multiple writes
+                write_ids = []
+                for i in range(5):
+                    write_id = await optimizer.async_database_write(
+                        table="test_table", data={"id": str(uuid.uuid4()), "index": i}
+                    )
+                    write_ids.append(write_id)
 
-            # Wait for background worker to process some items
-            await asyncio.sleep(0.1)
+                assert len(write_ids) == 5
+                assert all(wid.startswith("write_") for wid in write_ids)
 
-            # Background writer should be running
-            assert optimizer._background_writer is not None
-        finally:
-            # Cleanup background tasks
-            await optimizer.close()
+                # Wait for background worker to process some items
+                await asyncio.sleep(0.1)
+
+                # Background writer should be running
+                assert optimizer._background_writer is not None
+            finally:
+                # Cleanup background tasks (within patch context)
+                await optimizer.close()
 
 
 class TestBatchOperations:
@@ -1552,19 +1585,30 @@ class TestEdgeCasesAndErrorHandling:
     @pytest.mark.asyncio
     async def test_performance_metrics_queue_sizes(self):
         """Test performance metrics include queue sizes."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         optimizer = PerformanceOptimizer()
 
         try:
-            # Add some items to queues
-            await optimizer.async_database_write("test_table", {"id": "test1"})
-            await optimizer.async_database_write("test_table", {"id": "test2"})
+            # Mock the database pool to avoid real connection attempts
+            mock_pool = MagicMock()
+            mock_conn = MagicMock()
+            mock_conn.fetchval = AsyncMock(return_value=100)
+            mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_pool.close = AsyncMock()
 
-            # Get metrics
-            metrics = await optimizer.get_performance_metrics()
+            with patch.object(optimizer, "_get_pool", return_value=mock_pool):
+                # Add some items to queues (these will queue but not write to real DB)
+                await optimizer.async_database_write("test_table", {"id": "test1"})
+                await optimizer.async_database_write("test_table", {"id": "test2"})
 
-            # Should have queue size info if metrics available
-            if metrics:
-                assert "write_queue_size" in metrics or "batch_queue_size" in metrics
+                # Get metrics
+                metrics = await optimizer.get_performance_metrics()
+
+                # Should have queue size info if metrics available
+                if metrics:
+                    assert "write_queue_size" in metrics or "batch_queue_size" in metrics
         finally:
             # Cleanup background tasks
             await optimizer.close()
