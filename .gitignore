@@ -300,3 +300,22 @@ CLEANUP_*.md
 *observability_report.txt
 SYSTEM_DASHBOARD.md
 db_dumps/
+
+# Skills - Ignore third-party/bloated skills (only track our custom skills)
+# Keep: pr-review, agent-observability, agent-tracking, intelligence, log-execution, routing, _shared
+skills/skill-writer/
+skills/research/
+skills/claude-code-analyzer/
+skills/PDF Processing Pro/
+skills/tailwindcss/
+skills/shadcn-ui/
+skills/nextjs/
+skills/prompt-engineering-patterns/
+skills/git-advanced-workflows/
+skills/async-python-patterns/
+skills/api-design-principles/
+skills/architecture-patterns/
+skills/brainstorming/
+skills/remembering-conversations/
+skills/senior-architect/
+skills/systematic-debugging/
