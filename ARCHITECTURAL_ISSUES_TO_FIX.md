@@ -6,6 +6,66 @@
 
 ---
 
+## Long-Term Solution: ADR-001 Service Ownership Boundaries
+
+**Location**: `/Volumes/PRO-G40/Code/omniarchon/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md`
+
+**Status**: APPROVED - 8-week implementation plan in progress
+
+### Overview
+
+ADR-001 provides a comprehensive architectural solution that addresses **all five issues** documented below. The ADR establishes clear service ownership boundaries, configuration management patterns, and deployment strategies across the entire OmniNode platform.
+
+**⚠️ Important**: The band-aid fixes documented in this file are **temporary measures** to restore immediate functionality. All permanent solutions should follow the ADR-001 implementation plan.
+
+### Issue Mapping to ADR-001 Solutions
+
+| Issue | ADR-001 Solution | Implementation Phase |
+|-------|------------------|---------------------|
+| **Issue 1**: Docker Compose Anti-Pattern | **Phase 2**: Configuration Consolidation<br>- Single docker-compose.yml per repo<br>- Environment-based configuration (.env.dev/.staging/.prod)<br>- Pydantic Settings for validation | Weeks 3-4 |
+| **Issue 2**: Cross-Repository Boundaries | **Service Ownership Matrix**<br>- Clear ownership: omniarchon owns archon-* services<br>- omniclaude consumes via external dependencies<br>- Consul-based service discovery | Weeks 1-2 |
+| **Issue 3**: Hardcoded Configuration | **Pydantic Settings Framework**<br>- Type-safe configuration with validation<br>- Environment variable precedence<br>- No hardcoded values in code | Weeks 3-4 |
+| **Issue 4**: Service Health Dependencies | **Consul Service Discovery**<br>- Health check integration<br>- Automatic DNS resolution<br>- Dependency management | Weeks 5-6 |
+| **Issue 5**: Router Consumer Not Deployed | **Phase 3**: Service Relocation<br>- Move archon-router-consumer to omniclaude<br>- Proper ownership boundaries<br>- Independent deployment | Weeks 7-8 |
+
+### Implementation Timeline
+
+**Total Duration**: 8 weeks across 3 phases
+
+**Phase 1** (Weeks 1-2): Service Ownership & Discovery
+- Define ownership matrix
+- Implement Consul integration
+- Document external dependency patterns
+
+**Phase 2** (Weeks 3-4): Configuration Management
+- Consolidate docker-compose files
+- Implement Pydantic Settings
+- Create environment templates
+
+**Phase 3** (Weeks 5-8): Service Health & Relocation
+- Health check standardization
+- Relocate misplaced services
+- Validation and documentation
+
+### Key Benefits
+
+1. **Single Source of Truth**: Pydantic Settings replaces scattered configuration
+2. **Clear Boundaries**: Service ownership matrix prevents cross-repo confusion
+3. **Type Safety**: Configuration validation at startup prevents runtime errors
+4. **Service Discovery**: Consul eliminates hardcoded hostnames/ports
+5. **Maintainability**: Standardized patterns across all OmniNode repositories
+
+### Relationship to This Document
+
+This document (ARCHITECTURAL_ISSUES_TO_FIX.md) serves as:
+- **Immediate action tracker** for band-aid fixes to restore functionality
+- **Problem statement** documenting why ADR-001 is necessary
+- **Validation evidence** that ADR-001 addresses real production issues
+
+**Do not implement long-term solutions in this document** - refer to ADR-001 implementation plan.
+
+---
+
 ## Issue 1: Docker Compose Anti-Pattern
 
 ### Problem
@@ -263,6 +323,7 @@ omniclaude_archon_router_consumer   Up 2 minutes (healthy)
 ---
 
 ## Related Documents
+- **[ADR-001: Service Ownership Boundaries](../omniarchon/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md)** - Long-term architectural solution
 - [Agent System Remediation Plan](AGENT_SYSTEM_REMEDIATION_PLAN.md)
 - [Documentation Audit Report](DOCUMENTATION_AUDIT_REPORT_2025-11-04.md)
 - [Security Audit](SECURITY_AUDIT_HARDCODED_PASSWORDS.md)
@@ -272,9 +333,14 @@ omniclaude_archon_router_consumer   Up 2 minutes (healthy)
 ## Notes
 - This document was created during investigation of agent system failures
 - Cross-repository editing revealed deeper architectural issues
-- Proper fix requires architectural refactoring, not band-aids
+- **ADR-001 provides the proper architectural solution** - see mapping above
+- Band-aid fixes in this document are temporary until ADR-001 implementation
 - Following 12-factor app principles will prevent future issues
+- ADR-001 timeline: 8 weeks across 3 phases
 
 ---
 
-**Next Action:** Review with team and prioritize fixes based on risk/impact.
+**Next Action:**
+1. Apply band-aid fixes from Phase 1 to restore immediate functionality
+2. Begin ADR-001 Phase 1 implementation (Service Ownership & Discovery)
+3. Track long-term progress in ADR-001 implementation plan
