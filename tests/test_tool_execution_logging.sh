@@ -5,14 +5,18 @@
 
 set -euo pipefail
 
+# Detect project root dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 echo "=== Tool Execution Logging Test ==="
 echo ""
 
 # Configuration
 CORRELATION_ID=$(uuidgen)
 AGENT_NAME="test-agent"
-HOOK_SCRIPT="/Volumes/PRO-G40/Code/omniclaude/claude_hooks/post-tool-use-quality.sh"
-LOG_FILE="/Volumes/PRO-G40/Code/omniclaude/claude_hooks/logs/post-tool-use.log"
+HOOK_SCRIPT="$PROJECT_ROOT/claude_hooks/post-tool-use-quality.sh"
+LOG_FILE="$PROJECT_ROOT/claude_hooks/logs/post-tool-use.log"
 
 echo "Test Configuration:"
 echo "  Correlation ID: $CORRELATION_ID"
@@ -23,15 +27,15 @@ echo ""
 # Setup correlation context
 export CORRELATION_ID="$CORRELATION_ID"
 export AGENT_NAME="$AGENT_NAME"
-export PROJECT_PATH="/Volumes/PRO-G40/Code/omniclaude"
-export PROJECT_NAME="omniclaude"
+export PROJECT_PATH="$PROJECT_ROOT"
+export PROJECT_NAME="$(basename "$PROJECT_ROOT")"
 
 # Create test tool info JSON (simulating a Read tool call)
 TEST_TOOL_INFO=$(cat <<EOF
 {
   "tool_name": "Read",
   "tool_input": {
-    "file_path": "/Volumes/PRO-G40/Code/omniclaude/test_file.txt"
+    "file_path": "$PROJECT_ROOT/test_file.txt"
   },
   "tool_response": {
     "content": "test content",
@@ -45,7 +49,7 @@ EOF
 echo "Step 1: Writing correlation context..."
 python3 -c "
 import sys
-sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude/claude_hooks/lib')
+sys.path.insert(0, '$PROJECT_ROOT/claude_hooks/lib')
 from correlation_manager import set_correlation_id
 
 set_correlation_id(
@@ -84,8 +88,8 @@ echo ""
 echo "Step 6: Querying agent_actions table for test event..."
 
 # Source .env for PostgreSQL credentials
-if [[ -f "/Volumes/PRO-G40/Code/omniclaude/.env" ]]; then
-    source /Volumes/PRO-G40/Code/omniclaude/.env
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+    source "$PROJECT_ROOT/.env"
 fi
 
 QUERY_RESULT=$(PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -t -c "
