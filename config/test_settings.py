@@ -17,7 +17,40 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def test_settings_load():
-    """Test that settings load without errors."""
+    """
+    Test that settings load without errors.
+
+    Verifies comprehensive configuration framework functionality including:
+    - Settings initialization from environment variables
+    - Type safety for configuration values (int, bool, str)
+    - Helper method execution (DSN generation, effective values)
+    - Configuration validation for required services
+    - Sensitive value sanitization (passwords, API keys)
+    - Feature flag accessibility
+
+    Args:
+        None
+
+    Returns:
+        bool: True if all tests pass and settings load correctly,
+              False if any test fails or settings cannot be loaded
+
+    Raises:
+        Exception: Caught and printed if settings fail to load.
+                  Stack trace is displayed for debugging.
+
+    Example:
+        >>> success = test_settings_load()
+
+        ================================================================================
+        Testing Pydantic Settings Framework
+        ================================================================================
+
+        ✅ Settings loaded successfully!
+        ...
+        ✅ All tests passed!
+        >>> assert success
+    """
     print("\n" + "=" * 80)
     print("Testing Pydantic Settings Framework")
     print("=" * 80)
@@ -147,7 +180,47 @@ def test_settings_load():
 
 
 def test_validation():
-    """Test field validators."""
+    """
+    Test Pydantic field validators for configuration values.
+
+    Validates that Pydantic validators correctly enforce constraints on
+    configuration fields including:
+    - Port number range validation (1-65535)
+    - Quality threshold range validation (0.0-1.0)
+    - Proper rejection of invalid values
+    - Acceptance of valid values within constraints
+
+    Tests modify environment variables temporarily and restore original
+    values after completion.
+
+    Args:
+        None
+
+    Returns:
+        None: Prints test results to stdout. Success/failure indicated
+              by printed ✅/❌ symbols.
+
+    Raises:
+        Exception: Individual validation test failures are caught and
+                  reported as test results, not propagated.
+
+    Example:
+        >>> test_validation()
+
+        ================================================================================
+        Testing Field Validators
+        ================================================================================
+
+        Test 1: Port Validation
+          ✅ Valid port accepted: 5432
+          ✅ Invalid port rejected: ...
+
+        Test 2: Quality Threshold Validation
+          ✅ Valid threshold accepted: 0.7
+          ✅ Invalid threshold rejected: ...
+
+        ✅ Validation tests completed!
+    """
     print("\n" + "=" * 80)
     print("Testing Field Validators")
     print("=" * 80)
@@ -156,6 +229,8 @@ def test_validation():
 
     # Test port validation
     print("\nTest 1: Port Validation")
+    # Save original value
+    original_postgres_port = os.environ.get("POSTGRES_PORT")
     try:
         # Valid port
         os.environ["POSTGRES_PORT"] = "5432"
@@ -174,9 +249,17 @@ def test_validation():
 
     except Exception as e:
         print(f"  ❌ Port validation test failed: {e}")
+    finally:
+        # Restore original value
+        if original_postgres_port is not None:
+            os.environ["POSTGRES_PORT"] = original_postgres_port
+        else:
+            os.environ.pop("POSTGRES_PORT", None)
 
     # Test quality threshold validation
     print("\nTest 2: Quality Threshold Validation")
+    # Save original value
+    original_min_quality = os.environ.get("MIN_PATTERN_QUALITY")
     try:
         # Valid threshold
         os.environ["MIN_PATTERN_QUALITY"] = "0.7"
@@ -195,10 +278,12 @@ def test_validation():
 
     except Exception as e:
         print(f"  ❌ Quality threshold validation test failed: {e}")
-
-    # Reset environment
-    os.environ.pop("POSTGRES_PORT", None)
-    os.environ.pop("MIN_PATTERN_QUALITY", None)
+    finally:
+        # Restore original value
+        if original_min_quality is not None:
+            os.environ["MIN_PATTERN_QUALITY"] = original_min_quality
+        else:
+            os.environ.pop("MIN_PATTERN_QUALITY", None)
 
     print("\n" + "=" * 80)
     print("✅ Validation tests completed!")

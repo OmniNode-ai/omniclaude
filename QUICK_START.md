@@ -3,26 +3,21 @@
 ## TL;DR
 
 ```bash
-# Development
-cp .env.dev .env.dev.local
-nano .env.dev.local  # Set passwords
-docker-compose --env-file .env.dev.local up -d
+# Setup (current single-environment configuration)
+cp .env.example .env
+nano .env  # Set passwords and API keys
+./scripts/validate-env.sh .env
+docker-compose up -d
 
-# Test
-cp .env.test .env.test.local
-nano .env.test.local  # Set password
-docker-compose --env-file .env.test.local up -d --profile test
-
-# Production
-cp .env.prod .env.prod.local
-nano .env.prod.local  # Configure everything
-./scripts/validate-env.sh .env.prod.local
-docker-compose --env-file .env.prod.local up -d
+# Future: For multiple environments (when .env.dev, .env.test, .env.prod are added):
+# cp .env.example .env.dev
+# nano .env.dev
+# docker-compose --env-file .env.dev up -d
 ```
 
 ## Required Configuration
 
-Before first run, set these in your `.env.X.local` file:
+Before first run, set these in your `.env` file:
 
 ```bash
 # MUST CHANGE
@@ -31,37 +26,45 @@ APP_POSTGRES_PASSWORD="your-app-db-password"
 SECRET_KEY="$(openssl rand -base64 32)"
 GRAFANA_ADMIN_PASSWORD="your-grafana-password"
 
-# Verify
-KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"  # Dev
-POSTGRES_HOST="192.168.86.200"                   # Dev
+# VERIFY these match your infrastructure
+KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"
+POSTGRES_HOST="192.168.86.200"
 ```
 
 ## Common Commands
 
 ```bash
-# Start services
-docker-compose --env-file .env.dev.local up -d
+# Start services (uses .env automatically)
+docker-compose up -d
 
 # View logs
-docker-compose --env-file .env.dev.local logs -f app
+docker-compose logs -f app
 
 # Stop services
-docker-compose --env-file .env.dev.local down
+docker-compose down
 
 # Restart single service
-docker-compose --env-file .env.dev.local restart app
+docker-compose restart app
 
 # Rebuild and restart
-docker-compose --env-file .env.dev.local up -d --build app
+docker-compose up -d --build app
 
 # Check status
-docker-compose --env-file .env.dev.local ps
+docker-compose ps
 
-# Validate before deploy
-./scripts/validate-env.sh .env.dev.local
+# Validate configuration
+./scripts/validate-env.sh .env
 ```
 
-## Environment Differences
+## Current Configuration
+
+**Single Environment Setup** (current):
+- Kafka: Remote (192.168.86.200:29092)
+- PostgreSQL: Remote (192.168.86.200:5436)
+- Monitoring: Optional (--profile monitoring)
+- Log Level: Configurable in `.env`
+
+**Future: Multi-Environment Support** (when .env.dev, .env.test, .env.prod are added):
 
 | Feature | Development | Test | Production |
 |---------|-------------|------|------------|
@@ -75,13 +78,16 @@ docker-compose --env-file .env.dev.local ps
 
 ```bash
 # Validation failed?
-./scripts/validate-env.sh .env.dev.local
+./scripts/validate-env.sh .env
 
 # Service won't start?
-docker-compose --env-file .env.dev.local config
+docker-compose config
 
 # Database connection issues?
-docker exec -it omniclaude_dev_postgres psql -U omniclaude
+source .env && psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}
+
+# View service logs
+docker-compose logs -f app
 
 # View full documentation
 cat deployment/README.md
@@ -89,21 +95,24 @@ cat deployment/README.md
 
 ## Files
 
-- `.env.dev` - Development template
-- `.env.test` - Test template
-- `.env.prod` - Production template
+**Current**:
+- `.env.example` - Environment template (copy to `.env`)
+- `.env` - Your local configuration (gitignored)
 - `deployment/docker-compose.yml` - Consolidated compose
 - `deployment/README.md` - Full documentation
 - `scripts/validate-env.sh` - Configuration validator
 
+**Future** (for multi-environment support):
+- `.env.dev`, `.env.test`, `.env.prod` - Environment-specific templates
+
 ## Security Checklist
 
-- [ ] Copy `.env.X` to `.env.X.local`
+- [ ] Copy `.env.example` to `.env`
 - [ ] Change all passwords from placeholders
-- [ ] Generate strong `SECRET_KEY`
-- [ ] Never commit `.env.X.local` to git
-- [ ] Validate with `./scripts/validate-env.sh`
-- [ ] Use separate credentials per environment
+- [ ] Generate strong `SECRET_KEY` (use `openssl rand -base64 32`)
+- [ ] Never commit `.env` to git (already in .gitignore)
+- [ ] Validate with `./scripts/validate-env.sh .env`
+- [ ] Use separate credentials per environment (when multi-env is needed)
 
 ## Help
 

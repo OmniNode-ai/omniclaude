@@ -78,6 +78,51 @@ These services are provided by `omninode_bridge` and `omniarchon` repositories.
 
 ## Environment Configuration
 
+### PostgreSQL Environment Variable Convention
+
+**IMPORTANT**: This compose file uses **TWO SETS** of PostgreSQL variables with distinct purposes:
+
+#### 1. APP_POSTGRES_* → Local Application Database
+
+Used by: `app`, `postgres` services
+
+```bash
+# Local containerized PostgreSQL database for OmniClaude application
+APP_POSTGRES_USER=omniclaude
+APP_POSTGRES_PASSWORD=<set_in_env>
+APP_POSTGRES_DATABASE=omniclaude
+APP_POSTGRES_HOST=postgres
+APP_POSTGRES_INTERNAL_PORT=5432
+```
+
+**Purpose**: Application-specific data storage, runs as a containerized PostgreSQL service within Docker.
+
+#### 2. POSTGRES_* → Shared Bridge Database
+
+Used by: `agent-observability-consumer`, `routing-adapter`, `archon-router-consumer`, `test-runner`
+
+```bash
+# Remote shared database for cross-service observability
+POSTGRES_HOST=192.168.86.200
+POSTGRES_PORT=5436
+POSTGRES_DATABASE=omninode_bridge
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<set_in_env>
+```
+
+**Purpose**: Cross-service observability, agent routing decisions, manifest injections, and all event-driven intelligence tracking. This database is shared across all OmniNode repositories.
+
+#### Why Two Sets?
+
+- **Local app database** (`APP_POSTGRES_*`): Isolated application data that doesn't need to be shared
+- **Shared bridge database** (`POSTGRES_*`): Centralized observability and intelligence data that multiple services and repositories need to access
+
+This separation ensures:
+- ✅ Clear separation of concerns
+- ✅ Application data isolation
+- ✅ Shared observability across all OmniNode services
+- ✅ No naming conflicts between local and shared databases
+
 ### Required Variables
 
 See `../.env.example` for complete list. Key variables:
@@ -86,7 +131,15 @@ See `../.env.example` for complete list. Key variables:
 # Infrastructure (remote services)
 POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
+POSTGRES_DATABASE=omninode_bridge
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<set_in_env>
 KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+
+# Local application database
+APP_POSTGRES_USER=omniclaude
+APP_POSTGRES_PASSWORD=<set_in_env>
+APP_POSTGRES_DATABASE=omniclaude
 
 # API Keys (get from provider dashboards)
 GEMINI_API_KEY=your_key_here
@@ -185,12 +238,18 @@ docker-compose restart
 ### Database Access
 
 ```bash
-# Connect to application database
-docker-compose exec postgres psql -U postgres -d omniclaude
+# Connect to LOCAL application database (APP_POSTGRES_*)
+docker-compose exec postgres psql -U omniclaude -d omniclaude
 
-# Connect to shared database (using .env variables)
+# Connect to SHARED bridge database (POSTGRES_*)
+# Using .env variables - requires POSTGRES_PASSWORD to be set
 source ../.env
 psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE
+
+# Example: Query agent routing decisions from shared database
+source ../.env
+psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE \
+  -c "SELECT * FROM agent_routing_decisions ORDER BY created_at DESC LIMIT 10;"
 ```
 
 ### Kafka Operations

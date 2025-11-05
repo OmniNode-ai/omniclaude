@@ -54,7 +54,6 @@ repos:
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
         stages: [pre-commit]
-        pass_filenames: false
 
       - id: bandit-security
         name: bandit (security scanner - match CI)

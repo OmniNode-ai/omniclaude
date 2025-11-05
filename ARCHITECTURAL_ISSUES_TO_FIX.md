@@ -8,7 +8,7 @@
 
 ## Long-Term Solution: ADR-001 Service Ownership Boundaries
 
-**Location**: `/Volumes/PRO-G40/Code/omniarchon/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md`
+**Location**: [omniarchon ADR-001](https://github.com/OmniNode-ai/omniarchon/blob/main/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md) (sibling repository)
 
 **Status**: APPROVED - 8-week implementation plan in progress
 
@@ -323,7 +323,7 @@ omniclaude_archon_router_consumer   Up 2 minutes (healthy)
 ---
 
 ## Related Documents
-- **[ADR-001: Service Ownership Boundaries](../omniarchon/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md)** - Long-term architectural solution
+- **[ADR-001: Service Ownership Boundaries](https://github.com/OmniNode-ai/omniarchon/blob/main/docs/architecture/ADR-001-SERVICE-OWNERSHIP-BOUNDARIES.md)** - Long-term architectural solution (omniarchon repository)
 - [Agent System Remediation Plan](AGENT_SYSTEM_REMEDIATION_PLAN.md)
 - [Documentation Audit Report](DOCUMENTATION_AUDIT_REPORT_2025-11-04.md)
 - [Security Audit](SECURITY_AUDIT_HARDCODED_PASSWORDS.md)

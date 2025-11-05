@@ -37,6 +37,7 @@ Implementation:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -433,6 +434,54 @@ class Settings(BaseSettings):
         return str(home_dir / ".claude" / "agent-definitions")
 
     # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
+
+    def __init__(self, **values):
+        """
+        Initialize settings with environment-specific .env file support.
+
+        This method implements multi-file loading with the following priority:
+        1. System environment variables (highest priority - Pydantic default)
+        2. .env.{ENVIRONMENT} file (environment-specific overrides)
+        3. .env file (default/fallback)
+
+        Environment-specific files are automatically loaded when the ENVIRONMENT
+        environment variable is set (e.g., ENVIRONMENT=test loads .env.test).
+
+        Note: Pydantic loads files in order, with LATER files having higher priority.
+        So we load .env first, then .env.{ENVIRONMENT} to allow overrides.
+
+        Example:
+            >>> # With ENVIRONMENT=test, loads .env then .env.test (override)
+            >>> os.environ['ENVIRONMENT'] = 'test'
+            >>> settings = Settings()
+            >>> # Without ENVIRONMENT, loads only .env
+            >>> del os.environ['ENVIRONMENT']
+            >>> settings = Settings()
+        """
+        env_files: list[str | Path] = []
+
+        # Always include default .env as base
+        env_files.append(Path(".env"))
+
+        # Add environment-specific file for overrides (loaded last = highest priority)
+        env_name = os.getenv("ENVIRONMENT")
+        if env_name:
+            candidate = Path(f".env.{env_name}")
+            if candidate.exists():
+                env_files.append(candidate)
+                logger.info(f"Loading environment-specific config: {candidate}")
+            else:
+                logger.debug(
+                    f"Environment file .env.{env_name} not found, " f"using .env only"
+                )
+
+        # Initialize with environment file list
+        # System environment variables still take highest priority (Pydantic default)
+        super().__init__(_env_file=tuple(env_files) if env_files else None, **values)
+
+    # =========================================================================
     # PYDANTIC SETTINGS CONFIGURATION
     # =========================================================================
 
@@ -476,8 +525,9 @@ class Settings(BaseSettings):
             'postgresql+asyncpg://postgres:password@192.168.86.200:5436/omninode_bridge'
         """
         scheme = "postgresql+asyncpg" if async_driver else "postgresql"
+        password = self.get_effective_postgres_password()
         return (
-            f"{scheme}://{self.postgres_user}:{self.postgres_password}"
+            f"{scheme}://{self.postgres_user}:{password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
         )
 

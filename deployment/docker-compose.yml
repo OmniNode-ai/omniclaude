@@ -9,6 +9,28 @@
 #
 # See deployment/README.md for detailed instructions
 # ==============================================================================
+#
+# PostgreSQL Environment Variable Convention:
+# -------------------------------------------
+# This compose file uses TWO sets of PostgreSQL variables with distinct purposes:
+#
+# 1. APP_POSTGRES_* → Local application database (containerized PostgreSQL)
+#    - Used by: app, postgres services
+#    - Database: omniclaude (local, containerized)
+#    - Example: APP_POSTGRES_USER=omniclaude, APP_POSTGRES_PASSWORD=<set_in_env>
+#
+# 2. POSTGRES_* → Shared bridge database (remote infrastructure)
+#    - Used by: agent-observability-consumer, routing-adapter, archon-router-consumer, test-runner
+#    - Database: omninode_bridge (shared, 192.168.86.200:5436)
+#    - Example: POSTGRES_USER=postgres, POSTGRES_PASSWORD=<set_in_env>
+#
+# WHY TWO SETS?
+# - Local app database (APP_POSTGRES_*): Application-specific data, runs in Docker
+# - Shared bridge database (POSTGRES_*): Cross-service observability, agent routing,
+#   manifest injections, and all event-driven intelligence tracking
+#
+# See deployment/README.md for detailed configuration guide.
+# ==============================================================================
 
 services:
   # ============================================================================
@@ -29,7 +51,8 @@ services:
       - "${APP_PORT:-8000}:8000"
       - "${APP_METRICS_PORT:-8001}:8001"
     environment:
-      # Database configuration
+      # Database configuration - LOCAL APP DATABASE
+      # Uses APP_POSTGRES_* variables for local containerized PostgreSQL
       - DATABASE_URL=postgresql://${APP_POSTGRES_USER:-omniclaude}:${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}@${APP_POSTGRES_HOST:-postgres}:${APP_POSTGRES_INTERNAL_PORT:-5432}/${APP_POSTGRES_DATABASE:-omniclaude}
       - POSTGRES_HOST=${APP_POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${APP_POSTGRES_INTERNAL_PORT:-5432}
@@ -103,7 +126,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set}
       - KAFKA_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-agent-observability-postgres}
 
-      # PostgreSQL configuration (connects to bridge database)
+      # PostgreSQL configuration - SHARED BRIDGE DATABASE
+      # Uses POSTGRES_* variables for remote omninode_bridge database (192.168.86.200:5436)
       - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
       - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
       - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
@@ -160,7 +184,8 @@ services:
       - KAFKA_COMPLETED_TOPIC=${KAFKA_ROUTING_COMPLETED_TOPIC:-agent.routing.completed.v1}
       - KAFKA_FAILED_TOPIC=${KAFKA_ROUTING_FAILED_TOPIC:-agent.routing.failed.v1}
 
-      # PostgreSQL configuration
+      # PostgreSQL configuration - SHARED BRIDGE DATABASE
+      # Uses POSTGRES_* variables for remote omninode_bridge database (192.168.86.200:5436)
       - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
       - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
       - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
@@ -179,7 +204,7 @@ services:
       - CACHE_TTL_SECONDS=${ROUTING_CACHE_TTL:-3600}
       - MAX_RECOMMENDATIONS=${MAX_RECOMMENDATIONS:-5}
     volumes:
-      - ${AGENT_DEFINITIONS_HOST_PATH:-~/.claude/agent-definitions}:/agent-definitions:ro
+      - ${AGENT_DEFINITIONS_HOST_PATH:-$HOME/.claude/agent-definitions}:/agent-definitions:ro
     networks:
       - app_network
     healthcheck:
@@ -218,7 +243,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set}
       - KAFKA_GROUP_ID=${KAFKA_ROUTER_GROUP_ID:-agent-router-service}
 
-      # PostgreSQL configuration
+      # PostgreSQL configuration - SHARED BRIDGE DATABASE
+      # Uses POSTGRES_* variables for remote omninode_bridge database (192.168.86.200:5436)
       - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
       - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
       - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
@@ -231,7 +257,7 @@ services:
       # Service configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
-      - ${AGENT_DEFINITIONS_HOST_PATH:-~/.claude/agent-definitions}:/agent-definitions:ro
+      - ${AGENT_DEFINITIONS_HOST_PATH:-$HOME/.claude/agent-definitions}:/agent-definitions:ro
     networks:
       - app_network
     healthcheck:
@@ -261,6 +287,8 @@ services:
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
     environment:
+      # Local App Database Configuration
+      # Uses APP_POSTGRES_* variables for local containerized PostgreSQL
       - POSTGRES_USER=${APP_POSTGRES_USER:-omniclaude}
       - POSTGRES_PASSWORD=${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}
       - POSTGRES_DB=${APP_POSTGRES_DATABASE:-omniclaude}
@@ -268,7 +296,7 @@ services:
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ${POSTGRES_INIT_SCRIPT:-./scripts/init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ${POSTGRES_INIT_SCRIPT:-../scripts/init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - app_network
     healthcheck:
@@ -374,6 +402,8 @@ services:
     container_name: ${CONTAINER_PREFIX:-omniclaude}_test_runner
     environment:
       - KAFKA_BROKERS=${KAFKA_BOOTSTRAP_SERVERS:-redpanda:9092}
+      # PostgreSQL configuration - SHARED BRIDGE DATABASE
+      # Uses POSTGRES_* variables for testing against shared database
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
       - POSTGRES_PORT=${POSTGRES_INTERNAL_PORT:-5432}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}

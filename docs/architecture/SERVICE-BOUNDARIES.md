@@ -109,7 +109,7 @@ KAFKA_REQUEST_TIMEOUT_MS=5000
 **Docker Container**: `omniclaude_archon_router_consumer`
 
 **Dependencies**:
-- External: Kafka (192.168.86.200:29092), PostgreSQL (192.168.86.200:5436)
+- External: Kafka (`${KAFKA_BOOTSTRAP_SERVERS}`), PostgreSQL (`${POSTGRES_HOST}:${POSTGRES_PORT}`)
 - Internal: Agent registry (`~/.claude/agent-definitions/`)
 
 **Kafka Topics**:
@@ -118,16 +118,16 @@ KAFKA_REQUEST_TIMEOUT_MS=5000
 
 **Configuration**:
 ```bash
-# docker-compose.yml
+# docker-compose.yml (uses .env variables)
 services:
   archon-router-consumer:
     build:
       context: .
       dockerfile: deployment/Dockerfile.router-consumer
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092
-      - POSTGRES_HOST=192.168.86.200
-      - POSTGRES_PORT=5436
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}  # From .env
+      - POSTGRES_HOST=${POSTGRES_HOST}                      # From .env
+      - POSTGRES_PORT=${POSTGRES_PORT}                      # From .env
 ```
 
 **Ports**: N/A (Kafka consumer only)
@@ -160,7 +160,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ### 1. Archon Intelligence Service
 
 **Owner**: omniarchon repository
-**Endpoint**: `http://192.168.86.101:8053`
+**Endpoint**: `${ARCHON_INTELLIGENCE_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
 **Purpose**: Intelligence coordination and event processing
@@ -191,7 +191,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ### 2. Archon Search Service
 
 **Owner**: omniarchon repository
-**Endpoint**: `http://192.168.86.101:8055`
+**Endpoint**: `${ARCHON_SEARCH_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
 **Purpose**: Full-text and semantic search across patterns and code
@@ -215,7 +215,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ### 3. Archon Bridge Service
 
 **Owner**: omniarchon repository
-**Endpoint**: `http://192.168.86.101:8054`
+**Endpoint**: `${ARCHON_BRIDGE_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
 **Purpose**: PostgreSQL connector with query optimization
@@ -234,7 +234,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ### 4. Kafka/Redpanda Event Bus
 
 **Owner**: Shared infrastructure (deployed separately)
-**Endpoint**: `192.168.86.200:29092` (external) / `omninode-bridge-redpanda:9092` (Docker internal)
+**Endpoint**: `${KAFKA_BOOTSTRAP_SERVERS}` (see `.env` for context-specific value)
 **Access Pattern**: Kafka protocol
 
 **Purpose**: Distributed event bus for all intelligence communication
@@ -259,21 +259,24 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 
 **Configuration in omniclaude**:
 ```bash
-# .env configuration
+# .env configuration (context-specific)
 # For Docker services (internal port)
 KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092
 
 # For host scripts (external port)
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+KAFKA_BOOTSTRAP_SERVERS=${KAFKA_REMOTE_HOST}:29092  # See .env.example
+
+# For remote shell (when SSH'd into server)
+KAFKA_BOOTSTRAP_SERVERS=localhost:29092
 ```
 
-**Admin UI**: `http://192.168.86.200:8080` (Redpanda Console)
+**Admin UI**: See `.env` for `KAFKA_ADMIN_UI_URL` (typically port 8080)
 
 **Port Reference**:
 | Context | Bootstrap Servers | Port | Use Case |
 |---------|------------------|------|----------|
 | **Docker services** | `omninode-bridge-redpanda:9092` | 9092 | Container-to-container (router consumer) |
-| **Host scripts** | `192.168.86.200:29092` | 29092 | Development scripts, testing |
+| **Host scripts** | `${KAFKA_REMOTE_HOST}:29092` | 29092 | Development scripts, testing |
 | **Remote shell** | `localhost:29092` | 29092 | SSH'd into remote server |
 
 ---
@@ -281,7 +284,7 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 ### 5. PostgreSQL Database
 
 **Owner**: Shared infrastructure (deployed separately)
-**Endpoint**: `192.168.86.200:5436` (external) / `omninode-bridge-postgres:5432` (Docker internal)
+**Endpoint**: `${POSTGRES_HOST}:${POSTGRES_PORT}` (see `.env`)
 **Access Pattern**: PostgreSQL protocol (direct connection)
 
 **Purpose**: Persistent storage for agent execution, routing decisions, and observability data
@@ -299,11 +302,12 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 **Configuration in omniclaude**:
 ```bash
 # .env configuration (ALWAYS source before using)
-POSTGRES_HOST=192.168.86.200
-POSTGRES_PORT=5436
-POSTGRES_DATABASE=omninode_bridge
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=<set_in_env>  # NEVER hardcode
+# See .env.example for default values
+POSTGRES_HOST=${POSTGRES_HOST}          # Typically: remote server IP
+POSTGRES_PORT=${POSTGRES_PORT}          # Typically: 5436 (external) or 5432 (internal)
+POSTGRES_DATABASE=${POSTGRES_DATABASE}  # Database name
+POSTGRES_USER=${POSTGRES_USER}          # Database user
+POSTGRES_PASSWORD=<set_in_env>          # NEVER hardcode - set in .env
 ```
 
 **Usage**:
@@ -324,7 +328,7 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 ### 6. Qdrant Vector Database
 
 **Owner**: Deployed locally in omniclaude (but patterns managed by omniarchon)
-**Endpoint**: `http://localhost:6333`
+**Endpoint**: `${QDRANT_URL}` (see `.env`)
 **Access Pattern**: HTTP REST API
 
 **Purpose**: Vector storage for pattern discovery and semantic search
@@ -336,10 +340,10 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 
 **Configuration in omniclaude**:
 ```bash
-# .env configuration
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-QDRANT_URL=http://localhost:6333
+# .env configuration (see .env.example)
+QDRANT_HOST=${QDRANT_HOST}    # Typically: localhost (local deployment)
+QDRANT_PORT=${QDRANT_PORT}    # Typically: 6333
+QDRANT_URL=${QDRANT_URL}      # Full URL for HTTP access
 ```
 
 **Note**: While Qdrant runs locally in omniclaude's Docker, the **patterns are populated and managed by omniarchon**. omniclaude only reads from these collections.
@@ -367,14 +371,14 @@ omniclaude uses **environment-based service discovery** following 12-factor app 
 # Docker services use internal port (9092)
 # Host scripts use external port (29092)
 KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # For Docker
-# KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092         # For host scripts
+# KAFKA_BOOTSTRAP_SERVERS=${KAFKA_REMOTE_HOST}:29092   # For host scripts (see .env.example)
 
 # PostgreSQL Database
-POSTGRES_HOST=192.168.86.200
-POSTGRES_PORT=5436
+POSTGRES_HOST=<see .env.example>       # Remote server IP
+POSTGRES_PORT=<see .env.example>       # External port (typically 5436)
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=<your_password_here>  # NEVER commit real passwords
+POSTGRES_PASSWORD=<set_in_env>         # NEVER commit real passwords
 
 # Qdrant Vector Database (local)
 QDRANT_HOST=localhost
@@ -387,9 +391,9 @@ QDRANT_URL=http://localhost:6333
 # Note: Accessed primarily via Kafka events
 # Direct HTTP used only for health checks
 
-ARCHON_INTELLIGENCE_URL=http://192.168.86.101:8053
-ARCHON_SEARCH_URL=http://192.168.86.101:8055
-ARCHON_BRIDGE_URL=http://192.168.86.101:8054
+ARCHON_INTELLIGENCE_URL=<see .env.example>  # Archon server IP and port
+ARCHON_SEARCH_URL=<see .env.example>        # Archon server IP and port
+ARCHON_BRIDGE_URL=<see .env.example>        # Archon server IP and port
 
 # ============================================
 # FEATURE FLAGS
@@ -418,14 +422,32 @@ echo "KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}"
 
 ### DNS Resolution
 
-For Kafka hostname resolution, `/etc/hosts` must contain:
+**For Docker Services**: No `/etc/hosts` configuration required
+- External network references enable native service discovery
+- Docker network automatically resolves `omninode-bridge-redpanda:9092`, `omninode-bridge-postgres:5432`, etc.
+- Services communicate directly via Docker DNS
+
+**For Host Scripts**: `/etc/hosts` entries required
+
+When running scripts/commands on the host machine (outside Docker), add these entries to `/etc/hosts`:
 
 ```bash
-# /etc/hosts entries (required for Kafka broker discovery)
-192.168.86.200 omninode-bridge-redpanda
-192.168.86.200 omninode-bridge-consul
-192.168.86.200 omninode-bridge-postgres
+# /etc/hosts entries (required for host scripts accessing Kafka/PostgreSQL)
+# Replace IP address with value from your .env POSTGRES_HOST/KAFKA_REMOTE_HOST
+<your_remote_server_ip> omninode-bridge-redpanda
+<your_remote_server_ip> omninode-bridge-consul
+<your_remote_server_ip> omninode-bridge-postgres
+
+# Example (if remote server is 192.168.86.200):
+# 192.168.86.200 omninode-bridge-redpanda
+# 192.168.86.200 omninode-bridge-consul
+# 192.168.86.200 omninode-bridge-postgres
 ```
+
+**Why the difference?**
+- Docker services use external network references → automatic DNS resolution
+- Host scripts run outside Docker network → manual DNS configuration needed
+- Kafka uses two-step broker discovery protocol requiring hostname resolution
 
 ---
 
@@ -445,9 +467,10 @@ omniclaude uses three communication patterns with external services:
 
 **Example**:
 ```bash
-# Health checks
-curl http://192.168.86.101:8053/health  # Archon Intelligence
-curl http://localhost:6333/collections   # Qdrant
+# Health checks (load .env first to get service URLs)
+source .env
+curl ${ARCHON_INTELLIGENCE_URL}/health  # Archon Intelligence
+curl ${QDRANT_URL}/collections          # Qdrant
 ```
 
 **NOT USED FOR**: Primary intelligence queries (use Kafka instead)
@@ -525,7 +548,7 @@ omniclaude receives manifest
 
 **Used For**: Agent execution logging and historical queries
 
-**Services**: PostgreSQL (192.168.86.200:5436)
+**Services**: PostgreSQL (`${POSTGRES_HOST}:${POSTGRES_PORT}` - see `.env`)
 
 **Access Pattern**: Direct PostgreSQL protocol connection
 
@@ -702,17 +725,17 @@ GEMINI_API_KEY=actual_key_here
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXTERNAL DEPENDENCIES                         │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Kafka/Redpanda (192.168.86.200:29092)                   │  │
+│  │  Kafka/Redpanda (${KAFKA_BOOTSTRAP_SERVERS})             │  │
 │  │    - Event bus for all intelligence communication        │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  PostgreSQL (192.168.86.200:5436)                        │  │
+│  │  PostgreSQL (${POSTGRES_HOST}:${POSTGRES_PORT})          │  │
 │  │    - Agent execution logging                             │  │
 │  │    - Routing decisions                                   │  │
 │  │    - Manifest injections                                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Qdrant (localhost:6333) - LOCALLY DEPLOYED              │  │
+│  │  Qdrant (${QDRANT_URL}) - LOCALLY DEPLOYED               │  │
 │  │    - Pattern storage (managed by omniarchon)             │  │
 │  │    - Vector search                                       │  │
 │  └───────────────────────────────────────────────────────────┘  │
@@ -723,17 +746,17 @@ GEMINI_API_KEY=actual_key_here
 ┌─────────────────────────────────────────────────────────────────┐
 │                      OMNIARCHON OWNS                             │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Intelligence (192.168.86.101:8053)               │  │
+│  │  Archon Intelligence (${ARCHON_INTELLIGENCE_URL})        │  │
 │  │    - Intelligence coordination                           │  │
 │  │    - Pattern discovery orchestration                     │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Search (192.168.86.101:8055)                     │  │
+│  │  Archon Search (${ARCHON_SEARCH_URL})                    │  │
 │  │    - Full-text search                                    │  │
 │  │    - Semantic search                                     │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Bridge (192.168.86.101:8054)                     │  │
+│  │  Archon Bridge (${ARCHON_BRIDGE_URL})                    │  │
 │  │    - PostgreSQL connector                                │  │
 │  │    - Query optimization                                  │  │
 │  └───────────────────────────────────────────────────────────┘  │
@@ -811,13 +834,16 @@ GEMINI_API_KEY=actual_key_here
 
 **Diagnosis**:
 ```bash
-# Check service health
-curl http://192.168.86.101:8053/health  # Archon Intelligence
-curl http://192.168.86.101:8055/health  # Archon Search
-curl http://localhost:6333/collections   # Qdrant
+# Load environment variables
+source .env
 
-# Check Kafka connectivity
-kcat -L -b 192.168.86.200:29092
+# Check service health (using env vars)
+curl ${ARCHON_INTELLIGENCE_URL}/health  # Archon Intelligence
+curl ${ARCHON_SEARCH_URL}/health        # Archon Search
+curl ${QDRANT_URL}/collections          # Qdrant
+
+# Check Kafka connectivity (using env vars)
+kcat -L -b ${KAFKA_BOOTSTRAP_SERVERS}
 
 # Run comprehensive health check
 ./scripts/health_check.sh
@@ -825,8 +851,8 @@ kcat -L -b 192.168.86.200:29092
 
 **Resolution**:
 1. Verify services are running: `docker ps | grep archon`
-2. Check network connectivity: `ping 192.168.86.101`
-3. Verify `/etc/hosts` entries for Kafka
+2. Check network connectivity: `ping ${ARCHON_INTELLIGENCE_URL%%:*}` (extract host from URL)
+3. Verify `/etc/hosts` entries (only needed for host scripts, not Docker services)
 4. Check service logs: `docker logs archon-intelligence`
 
 ---
@@ -905,12 +931,15 @@ resources:
 
 **Diagnosis**:
 ```bash
-# Check Qdrant collections
-curl http://localhost:6333/collections | jq
+# Load environment variables
+source .env
+
+# Check Qdrant collections (using env vars)
+curl ${QDRANT_URL}/collections | jq
 
 # Check collection counts
-curl http://localhost:6333/collections/execution_patterns | jq '.result.points_count'
-curl http://localhost:6333/collections/code_patterns | jq '.result.points_count'
+curl ${QDRANT_URL}/collections/execution_patterns | jq '.result.points_count'
+curl ${QDRANT_URL}/collections/code_patterns | jq '.result.points_count'
 
 # Check agent history for query times
 python3 agents/lib/agent_history_browser.py --limit 20
