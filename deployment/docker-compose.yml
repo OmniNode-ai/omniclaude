@@ -1,6 +1,14 @@
-# OmniClaude Production-Ready Docker Compose Stack
-# Includes application, database, monitoring, and observability components
-# Security-hardened with health checks, resource limits, and network segmentation
+# OmniClaude Consolidated Docker Compose Stack
+# ==============================================================================
+# Single compose file with environment-specific configuration via .env files
+#
+# Usage:
+#   Development: docker-compose --env-file .env.dev up -d
+#   Testing:     docker-compose --env-file .env.test up -d --profile test
+#   Production:  docker-compose --env-file .env.prod up -d
+#
+# See deployment/README.md for detailed instructions
+# ==============================================================================
 
 services:
   # ============================================================================
@@ -14,38 +22,35 @@ services:
         BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
         VERSION: ${VERSION:-0.1.0}
-      # cache_from disabled for CI - enable with GHCR if needed:
-      # cache_from:
-      #   - ghcr.io/omninode-ai/omniclaude:latest
     image: omniclaude:${VERSION:-latest}
-    container_name: omniclaude_app
-    restart: unless-stopped
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_app
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "8000:8000"  # Application API
-      - "8001:8001"  # Metrics endpoint
+      - "${APP_PORT:-8000}:8000"
+      - "${APP_METRICS_PORT:-8001}:8001"
     environment:
       # Database configuration
-      - DATABASE_URL=postgresql://omniclaude:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}@postgres:5432/omniclaude
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
-      - POSTGRES_DATABASE=omniclaude
+      - DATABASE_URL=postgresql://${APP_POSTGRES_USER:-omniclaude}:${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}@${APP_POSTGRES_HOST:-postgres}:${APP_POSTGRES_INTERNAL_PORT:-5432}/${APP_POSTGRES_DATABASE:-omniclaude}
+      - POSTGRES_HOST=${APP_POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${APP_POSTGRES_INTERNAL_PORT:-5432}
+      - POSTGRES_USER=${APP_POSTGRES_USER:-omniclaude}
+      - POSTGRES_PASSWORD=${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}
+      - POSTGRES_DATABASE=${APP_POSTGRES_DATABASE:-omniclaude}
 
       # Valkey configuration (Redis-compatible)
-      - REDIS_URL=redis://valkey:6379/0
+      - REDIS_URL=redis://${VALKEY_HOST:-valkey}:${VALKEY_INTERNAL_PORT:-6379}/${VALKEY_DB:-0}
 
       # Application configuration
-      - APP_ENV=production
+      - APP_ENV=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in environment}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
 
       # OpenTelemetry configuration
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-      - OTEL_SERVICE_NAME=omniclaude
-      - OTEL_TRACES_EXPORTER=otlp
-      - OTEL_METRICS_EXPORTER=otlp
-      - OTEL_LOGS_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://${OTEL_COLLECTOR_HOST:-otel-collector}:${OTEL_COLLECTOR_PORT:-4317}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-omniclaude}
+      - OTEL_TRACES_EXPORTER=${OTEL_TRACES_EXPORTER:-otlp}
+      - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-otlp}
+      - OTEL_LOGS_EXPORTER=${OTEL_LOGS_EXPORTER:-otlp}
 
       # Prometheus metrics
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
@@ -71,11 +76,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '${APP_CPU_LIMIT:-2.0}'
+          memory: ${APP_MEMORY_LIMIT:-2G}
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${APP_CPU_RESERVATION:-0.5}'
+          memory: ${APP_MEMORY_RESERVATION:-512M}
+    profiles:
+      - ${PROFILE_APP:-default}
 
   # ============================================================================
   # Agent Observability Consumer Service
@@ -89,32 +96,31 @@ services:
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
         VERSION: ${VERSION:-0.1.0}
     image: omniclaude-agent-consumer:${VERSION:-latest}
-    container_name: omniclaude_agent_consumer
-    restart: unless-stopped
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_agent_consumer
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       # Kafka configuration
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
-      - KAFKA_GROUP_ID=agent-observability-postgres
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set}
+      - KAFKA_GROUP_ID=${KAFKA_CONSUMER_GROUP_ID:-agent-observability-postgres}
 
-      # PostgreSQL configuration (connects to remote omninode-bridge database)
-      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
-      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
-      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
-      - POSTGRES_PASSWORD=${OMNINODE_BRIDGE_POSTGRES_PASSWORD:?OMNINODE_BRIDGE_POSTGRES_PASSWORD must be set in environment}
+      # PostgreSQL configuration (connects to bridge database)
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
 
       # Batch processing configuration
-      - BATCH_SIZE=100
-      - BATCH_TIMEOUT_MS=1000
+      - BATCH_SIZE=${CONSUMER_BATCH_SIZE:-100}
+      - BATCH_TIMEOUT_MS=${CONSUMER_BATCH_TIMEOUT_MS:-1000}
 
       # Health check and logging
-      - HEALTH_CHECK_PORT=8080
-      - LOG_LEVEL=INFO
+      - HEALTH_CHECK_PORT=${CONSUMER_HEALTH_PORT:-8080}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - app_network
-      # omninode_bridge_network removed - bridge services now remote at 192.168.86.200
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${CONSUMER_HEALTH_PORT:-8080}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -122,11 +128,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${CONSUMER_CPU_LIMIT:-0.5}'
+          memory: ${CONSUMER_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '${CONSUMER_CPU_RESERVATION:-0.1}'
+          memory: ${CONSUMER_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_CONSUMER:-default}
 
   # ============================================================================
   # Routing Adapter Service (Event-Driven Agent Routing)
@@ -140,39 +148,38 @@ services:
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
         VERSION: ${VERSION:-0.1.0}
     image: omniclaude-routing-adapter:${VERSION:-latest}
-    container_name: omniclaude_routing_adapter
-    restart: unless-stopped
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_routing_adapter
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "8070:8070"  # Health check and metrics
+      - "${ROUTING_ADAPTER_PORT:-8070}:8070"
     environment:
       # Kafka configuration
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
-      - KAFKA_GROUP_ID=agent-routing-service
-      - KAFKA_REQUEST_TOPIC=agent.routing.requested.v1
-      - KAFKA_COMPLETED_TOPIC=agent.routing.completed.v1
-      - KAFKA_FAILED_TOPIC=agent.routing.failed.v1
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set}
+      - KAFKA_GROUP_ID=${KAFKA_ROUTING_GROUP_ID:-agent-routing-service}
+      - KAFKA_REQUEST_TOPIC=${KAFKA_ROUTING_REQUEST_TOPIC:-agent.routing.requested.v1}
+      - KAFKA_COMPLETED_TOPIC=${KAFKA_ROUTING_COMPLETED_TOPIC:-agent.routing.completed.v1}
+      - KAFKA_FAILED_TOPIC=${KAFKA_ROUTING_FAILED_TOPIC:-agent.routing.failed.v1}
 
-      # PostgreSQL configuration (for routing decisions logging)
-      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
-      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
-      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
+      # PostgreSQL configuration
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
 
-      # Agent registry configuration (Phase 2)
-      - AGENT_REGISTRY_PATH=/agent-definitions/agent-registry.yaml
-      - AGENT_DEFINITIONS_PATH=/agent-definitions
+      # Agent registry configuration
+      - AGENT_REGISTRY_PATH=${AGENT_REGISTRY_PATH:-/agent-definitions/agent-registry.yaml}
+      - AGENT_DEFINITIONS_PATH=${AGENT_DEFINITIONS_PATH:-/agent-definitions}
 
       # Service configuration
       - ROUTING_ADAPTER_PORT=8070
       - HEALTH_CHECK_PORT=8070
-      - LOG_LEVEL=INFO
-      - ROUTING_TIMEOUT_MS=5000
-      - CACHE_TTL_SECONDS=3600
-      - MAX_RECOMMENDATIONS=5
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ROUTING_TIMEOUT_MS=${ROUTING_TIMEOUT_MS:-5000}
+      - CACHE_TTL_SECONDS=${ROUTING_CACHE_TTL:-3600}
+      - MAX_RECOMMENDATIONS=${MAX_RECOMMENDATIONS:-5}
     volumes:
-      # Mount agent definitions for registry access (read-only)
-      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+      - ${AGENT_DEFINITIONS_HOST_PATH:-~/.claude/agent-definitions}:/agent-definitions:ro
     networks:
       - app_network
     healthcheck:
@@ -184,11 +191,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${ROUTING_ADAPTER_CPU_LIMIT:-0.5}'
+          memory: ${ROUTING_ADAPTER_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '${ROUTING_ADAPTER_CPU_RESERVATION:-0.1}'
+          memory: ${ROUTING_ADAPTER_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_ROUTING_ADAPTER:-default}
 
   # ============================================================================
   # Agent Router Event Consumer (Kafka-based Agent Routing)
@@ -202,32 +211,29 @@ services:
         VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
         VERSION: ${VERSION:-0.2.0}
     image: omniclaude-archon-router-consumer:${VERSION:-latest}
-    container_name: omniclaude_archon_router_consumer
-    restart: unless-stopped
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_archon_router_consumer
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      # Kafka configuration (use internal Docker network name)
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set in environment}
-      - KAFKA_GROUP_ID=agent-router-service
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS must be set}
+      - KAFKA_GROUP_ID=${KAFKA_ROUTER_GROUP_ID:-agent-router-service}
 
-      # PostgreSQL configuration (for routing decisions logging)
-      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set in environment}
-      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set in environment}
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set in environment}
-      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set in environment}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
+      # PostgreSQL configuration
+      - POSTGRES_HOST=${POSTGRES_HOST:?POSTGRES_HOST must be set}
+      - POSTGRES_PORT=${POSTGRES_PORT:?POSTGRES_PORT must be set}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:?POSTGRES_DATABASE must be set}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER must be set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
 
       # Agent registry configuration
-      - REGISTRY_PATH=/agent-definitions/agent-registry.yaml
+      - REGISTRY_PATH=${AGENT_REGISTRY_PATH:-/agent-definitions/agent-registry.yaml}
 
       # Service configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
-      # Mount agent definitions for registry access (read-only)
-      - ${HOME}/.claude/agent-definitions:/agent-definitions:ro
+      - ${AGENT_DEFINITIONS_HOST_PATH:-~/.claude/agent-definitions}:/agent-definitions:ro
     networks:
       - app_network
-      - omninode-bridge-network
-    # Note: No external ports needed - pure event consumer
     healthcheck:
       test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep agent_router_event_service.py"]
       interval: 30s
@@ -237,34 +243,36 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${ARCHON_ROUTER_CPU_LIMIT:-0.5}'
+          memory: ${ARCHON_ROUTER_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '${ARCHON_ROUTER_CPU_RESERVATION:-0.1}'
+          memory: ${ARCHON_ROUTER_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_ARCHON_ROUTER:-default}
 
   # ============================================================================
-  # PostgreSQL Database Service
+  # PostgreSQL Database Service (App-specific)
   # ============================================================================
   postgres:
-    image: postgres:16-alpine
-    container_name: omniclaude_postgres
-    restart: unless-stopped
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_postgres
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
     environment:
-      - POSTGRES_USER=omniclaude
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in environment}
-      - POSTGRES_DB=omniclaude
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - POSTGRES_USER=${APP_POSTGRES_USER:-omniclaude}
+      - POSTGRES_PASSWORD=${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}
+      - POSTGRES_DB=${APP_POSTGRES_DATABASE:-omniclaude}
+      - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---encoding=UTF-8 --lc-collate=C --lc-ctype=C}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ${POSTGRES_INIT_SCRIPT:-./scripts/init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U omniclaude -d omniclaude"]
+      test: ["CMD-SHELL", "pg_isready -U ${APP_POSTGRES_USER:-omniclaude} -d ${APP_POSTGRES_DATABASE:-omniclaude}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -272,27 +280,151 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1G
+          cpus: '${POSTGRES_CPU_LIMIT:-1.0}'
+          memory: ${POSTGRES_MEMORY_LIMIT:-1G}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${POSTGRES_CPU_RESERVATION:-0.25}'
+          memory: ${POSTGRES_MEMORY_RESERVATION:-256M}
+    profiles:
+      - ${PROFILE_POSTGRES:-default}
+
+  # ============================================================================
+  # Redpanda (Kafka-compatible broker) - Test Environment Only
+  # ============================================================================
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION:-v23.3.3}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:29092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:29092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:28082
+      - --advertise-pandaproxy-addr
+      - internal://redpanda:8082,external://localhost:28082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:28081
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+      - --mode
+      - dev-container
+      - --smp
+      - '1'
+      - --default-log-level=${REDPANDA_LOG_LEVEL:-info}
+    ports:
+      - "${REDPANDA_KAFKA_PORT:-29092}:29092"
+      - "${REDPANDA_PROXY_PORT:-28082}:28082"
+      - "${REDPANDA_SCHEMA_PORT:-28081}:28081"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    profiles:
+      - test
+
+  # ============================================================================
+  # Redpanda Console (Kafka UI) - Test/Debug Only
+  # ============================================================================
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:${REDPANDA_CONSOLE_VERSION:-v2.3.8}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_console
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["${KAFKA_CONSOLE_BROKER:-redpanda:9092}"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://${KAFKA_CONSOLE_SCHEMA_HOST:-redpanda}:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://${KAFKA_CONSOLE_ADMIN_HOST:-redpanda}:9644"]
+    ports:
+      - "${REDPANDA_CONSOLE_PORT:-8080}:8080"
+    networks:
+      - app_network
+    depends_on:
+      - redpanda
+    profiles:
+      - test
+      - debug
+
+  # ============================================================================
+  # Test Runner (runs pytest in isolated container) - Test Only
+  # ============================================================================
+  test-runner:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.test-runner
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_test_runner
+    environment:
+      - KAFKA_BROKERS=${KAFKA_BOOTSTRAP_SERVERS:-redpanda:9092}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_INTERNAL_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - PYTHONUNBUFFERED=1
+      - DEBUG=${DEBUG:-false}
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+    volumes:
+      - ../tests:/app/tests:ro
+      - ../agents:/app/agents:ro
+      - ../skills:/app/skills:ro
+      - ./test-results:/app/test-results
+    command: >
+      sh -c "
+        echo '🧪 Waiting for services to be ready...' &&
+        sleep 5 &&
+        echo '🧪 Running unit tests...' &&
+        pytest tests/test_kafka_logging.py -v --tb=short --junitxml=/app/test-results/unit.xml &&
+        echo '🧪 Running integration tests...' &&
+        pytest tests/test_kafka_consumer.py -v --tb=short --junitxml=/app/test-results/integration.xml &&
+        echo '🧪 Running e2e tests...' &&
+        pytest tests/test_e2e_agent_logging.py -v --tb=short --junitxml=/app/test-results/e2e.xml &&
+        echo '🧪 Running performance tests...' &&
+        pytest tests/test_logging_performance.py -v --tb=short -m performance --junitxml=/app/test-results/performance.xml &&
+        echo '✅ All tests completed!'
+      "
+    profiles:
+      - test
 
   # ============================================================================
   # Valkey Cache Service (Redis-compatible)
   # ============================================================================
   valkey:
-    image: valkey/valkey:7-alpine
-    container_name: omniclaude_valkey
-    restart: unless-stopped
+    image: valkey/valkey:${VALKEY_VERSION:-7-alpine}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_valkey
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "6379:6379"
+      - "${VALKEY_PORT:-6379}:6379"
     command: >
       valkey-server
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory ${VALKEY_MAXMEMORY:-512mb}
+      --maxmemory-policy ${VALKEY_MAXMEMORY_POLICY:-allkeys-lru}
       --appendonly yes
-      --appendfsync everysec
+      --appendfsync ${VALKEY_APPENDFSYNC:-everysec}
     volumes:
       - valkey_data:/data
     networks:
@@ -305,28 +437,30 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${VALKEY_CPU_LIMIT:-0.5}'
+          memory: ${VALKEY_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '${VALKEY_CPU_RESERVATION:-0.1}'
+          memory: ${VALKEY_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_VALKEY:-default}
 
   # ============================================================================
   # Prometheus Monitoring Service
   # ============================================================================
   prometheus:
-    image: prom/prometheus:v2.48.0
-    container_name: omniclaude_prometheus
-    restart: unless-stopped
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v2.48.0}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_prometheus
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}'
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -341,28 +475,30 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1G
+          cpus: '${PROMETHEUS_CPU_LIMIT:-1.0}'
+          memory: ${PROMETHEUS_MEMORY_LIMIT:-1G}
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '${PROMETHEUS_CPU_RESERVATION:-0.25}'
+          memory: ${PROMETHEUS_MEMORY_RESERVATION:-256M}
+    profiles:
+      - ${PROFILE_MONITORING:-default}
 
   # ============================================================================
   # Grafana Visualization Service
   # ============================================================================
   grafana:
-    image: grafana/grafana:10.2.0
-    container_name: omniclaude_grafana
-    restart: unless-stopped
+    image: grafana/grafana:${GRAFANA_VERSION:-10.2.0}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_grafana
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in environment}
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
-      - GF_SERVER_ROOT_URL=http://localhost:3000
-      - GF_ANALYTICS_REPORTING_ENABLED=false
-      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      - GF_INSTALL_PLUGINS=${GRAFANA_PLUGINS:-grafana-clock-panel,grafana-simple-json-datasource}
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      - GF_ANALYTICS_REPORTING_ENABLED=${GRAFANA_ANALYTICS:-false}
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=${GRAFANA_CHECK_UPDATES:-false}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -379,24 +515,26 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '${GRAFANA_CPU_LIMIT:-1.0}'
+          memory: ${GRAFANA_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.25'
-          memory: 128M
+          cpus: '${GRAFANA_CPU_RESERVATION:-0.25}'
+          memory: ${GRAFANA_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_MONITORING:-default}
 
   # ============================================================================
   # OpenTelemetry Collector Service
   # ============================================================================
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.91.0
-    container_name: omniclaude_otel_collector
-    restart: unless-stopped
+    image: otel/opentelemetry-collector-contrib:${OTEL_VERSION:-0.91.0}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_otel_collector
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "4317:4317"   # OTLP gRPC receiver
-      - "4318:4318"   # OTLP HTTP receiver
-      - "8888:8888"   # Prometheus metrics endpoint
-      - "13133:13133" # Health check endpoint
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+      - "${OTEL_METRICS_PORT:-8888}:8888"
+      - "${OTEL_HEALTH_PORT:-13133}:13133"
     command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
       - ./monitoring/otel/otel-collector-config.yml:/etc/otel-collector-config.yml:ro
@@ -411,22 +549,24 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '${OTEL_CPU_LIMIT:-1.0}'
+          memory: ${OTEL_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.25'
-          memory: 128M
+          cpus: '${OTEL_CPU_RESERVATION:-0.25}'
+          memory: ${OTEL_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_MONITORING:-default}
 
   # ============================================================================
   # Jaeger Distributed Tracing Service
   # ============================================================================
   jaeger:
-    image: jaegertracing/all-in-one:1.52
-    container_name: omniclaude_jaeger
-    restart: unless-stopped
+    image: jaegertracing/all-in-one:${JAEGER_VERSION:-1.52}
+    container_name: ${CONTAINER_PREFIX:-omniclaude}_jaeger
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "14268:14268"  # Jaeger collector HTTP
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "${JAEGER_COLLECTOR_PORT:-14268}:14268"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
@@ -439,11 +579,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '${JAEGER_CPU_LIMIT:-0.5}'
+          memory: ${JAEGER_MEMORY_LIMIT:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '${JAEGER_CPU_RESERVATION:-0.1}'
+          memory: ${JAEGER_MEMORY_RESERVATION:-128M}
+    profiles:
+      - ${PROFILE_MONITORING:-default}
 
 # ============================================================================
 # Networks - Segregated for security
@@ -453,15 +595,23 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/16
+        - subnet: ${APP_NETWORK_SUBNET:-172.30.0.0/16}
   monitoring_network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.31.0.0/16
+        - subnet: ${MONITORING_NETWORK_SUBNET:-172.31.0.0/16}
+
+  # External networks for cross-repository communication
+  # These networks are created by omninode_bridge and allow native
+  # connectivity to PostgreSQL, Kafka/Redpanda, and other shared services
+  # running on 192.168.86.200 without requiring /etc/hosts configuration
   omninode-bridge-network:
     external: true
     name: omninode-bridge-network
+  omninode_bridge_omninode-bridge-network:
+    external: true
+    name: omninode_bridge_omninode-bridge-network
 
 # ============================================================================
 # Volumes - Persistent data storage
@@ -470,6 +620,8 @@ volumes:
   app_data:
     driver: local
   postgres_data:
+    driver: local
+  redpanda_data:
     driver: local
   valkey_data:
     driver: local
