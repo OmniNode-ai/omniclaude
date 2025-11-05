@@ -13,6 +13,130 @@ This directory contains a consolidated Docker Compose configuration following 12
 - ✅ Easy to add new environments when needed
 - ✅ Follows 12-factor app methodology
 
+## Prerequisites
+
+### External Dependencies
+
+**⚠️ REQUIRED**: The `omninode_bridge` repository must be running before starting OmniClaude services.
+
+OmniClaude connects to external Docker networks created by `omninode_bridge` for cross-repository communication. Without these networks, Docker Compose will fail to start with "network not found" errors.
+
+#### Verify External Networks Exist
+
+Before starting OmniClaude, verify the required networks are available:
+
+```bash
+# Check for required external networks
+docker network ls | grep omninode-bridge
+```
+
+**Expected output**:
+```
+<network-id>   omninode-bridge-network                      bridge    local
+<network-id>   omninode_bridge_omninode-bridge-network      bridge    local
+```
+
+If you see both networks listed, you're ready to start OmniClaude services. If networks are missing, see troubleshooting below.
+
+#### Required Networks
+
+| Network Name | Created By | Purpose |
+|--------------|------------|---------|
+| `omninode-bridge-network` | omninode_bridge | Primary cross-repository communication |
+| `omninode_bridge_omninode-bridge-network` | omninode_bridge | Secondary cross-repository network |
+
+These networks enable:
+- ✅ Native service-to-service connectivity across repositories
+- ✅ Direct access to shared PostgreSQL and Kafka/Redpanda
+- ✅ Automatic DNS resolution within Docker network
+- ✅ No manual `/etc/hosts` configuration required (for Docker services)
+
+### Troubleshooting: "Network Not Found"
+
+#### Problem: Docker Compose Fails with Network Error
+
+If you see this error when running `docker-compose up`:
+
+```
+ERROR: Network omninode-bridge-network declared as external, but could not be found
+```
+
+This means the external networks from `omninode_bridge` are not available.
+
+#### Solution: Start omninode_bridge First
+
+**Step 1**: Navigate to omninode_bridge repository and start services:
+
+```bash
+# Navigate to omninode_bridge (adjust path as needed)
+cd ../omninode_bridge
+
+# Start omninode_bridge services
+docker-compose up -d
+```
+
+**Step 2**: Verify networks were created:
+
+```bash
+# Check that both networks now exist
+docker network ls | grep omninode-bridge
+
+# Should show:
+# omninode-bridge-network
+# omninode_bridge_omninode-bridge-network
+```
+
+**Step 3**: Return to OmniClaude and retry:
+
+```bash
+# Navigate back to omniclaude deployment
+cd ../omniclaude/deployment
+
+# Start services (networks should now be available)
+docker-compose up -d
+```
+
+#### Alternative: Disable Cross-Repository Communication
+
+If you don't need cross-repository communication and want to run OmniClaude in isolation:
+
+**Option 1**: Comment out external networks in `docker-compose.yml`:
+
+```yaml
+# networks:
+#   omninode-bridge-network:
+#     external: true
+#     name: omninode-bridge-network
+#   omninode_bridge_omninode-bridge-network:
+#     external: true
+#     name: omninode_bridge_omninode-bridge-network
+```
+
+**Option 2**: Update service network assignments to remove external network references.
+
+**⚠️ Warning**: Disabling external networks means:
+- ❌ No access to shared PostgreSQL on 192.168.86.200:5436
+- ❌ No access to Kafka/Redpanda event bus
+- ❌ Limited agent observability and intelligence features
+- ❌ Some services may not function correctly
+
+Only use this approach for isolated testing or development without shared infrastructure.
+
+#### Verify External Network Connectivity
+
+After starting services, verify connectivity to shared infrastructure:
+
+```bash
+# Test PostgreSQL connectivity (requires .env to be sourced)
+source ../.env
+psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -c "SELECT 1"
+
+# Test Kafka connectivity (requires kcat)
+kcat -L -b 192.168.86.200:29092
+
+# Expected: Connection successful with broker list
+```
+
 ## Quick Start
 
 ### Development Environment (Current Setup)
@@ -165,6 +289,235 @@ This checks:
 - ✅ Password strength requirements
 - ✅ URL format validation
 - ✅ Port number ranges
+
+## Database Architecture
+
+OmniClaude uses **two separate PostgreSQL databases** with distinct purposes and connection patterns.
+
+### Overview
+
+| Database Type | Environment Variables | Purpose | Location |
+|---------------|----------------------|---------|----------|
+| **Local Application Database** | `APP_POSTGRES_*` | Application-specific data storage | Containerized (postgres service) |
+| **Shared Bridge Database** | `POSTGRES_*` | Cross-service observability & intelligence | Remote (192.168.86.200:5436) |
+
+### 1. Local Application Database (APP_POSTGRES_*)
+
+**Purpose**: Application-specific data for OmniClaude services
+
+**Configuration Variables**:
+```bash
+APP_POSTGRES_HOST=postgres
+APP_POSTGRES_PORT=5432
+APP_POSTGRES_USER=omniclaude
+APP_POSTGRES_PASSWORD=<set_in_env>
+APP_POSTGRES_DATABASE=omniclaude
+APP_POSTGRES_INTERNAL_PORT=5432
+```
+
+**Services Using This Database**:
+- `app` - Main FastAPI application
+- `postgres` - Local PostgreSQL container
+
+**Connection Pattern**:
+```bash
+# From within Docker network
+postgresql://omniclaude:${APP_POSTGRES_PASSWORD}@postgres:5432/omniclaude
+
+# From host (after exposing port)
+postgresql://omniclaude:${APP_POSTGRES_PASSWORD}@localhost:5432/omniclaude
+```
+
+**Example Access**:
+```bash
+# Connect to local app database
+docker-compose exec postgres psql -U omniclaude -d omniclaude
+
+# Run query
+docker-compose exec postgres psql -U omniclaude -d omniclaude \
+  -c "SELECT * FROM users LIMIT 10;"
+```
+
+### 2. Shared Bridge Database (POSTGRES_*)
+
+**Purpose**: Cross-repository observability, agent routing, manifest injections, and event-driven intelligence tracking
+
+**Configuration Variables**:
+```bash
+POSTGRES_HOST=192.168.86.200
+POSTGRES_PORT=5436
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<set_in_env>
+POSTGRES_DATABASE=omninode_bridge
+```
+
+**Services Using This Database**:
+- `routing-adapter` - Agent routing service
+- `agent-observability-consumer` - Observability event consumer
+- `archon-router-consumer` - Event-based routing consumer
+- `test-runner` - Integration test runner
+- External services from other repositories (omniarchon, omninode_bridge)
+
+**Key Tables** (34+ total):
+- `agent_routing_decisions` - Agent selection with confidence scores
+- `agent_manifest_injections` - Complete manifest snapshots
+- `agent_execution_logs` - Agent lifecycle tracking
+- `agent_transformation_events` - Polymorphic transformations
+- `workflow_steps` - Workflow execution history
+- `llm_calls` - LLM API call tracking
+- `router_performance_metrics` - Routing analytics
+- `error_events` / `success_events` - Event tracking
+
+**Connection Pattern**:
+```bash
+# From within Docker network (using external network reference)
+postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge
+
+# From host scripts
+postgresql://postgres:${POSTGRES_PASSWORD}@192.168.86.200:5436/omninode_bridge
+```
+
+**Example Access**:
+```bash
+# Connect to shared bridge database (requires .env)
+source ../.env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}
+
+# Query agent routing decisions
+source ../.env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -c "SELECT * FROM agent_routing_decisions ORDER BY created_at DESC LIMIT 10;"
+
+# Query manifest injections
+source ../.env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -c "SELECT correlation_id, agent_name, query_time_ms FROM agent_manifest_injections ORDER BY created_at DESC LIMIT 5;"
+```
+
+### Why Two Databases?
+
+**Separation of Concerns**:
+- **Local app database** (`APP_POSTGRES_*`) contains application-specific data that doesn't need to be shared across services or repositories
+- **Shared bridge database** (`POSTGRES_*`) provides centralized observability and intelligence data accessible by multiple services and repositories
+
+**Benefits**:
+
+| Benefit | Description |
+|---------|-------------|
+| **Isolation** | Application failures don't affect observability data |
+| **Scalability** | Shared database can be independently scaled and optimized |
+| **Reliability** | Local database issues don't impact cross-service intelligence |
+| **Security** | Different access patterns and security requirements |
+| **Performance** | Optimized connection pools for different workloads |
+| **Data Sovereignty** | Clear ownership and lifecycle management |
+
+**Example Scenarios**:
+
+- **User Authentication Data** → Local App Database (APP_POSTGRES_*)
+  - Reason: Application-specific, no need to share with other repos
+
+- **Agent Routing Decisions** → Shared Bridge Database (POSTGRES_*)
+  - Reason: Multiple services and repos need to analyze routing patterns
+
+- **API Request Logs** → Local App Database (APP_POSTGRES_*)
+  - Reason: Application-specific logs
+
+- **Manifest Injections** → Shared Bridge Database (POSTGRES_*)
+  - Reason: Cross-repo traceability and debugging
+
+### Service-to-Database Mapping
+
+```
+┌──────────────────────────────────────────────┐
+│         LOCAL APP DATABASE                   │
+│         (APP_POSTGRES_*)                     │
+│                                              │
+│  Services:                                   │
+│  • app (FastAPI application)                 │
+│  • postgres (database container)             │
+│                                              │
+│  Data:                                       │
+│  • Application state                         │
+│  • User data                                 │
+│  • API logs                                  │
+└──────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────┐
+│      SHARED BRIDGE DATABASE                  │
+│      (POSTGRES_*)                            │
+│      Location: 192.168.86.200:5436           │
+│                                              │
+│  Services:                                   │
+│  • routing-adapter                           │
+│  • agent-observability-consumer              │
+│  • archon-router-consumer                    │
+│  • test-runner                               │
+│  • External services (other repos)           │
+│                                              │
+│  Data:                                       │
+│  • Agent routing decisions (34+ tables)      │
+│  • Manifest injections                       │
+│  • Execution logs                            │
+│  • Performance metrics                       │
+│  • Cross-repo intelligence                   │
+└──────────────────────────────────────────────┘
+```
+
+### Configuration Best Practices
+
+1. **Use Distinct Passwords**: Never reuse passwords between local and shared databases
+2. **Source .env Before Queries**: Always run `source ../.env` before database operations
+3. **Verify Connection Variables**: Use `echo ${POSTGRES_HOST}` to verify loaded values
+4. **Test Connectivity**: Use health checks to verify both databases are accessible
+5. **Monitor Separately**: Set up separate monitoring for each database type
+
+### Troubleshooting Database Connectivity
+
+**Issue: Cannot connect to shared database**
+```bash
+# Verify environment variables are loaded
+source ../.env
+echo "Host: ${POSTGRES_HOST}"
+echo "Port: ${POSTGRES_PORT}"
+echo "Database: ${POSTGRES_DATABASE}"
+echo "Password set: ${POSTGRES_PASSWORD:+YES}"
+
+# Test connectivity
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -c "SELECT 1"
+```
+
+**Issue: Service connecting to wrong database**
+```bash
+# Check which database your service is configured to use
+docker-compose exec <service-name> env | grep POSTGRES
+
+# Services using APP_POSTGRES_* should show "omniclaude"
+# Services using POSTGRES_* should show "omninode_bridge"
+```
+
+**Issue: Test runner fails with database error**
+```bash
+# Test runner uses POSTGRES_* (shared database)
+# Verify shared database credentials in .env
+source ../.env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -c "SELECT 1"
+
+# Check if omninode_bridge database exists
+source ../.env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -c "\l" | grep omninode_bridge
+```
+
+**Issue: App cannot connect to local database**
+```bash
+# Verify postgres container is running
+docker-compose ps postgres
+
+# Check postgres logs
+docker-compose logs postgres
+
+# Connect directly to postgres container
+docker-compose exec postgres psql -U omniclaude -d omniclaude -c "SELECT 1"
+```
 
 ## Service Profiles
 

@@ -474,11 +474,8 @@ nano .env
 
 2. **Install dependencies**:
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Install Pydantic Settings Framework
-pip install pydantic pydantic-settings
+# Install Python dependencies with Poetry
+poetry install
 
 # Install shared library (for hooks and agents)
 ./shared_lib/setup.sh
@@ -493,16 +490,20 @@ pip install pydantic pydantic-settings
 
 4. **Optional: Deploy with Docker**:
 ```bash
-# For development environment
-cp .env.dev .env.dev.local
-nano .env.dev.local  # Set your passwords
-docker-compose --env-file .env.dev.local up -d
+# For development environment (default)
+cd deployment && docker-compose up -d
+
+# For specific environment (.env.dev, .env.test, .env.prod)
+cd deployment && docker-compose --env-file ../.env.dev up -d
 
 # Verify health
 ./scripts/health_check.sh
 
 # View logs
-docker-compose --env-file .env.dev.local logs -f
+cd deployment && docker-compose logs -f
+
+# Stop services
+cd deployment && docker-compose down
 ```
 
 See **[QUICK_START.md](QUICK_START.md)** for detailed Docker deployment instructions.
