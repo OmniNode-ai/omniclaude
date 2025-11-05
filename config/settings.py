@@ -38,10 +38,11 @@ Implementation:
 
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import Field, HttpUrl, field_validator
+from pydantic import Field, HttpUrl, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -319,12 +320,12 @@ class Settings(BaseSettings):
     )
 
     # Agent Router Configuration
-    agent_registry_path: Optional[str] = Field(
+    agent_registry_path: str = Field(
         default=None,
         description="Path to agent registry YAML (defaults to ~/.claude/agent-definitions/agent-registry.yaml)",
     )
 
-    agent_definitions_path: Optional[str] = Field(
+    agent_definitions_path: str = Field(
         default=None,
         description="Path to agent definitions directory (defaults to ~/.claude/agent-definitions/)",
     )
@@ -334,9 +335,13 @@ class Settings(BaseSettings):
         default=8055, ge=1, le=65535, description="Routing adapter service HTTP port"
     )
 
-    routing_adapter_host: str = Field(
-        default="0.0.0.0",  # noqa: S104  # Service needs to bind to all interfaces for Docker
-        description="Routing adapter service bind address",
+    routing_adapter_host: Optional[str] = Field(
+        default=None,
+        description=(
+            "Routing adapter service bind address. "
+            "Defaults to 0.0.0.0 in development (allows external connections), "
+            "127.0.0.1 in production (localhost only for security)."
+        ),
     )
 
     routing_timeout_ms: int = Field(
@@ -432,6 +437,57 @@ class Settings(BaseSettings):
             return v
         home_dir = Path.home()
         return str(home_dir / ".claude" / "agent-definitions")
+
+    @field_validator("routing_adapter_host", mode="before")
+    @classmethod
+    def validate_routing_adapter_host(cls, v: Any, info: ValidationInfo) -> str:
+        """
+        Validate and set environment-specific host binding for security.
+
+        Security Rationale:
+        -------------------
+        - Development: Binds to 0.0.0.0 (all interfaces) to allow connections from
+          Docker containers, local network, and external debugging tools.
+
+        - Production/Test: Binds to 127.0.0.1 (localhost only) to prevent external
+          access. This is critical for security in production deployments where the
+          service should only be accessed through a reverse proxy (nginx, etc).
+
+        Binding to 0.0.0.0 in production exposes the service to the network, which:
+        - Increases attack surface
+        - Bypasses firewall protection
+        - Allows unauthorized access if authentication is weak
+        - Violates principle of least privilege
+
+        If external access is needed in production, use a reverse proxy with:
+        - TLS/SSL termination
+        - Rate limiting
+        - Authentication/authorization
+        - Request filtering
+
+        Args:
+            v: Explicit host value from environment variable or None
+            info: Validation context (unused - we read ENVIRONMENT directly)
+
+        Returns:
+            Host binding address (0.0.0.0 for dev, 127.0.0.1 for prod)
+        """
+        # If explicitly set via ROUTING_ADAPTER_HOST environment variable, respect that
+        if v is not None:
+            return v
+
+        # Read ENVIRONMENT env var directly (case-insensitive due to Settings config)
+        # This is more reliable than info.data since environment field is defined later
+        import os
+
+        env = os.getenv("ENVIRONMENT", "production").lower()
+
+        if env == "development":
+            # Development: Allow external connections for Docker/debugging
+            return "0.0.0.0"  # noqa: S104  # Intentional: Development only, secured via Docker network
+        else:
+            # Production/Test: Localhost only for security
+            return "127.0.0.1"
 
     # =========================================================================
     # INITIALIZATION
@@ -726,15 +782,15 @@ class Settings(BaseSettings):
 # SINGLETON INSTANCE
 # =========================================================================
 
-_settings: Optional[Settings] = None
 
-
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Get or create singleton settings instance.
+    Get or create singleton settings instance using thread-safe lru_cache.
 
     This function implements the singleton pattern to ensure only one
     Settings instance is created and reused throughout the application.
+    The @lru_cache decorator provides thread-safe memoization.
 
     Returns:
         Settings instance
@@ -745,20 +801,18 @@ def get_settings() -> Settings:
         >>> print(settings.postgres_host)
         192.168.86.200
     """
-    global _settings
-    if _settings is None:
-        _settings = Settings()
+    settings = Settings()
 
-        # Validate required services on first load
-        errors = _settings.validate_required_services()
-        if errors:
-            error_msg = "\n".join(f"  - {error}" for error in errors)
-            logger.error(f"Configuration validation failed:\n{error_msg}")
-            # Note: We log but don't raise to allow partial configuration for testing
-        else:
-            logger.info("Configuration loaded and validated successfully")
+    # Validate required services on first load
+    errors = settings.validate_required_services()
+    if errors:
+        error_msg = "\n".join(f"  - {error}" for error in errors)
+        logger.error(f"Configuration validation failed:\n{error_msg}")
+        # Note: We log but don't raise to allow partial configuration for testing
+    else:
+        logger.info("Configuration loaded and validated successfully")
 
-    return _settings
+    return settings
 
 
 def reload_settings() -> Settings:
@@ -766,6 +820,7 @@ def reload_settings() -> Settings:
     Force reload of settings from environment.
 
     Useful for testing or when environment variables change at runtime.
+    Clears the lru_cache to force recreation of the Settings instance.
 
     Returns:
         New Settings instance
@@ -777,6 +832,5 @@ def reload_settings() -> Settings:
         >>> print(settings.postgres_port)
         5432
     """
-    global _settings
-    _settings = None
+    get_settings.cache_clear()
     return get_settings()
