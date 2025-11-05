@@ -142,8 +142,7 @@ celerybeat.pid
 
 # Environments
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 .venv/
 env/
@@ -270,16 +269,27 @@ claude-flow.config.json
 session-*.json
 *auto-save*.json
 
-# Development and Analysis Documents (temporary files)
-*_ANALYSIS.md
-*_SUMMARY.md
-*_GUIDE.md
+# Development and Analysis Documents (temporary files in root)
+/*_ANALYSIS.md
+/*_SUMMARY.md
+/*_GUIDE.md
 TEMP_*IMPLEMENTATION*.md
 REFACTORING_EXAMPLE.py
 examples_*.py
 factory_pattern_analysis.md
 migration_guide_*.md
 coverage.json
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Test and validation output files
+*_output.txt
+*_results.txt
+*_validation*.txt
 
 # Machine Learning Models (auto-generated)
 *.pkl

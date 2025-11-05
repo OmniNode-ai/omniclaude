@@ -79,12 +79,6 @@ agents:
     domain_context: "debugging"
     specialization_level: "expert"
 
-# Claude Skills Integration
-claude_skills_references:
-  - "@senior-architect - Software Architecture Design"
-  - "@architecture-patterns - Backend Architecture Patterns"
-
-
   frontend-developer:
     name: "agent-frontend-developer"
     title: "Frontend Developer Specialist"
@@ -368,6 +362,11 @@ transformation_config:
     4: "Assume agent identity and capabilities"
     5: "Execute task using agent-specific patterns"
     6: "Maintain transformation context throughout execution"
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@architecture-patterns - Backend Architecture Patterns"
 
 # Integration Points
 integration:

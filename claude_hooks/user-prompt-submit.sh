@@ -10,16 +10,20 @@ LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
 HOOKS_LIB="$HOME/.claude/hooks/lib"
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# Detect project root dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Load environment variables from .env if available
-if [[ -f "/Volumes/PRO-G40/Code/omniclaude/.env" ]]; then
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a  # automatically export all variables
-    source "/Volumes/PRO-G40/Code/omniclaude/.env" 2>/dev/null || true
+    source "$PROJECT_ROOT/.env" 2>/dev/null || true
     set +a
 fi
 
 # Load database credentials for all scripts (sets PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE)
-if [[ -f "/Volumes/PRO-G40/Code/omniclaude/scripts/db-credentials.sh" ]]; then
-    source "/Volumes/PRO-G40/Code/omniclaude/scripts/db-credentials.sh" --silent
+if [[ -f "$PROJECT_ROOT/scripts/db-credentials.sh" ]]; then
+    source "$PROJECT_ROOT/scripts/db-credentials.sh" --silent
 fi
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"

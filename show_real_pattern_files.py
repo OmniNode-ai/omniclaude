@@ -8,7 +8,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # Add agents to path
 sys.path.insert(0, str(Path(__file__).parent / "agents"))
 
@@ -92,13 +91,13 @@ async def show_real_file_paths():
             if full_path.exists():
                 print("    ✅ File exists")
             else:
-                # Try relative to different base paths
-                for base in [
-                    "/Volumes/PRO-G40/Code/omniarchon",
-                    "/Volumes/PRO-G40/Code/omniclaude",
-                    "/Volumes/PRO-G40/Code/omninode_bridge",
-                ]:
-                    test_path = Path(base) / file_path
+                # Try relative to different base paths (detect dynamically)
+                code_base = Path.home() / "Code"  # Default: ~/Code
+                # Override if OMNI_CODE_BASE is set
+                code_base = Path(os.getenv("OMNI_CODE_BASE", code_base))
+
+                for repo in ["omniarchon", "omniclaude", "omninode_bridge"]:
+                    test_path = code_base / repo / file_path
                     if test_path.exists():
                         print(f"    ✅ File exists at: {test_path}")
                         break
