@@ -136,7 +136,7 @@ class IntelligenceCache:
         """Close connection"""
         if self._client:
             try:
-                await self._client.close()
+                await self._client.aclose()
                 logger.debug("Valkey cache connection closed")
             except Exception as e:
                 logger.warning(f"Error closing Valkey connection: {e}")
