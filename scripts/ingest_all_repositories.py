@@ -17,15 +17,17 @@ from typing import Any, Dict, List
 
 import requests
 
+from config import settings
+
 
 class MultiRepositoryIngester:
     def __init__(
         self,
-        base_url: str = "http://localhost:8053",
-        search_url: str = "http://localhost:8055",
+        base_url: str = None,
+        search_url: str = None,
     ):
-        self.base_url = base_url
-        self.search_url = search_url
+        self.base_url = base_url or str(settings.archon_intelligence_url)
+        self.search_url = search_url or str(settings.archon_search_url)
         self.results = []
         self.lock = Lock()
 

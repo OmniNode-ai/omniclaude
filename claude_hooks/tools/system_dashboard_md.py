@@ -5,11 +5,16 @@ Auto-generates markdown dashboard from database metrics
 """
 
 import os
+import sys
 from datetime import datetime
 from typing import Any, Dict, List
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+# Add config for type-safe settings
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+from config import settings
 
 
 class SystemDashboard:
@@ -20,9 +25,7 @@ class SystemDashboard:
         db_password: str = None,
         output_file: str = "SYSTEM_DASHBOARD.md",
     ):
-        password = db_password or os.getenv(
-            "OMNINODE_BRIDGE_PASSWORD", "omninode-bridge-postgres-dev-2024"
-        )
+        password = db_password or settings.get_effective_postgres_password()
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         db = os.getenv("POSTGRES_DB", "omninode_bridge")

@@ -20,7 +20,9 @@ Performance Targets:
 """
 
 import logging
+import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -28,6 +30,32 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def _get_default_registry_path() -> str:
+    """
+    Get default agent registry path with environment variable support.
+
+    Priority:
+    1. AGENT_REGISTRY_PATH environment variable
+    2. REGISTRY_PATH environment variable (Docker compatibility)
+    3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+
+    Returns:
+        Path to agent registry file
+    """
+    # Check explicit override
+    if path := os.getenv("AGENT_REGISTRY_PATH"):
+        return path
+
+    # Check Docker-compatible env var
+    if path := os.getenv("REGISTRY_PATH"):
+        return path
+
+    # Default to home directory
+    home_dir = Path.home()
+    return str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml")
+
 
 # Use absolute imports to avoid relative import issues
 try:
@@ -63,6 +91,28 @@ class AgentRecommendation:
     definition_path: str
 
 
+@dataclass
+class RoutingTiming:
+    """
+    Performance timing data for routing operations.
+
+    All timings in microseconds for high precision.
+
+    Attributes:
+        total_routing_time_us: Total time for complete routing operation
+        cache_lookup_us: Time spent checking cache
+        trigger_matching_us: Time spent matching triggers
+        confidence_scoring_us: Time spent calculating confidence scores
+        cache_hit: Whether result was found in cache
+    """
+
+    total_routing_time_us: int
+    cache_lookup_us: int
+    trigger_matching_us: int
+    confidence_scoring_us: int
+    cache_hit: bool
+
+
 class AgentRouter:
     """
     Agent routing with confidence scoring and caching.
@@ -73,18 +123,20 @@ class AgentRouter:
 
     def __init__(
         self,
-        registry_path: str = (
-            "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
-        ),
+        registry_path: Optional[str] = None,
         cache_ttl: int = 3600,
     ):
         """
         Initialize enhanced router.
 
         Args:
-            registry_path: Path to agent registry YAML file
+            registry_path: Path to agent registry YAML file (uses default if None)
             cache_ttl: Cache time-to-live in seconds (default: 1 hour)
         """
+        # Use default registry path if not provided
+        if registry_path is None:
+            registry_path = _get_default_registry_path()
+
         try:
             # Load registry
             with open(registry_path) as f:
@@ -123,6 +175,9 @@ class AgentRouter:
                 "fuzzy_matches": 0,
             }
 
+            # Track performance timing for most recent route
+            self.last_routing_timing: Optional[RoutingTiming] = None
+
             logger.info("AgentRouter initialized successfully")
 
         except FileNotFoundError:
@@ -155,6 +210,8 @@ class AgentRouter:
         """
         Route user request to best agent(s).
 
+        Performance timing is captured and stored in self.last_routing_timing.
+
         Args:
             user_request: User's input text
             context: Optional execution context (domain, previous agent, etc.)
@@ -164,6 +221,9 @@ class AgentRouter:
             List of agent recommendations sorted by confidence (highest first)
         """
         try:
+            # Start overall timing
+            routing_start_us = time.perf_counter_ns() // 1000
+
             self.routing_stats["total_routes"] += 1
             context = context or {}
 
@@ -172,14 +232,31 @@ class AgentRouter:
                 extra={"context": context, "max_recommendations": max_recommendations},
             )
 
+            # Track timing for each stage
+            cache_lookup_start_us = time.perf_counter_ns() // 1000
+
             # 1. Check cache
             cached = self.cache.get(user_request, context)
+            cache_lookup_end_us = time.perf_counter_ns() // 1000
+            cache_lookup_time_us = cache_lookup_end_us - cache_lookup_start_us
+
             if cached is not None:
                 self.routing_stats["cache_hits"] += 1
                 logger.debug(
                     "Cache hit - returning cached recommendations",
                     extra={"cached_count": len(cached)},
                 )
+
+                # Record timing for cache hit
+                routing_end_us = time.perf_counter_ns() // 1000
+                self.last_routing_timing = RoutingTiming(
+                    total_routing_time_us=routing_end_us - routing_start_us,
+                    cache_lookup_us=cache_lookup_time_us,
+                    trigger_matching_us=0,
+                    confidence_scoring_us=0,
+                    cache_hit=True,
+                )
+
                 return cached
 
             self.routing_stats["cache_misses"] += 1
@@ -196,11 +273,28 @@ class AgentRouter:
                         f"Explicit agent request: {explicit_agent}",
                         extra={"agent_name": explicit_agent},
                     )
+
+                    # Record timing for explicit request
+                    routing_end_us = time.perf_counter_ns() // 1000
+                    self.last_routing_timing = RoutingTiming(
+                        total_routing_time_us=routing_end_us - routing_start_us,
+                        cache_lookup_us=cache_lookup_time_us,
+                        trigger_matching_us=0,
+                        confidence_scoring_us=0,
+                        cache_hit=False,
+                    )
+
                     return result
 
             # 3. Trigger-based matching with scoring
             self.routing_stats["fuzzy_matches"] += 1
+
+            trigger_matching_start_us = time.perf_counter_ns() // 1000
             trigger_matches = self.trigger_matcher.match(user_request)
+            trigger_matching_end_us = time.perf_counter_ns() // 1000
+            trigger_matching_time_us = (
+                trigger_matching_end_us - trigger_matching_start_us
+            )
 
             logger.debug(
                 f"Found {len(trigger_matches)} trigger matches",
@@ -208,6 +302,7 @@ class AgentRouter:
             )
 
             # 4. Score each match
+            confidence_scoring_start_us = time.perf_counter_ns() // 1000
             recommendations = []
             for agent_name, trigger_score, match_reason in trigger_matches:
                 try:
@@ -252,8 +347,25 @@ class AgentRouter:
             # 6. Limit to max recommendations
             recommendations = recommendations[:max_recommendations]
 
+            confidence_scoring_end_us = time.perf_counter_ns() // 1000
+            confidence_scoring_time_us = (
+                confidence_scoring_end_us - confidence_scoring_start_us
+            )
+
             # 7. Cache results (even empty results to avoid recomputation)
             self.cache.set(user_request, recommendations, context)
+
+            # Calculate total routing time
+            routing_end_us = time.perf_counter_ns() // 1000
+
+            # Record detailed timing
+            self.last_routing_timing = RoutingTiming(
+                total_routing_time_us=routing_end_us - routing_start_us,
+                cache_lookup_us=cache_lookup_time_us,
+                trigger_matching_us=trigger_matching_time_us,
+                confidence_scoring_us=confidence_scoring_time_us,
+                cache_hit=False,
+            )
 
             # 8. Log routing decision
             logger.info(
@@ -267,6 +379,7 @@ class AgentRouter:
                         recommendations[0].confidence.total if recommendations else 0.0
                     ),
                     "total_candidates": len(trigger_matches),
+                    "routing_time_us": self.last_routing_timing.total_routing_time_us,
                 },
             )
 
@@ -444,10 +557,7 @@ class AgentRouter:
         Args:
             registry_path: Path to registry file (uses default if None)
         """
-        path = (
-            registry_path
-            or "/Users/jonah/.claude/agent-definitions/agent-registry.yaml"
-        )
+        path = registry_path or _get_default_registry_path()
 
         try:
             logger.info(f"Reloading registry from {path}")

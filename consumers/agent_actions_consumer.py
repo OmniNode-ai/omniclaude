@@ -666,14 +666,30 @@ class AgentActionsConsumer:
     def _insert_transformation_events(
         self, cursor, events: List[Dict[str, Any]]
     ) -> tuple[int, int]:
-        """Insert agent_transformation_events events."""
+        """
+        Insert agent_transformation_events events with comprehensive schema support.
+
+        Handles both old format (confidence_score) and new format (routing_confidence).
+        """
         insert_sql = """
             INSERT INTO agent_transformation_events (
-                id, source_agent, target_agent, transformation_reason,
-                confidence_score, transformation_duration_ms, success, created_at,
-                project_path, project_name, claude_session_id
+                id, event_type, correlation_id, session_id,
+                source_agent, target_agent, transformation_reason,
+                user_request, routing_confidence, routing_strategy,
+                transformation_duration_ms, initialization_duration_ms, total_execution_duration_ms,
+                success, error_message, error_type, quality_score,
+                context_snapshot, context_keys, context_size_bytes,
+                agent_definition_id, parent_event_id,
+                started_at, completed_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s,
+                %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -683,21 +699,74 @@ class AgentActionsConsumer:
             event_id = str(uuid.uuid4())
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
+            # Handle both old format (confidence_score) and new format (routing_confidence)
+            routing_confidence = event.get("routing_confidence") or event.get(
+                "confidence_score"
+            )
+
+            # Parse correlation_id and session_id as UUIDs
+            correlation_id = event.get("correlation_id")
+            if correlation_id and not isinstance(correlation_id, uuid.UUID):
+                try:
+                    correlation_id = uuid.UUID(correlation_id)
+                except ValueError:
+                    correlation_id = uuid.uuid4()
+            elif not correlation_id:
+                correlation_id = uuid.uuid4()
+
+            session_id = event.get("session_id")
+            if session_id and not isinstance(session_id, uuid.UUID):
+                try:
+                    session_id = uuid.UUID(session_id)
+                except ValueError:
+                    session_id = None
+
+            # Parse context_snapshot as JSONB
+            context_snapshot = event.get("context_snapshot")
+            if context_snapshot and not isinstance(context_snapshot, str):
+                context_snapshot = json.dumps(context_snapshot)
+
+            # Parse agent_definition_id and parent_event_id as UUIDs
+            agent_definition_id = event.get("agent_definition_id")
+            if agent_definition_id:
+                try:
+                    agent_definition_id = uuid.UUID(agent_definition_id)
+                except ValueError:
+                    agent_definition_id = None
+
+            parent_event_id = event.get("parent_event_id")
+            if parent_event_id:
+                try:
+                    parent_event_id = uuid.UUID(parent_event_id)
+                except ValueError:
+                    parent_event_id = None
+
             batch_data.append(
                 (
                     event_id,
+                    event.get("event_type", "transformation_complete"),
+                    correlation_id,
+                    session_id,
                     event.get("source_agent"),
                     event.get("target_agent"),
                     event.get("transformation_reason"),
-                    event.get("confidence_score"),
+                    event.get("user_request"),
+                    routing_confidence,
+                    event.get("routing_strategy"),
                     event.get("transformation_duration_ms"),
+                    event.get("initialization_duration_ms"),
+                    event.get("total_execution_duration_ms"),
                     event.get("success", True),
-                    timestamp,
-                    event.get("project_path"),  # Extract project context
-                    event.get("project_name"),
-                    event.get(
-                        "session_id"
-                    ),  # Note: event uses session_id, DB uses claude_session_id
+                    event.get("error_message"),
+                    event.get("error_type"),
+                    event.get("quality_score"),
+                    context_snapshot,
+                    event.get("context_keys"),
+                    event.get("context_size_bytes"),
+                    agent_definition_id,
+                    parent_event_id,
+                    event.get("started_at", timestamp),
+                    event.get("completed_at"),
                 )
             )
 

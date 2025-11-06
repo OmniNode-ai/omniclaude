@@ -1,11 +1,18 @@
 """Database connection utilities with connection pooling."""
 
 import os
+
+# Add config for type-safe settings
+import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Generator, Optional
 
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config import settings
 
 
 class DatabasePool:
@@ -29,9 +36,7 @@ class DatabasePool:
                 port=int(os.getenv("POSTGRES_PORT", "5436")),
                 database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
                 user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv(
-                    "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
-                ),
+                password=settings.get_effective_postgres_password(),
             )
 
     @contextmanager

@@ -47,6 +47,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import requests
+
+from config import settings
 from lib.resilience import ResilientAPIClient, graceful_tracking
 
 logger = logging.getLogger(__name__)
@@ -81,13 +83,11 @@ class PatternTracker:
         Initialize pattern tracker.
 
         Args:
-            base_url: Base URL for Phase 4 API (default: from env or localhost:8053)
+            base_url: Base URL for Phase 4 API (defaults to settings.archon_intelligence_url)
             enable_tracking: Enable/disable tracking (useful for testing)
         """
-        # Get base URL from environment or use default
-        self.base_url = base_url or os.getenv(
-            "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
-        )
+        # Get base URL from settings
+        self.base_url = base_url or str(settings.archon_intelligence_url)
 
         self.enable_tracking = enable_tracking
 

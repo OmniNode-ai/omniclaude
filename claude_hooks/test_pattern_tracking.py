@@ -11,6 +11,8 @@ import sys
 import tempfile
 import uuid
 
+from config import settings
+
 # Add hooks to path
 sys.path.insert(0, "/Users/jonah/.claude/hooks")
 
@@ -159,7 +161,7 @@ def test_direct_api():
         # Make direct API call
         with httpx.Client(timeout=10.0) as client:
             response = client.post(
-                "http://localhost:8053/api/pattern-traceability/lineage/track",
+                f"{settings.archon_intelligence_url}/api/pattern-traceability/lineage/track",
                 json=test_payload,
             )
 

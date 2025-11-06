@@ -9,30 +9,55 @@
 
 set -euo pipefail
 
-# Configuration
-DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
-DB_PORT="${POSTGRES_PORT:-5436}"
-DB_NAME="${POSTGRES_DATABASE:-omninode_bridge}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Verify password is set
-if [ -z "$DB_PASSWORD" ]; then
-    echo -e "${YELLOW}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
-    echo "   Please run: source .env"
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
+fi
+
+# Source .env file
+source "$PROJECT_ROOT/.env"
+
+# Configuration (no fallbacks - must be set in .env)
+DB_HOST="${POSTGRES_HOST}"
+DB_PORT="${POSTGRES_PORT}"
+DB_NAME="${POSTGRES_DATABASE}"
+DB_USER="${POSTGRES_USER}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"
+
+# Colors (defined before validation to allow colored output)
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
     exit 1
 fi
 
 # Output directory
 DUMP_DIR="${DUMP_DIR:-./db_dumps}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
 
 # ==============================================================================
 # Functions
@@ -246,12 +271,12 @@ Output:
     All dumps are saved to: $DUMP_DIR/
     Filenames include timestamp: ${TIMESTAMP}
 
-Environment Variables:
-    POSTGRES_HOST       Database host (default: 192.168.86.200)
-    POSTGRES_PORT       Database port (default: 5436)
-    POSTGRES_DATABASE   Database name (default: omninode_bridge)
-    POSTGRES_USER       Database user (default: postgres)
-    POSTGRES_PASSWORD   Database password (REQUIRED - must be set via .env)
+Environment Variables (configured in .env):
+    POSTGRES_HOST       Database host (required)
+    POSTGRES_PORT       Database port (required)
+    POSTGRES_DATABASE   Database name (required)
+    POSTGRES_USER       Database user (required)
+    POSTGRES_PASSWORD   Database password (required)
     DUMP_DIR            Output directory (default: ./db_dumps)
 
 Examples:

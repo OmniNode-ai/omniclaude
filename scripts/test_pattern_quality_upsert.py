@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
+from config import settings
 
 
 async def test_upsert():
@@ -32,17 +33,9 @@ async def test_upsert():
         version="1.0.0",
     )
 
-    # Database connection string (use correct hostname for host machine)
-    import os
-
-    password = os.environ.get("POSTGRES_PASSWORD")
-    if not password:
-        raise ValueError(
-            "POSTGRES_PASSWORD environment variable not set. Run: source .env"
-        )
-    database_url = (
-        f"postgresql://postgres:{password}@192.168.86.200:5436/omninode_bridge"
-    )
+    # Database connection string from Pydantic settings
+    database_url = settings.get_postgres_dsn()
+    print(f"Using database URL: {database_url}")
 
     # Store the score
     scorer = PatternQualityScorer()

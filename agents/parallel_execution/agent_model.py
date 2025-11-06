@@ -64,6 +64,10 @@ class AgentTask(BaseModel):
     input_data: Dict[str, Any] = Field(default_factory=dict)
     dependencies: list[str] = Field(default_factory=list)
 
+    # Traceability fields
+    correlation_id: Optional[str] = None
+    session_id: Optional[str] = None
+
 
 class AgentResult(BaseModel):
     """Result from agent execution."""

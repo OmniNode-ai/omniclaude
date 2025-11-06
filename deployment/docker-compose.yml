@@ -259,6 +259,11 @@ services:
 
       # Service configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    extra_hosts:
+      # DNS resolution for remote shared infrastructure
+      - "omninode-bridge-redpanda:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
+      - "omninode-bridge-postgres:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
+      - "omninode-bridge-consul:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
     volumes:
       - ${AGENT_DEFINITIONS_HOST_PATH:-$HOME/.claude/agent-definitions}:/agent-definitions:ro
     networks:

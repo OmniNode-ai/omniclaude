@@ -1,0 +1,574 @@
+#!/usr/bin/env python3
+"""
+Intelligence Usage Tracker - Track effectiveness of patterns, intelligence, and debug data.
+
+Monitors which intelligence is:
+- Retrieved from Qdrant/Memgraph/PostgreSQL
+- Applied to agent decision-making
+- Effective (quality impact, success contributions)
+
+Stores data in agent_intelligence_usage table for ROI analysis.
+
+Key Features:
+- Track retrieval of patterns, schemas, debug intelligence
+- Track application (was it actually used?)
+- Calculate effectiveness metrics
+- Link to agent executions via correlation_id
+- Non-blocking async logging with retry
+
+Performance Targets:
+- Logging time: <50ms per record
+- Success rate: >95%
+- Minimal overhead on manifest generation
+
+Created: 2025-11-06
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IntelligenceUsageRecord:
+    """Record of intelligence usage during agent execution."""
+
+    # Correlation and tracing
+    correlation_id: UUID
+    execution_id: Optional[UUID] = None
+    manifest_injection_id: Optional[UUID] = None
+    prompt_id: Optional[UUID] = None
+
+    # Agent context
+    agent_name: str = "unknown"
+
+    # Intelligence source
+    intelligence_type: str = (
+        "pattern"  # pattern, schema, debug_intelligence, model, infrastructure
+    )
+    intelligence_source: str = (
+        "qdrant"  # qdrant, memgraph, postgres, archon-intelligence
+    )
+
+    # Intelligence identification
+    intelligence_id: Optional[UUID] = None
+    intelligence_name: Optional[str] = None
+    collection_name: Optional[str] = None
+
+    # Usage details
+    usage_context: str = (
+        "reference"  # reference, implementation, inspiration, validation
+    )
+    usage_count: int = 1
+    confidence_score: Optional[float] = None
+
+    # Intelligence content (snapshot)
+    intelligence_snapshot: Optional[Dict[str, Any]] = None
+    intelligence_summary: Optional[str] = None
+
+    # Query details
+    query_used: Optional[str] = None
+    query_time_ms: Optional[int] = None
+    query_results_rank: Optional[int] = None
+
+    # Application tracking
+    was_applied: bool = False
+    application_details: Optional[Dict[str, Any]] = None
+    file_operations_using_this: Optional[List[UUID]] = None
+
+    # Effectiveness tracking
+    contributed_to_success: Optional[bool] = None
+    quality_impact: Optional[float] = None
+
+    # Metadata
+    metadata: Optional[Dict[str, Any]] = None
+
+    # Timestamps
+    created_at: datetime = None
+    applied_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        """Set default values after initialization."""
+        if self.created_at is None:
+            self.created_at = datetime.now(UTC)
+        if self.metadata is None:
+            self.metadata = {}
+
+
+class IntelligenceUsageTracker:
+    """
+    Track intelligence usage and effectiveness.
+
+    Provides:
+    - Record when intelligence is retrieved
+    - Record when intelligence is applied
+    - Calculate effectiveness metrics
+    - Store in agent_intelligence_usage table
+    - Non-blocking async logging
+
+    Example:
+        tracker = IntelligenceUsageTracker()
+        await tracker.track_retrieval(
+            correlation_id=correlation_id,
+            agent_name="test-agent",
+            intelligence_type="pattern",
+            intelligence_source="qdrant",
+            intelligence_name="Node State Management Pattern",
+            collection_name="execution_patterns",
+            confidence_score=0.95,
+            query_time_ms=450,
+        )
+
+        await tracker.track_application(
+            correlation_id=correlation_id,
+            intelligence_name="Node State Management Pattern",
+            was_applied=True,
+            quality_impact=0.85,
+        )
+    """
+
+    def __init__(
+        self,
+        db_host: Optional[str] = None,
+        db_port: Optional[int] = None,
+        db_name: Optional[str] = None,
+        db_user: Optional[str] = None,
+        db_password: Optional[str] = None,
+        enable_tracking: bool = True,
+    ):
+        """
+        Initialize intelligence usage tracker.
+
+        Args:
+            db_host: PostgreSQL host (default: from settings or env)
+            db_port: PostgreSQL port (default: from settings or env)
+            db_name: Database name (default: from settings or env)
+            db_user: Database user (default: from settings or env)
+            db_password: Database password (default: from settings or env)
+            enable_tracking: Enable tracking (disable for testing)
+        """
+        # Use Pydantic settings if available, otherwise fall back to env vars
+        if settings:
+            self.db_host = db_host or settings.postgres_host
+            self.db_port = db_port or settings.postgres_port
+            self.db_name = db_name or settings.postgres_database
+            self.db_user = db_user or settings.postgres_user
+            self.db_password = db_password or settings.get_effective_postgres_password()
+        else:
+            self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
+            self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
+            self.db_name = db_name or os.environ.get(
+                "POSTGRES_DATABASE", "omninode_bridge"
+            )
+            self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
+            self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
+
+        self.enable_tracking = enable_tracking
+
+        if not self.db_password:
+            logger.warning(
+                "POSTGRES_PASSWORD not set. Intelligence usage tracking disabled. Run: source .env"
+            )
+            self.enable_tracking = False
+
+        # In-memory cache for pending records (for batch processing)
+        self._pending_records: List[IntelligenceUsageRecord] = []
+        self._max_pending = 100  # Flush after 100 records
+
+    async def track_retrieval(
+        self,
+        correlation_id: UUID,
+        agent_name: str,
+        intelligence_type: str,
+        intelligence_source: str,
+        intelligence_name: Optional[str] = None,
+        collection_name: Optional[str] = None,
+        intelligence_id: Optional[UUID] = None,
+        confidence_score: Optional[float] = None,
+        query_time_ms: Optional[int] = None,
+        query_used: Optional[str] = None,
+        query_results_rank: Optional[int] = None,
+        intelligence_snapshot: Optional[Dict[str, Any]] = None,
+        intelligence_summary: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Track intelligence retrieval.
+
+        Args:
+            correlation_id: Correlation ID linking to execution
+            agent_name: Agent name
+            intelligence_type: Type (pattern, schema, debug_intelligence, model, infrastructure)
+            intelligence_source: Source (qdrant, memgraph, postgres, archon-intelligence)
+            intelligence_name: Name of intelligence
+            collection_name: Qdrant collection name
+            intelligence_id: UUID of intelligence item
+            confidence_score: Confidence/relevance score (0.0-1.0)
+            query_time_ms: Query performance
+            query_used: Query that retrieved this intelligence
+            query_results_rank: Ranking in query results (1=top)
+            intelligence_snapshot: Complete intelligence data structure
+            intelligence_summary: Human-readable summary
+            metadata: Additional metadata
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.enable_tracking:
+            return False
+
+        try:
+            record = IntelligenceUsageRecord(
+                correlation_id=correlation_id,
+                agent_name=agent_name,
+                intelligence_type=intelligence_type,
+                intelligence_source=intelligence_source,
+                intelligence_name=intelligence_name,
+                collection_name=collection_name,
+                intelligence_id=intelligence_id,
+                confidence_score=confidence_score,
+                query_time_ms=query_time_ms,
+                query_used=query_used,
+                query_results_rank=query_results_rank,
+                intelligence_snapshot=intelligence_snapshot,
+                intelligence_summary=intelligence_summary,
+                metadata=metadata or {},
+            )
+
+            # Store record in database
+            await self._store_record(record)
+
+            logger.debug(
+                f"Tracked intelligence retrieval: {intelligence_type} '{intelligence_name}' "
+                f"from {intelligence_source} (confidence: {confidence_score})"
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to track intelligence retrieval: {e}", exc_info=True)
+            return False
+
+    async def track_application(
+        self,
+        correlation_id: UUID,
+        intelligence_name: str,
+        was_applied: bool = True,
+        application_details: Optional[Dict[str, Any]] = None,
+        file_operations_using_this: Optional[List[UUID]] = None,
+        contributed_to_success: Optional[bool] = None,
+        quality_impact: Optional[float] = None,
+    ) -> bool:
+        """
+        Track intelligence application (was it actually used?).
+
+        Args:
+            correlation_id: Correlation ID
+            intelligence_name: Name of intelligence
+            was_applied: Whether intelligence was actually used
+            application_details: How it was applied
+            file_operations_using_this: File operations that used this
+            contributed_to_success: Whether this helped achieve success
+            quality_impact: Estimated quality contribution (0.0-1.0)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.enable_tracking:
+            return False
+
+        try:
+            # Update existing record with application details
+            await self._update_application(
+                correlation_id=correlation_id,
+                intelligence_name=intelligence_name,
+                was_applied=was_applied,
+                application_details=application_details,
+                file_operations_using_this=file_operations_using_this,
+                contributed_to_success=contributed_to_success,
+                quality_impact=quality_impact,
+            )
+
+            logger.debug(
+                f"Tracked intelligence application: '{intelligence_name}' "
+                f"(applied: {was_applied}, quality_impact: {quality_impact})"
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to track intelligence application: {e}", exc_info=True
+            )
+            return False
+
+    async def _store_record(self, record: IntelligenceUsageRecord) -> bool:
+        """Store intelligence usage record in database."""
+        try:
+            import psycopg2
+            import psycopg2.extras
+
+            # Connect to database
+            with (
+                psycopg2.connect(
+                    host=self.db_host,
+                    port=self.db_port,
+                    dbname=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                ) as conn,
+                conn.cursor() as cursor,
+            ):
+                # Insert record
+                cursor.execute(
+                    """
+                    INSERT INTO agent_intelligence_usage (
+                        correlation_id,
+                        execution_id,
+                        manifest_injection_id,
+                        prompt_id,
+                        agent_name,
+                        intelligence_type,
+                        intelligence_source,
+                        intelligence_id,
+                        intelligence_name,
+                        collection_name,
+                        usage_context,
+                        usage_count,
+                        confidence_score,
+                        intelligence_snapshot,
+                        intelligence_summary,
+                        query_used,
+                        query_time_ms,
+                        query_results_rank,
+                        was_applied,
+                        application_details,
+                        file_operations_using_this,
+                        contributed_to_success,
+                        quality_impact,
+                        metadata,
+                        created_at,
+                        applied_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    """,
+                    (
+                        str(record.correlation_id),
+                        str(record.execution_id) if record.execution_id else None,
+                        (
+                            str(record.manifest_injection_id)
+                            if record.manifest_injection_id
+                            else None
+                        ),
+                        str(record.prompt_id) if record.prompt_id else None,
+                        record.agent_name,
+                        record.intelligence_type,
+                        record.intelligence_source,
+                        str(record.intelligence_id) if record.intelligence_id else None,
+                        record.intelligence_name,
+                        record.collection_name,
+                        record.usage_context,
+                        record.usage_count,
+                        record.confidence_score,
+                        (
+                            psycopg2.extras.Json(record.intelligence_snapshot)
+                            if record.intelligence_snapshot
+                            else None
+                        ),
+                        record.intelligence_summary,
+                        record.query_used,
+                        record.query_time_ms,
+                        record.query_results_rank,
+                        record.was_applied,
+                        (
+                            psycopg2.extras.Json(record.application_details)
+                            if record.application_details
+                            else None
+                        ),
+                        record.file_operations_using_this,
+                        record.contributed_to_success,
+                        record.quality_impact,
+                        psycopg2.extras.Json(record.metadata),
+                        record.created_at,
+                        record.applied_at,
+                    ),
+                )
+
+                conn.commit()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to store intelligence usage record: {e}")
+            return False
+
+    async def _update_application(
+        self,
+        correlation_id: UUID,
+        intelligence_name: str,
+        was_applied: bool,
+        application_details: Optional[Dict[str, Any]],
+        file_operations_using_this: Optional[List[UUID]],
+        contributed_to_success: Optional[bool],
+        quality_impact: Optional[float],
+    ) -> bool:
+        """Update intelligence usage record with application details."""
+        try:
+            import psycopg2
+            import psycopg2.extras
+
+            # Connect to database
+            with (
+                psycopg2.connect(
+                    host=self.db_host,
+                    port=self.db_port,
+                    dbname=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                ) as conn,
+                conn.cursor() as cursor,
+            ):
+                # Update record
+                cursor.execute(
+                    """
+                    UPDATE agent_intelligence_usage
+                    SET
+                        was_applied = %s,
+                        application_details = %s,
+                        file_operations_using_this = %s,
+                        contributed_to_success = %s,
+                        quality_impact = %s,
+                        applied_at = NOW()
+                    WHERE correlation_id = %s
+                        AND intelligence_name = %s
+                    """,
+                    (
+                        was_applied,
+                        (
+                            psycopg2.extras.Json(application_details)
+                            if application_details
+                            else None
+                        ),
+                        file_operations_using_this,
+                        contributed_to_success,
+                        quality_impact,
+                        str(correlation_id),
+                        intelligence_name,
+                    ),
+                )
+
+                conn.commit()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update intelligence application: {e}")
+            return False
+
+    async def get_usage_stats(
+        self,
+        intelligence_name: Optional[str] = None,
+        intelligence_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get intelligence usage statistics.
+
+        Args:
+            intelligence_name: Filter by intelligence name
+            intelligence_type: Filter by intelligence type
+
+        Returns:
+            Dictionary with usage statistics
+        """
+        if not self.enable_tracking:
+            return {"error": "Tracking disabled"}
+
+        try:
+            import psycopg2
+            import psycopg2.extras
+
+            with (
+                psycopg2.connect(
+                    host=self.db_host,
+                    port=self.db_port,
+                    dbname=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                ) as conn,
+                conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor,
+            ):
+                # Build query with optional filters
+                where_clauses = []
+                params = []
+
+                if intelligence_name:
+                    where_clauses.append("intelligence_name = %s")
+                    params.append(intelligence_name)
+
+                if intelligence_type:
+                    where_clauses.append("intelligence_type = %s")
+                    params.append(intelligence_type)
+
+                where_clause = (
+                    "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+                )
+
+                # Query usage statistics
+                cursor.execute(
+                    f"""
+                    SELECT
+                        COUNT(*) as total_retrievals,
+                        COUNT(*) FILTER (WHERE was_applied) as times_applied,
+                        ROUND(
+                            (COUNT(*) FILTER (WHERE was_applied)::numeric * 100) /
+                            NULLIF(COUNT(*), 0),
+                            2
+                        ) as application_rate_percent,
+                        AVG(confidence_score) as avg_confidence,
+                        AVG(quality_impact) FILTER (WHERE was_applied) as avg_quality_impact,
+                        COUNT(*) FILTER (WHERE contributed_to_success) as success_contributions,
+                        AVG(query_time_ms) as avg_query_time_ms,
+                        array_agg(DISTINCT agent_name) as agents_using_this,
+                        array_agg(DISTINCT intelligence_source) as sources,
+                        MIN(created_at) as first_used,
+                        MAX(created_at) as last_used
+                    FROM agent_intelligence_usage
+                    {where_clause}
+                    """,
+                    params,
+                )
+
+                result = cursor.fetchone()
+
+                return dict(result) if result else {}
+
+        except Exception as e:
+            logger.error(f"Failed to get usage stats: {e}")
+            return {"error": str(e)}
+
+
+# Singleton instance for convenience
+_tracker_instance: Optional[IntelligenceUsageTracker] = None
+
+
+def get_tracker() -> IntelligenceUsageTracker:
+    """Get singleton tracker instance."""
+    global _tracker_instance
+    if _tracker_instance is None:
+        _tracker_instance = IntelligenceUsageTracker()
+    return _tracker_instance

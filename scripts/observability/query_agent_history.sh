@@ -21,15 +21,15 @@
 #   ./query_agent_history.sh --export json > history.json
 #
 # Prerequisites:
-#   - PostgreSQL credentials in .env or environment variables
-#   - Network access to database (192.168.86.200:5436)
+#   - PostgreSQL credentials in .env file
+#   - Network access to database
 #
-# Environment Variables:
-#   POSTGRES_HOST (default: 192.168.86.200)
-#   POSTGRES_PORT (default: 5436)
-#   POSTGRES_USER (default: postgres)
+# Environment Variables (configured in .env):
+#   POSTGRES_HOST (required)
+#   POSTGRES_PORT (required)
+#   POSTGRES_USER (required)
 #   POSTGRES_PASSWORD (required)
-#   POSTGRES_DB (default: omninode_bridge)
+#   POSTGRES_DATABASE (required)
 #
 # Created: 2025-10-29
 ################################################################################
@@ -95,18 +95,40 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Load environment
-if [ -f "$PROJECT_ROOT/.env" ]; then
-    set -a
-    source "$PROJECT_ROOT/.env"
-    set +a
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    echo -e "${RED}❌ ERROR: .env file not found at $PROJECT_ROOT/.env${NC}"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
 fi
 
-# Configuration with defaults
-POSTGRES_HOST=${POSTGRES_HOST:-"192.168.86.200"}
-POSTGRES_PORT=${POSTGRES_PORT:-"5436"}
-POSTGRES_USER=${POSTGRES_USER:-"postgres"}
-POSTGRES_DB=${POSTGRES_DB:-"omninode_bridge"}
+set -a
+source "$PROJECT_ROOT/.env"
+set +a
+
+# Configuration (no fallbacks - must be set in .env)
+POSTGRES_HOST="${POSTGRES_HOST}"
+POSTGRES_PORT="${POSTGRES_PORT}"
+POSTGRES_USER="${POSTGRES_USER}"
+POSTGRES_DB="${POSTGRES_DATABASE}"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_DB" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$PGPASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
+fi
 
 # Helper functions
 log_info() {

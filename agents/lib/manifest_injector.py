@@ -60,6 +60,9 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+# Import Pydantic Settings for type-safe configuration
+from config import settings
+
 # Import nest_asyncio for nested event loop support
 try:
     import nest_asyncio
@@ -132,6 +135,20 @@ except ImportError:
     if str(lib_path) not in sys.path:
         sys.path.insert(0, str(lib_path))
     from archon_hybrid_scorer import ArchonHybridScorer
+
+
+# Import IntelligenceUsageTracker for intelligence effectiveness tracking
+try:
+    from intelligence_usage_tracker import IntelligenceUsageTracker
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from intelligence_usage_tracker import IntelligenceUsageTracker
 
 logger = logging.getLogger(__name__)
 
@@ -715,6 +732,16 @@ class ManifestInjector:
         else:
             self._storage = None
 
+        # Intelligence usage tracker
+        self._usage_tracker: Optional[IntelligenceUsageTracker] = None
+        if self.enable_storage:
+            try:
+                self._usage_tracker = IntelligenceUsageTracker()
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize intelligence usage tracker: {e}"
+                )
+
         # Quality scoring configuration
         self.quality_scorer = PatternQualityScorer()
         self.enable_quality_filtering = (
@@ -1208,7 +1235,7 @@ class ManifestInjector:
                 )
 
         try:
-            qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+            qdrant_url = os.environ.get("QDRANT_URL", str(settings.qdrant_url))
 
             async with aiohttp.ClientSession() as session:
                 for collection_name in collections:
@@ -1715,6 +1742,63 @@ class ManifestInjector:
                 },
             }
 
+            # Track intelligence usage for each pattern retrieved
+            if self._usage_tracker:
+                try:
+                    # Track execution_patterns
+                    for i, pattern in enumerate(exec_patterns):
+                        await self._usage_tracker.track_retrieval(
+                            correlation_id=UUID(correlation_id),
+                            agent_name=self.agent_name or "unknown",
+                            intelligence_type="pattern",
+                            intelligence_source="qdrant",
+                            intelligence_name=pattern.get("name", "unknown"),
+                            collection_name="execution_patterns",
+                            confidence_score=pattern.get(
+                                "confidence", pattern.get("confidence_score")
+                            ),
+                            query_time_ms=exec_time,
+                            query_used="PATTERN_EXTRACTION",
+                            query_results_rank=i + 1,
+                            intelligence_snapshot=pattern,
+                            intelligence_summary=pattern.get("description", ""),
+                            metadata={
+                                "source": "event-based",
+                                "parallel_query": True,
+                            },
+                        )
+
+                    # Track code_patterns
+                    for i, pattern in enumerate(code_patterns):
+                        await self._usage_tracker.track_retrieval(
+                            correlation_id=UUID(correlation_id),
+                            agent_name=self.agent_name or "unknown",
+                            intelligence_type="pattern",
+                            intelligence_source="qdrant",
+                            intelligence_name=pattern.get("name", "unknown"),
+                            collection_name="code_patterns",
+                            confidence_score=pattern.get(
+                                "confidence", pattern.get("confidence_score")
+                            ),
+                            query_time_ms=code_time,
+                            query_used="PATTERN_EXTRACTION",
+                            query_results_rank=i + 1,
+                            intelligence_snapshot=pattern,
+                            intelligence_summary=pattern.get("description", ""),
+                            metadata={
+                                "source": "event-based",
+                                "parallel_query": True,
+                            },
+                        )
+
+                    self.logger.debug(
+                        f"[{correlation_id}] Tracked {len(all_patterns)} pattern retrievals"
+                    )
+                except Exception as track_error:
+                    self.logger.warning(
+                        f"[{correlation_id}] Failed to track pattern retrievals: {track_error}"
+                    )
+
             # Cache the result in both Valkey and in-memory caches
             # Valkey cache (distributed, persistent)
             if self._valkey_cache:
@@ -1990,8 +2074,8 @@ class ManifestInjector:
         try:
             import aiohttp
 
-            # Get Qdrant URL from environment
-            qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+            # Get Qdrant URL from environment (defaults to Pydantic settings)
+            qdrant_url = os.getenv("QDRANT_URL", str(settings.qdrant_url))
 
             # Try to fetch collections
             async with aiohttp.ClientSession() as session:
@@ -2542,7 +2626,23 @@ class ManifestInjector:
                     f"[{correlation_id}] Qdrant workflow_events unavailable: {qdrant_error}"
                 )
 
-            # Fallback: Query PostgreSQL for pattern feedback
+            # Fallback 1: Query PostgreSQL agent_execution_logs (primary source)
+            try:
+                execution_workflows = await self._query_agent_execution_logs()
+                if execution_workflows:
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["debug_intelligence"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Debug intelligence from agent_execution_logs: "
+                        f"{len(execution_workflows)} workflows in {elapsed_ms}ms"
+                    )
+                    return self._format_execution_workflows(execution_workflows)
+            except Exception as exec_error:
+                self.logger.debug(
+                    f"[{correlation_id}] PostgreSQL agent_execution_logs unavailable: {exec_error}"
+                )
+
+            # Fallback 2: Query PostgreSQL for pattern feedback
             try:
                 db_workflows = await self._query_pattern_feedback_from_db()
                 if db_workflows:
@@ -2558,7 +2658,7 @@ class ManifestInjector:
                     f"[{correlation_id}] PostgreSQL pattern feedback unavailable: {db_error}"
                 )
 
-            # Fallback: Check local JSON logs from AgentExecutionLogger
+            # Fallback 3: Check local JSON logs from AgentExecutionLogger
             try:
                 log_workflows = await self._query_local_execution_logs()
                 if log_workflows:
@@ -2599,6 +2699,80 @@ class ManifestInjector:
                 "error": str(e),
                 "query_time_ms": elapsed_ms,
             }
+
+    async def _query_agent_execution_logs(self) -> List[Dict[str, Any]]:
+        """
+        Query agent execution logs from PostgreSQL agent_execution_logs table.
+
+        Returns:
+            List of workflow dictionaries with execution success/failure data
+        """
+        try:
+            from .db import get_pg_pool
+
+            pool = await get_pg_pool()
+            if pool is None:
+                return []
+
+            async with pool.acquire() as conn:
+                # Query recent agent executions (last 100 entries)
+                # Get both successes and failures for learning
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        execution_id,
+                        correlation_id,
+                        agent_name,
+                        user_prompt,
+                        status,
+                        quality_score,
+                        error_message,
+                        error_type,
+                        duration_ms,
+                        metadata,
+                        created_at
+                    FROM agent_execution_logs
+                    WHERE status IN ('success', 'error', 'failed')
+                    ORDER BY created_at DESC
+                    LIMIT 100
+                    """
+                )
+
+                workflows = []
+                for row in rows:
+                    # Extract relevant metadata
+                    metadata = row["metadata"] or {}
+
+                    workflows.append(
+                        {
+                            "execution_id": str(row["execution_id"]),
+                            "correlation_id": str(row["correlation_id"]),
+                            "agent_name": row["agent_name"],
+                            "user_prompt": row["user_prompt"],
+                            "status": row["status"],
+                            "quality_score": (
+                                float(row["quality_score"])
+                                if row["quality_score"]
+                                else None
+                            ),
+                            "error_message": row["error_message"],
+                            "error_type": row["error_type"],
+                            "duration_ms": row["duration_ms"],
+                            "metadata": metadata,
+                            "timestamp": (
+                                row["created_at"].isoformat()
+                                if row["created_at"]
+                                else None
+                            ),
+                            "success": row["status"] == "success",
+                        }
+                    )
+
+                return workflows
+
+        except Exception as e:
+            self.logger.debug(f"PostgreSQL agent execution logs query failed: {e}")
+            return []
 
     async def _query_pattern_feedback_from_db(self) -> List[Dict[str, Any]]:
         """
@@ -2716,6 +2890,66 @@ class ManifestInjector:
         except Exception as e:
             self.logger.debug(f"Local execution logs query failed: {e}")
             return []
+
+    def _format_execution_workflows(
+        self, workflows: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Format agent execution log results for debug intelligence.
+
+        Args:
+            workflows: List of workflow dicts from agent_execution_logs
+
+        Returns:
+            Raw format compatible with _format_debug_intelligence_result
+        """
+        # Format workflows with enriched information
+        formatted_workflows = []
+        for workflow in workflows[:20]:  # Top 20 workflows
+            # Build quality info
+            quality_info = ""
+            if workflow.get("quality_score"):
+                quality_info = f" (quality: {workflow['quality_score']:.2f})"
+
+            # Build duration info
+            duration_info = ""
+            if workflow.get("duration_ms"):
+                duration_info = f" in {workflow['duration_ms']}ms"
+
+            # Build reasoning based on success or failure
+            if workflow.get("success"):
+                reasoning = (
+                    f"Agent '{workflow.get('agent_name', 'unknown')}' successfully completed "
+                    f"task '{workflow.get('user_prompt', 'N/A')[:50]}...'{quality_info}{duration_info}"
+                )
+                error_msg = None
+            else:
+                error_type = workflow.get("error_type", "Unknown error")
+                error_msg = workflow.get("error_message", "No details")
+                reasoning = (
+                    f"Agent '{workflow.get('agent_name', 'unknown')}' failed "
+                    f"on task '{workflow.get('user_prompt', 'N/A')[:50]}...': "
+                    f"{error_type}{duration_info}"
+                )
+
+            # Add formatted workflow
+            formatted_workflows.append(
+                {
+                    "success": workflow.get("success", False),
+                    "tool_name": workflow.get("agent_name", "unknown"),
+                    "reasoning": reasoning,
+                    "error": error_msg,
+                    "timestamp": workflow.get("timestamp"),
+                    "quality_score": workflow.get("quality_score"),
+                    "duration_ms": workflow.get("duration_ms"),
+                    "user_prompt": workflow.get("user_prompt"),
+                }
+            )
+
+        return {
+            "similar_workflows": formatted_workflows,
+            "query_time_ms": 0,
+        }
 
     def _format_db_workflows(self, workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -3048,9 +3282,9 @@ class ManifestInjector:
             >>> # Returns: ["debug_intelligence", "infrastructure"]
         """
         if not task_context:
-            # No context - include minimal set
+            # No context - include minimal set with debug intelligence for learning
             self.logger.debug("No task context available, using minimal sections")
-            return ["patterns", "infrastructure"]
+            return ["patterns", "infrastructure", "debug_intelligence"]
 
         sections = []
 
@@ -3075,9 +3309,9 @@ class ManifestInjector:
         ):
             sections.append("infrastructure")
 
-        # Debug intelligence: Include for debug/troubleshoot tasks
-        if task_context.primary_intent == TaskIntent.DEBUG:
-            sections.append("debug_intelligence")
+        # Debug intelligence: ALWAYS include to enable learning from past executions
+        # This allows agents to learn from historical patterns regardless of task type
+        sections.append("debug_intelligence")
 
         # Models: Include if ONEX nodes mentioned
         if len(task_context.mentioned_node_types) > 0 or "onex" in " ".join(
@@ -3085,13 +3319,13 @@ class ManifestInjector:
         ):
             sections.append("models")
 
-        # Fallback: If no sections selected, include patterns + infrastructure
+        # Fallback: If no sections selected, include patterns + infrastructure + debug_intelligence
         if not sections:
             self.logger.debug(
                 f"No sections matched for intent {task_context.primary_intent.value}, "
                 f"using fallback sections"
             )
-            sections = ["patterns", "infrastructure"]
+            sections = ["patterns", "infrastructure", "debug_intelligence"]
 
         self.logger.debug(
             f"Selected {len(sections)} sections for intent {task_context.primary_intent.value}: {sections}"
@@ -3771,10 +4005,9 @@ class ManifestInjector:
             # Count schemas
             database_schemas_count = len(schemas_data.get("tables", []))
 
-            # Debug intelligence counts
-            workflows = debug_data.get("similar_workflows", {})
-            debug_intelligence_successes = len(workflows.get("successes", []))
-            debug_intelligence_failures = len(workflows.get("failures", []))
+            # Debug intelligence counts (use total counts, not limited display list)
+            debug_intelligence_successes = debug_data.get("total_successes", 0)
+            debug_intelligence_failures = debug_data.get("total_failures", 0)
 
             # Filesystem counts
             filesystem_data = manifest.get("filesystem", {})

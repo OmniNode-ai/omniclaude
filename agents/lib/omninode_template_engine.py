@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Set
 # Import from omnibase_core
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
+# Import Pydantic Settings for type-safe configuration
+from config import settings
+
 from .models.intelligence_context import IntelligenceContext, get_default_intelligence
 
 # Pattern learning imports (KV-002 integration)
@@ -205,9 +208,7 @@ class OmniNodeTemplateEngine:
             try:
                 self.pattern_library = PatternLibrary()
                 self.pattern_storage = PatternStorage(
-                    qdrant_url=getattr(
-                        self.config, "qdrant_url", "http://localhost:6333"
-                    ),
+                    qdrant_url=settings.qdrant_url,
                     collection_name="code_generation_patterns",
                     use_in_memory=False,  # Try Qdrant first, fallback to in-memory if unavailable
                 )
@@ -1044,31 +1045,29 @@ class OmniNodeTemplateEngine:
         files = {}
 
         # Generate input model
-        files["v1_0_0/models/model_{}_input.py".format(microservice_name)] = (
+        files[f"v1_0_0/models/model_{microservice_name}_input.py"] = (
             self._generate_input_model(microservice_name, analysis_result)
         )
 
         # Generate output model
-        files["v1_0_0/models/model_{}_output.py".format(microservice_name)] = (
+        files[f"v1_0_0/models/model_{microservice_name}_output.py"] = (
             self._generate_output_model(microservice_name, analysis_result)
         )
 
         # Generate config model
-        files["v1_0_0/models/model_{}_config.py".format(microservice_name)] = (
+        files[f"v1_0_0/models/model_{microservice_name}_config.py"] = (
             self._generate_config_model(microservice_name, analysis_result)
         )
 
         # Generate contract model (NEW: Phase 6 enhancement)
         files[
-            "v1_0_0/models/model_{}_{}_contract.py".format(
-                microservice_name, node_type.lower()
-            )
+            f"v1_0_0/models/model_{microservice_name}_{node_type.lower()}_contract.py"
         ] = self._generate_contract_model(
             microservice_name, node_type, domain, analysis_result, context
         )
 
         # Generate enum
-        files["v1_0_0/enums/enum_{}_operation_type.py".format(microservice_name)] = (
+        files[f"v1_0_0/enums/enum_{microservice_name}_operation_type.py"] = (
             self._generate_operation_enum(microservice_name, analysis_result)
         )
 
@@ -2009,12 +2008,12 @@ tags:
             # Proper URL scheme mapping with database name and config-based endpoints
             if "postgres" in system.lower() or "database" in system.lower():
                 # Include database name in PostgreSQL URL
-                target = f"postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"
+                target = f"postgresql://{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_database}"
             elif "redis" in system.lower() or "cache" in system.lower():
-                target = f"redis://{self.config.redis_host}:{self.config.redis_port}"
+                target = f"redis://{settings.redis_host}:{settings.redis_port}"
             elif "kafka" in system.lower():
                 # Handle kafka_bootstrap_servers that may already include scheme
-                kafka_servers = self.config.kafka_bootstrap_servers
+                kafka_servers = settings.kafka_bootstrap_servers
                 if kafka_servers.startswith("kafka://"):
                     target = kafka_servers
                 else:
@@ -2054,15 +2053,15 @@ tags:
             if "postgres" in system.lower() or "database" in system.lower():
                 # Include database name in PostgreSQL URL
                 endpoints.append(
-                    f'    - "postgresql://{self.config.postgres_host}:{self.config.postgres_port}/{self.config.postgres_db}"'
+                    f'    - "postgresql://{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_database}"'
                 )
             elif "redis" in system.lower() or "cache" in system.lower():
                 endpoints.append(
-                    f'    - "redis://{self.config.redis_host}:{self.config.redis_port}"'
+                    f'    - "redis://{settings.redis_host}:{settings.redis_port}"'
                 )
             elif "kafka" in system.lower():
                 # Handle kafka_bootstrap_servers that may already include scheme
-                kafka_servers = self.config.kafka_bootstrap_servers
+                kafka_servers = settings.kafka_bootstrap_servers
                 if kafka_servers.startswith("kafka://"):
                     endpoints.append(f'    - "{kafka_servers}"')
                 else:

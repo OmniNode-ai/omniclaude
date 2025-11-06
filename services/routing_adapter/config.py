@@ -74,13 +74,9 @@ class RoutingAdapterConfig:
         self.health_check_interval = settings.health_check_interval  # Already int
 
         # Agent Router Configuration
-        home_dir = Path.home()
-        self.agent_registry_path = settings.agent_registry_path or str(
-            home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml"
-        )
-        self.agent_definitions_path = settings.agent_definitions_path or str(
-            home_dir / ".claude" / "agent-definitions"
-        )
+        # Uses settings.agent_registry_path which handles REGISTRY_PATH env var for Docker
+        self.agent_registry_path = settings.agent_registry_path
+        self.agent_definitions_path = settings.agent_definitions_path
 
         # Performance Configuration
         self.routing_timeout_ms = settings.routing_timeout_ms  # Already int

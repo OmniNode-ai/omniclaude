@@ -4,6 +4,7 @@ Pydantic AI-based Contract-Driven Code Generator Agent
 Generates ONEX-compliant code using LLM intelligence with structured outputs.
 """
 
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,10 @@ from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+# Add agents/lib to path for execution logger
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+from agent_execution_mixin import AgentExecutionMixin
 
 # Load environment variables from .env file
 try:
@@ -273,7 +278,7 @@ async def validate_node_name(ctx: RunContext[AgentDeps], node_name: str) -> str:
 # ============================================================================
 
 
-class CoderAgent:
+class CoderAgent(AgentExecutionMixin):
     """
     Pydantic AI-based contract-driven code generation agent.
 
@@ -281,6 +286,9 @@ class CoderAgent:
     """
 
     def __init__(self):
+        # Initialize execution logging mixin
+        super().__init__(agent_name="contract-driven-generator")
+
         self.config = AgentConfig.load("agent-contract-driven-generator")
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
@@ -288,7 +296,23 @@ class CoderAgent:
 
     async def execute(self, task: AgentTask) -> AgentResult:
         """
-        Execute code generation using Pydantic AI agent.
+        Execute code generation using Pydantic AI agent with execution logging.
+
+        Args:
+            task: Task containing generation requirements
+
+        Returns:
+            AgentResult with generated code
+        """
+        # Execute with automatic execution logging
+        return await self.execute_with_logging(
+            task=task,
+            execute_fn=self._execute_impl,
+        )
+
+    async def _execute_impl(self, task: AgentTask) -> AgentResult:
+        """
+        Internal implementation of code generation.
 
         Args:
             task: Task containing generation requirements
@@ -319,8 +343,14 @@ class CoderAgent:
                 task_id=task.task_id,
             )
 
+            # Log progress: gathering intelligence
+            await self.log_progress("gathering_intelligence", 20)
+
             # Gather intelligence
             intelligence = await self._gather_intelligence(task, pre_gathered_context)
+
+            # Log progress: intelligence gathered
+            await self.log_progress("intelligence_gathered", 40)
 
             # Create agent dependencies
             deps = AgentDeps(
@@ -344,11 +374,20 @@ class CoderAgent:
                 task_id=task.task_id,
             )
 
+            # Log progress: generating code
+            await self.log_progress("generating_code", 60)
+
             result = await code_generator_agent.run(prompt, deps=deps)
             generated_output: ONEXNodeCode = result.output
 
+            # Log progress: code generated
+            await self.log_progress("code_generated", 80)
+
             # Assemble final code
             final_code = self._assemble_code(generated_output)
+
+            # Log progress: validating
+            await self.log_progress("validating", 90)
 
             # Validate quality
             quality_metrics = await self._validate_quality(

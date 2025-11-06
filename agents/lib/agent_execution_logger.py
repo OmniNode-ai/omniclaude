@@ -164,12 +164,24 @@ class AgentExecutionLogger:
         if self._kafka_enabled:
             try:
                 self._kafka_client = RpkKafkaClient()
-                self.logger.debug("Kafka event publishing enabled")
+                self.logger.debug("Kafka event publishing enabled (using rpk)")
             except Exception as e:
-                self.logger.warning(
-                    "Kafka client initialization failed, disabling event publishing",
-                    metadata={"error": str(e)},
-                )
+                # Gracefully disable if docker/rpk is not available
+                # This is expected in environments without docker installed
+                error_str = str(e)
+                if "Docker executable not found" in error_str:
+                    self.logger.debug(
+                        "Kafka event publishing disabled (docker not available). "
+                        "This is normal for non-Docker environments.",
+                        metadata={
+                            "hint": "Set KAFKA_ENABLE_LOGGING=false to silence this message"
+                        },
+                    )
+                else:
+                    self.logger.warning(
+                        "Kafka client initialization failed, disabling event publishing",
+                        metadata={"error": error_str},
+                    )
                 self._kafka_enabled = False
 
     def _should_retry_db(self) -> bool:

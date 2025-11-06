@@ -17,12 +17,14 @@ import sys
 import uuid
 from pathlib import Path
 
-
 # Add agents directory to path
 repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root / "agents"))
+sys.path.insert(0, str(repo_root))
 
 from lib.manifest_injector import ManifestInjector
+
+from config import settings
 
 
 async def test_basic_backward_compatibility():
@@ -208,7 +210,7 @@ async def main():
 
     # Check environment
     print("\n=== Environment Check ===")
-    kafka_enabled = os.getenv("KAFKA_ENABLE_INTELLIGENCE", "true").lower() == "true"
+    kafka_enabled = settings.kafka_enable_intelligence
     print(f"KAFKA_ENABLE_INTELLIGENCE: {kafka_enabled}")
 
     if not kafka_enabled:

@@ -21,6 +21,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Import Pydantic Settings for type-safe configuration
+from config import settings
+
 from .event_models import EventType, IntentContextData, WorkflowEvent
 
 logger = logging.getLogger(__name__)
@@ -43,7 +46,7 @@ class EventStore:
     def __init__(
         self,
         storage_path: Path,
-        qdrant_url: str = "http://localhost:6333",
+        qdrant_url: str | None = None,
         ollama_url: str = "http://192.168.86.200:11434",
         retention_days: int = 90,
     ):
@@ -52,10 +55,14 @@ class EventStore:
 
         Args:
             storage_path: Path to SQLite database
-            qdrant_url: Qdrant server URL for vector storage
+            qdrant_url: Qdrant server URL for vector storage (defaults to settings.qdrant_url if not provided)
             ollama_url: Ollama server for embeddings
             retention_days: Days to retain events (default 90)
         """
+        # Use Pydantic settings if qdrant_url not explicitly provided
+        if qdrant_url is None:
+            qdrant_url = settings.qdrant_url
+
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 

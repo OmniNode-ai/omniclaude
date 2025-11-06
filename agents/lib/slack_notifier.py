@@ -55,11 +55,15 @@ from typing import Any, Dict, Optional
 # HTTP client imports
 try:
     import aiohttp
+    import certifi  # For SSL certificate verification
 
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
-    logging.warning("aiohttp not available - Slack notifications disabled")
+    logging.warning(
+        "aiohttp or certifi not available - Slack notifications disabled. "
+        "Install with: pip install aiohttp certifi"
+    )
 
 # Add project root to path for config import
 _project_root = Path(__file__).parent.parent.parent
@@ -417,7 +421,16 @@ class SlackNotifier:
             return False
 
         try:
-            async with aiohttp.ClientSession() as session:
+            # Create SSL context with certificate verification using certifi
+            # certifi provides Mozilla's carefully curated CA bundle
+            import ssl
+
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+            # Create connector with SSL context
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.post(
                     self.webhook_url,
                     json=message,

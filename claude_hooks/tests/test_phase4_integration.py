@@ -11,7 +11,7 @@ Comprehensive test suite validating the entire Phase 4 integration pipeline:
 6. API Health and Availability
 
 Test Requirements:
-- Intelligence Service running on localhost:8053
+- Intelligence Service running (configured via settings.archon_intelligence_url)
 - Database accessible (for validation)
 - pytest and pytest-asyncio installed
 
@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from config import settings
+
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
@@ -36,7 +38,7 @@ from phase4_api_client import Phase4APIClient
 # Test Configuration
 # ============================================================================
 
-API_BASE_URL = "http://localhost:8053"
+API_BASE_URL = str(settings.archon_intelligence_url)
 TEST_TIMEOUT = 10.0  # seconds
 
 
@@ -470,7 +472,7 @@ def test_summary():
     print("   Pattern Tracker integration")
     print("   Graceful error handling")
     print("\nRequirements:")
-    print("  + Intelligence Service running on localhost:8053")
+    print(f"  + Intelligence Service running at {settings.archon_intelligence_url}")
     print("  + Database accessible (for full validation)")
     print("=" * 70 + "\n")
 

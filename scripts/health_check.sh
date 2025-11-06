@@ -27,29 +27,48 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Load environment variables from .env if it exists
+# Load environment variables from .env
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-    # Source .env file but only export variables we need
-    source "$PROJECT_ROOT/.env"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
 fi
 
-# Connection details (with fallbacks)
-KAFKA_HOST="${KAFKA_HOST:-192.168.86.200:9092}"
-POSTGRES_HOST="${TRACEABILITY_DB_HOST:-192.168.86.200}"
-POSTGRES_PORT="${TRACEABILITY_DB_PORT:-5436}"
-POSTGRES_DB="${TRACEABILITY_DB_NAME:-omninode_bridge}"
-POSTGRES_USER="${TRACEABILITY_DB_USER:-postgres}"
-POSTGRES_PASSWORD="${TRACEABILITY_DB_PASSWORD}"  # Must be set in environment
-QDRANT_HOST="${QDRANT_HOST:-localhost}"
-QDRANT_PORT="${QDRANT_PORT:-6333}"
+# Source .env file
+source "$PROJECT_ROOT/.env"
 
-# Verify password is set (warning only, allow to continue for health check)
-if [ -z "$POSTGRES_PASSWORD" ]; then
-    echo "⚠️  WARNING: TRACEABILITY_DB_PASSWORD not set, database checks will be skipped"
-    echo "   Please run: source .env"
-    POSTGRES_PASSWORD="NOT_SET"  # Set to avoid empty variable errors
+# Connection details (no fallbacks - must be set in .env)
+KAFKA_HOST="${KAFKA_BOOTSTRAP_SERVERS}"
+POSTGRES_HOST="${POSTGRES_HOST}"
+POSTGRES_PORT="${POSTGRES_PORT}"
+POSTGRES_DB="${POSTGRES_DATABASE}"
+POSTGRES_USER="${POSTGRES_USER}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+QDRANT_HOST="${QDRANT_HOST}"
+QDRANT_PORT="${QDRANT_PORT}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$KAFKA_HOST" ] && missing_vars+=("KAFKA_BOOTSTRAP_SERVERS")
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_DB" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$QDRANT_HOST" ] && missing_vars+=("QDRANT_HOST")
+[ -z "$QDRANT_PORT" ] && missing_vars+=("QDRANT_PORT")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "❌ ERROR: Required environment variables not set in .env:"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
 fi
 
 # Initialize results

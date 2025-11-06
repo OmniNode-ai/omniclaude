@@ -99,7 +99,8 @@ def validate_required_env_vars(
         - Missing POSTGRES_PASSWORD is a common issue. Ensure .env file
           contains: POSTGRES_PASSWORD=<your_password>
         - KAFKA_BOOTSTRAP_SERVERS format: host:port (e.g., 192.168.86.200:9092)
-        - QDRANT_URL format: http://host:port (e.g., http://localhost:6333)
+        - QDRANT_URL format: http://host:port (e.g., from settings.qdrant_url)
+        - Consider using the Pydantic settings module (config.settings) for type-safe access
     """
     # Combine required and additional variables
     vars_to_check = REQUIRED_ENV_VARS.copy()
@@ -158,7 +159,7 @@ def validate_env_var_format(var_name: str, expected_format: str) -> None:
             raise EnvironmentError(
                 f"Invalid format for '{var_name}': {value}\n"
                 f"Expected format: {expected_format}\n"
-                f"Example: http://localhost:6333"
+                f"Example: Use settings.qdrant_url from Pydantic settings"
             )
 
 
@@ -279,7 +280,8 @@ def _check_common_issues() -> List[str]:
     ):
         warnings.append(
             f"QDRANT_URL format may be incorrect: {qdrant_url}\n"
-            f"Expected format: http://host:port (e.g., http://localhost:6333)"
+            f"Expected format: http://host:port\n"
+            f"Note: Consider using Pydantic settings (config.settings.qdrant_url)"
         )
 
     return warnings

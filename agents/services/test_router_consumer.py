@@ -48,9 +48,29 @@ class RouterConsumerTester:
 
     def __init__(self):
         # Load configuration from environment
-        self.kafka_bootstrap = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-        )
+        # NOTE: For host scripts, use external port 29102, not internal port 9092
+        # Docker containers use omninode-bridge-redpanda:9092 (internal)
+        # Host scripts use localhost:29102 or 192.168.86.200:29102 (external)
+
+        # Get bootstrap servers from env, but convert to external port for host access
+        kafka_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29102")
+
+        # If using omninode-bridge-redpanda hostname, convert to external port
+        # NOTE: Must use IP address 192.168.86.200, not localhost, due to Kafka advertised listeners
+        if "omninode-bridge-redpanda" in kafka_servers:
+            # Replace hostname with IP address and use external port 29102
+            self.kafka_bootstrap = "192.168.86.200:29102"
+            print(
+                f"🔧 Converted Docker hostname to host-accessible: {self.kafka_bootstrap}"
+            )
+        elif ":9092" in kafka_servers:
+            # If using internal port 9092, switch to external port 29102
+            self.kafka_bootstrap = kafka_servers.replace(":9092", ":29102")
+            print(
+                f"🔧 Converted internal port to external port: {self.kafka_bootstrap}"
+            )
+        else:
+            self.kafka_bootstrap = kafka_servers
         self.postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
         self.postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))
         self.postgres_db = os.getenv("POSTGRES_DATABASE", "omninode_bridge")

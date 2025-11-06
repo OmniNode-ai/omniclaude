@@ -5,6 +5,7 @@
 Dashboard queries and scripts for monitoring agent execution status in real-time.
 
 **Created**: 2025-10-30
+**Updated**: 2025-11-06
 **Database**: omninode_bridge on 192.168.86.200:5436
 **Correlation ID**: a27b9e0c-ffc2-4357-b53a-ed080e1edf9c
 
@@ -13,8 +14,49 @@ Dashboard queries and scripts for monitoring agent execution status in real-time
 ## Files Created
 
 1. **dashboard_views.sql** - 9 SQL views for dashboards
-2. **cleanup_stuck_agents.sh** - Automated cleanup for stuck agents
-3. **dashboard_stats.sh** - Interactive dashboard query tool
+2. **apply_dashboard_views.sh** - Helper script to apply/update views
+3. **cleanup_stuck_agents.sh** - Automated cleanup for stuck agents
+4. **dashboard_stats.sh** - Interactive dashboard query tool
+
+---
+
+## Setup
+
+### Initial Setup (First Time)
+
+Before using the dashboard, you must apply the SQL views to your database:
+
+```bash
+# Apply dashboard views
+./scripts/observability/apply_dashboard_views.sh
+
+# Or force apply (skip confirmation)
+./scripts/observability/apply_dashboard_views.sh --force
+```
+
+The script will:
+1. Check database connection
+2. Verify existing views
+3. Apply all 9 dashboard views
+4. Test each view to ensure it works
+5. Display summary of created views
+
+**Note**: Views are already applied in the default omninode_bridge database. Only run this if:
+- Setting up on a new database
+- Views are missing or outdated
+- You've modified dashboard_views.sql
+
+### Updating Existing Views
+
+If you modify `dashboard_views.sql` or need to update views:
+
+```bash
+# Update views (with confirmation)
+./scripts/observability/apply_dashboard_views.sh
+
+# Update views (without confirmation)
+./scripts/observability/apply_dashboard_views.sh --force
+```
 
 ---
 

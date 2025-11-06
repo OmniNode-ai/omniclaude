@@ -32,9 +32,11 @@ from typing import Any, Dict
 
 import requests
 
+from config import settings
+
 # Service URL configuration from environment
 INTELLIGENCE_SERVICE_URL = os.environ.get(
-    "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
+    "INTELLIGENCE_SERVICE_URL", str(settings.archon_intelligence_url)
 )
 MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
 # Support both MCP_SERVER_URL and ARCHON_MCP_URL for backward compatibility

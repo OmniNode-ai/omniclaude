@@ -10,29 +10,34 @@ import sys
 import uuid
 from pathlib import Path
 
-
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from agents.lib.manifest_injector import ManifestInjector
+from config import settings
 
 
 async def main():
     """Generate and save the formatted manifest."""
 
-    # Verify required environment variables
-    if not os.environ.get("POSTGRES_PASSWORD"):
-        print("❌ ERROR: POSTGRES_PASSWORD environment variable not set")
-        print("   Please run: source .env")
+    # Verify required configuration from Pydantic settings
+    validation_errors = settings.validate_required_services()
+    if validation_errors:
+        print("❌ ERROR: Configuration validation failed")
+        for error in validation_errors:
+            print(f"   - {error}")
+        print("   Please ensure .env file is properly configured")
+        print("   Run: source .env")
         return 1
 
-    # Set up environment variables (non-sensitive defaults)
-    os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092")
-    os.environ.setdefault("POSTGRES_HOST", "192.168.86.200")
-    os.environ.setdefault("POSTGRES_PORT", "5436")
-    os.environ.setdefault("POSTGRES_DATABASE", "omninode_bridge")
-    os.environ.setdefault("POSTGRES_USER", "postgres")
+    # Set up environment variables for legacy code compatibility
+    os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", settings.kafka_bootstrap_servers)
+    os.environ.setdefault("POSTGRES_HOST", settings.postgres_host)
+    os.environ.setdefault("POSTGRES_PORT", str(settings.postgres_port))
+    os.environ.setdefault("POSTGRES_DATABASE", settings.postgres_database)
+    os.environ.setdefault("POSTGRES_USER", settings.postgres_user)
+    os.environ.setdefault("POSTGRES_PASSWORD", settings.postgres_password)
     os.environ.setdefault("AGENT_NAME", "manifest-generator")
 
     print("🔧 Initializing ManifestInjector...")

@@ -14,7 +14,7 @@ This test demonstrates the full end-to-end pipeline in action.
 Usage:
     python tests/test_live_integration.py
     # OR with custom API URL:
-    API_URL=http://localhost:8053 python tests/test_live_integration.py
+    python tests/test_live_integration.py  # Uses settings.archon_intelligence_url
 """
 
 import asyncio
@@ -23,6 +23,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from config import settings
+
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
@@ -30,7 +32,7 @@ from pattern_id_system import PatternIDSystem, PatternLineageDetector
 from phase4_api_client import Phase4APIClient
 
 # Test configuration
-API_BASE_URL = os.getenv("API_URL", "http://localhost:8053")
+API_BASE_URL = os.getenv("API_URL", str(settings.archon_intelligence_url))
 VERBOSE = os.getenv("VERBOSE", "1") == "1"
 
 
@@ -127,7 +129,9 @@ async def fetch_user_data(user_id: str):
     except Exception as e:
         print_error(f"API health check failed: {e}")
         print("\nCannot proceed without API access. Please ensure:")
-        print("  1. Intelligence Service is running on localhost:8053")
+        print(
+            f"  1. Intelligence Service is running at {settings.archon_intelligence_url}"
+        )
         print("  2. No firewall blocking connections")
         print("  3. Service is healthy and responsive")
         return False

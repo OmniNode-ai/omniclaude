@@ -167,28 +167,19 @@ class RoutingEventClient:
         if bootstrap_servers:
             self.bootstrap_servers = bootstrap_servers
         elif SETTINGS_AVAILABLE:
-            self.bootstrap_servers = settings.kafka_bootstrap_servers
+            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         else:
-            # Fallback to environment variables if settings not available
-            self.bootstrap_servers = (
-                os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-                or os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS")
-                or os.getenv("KAFKA_BROKERS")
+            # This should not happen - settings should always be available
+            raise RuntimeError(
+                "config.settings not available. Cannot initialize RoutingEventClient.\n"
+                "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env"
             )
 
         if not self.bootstrap_servers:
             raise ValueError(
-                "bootstrap_servers must be provided or set via environment variables.\n"
-                "Checked variables (in order):\n"
-                "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
-                "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
-                "  3. KAFKA_BROKERS (legacy compatibility)\n"
+                "bootstrap_servers must be provided or set via KAFKA_BOOTSTRAP_SERVERS in .env file.\n"
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
-                "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
-                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
-                    os.getenv("KAFKA_BROKERS", "not set"),
-                )
+                f"Current value from settings: {self.bootstrap_servers!r}"
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = (
@@ -780,7 +771,15 @@ async def route_via_events(
         )
     """
     # Feature flag: USE_EVENT_ROUTING (default: True)
-    use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in ("true", "1", "yes")
+    if SETTINGS_AVAILABLE:
+        use_events = settings.use_event_routing
+    else:
+        # Fallback for when settings not available
+        use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
 
     if not use_events and fallback_to_local:
         # Skip events, go straight to local routing

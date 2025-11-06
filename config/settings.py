@@ -636,6 +636,12 @@ class Settings(BaseSettings):
         description="Path to agent definitions directory (defaults to ~/.claude/agent-definitions/)",
     )
 
+    # Kafka Consumer Configuration
+    kafka_group_id: str = Field(
+        default="omniclaude-agent-router-consumer-group",
+        description="Kafka consumer group ID for router consumer",
+    )
+
     # Routing Service Configuration
     routing_adapter_port: int = Field(
         default=8055, ge=1, le=65535, description="Routing adapter service HTTP port"
@@ -648,6 +654,19 @@ class Settings(BaseSettings):
             "Defaults to 0.0.0.0 in development (allows external connections), "
             "127.0.0.1 in production (localhost only for security)."
         ),
+    )
+
+    health_check_port: int = Field(
+        default=8070,
+        ge=1,
+        le=65535,
+        description="Port for health check HTTP endpoint in router consumer",
+    )
+
+    # Feature Flags
+    use_event_routing: bool = Field(
+        default=True,
+        description="Enable event-based routing via Kafka (vs HTTP)",
     )
 
     routing_timeout_ms: int = Field(
@@ -686,7 +705,9 @@ class Settings(BaseSettings):
     # VALIDATORS
     # =========================================================================
 
-    @field_validator("postgres_port", "qdrant_port", "routing_adapter_port")
+    @field_validator(
+        "postgres_port", "qdrant_port", "routing_adapter_port", "health_check_port"
+    )
     @classmethod
     def validate_port_range(cls, v: int) -> int:
         """Validate port is in valid range (1-65535)."""
@@ -742,9 +763,23 @@ class Settings(BaseSettings):
     @field_validator("agent_registry_path", mode="before")
     @classmethod
     def resolve_agent_registry_path(cls, v: Optional[str]) -> str:
-        """Resolve agent registry path with default."""
+        """
+        Resolve agent registry path with default.
+
+        Priority:
+        1. AGENT_REGISTRY_PATH environment variable (explicit override)
+        2. REGISTRY_PATH environment variable (Docker compatibility)
+        3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+        """
         if v:
             return v
+
+        # Check for Docker-compatible REGISTRY_PATH environment variable
+        registry_path = os.getenv("REGISTRY_PATH")
+        if registry_path:
+            return registry_path
+
+        # Fall back to home directory default
         home_dir = Path.home()
         return str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml")
 

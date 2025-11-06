@@ -14,17 +14,28 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
     set +a
 fi
 
-# Set PostgreSQL environment variables
-export PGHOST="${POSTGRES_HOST:-192.168.86.200}"
-export PGPORT="${POSTGRES_PORT:-5436}"
-export PGUSER="${POSTGRES_USER:-postgres}"
-export PGPASSWORD="${POSTGRES_PASSWORD}"  # Must be set in .env
-export PGDATABASE="${POSTGRES_DATABASE:-omninode_bridge}"
+# Set PostgreSQL environment variables (no fallbacks - must be set in .env)
+export PGHOST="${POSTGRES_HOST}"
+export PGPORT="${POSTGRES_PORT}"
+export PGUSER="${POSTGRES_USER}"
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+export PGDATABASE="${POSTGRES_DATABASE}"
 
-# Verify credentials are set
-if [ -z "$PGPASSWORD" ]; then
-    echo "❌ ERROR: POSTGRES_PASSWORD not found in .env" >&2
-    echo "   Please run: source .env" >&2
+# Verify required credentials are set
+missing_vars=()
+[ -z "$PGHOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$PGPORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$PGUSER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$PGPASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$PGDATABASE" ] && missing_vars+=("POSTGRES_DATABASE")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "❌ ERROR: Required environment variables not set in .env:" >&2
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var" >&2
+    done
+    echo "" >&2
+    echo "Please update your .env file with these variables." >&2
     return 1 2>/dev/null || exit 1
 fi
 

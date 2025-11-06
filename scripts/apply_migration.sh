@@ -4,18 +4,49 @@
 
 set -euo pipefail
 
-# Configuration
-DB_HOST="${OMNINODE_BRIDGE_HOST:-localhost}"
-DB_PORT="${OMNINODE_BRIDGE_PORT:-5436}"
-DB_NAME="${OMNINODE_BRIDGE_DB:-omninode_bridge}"
-DB_USER="${OMNINODE_BRIDGE_USER:-postgres}"
-DB_PASSWORD="${OMNINODE_BRIDGE_PASSWORD:-omninode-bridge-postgres-dev-2024}"
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
+fi
+
+# Source .env file
+source "$PROJECT_ROOT/.env"
+
+# Configuration (no fallbacks - must be set in .env)
+DB_HOST="${POSTGRES_HOST}"
+DB_PORT="${POSTGRES_PORT}"
+DB_NAME="${POSTGRES_DATABASE}"
+DB_USER="${POSTGRES_USER}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
+fi
 
 # Help
 if [ $# -eq 0 ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
@@ -24,12 +55,12 @@ if [ $# -eq 0 ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     echo "Example:"
     echo "  $0 agents/migrations/001_agent_detection_failures.sql"
     echo ""
-    echo "Environment variables:"
-    echo "  OMNINODE_BRIDGE_HOST     (default: localhost)"
-    echo "  OMNINODE_BRIDGE_PORT     (default: 5436)"
-    echo "  OMNINODE_BRIDGE_DB       (default: omninode_bridge)"
-    echo "  OMNINODE_BRIDGE_USER     (default: postgres)"
-    echo "  OMNINODE_BRIDGE_PASSWORD (default: omninode-bridge-postgres-dev-2024)"
+    echo "Environment variables (configured in .env):"
+    echo "  POSTGRES_HOST (required)"
+    echo "  POSTGRES_PORT (required)"
+    echo "  POSTGRES_DATABASE (required)"
+    echo "  POSTGRES_USER (required)"
+    echo "  POSTGRES_PASSWORD (required)"
     exit 0
 fi
 

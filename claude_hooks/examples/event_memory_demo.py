@@ -40,9 +40,9 @@ def demo_complete_workflow():
     db_path = Path.home() / ".claude/hooks/data/demo_events.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # EventStore now uses settings.qdrant_url by default
     store = EventStore(
         storage_path=db_path,
-        qdrant_url="http://localhost:6333",
         ollama_url="http://192.168.86.200:11434",
     )
 

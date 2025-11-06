@@ -16,6 +16,19 @@
 set -e  # Exit on error
 set -u  # Exit on undefined variable
 
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
+fi
+
+# Source .env file
+source "$PROJECT_ROOT/.env"
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -24,17 +37,28 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Configuration
-DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
-DB_PORT="${POSTGRES_PORT:-5436}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_NAME="${POSTGRES_DATABASE:-omninode_bridge}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+# Configuration (no fallbacks - must be set in .env)
+DB_HOST="${POSTGRES_HOST}"
+DB_PORT="${POSTGRES_PORT}"
+DB_USER="${POSTGRES_USER}"
+DB_NAME="${POSTGRES_DATABASE}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"
 
-# Verify password is set
-if [ -z "$DB_PASSWORD" ]; then
-    echo -e "${RED}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
-    echo "   Please run: source .env"
+# Verify required variables are set
+missing_vars=()
+[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
     exit 1
 fi
 

@@ -71,6 +71,10 @@ capabilities:
       description: "Dynamic transformation into specialized agent roles as needed"
       performance_target: "<500ms transformation overhead with context preservation"
 
+    - name: "Action Logging and Observability"
+      description: "Comprehensive action logging for tool calls, decisions, errors, and successes with complete traceability"
+      performance_target: "<5ms per action with non-blocking async publishing"
+
   specialized_capabilities:
     coordination:
       - "Task complexity assessment and decomposition"
@@ -100,6 +104,17 @@ capabilities:
       - "Specialized capability inheritance"
       - "Seamless workflow continuation across roles"
 
+    observability:
+      - "Automatic tool call logging with precise timing (<5ms overhead)"
+      - "Decision logging with context and outcome tracking"
+      - "Error logging with stack traces and debugging context"
+      - "Success logging for workflow milestone tracking"
+      - "Correlation ID tracking across complete agent lifecycle"
+      - "Non-blocking async event publishing to Kafka (agent-actions topic)"
+      - "Graceful degradation when Kafka infrastructure unavailable"
+      - "Context manager support for automatic timing and error capture"
+      - "Project context preservation (path, name, working directory)"
+
 framework_integration:
   template_system:
     primary_template: "orchestrated_intelligence_research"
@@ -120,6 +135,11 @@ framework_integration:
     - "capture_debug_intelligence_on_error()"
     - "agent_lifecycle_initialization()"
     - "agent_lifecycle_cleanup()"
+    - "initialize_action_logger()"
+    - "log_tool_calls_with_timing()"
+    - "log_decisions_and_outcomes()"
+    - "log_errors_for_debugging()"
+    - "log_success_milestones()"
 
   pattern_catalog:
     applicable_patterns:
@@ -136,6 +156,12 @@ framework_integration:
       - "Failure recovery and circuit breaker patterns"
       - "Load balancing and resource optimization"
       - "State synchronization and consistency management"
+
+    observability_patterns:
+      - "Action logging with correlation ID tracking"
+      - "Context manager for automatic timing and error capture"
+      - "Non-blocking async event publishing"
+      - "Graceful degradation on infrastructure failures"
 
 
 # Claude Skills Integration
@@ -359,6 +385,118 @@ git_policy:
     ❌ DON'T: Run git commit unless user explicitly asks
 
   exceptions: "NONE - never commit unless explicitly requested in user message"
+
+action_logging_integration:
+  overview: "Comprehensive observability through action logging for all agent operations"
+
+  initialization:
+    description: "Initialize ActionLogger at agent startup with correlation ID"
+    code_example: |
+      from agents.lib.action_logger import ActionLogger
+
+      # Initialize logger with agent context
+      action_logger = ActionLogger(
+          agent_name="polymorphic-agent",
+          correlation_id=correlation_id,  # Pass through from manifest
+          project_path=project_path,
+          project_name=project_name,
+          working_directory=working_directory,
+          debug_mode=True
+      )
+
+  usage_patterns:
+    context_manager_pattern:
+      description: "Recommended pattern using context manager for automatic timing and error capture"
+      performance: "<5ms overhead with automatic timing"
+      code_example: |
+        # Log tool call with automatic timing
+        async with action_logger.tool_call("Read", {"file_path": "..."}) as action:
+            result = await read_file(file_path)
+            action.set_result({"line_count": len(result), "file_size": size})
+
+        # Benefits:
+        # - Automatic timing (duration_ms calculated)
+        # - Automatic error capture (exceptions logged as failures)
+        # - Clean, readable code
+
+    manual_logging_pattern:
+      description: "Manual logging for more control over timing and error handling"
+      code_example: |
+        # Manual tool call logging
+        await action_logger.log_tool_call(
+            tool_name="Write",
+            tool_parameters={"file_path": "...", "content_length": 2048},
+            tool_result={"success": True},
+            duration_ms=30,
+            success=True
+        )
+
+    decision_logging:
+      description: "Log coordination decisions and agent selection"
+      code_example: |
+        await action_logger.log_decision(
+            decision_name="select_agent",
+            decision_context={"candidates": ["agent-a", "agent-b"], "task": "..."},
+            decision_result={"selected": "agent-a", "confidence": 0.92},
+            duration_ms=15
+        )
+
+    error_logging:
+      description: "Log errors with context for debugging"
+      code_example: |
+        await action_logger.log_error(
+            error_type="ImportError",
+            error_message="Module 'foo' not found",
+            error_context={"file": "/path/to/file.py", "line": 15}
+        )
+
+    success_logging:
+      description: "Log workflow milestones and successes"
+      code_example: |
+        await action_logger.log_success(
+            success_name="workflow_completed",
+            success_details={"agents_coordinated": 5, "files_processed": 12},
+            duration_ms=2500
+        )
+
+  integration_checklist:
+    required_steps:
+      - "Import ActionLogger from agents.lib.action_logger"
+      - "Initialize logger in agent_lifecycle_initialization() with correlation_id"
+      - "Wrap all tool calls with async with logger.tool_call() context manager"
+      - "Log all coordination decisions with log_decision()"
+      - "Log all errors with log_error() for debugging"
+      - "Log workflow milestones with log_success()"
+      - "Pass correlation_id through entire agent lifecycle"
+      - "Verify actions appear in agent_actions PostgreSQL table"
+
+  performance_targets:
+    action_logging_overhead: "<5ms per action (non-blocking async)"
+    kafka_publish_latency: "<10ms (batched by producer)"
+    database_persistence_latency: "<500ms (via consumer)"
+    graceful_degradation: "Logs warning but never fails execution"
+
+  infrastructure_requirements:
+    kafka_topic: "agent-actions"
+    kafka_bootstrap_servers: "192.168.86.200:29092"
+    consumer_service: "agent_actions_consumer.py"
+    database_table: "agent_actions (PostgreSQL)"
+    correlation_tracking: "Links to agent_routing_decisions and agent_manifest_injections"
+
+  benefits:
+    - "Complete execution traceability via correlation_id"
+    - "Performance analysis through precise timing"
+    - "Debugging assistance through error context capture"
+    - "Workflow analysis through decision and success logging"
+    - "Zero execution impact through non-blocking async publishing"
+    - "Reliability through graceful degradation on infrastructure failures"
+
+  related_documentation:
+    - "docs/observability/AGENT_ACTION_LOGGING.md - Comprehensive implementation guide"
+    - "agents/lib/action_logger.py - ActionLogger API reference"
+    - "agents/lib/action_event_publisher.py - Low-level publishing API"
+    - "consumers/agent_actions_consumer.py - Consumer implementation"
+    - "migrations/005_create_agent_actions_table.sql - Database schema"
 
 parallel_execution_best_practices:
   lessons_learned:

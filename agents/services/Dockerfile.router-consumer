@@ -37,11 +37,16 @@ WORKDIR /app
 # asyncpg for PostgreSQL async logging
 # aiohttp for HTTP health check server
 # pyyaml for agent registry
+# pydantic & pydantic-settings for type-safe config
+# python-dotenv for .env file loading
 RUN pip install --no-cache-dir \
     aiokafka==0.10.0 \
     asyncpg==0.29.0 \
     aiohttp==3.9.1 \
-    pyyaml==6.0.2
+    pyyaml==6.0.2 \
+    pydantic==2.5.0 \
+    pydantic-settings==2.1.0 \
+    python-dotenv==1.0.0
 
 # Copy event consumer service
 COPY --chown=omniclaude:omniclaude agents/services/agent_router_event_service.py ./
@@ -61,6 +66,9 @@ COPY --chown=omniclaude:omniclaude agents/lib/kafka_rpk_client.py ./lib/
 
 # Copy omnibase_core mock for enums (needed by agent_execution_logger)
 COPY --chown=omniclaude:omniclaude agents/tests/mocks/omnibase_core/ ./lib/omnibase_core/
+
+# Copy config module for type-safe settings
+COPY --chown=omniclaude:omniclaude config/ ./config/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \

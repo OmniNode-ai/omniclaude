@@ -5,6 +5,7 @@ Multi-dimensional debugging with LLM-powered analysis, quality correlation,
 pattern recognition, and root cause identification.
 """
 
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,10 @@ from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+# Add agents/lib to path for execution logger
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+from agent_execution_mixin import AgentExecutionMixin
 
 # Load environment variables from .env file
 try:
@@ -317,7 +322,7 @@ async def get_debug_patterns(ctx: RunContext[AgentDeps]) -> str:
     ],
     description="Multi-dimensional debug intelligence agent",
 )
-class DebugIntelligenceAgent:
+class DebugIntelligenceAgent(AgentExecutionMixin):
     """
     Pydantic AI-based debug intelligence agent.
 
@@ -325,6 +330,9 @@ class DebugIntelligenceAgent:
     """
 
     def __init__(self):
+        # Initialize execution logging mixin
+        super().__init__(agent_name="debug-intelligence")
+
         self.config = AgentConfig.load("agent-debug-intelligence")
         self.trace_logger = get_trace_logger()
         self.mcp_client = ArchonMCPClient()
@@ -332,7 +340,23 @@ class DebugIntelligenceAgent:
 
     async def execute(self, task: AgentTask) -> AgentResult:
         """
-        Execute debug analysis using Pydantic AI agent.
+        Execute debug analysis using Pydantic AI agent with execution logging.
+
+        Args:
+            task: Task containing bug information and code
+
+        Returns:
+            AgentResult with debug analysis
+        """
+        # Execute with automatic execution logging
+        return await self.execute_with_logging(
+            task=task,
+            execute_fn=self._execute_impl,
+        )
+
+    async def _execute_impl(self, task: AgentTask) -> AgentResult:
+        """
+        Internal implementation of debug analysis.
 
         Args:
             task: Task containing bug information and code
@@ -365,6 +389,9 @@ class DebugIntelligenceAgent:
                 task_id=task.task_id,
             )
 
+            # Log progress: gathering intelligence
+            await self.log_progress("gathering_intelligence", 25)
+
             # Gather intelligence
             intelligence = await self._gather_intelligence(
                 task,
@@ -374,6 +401,9 @@ class DebugIntelligenceAgent:
                 error_message,
                 pre_gathered_context,
             )
+
+            # Log progress: intelligence gathered
+            await self.log_progress("intelligence_gathered", 50)
 
             # Create agent dependencies
             deps = AgentDeps(
@@ -399,8 +429,14 @@ class DebugIntelligenceAgent:
                 task_id=task.task_id,
             )
 
+            # Log progress: analyzing
+            await self.log_progress("analyzing", 75)
+
             result = await debug_intelligence_agent.run(prompt, deps=deps)
             debug_output: DebugAnalysis = result.output
+
+            # Log progress: analysis complete
+            await self.log_progress("analysis_complete", 95)
 
             # Calculate execution time
             execution_time_ms = (time.time() - start_time) * 1000

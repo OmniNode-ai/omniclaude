@@ -10,9 +10,9 @@ Usage:
         --event document_updated \\
         --commit abc123def456
 
-Environment Variables (loaded from .env):
-    KAFKA_BOOTSTRAP_SERVERS: Kafka broker address (default: localhost:9092)
-    KAFKA_DOC_TOPIC: Topic for documentation events (default: documentation-changed)
+Configuration (loaded from Pydantic settings):
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker address
+    KAFKA_DOC_TOPIC: Topic for documentation events
 """
 
 from __future__ import annotations
@@ -34,6 +34,9 @@ load_dotenv(project_root / ".env")
 
 # Add parent directory to path to import ConfluentKafkaClient
 sys.path.insert(0, str(project_root))
+
+# Import Pydantic settings for type-safe configuration
+from config import settings
 
 try:
     from agents.lib.kafka_rpk_client import RpkKafkaClient
@@ -282,13 +285,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--bootstrap-servers",
-        default=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        help="Kafka bootstrap servers (default: localhost:9092)",
+        default=settings.kafka_bootstrap_servers,
+        help=f"Kafka bootstrap servers (default: {settings.kafka_bootstrap_servers})",
     )
     parser.add_argument(
         "--topic",
-        default=os.getenv("KAFKA_DOC_TOPIC", "documentation-changed"),
-        help="Kafka topic name (default: documentation-changed)",
+        default=settings.kafka_doc_topic,
+        help=f"Kafka topic name (default: {settings.kafka_doc_topic})",
     )
     parser.add_argument(
         "--quiet",

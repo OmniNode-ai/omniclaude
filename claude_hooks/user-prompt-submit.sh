@@ -407,7 +407,7 @@ if [[ ! -f "$MANIFEST_LOADER" ]]; then
   MANIFEST_LOADER="${HOOKS_LIB}/../manifest_loader.py"
 fi
 
-SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" AGENT_NAME="${AGENT_NAME:-unknown}" python3 "$MANIFEST_LOADER" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
+SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" CORRELATION_ID="$CORRELATION_ID" AGENT_NAME="${AGENT_NAME:-unknown}" python3 "$MANIFEST_LOADER" --correlation-id "$CORRELATION_ID" --agent-name "${AGENT_NAME:-unknown}" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
 
 if [[ -n "$SYSTEM_MANIFEST" ]]; then
   log "System manifest loaded successfully (${#SYSTEM_MANIFEST} chars)"

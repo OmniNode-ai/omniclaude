@@ -40,6 +40,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Import type-safe configuration
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config import settings
+
 # Kafka imports
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -303,6 +307,140 @@ class PostgresLogger:
             "failed_logs": self._error_count,
         }
 
+    async def log_performance_metrics(
+        self,
+        metric_type: str,
+        selected_agent: str,
+        selection_strategy: str,
+        confidence_score: float,
+        alternatives_count: int,
+        total_routing_time_us: int,
+        cache_lookup_us: int,
+        trigger_matching_us: int,
+        confidence_scoring_us: int,
+        cache_hit: bool,
+        trigger_confidence: float,
+        context_confidence: float,
+        capability_confidence: float,
+        historical_confidence: float,
+        correlation_id: Optional[str] = None,
+        user_request_hash: Optional[str] = None,
+        context_hash: Optional[str] = None,
+        alternative_agents: Optional[List[Dict[str, Any]]] = None,
+        max_retries: int = 3,
+    ) -> Optional[str]:
+        """
+        Log router performance metrics to database with retry logic.
+
+        Non-blocking - will not raise exceptions even if logging fails.
+
+        Args:
+            metric_type: Type of metric (e.g., 'routing_decision')
+            selected_agent: Agent selected by router
+            selection_strategy: Strategy used for routing
+            confidence_score: Overall confidence score (0.0-1.0)
+            alternatives_count: Number of alternative recommendations
+            total_routing_time_us: Total routing time in microseconds
+            cache_lookup_us: Cache lookup time in microseconds
+            trigger_matching_us: Trigger matching time in microseconds
+            confidence_scoring_us: Confidence scoring time in microseconds
+            cache_hit: Whether cache was hit
+            trigger_confidence: Trigger component of confidence (0.0-1.0)
+            context_confidence: Context component of confidence (0.0-1.0)
+            capability_confidence: Capability component of confidence (0.0-1.0)
+            historical_confidence: Historical component of confidence (0.0-1.0)
+            correlation_id: Correlation ID for traceability
+            user_request_hash: Hash of user request
+            context_hash: Hash of context
+            alternative_agents: Alternative recommendations (JSONB)
+            max_retries: Maximum retry attempts (default: 3)
+
+        Returns:
+            Record ID on success, None on failure
+        """
+        if not self._initialized or not self._pool:
+            logger.debug(
+                "PostgresLogger not initialized - skipping performance metrics log"
+            )
+            return None
+
+        # Prepare data
+        alternative_agents_json = json.dumps(alternative_agents or [])
+
+        insert_sql = """
+            INSERT INTO router_performance_metrics (
+                metric_type,
+                correlation_id,
+                user_request_hash,
+                context_hash,
+                selected_agent,
+                selection_strategy,
+                confidence_score,
+                alternative_agents,
+                alternatives_count,
+                cache_lookup_us,
+                trigger_matching_us,
+                confidence_scoring_us,
+                total_routing_time_us,
+                trigger_confidence,
+                context_confidence,
+                capability_confidence,
+                historical_confidence,
+                cache_hit,
+                measured_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING id
+        """
+
+        # Retry loop with exponential backoff
+        retry_delay = 0.1
+
+        for attempt in range(max_retries):
+            try:
+                async with self._pool.acquire() as conn:
+                    record_id = await conn.fetchval(
+                        insert_sql,
+                        metric_type,
+                        correlation_id,
+                        user_request_hash,
+                        context_hash,
+                        selected_agent,
+                        selection_strategy,
+                        confidence_score,
+                        alternative_agents_json,
+                        alternatives_count,
+                        cache_lookup_us,
+                        trigger_matching_us,
+                        confidence_scoring_us,
+                        total_routing_time_us,
+                        trigger_confidence,
+                        context_confidence,
+                        capability_confidence,
+                        historical_confidence,
+                        cache_hit,
+                        datetime.now(UTC),
+                    )
+
+                    logger.debug(
+                        f"Performance metrics logged (record_id: {record_id}, agent: {selected_agent}, total_time_us: {total_routing_time_us})"
+                    )
+                    return str(record_id)
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Performance metrics logging failed (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    logger.error(
+                        f"Performance metrics logging failed after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+
+        return None
+
 
 class AgentRouterEventService:
     """
@@ -351,10 +489,16 @@ class AgentRouterEventService:
         self.health_check_port = health_check_port
 
         # Default registry path
+        # Priority: 1) explicit parameter, 2) REGISTRY_PATH env var, 3) home directory default
         if registry_path is None:
-            registry_path = str(
-                Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-            )
+            registry_path = os.getenv("REGISTRY_PATH")
+            if registry_path is None:
+                registry_path = str(
+                    Path.home()
+                    / ".claude"
+                    / "agent-definitions"
+                    / "agent-registry.yaml"
+                )
         self.registry_path = registry_path
 
         # Database config
@@ -430,7 +574,7 @@ class AgentRouterEventService:
             bootstrap_servers=self.bootstrap_servers,
             group_id=self.consumer_group_id,
             enable_auto_commit=True,
-            auto_offset_reset="latest",
+            auto_offset_reset="earliest",
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         )
         await self._consumer.start()
@@ -750,6 +894,44 @@ class AgentRouterEventService:
                     reasoning=primary.reason,
                 )
 
+                # Log performance metrics if timing data is available
+                if self._router and self._router.last_routing_timing:
+                    timing = self._router.last_routing_timing
+                    try:
+                        await self._postgres_logger.log_performance_metrics(
+                            metric_type="routing_decision",
+                            selected_agent=primary.agent_name,
+                            selection_strategy="enhanced_fuzzy_matching",
+                            confidence_score=primary.confidence.total,
+                            alternatives_count=len(recommendations) - 1,
+                            total_routing_time_us=timing.total_routing_time_us,
+                            cache_lookup_us=timing.cache_lookup_us,
+                            trigger_matching_us=timing.trigger_matching_us,
+                            confidence_scoring_us=timing.confidence_scoring_us,
+                            cache_hit=timing.cache_hit,
+                            trigger_confidence=primary.confidence.trigger_score,
+                            context_confidence=primary.confidence.context_score,
+                            capability_confidence=primary.confidence.capability_score,
+                            historical_confidence=primary.confidence.historical_score,
+                            correlation_id=correlation_id,
+                            alternative_agents=[
+                                {
+                                    "agent_name": rec.agent_name,
+                                    "confidence": rec.confidence.total,
+                                    "reason": rec.reason,
+                                }
+                                for rec in recommendations[1:]
+                            ],
+                        )
+                        self.logger.debug(
+                            f"Performance metrics logged (total_time_us: {timing.total_routing_time_us}, cache_hit: {timing.cache_hit})"
+                        )
+                    except Exception as e:
+                        # Non-blocking - log error but don't fail routing
+                        self.logger.warning(
+                            f"Failed to log performance metrics: {e}", exc_info=True
+                        )
+
             self._requests_succeeded += 1
             self.logger.info(
                 f"Routing completed (correlation_id: {correlation_id}, agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%}, time: {routing_time_ms:.1f}ms)"
@@ -861,21 +1043,19 @@ class AgentRouterEventService:
 
 async def main():
     """Main entry point for the service."""
-    # Load configuration from environment
-    bootstrap_servers = os.getenv(
-        "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
-    )
-    consumer_group_id = os.getenv("KAFKA_GROUP_ID", "agent-router-service")
-    registry_path = os.getenv("REGISTRY_PATH")
-    health_check_port = int(os.getenv("HEALTH_CHECK_PORT", "8070"))
+    # Load configuration from type-safe settings
+    bootstrap_servers = settings.kafka_bootstrap_servers
+    consumer_group_id = settings.kafka_group_id
+    registry_path = os.getenv("REGISTRY_PATH")  # Optional override
+    health_check_port = settings.health_check_port
 
     # PostgreSQL configuration
     db_config = {
-        "db_host": os.getenv("POSTGRES_HOST", "192.168.86.200"),
-        "db_port": int(os.getenv("POSTGRES_PORT", "5436")),
-        "db_name": os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
-        "db_user": os.getenv("POSTGRES_USER", "postgres"),
-        "db_password": os.getenv("POSTGRES_PASSWORD", ""),
+        "db_host": settings.postgres_host,
+        "db_port": settings.postgres_port,
+        "db_name": settings.postgres_database,
+        "db_user": settings.postgres_user,
+        "db_password": settings.get_effective_postgres_password(),
     }
 
     # Create service
