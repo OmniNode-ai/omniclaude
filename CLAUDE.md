@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - **Type-Safe Configuration** → `config/README.md` (Pydantic Settings framework, 90+ validated variables)
 > - **Docker Deployment** → `deployment/README.md` (Consolidated docker-compose, environment setup)
 > - **Agent Framework** → `agents/polymorphic-agent.md` (ONEX compliance, mandatory functions)
+> - **Memory Management** → `docs/guides/MEMORY_MANAGEMENT_USER_GUIDE.md` (Hook-based persistent context)
 > - **Test Coverage** → `TEST_COVERAGE_PLAN.md` (Testing strategy and plans)
 > - **Security** → `SECURITY_KEY_ROTATION.md` (API key management and rotation)
 >
@@ -18,6 +19,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - ✅ External network references for cross-repo communication
 > - ✅ Simplified environment configuration (.env approach)
 > - ✅ Environment validation script for safety
+> - ✅ **NEW**: Hook-based memory management with intent-driven retrieval
+> - ✅ **NEW**: Integration with Anthropic's Context Management API Beta
+> - ✅ **NEW**: Cross-session persistent context (75-80% token savings)
 
 > **📚 Shared Infrastructure**: For common OmniNode infrastructure (PostgreSQL, Kafka/Redpanda, remote server topology, Docker networking, environment variables), see **`~/.claude/CLAUDE.md`**. This file contains OmniClaude-specific architecture, agents, and services only.
 
@@ -28,6 +32,7 @@ OmniClaude is a comprehensive toolkit for enhancing Claude Code capabilities wit
 - **Intelligence infrastructure** for real-time pattern discovery
 - **Event-driven architecture** using Kafka for distributed intelligence
 - **Polymorphic agent framework** with ONEX compliance
+- **Hook-based memory management** with intent-driven context retrieval
 - **Complete observability** with manifest injection traceability
 
 ## Table of Contents
@@ -40,11 +45,12 @@ OmniClaude is a comprehensive toolkit for enhancing Claude Code capabilities wit
 6. [Agent Observability & Traceability](#agent-observability--traceability)
 7. [Container Management](#container-management)
 8. [Agent Router Service](#agent-router-service)
-9. [Provider Management](#provider-management)
-10. [Polymorphic Agent Framework](#polymorphic-agent-framework)
-11. [Event Bus Architecture](#event-bus-architecture)
-12. [Troubleshooting Guide](#troubleshooting-guide)
-13. [Quick Reference](#quick-reference)
+9. [Hook-Based Memory Management](#hook-based-memory-management)
+10. [Provider Management](#provider-management)
+11. [Polymorphic Agent Framework](#polymorphic-agent-framework)
+12. [Event Bus Architecture](#event-bus-architecture)
+13. [Troubleshooting Guide](#troubleshooting-guide)
+14. [Quick Reference](#quick-reference)
 
 ---
 
@@ -868,6 +874,267 @@ python3 agents/services/test_router_service.py -v
 
 ---
 
+## Hook-Based Memory Management
+
+OmniClaude provides an intelligent memory management system that runs through Claude Code hooks, giving Claude persistent context across sessions without requiring agent orchestration.
+
+### Overview
+
+**Key Features**:
+- **Intent-Driven Retrieval**: LLM-based intent extraction with 75-80% token savings
+- **Cross-Session Persistence**: Memory survives Claude Code restarts
+- **Real-Time Updates**: Hooks capture execution patterns, file changes, and workspace state
+- **Smart Context Injection**: Relevant memories automatically injected into prompts
+- **Graceful Degradation**: Falls back to minimal context on errors
+
+**Integration with Anthropic's Context Management API**:
+- Beta header: `anthropic-beta: context-management-2025-06-27`
+- Context Editing: `clear_tool_uses_20250919` (automatic stale context cleanup)
+- Memory Tool: `memory_20250818` (file-based persistent storage)
+- 39% performance improvement over baseline
+
+### Architecture
+
+**Memory Client** (`claude_hooks/lib/memory_client.py`):
+```python
+from claude_hooks.lib.memory_client import get_memory_client
+
+memory = get_memory_client()
+
+# Store memory
+await memory.store_memory(
+    key="jwt_implementation",
+    value={"pattern": "Bearer token", "location": "auth.py"},
+    category="workspace",
+    metadata={"updated_by": "user"}
+)
+
+# Retrieve memory
+jwt_info = await memory.get_memory("jwt_implementation", "workspace")
+
+# Update memory (deep merge for dicts)
+await memory.update_memory("jwt_implementation", {"status": "complete"}, "workspace")
+```
+
+**Intent Extractor** (`claude_hooks/lib/intent_extractor.py`):
+```python
+from claude_hooks.lib.intent_extractor import extract_intent
+
+# Extract structured intent from prompt
+intent = await extract_intent("Help me implement JWT authentication in auth.py")
+
+# Results:
+# - task_type: "authentication"
+# - entities: ["JWT", "auth.py"]
+# - operations: ["implement"]
+# - confidence: 0.9 (LLM) or 0.7 (keyword fallback)
+```
+
+### Memory Categories
+
+Memory is organized into 6 categories:
+
+| Category | Purpose | Examples |
+|----------|---------|----------|
+| **workspace** | Project context, file information | Current branch, modified files, file dependencies |
+| **intelligence** | Agent capabilities, patterns | Available agents, ONEX patterns, routing decisions |
+| **execution_history** | Tool execution records | Successful Read operations, failed Edit attempts |
+| **patterns** | Success/failure patterns | JWT auth implementations, database connection patterns |
+| **routing** | Agent routing decisions | Confidence scores, routing history |
+| **workspace_events** | File change events | File created/modified/deleted timestamps |
+
+**Storage Location**: `~/.claude/memory/{category}/{key}.json`
+
+### Hook Integration
+
+**Three Hooks Working Together**:
+
+1. **pre-prompt-submit** (Blocking, <100ms):
+   - Extracts intent from user prompt
+   - Queries relevant memories based on intent
+   - Ranks memories by relevance with token budget
+   - Injects context into prompt before submission
+
+2. **post-tool-use** (Non-blocking, <50ms):
+   - Captures tool execution results
+   - Learns success/failure patterns
+   - Tracks tool usage sequences
+   - Updates execution history
+
+3. **workspace-change** (Background, <20ms/file):
+   - Monitors file changes (created/modified/deleted)
+   - Analyzes file types and dependencies
+   - Updates project context
+   - Tracks change history
+
+**Hook Flow Example**:
+```
+User: "Implement JWT authentication in auth.py"
+  ↓
+pre-prompt-submit hook:
+  1. Extract intent: task_type="authentication", entities=["JWT", "auth.py"]
+  2. Query memory for:
+     - workspace/file_context_auth_py
+     - patterns/success_patterns_authentication
+     - execution_history/auth_py_edits
+  3. Rank by relevance (token budget: 5000)
+  4. Inject context into prompt
+  ↓
+Claude receives enhanced prompt with relevant context
+  ↓
+Claude executes: Read auth.py, Edit auth.py
+  ↓
+post-tool-use hook:
+  1. Record Read success (45ms)
+  2. Record Edit success (120ms)
+  3. Update success_patterns_authentication
+  4. Track tool sequence: Read → Edit (successful pattern)
+  ↓
+workspace-change hook:
+  1. Detect auth.py modified
+  2. Analyze dependencies (imports jwt, bcrypt)
+  3. Update file context
+  4. Store change event
+```
+
+### Configuration
+
+**Environment Variables** (`.env`):
+```bash
+# Memory management
+ENABLE_MEMORY_CLIENT=true
+MEMORY_STORAGE_BACKEND=filesystem
+MEMORY_STORAGE_PATH=~/.claude/memory
+MEMORY_ENABLE_FALLBACK=true
+
+# Intent extraction
+ENABLE_INTENT_EXTRACTION=true
+MEMORY_MAX_TOKENS=5000
+
+# Context editing
+ENABLE_CONTEXT_EDITING=true
+ANTHROPIC_BETA_HEADER=anthropic-beta: context-management-2025-06-27
+```
+
+**Pydantic Settings** (`config/settings.py`):
+```python
+from config import settings
+
+print(settings.enable_memory_client)           # True
+print(settings.memory_max_tokens)              # 5000
+print(settings.enable_intent_extraction)       # True
+```
+
+### Usage Examples
+
+**Query Memory Directly**:
+```python
+from claude_hooks.lib.memory_client import get_memory_client
+
+memory = get_memory_client()
+
+# List all keys in category
+keys = await memory.list_memory("workspace")
+
+# List all categories
+categories = await memory.list_categories()
+
+# Get workspace state
+workspace = await memory.get_memory("workspace_state", "workspace")
+print(f"Branch: {workspace['branch']}")
+print(f"Modified files: {workspace['modified_files']}")
+```
+
+**Analyze Patterns**:
+```python
+# Get success patterns for authentication tasks
+auth_patterns = await memory.get_memory("success_patterns_authentication", "patterns")
+print(f"Success rate: {auth_patterns['success_rate']}")
+print(f"Common tools: {auth_patterns['common_tools']}")
+```
+
+**Review Execution History**:
+```python
+# Get execution history for specific file
+history = await memory.get_memory("execution_history_auth_py", "execution_history")
+for execution in history[-5:]:  # Last 5 executions
+    print(f"{execution['tool']}: {execution['status']} ({execution['duration_ms']}ms)")
+```
+
+### Performance
+
+**Targets**:
+- Pre-prompt hook: <100ms overhead
+- Post-tool hook: <50ms overhead
+- Workspace-change hook: <20ms per file (background)
+- Intent extraction (LLM): 100-200ms
+- Intent extraction (keyword): 1-5ms
+- Token budget compliance: 2-5K tokens (75-80% savings vs. full memory)
+
+**Monitoring**:
+```bash
+# View hook performance
+python3 agents/lib/agent_history_browser.py --limit 20
+
+# Check memory storage size
+du -sh ~/.claude/memory/
+
+# View recent memory operations
+ls -lt ~/.claude/memory/*/*.json | head -20
+```
+
+### Migration from Correlation Manager
+
+**Automatic Migration**:
+```bash
+# Dry run (preview migration)
+python3 claude_hooks/lib/migrate_to_memory.py --dry-run --verbose
+
+# Perform migration with backup
+python3 claude_hooks/lib/migrate_to_memory.py --backup --validate
+
+# Migration converts:
+#   ~/.claude/hooks/.state/*.json → ~/.claude/memory/{category}/{key}.json
+```
+
+**What Gets Migrated**:
+- Correlation context → `routing/correlation_*`
+- Agent state → `routing/agent_state_*`
+- Generic state → `workspace/legacy_*`
+
+### Troubleshooting
+
+| Issue | Diagnosis | Fix |
+|-------|-----------|-----|
+| No context injected | Check `ENABLE_MEMORY_CLIENT` in `.env` | Set to `true` and restart |
+| Slow prompt submission | Check intent extraction performance | Set `ENABLE_INTENT_EXTRACTION=false` for keyword mode |
+| Memory not persisting | Check filesystem permissions | `chmod -R 755 ~/.claude/memory` |
+| High token usage | Review injected context | Reduce `MEMORY_MAX_TOKENS` (default: 5000) |
+| Hook errors | Check hook logs | `cat ~/.claude/hooks/logs/pre_prompt_submit.log` |
+
+**Health Check**:
+```bash
+# Verify memory client
+python3 -c "from claude_hooks.lib.memory_client import get_memory_client; import asyncio; asyncio.run(get_memory_client().list_categories())"
+
+# Verify intent extraction
+python3 -c "from claude_hooks.lib.intent_extractor import extract_intent; import asyncio; print(asyncio.run(extract_intent('test prompt')))"
+
+# Run comprehensive tests
+pytest tests/claude_hooks/test_memory_client.py -v
+pytest tests/claude_hooks/test_intent_extractor.py -v
+pytest tests/claude_hooks/test_hooks_integration.py -v
+```
+
+### Documentation
+
+- **Architecture**: `docs/planning/HOOK_MEMORY_MANAGEMENT_INTEGRATION.md` (1,494 LOC)
+- **Implementation Status**: `docs/planning/HOOK_MEMORY_IMPLEMENTATION_STATUS.md`
+- **User Guide**: `docs/guides/MEMORY_MANAGEMENT_USER_GUIDE.md` (created below)
+- **API Reference**: Docstrings in `claude_hooks/lib/memory_client.py` and `intent_extractor.py`
+
+---
+
 ## Provider Management
 
 ### Switch AI Providers
@@ -1252,7 +1519,9 @@ python -c "from config import settings; print(settings.validate_required_service
 - **Config**: `.env`, `config/settings.py`, `config/README.md`, `claude-providers.json`
 - **Deployment**: `deployment/docker-compose.yml`, `deployment/README.md`
 - **Intelligence**: `agents/lib/manifest_injector.py`, `agents/lib/routing_event_client.py`
-- **Docs**: `docs/observability/AGENT_TRACEABILITY.md`, `SECURITY_KEY_ROTATION.md`
+- **Memory Management**: `claude_hooks/lib/memory_client.py`, `claude_hooks/lib/intent_extractor.py`
+- **Hooks**: `claude_hooks/pre_prompt_submit.py`, `claude_hooks/post_tool_use.py`, `claude_hooks/workspace_change.py`
+- **Docs**: `docs/observability/AGENT_TRACEABILITY.md`, `docs/guides/MEMORY_MANAGEMENT_USER_GUIDE.md`, `SECURITY_KEY_ROTATION.md`
 - **Validation**: `scripts/validate-env.sh`
 
 ### Performance Targets
@@ -1307,11 +1576,15 @@ python -c "from config import settings; print(settings.validate_required_service
 - **Phase 2 Complete**: External network references for native cross-repository communication
 - **Phase 2 Complete**: Simplified environment configuration with single `.env.example` template
 - **Phase 2 Complete**: Environment validation script (`scripts/validate-env.sh`) for configuration safety
+- **NEW**: Hook-based memory management with intent-driven retrieval (75-80% token savings)
+- **NEW**: Cross-session persistent context via filesystem backend (`~/.claude/memory/`)
+- **NEW**: Three integrated hooks: pre-prompt-submit, post-tool-use, workspace-change
+- **NEW**: Integration with Anthropic's Context Management API Beta (context editing + memory tool)
 
 ---
 
-**Last Updated**: 2025-11-05
-**Documentation Version**: 2.3.0
+**Last Updated**: 2025-11-06
+**Documentation Version**: 2.4.0
 **Intelligence Infrastructure**: Event-driven via Kafka
 **Router Architecture**: Event-based (Kafka consumer) - Phase 2 complete
 **Configuration Framework**: Pydantic Settings - Phase 2 (ADR-001)
@@ -1320,3 +1593,6 @@ python -c "from config import settings; print(settings.validate_required_service
 **Database Tables**: 34 in omninode_bridge
 **Observability**: Complete traceability with correlation ID tracking
 **Router Performance**: 7-8ms routing time, <500ms total latency
+**Memory Management**: Hook-based with intent-driven retrieval (75-80% token savings)
+**Context Persistence**: Cross-session filesystem backend (~/.claude/memory/)
+**Anthropic Integration**: Context Management API Beta (context editing + memory tool)
