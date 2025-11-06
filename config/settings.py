@@ -299,6 +299,50 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Memory Client Configuration (Anthropic Context Management API Beta)
+    enable_memory_client: bool = Field(
+        default=True,
+        description="Enable Anthropic's Memory Tool API for persistent context management"
+    )
+
+    memory_storage_backend: str = Field(
+        default="filesystem",
+        description="Storage backend for memory client (filesystem, postgresql, hybrid)"
+    )
+
+    memory_storage_path: str = Field(
+        default=None,
+        description="Base path for filesystem memory storage (defaults to ~/.claude/memory)"
+    )
+
+    memory_enable_fallback: bool = Field(
+        default=True,
+        description="Enable fallback to correlation manager if memory client fails"
+    )
+
+    enable_intent_extraction: bool = Field(
+        default=True,
+        description="Enable intent extraction for smart memory retrieval"
+    )
+
+    memory_max_tokens: int = Field(
+        default=5000,
+        ge=1000,
+        le=20000,
+        description="Maximum tokens for memory context injection"
+    )
+
+    # Context Editing (Anthropic Beta)
+    enable_context_editing: bool = Field(
+        default=True,
+        description="Enable automatic context editing (clears stale tool uses)"
+    )
+
+    anthropic_beta_header: str = Field(
+        default="anthropic-beta: context-management-2025-06-27",
+        description="Beta header for Anthropic Context Management API"
+    )
+
     # =========================================================================
     # OPTIONAL CONFIGURATION
     # =========================================================================
