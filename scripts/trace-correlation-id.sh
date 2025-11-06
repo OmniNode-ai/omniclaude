@@ -162,14 +162,14 @@ SELECT
     id,
     source_agent,
     target_agent,
-    confidence_score,
+    routing_confidence,
     transformation_reason,
     transformation_duration_ms,
     success,
-    created_at
+    started_at
 FROM agent_transformation_events
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY created_at ASC;
+ORDER BY started_at ASC;
 "
 
 run_query "$TRANSFORM_QUERY" "Agent Transformations"
@@ -182,16 +182,19 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 METRICS_QUERY="
 SELECT
     id,
-    query_text,
-    routing_duration_ms,
+    selected_agent,
+    selection_strategy,
+    confidence_score,
+    total_routing_time_us,
     cache_hit,
-    trigger_match_strategy,
-    candidates_evaluated,
-    confidence_components::text,
-    created_at
+    trigger_confidence,
+    context_confidence,
+    capability_confidence,
+    alternatives_count,
+    measured_at
 FROM router_performance_metrics
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY created_at ASC;
+ORDER BY measured_at ASC;
 "
 
 run_query "$METRICS_QUERY" "Performance Metrics"
@@ -208,12 +211,12 @@ SELECT
     status,
     quality_score,
     duration_ms,
-    start_time,
-    end_time,
+    started_at,
+    completed_at,
     error_message
 FROM agent_execution_logs
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY start_time ASC;
+ORDER BY started_at ASC;
 "
 
 run_query "$EXECUTION_QUERY" "Execution Logs" || echo -e "${YELLOW}  ℹ️  agent_execution_logs table may not exist${NC}\n"
