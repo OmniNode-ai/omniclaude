@@ -144,6 +144,98 @@ infrastructure_expertise:
     - "Multi-container application orchestration"
     - "Container networking and storage"
 
+  container_troubleshooting_protocol:
+    priority: "CRITICAL - MANDATORY WORKFLOW"
+    description: "ALWAYS check container logs FIRST before any other diagnostic action"
+
+    step_1_always_check_logs:
+      description: "MANDATORY: Check container logs before any other action"
+      priority: "CRITICAL - NEVER SKIP THIS STEP"
+      time_savings: "10-25 minutes per incident"
+      success_rate: "90% of issues diagnosed from logs alone"
+
+      commands:
+        primary: "docker logs --tail 100 --since 5m <container_name>"
+        real_time: "docker logs -f <container_name>"
+        timestamp: "docker logs --since $(date -u -d '10 minutes ago' '+%Y-%m-%dT%H:%M:%S') <container_name>"
+        compose: "docker-compose logs <service_name> --tail 100"
+
+      log_analysis_checklist:
+        errors:
+          - "Search for: ERROR, FATAL, Exception, Traceback"
+          - "Identify stack traces and error codes"
+          - "Note timestamp of first error occurrence"
+          - "Check error frequency and patterns"
+
+        connection_issues:
+          - "Pattern: Connection refused|Connection timeout|ECONNREFUSED"
+          - "Likely cause: Service dependency not available"
+          - "Next action: Check dependent services with docker ps -a"
+
+        authentication_issues:
+          - "Pattern: Authentication failed|Access denied|401|403"
+          - "Likely cause: Wrong credentials or missing API keys"
+          - "Next action: Verify environment variables in .env file"
+
+        resource_issues:
+          - "Pattern: Out of memory|OOM|Disk full|No space left"
+          - "Likely cause: Resource exhaustion"
+          - "Next action: Check docker stats <container_name>"
+
+        configuration_issues:
+          - "Pattern: Config error|Invalid configuration|Cannot parse"
+          - "Likely cause: Malformed config or missing parameters"
+          - "Next action: Validate configuration files and env vars"
+
+      next_steps_if_logs_unclear:
+        - "Check container status: docker ps -a | grep <container_name>"
+        - "Inspect container config: docker inspect <container_name>"
+        - "Check resource usage: docker stats <container_name> --no-stream"
+        - "Verify network: docker network inspect <network_name>"
+        - "Check volumes: docker volume inspect <volume_name>"
+
+    step_2_container_status:
+      description: "Verify container state AFTER reviewing logs"
+      commands:
+        - "docker ps -a | grep <container_name>"
+        - "docker inspect <container_name> --format='{{.State.Status}}'"
+        - "docker inspect <container_name> --format='{{.RestartCount}}'"
+
+    step_3_health_checks:
+      description: "Check health status if container has health checks"
+      commands:
+        - "docker inspect <container_name> --format='{{.State.Health}}'"
+        - "docker exec <container_name> curl -f http://localhost:<port>/health"
+
+    common_container_issues:
+      startup_failures:
+        symptom: "Container exits immediately after start"
+        first_action: "docker logs <container_name> # Check initialization errors"
+        common_causes:
+          - "Missing or incorrect environment variables"
+          - "Port already in use (check with: lsof -i :<port>)"
+          - "Volume mount issues (wrong paths or permissions)"
+          - "Configuration file syntax errors"
+
+      network_issues:
+        symptom: "Container can't connect to other services"
+        first_action: "docker logs <container_name> | grep -i 'connection\\|network'"
+        common_causes:
+          - "Incorrect service name (check docker-compose.yml)"
+          - "Network not connected (check docker network ls)"
+          - "Port mapping issues"
+          - "DNS resolution failures"
+
+      performance_degradation:
+        symptom: "Container slow or unresponsive"
+        first_action: "docker logs <container_name> --tail 200 # Check for errors/warnings"
+        second_action: "docker stats <container_name> --no-stream"
+        common_causes:
+          - "Memory exhaustion (OOM killer)"
+          - "CPU throttling (check limits)"
+          - "Disk I/O bottleneck"
+          - "Network latency to dependencies"
+
   ci_cd_optimization:
     - "Pipeline performance optimization"
     - "Build and deployment automation"

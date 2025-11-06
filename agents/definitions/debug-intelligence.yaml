@@ -192,11 +192,153 @@ workflow_templates:
 
 # Debug Investigation Patterns
 debug_patterns:
+  docker_container_debugging:
+    priority: "CRITICAL - MANDATORY FOR CONTAINER ISSUES"
+    description: "ALWAYS check container logs FIRST when debugging Docker containers"
+
+    phase_1_logs_first:
+      description: "MANDATORY: Start with container logs - never skip this step"
+      priority: "CRITICAL"
+      time_savings: "10-25 minutes per incident"
+      success_rate: "90% of issues diagnosed from logs"
+
+      commands:
+        primary: "docker logs --tail 100 --since 5m <container_name>"
+        real_time: "docker logs -f <container_name>"
+        all_services: "docker-compose logs --tail 50"
+
+      log_analysis_framework:
+        error_identification:
+          - "Search for: ERROR, FATAL, Exception, Traceback, CRITICAL"
+          - "Identify stack traces and error codes"
+          - "Note exact timestamp of first error"
+          - "Check if error repeats (frequency pattern)"
+
+        pattern_recognition:
+          - "Repeated errors → systematic issue vs transient"
+          - "Error cascades → one error triggering others"
+          - "Timing patterns → errors at specific intervals"
+          - "Connection patterns → which services failing to connect"
+
+        context_gathering:
+          - "What happened immediately before first error?"
+          - "Were there WARN messages leading up to error?"
+          - "Did container restart recently? (check restart count)"
+          - "Any recent code/config deployments?"
+
+      common_log_patterns:
+        connection_errors:
+          pattern: "Connection refused|Connection timeout|ECONNREFUSED|ETIMEDOUT"
+          likely_cause: "Service dependency not available or incorrect hostname/port"
+          diagnostic_steps:
+            - "Check if dependent service is running: docker ps -a"
+            - "Verify service name in docker-compose.yml or config"
+            - "Test DNS resolution: docker exec <container> nslookup <service>"
+            - "Test connectivity: docker exec <container> ping <service>"
+
+        authentication_errors:
+          pattern: "Authentication failed|Access denied|401|403|Unauthorized"
+          likely_cause: "Wrong credentials, missing API keys, or expired tokens"
+          diagnostic_steps:
+            - "Check environment variables: docker exec <container> printenv | grep -i auth"
+            - "Verify .env file has correct values"
+            - "Check if credentials match between services"
+            - "Verify token expiration or rotation"
+
+        resource_errors:
+          pattern: "Out of memory|OOM|Disk full|No space left|ENOMEM|ENOSPC"
+          likely_cause: "Resource exhaustion - memory, disk, or file handles"
+          diagnostic_steps:
+            - "Check resource usage: docker stats <container> --no-stream"
+            - "Check memory limit: docker inspect <container> --format='{{.HostConfig.Memory}}'"
+            - "Check disk usage: docker exec <container> df -h"
+            - "Check file handles: docker exec <container> lsof | wc -l"
+
+        configuration_errors:
+          pattern: "Config error|Invalid configuration|Cannot parse|YAML error|JSON error"
+          likely_cause: "Malformed config file, missing parameters, or type mismatch"
+          diagnostic_steps:
+            - "Validate config syntax: docker exec <container> cat /app/config.yaml"
+            - "Check required env vars: docker inspect <container> --format='{{.Config.Env}}'"
+            - "Verify file mounts: docker inspect <container> --format='{{.Mounts}}'"
+            - "Check file permissions: docker exec <container> ls -la /app"
+
+        startup_errors:
+          pattern: "Initialization failed|Startup error|Failed to start|Cannot bind to port"
+          likely_cause: "Missing dependencies, port conflicts, or initialization failures"
+          diagnostic_steps:
+            - "Check if port already in use: lsof -i :<port>"
+            - "Verify entrypoint: docker inspect <container> --format='{{.Config.Entrypoint}}'"
+            - "Check command: docker inspect <container> --format='{{.Config.Cmd}}'"
+            - "Verify working directory: docker exec <container> pwd"
+
+    phase_2_container_state:
+      description: "Verify container state AFTER analyzing logs"
+      commands:
+        status: "docker ps -a | grep <container_name>"
+        inspect: "docker inspect <container_name>"
+        restart_count: "docker inspect <container_name> --format='{{.RestartCount}}'"
+        exit_code: "docker inspect <container_name> --format='{{.State.ExitCode}}'"
+
+    phase_3_resource_analysis:
+      description: "Check resource usage if logs indicate performance issues"
+      commands:
+        stats: "docker stats <container_name> --no-stream"
+        top: "docker top <container_name>"
+        memory_detail: "docker inspect <container_name> | grep -A 10 'Memory'"
+
+    phase_4_interactive_debugging:
+      description: "ONLY if logs don't reveal root cause - use interactive debugging"
+      commands:
+        shell: "docker exec -it <container_name> bash"
+        test_connectivity: "docker exec <container_name> curl -v http://<service>:<port>"
+        check_env: "docker exec <container_name> printenv"
+        check_files: "docker exec <container_name> ls -la /app"
+
+  container_hypothesis_generation:
+    description: "Generate testable hypotheses based on container log evidence"
+
+    if_logs_show_startup_failure:
+      hypothesis: "Configuration, dependency, or initialization issue"
+      evidence_needed: "Exact error message from logs, container restart count"
+      tests:
+        - "Verify env vars: docker inspect <container> --format='{{.Config.Env}}'"
+        - "Check volume mounts: docker inspect <container> --format='{{.Mounts}}'"
+        - "Verify entry point: docker inspect <container> --format='{{.Config.Entrypoint}}'"
+        - "Test command manually: docker run -it <image> <command>"
+
+    if_logs_show_connection_errors:
+      hypothesis: "Network configuration or service discovery issue"
+      evidence_needed: "Target hostname/port from logs, network configuration"
+      tests:
+        - "Verify network: docker network inspect <network_name>"
+        - "Test DNS: docker exec <container> nslookup <target_service>"
+        - "Test connectivity: docker exec <container> ping <target_service>"
+        - "Check network mode: docker inspect <container> --format='{{.HostConfig.NetworkMode}}'"
+
+    if_logs_show_permission_errors:
+      hypothesis: "File permissions, user context, or volume mount issue"
+      evidence_needed: "File path from error, user/group from container"
+      tests:
+        - "Check user: docker exec <container> whoami"
+        - "Check user ID: docker exec <container> id"
+        - "Check file permissions: docker exec <container> ls -la <file_path>"
+        - "Check volume ownership: ls -la <host_volume_path>"
+
+    if_logs_show_resource_exhaustion:
+      hypothesis: "Memory, disk, or file descriptor exhaustion"
+      evidence_needed: "Resource usage patterns, container limits"
+      tests:
+        - "Check current usage: docker stats <container> --no-stream"
+        - "Check limits: docker inspect <container> --format='{{.HostConfig}}'"
+        - "Check disk usage: docker exec <container> df -h"
+        - "Check memory details: docker inspect <container> | grep Memory"
+
   symptom_analysis:
-    - "Log aggregation and pattern identification"
+    - "Log aggregation and pattern identification (ALWAYS start with docker logs)"
     - "Metric correlation and anomaly detection"
     - "System behavior analysis and comparison"
-    - "Error propagation tracking"
+    - "Error propagation tracking across containers"
 
   hypothesis_testing:
     - "Systematic elimination methodology"
