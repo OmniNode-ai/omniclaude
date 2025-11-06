@@ -1509,11 +1509,11 @@ class ManifestInjector:
                 )
 
                 # Filter by threshold (>0.3)
-                RELEVANCE_THRESHOLD = 0.3
+                relevance_threshold = 0.3
                 filtered_patterns = [
                     p
                     for p in scored_patterns_list
-                    if p.get("hybrid_score", 0.0) > RELEVANCE_THRESHOLD
+                    if p.get("hybrid_score", 0.0) > relevance_threshold
                 ]
 
                 # Already sorted by score (descending) from batch scoring
@@ -1526,11 +1526,11 @@ class ManifestInjector:
                     self.logger.info(
                         f"[{correlation_id}] Filtered patterns by relevance (Archon Hybrid Scoring): "
                         f"{len(all_patterns)} relevant (from {original_count} total), "
-                        f"threshold={RELEVANCE_THRESHOLD}, avg_score={avg_score:.2f}"
+                        f"threshold={relevance_threshold}, avg_score={avg_score:.2f}"
                     )
                 else:
                     self.logger.warning(
-                        f"[{correlation_id}] No patterns met relevance threshold (>{RELEVANCE_THRESHOLD})"
+                        f"[{correlation_id}] No patterns met relevance threshold (>{relevance_threshold})"
                     )
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -3411,6 +3411,10 @@ class ManifestInjector:
         else:
             manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
 
+        # Add action logging (always included - uses local context only)
+        # No Kafka query needed - correlation_id and agent_name come from self
+        manifest["action_logging"] = {}
+
         return manifest
 
     def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -3611,8 +3615,8 @@ class ManifestInjector:
             sections: Optional list of sections to include.
                      If None, includes all sections.
                      Available: ['patterns', 'models', 'infrastructure',
-                                'file_structure', 'dependencies', 'interfaces',
-                                'agent_framework', 'skills']
+                                'database_schemas', 'debug_intelligence',
+                                'filesystem', 'action_logging']
 
         Returns:
             Formatted string ready for prompt injection
@@ -3652,6 +3656,7 @@ class ManifestInjector:
             "database_schemas": self._format_database_schemas,
             "debug_intelligence": self._format_debug_intelligence,
             "filesystem": self._format_filesystem,
+            "action_logging": self._format_action_logging,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -3933,6 +3938,89 @@ class ManifestInjector:
         This method now returns an empty string to eliminate token waste.
         """
         return ""  # Return empty string instead of full tree
+
+    def _format_action_logging(self, action_logging_data: Dict) -> str:
+        """
+        Format action logging requirements section.
+
+        Provides agents with ready-to-use ActionLogger code and examples.
+        This ensures all agents automatically log their actions for observability.
+        """
+        output = ["ACTION LOGGING REQUIREMENTS:"]
+        output.append("")
+
+        # Get correlation ID and agent name from current context
+        correlation_id = (
+            str(self._current_correlation_id)
+            if self._current_correlation_id
+            else "auto-generated"
+        )
+        agent_name = self.agent_name or "your-agent-name"
+        project_name = action_logging_data.get("project_name", "omniclaude")
+
+        output.append(f"  Correlation ID: {correlation_id}")
+        output.append("")
+
+        # Initialization code
+        output.append("  Initialize ActionLogger:")
+        output.append("  ```python")
+        output.append("  from agents.lib.action_logger import ActionLogger")
+        output.append("")
+        output.append("  logger = ActionLogger(")
+        output.append(f'      agent_name="{agent_name}",')
+        output.append(f'      correlation_id="{correlation_id}",')
+        output.append(f'      project_name="{project_name}"')
+        output.append("  )")
+        output.append("  ```")
+        output.append("")
+
+        # Tool call example with context manager
+        output.append("  Log tool calls (automatic timing):")
+        output.append("  ```python")
+        output.append(
+            '  async with logger.tool_call("Read", {"file_path": "..."}) as action:'
+        )
+        output.append("      result = await read_file(...)")
+        output.append('      action.set_result({"line_count": len(result)})')
+        output.append("  ```")
+        output.append("")
+
+        # Decision logging example
+        output.append("  Log decisions:")
+        output.append("  ```python")
+        output.append('  await logger.log_decision("select_strategy",')
+        output.append(
+            '      decision_result={"chosen": "approach_a", "confidence": 0.92})'
+        )
+        output.append("  ```")
+        output.append("")
+
+        # Error logging example
+        output.append("  Log errors:")
+        output.append("  ```python")
+        output.append('  await logger.log_error("ErrorType", "error message",')
+        output.append('      error_context={"file": "...", "line": 42},')
+        output.append('      severity="error")')
+        output.append("  ```")
+        output.append("")
+
+        # Success logging example
+        output.append("  Log successes:")
+        output.append("  ```python")
+        output.append('  await logger.log_success("task_completed",')
+        output.append('      success_details={"files_processed": 5},')
+        output.append("      duration_ms=250)")
+        output.append("  ```")
+        output.append("")
+
+        # Performance and infrastructure note
+        output.append("  Performance: <5ms overhead per action, non-blocking")
+        output.append("  Kafka Topic: agent-actions")
+        output.append(
+            "  Benefits: Complete traceability, debug intelligence, performance metrics"
+        )
+
+        return "\n".join(output)
 
     def get_manifest_summary(self) -> Dict[str, Any]:
         """
