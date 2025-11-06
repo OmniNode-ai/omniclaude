@@ -101,6 +101,19 @@ class Settings(BaseSettings):
         description="Archon Main Server (if different from intelligence)",
     )
 
+    # ONEX MCP Service Configuration
+    onex_mcp_host: str = Field(
+        default="192.168.86.101",
+        description="ONEX MCP service host (Model Context Protocol)",
+    )
+
+    onex_mcp_port: int = Field(
+        default=8151,
+        ge=1,
+        le=65535,
+        description="ONEX MCP service port",
+    )
+
     # =========================================================================
     # SHARED INFRASTRUCTURE - KAFKA/REDPANDA (from omninode_bridge)
     # =========================================================================
@@ -148,9 +161,44 @@ class Settings(BaseSettings):
         description="Request timeout in milliseconds (1-60 seconds)",
     )
 
+    kafka_pattern_discovery_timeout_ms: int = Field(
+        default=5000,
+        ge=1000,
+        le=60000,
+        description="Pattern discovery timeout in milliseconds (1-60 seconds)",
+    )
+
+    kafka_code_analysis_timeout_ms: int = Field(
+        default=10000,
+        ge=1000,
+        le=120000,
+        description="Code analysis timeout in milliseconds (1-120 seconds)",
+    )
+
     kafka_doc_topic: str = Field(
         default="documentation-changed",
         description="Documentation change tracking topic",
+    )
+
+    kafka_consumer_group_prefix: str = Field(
+        default="omniclaude",
+        description="Kafka consumer group prefix for this service",
+    )
+
+    # Kafka Intelligence Topics
+    topic_code_analysis_requested: str = Field(
+        default="dev.archon-intelligence.intelligence.code-analysis-requested.v1",
+        description="Topic for code analysis requests",
+    )
+
+    topic_code_analysis_completed: str = Field(
+        default="dev.archon-intelligence.intelligence.code-analysis-completed.v1",
+        description="Topic for successful analysis responses",
+    )
+
+    topic_code_analysis_failed: str = Field(
+        default="dev.archon-intelligence.intelligence.code-analysis-failed.v1",
+        description="Topic for failed analysis responses",
     )
 
     # =========================================================================
@@ -258,6 +306,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Redis Configuration (for legacy compatibility)
+    redis_host: str = Field(
+        default="localhost",
+        description="Redis server host (legacy compatibility)",
+    )
+
+    redis_port: int = Field(
+        default=6379,
+        ge=1,
+        le=65535,
+        description="Redis server port (legacy compatibility)",
+    )
+
     # Cache TTLs (seconds)
     cache_ttl_patterns: int = Field(
         default=300,
@@ -297,6 +358,126 @@ class Settings(BaseSettings):
             "Minimum pattern quality threshold (0.0-1.0). "
             "0.9+=Excellent, 0.7-0.9=Good, 0.5-0.7=Fair, <0.5=Poor (filtered)"
         ),
+    )
+
+    # =========================================================================
+    # CODE GENERATION & QUALITY GATES
+    # =========================================================================
+
+    # Code Generation Control
+    codegen_consumer_group: str = Field(
+        default="omniclaude-codegen",
+        description="Kafka consumer group for code generation service",
+    )
+
+    codegen_generate_contracts: bool = Field(
+        default=True,
+        description="Enable automatic contract generation",
+    )
+
+    codegen_generate_models: bool = Field(
+        default=True,
+        description="Enable automatic model generation",
+    )
+
+    codegen_generate_enums: bool = Field(
+        default=True,
+        description="Enable automatic enum generation",
+    )
+
+    codegen_generate_business_logic: bool = Field(
+        default=False,
+        description="Enable business logic generation (starts with stubs)",
+    )
+
+    codegen_generate_tests: bool = Field(
+        default=True,
+        description="Enable automatic test generation",
+    )
+
+    # Mixin Configuration
+    codegen_auto_select_mixins: bool = Field(
+        default=True,
+        description="Automatically select appropriate mixins for generated code",
+    )
+
+    codegen_mixin_confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence threshold for mixin selection (0.0-1.0)",
+    )
+
+    # Core Library Dependencies
+    use_core_stable: bool = Field(
+        default=True,
+        description="Use omnibase_core as dependency (Pydantic 2.x)",
+    )
+
+    use_spi_validators: bool = Field(
+        default=True,
+        description="Use omnibase_spi validators",
+    )
+
+    use_archon_events: bool = Field(
+        default=False,
+        description="Use omniarchon event handlers (when ready)",
+    )
+
+    use_bridge_events: bool = Field(
+        default=False,
+        description="Use omninode_bridge event infrastructure (when ready)",
+    )
+
+    # Event-Driven Features
+    enable_event_driven_analysis: bool = Field(
+        default=False,
+        description="Enable event-driven code analysis",
+    )
+
+    enable_event_driven_validation: bool = Field(
+        default=False,
+        description="Enable event-driven validation",
+    )
+
+    enable_event_driven_patterns: bool = Field(
+        default=False,
+        description="Enable event-driven pattern discovery",
+    )
+
+    # Quality Thresholds
+    quality_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Minimum quality threshold for code generation (0.0-1.0)",
+    )
+
+    onex_compliance_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum ONEX compliance threshold (0.0-1.0)",
+    )
+
+    require_human_review: bool = Field(
+        default=True,
+        description="Require human review for generated code",
+    )
+
+    # Intelligence Timeouts
+    analysis_timeout_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Code analysis timeout in seconds",
+    )
+
+    validation_timeout_seconds: int = Field(
+        default=20,
+        ge=1,
+        le=600,
+        description="Validation timeout in seconds",
     )
 
     # =========================================================================
@@ -411,13 +592,26 @@ class Settings(BaseSettings):
         return v
 
     @field_validator(
-        "kafka_request_timeout_ms", "routing_timeout_ms", "request_timeout_ms"
+        "kafka_request_timeout_ms",
+        "kafka_pattern_discovery_timeout_ms",
+        "routing_timeout_ms",
+        "request_timeout_ms",
     )
     @classmethod
     def validate_timeout(cls, v: int) -> int:
         """Validate timeout is reasonable (1-60 seconds)."""
         if not 1000 <= v <= 60000:
             raise ValueError(f"Timeout must be between 1000ms and 60000ms, got {v}")
+        return v
+
+    @field_validator("kafka_code_analysis_timeout_ms")
+    @classmethod
+    def validate_code_analysis_timeout(cls, v: int) -> int:
+        """Validate code analysis timeout is reasonable (1-120 seconds)."""
+        if not 1000 <= v <= 120000:
+            raise ValueError(
+                f"Code analysis timeout must be between 1000ms and 120000ms, got {v}"
+            )
         return v
 
     @field_validator("agent_registry_path", mode="before")

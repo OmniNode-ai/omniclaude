@@ -7,7 +7,7 @@ environment variable support, feature flags, and validation.
 Usage:
     >>> from agents.lib.config import IntelligenceConfig
     >>>
-    >>> # Load from environment
+    >>> # Load from environment (uses centralized settings)
     >>> config = IntelligenceConfig.from_env()
     >>> config.validate_config()
     >>>
@@ -19,24 +19,30 @@ Usage:
     >>> servers = config.get_bootstrap_servers()
 
 Configuration precedence:
-1. Environment variables (highest)
-2. Default values (lowest)
+1. System environment variables (highest)
+2. .env.{ENVIRONMENT} file (environment-specific)
+3. .env file (default/fallback)
+4. Default values in Settings class (lowest)
 
 Environment Variables:
-    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: 192.168.86.200:9092)
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: 192.168.86.200:29092)
     KAFKA_ENABLE_INTELLIGENCE: Enable event-based intelligence (default: true)
     KAFKA_REQUEST_TIMEOUT_MS: Request timeout in milliseconds (default: 5000)
+    KAFKA_PATTERN_DISCOVERY_TIMEOUT_MS: Pattern discovery timeout (default: 5000)
+    KAFKA_CODE_ANALYSIS_TIMEOUT_MS: Code analysis timeout (default: 10000)
     ENABLE_EVENT_BASED_DISCOVERY: Enable event discovery (default: true)
     ENABLE_FILESYSTEM_FALLBACK: Enable filesystem fallback (default: true)
 
 Created: 2025-10-23
+Updated: 2025-11-06 (Phase 2: Migrated to Pydantic Settings)
 Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.2
 """
 
-import os
 from typing import Any, Dict
 
 from pydantic import BaseModel, Field, field_validator
+
+from config import reload_settings
 
 
 class IntelligenceConfig(BaseModel):
@@ -67,41 +73,39 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default_factory=lambda: os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-        ),
-        description="Kafka bootstrap servers (set via KAFKA_BOOTSTRAP_SERVERS env var)",
+        default_factory=lambda: reload_settings().kafka_bootstrap_servers,
+        description="Kafka bootstrap servers (loaded from centralized settings)",
     )
 
     kafka_enable_intelligence: bool = Field(
-        default=True,
-        description="Enable Kafka-based intelligence gathering",
+        default_factory=lambda: reload_settings().kafka_enable_intelligence,
+        description="Enable Kafka-based intelligence gathering (loaded from centralized settings)",
     )
 
     kafka_request_timeout_ms: int = Field(
-        default=5000,
-        description="Default request timeout in milliseconds",
+        default_factory=lambda: reload_settings().kafka_request_timeout_ms,
+        description="Default request timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=60000,
     )
 
     kafka_pattern_discovery_timeout_ms: int = Field(
-        default=5000,
-        description="Pattern discovery timeout in milliseconds",
+        default_factory=lambda: reload_settings().kafka_pattern_discovery_timeout_ms,
+        description="Pattern discovery timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=60000,
     )
 
     kafka_code_analysis_timeout_ms: int = Field(
-        default=10000,
-        description="Code analysis timeout in milliseconds",
+        default_factory=lambda: reload_settings().kafka_code_analysis_timeout_ms,
+        description="Code analysis timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=120000,
     )
 
     kafka_consumer_group_prefix: str = Field(
-        default="omniclaude-intelligence",
-        description="Consumer group prefix for client isolation",
+        default_factory=lambda: reload_settings().kafka_consumer_group_prefix,
+        description="Consumer group prefix for client isolation (loaded from centralized settings)",
     )
 
     # =========================================================================
@@ -109,18 +113,18 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     enable_event_based_discovery: bool = Field(
-        default=True,
-        description="Enable event-based pattern discovery",
+        default_factory=lambda: reload_settings().enable_event_based_discovery,
+        description="Enable event-based pattern discovery (loaded from centralized settings)",
     )
 
     enable_filesystem_fallback: bool = Field(
-        default=True,
-        description="Enable fallback to built-in patterns on failure",
+        default_factory=lambda: reload_settings().enable_filesystem_fallback,
+        description="Enable fallback to built-in patterns on failure (loaded from centralized settings)",
     )
 
     prefer_event_patterns: bool = Field(
-        default=True,
-        description="Prefer event-based patterns with higher confidence scores",
+        default_factory=lambda: reload_settings().prefer_event_patterns,
+        description="Prefer event-based patterns with higher confidence scores (loaded from centralized settings)",
     )
 
     # =========================================================================
@@ -128,18 +132,18 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     topic_code_analysis_requested: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-requested.v1",
-        description="Topic for code analysis requests",
+        default_factory=lambda: reload_settings().topic_code_analysis_requested,
+        description="Topic for code analysis requests (loaded from centralized settings)",
     )
 
     topic_code_analysis_completed: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-completed.v1",
-        description="Topic for successful analysis responses",
+        default_factory=lambda: reload_settings().topic_code_analysis_completed,
+        description="Topic for successful analysis responses (loaded from centralized settings)",
     )
 
     topic_code_analysis_failed: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-failed.v1",
-        description="Topic for failed analysis responses",
+        default_factory=lambda: reload_settings().topic_code_analysis_failed,
+        description="Topic for failed analysis responses (loaded from centralized settings)",
     )
 
     # =========================================================================
@@ -189,59 +193,44 @@ class IntelligenceConfig(BaseModel):
     @classmethod
     def from_env(cls) -> "IntelligenceConfig":
         """
-        Load configuration from environment variables.
+        Load configuration from centralized settings.
 
-        Environment variables override default values. All environment
-        variables are optional and will fall back to defaults if not set.
+        This method creates an IntelligenceConfig instance using values from
+        the centralized Pydantic Settings framework. Settings are reloaded
+        from environment variables to ensure latest values are used (important
+        for testing with monkeypatch).
+
+        Configuration is loaded with the following precedence:
+        1. System environment variables (highest priority)
+        2. .env.{ENVIRONMENT} file (environment-specific overrides)
+        3. .env file (default/fallback)
+        4. Default values in Settings class (lowest priority)
 
         Returns:
-            IntelligenceConfig with values from environment
+            IntelligenceConfig with values from centralized settings
 
         Example:
-            >>> os.environ["KAFKA_BOOTSTRAP_SERVERS"] = "kafka:9092"
             >>> config = IntelligenceConfig.from_env()
-            >>> assert config.kafka_bootstrap_servers == "kafka:9092"
+            >>> print(config.kafka_bootstrap_servers)
+            192.168.86.200:29092
         """
+        # Reload settings to pick up any environment variable changes
+        # (important for testing with monkeypatch)
+        current_settings = reload_settings()
+
         return cls(
-            kafka_bootstrap_servers=os.getenv(
-                "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-            ),
-            kafka_enable_intelligence=_parse_bool(
-                os.getenv("KAFKA_ENABLE_INTELLIGENCE", "true")
-            ),
-            kafka_request_timeout_ms=_parse_int(
-                os.getenv("KAFKA_REQUEST_TIMEOUT_MS", "5000")
-            ),
-            kafka_pattern_discovery_timeout_ms=_parse_int(
-                os.getenv("KAFKA_PATTERN_DISCOVERY_TIMEOUT_MS", "5000")
-            ),
-            kafka_code_analysis_timeout_ms=_parse_int(
-                os.getenv("KAFKA_CODE_ANALYSIS_TIMEOUT_MS", "10000")
-            ),
-            kafka_consumer_group_prefix=os.getenv(
-                "KAFKA_CONSUMER_GROUP_PREFIX", "omniclaude-intelligence"
-            ),
-            enable_event_based_discovery=_parse_bool(
-                os.getenv("ENABLE_EVENT_BASED_DISCOVERY", "true")
-            ),
-            enable_filesystem_fallback=_parse_bool(
-                os.getenv("ENABLE_FILESYSTEM_FALLBACK", "true")
-            ),
-            prefer_event_patterns=_parse_bool(
-                os.getenv("PREFER_EVENT_PATTERNS", "true")
-            ),
-            topic_code_analysis_requested=os.getenv(
-                "TOPIC_CODE_ANALYSIS_REQUESTED",
-                "dev.archon-intelligence.intelligence.code-analysis-requested.v1",
-            ),
-            topic_code_analysis_completed=os.getenv(
-                "TOPIC_CODE_ANALYSIS_COMPLETED",
-                "dev.archon-intelligence.intelligence.code-analysis-completed.v1",
-            ),
-            topic_code_analysis_failed=os.getenv(
-                "TOPIC_CODE_ANALYSIS_FAILED",
-                "dev.archon-intelligence.intelligence.code-analysis-failed.v1",
-            ),
+            kafka_bootstrap_servers=current_settings.kafka_bootstrap_servers,
+            kafka_enable_intelligence=current_settings.kafka_enable_intelligence,
+            kafka_request_timeout_ms=current_settings.kafka_request_timeout_ms,
+            kafka_pattern_discovery_timeout_ms=current_settings.kafka_pattern_discovery_timeout_ms,
+            kafka_code_analysis_timeout_ms=current_settings.kafka_code_analysis_timeout_ms,
+            kafka_consumer_group_prefix=current_settings.kafka_consumer_group_prefix,
+            enable_event_based_discovery=current_settings.enable_event_based_discovery,
+            enable_filesystem_fallback=current_settings.enable_filesystem_fallback,
+            prefer_event_patterns=current_settings.prefer_event_patterns,
+            topic_code_analysis_requested=current_settings.topic_code_analysis_requested,
+            topic_code_analysis_completed=current_settings.topic_code_analysis_completed,
+            topic_code_analysis_failed=current_settings.topic_code_analysis_failed,
         )
 
     # =========================================================================
@@ -305,40 +294,3 @@ class IntelligenceConfig(BaseModel):
             Dictionary with all configuration values
         """
         return self.model_dump()
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-
-def _parse_bool(value: str) -> bool:
-    """
-    Parse boolean value from string.
-
-    Args:
-        value: String value (true/false, yes/no, 1/0)
-
-    Returns:
-        Boolean value
-    """
-    return value.lower() in ("true", "yes", "1", "on", "enabled")
-
-
-def _parse_int(value: str) -> int:
-    """
-    Parse integer value from string.
-
-    Args:
-        value: String value
-
-    Returns:
-        Integer value
-
-    Raises:
-        ValueError: If value is not a valid integer
-    """
-    try:
-        return int(value)
-    except ValueError as e:
-        raise ValueError(f"Invalid integer value: {value}") from e

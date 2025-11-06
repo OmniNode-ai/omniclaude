@@ -58,6 +58,15 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
     logging.error("asyncpg not available. Install with: pip install asyncpg")
 
+# HTTP server for health checks
+try:
+    from aiohttp import web
+
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+    logging.error("aiohttp not available. Install with: pip install aiohttp")
+
 # Add lib directory to Python path for AgentRouter imports
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
@@ -286,6 +295,7 @@ class AgentRouterEventService:
         db_name: str = "omninode_bridge",
         db_user: str = "postgres",
         db_password: str = "",
+        health_check_port: int = 8070,
     ):
         """
         Initialize agent router event service.
@@ -299,12 +309,14 @@ class AgentRouterEventService:
             db_name: PostgreSQL database name
             db_user: PostgreSQL user
             db_password: PostgreSQL password
+            health_check_port: Port for HTTP health check endpoint
         """
         if not KAFKA_AVAILABLE:
             raise RuntimeError("aiokafka not available - cannot start event service")
 
         self.bootstrap_servers = bootstrap_servers
         self.consumer_group_id = consumer_group_id
+        self.health_check_port = health_check_port
 
         # Default registry path
         if registry_path is None:
@@ -327,6 +339,8 @@ class AgentRouterEventService:
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
         self._postgres_logger: Optional[PostgresLogger] = None
+        self._health_app: Optional[web.Application] = None
+        self._health_runner: Optional[web.AppRunner] = None
         self._shutdown_event = asyncio.Event()
         self._started = False
 
@@ -343,7 +357,7 @@ class AgentRouterEventService:
         """
         Start the event service.
 
-        Initializes AgentRouter, Kafka producer/consumer, and PostgreSQL logger.
+        Initializes AgentRouter, Kafka producer/consumer, PostgreSQL logger, and health check server.
         """
         if self._started:
             self.logger.warning("Service already started")
@@ -390,6 +404,12 @@ class AgentRouterEventService:
         await self._consumer.start()
         self.logger.info(f"Kafka consumer started (group: {self.consumer_group_id})")
 
+        # Start health check server
+        if AIOHTTP_AVAILABLE:
+            await self._start_health_server()
+        else:
+            self.logger.warning("aiohttp not available - health check server disabled")
+
         self._started = True
         self.logger.info("=" * 60)
         self.logger.info("Service ready - waiting for routing requests")
@@ -397,7 +417,62 @@ class AgentRouterEventService:
         self.logger.info(
             f"  Publishing to: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}"
         )
+        self.logger.info(
+            f"  Health check: http://localhost:{self.health_check_port}/health"
+        )
         self.logger.info("=" * 60)
+
+    async def _start_health_server(self) -> None:
+        """Start HTTP health check server."""
+        try:
+            # Create health check endpoint
+            async def health_handler(request):
+                """Health check endpoint handler."""
+                return web.json_response(
+                    {
+                        "status": "healthy",
+                        "service": "router-consumer",
+                        "uptime_seconds": int(time.time() - self._start_time),
+                        "metrics": {
+                            "requests_processed": self._requests_processed,
+                            "requests_succeeded": self._requests_succeeded,
+                            "requests_failed": self._requests_failed,
+                            "success_rate": (
+                                self._requests_succeeded / self._requests_processed
+                                if self._requests_processed > 0
+                                else 0.0
+                            ),
+                            "average_routing_time_ms": (
+                                self._total_routing_time_ms / self._requests_processed
+                                if self._requests_processed > 0
+                                else 0.0
+                            ),
+                        },
+                    }
+                )
+
+            # Create aiohttp application
+            self._health_app = web.Application()
+            self._health_app.router.add_get("/health", health_handler)
+
+            # Create and start runner
+            self._health_runner = web.AppRunner(self._health_app)
+            await self._health_runner.setup()
+
+            # Start site (bind to all interfaces for Docker container accessibility)
+            site = web.TCPSite(
+                self._health_runner, "0.0.0.0", self.health_check_port  # noqa: S104
+            )
+            await site.start()
+
+            self.logger.info(
+                f"Health check server started on port {self.health_check_port}"
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to start health check server: {e}", exc_info=True
+            )
 
     async def stop(self) -> None:
         """Stop the event service gracefully."""
@@ -406,6 +481,11 @@ class AgentRouterEventService:
 
         self.logger.info("Stopping agent router event service...")
         self._shutdown_event.set()
+
+        # Stop health check server
+        if self._health_runner:
+            await self._health_runner.cleanup()
+            self.logger.info("Health check server stopped")
 
         # Stop consumer
         if self._consumer:
@@ -668,6 +748,7 @@ async def main():
     )
     consumer_group_id = os.getenv("KAFKA_GROUP_ID", "agent-router-service")
     registry_path = os.getenv("REGISTRY_PATH")
+    health_check_port = int(os.getenv("HEALTH_CHECK_PORT", "8070"))
 
     # PostgreSQL configuration
     db_config = {
@@ -683,6 +764,7 @@ async def main():
         bootstrap_servers=bootstrap_servers,
         consumer_group_id=consumer_group_id,
         registry_path=registry_path,
+        health_check_port=health_check_port,
         **db_config,
     )
 

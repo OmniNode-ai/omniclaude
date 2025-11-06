@@ -4,10 +4,18 @@ Version Configuration for Autonomous Code Generation
 
 Handles version isolation and feature flags for concurrent work streams.
 Allows switching between legacy (Pydantic 1.x) and stable (Pydantic 2.x) implementations.
+
+Configuration is loaded from centralized settings (config.settings module).
+Call update_from_environment() to sync with latest settings values.
+
+Note: As of Phase 2, configuration uses Pydantic Settings framework.
+See config/settings.py for all available configuration options.
 """
 
 from dataclasses import dataclass
 from enum import Enum
+
+from config import settings
 
 
 class ImplementationMode(Enum):
@@ -113,90 +121,61 @@ class VersionConfig:
         return feature_map.get(feature, False)
 
     def update_from_environment(self):
-        """Update configuration from environment variables"""
-        import os
+        """
+        Update configuration from centralized settings.
 
+        Note: Configuration now loaded from config.settings module.
+        This method provides backward compatibility for code that
+        calls update_from_environment() explicitly.
+
+        All type conversions and validations are handled by Pydantic Settings.
+        """
         # Core library flags
-        self.use_core_stable = os.getenv("USE_CORE_STABLE", "false").lower() == "true"
-        self.use_archon_events = (
-            os.getenv("USE_ARCHON_EVENTS", "false").lower() == "true"
-        )
-        self.use_bridge_events = (
-            os.getenv("USE_BRIDGE_EVENTS", "false").lower() == "true"
-        )
-        self.use_spi_validators = (
-            os.getenv("USE_SPI_VALIDATORS", "false").lower() == "true"
-        )
+        self.use_core_stable = settings.use_core_stable
+        self.use_archon_events = settings.use_archon_events
+        self.use_bridge_events = settings.use_bridge_events
+        self.use_spi_validators = settings.use_spi_validators
 
         # Event-driven features
-        self.enable_event_driven_analysis = (
-            os.getenv("ENABLE_EVENT_DRIVEN_ANALYSIS", "false").lower() == "true"
-        )
-        self.enable_event_driven_validation = (
-            os.getenv("ENABLE_EVENT_DRIVEN_VALIDATION", "false").lower() == "true"
-        )
-        self.enable_event_driven_patterns = (
-            os.getenv("ENABLE_EVENT_DRIVEN_PATTERNS", "false").lower() == "true"
-        )
+        self.enable_event_driven_analysis = settings.enable_event_driven_analysis
+        self.enable_event_driven_validation = settings.enable_event_driven_validation
+        self.enable_event_driven_patterns = settings.enable_event_driven_patterns
 
         # Database configuration
-        self.postgres_host = os.getenv("POSTGRES_HOST", self.postgres_host)
-        try:
-            self.postgres_port = int(
-                os.getenv("POSTGRES_PORT", str(self.postgres_port))
-            )
-        except ValueError as e:
-            raise ValueError(
-                f"Invalid POSTGRES_PORT value. Must be a valid integer: {e}"
-            )
-        self.postgres_db = os.getenv("POSTGRES_DB", self.postgres_db)
-        self.postgres_user = os.getenv("POSTGRES_USER", self.postgres_user)
-        self.postgres_password = os.getenv("POSTGRES_PASSWORD", self.postgres_password)
+        self.postgres_host = settings.postgres_host
+        self.postgres_port = settings.postgres_port  # Already int, no conversion needed
+        self.postgres_db = settings.postgres_database  # Note: different name!
+        self.postgres_user = settings.postgres_user
+        self.postgres_password = settings.get_effective_postgres_password()
 
         # ONEX MCP Service configuration
-        self.onex_mcp_host = os.getenv("ONEX_MCP_HOST", self.onex_mcp_host)
-        try:
-            self.onex_mcp_port = int(
-                os.getenv("ONEX_MCP_PORT", str(self.onex_mcp_port))
-            )
-        except ValueError as e:
-            raise ValueError(
-                f"Invalid ONEX_MCP_PORT value. Must be a valid integer: {e}"
-            )
+        self.onex_mcp_host = settings.onex_mcp_host
+        self.onex_mcp_port = settings.onex_mcp_port  # Already int
 
         # Redis configuration
-        self.redis_host = os.getenv("REDIS_HOST", self.redis_host)
-        try:
-            self.redis_port = int(os.getenv("REDIS_PORT", str(self.redis_port)))
-        except ValueError as e:
-            raise ValueError(f"Invalid REDIS_PORT value. Must be a valid integer: {e}")
+        self.redis_host = settings.redis_host
+        self.redis_port = settings.redis_port  # Already int
 
         # Kafka configuration
-        self.kafka_bootstrap_servers = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", self.kafka_bootstrap_servers
-        )
-        self.consumer_group = os.getenv("CONSUMER_GROUP", self.consumer_group)
+        self.kafka_bootstrap_servers = settings.kafka_bootstrap_servers
+        self.consumer_group = (
+            settings.kafka_consumer_group_prefix
+        )  # Note: different name!
 
         # Quality gates
-        self.quality_threshold = float(
-            os.getenv("QUALITY_THRESHOLD", str(self.quality_threshold))
-        )
-        self.onex_compliance_threshold = float(
-            os.getenv("ONEX_COMPLIANCE_THRESHOLD", str(self.onex_compliance_threshold))
-        )
-        self.require_human_review = (
-            os.getenv("REQUIRE_HUMAN_REVIEW", "true").lower() == "true"
-        )
+        self.quality_threshold = settings.quality_threshold  # Already float
+        self.onex_compliance_threshold = (
+            settings.onex_compliance_threshold
+        )  # Already float
+        self.require_human_review = settings.require_human_review  # Already bool
 
         # Timeouts
-        self.analysis_timeout_seconds = int(
-            os.getenv("ANALYSIS_TIMEOUT_SECONDS", str(self.analysis_timeout_seconds))
-        )
-        self.validation_timeout_seconds = int(
-            os.getenv(
-                "VALIDATION_TIMEOUT_SECONDS", str(self.validation_timeout_seconds)
-            )
-        )
+        self.analysis_timeout_seconds = settings.analysis_timeout_seconds  # Already int
+        self.validation_timeout_seconds = (
+            settings.validation_timeout_seconds
+        )  # Already int
+
+        # Note: No ValueError exception handling needed - Pydantic validates on settings load
 
 
 # Global configuration instance

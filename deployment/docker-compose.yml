@@ -254,14 +254,18 @@ services:
       # Agent registry configuration
       - REGISTRY_PATH=${AGENT_REGISTRY_PATH:-/agent-definitions/agent-registry.yaml}
 
+      # Health check configuration
+      - HEALTH_CHECK_PORT=${ARCHON_ROUTER_HEALTH_PORT:-8070}
+
       # Service configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ${AGENT_DEFINITIONS_HOST_PATH:-$HOME/.claude/agent-definitions}:/agent-definitions:ro
     networks:
       - app_network
+      - omninode-bridge-network
     healthcheck:
-      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep agent_router_event_service.py"]
+      test: ["CMD", "curl", "-f", "http://localhost:${ARCHON_ROUTER_HEALTH_PORT:-8070}/health"]
       interval: 30s
       timeout: 10s
       retries: 3

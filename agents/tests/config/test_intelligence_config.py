@@ -17,11 +17,7 @@ Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.2
 import pytest
 from pydantic import ValidationError
 
-from agents.lib.config.intelligence_config import (
-    IntelligenceConfig,
-    _parse_bool,
-    _parse_int,
-)
+from agents.lib.config.intelligence_config import IntelligenceConfig
 
 # =============================================================================
 # Test Fixtures
@@ -74,13 +70,14 @@ class TestIntelligenceConfigDefaults:
         """Test all default configuration values are set correctly."""
         config = IntelligenceConfig()
 
-        # Kafka configuration defaults
-        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
+        # Kafka configuration defaults (loaded from centralized settings)
+        # Note: kafka_bootstrap_servers comes from .env file
+        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
         assert config.kafka_enable_intelligence is True
         assert config.kafka_request_timeout_ms == 5000
         assert config.kafka_pattern_discovery_timeout_ms == 5000
         assert config.kafka_code_analysis_timeout_ms == 10000
-        assert config.kafka_consumer_group_prefix == "omniclaude-intelligence"
+        assert config.kafka_consumer_group_prefix == "omniclaude"
 
         # Feature flag defaults
         assert config.enable_event_based_discovery is True
@@ -166,7 +163,8 @@ class TestEnvironmentVariableLoading:
     def test_from_env_uses_defaults_when_not_set(self, clean_env):
         """Test from_env() uses default values when env vars not set."""
         config = IntelligenceConfig.from_env()
-        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
+        # Note: kafka_bootstrap_servers comes from .env file
+        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
         assert config.kafka_enable_intelligence is True
 
 
@@ -375,52 +373,10 @@ class TestUtilityMethods:
 
 
 # =============================================================================
-# Test: Helper Functions
-# =============================================================================
-
-
-class TestHelperFunctions:
-    """Test module-level helper functions."""
-
-    def test_parse_bool_true_variants(self):
-        """Test _parse_bool recognizes true variants."""
-        true_values = ["true", "TRUE", "True", "yes", "YES", "1", "on", "ON", "enabled"]
-        for value in true_values:
-            assert _parse_bool(value) is True, f"Failed for: {value}"
-
-    def test_parse_bool_false_variants(self):
-        """Test _parse_bool recognizes false variants."""
-        false_values = ["false", "FALSE", "no", "NO", "0", "off", "OFF", "disabled"]
-        for value in false_values:
-            assert _parse_bool(value) is False, f"Failed for: {value}"
-
-    def test_parse_bool_arbitrary_string_returns_false(self):
-        """Test _parse_bool returns false for unrecognized strings."""
-        assert _parse_bool("random") is False
-        assert _parse_bool("") is False
-        assert _parse_bool("maybe") is False
-
-    def test_parse_int_valid_numbers(self):
-        """Test _parse_int parses valid integer strings."""
-        assert _parse_int("0") == 0
-        assert _parse_int("42") == 42
-        assert _parse_int("5000") == 5000
-        assert _parse_int("-10") == -10
-
-    def test_parse_int_invalid_raises_error(self):
-        """Test _parse_int raises ValueError for invalid input."""
-        with pytest.raises(ValueError, match="Invalid integer value"):
-            _parse_int("not_a_number")
-
-    def test_parse_int_float_raises_error(self):
-        """Test _parse_int raises ValueError for float strings."""
-        with pytest.raises(ValueError, match="Invalid integer value"):
-            _parse_int("3.14")
-
-
-# =============================================================================
 # Test: Edge Cases and Boundary Conditions
 # =============================================================================
+# Note: Helper function tests (_parse_bool, _parse_int) removed in Phase 2
+# Type conversion is now handled automatically by Pydantic Settings framework
 
 
 class TestEdgeCases:
@@ -464,7 +420,8 @@ class TestEdgeCases:
         config = IntelligenceConfig()
         # Pydantic models are mutable by default, but we can test field access
         assert hasattr(config, "kafka_bootstrap_servers")
-        assert config.kafka_bootstrap_servers == "192.168.86.200:9092"
+        # Note: kafka_bootstrap_servers comes from .env file
+        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
 
 
 # =============================================================================
