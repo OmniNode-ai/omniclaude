@@ -75,8 +75,15 @@ async def test_routing_request():
         print("     docker ps | grep router-consumer")
         print("  2. Check consumer logs:")
         print("     docker logs omniclaude_archon_router_consumer --tail 50")
-        print("  3. Verify Kafka connectivity:")
-        print("     kcat -L -b 192.168.86.200:29092")
+        print("  3. Verify Kafka connectivity (from Docker):")
+        # Import settings to get current Kafka config
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from config import settings
+
+        print(f"     kcat -L -b {settings.kafka_bootstrap_servers}")
         return None
 
     except Exception as e:
@@ -95,20 +102,26 @@ async def verify_database_record():
     print("=" * 80 + "\n")
 
     try:
-        import os
+        import sys
+        from pathlib import Path
 
         import asyncpg
 
-        # Load environment variables
-        postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-        postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))
-        postgres_user = os.getenv("POSTGRES_USER", "postgres")
-        postgres_password = os.getenv("POSTGRES_PASSWORD")
-        postgres_database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+        # Add project root to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from config import settings
 
-        if not postgres_password:
-            print("⚠️  WARNING: POSTGRES_PASSWORD not set in environment")
-            print("   Run: source .env")
+        # Get PostgreSQL configuration from settings (auto-loaded from .env)
+        postgres_host = settings.postgres_host
+        postgres_port = settings.postgres_port
+        postgres_user = settings.postgres_user
+        postgres_database = settings.postgres_database
+
+        try:
+            postgres_password = settings.get_effective_postgres_password()
+        except ValueError:
+            print("⚠️  WARNING: POSTGRES_PASSWORD not set in .env")
+            print("   Please set POSTGRES_PASSWORD in your .env file")
             return
 
         # Connect to database
@@ -127,8 +140,11 @@ async def verify_database_record():
             # Query recent routing decisions
             query = """
                 SELECT
-                    agent_name,
-                    confidence,
+                    correlation_id,
+                    selected_agent,
+                    confidence_score,
+                    routing_time_ms,
+                    routing_strategy,
                     user_request,
                     created_at
                 FROM agent_routing_decisions
@@ -140,14 +156,20 @@ async def verify_database_record():
             if rows:
                 print(f"✅ Found {len(rows)} recent routing decisions:\n")
                 for i, row in enumerate(rows, 1):
-                    agent_name = row["agent_name"]
-                    confidence = row["confidence"]
+                    correlation_id = row["correlation_id"]
+                    selected_agent = row["selected_agent"]
+                    confidence_score = row["confidence_score"]
+                    routing_time_ms = row["routing_time_ms"]
+                    routing_strategy = row["routing_strategy"]
                     user_request = row["user_request"][:60]
                     created_at = row["created_at"]
 
-                    print(f"{i}. Agent: {agent_name}")
-                    print(f"   Confidence: {confidence:.2%}")
+                    print(f"{i}. Agent: {selected_agent}")
+                    print(f"   Confidence: {confidence_score:.2%}")
+                    print(f"   Routing Time: {routing_time_ms}ms")
+                    print(f"   Strategy: {routing_strategy}")
                     print(f"   Request: {user_request}...")
+                    print(f"   Correlation ID: {correlation_id}")
                     print(f"   Created: {created_at}")
                     print()
             else:
@@ -195,10 +217,17 @@ async def main():
         print(
             "  2. Check consumer logs: docker logs omniclaude_archon_router_consumer --tail 50"
         )
-        print("  3. Verify Kafka topics: kcat -L -b 192.168.86.200:29092")
+        # Import settings to get current Kafka config
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from config import settings
+
         print(
-            "  4. Check database connectivity: source .env && psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER"
+            f"  3. Verify Kafka topics: kcat -L -b {settings.kafka_bootstrap_servers}"
         )
+        print("  4. Check database connectivity (credentials auto-loaded from .env)")
         return 1
 
 

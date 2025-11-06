@@ -42,10 +42,111 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from dotenv import load_dotenv
 from pydantic import Field, HttpUrl, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def find_project_root(start_path: Optional[Path] = None) -> Path:
+    """
+    Find the project root directory by looking for .env or .git.
+
+    This function searches upward from the start path (or current file location)
+    to find the project root, identified by the presence of .env or .git.
+
+    Args:
+        start_path: Starting directory for search (defaults to this file's directory)
+
+    Returns:
+        Path to project root directory
+
+    Raises:
+        RuntimeError: If project root cannot be found
+
+    Example:
+        >>> root = find_project_root()
+        >>> print(root / ".env")
+        /path/to/project/.env
+    """
+    if start_path is None:
+        # Start from this file's directory
+        start_path = Path(__file__).resolve().parent
+
+    current = start_path
+    max_depth = 10  # Prevent infinite loops
+
+    for _ in range(max_depth):
+        # Check for project markers
+        if (current / ".env").exists() or (current / ".git").exists():
+            return current
+
+        # Move up one directory
+        parent = current.parent
+        if parent == current:
+            # Reached filesystem root
+            break
+        current = parent
+
+    # Fallback: If not found, assume parent of config/ directory is project root
+    # This handles the case where .env doesn't exist yet
+    return Path(__file__).resolve().parent.parent
+
+
+def load_env_files(project_root: Path, environment: Optional[str] = None) -> None:
+    """
+    Load environment files from project root.
+
+    Loads .env and optionally .env.{environment} files using python-dotenv.
+    This ensures environment variables are available BEFORE Pydantic Settings
+    initialization, making them work from any directory.
+
+    Priority (highest to lowest):
+        1. System environment variables (not modified)
+        2. .env.{environment} file (loaded last = highest priority)
+        3. .env file (loaded first = base configuration)
+
+    Args:
+        project_root: Path to project root directory
+        environment: Environment name (dev, test, prod, etc.)
+
+    Example:
+        >>> load_env_files(Path("/project"), environment="test")
+        # Loads /project/.env then /project/.env.test
+    """
+    # Load base .env file
+    env_file = project_root / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=False)  # Don't override system env vars
+        logger.debug(f"Loaded environment from: {env_file}")
+    else:
+        logger.debug(f"No .env file found at: {env_file}")
+
+    # Load environment-specific file (if specified)
+    if environment:
+        env_specific = project_root / f".env.{environment}"
+        if env_specific.exists():
+            load_dotenv(env_specific, override=True)  # Override .env values
+            logger.info(f"Loaded environment-specific config: {env_specific}")
+        else:
+            logger.debug(f"No environment-specific file: {env_specific}")
+
+
+# =========================================================================
+# AUTO-LOAD ENVIRONMENT FILES ON MODULE IMPORT
+# =========================================================================
+# This ensures .env is loaded BEFORE Settings is instantiated, making it
+# work from any directory without manual intervention.
+
+try:
+    _project_root = find_project_root()
+    _environment = os.getenv("ENVIRONMENT")
+    load_env_files(_project_root, _environment)
+    logger.debug(f"Auto-loaded .env from project root: {_project_root}")
+except Exception as e:
+    logger.warning(f"Failed to auto-load .env files: {e}")
+    # Continue anyway - Pydantic will use system env vars and defaults
 
 
 class Settings(BaseSettings):
@@ -121,7 +222,7 @@ class Settings(BaseSettings):
     # Running on 192.168.86.200
 
     kafka_bootstrap_servers: str = Field(
-        default="192.168.86.200:29092",
+        default="omninode-bridge-redpanda:9092",
         description=(
             "Kafka broker addresses. "
             "Use omninode-bridge-redpanda:9092 for Docker services, "
@@ -273,6 +374,30 @@ class Settings(BaseSettings):
 
     openai_api_key: Optional[str] = Field(
         default=None, description="OpenAI API key (optional)"
+    )
+
+    # =========================================================================
+    # ALERTING & NOTIFICATIONS
+    # =========================================================================
+    # Slack webhook for fail-fast error notifications
+
+    slack_webhook_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Slack webhook URL for error notifications (optional). "
+            "Get from: https://api.slack.com/messaging/webhooks. "
+            "Notifications are opt-in - only sent if URL is configured."
+        ),
+    )
+
+    slack_notification_throttle_seconds: int = Field(
+        default=300,
+        ge=0,
+        description=(
+            "Throttle window for Slack notifications (seconds). "
+            "Max 1 notification per error type per window. "
+            "Default: 300 (5 minutes). Set to 0 to disable throttling."
+        ),
     )
 
     # =========================================================================
@@ -689,58 +814,41 @@ class Settings(BaseSettings):
 
     def __init__(self, **values):
         """
-        Initialize settings with environment-specific .env file support.
+        Initialize settings with environment variables.
 
-        This method implements multi-file loading with the following priority:
-        1. System environment variables (highest priority - Pydantic default)
-        2. .env.{ENVIRONMENT} file (environment-specific overrides)
-        3. .env file (default/fallback)
+        Environment files (.env and .env.{ENVIRONMENT}) are automatically loaded
+        at module import time via load_env_files() function, so they're already
+        available as system environment variables.
 
-        Environment-specific files are automatically loaded when the ENVIRONMENT
-        environment variable is set (e.g., ENVIRONMENT=test loads .env.test).
+        Priority (highest to lowest):
+        1. System environment variables (highest priority)
+        2. .env.{ENVIRONMENT} file (loaded at import time)
+        3. .env file (loaded at import time)
+        4. Default values in Settings class (lowest priority)
 
-        Note: Pydantic loads files in order, with LATER files having higher priority.
-        So we load .env first, then .env.{ENVIRONMENT} to allow overrides.
+        Note: No need to pass _env_file to super().__init__() because environment
+        variables are already loaded into os.environ by load_env_files().
 
         Example:
-            >>> # With ENVIRONMENT=test, loads .env then .env.test (override)
-            >>> os.environ['ENVIRONMENT'] = 'test'
-            >>> settings = Settings()
-            >>> # Without ENVIRONMENT, loads only .env
-            >>> del os.environ['ENVIRONMENT']
-            >>> settings = Settings()
+            >>> # Environment files already loaded at import time
+            >>> from config import settings
+            >>> print(settings.postgres_host)  # Uses value from .env
         """
-        env_files: list[str | Path] = []
-
-        # Always include default .env as base
-        env_files.append(Path(".env"))
-
-        # Add environment-specific file for overrides (loaded last = highest priority)
-        env_name = os.getenv("ENVIRONMENT")
-        if env_name:
-            candidate = Path(f".env.{env_name}")
-            if candidate.exists():
-                env_files.append(candidate)
-                logger.info(f"Loading environment-specific config: {candidate}")
-            else:
-                logger.debug(
-                    f"Environment file .env.{env_name} not found, " f"using .env only"
-                )
-
-        # Initialize with environment file list
-        # System environment variables still take highest priority (Pydantic default)
-        super().__init__(_env_file=tuple(env_files) if env_files else None, **values)
+        # Environment files already loaded at module import time
+        # Just initialize with system environment variables
+        super().__init__(**values)
 
     # =========================================================================
     # PYDANTIC SETTINGS CONFIGURATION
     # =========================================================================
 
     model_config = SettingsConfigDict(
-        # Environment file configuration
+        # Environment file configuration (fallback only - files loaded at import time)
+        # The load_env_files() function at module import loads .env files into os.environ,
+        # so this env_file setting is just a fallback if import-time loading fails.
         env_file=".env",
         env_file_encoding="utf-8",
-        # Support for multiple environment files
-        # Priority: .env.{environment} > .env > system env vars
+        # No environment variable prefix
         env_prefix="",
         # Case insensitive environment variable matching
         case_sensitive=False,
@@ -920,6 +1028,16 @@ class Settings(BaseSettings):
         log.info(f"  Z.ai: {'configured' if self.zai_api_key else 'not set'}")
         log.info(f"  OpenAI: {'configured' if self.openai_api_key else 'not set'}")
 
+        # Alerting & Notifications
+        log.info("\nAlerting & Notifications:")
+        log.info(
+            f"  Slack Webhook: {'configured' if self.slack_webhook_url else 'not configured'}"
+        )
+        if self.slack_webhook_url:
+            log.info(
+                f"  Notification Throttle: {self.slack_notification_throttle_seconds}s"
+            )
+
         # Feature Flags
         log.info("\nFeature Flags:")
         log.info(f"  Event-based Intelligence: {self.kafka_enable_intelligence}")
@@ -959,6 +1077,7 @@ class Settings(BaseSettings):
             "google_api_key",
             "zai_api_key",
             "openai_api_key",
+            "slack_webhook_url",
         ]
 
         for field in sensitive_fields:
@@ -1002,6 +1121,33 @@ def get_settings() -> Settings:
     if errors:
         error_msg = "\n".join(f"  - {error}" for error in errors)
         logger.error(f"Configuration validation failed:\n{error_msg}")
+
+        # Send Slack notification for configuration validation failures
+        try:
+            # Import here to avoid circular dependency
+            import asyncio
+
+            from agents.lib.slack_notifier import get_slack_notifier
+
+            notifier = get_slack_notifier()
+            if notifier.is_enabled():
+                # Create task for async notification
+                asyncio.create_task(
+                    notifier.send_error_notification(
+                        error=ValueError(
+                            f"Configuration validation failed: {len(errors)} error(s)"
+                        ),
+                        context={
+                            "service": "config_settings",
+                            "operation": "configuration_validation",
+                            "validation_errors": errors,
+                            "error_count": len(errors),
+                        },
+                    )
+                )
+        except Exception as notify_error:
+            logger.debug(f"Failed to send Slack notification: {notify_error}")
+
         # Note: We log but don't raise to allow partial configuration for testing
     else:
         logger.info("Configuration loaded and validated successfully")

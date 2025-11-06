@@ -53,6 +53,15 @@ COPY --chown=omniclaude:omniclaude agents/lib/confidence_scorer.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/capability_index.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/result_cache.py ./lib/
 
+# Copy execution logging dependencies
+COPY --chown=omniclaude:omniclaude agents/lib/agent_execution_logger.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/db.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/structured_logger.py ./lib/
+COPY --chown=omniclaude:omniclaude agents/lib/kafka_rpk_client.py ./lib/
+
+# Copy omnibase_core mock for enums (needed by agent_execution_logger)
+COPY --chown=omniclaude:omniclaude agents/tests/mocks/omnibase_core/ ./lib/omnibase_core/
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

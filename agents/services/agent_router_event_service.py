@@ -72,11 +72,22 @@ lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
 try:
+    from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
+    from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 except ImportError as e:
-    logging.error(f"Failed to import AgentRouter: {e}")
+    logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
     raise
+
+# Import Slack notifier for error notifications
+try:
+    from slack_notifier import get_slack_notifier
+
+    SLACK_NOTIFIER_AVAILABLE = True
+except ImportError:
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 # Configure logging
 logging.basicConfig(
@@ -157,6 +168,27 @@ class PostgresLogger:
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL pool: {e}", exc_info=True)
             self._initialized = False
+
+            # Send Slack notification for database connection failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    import asyncio
+
+                    asyncio.create_task(
+                        notifier.send_error_notification(
+                            error=e,
+                            context={
+                                "service": "agent_router_event_service",
+                                "operation": "postgres_initialization",
+                                "db_host": self.host,
+                                "db_port": self.port,
+                                "db_name": self.database,
+                            },
+                        )
+                    )
+                except Exception as notify_error:
+                    logger.debug(f"Failed to send Slack notification: {notify_error}")
 
     async def close(self) -> None:
         """Close database connection pool."""
@@ -603,9 +635,32 @@ class AgentRouterEventService:
         """
         start_time = time.time()
 
+        # Initialize execution logger for lifecycle tracking
+        execution_logger = None
+        try:
+            execution_logger = await log_agent_execution(
+                agent_name="agent-router-service",
+                user_prompt=user_request,
+                correlation_id=correlation_id,
+            )
+        except Exception as e:
+            # Non-blocking - log error but continue routing
+            self.logger.warning(f"Failed to initialize execution logger: {e}")
+
         try:
             # Extract routing options
             max_recommendations = options.get("max_recommendations", 5)
+
+            # Log progress: starting routing analysis
+            if execution_logger:
+                try:
+                    await execution_logger.progress(
+                        stage="routing_analysis",
+                        percent=25,
+                        metadata={"max_recommendations": max_recommendations},
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Progress logging failed: {e}")
 
             # Route using AgentRouter
             if not self._router:
@@ -618,6 +673,17 @@ class AgentRouterEventService:
             )
 
             routing_time_ms = (time.time() - start_time) * 1000
+
+            # Log progress: routing completed
+            if execution_logger:
+                try:
+                    await execution_logger.progress(
+                        stage="routing_completed",
+                        percent=75,
+                        metadata={"routing_time_ms": routing_time_ms},
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Progress logging failed: {e}")
 
             # Handle no recommendations (fallback)
             if not recommendations:
@@ -689,6 +755,22 @@ class AgentRouterEventService:
                 f"Routing completed (correlation_id: {correlation_id}, agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%}, time: {routing_time_ms:.1f}ms)"
             )
 
+            # Log execution completion: success
+            if execution_logger:
+                try:
+                    await execution_logger.complete(
+                        status=EnumOperationStatus.SUCCESS,
+                        quality_score=primary.confidence.total,
+                        metadata={
+                            "selected_agent": primary.agent_name,
+                            "confidence": primary.confidence.total,
+                            "routing_time_ms": routing_time_ms,
+                            "recommendation_count": len(recommendations),
+                        },
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Execution completion logging failed: {e}")
+
         except Exception as e:
             self._requests_failed += 1
             routing_time_ms = (time.time() - start_time) * 1000
@@ -697,6 +779,27 @@ class AgentRouterEventService:
                 f"Routing failed (correlation_id: {correlation_id}): {e}",
                 exc_info=True,
             )
+
+            # Send Slack notification for routing failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    asyncio.create_task(
+                        notifier.send_error_notification(
+                            error=e,
+                            context={
+                                "service": "agent_router_event_service",
+                                "operation": "routing_execution",
+                                "correlation_id": correlation_id,
+                                "user_request": user_request[:200],
+                                "routing_time_ms": routing_time_ms,
+                            },
+                        )
+                    )
+                except Exception as notify_error:
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
 
             # Publish failed event
             if self._producer:
@@ -716,6 +819,22 @@ class AgentRouterEventService:
                     )
                 except Exception as publish_error:
                     self.logger.error(f"Failed to publish error event: {publish_error}")
+
+            # Log execution completion: failure
+            if execution_logger:
+                try:
+                    await execution_logger.complete(
+                        status=EnumOperationStatus.FAILED,
+                        error_message=str(e),
+                        error_type=type(e).__name__,
+                        metadata={
+                            "routing_time_ms": routing_time_ms,
+                        },
+                    )
+                except Exception as log_error:
+                    self.logger.warning(
+                        f"Execution completion logging failed: {log_error}"
+                    )
 
     def _create_fallback_recommendation(self):
         """Create fallback recommendation when routing fails."""

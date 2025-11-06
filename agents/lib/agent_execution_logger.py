@@ -30,9 +30,16 @@ from uuid import UUID, uuid4
 
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
-from .db import get_pg_pool
-from .kafka_rpk_client import RpkKafkaClient
-from .structured_logger import StructuredLogger
+try:
+    # Try relative imports first (for package usage)
+    from .db import get_pg_pool
+    from .kafka_rpk_client import RpkKafkaClient
+    from .structured_logger import StructuredLogger
+except ImportError:
+    # Fall back to absolute imports (for standalone usage)
+    from db import get_pg_pool
+    from kafka_rpk_client import RpkKafkaClient
+    from structured_logger import StructuredLogger
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None
