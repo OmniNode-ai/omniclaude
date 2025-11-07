@@ -4,14 +4,23 @@ Slack Webhook Error Notification System
 ========================================
 
 Fail-fast error notification system that sends critical errors to Slack
-with intelligent throttling to prevent spam.
+with distributed throttling to prevent spam across multiple instances.
 
 Features:
 - Async HTTP POST to Slack webhooks
-- Rate limiting (max 1 notification per error type per 5 minutes)
+- Distributed rate limiting via Valkey/Redis (works across containers/instances)
+- Automatic throttle key expiration (TTL-based)
 - Rich error context (type, message, stack trace, service, timestamp)
 - Non-blocking (errors don't break main flow)
+- Graceful degradation (fail open if cache unavailable)
 - Opt-in (only sends if webhook URL configured)
+
+Throttling Strategy:
+- Uses distributed cache (Valkey/Redis) with TTL-based keys
+- Max 1 notification per error type per 5 minutes (configurable)
+- Works across multiple processes/containers (critical for K8s/multi-worker)
+- Falls back to no throttling if cache unavailable (fail open)
+- Automatic cleanup via TTL expiration
 
 Integration:
 - Routing failures (Kafka connection errors, routing errors)
@@ -38,7 +47,13 @@ Usage:
         )
         raise  # Re-raise to maintain normal error flow
 
+Environment Variables:
+    VALKEY_URL: redis://:password@host:port/db (for distributed throttling)
+    SLACK_WEBHOOK_URL: Slack webhook URL
+    SLACK_NOTIFICATION_THROTTLE_SECONDS: Throttle window (default: 300)
+
 Created: 2025-11-06
+Updated: 2025-11-07 (distributed cache support)
 """
 
 from __future__ import annotations
@@ -65,6 +80,19 @@ except ImportError:
         "Install with: pip install aiohttp certifi"
     )
 
+# Distributed cache imports (Valkey/Redis)
+try:
+    import redis
+
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logging.info(
+        "redis library not available - distributed throttling disabled, "
+        "throttling will not work across multiple instances. "
+        "Install with: pip install redis"
+    )
+
 # Add project root to path for config import
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
@@ -87,17 +115,19 @@ logger = logging.getLogger(__name__)
 
 class SlackNotifier:
     """
-    Slack webhook error notification system with throttling.
+    Slack webhook error notification system with distributed throttling.
 
     Provides fail-fast error notifications to Slack with intelligent
     rate limiting to prevent spam. Notifications are sent asynchronously
     and non-blocking - failures do not affect the main application flow.
 
     Features:
-    - Throttling: Max 1 notification per error type per configurable window
+    - Distributed throttling: Max 1 notification per error type per configurable window
+      (works across multiple instances/containers via Valkey/Redis)
     - Rich context: Error type, message, stack trace, service name, timestamp
     - Opt-in: Only sends if SLACK_WEBHOOK_URL is configured
     - Non-blocking: Errors in notification system are logged but don't propagate
+    - Graceful degradation: Falls back to no throttling if cache unavailable
 
     Usage:
         notifier = SlackNotifier()
@@ -148,20 +178,23 @@ class SlackNotifier:
                 os.getenv("SLACK_NOTIFICATION_THROTTLE_SECONDS", "300")
             )
 
-        # In-memory throttle cache: {error_key: last_sent_timestamp}
-        self._throttle_cache: Dict[str, float] = {}
+        # Initialize logger first (needed by _init_cache)
+        self.logger = logging.getLogger(__name__)
+
+        # Distributed cache client for throttling (Valkey/Redis)
+        self._cache_client: Optional[Any] = None
+        self._init_cache()
 
         # Metrics
         self._notifications_sent = 0
         self._notifications_throttled = 0
         self._notifications_failed = 0
 
-        self.logger = logging.getLogger(__name__)
-
         # Log initialization status
         if self.webhook_url:
+            throttle_mode = "distributed" if self._cache_client else "disabled"
             self.logger.info(
-                f"SlackNotifier initialized (throttle: {self.throttle_seconds}s)"
+                f"SlackNotifier initialized (throttle: {self.throttle_seconds}s, mode: {throttle_mode})"
             )
         else:
             self.logger.debug(
@@ -176,6 +209,61 @@ class SlackNotifier:
             True if webhook URL is configured, False otherwise
         """
         return bool(self.webhook_url and AIOHTTP_AVAILABLE)
+
+    def _init_cache(self) -> None:
+        """
+        Initialize distributed cache client for throttling.
+
+        Attempts to connect to Valkey/Redis for distributed throttling.
+        Falls back gracefully if cache unavailable (fail open - no throttling).
+
+        Cache Strategy:
+        - Uses TTL-based keys for automatic expiration
+        - Key format: slack_throttle:{error_key}
+        - TTL: self.throttle_seconds (default 5 minutes)
+        - Fail open: No cache = no throttling (notifications sent)
+        """
+        if not REDIS_AVAILABLE:
+            self.logger.debug(
+                "Redis library not available - distributed throttling disabled"
+            )
+            return
+
+        try:
+            # Get Valkey URL from config or environment
+            valkey_url = None
+            if SETTINGS_AVAILABLE:
+                valkey_url = settings.valkey_url
+            else:
+                import os
+
+                valkey_url = os.getenv("VALKEY_URL")
+
+            if not valkey_url:
+                self.logger.debug(
+                    "VALKEY_URL not configured - distributed throttling disabled"
+                )
+                return
+
+            # Initialize Redis client (Redis protocol, works with Valkey)
+            self._cache_client = redis.StrictRedis.from_url(
+                valkey_url,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+
+            # Test connection
+            self._cache_client.ping()
+            self.logger.info(
+                f"Connected to distributed cache for throttling: {valkey_url.split('@')[-1]}"
+            )
+
+        except Exception as e:
+            self.logger.warning(
+                f"Could not initialize distributed cache (throttling disabled): {e}"
+            )
+            self._cache_client = None
 
     async def send_error_notification(
         self,
@@ -261,32 +349,74 @@ class SlackNotifier:
 
     def _should_throttle(self, error_key: str) -> bool:
         """
-        Check if notification should be throttled.
+        Check if notification should be throttled using distributed cache.
 
         Args:
             error_key: Error key for throttling
 
         Returns:
-            True if should throttle, False if should send
-        """
-        current_time = time.time()
-        last_sent = self._throttle_cache.get(error_key)
+            True if should throttle (error sent recently), False if should send
 
-        if last_sent is None:
-            # Never sent before
+        Cache Strategy:
+        - If cache unavailable: return False (fail open - send notification)
+        - If key exists in cache: return True (throttle)
+        - If key doesn't exist: return False (send notification)
+        """
+        if not self._cache_client:
+            # No cache available - fail open (don't throttle)
             return False
 
-        elapsed = current_time - last_sent
-        return elapsed < self.throttle_seconds
+        cache_key = f"slack_throttle:{error_key}"
+
+        try:
+            # Check if key exists (within throttle window)
+            exists = self._cache_client.exists(cache_key)
+            if exists:
+                self.logger.debug(
+                    f"Throttle cache HIT: {error_key} (within {self.throttle_seconds}s window)"
+                )
+                return True  # Throttle - error was sent recently
+
+            self.logger.debug(f"Throttle cache MISS: {error_key}")
+            return False  # Don't throttle - first occurrence in window
+
+        except Exception as e:
+            # Fail open - send notification on cache errors
+            self.logger.warning(f"Throttle cache error (fail open): {e}")
+            return False
 
     def _update_throttle_cache(self, error_key: str) -> None:
         """
-        Update throttle cache with current timestamp.
+        Update throttle cache with TTL (distributed cache).
+
+        Sets cache key with automatic expiration after throttle_seconds.
+        Only called after successful notification delivery.
 
         Args:
             error_key: Error key for throttling
+
+        Cache Strategy:
+        - Key: slack_throttle:{error_key}
+        - Value: "1" (sentinel value, existence is what matters)
+        - TTL: self.throttle_seconds (default 5 minutes = 300 seconds)
+        - Automatic expiration: Redis/Valkey handles cleanup
         """
-        self._throttle_cache[error_key] = time.time()
+        if not self._cache_client:
+            # No cache available - nothing to update
+            return
+
+        cache_key = f"slack_throttle:{error_key}"
+
+        try:
+            # Set key with TTL (throttle_seconds)
+            self._cache_client.setex(cache_key, self.throttle_seconds, "1")
+            self.logger.debug(
+                f"Throttle cache SET: {error_key} (TTL: {self.throttle_seconds}s)"
+            )
+
+        except Exception as e:
+            # Log but don't fail - notification already sent successfully
+            self.logger.warning(f"Failed to update throttle cache (non-fatal): {e}")
 
     def _build_slack_message(
         self, error: Exception, context: Dict[str, Any]
@@ -421,11 +551,20 @@ class SlackNotifier:
             return False
 
         try:
-            # Create SSL context with certificate verification using certifi
-            # certifi provides Mozilla's carefully curated CA bundle
+            # Create SSL context with certificate verification
             import ssl
 
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            # Try to use certifi's CA bundle (more reliable)
+            # Fall back to system CA bundle if certifi not available
+            try:
+                import certifi
+
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                ssl_context = ssl.create_default_context()  # Use system CA bundle
+                self.logger.warning(
+                    "certifi not available, using system CA bundle for SSL verification"
+                )
 
             # Create connector with SSL context
             connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -467,10 +606,26 @@ class SlackNotifier:
 
     def clear_throttle_cache(self) -> None:
         """
-        Clear throttle cache (useful for testing).
+        Clear all throttle cache entries (useful for testing).
+
+        Removes all slack_throttle:* keys from distributed cache.
         """
-        self._throttle_cache.clear()
-        self.logger.debug("Throttle cache cleared")
+        if not self._cache_client:
+            self.logger.debug("No cache client - nothing to clear")
+            return
+
+        try:
+            # Find all throttle keys
+            keys = self._cache_client.keys("slack_throttle:*")
+            if keys:
+                # Delete all found keys
+                self._cache_client.delete(*keys)
+                self.logger.info(f"Throttle cache cleared: {len(keys)} keys deleted")
+            else:
+                self.logger.debug("Throttle cache already empty")
+
+        except Exception as e:
+            self.logger.warning(f"Failed to clear throttle cache: {e}")
 
 
 # Singleton instance for convenience

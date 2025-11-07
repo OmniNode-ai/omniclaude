@@ -63,91 +63,95 @@ async def test_retrieval_tracking():
 
     tracker = IntelligenceUsageTracker()
 
-    # Generate test correlation ID
-    correlation_id = uuid4()
-    agent_name = "test-agent"
+    try:
+        # Generate test correlation ID
+        correlation_id = uuid4()
+        agent_name = "test-agent"
 
-    print(f"Correlation ID: {correlation_id}")
-    print(f"Agent Name: {agent_name}\n")
+        print(f"Correlation ID: {correlation_id}")
+        print(f"Agent Name: {agent_name}\n")
 
-    # Test 1: Track pattern retrieval from execution_patterns
-    print("Test 1: Tracking pattern retrieval from execution_patterns...")
-    success = await tracker.track_retrieval(
-        correlation_id=correlation_id,
-        agent_name=agent_name,
-        intelligence_type="pattern",
-        intelligence_source="qdrant",
-        intelligence_name="Node State Management Pattern",
-        collection_name="execution_patterns",
-        confidence_score=0.95,
-        query_time_ms=450,
-        query_used="PATTERN_EXTRACTION",
-        query_results_rank=1,
-        intelligence_summary="ONEX pattern for state management",
-        metadata={
-            "source": "test",
-            "parallel_query": False,
-        },
-    )
+        # Test 1: Track pattern retrieval from execution_patterns
+        print("Test 1: Tracking pattern retrieval from execution_patterns...")
+        success = await tracker.track_retrieval(
+            correlation_id=correlation_id,
+            agent_name=agent_name,
+            intelligence_type="pattern",
+            intelligence_source="qdrant",
+            intelligence_name="Node State Management Pattern",
+            collection_name="execution_patterns",
+            confidence_score=0.95,
+            query_time_ms=450,
+            query_used="PATTERN_EXTRACTION",
+            query_results_rank=1,
+            intelligence_summary="ONEX pattern for state management",
+            metadata={
+                "source": "test",
+                "parallel_query": False,
+            },
+        )
 
-    if success:
-        print("✅ Pattern retrieval tracked successfully")
-    else:
-        print("❌ Failed to track pattern retrieval")
-        return False
+        if success:
+            print("✅ Pattern retrieval tracked successfully")
+        else:
+            print("❌ Failed to track pattern retrieval")
+            return False
 
-    # Test 2: Track pattern retrieval from code_patterns
-    print("\nTest 2: Tracking pattern retrieval from code_patterns...")
-    success = await tracker.track_retrieval(
-        correlation_id=correlation_id,
-        agent_name=agent_name,
-        intelligence_type="pattern",
-        intelligence_source="qdrant",
-        intelligence_name="Async Event Bus Communication",
-        collection_name="code_patterns",
-        confidence_score=0.92,
-        query_time_ms=380,
-        query_used="PATTERN_EXTRACTION",
-        query_results_rank=2,
-        intelligence_summary="Real Python implementation of event bus",
-        metadata={
-            "source": "test",
-            "parallel_query": False,
-        },
-    )
+        # Test 2: Track pattern retrieval from code_patterns
+        print("\nTest 2: Tracking pattern retrieval from code_patterns...")
+        success = await tracker.track_retrieval(
+            correlation_id=correlation_id,
+            agent_name=agent_name,
+            intelligence_type="pattern",
+            intelligence_source="qdrant",
+            intelligence_name="Async Event Bus Communication",
+            collection_name="code_patterns",
+            confidence_score=0.92,
+            query_time_ms=380,
+            query_used="PATTERN_EXTRACTION",
+            query_results_rank=2,
+            intelligence_summary="Real Python implementation of event bus",
+            metadata={
+                "source": "test",
+                "parallel_query": False,
+            },
+        )
 
-    if success:
-        print("✅ Pattern retrieval tracked successfully")
-    else:
-        print("❌ Failed to track pattern retrieval")
-        return False
+        if success:
+            print("✅ Pattern retrieval tracked successfully")
+        else:
+            print("❌ Failed to track pattern retrieval")
+            return False
 
-    # Test 3: Track debug intelligence retrieval
-    print("\nTest 3: Tracking debug intelligence retrieval...")
-    success = await tracker.track_retrieval(
-        correlation_id=correlation_id,
-        agent_name=agent_name,
-        intelligence_type="debug_intelligence",
-        intelligence_source="postgres",
-        intelligence_name="Similar Successful Workflow",
-        confidence_score=0.88,
-        query_time_ms=120,
-        query_used="DEBUG_INTELLIGENCE_QUERY",
-        query_results_rank=1,
-        intelligence_summary="Successfully read file before editing",
-        metadata={
-            "source": "test",
-            "success": True,
-        },
-    )
+        # Test 3: Track debug intelligence retrieval
+        print("\nTest 3: Tracking debug intelligence retrieval...")
+        success = await tracker.track_retrieval(
+            correlation_id=correlation_id,
+            agent_name=agent_name,
+            intelligence_type="debug_intelligence",
+            intelligence_source="postgres",
+            intelligence_name="Similar Successful Workflow",
+            confidence_score=0.88,
+            query_time_ms=120,
+            query_used="DEBUG_INTELLIGENCE_QUERY",
+            query_results_rank=1,
+            intelligence_summary="Successfully read file before editing",
+            metadata={
+                "source": "test",
+                "success": True,
+            },
+        )
 
-    if success:
-        print("✅ Debug intelligence retrieval tracked successfully")
-    else:
-        print("❌ Failed to track debug intelligence retrieval")
-        return False
+        if success:
+            print("✅ Debug intelligence retrieval tracked successfully")
+        else:
+            print("❌ Failed to track debug intelligence retrieval")
+            return False
 
-    return True
+        return True
+    finally:
+        # Ensure pool is properly closed
+        await tracker.close()
 
 
 async def test_application_tracking():
@@ -160,45 +164,49 @@ async def test_application_tracking():
 
     tracker = IntelligenceUsageTracker()
 
-    # Generate test correlation ID
-    correlation_id = uuid4()
-    agent_name = "test-agent"
+    try:
+        # Generate test correlation ID
+        correlation_id = uuid4()
+        agent_name = "test-agent"
 
-    # First, track retrieval
-    print("Step 1: Tracking pattern retrieval...")
-    await tracker.track_retrieval(
-        correlation_id=correlation_id,
-        agent_name=agent_name,
-        intelligence_type="pattern",
-        intelligence_source="qdrant",
-        intelligence_name="File Operation Pattern",
-        collection_name="code_patterns",
-        confidence_score=0.90,
-        query_time_ms=200,
-    )
-    print("✅ Pattern retrieval tracked")
+        # First, track retrieval
+        print("Step 1: Tracking pattern retrieval...")
+        await tracker.track_retrieval(
+            correlation_id=correlation_id,
+            agent_name=agent_name,
+            intelligence_type="pattern",
+            intelligence_source="qdrant",
+            intelligence_name="File Operation Pattern",
+            collection_name="code_patterns",
+            confidence_score=0.90,
+            query_time_ms=200,
+        )
+        print("✅ Pattern retrieval tracked")
 
-    # Then, track application
-    print("\nStep 2: Tracking pattern application...")
-    success = await tracker.track_application(
-        correlation_id=correlation_id,
-        intelligence_name="File Operation Pattern",
-        was_applied=True,
-        application_details={
-            "applied_to": "file_read_operation",
-            "success": True,
-        },
-        contributed_to_success=True,
-        quality_impact=0.85,
-    )
+        # Then, track application
+        print("\nStep 2: Tracking pattern application...")
+        success = await tracker.track_application(
+            correlation_id=correlation_id,
+            intelligence_name="File Operation Pattern",
+            was_applied=True,
+            application_details={
+                "applied_to": "file_read_operation",
+                "success": True,
+            },
+            contributed_to_success=True,
+            quality_impact=0.85,
+        )
 
-    if success:
-        print("✅ Pattern application tracked successfully")
-    else:
-        print("❌ Failed to track pattern application")
-        return False
+        if success:
+            print("✅ Pattern application tracked successfully")
+        else:
+            print("❌ Failed to track pattern application")
+            return False
 
-    return True
+        return True
+    finally:
+        # Ensure pool is properly closed
+        await tracker.close()
 
 
 async def test_usage_stats():
@@ -211,29 +219,86 @@ async def test_usage_stats():
 
     tracker = IntelligenceUsageTracker()
 
-    # Get overall stats
-    print("Fetching overall usage statistics...")
-    stats = await tracker.get_usage_stats()
+    try:
+        # Get overall stats
+        print("Fetching overall usage statistics...")
+        stats = await tracker.get_usage_stats()
 
-    if "error" in stats:
-        print(f"❌ Error fetching stats: {stats['error']}")
+        if "error" in stats:
+            print(f"❌ Error fetching stats: {stats['error']}")
+            return False
+
+        print("\n📊 Overall Usage Statistics:")
+        print(f"  Total Retrievals: {stats.get('total_retrievals', 0)}")
+        print(f"  Times Applied: {stats.get('times_applied', 0)}")
+        print(f"  Application Rate: {stats.get('application_rate_percent', 0)}%")
+        print(f"  Avg Confidence: {stats.get('avg_confidence') or 0:.2f}")
+        print(f"  Avg Quality Impact: {stats.get('avg_quality_impact') or 0:.2f}")
+        print(f"  Success Contributions: {stats.get('success_contributions', 0)}")
+        print(f"  Avg Query Time: {stats.get('avg_query_time_ms') or 0:.0f}ms")
+
+        if stats.get("total_retrievals", 0) > 0:
+            print("\n✅ Usage statistics retrieved successfully")
+            return True
+        else:
+            print("\n⚠️  No usage statistics found (may be expected for fresh install)")
+            return True
+    finally:
+        # Ensure pool is properly closed
+        await tracker.close()
+
+
+async def test_pool_lifecycle():
+    """Test connection pool lifecycle (create and cleanup)."""
+    print("\n=== Testing Connection Pool Lifecycle ===\n")
+
+    if not os.getenv("POSTGRES_PASSWORD"):
+        print("⚠️  POSTGRES_PASSWORD not set. Run: source .env")
         return False
 
-    print("\n📊 Overall Usage Statistics:")
-    print(f"  Total Retrievals: {stats.get('total_retrievals', 0)}")
-    print(f"  Times Applied: {stats.get('times_applied', 0)}")
-    print(f"  Application Rate: {stats.get('application_rate_percent', 0)}%")
-    print(f"  Avg Confidence: {stats.get('avg_confidence') or 0:.2f}")
-    print(f"  Avg Quality Impact: {stats.get('avg_quality_impact') or 0:.2f}")
-    print(f"  Success Contributions: {stats.get('success_contributions', 0)}")
-    print(f"  Avg Query Time: {stats.get('avg_query_time_ms') or 0:.0f}ms")
+    tracker = IntelligenceUsageTracker()
 
-    if stats.get("total_retrievals", 0) > 0:
-        print("\n✅ Usage statistics retrieved successfully")
+    try:
+        # Test pool creation
+        print("Step 1: Creating connection pool...")
+        pool = await tracker._get_pool()
+        if pool is None:
+            print("❌ Failed to create connection pool")
+            return False
+        print("✅ Connection pool created successfully")
+
+        # Test reusing existing pool
+        print("\nStep 2: Verifying pool reuse...")
+        pool2 = await tracker._get_pool()
+        if pool is not pool2:
+            print("❌ Pool not reused (created new instance)")
+            return False
+        print("✅ Pool reused successfully")
+
+        # Test pool cleanup
+        print("\nStep 3: Closing connection pool...")
+        await tracker.close()
+        if tracker._pool is not None:
+            print("❌ Pool not properly closed")
+            return False
+        print("✅ Connection pool closed successfully")
+
+        # Test pool recreation after close
+        print("\nStep 4: Recreating pool after close...")
+        pool3 = await tracker._get_pool()
+        if pool3 is None:
+            print("❌ Failed to recreate pool after close")
+            return False
+        print("✅ Pool recreated successfully")
+
+        # Final cleanup
+        await tracker.close()
+
         return True
-    else:
-        print("\n⚠️  No usage statistics found (may be expected for fresh install)")
-        return True
+
+    except Exception as e:
+        print(f"❌ Error during pool lifecycle test: {e}")
+        return False
 
 
 async def test_database_view():
@@ -251,22 +316,20 @@ async def test_database_view():
         return False
 
     try:
-        import psycopg2
-        import psycopg2.extras
+        import asyncpg
 
-        # Connect to database using centralized settings
-        with (
-            psycopg2.connect(
-                host=settings.postgres_host,
-                port=settings.postgres_port,
-                dbname=settings.postgres_database,
-                user=settings.postgres_user,
-                password=settings.get_effective_postgres_password(),
-            ) as conn,
-            conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor,
-        ):
+        # Connect to database using centralized settings with asyncpg
+        conn = await asyncpg.connect(
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            database=settings.postgres_database,
+            user=settings.postgres_user,
+            password=settings.get_effective_postgres_password(),
+        )
+
+        try:
             # Query view
-            cursor.execute(
+            results = await conn.fetch(
                 """
                 SELECT
                     intelligence_type,
@@ -282,8 +345,6 @@ async def test_database_view():
                 LIMIT 10
             """
             )
-
-            results = cursor.fetchall()
 
             if results:
                 print(
@@ -310,6 +371,9 @@ async def test_database_view():
                 print("    Run manifest injection to populate intelligence usage data")
                 return True
 
+        finally:
+            await conn.close()
+
     except Exception as e:
         print(f"❌ Error querying view: {e}")
         return False
@@ -329,6 +393,7 @@ async def main():
 
     # Run tests
     tests = [
+        ("Connection Pool Lifecycle", test_pool_lifecycle),
         ("Intelligence Retrieval Tracking", test_retrieval_tracking),
         ("Intelligence Application Tracking", test_application_tracking),
         ("Usage Statistics Retrieval", test_usage_stats),

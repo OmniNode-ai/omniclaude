@@ -1131,17 +1131,84 @@ class Settings(BaseSettings):
 # =========================================================================
 
 
+def _send_config_error_notification(errors: list[str]) -> None:
+    """
+    Send Slack notification for configuration errors (non-blocking).
+
+    Separated from get_settings() to avoid coupling and circular dependencies.
+    Uses synchronous HTTP since no event loop exists during module initialization.
+
+    Args:
+        errors: List of configuration validation error messages
+
+    Note:
+        This function fails silently if notification cannot be sent.
+        It's designed to be best-effort and not block application startup.
+    """
+    try:
+        # Import here to avoid circular dependency
+        import httpx
+
+        from agents.lib.slack_notifier import get_slack_notifier
+
+        notifier = get_slack_notifier()
+        if not notifier.is_enabled():
+            logger.debug("Slack notifications disabled, skipping error notification")
+            return
+
+        # Build notification message
+        error = ValueError(f"Configuration validation failed: {len(errors)} error(s)")
+        context = {
+            "service": "config_settings",
+            "operation": "configuration_validation",
+            "validation_errors": errors,
+            "error_count": len(errors),
+        }
+        payload = notifier._build_slack_message(error=error, context=context)
+
+        # Send synchronously (no event loop during initialization)
+        try:
+            response = httpx.post(
+                notifier.webhook_url,
+                json=payload,
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                logger.debug(
+                    "Configuration validation error notification sent to Slack"
+                )
+            else:
+                logger.debug(
+                    f"Slack webhook returned non-200 status: {response.status_code}"
+                )
+        except httpx.TimeoutException:
+            logger.debug("Slack webhook request timed out")
+        except Exception as send_error:
+            logger.debug(f"Failed to send notification to Slack: {send_error}")
+
+    except Exception as notify_error:
+        # Fail silently - notification is best-effort
+        logger.debug(f"Could not send config error notification: {notify_error}")
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
-    Get or create singleton settings instance using thread-safe lru_cache.
+    Get or create singleton settings instance with validation.
 
     This function implements the singleton pattern to ensure only one
     Settings instance is created and reused throughout the application.
     The @lru_cache decorator provides thread-safe memoization.
 
+    In production environments, configuration validation failures will
+    raise ValueError to prevent application startup with invalid config.
+    In development/test modes, errors are logged and notifications are sent.
+
     Returns:
         Settings instance
+
+    Raises:
+        ValueError: If configuration validation fails in production environment
 
     Example:
         >>> from config import get_settings
@@ -1157,51 +1224,20 @@ def get_settings() -> Settings:
         error_msg = "\n".join(f"  - {error}" for error in errors)
         logger.error(f"Configuration validation failed:\n{error_msg}")
 
-        # Send Slack notification for configuration validation failures
-        # Using synchronous HTTP since no event loop exists during settings initialization
-        try:
-            # Import here to avoid circular dependency
-            import httpx
+        # CRITICAL: Enforce strict validation in production mode
+        # Production deployments MUST have valid configuration
+        if settings.environment == "production":
+            raise ValueError(
+                f"Configuration validation failed in production mode. "
+                f"Cannot start service with invalid configuration. "
+                f"Errors found:\n{error_msg}"
+            )
 
-            from agents.lib.slack_notifier import get_slack_notifier
+        # Development/test: send notification (separate concern)
+        _send_config_error_notification(errors)
 
-            notifier = get_slack_notifier()
-            if notifier.is_enabled():
-                # Build notification message
-                error = ValueError(
-                    f"Configuration validation failed: {len(errors)} error(s)"
-                )
-                context = {
-                    "service": "config_settings",
-                    "operation": "configuration_validation",
-                    "validation_errors": errors,
-                    "error_count": len(errors),
-                }
-                payload = notifier._build_slack_message(error=error, context=context)
-
-                # Send synchronously (no event loop during initialization)
-                try:
-                    response = httpx.post(
-                        notifier.webhook_url,
-                        json=payload,
-                        timeout=10.0,
-                    )
-                    if response.status_code == 200:
-                        logger.debug(
-                            "Configuration validation error notification sent to Slack"
-                        )
-                    else:
-                        logger.debug(
-                            f"Slack webhook returned non-200 status: {response.status_code}"
-                        )
-                except httpx.TimeoutException:
-                    logger.debug("Slack webhook request timed out")
-                except Exception as send_error:
-                    logger.debug(f"Failed to send notification to Slack: {send_error}")
-        except Exception as notify_error:
-            logger.debug(f"Failed to send Slack notification: {notify_error}")
-
-        # Note: We log but don't raise to allow partial configuration for testing
+        # Note: In development/test modes, we log but don't raise to allow partial configuration
+        # Production mode enforces strict validation (see ValueError raise above)
     else:
         logger.info("Configuration loaded and validated successfully")
 

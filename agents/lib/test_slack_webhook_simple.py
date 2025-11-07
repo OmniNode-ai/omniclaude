@@ -24,6 +24,7 @@ import asyncio
 import json
 import os
 import ssl
+from datetime import datetime, timezone
 
 try:
     import aiohttp
@@ -56,6 +57,9 @@ async def send_test_notification():
         print("   https://api.slack.com/apps")
         return False
 
+    # Generate current timestamp
+    current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
     message = {
         "text": "🧪 Test notification from OmniClaude",
         "blocks": [
@@ -71,7 +75,7 @@ async def send_test_notification():
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "*Status:* Slack notification system is working!\n*Timestamp:* 2025-11-06 15:15:00 UTC\n*Source:* test_slack_webhook_simple.py",
+                    "text": f"*Status:* Slack notification system is working!\n*Timestamp:* {current_time}\n*Source:* test_slack_webhook_simple.py",
                 },
             },
         ],

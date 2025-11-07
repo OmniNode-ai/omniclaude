@@ -26,12 +26,15 @@ Created: 2025-11-06
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
+
+import asyncpg
 
 # Import Pydantic Settings for type-safe configuration
 try:
@@ -184,9 +187,61 @@ class IntelligenceUsageTracker:
             )
             self.enable_tracking = False
 
+        # Connection pool for async database operations
+        self._pool: Optional[asyncpg.Pool] = None
+
+        # Pool configuration from settings
+        if settings:
+            self._pool_min_size = settings.postgres_pool_min_size
+            self._pool_max_size = settings.postgres_pool_max_size
+        else:
+            self._pool_min_size = int(os.environ.get("POSTGRES_POOL_MIN_SIZE", "2"))
+            self._pool_max_size = int(os.environ.get("POSTGRES_POOL_MAX_SIZE", "10"))
+
         # In-memory cache for pending records (for batch processing)
         self._pending_records: List[IntelligenceUsageRecord] = []
         self._max_pending = 100  # Flush after 100 records
+
+    async def _get_pool(self) -> asyncpg.Pool:
+        """
+        Get or create connection pool.
+
+        Returns:
+            Connection pool instance
+
+        Raises:
+            Exception: If pool creation fails
+        """
+        if self._pool is None:
+            try:
+                self._pool = await asyncpg.create_pool(
+                    host=self.db_host,
+                    port=self.db_port,
+                    database=self.db_name,
+                    user=self.db_user,
+                    password=self.db_password,
+                    min_size=self._pool_min_size,
+                    max_size=self._pool_max_size,
+                )
+                logger.debug(
+                    f"Created asyncpg connection pool: min={self._pool_min_size}, max={self._pool_max_size}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to create connection pool: {e}")
+                raise
+
+        return self._pool
+
+    async def close(self) -> None:
+        """Close connection pool and cleanup resources."""
+        if self._pool is not None:
+            try:
+                await self._pool.close()
+                logger.debug("Closed asyncpg connection pool")
+            except Exception as e:
+                logger.error(f"Error closing connection pool: {e}")
+            finally:
+                self._pool = None
 
     async def track_retrieval(
         self,
@@ -328,24 +383,28 @@ class IntelligenceUsageTracker:
             return False
 
     async def _store_record(self, record: IntelligenceUsageRecord) -> bool:
-        """Store intelligence usage record in database."""
-        try:
-            import psycopg2
-            import psycopg2.extras
+        """Store intelligence usage record in database (fully async with connection pooling)."""
+        if not self.enable_tracking:
+            return True
 
-            # Connect to database
-            with (
-                psycopg2.connect(
-                    host=self.db_host,
-                    port=self.db_port,
-                    dbname=self.db_name,
-                    user=self.db_user,
-                    password=self.db_password,
-                ) as conn,
-                conn.cursor() as cursor,
-            ):
-                # Insert record
-                cursor.execute(
+        try:
+            pool = await self._get_pool()
+
+            # Prepare JSON data (asyncpg accepts json strings directly)
+            intelligence_snapshot_json = (
+                json.dumps(record.intelligence_snapshot)
+                if record.intelligence_snapshot
+                else None
+            )
+            application_details_json = (
+                json.dumps(record.application_details)
+                if record.application_details
+                else None
+            )
+            metadata_json = json.dumps(record.metadata) if record.metadata else None
+
+            async with pool.acquire() as conn:
+                await conn.execute(
                     """
                     INSERT INTO agent_intelligence_usage (
                         correlation_id,
@@ -375,53 +434,41 @@ class IntelligenceUsageTracker:
                         created_at,
                         applied_at
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
                     )
                     """,
+                    str(record.correlation_id),
+                    str(record.execution_id) if record.execution_id else None,
                     (
-                        str(record.correlation_id),
-                        str(record.execution_id) if record.execution_id else None,
-                        (
-                            str(record.manifest_injection_id)
-                            if record.manifest_injection_id
-                            else None
-                        ),
-                        str(record.prompt_id) if record.prompt_id else None,
-                        record.agent_name,
-                        record.intelligence_type,
-                        record.intelligence_source,
-                        str(record.intelligence_id) if record.intelligence_id else None,
-                        record.intelligence_name,
-                        record.collection_name,
-                        record.usage_context,
-                        record.usage_count,
-                        record.confidence_score,
-                        (
-                            psycopg2.extras.Json(record.intelligence_snapshot)
-                            if record.intelligence_snapshot
-                            else None
-                        ),
-                        record.intelligence_summary,
-                        record.query_used,
-                        record.query_time_ms,
-                        record.query_results_rank,
-                        record.was_applied,
-                        (
-                            psycopg2.extras.Json(record.application_details)
-                            if record.application_details
-                            else None
-                        ),
-                        record.file_operations_using_this,
-                        record.contributed_to_success,
-                        record.quality_impact,
-                        psycopg2.extras.Json(record.metadata),
-                        record.created_at,
-                        record.applied_at,
+                        str(record.manifest_injection_id)
+                        if record.manifest_injection_id
+                        else None
                     ),
+                    str(record.prompt_id) if record.prompt_id else None,
+                    record.agent_name,
+                    record.intelligence_type,
+                    record.intelligence_source,
+                    str(record.intelligence_id) if record.intelligence_id else None,
+                    record.intelligence_name,
+                    record.collection_name,
+                    record.usage_context,
+                    record.usage_count,
+                    record.confidence_score,
+                    intelligence_snapshot_json,
+                    record.intelligence_summary,
+                    record.query_used,
+                    record.query_time_ms,
+                    record.query_results_rank,
+                    record.was_applied,
+                    application_details_json,
+                    record.file_operations_using_this,
+                    record.contributed_to_success,
+                    record.quality_impact,
+                    metadata_json,
+                    record.created_at,
+                    record.applied_at,
                 )
-
-                conn.commit()
 
             return True
 
@@ -439,52 +486,40 @@ class IntelligenceUsageTracker:
         contributed_to_success: Optional[bool],
         quality_impact: Optional[float],
     ) -> bool:
-        """Update intelligence usage record with application details."""
-        try:
-            import psycopg2
-            import psycopg2.extras
+        """Update intelligence usage record with application details (fully async with connection pooling)."""
+        if not self.enable_tracking:
+            return True
 
-            # Connect to database
-            with (
-                psycopg2.connect(
-                    host=self.db_host,
-                    port=self.db_port,
-                    dbname=self.db_name,
-                    user=self.db_user,
-                    password=self.db_password,
-                ) as conn,
-                conn.cursor() as cursor,
-            ):
-                # Update record
-                cursor.execute(
+        try:
+            pool = await self._get_pool()
+
+            # Prepare JSON data (asyncpg accepts json strings directly)
+            application_details_json = (
+                json.dumps(application_details) if application_details else None
+            )
+
+            async with pool.acquire() as conn:
+                await conn.execute(
                     """
                     UPDATE agent_intelligence_usage
                     SET
-                        was_applied = %s,
-                        application_details = %s,
-                        file_operations_using_this = %s,
-                        contributed_to_success = %s,
-                        quality_impact = %s,
+                        was_applied = $1,
+                        application_details = $2,
+                        file_operations_using_this = $3,
+                        contributed_to_success = $4,
+                        quality_impact = $5,
                         applied_at = NOW()
-                    WHERE correlation_id = %s
-                        AND intelligence_name = %s
+                    WHERE correlation_id = $6
+                        AND intelligence_name = $7
                     """,
-                    (
-                        was_applied,
-                        (
-                            psycopg2.extras.Json(application_details)
-                            if application_details
-                            else None
-                        ),
-                        file_operations_using_this,
-                        contributed_to_success,
-                        quality_impact,
-                        str(correlation_id),
-                        intelligence_name,
-                    ),
+                    was_applied,
+                    application_details_json,
+                    file_operations_using_this,
+                    contributed_to_success,
+                    quality_impact,
+                    str(correlation_id),
+                    intelligence_name,
                 )
-
-                conn.commit()
 
             return True
 
@@ -498,7 +533,7 @@ class IntelligenceUsageTracker:
         intelligence_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Get intelligence usage statistics.
+        Get intelligence usage statistics (fully async with connection pooling).
 
         Args:
             intelligence_name: Filter by intelligence name
@@ -511,37 +546,27 @@ class IntelligenceUsageTracker:
             return {"error": "Tracking disabled"}
 
         try:
-            import psycopg2
-            import psycopg2.extras
+            pool = await self._get_pool()
 
-            with (
-                psycopg2.connect(
-                    host=self.db_host,
-                    port=self.db_port,
-                    dbname=self.db_name,
-                    user=self.db_user,
-                    password=self.db_password,
-                ) as conn,
-                conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor,
-            ):
-                # Build query with optional filters
-                where_clauses = []
-                params = []
+            # Build query with optional filters
+            where_clauses = []
+            params = []
 
-                if intelligence_name:
-                    where_clauses.append("intelligence_name = %s")
-                    params.append(intelligence_name)
+            if intelligence_name:
+                where_clauses.append(f"intelligence_name = ${len(params) + 1}")
+                params.append(intelligence_name)
 
-                if intelligence_type:
-                    where_clauses.append("intelligence_type = %s")
-                    params.append(intelligence_type)
+            if intelligence_type:
+                where_clauses.append(f"intelligence_type = ${len(params) + 1}")
+                params.append(intelligence_type)
 
-                where_clause = (
-                    "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-                )
+            where_clause = (
+                "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+            )
 
+            async with pool.acquire() as conn:
                 # Query usage statistics
-                cursor.execute(
+                result = await conn.fetchrow(
                     f"""
                     SELECT
                         COUNT(*) as total_retrievals,
@@ -562,10 +587,8 @@ class IntelligenceUsageTracker:
                     FROM agent_intelligence_usage
                     {where_clause}
                     """,
-                    params,
+                    *params,
                 )
-
-                result = cursor.fetchone()
 
                 return dict(result) if result else {}
 
