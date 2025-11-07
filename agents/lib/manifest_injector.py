@@ -3417,10 +3417,58 @@ class ManifestInjector:
 
         return manifest
 
+    def _deduplicate_patterns(
+        self, patterns: List[Dict[str, Any]]
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        Deduplicate patterns by name, keeping the highest confidence version.
+
+        Args:
+            patterns: List of pattern dictionaries
+
+        Returns:
+            Tuple of (deduplicated_patterns, duplicates_removed_count)
+        """
+        if not patterns:
+            return [], 0
+
+        # Track patterns by name
+        pattern_map = {}
+
+        for pattern in patterns:
+            name = pattern.get("name", "Unknown Pattern")
+            confidence = pattern.get("confidence", 0.0)
+
+            # If pattern name not seen before, or this version has higher confidence
+            if name not in pattern_map or confidence > pattern_map[name].get(
+                "confidence", 0.0
+            ):
+                pattern_map[name] = pattern
+
+        # Calculate duplicates removed
+        original_count = len(patterns)
+        deduplicated = list(pattern_map.values())
+        duplicates_removed = original_count - len(deduplicated)
+
+        # Sort by confidence (highest first) to show best patterns
+        deduplicated.sort(key=lambda p: p.get("confidence", 0.0), reverse=True)
+
+        return deduplicated, duplicates_removed
+
     def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format patterns query result into manifest structure."""
         patterns = result.get("patterns", [])
         collections_queried = result.get("collections_queried", {})
+
+        # Deduplicate patterns by name (keeping highest confidence version)
+        deduplicated_patterns, duplicates_removed = self._deduplicate_patterns(patterns)
+
+        # Log deduplication metrics
+        if duplicates_removed > 0:
+            self.logger.info(
+                f"Pattern deduplication: removed {duplicates_removed} duplicates "
+                f"({len(patterns)} → {len(deduplicated_patterns)} patterns)"
+            )
 
         return {
             "available": [
@@ -3432,9 +3480,11 @@ class ManifestInjector:
                     "confidence": p.get("confidence", 0.0),
                     "use_cases": p.get("use_cases", []),
                 }
-                for p in patterns
+                for p in deduplicated_patterns
             ],
-            "total_count": len(patterns),
+            "total_count": len(deduplicated_patterns),
+            "original_count": len(patterns),
+            "duplicates_removed": duplicates_removed,
             "query_time_ms": result.get("query_time_ms", 0),
             "collections_queried": collections_queried,
         }
@@ -3698,6 +3748,8 @@ class ManifestInjector:
 
         patterns = patterns_data.get("available", [])
         collections_queried = patterns_data.get("collections_queried", {})
+        duplicates_removed = patterns_data.get("duplicates_removed", 0)
+        original_count = patterns_data.get("original_count", len(patterns))
 
         if not patterns:
             output.append("  (No patterns discovered - use built-in patterns)")
@@ -3709,6 +3761,14 @@ class ManifestInjector:
                 f"  Collections: execution_patterns ({collections_queried.get('execution_patterns', 0)}), "
                 f"code_patterns ({collections_queried.get('code_patterns', 0)})"
             )
+
+            # Show deduplication metrics if duplicates were removed
+            if duplicates_removed > 0:
+                output.append(
+                    f"  Deduplication: {duplicates_removed} duplicates removed "
+                    f"({original_count} → {len(patterns)} unique patterns)"
+                )
+
             output.append("")
 
         # Show top 20 patterns (increased from 10 to show more variety)
@@ -3726,7 +3786,7 @@ class ManifestInjector:
             output.append(f"  ... and {len(patterns) - display_limit} more patterns")
 
         output.append("")
-        output.append(f"  Total: {len(patterns)} patterns available")
+        output.append(f"  Total: {len(patterns)} unique patterns available")
 
         return "\n".join(output)
 
