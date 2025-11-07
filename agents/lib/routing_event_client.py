@@ -49,10 +49,16 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
-# Add routing adapter schemas to path
-sys.path.insert(
-    0, str(PathLib(__file__).parent.parent.parent / "services" / "routing_adapter")
-)
+# CRITICAL: Add project root FIRST to avoid config module conflicts
+# There's a config module in agents/lib/config/ that conflicts with main config/
+_project_root = PathLib(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Add routing adapter schemas to path (AFTER project root)
+_routing_adapter_path = str(_project_root / "services" / "routing_adapter")
+if _routing_adapter_path not in sys.path:
+    sys.path.append(_routing_adapter_path)
 
 # Import routing event schemas
 try:
@@ -65,12 +71,6 @@ except ImportError as e:
     logging.error(f"Failed to import routing schemas: {e}")
 
 logger = logging.getLogger(__name__)
-
-# Import type-safe configuration
-# Add project root to path to import config module
-_project_root = PathLib(__file__).parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
 
 try:
     from config import settings

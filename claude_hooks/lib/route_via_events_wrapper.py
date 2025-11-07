@@ -33,15 +33,13 @@ import logging
 import sys
 from pathlib import Path
 
-# Add agents/lib to path for routing_event_client
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).parent.parent.parent
-        / "Volumes/PRO-G40/Code/omniclaude/agents/lib"
-    ),
-)
-sys.path.insert(0, str(Path("/Volumes/PRO-G40/Code/omniclaude/agents/lib")))
+# CRITICAL: Add project root FIRST to avoid config module conflicts
+# There's a config module in agents/lib/config/ that conflicts with main config/
+project_root = Path("/Volumes/PRO-G40/Code/omniclaude")
+sys.path.insert(0, str(project_root))
+
+# Add agents/lib AFTER project root (order matters!)
+sys.path.append(str(project_root / "agents" / "lib"))
 
 try:
     from routing_event_client import route_via_events
