@@ -14,7 +14,7 @@ Successfully added automatic action logging instructions to manifest injection s
 
 **File**: `agents/lib/manifest_injector.py`
 **Method**: `_format_action_logging(self, action_logging_data: Dict) -> str`
-**Lines**: 3937-4008
+**Lines**: 4002-4083
 
 Generates "ACTION LOGGING REQUIREMENTS" section with:
 - Correlation ID from current context
@@ -30,7 +30,7 @@ Generates "ACTION LOGGING REQUIREMENTS" section with:
 
 **File**: `agents/lib/manifest_injector.py`
 **Location**: `format_for_prompt()` method
-**Line**: 3655
+**Line**: 3709
 
 Added to `available_sections` dictionary:
 ```python
@@ -41,7 +41,7 @@ Added to `available_sections` dictionary:
 
 **File**: `agents/lib/manifest_injector.py`
 **Location**: `format_for_prompt()` docstring
-**Lines**: 3613-3615
+**Lines**: 3667-3669
 
 Updated list of available sections to include `"action_logging"`
 

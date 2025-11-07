@@ -228,11 +228,12 @@ class TestNodeTemplate:
             template.validate_context(incomplete_context)
 
         error = exc_info.value
-        assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert error.error_code == EnumCoreErrorCode.VALIDATION_ERROR
         assert "Missing required placeholders" in error.message
-        # Error details are nested under 'context' key
-        assert "context" in error.details
-        assert "missing_placeholders" in error.details["context"]
+        # Error context contains additional information
+        assert "additional_context" in error.context
+        assert "context" in error.context["additional_context"]
+        assert "missing_placeholders" in error.context["additional_context"]["context"]
 
     def test_validate_context_extra_variables(
         self, sample_template_content, sample_context
@@ -296,7 +297,7 @@ class TestNodeTemplate:
             template.render(context)
 
         error = exc_info.value
-        assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
+        assert error.error_code == EnumCoreErrorCode.VALIDATION_ERROR
         assert "Missing required placeholders" in error.message
 
     def test_extract_placeholders_from_text(self):
@@ -569,7 +570,7 @@ class TestValidation:
                 engine._validate_node_type("INVALID")
 
             error = exc_info.value
-            assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
+            assert error.error_code == EnumCoreErrorCode.VALIDATION_ERROR
             assert "Invalid node type" in error.message
 
     def test_validate_output_path_safe(self, temp_templates_dir):
@@ -611,7 +612,7 @@ class TestValidation:
                     engine._validate_output_path(path)
 
                 error = exc_info.value
-                assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
+                assert error.error_code == EnumCoreErrorCode.VALIDATION_ERROR
 
     def test_validate_file_path_within_base(self, temp_templates_dir, tmp_path):
         """Test file path validation within base directory"""
@@ -646,7 +647,7 @@ class TestValidation:
                 engine._validate_file_path("../../etc/passwd", base_dir)
 
             error = exc_info.value
-            assert error.code == EnumCoreErrorCode.VALIDATION_ERROR
+            assert error.error_code == EnumCoreErrorCode.VALIDATION_ERROR
             assert "directory traversal" in error.message.lower()
 
     def test_validate_generation_inputs_valid(

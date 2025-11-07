@@ -1052,9 +1052,9 @@ class QualityValidator:
         )
 
         raise OnexError(
-            code=EnumCoreErrorCode.NOT_IMPLEMENTED,
+            error_code=EnumCoreErrorCode.METHOD_NOT_IMPLEMENTED,
             message="Kafka integration not yet implemented",
-            details={"correlation_id": str(correlation_id)},
+            correlation_id=correlation_id,
         )
 
     # ========================================================================

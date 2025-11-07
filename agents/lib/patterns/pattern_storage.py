@@ -485,8 +485,9 @@ class PatternStorage:
         Returns:
             Integer ID
         """
-        # Use first 8 bytes of MD5 hash
-        hash_bytes = hashlib.md5(pattern_id.encode()).digest()[:8]
+        # Use first 8 bytes of SHA256 hash (B324 fix - replaced MD5 with SHA256)
+        # This is non-cryptographic use (just deterministic ID generation)
+        hash_bytes = hashlib.sha256(pattern_id.encode()).digest()[:8]
         return int.from_bytes(hash_bytes, byteorder="big") % (2**63 - 1)
 
     async def get_storage_stats(self) -> dict[str, Any]:

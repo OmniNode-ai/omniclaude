@@ -589,7 +589,7 @@ def test_dual_collection_formatted_output(_mock_intelligence_client):
     # Should show collection statistics
     assert "execution_patterns" in formatted
     assert "code_patterns" in formatted
-    assert "Total: 4 patterns available" in formatted
+    assert "Total: 4 unique patterns available" in formatted
 
 
 # =============================================================================

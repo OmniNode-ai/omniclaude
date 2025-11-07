@@ -169,7 +169,17 @@ class IntelligenceUsageTracker:
             self.db_port = db_port or settings.postgres_port
             self.db_name = db_name or settings.postgres_database
             self.db_user = db_user or settings.postgres_user
-            self.db_password = db_password or settings.get_effective_postgres_password()
+            try:
+                self.db_password = (
+                    db_password or settings.get_effective_postgres_password()
+                )
+            except ValueError:
+                # Password not configured - will be handled by check below
+                logger.debug(
+                    "POSTGRES_PASSWORD not configured in settings. "
+                    "Intelligence usage tracking will be disabled."
+                )
+                self.db_password = None
         else:
             # Fall back to environment variables with safe defaults (no hardcoded environment-specific values)
             self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")

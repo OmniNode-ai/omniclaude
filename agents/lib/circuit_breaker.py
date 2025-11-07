@@ -104,7 +104,9 @@ class CircuitBreaker:
                     return False, CircuitBreakerError(f"Circuit {self.name} is OPEN")
 
             # Execute the function with retry logic
-            return await self._execute_with_retry(func, just_transitioned_to_half_open, *args, **kwargs)
+            return await self._execute_with_retry(
+                func, just_transitioned_to_half_open, *args, **kwargs
+            )
 
     def _should_open_circuit(self) -> bool:
         """Check if circuit should be opened."""

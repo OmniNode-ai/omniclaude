@@ -240,7 +240,9 @@ class TestTrackPerformance:
             assert performance_id == "no-tracking-id"
 
     @pytest.mark.asyncio
-    async def test_track_performance_database_error(self, analytics_instance, mock_pg_pool):
+    async def test_track_performance_database_error(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test graceful handling of database errors"""
         # Make execute raise an error
         conn = await mock_pg_pool.acquire().__aenter__()
@@ -261,7 +263,9 @@ class TestTrackPerformance:
                 assert "Failed to track agent performance" in str(mock_print.call_args)
 
     @pytest.mark.asyncio
-    async def test_track_performance_with_metadata(self, analytics_instance, mock_pg_pool):
+    async def test_track_performance_with_metadata(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test tracking with complex metadata"""
         metadata = {
             "complexity": "high",
@@ -293,7 +297,9 @@ class TestTrackPerformance:
             assert parsed["complexity"] == "high"
 
     @pytest.mark.asyncio
-    async def test_track_performance_no_metadata(self, analytics_instance, mock_pg_pool):
+    async def test_track_performance_no_metadata(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test tracking without metadata (defaults to empty dict)"""
         with patch("agents.lib.agent_analytics.get_pg_pool", return_value=mock_pg_pool):
             performance_id = await analytics_instance.track_agent_performance(
@@ -533,7 +539,9 @@ class TestAgentRecommendations:
             assert recommendations[0]["confidence_score"] > 0.9
 
     @pytest.mark.asyncio
-    async def test_get_recommendations_with_context(self, analytics_instance, mock_pg_pool):
+    async def test_get_recommendations_with_context(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test recommendations with additional context"""
         conn = await mock_pg_pool.acquire().__aenter__()
         conn.fetch.return_value = []
@@ -559,7 +567,9 @@ class TestAgentRecommendations:
             assert recommendations == []
 
     @pytest.mark.asyncio
-    async def test_get_recommendations_database_error(self, analytics_instance, mock_pg_pool):
+    async def test_get_recommendations_database_error(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test graceful handling of database errors in recommendations"""
         conn = await mock_pg_pool.acquire().__aenter__()
         conn.fetch.side_effect = Exception("Database error")
@@ -572,10 +582,14 @@ class TestAgentRecommendations:
 
                 assert recommendations == []
                 mock_print.assert_called_once()
-                assert "Failed to get agent recommendations" in str(mock_print.call_args)
+                assert "Failed to get agent recommendations" in str(
+                    mock_print.call_args
+                )
 
     @pytest.mark.asyncio
-    async def test_get_recommendations_null_values(self, analytics_instance, mock_pg_pool):
+    async def test_get_recommendations_null_values(
+        self, analytics_instance, mock_pg_pool
+    ):
         """Test handling of null values in recommendations"""
         sample_data = [
             {
@@ -655,7 +669,9 @@ class TestPerformanceTrends:
         conn.fetch.return_value = [MockRow(data) for data in sample_trends_data]
 
         with patch("agents.lib.agent_analytics.get_pg_pool", return_value=mock_pg_pool):
-            trends = await analytics_instance.get_performance_trends(days=7, interval_hours=24)
+            trends = await analytics_instance.get_performance_trends(
+                days=7, interval_hours=24
+            )
 
             assert trends["period_days"] == 7
             assert trends["interval_hours"] == 24
@@ -855,7 +871,11 @@ class TestCacheManagement:
 
         with patch("agents.lib.agent_analytics.get_pg_pool", return_value=mock_pg_pool):
             await analytics_instance.track_agent_performance(
-                agent_id="test", task_type="test", success=True, duration_ms=100, run_id="123"
+                agent_id="test",
+                task_type="test",
+                success=True,
+                duration_ms=100,
+                run_id="123",
             )
 
             # Cache should be invalidated

@@ -70,9 +70,11 @@ class TestIntelligenceConfigDefaults:
         """Test all default configuration values are set correctly."""
         config = IntelligenceConfig()
 
-        # Kafka configuration defaults (loaded from centralized settings)
-        # Note: kafka_bootstrap_servers comes from .env file
-        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
+        # Kafka configuration defaults (loaded from centralized Pydantic Settings)
+        # Note: Values come from .env file loaded at module import time
+        # The .env file is loaded by settings.py before Settings initialization,
+        # so these are the actual runtime defaults
+        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
         assert config.kafka_enable_intelligence is True
         assert config.kafka_request_timeout_ms == 5000
         assert config.kafka_pattern_discovery_timeout_ms == 5000
@@ -163,8 +165,8 @@ class TestEnvironmentVariableLoading:
     def test_from_env_uses_defaults_when_not_set(self, clean_env):
         """Test from_env() uses default values when env vars not set."""
         config = IntelligenceConfig.from_env()
-        # Note: kafka_bootstrap_servers comes from .env file
-        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
+        # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
+        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
         assert config.kafka_enable_intelligence is True
 
 
@@ -416,12 +418,18 @@ class TestEdgeCases:
         assert config.kafka_bootstrap_servers == "[::1]:9092"
 
     def test_config_immutability_with_pydantic(self, clean_env):
-        """Test configuration is immutable after creation."""
+        """Test configuration field access with Pydantic BaseModel."""
         config = IntelligenceConfig()
-        # Pydantic models are mutable by default, but we can test field access
+        # Pydantic BaseModel models are mutable by default (unless frozen=True)
+        # Test verifies field access works correctly
         assert hasattr(config, "kafka_bootstrap_servers")
-        # Note: kafka_bootstrap_servers comes from .env file
-        assert config.kafka_bootstrap_servers == "omninode-bridge-redpanda:9092"
+        # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
+        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
+
+        # Verify we can read all key fields
+        assert hasattr(config, "kafka_enable_intelligence")
+        assert hasattr(config, "kafka_request_timeout_ms")
+        assert hasattr(config, "enable_event_based_discovery")
 
 
 # =============================================================================

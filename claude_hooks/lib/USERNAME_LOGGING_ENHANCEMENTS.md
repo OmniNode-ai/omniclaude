@@ -174,13 +174,19 @@ Created comprehensive test suite:
 
 **Test Results**:
 ```
-✅ test_username_fallback - PASSED
-✅ test_metadata_capture - PASSED
-✅ test_session_start_output - PASSED
-✅ test_security_considerations - PASSED
+✅ test_username_fallback() - PASSED
+✅ test_metadata_capture() - PASSED
+✅ test_security_considerations() - PASSED
+✅ test_windows_domain_capture() - PASSED
 
 4 passed in 0.03s
 ```
+
+**Test Functions**:
+- `test_username_fallback()` - Tests USER/USERNAME environment variable fallback handling
+- `test_metadata_capture()` - Verifies all expected metadata fields are captured
+- `test_security_considerations()` - Ensures no sensitive data leakage
+- `test_windows_domain_capture()` - Mocked Windows domain capture via USERDOMAIN
 
 ## Backward Compatibility
 

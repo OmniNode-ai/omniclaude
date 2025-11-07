@@ -65,7 +65,10 @@ def get_terminal_size() -> Tuple[int, int]:
 
 def clear_screen():
     """Clear terminal screen"""
-    os.system("clear" if os.name != "nt" else "cls")
+    # Use ANSI escape sequence to clear screen (B605 fix - avoids os.system)
+    # \033[2J clears entire screen, \033[H moves cursor to home position
+    # This is safer than os.system() and works across platforms
+    print("\033[2J\033[H", end="")
 
 
 def colorize(text: str, color: str, bold: bool = False) -> str:

@@ -1594,7 +1594,9 @@ class TestEdgeCasesAndErrorHandling:
             mock_pool = MagicMock()
             mock_conn = MagicMock()
             mock_conn.fetchval = AsyncMock(return_value=100)
-            mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_pool.acquire.return_value.__aenter__ = AsyncMock(
+                return_value=mock_conn
+            )
             mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_pool.close = AsyncMock()
 
@@ -1608,7 +1610,9 @@ class TestEdgeCasesAndErrorHandling:
 
                 # Should have queue size info if metrics available
                 if metrics:
-                    assert "write_queue_size" in metrics or "batch_queue_size" in metrics
+                    assert (
+                        "write_queue_size" in metrics or "batch_queue_size" in metrics
+                    )
         finally:
             # Cleanup background tasks
             await optimizer.close()

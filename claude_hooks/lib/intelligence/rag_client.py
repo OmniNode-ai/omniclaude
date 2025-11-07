@@ -104,7 +104,9 @@ class RAGIntelligenceClient:
         # Sort params for consistent cache keys
         sorted_params = sorted(params.items())
         key_data = f"{query_type}:{sorted_params}"
-        return hashlib.md5(key_data.encode()).hexdigest()
+        # Use SHA256 instead of MD5 for better security (B324 fix)
+        # This is non-cryptographic use (cache key generation only)
+        return hashlib.sha256(key_data.encode()).hexdigest()
 
     def _get_cached(self, cache_key: str) -> Optional[Any]:
         """
