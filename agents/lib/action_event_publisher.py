@@ -6,7 +6,7 @@ Publishes agent action events (tool calls, decisions, errors) to Kafka for async
 Lightweight, non-blocking, with graceful degradation if Kafka is unavailable.
 
 Usage:
-    from action_event_publisher import publish_action_event
+    from agents.lib.action_event_publisher import publish_action_event
 
     await publish_action_event(
         agent_name="agent-researcher",

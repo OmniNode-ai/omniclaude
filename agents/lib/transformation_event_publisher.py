@@ -6,7 +6,7 @@ Publishes agent transformation events to Kafka for async logging to PostgreSQL.
 Lightweight, non-blocking, with graceful degradation if Kafka is unavailable.
 
 Usage:
-    from transformation_event_publisher import publish_transformation_event
+    from agents.lib.transformation_event_publisher import publish_transformation_event
 
     await publish_transformation_event(
         source_agent="polymorphic-agent",

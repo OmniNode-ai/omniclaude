@@ -131,6 +131,23 @@ async def verify_database_records(correlation_ids):
     print("TEST 3: Database Record Verification")
     print("=" * 80)
 
+    # Defensive check: ensure correlation_ids is not empty
+    if not correlation_ids:
+        print("❌ No correlation IDs provided to verify!")
+        print(
+            "   This indicates that previous tests failed to collect correlation IDs."
+        )
+        return False
+
+    # Filter out None values (in case tests failed before returning IDs)
+    valid_ids = [cid for cid in correlation_ids if cid is not None]
+    if not valid_ids:
+        print("❌ All correlation IDs are None!")
+        print("   This indicates that previous tests failed before generating IDs.")
+        return False
+
+    print(f"✓ Verifying {len(valid_ids)} correlation IDs")
+
     try:
         # Import database helpers
         sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
@@ -143,8 +160,7 @@ async def verify_database_records(correlation_ids):
 
         async with pool.acquire() as conn:
             # Query for records with test correlation IDs
-            placeholders = ", ".join([f"${i+1}" for i in range(len(correlation_ids))])
-            query = f"""
+            query = """
                 SELECT
                     execution_id,
                     correlation_id,
@@ -158,12 +174,12 @@ async def verify_database_records(correlation_ids):
                 ORDER BY created_at DESC
             """
 
-            records = await conn.fetch(query, correlation_ids)
+            records = await conn.fetch(query, valid_ids)
 
             if not records:
                 print("❌ No execution records found in database!")
                 print(
-                    f"   Searched for correlation IDs: {', '.join(correlation_ids[:2])}..."
+                    f"   Searched for {len(valid_ids)} correlation IDs: {', '.join(valid_ids[:2])}..."
                 )
                 return False
 

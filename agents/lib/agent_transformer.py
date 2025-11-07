@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Import transformation event publisher
 try:
-    from transformation_event_publisher import publish_transformation_event
+    from agents.lib.transformation_event_publisher import publish_transformation_event
 
     KAFKA_AVAILABLE = True
 except ImportError:
