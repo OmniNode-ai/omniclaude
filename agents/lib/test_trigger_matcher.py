@@ -153,9 +153,13 @@ def test_trigger_matching():
             print(f"    {description}")
             print()
 
-    return failed == 0
+    # For pytest compatibility: assert instead of return
+    assert failed == 0, f"{failed} test(s) failed - see output above for details"
 
 
 if __name__ == "__main__":
-    success = test_trigger_matching()
-    sys.exit(0 if success else 1)
+    try:
+        test_trigger_matching()
+        sys.exit(0)
+    except AssertionError:
+        sys.exit(1)

@@ -2017,15 +2017,9 @@ tags:
                 # For manifest dependency, use first broker if multiple exist
                 if "," in kafka_servers:
                     brokers = [broker.strip() for broker in kafka_servers.split(",")]
-                    first_broker = brokers[0]
+                    target = brokers[0]
                 else:
-                    first_broker = kafka_servers
-
-                # Apply kafka:// prefix if not already present
-                if first_broker.startswith("kafka://"):
-                    target = first_broker
-                else:
-                    target = f"kafka://{first_broker}"
+                    target = kafka_servers
             else:
                 target = "http://localhost:8080"  # Default fallback
 
@@ -2077,11 +2071,7 @@ tags:
                 else:
                     first_broker = kafka_servers
 
-                # Apply kafka:// prefix if not already present
-                if first_broker.startswith("kafka://"):
-                    endpoints.append(f'    - "{first_broker}"')
-                else:
-                    endpoints.append(f'    - "kafka://{first_broker}"')
+                endpoints.append(f'    - "{first_broker}"')
 
         return "\n".join(endpoints) if endpoints else "    []"
 

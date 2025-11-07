@@ -116,12 +116,18 @@ activation_patterns:
   explicit_triggers:
     - "test"
     - "testing"
+    - "validation"
+    - "validate"
+    - "verify"
     - "quality assurance"
     - "test strategy"
     - "test coverage"
     - "unit tests"
     - "integration tests"
     - "test automation"
+    - "validation test"
+    - "run tests"
+    - "execute tests"
 
   context_triggers:
     - "write tests for this code"

@@ -117,7 +117,7 @@ agents:
     definition_path: "agent-definitions/testing.yaml"
     priority: "high"
     capabilities: ["test_strategy", "quality_assurance", "test_automation", "coverage_analysis", "onex_testing"]
-    activation_triggers: ["test", "testing", "quality assurance", "test strategy", "coverage"]
+    activation_triggers: ["test", "testing", "validation", "validate", "verify", "quality assurance", "test strategy", "coverage", "validation test", "run tests", "execute tests"]
     domain_context: "quality_assurance"
     specialization_level: "expert"
 
