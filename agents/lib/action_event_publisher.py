@@ -419,6 +419,9 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG)
 
         # Test tool call
+        from pathlib import Path
+
+        project_path = str(Path(__file__).parent.parent.parent.resolve())
         success = await publish_tool_call(
             agent_name="agent-researcher",
             tool_name="Read",
@@ -430,7 +433,7 @@ if __name__ == "__main__":
             tool_result={"line_count": 100, "file_size_bytes": 5432},
             correlation_id=str(uuid4()),
             duration_ms=45,
-            project_path="/Volumes/PRO-G40/Code/omniclaude",
+            project_path=project_path,
             project_name="omniclaude",
         )
 

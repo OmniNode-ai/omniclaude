@@ -8,7 +8,7 @@ from the project root regardless of the current working directory.
 Usage:
     python3 tests/test_auto_env_loading.py
     cd tests && python3 test_auto_env_loading.py
-    cd / && python3 /Volumes/PRO-G40/Code/omniclaude/tests/test_auto_env_loading.py
+    cd / && python3 <project_root>/tests/test_auto_env_loading.py
 """
 
 import sys

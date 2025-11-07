@@ -38,7 +38,7 @@ async def example_agent_with_action_logging():
         agent_name="agent-researcher",
         correlation_id=str(uuid4()),
         project_name="omniclaude",
-        project_path="/Volumes/PRO-G40/Code/omniclaude",
+        project_path=str(Path(__file__).parent.parent.parent.resolve()),
         working_directory=os.getcwd(),
         debug_mode=True,
     )
@@ -47,10 +47,13 @@ async def example_agent_with_action_logging():
 
     # Example 1: Log file read with context manager (automatic timing)
     logger.info("Example 1: File read with context manager")
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    readme_path = str(project_root / "README.md")
+
     async with action_logger.tool_call(
         "Read",
         tool_parameters={
-            "file_path": "/Volumes/PRO-G40/Code/omniclaude/README.md",
+            "file_path": readme_path,
             "offset": 0,
             "limit": 100,
         },
@@ -59,7 +62,7 @@ async def example_agent_with_action_logging():
         await asyncio.sleep(0.02)  # 20ms
 
         # Simulate reading file
-        file_path = "/Volumes/PRO-G40/Code/omniclaude/README.md"
+        file_path = readme_path
         if Path(file_path).exists():
             with open(file_path, "r") as f:
                 content = f.read()
@@ -184,13 +187,14 @@ async def example_one_off_action():
     """
     logger.info("\nExample 8: One-off action logging")
 
+    project_root = Path(__file__).parent.parent.parent.resolve()
     await log_action(
         agent_name="agent-quick-task",
         action_type="tool_call",
         action_name="Grep",
         action_details={
             "pattern": "TODO",
-            "file_path": "/Volumes/PRO-G40/Code/omniclaude/**/*.py",
+            "file_path": f"{project_root}/**/*.py",
             "matches": 42,
         },
         correlation_id=str(uuid4()),

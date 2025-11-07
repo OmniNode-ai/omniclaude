@@ -104,7 +104,7 @@ def main():
     """Run migration on all target files"""
     print("=== localhost:8053 → settings.archon_intelligence_url Migration ===\n")
 
-    root = Path("/Volumes/PRO-G40/Code/omniclaude")
+    root = Path(__file__).parent.resolve()
     success_count = 0
     fail_count = 0
 

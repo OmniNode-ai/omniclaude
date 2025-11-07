@@ -39,7 +39,7 @@ async def test_agent_execution_logging():
     logger = AgentExecutionLogger(
         agent_name=agent_name,
         user_prompt=user_prompt,
-        project_path="/Volumes/PRO-G40/Code/omniclaude",
+        project_path=str(Path(__file__).parent.parent.resolve()),
         project_name="omniclaude",
     )
 

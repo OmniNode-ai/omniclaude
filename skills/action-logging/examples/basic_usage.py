@@ -37,11 +37,12 @@ async def example_agent():
     """Example agent with action logging."""
 
     # 1. Initialize logger at agent startup
+    project_root = Path(__file__).parent.parent.parent.parent.resolve()
     logger = ActionLogger(
         agent_name="agent-example",
         correlation_id=str(uuid4()),  # Get from agent context in production
         project_name="omniclaude",
-        project_path="/Volumes/PRO-G40/Code/omniclaude",
+        project_path=str(project_root),
         working_directory=os.getcwd(),
         debug_mode=True,
     )
