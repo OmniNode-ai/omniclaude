@@ -103,7 +103,7 @@ Generate code that matches the EXACT node name and functionality requested."""
 
 # Create the Pydantic AI agent
 code_generator_agent = Agent[AgentDeps, ONEXNodeCode](
-    "google-gla:gemini-1.5-flash",  # Fast, good quality
+    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
     deps_type=AgentDeps,
     output_type=ONEXNodeCode,
     system_prompt=ONEX_SYSTEM_PROMPT,
@@ -317,7 +317,7 @@ class CoderAgent:
                 "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7,
                 "onex_compliance_notes": generated_output.onex_compliance_notes,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-1.5-flash",
+                    "model_used": "gemini-2.5-flash",
                     "structured_output": True,
                     "tools_available": 3,
                 },

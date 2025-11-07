@@ -78,7 +78,7 @@ async def send_test_notification():
     }
 
     print("📤 Sending test notification to Slack...")
-    print(f"   Webhook: {WEBHOOK_URL[:50]}...")
+    print(f"   Webhook: {WEBHOOK_URL[:30]}...{WEBHOOK_URL[-10:]}")  # Mask middle part
 
     try:
         # Create SSL context using certifi's certificate bundle
@@ -113,4 +113,16 @@ async def send_test_notification():
 
 
 if __name__ == "__main__":
-    asyncio.run(send_test_notification())
+    import sys
+
+    try:
+        success = asyncio.run(send_test_notification())
+        if success:
+            print("\n✅ Test passed!")
+            sys.exit(0)  # Success
+        else:
+            print("\n❌ Test failed: Notification could not be sent", file=sys.stderr)
+            sys.exit(1)  # Failure
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}", file=sys.stderr)
+        sys.exit(1)  # Failure

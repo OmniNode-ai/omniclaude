@@ -32,6 +32,18 @@ try:
 except ImportError:
     print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
 
+# Add project root to path for centralized config import (before lib path)
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import centralized configuration (must be before lib path to avoid shadowing)
+try:
+    from config import settings
+except ImportError:
+    print("⚠️  config.settings not available. Ensure config module is installed.")
+    settings = None
+
 # Add lib directory to path for imports
 lib_path = Path(__file__).parent
 if str(lib_path) not in sys.path:
@@ -232,28 +244,17 @@ async def test_database_view():
         print("⚠️  POSTGRES_PASSWORD not set. Run: source .env")
         return False
 
+    # Check if settings is available
+    if settings is None:
+        print("❌ config.settings not available")
+        print("   Ensure config module is installed and in PYTHONPATH")
+        return False
+
     try:
         import psycopg2
         import psycopg2.extras
 
-        # Import settings with fallback
-        try:
-            from config import settings
-        except ImportError:
-            # Fallback to environment variables (os already imported at top)
-            class Settings:
-                postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-                postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))
-                postgres_database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-                postgres_user = os.getenv("POSTGRES_USER", "postgres")
-
-                @staticmethod
-                def get_effective_postgres_password():
-                    return os.getenv("POSTGRES_PASSWORD")
-
-            settings = Settings()
-
-        # Connect to database
+        # Connect to database using centralized settings
         with (
             psycopg2.connect(
                 host=settings.postgres_host,

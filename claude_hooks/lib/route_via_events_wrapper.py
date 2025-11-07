@@ -35,7 +35,7 @@ from pathlib import Path
 
 # CRITICAL: Add project root FIRST to avoid config module conflicts
 # There's a config module in agents/lib/config/ that conflicts with main config/
-project_root = Path("/Volumes/PRO-G40/Code/omniclaude")
+project_root = Path(__file__).resolve().parents[2]  # claude_hooks/lib → omniclaude root
 sys.path.insert(0, str(project_root))
 
 # Add agents/lib AFTER project root (order matters!)

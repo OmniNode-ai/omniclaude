@@ -306,8 +306,9 @@ class ActionLogger:
 
                     pass
 
-                error_obj = LoggedError(error_message)
-                error_obj.__class__.__name__ = error_type
+                # Create dynamic exception class with the desired name
+                error_cls = type(error_type, (LoggedError,), {})
+                error_obj = error_cls(error_message)
 
                 # Build notification context
                 notification_context = {
