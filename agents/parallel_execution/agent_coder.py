@@ -410,7 +410,7 @@ class CoderAgent(AgentExecutionMixin):
                 "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7,
                 "onex_compliance_notes": generated_output.onex_compliance_notes,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-1.5-flash",
+                    "model_used": "gemini-2.5-flash",
                     "structured_output": True,
                     "tools_available": 3,
                 },

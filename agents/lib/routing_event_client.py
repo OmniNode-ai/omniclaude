@@ -327,10 +327,13 @@ class RoutingEventClient:
         Stops producer and consumer, cleans up pending requests.
         Should be called when client is no longer needed.
         """
+        # Always run cleanup, even after partial startup failures
         if not self._started:
-            return
-
-        self.logger.info("Stopping routing event client")
+            self.logger.info(
+                "Stopping routing event client after partial startup failure"
+            )
+        else:
+            self.logger.info("Stopping routing event client")
 
         try:
             # Stop producer

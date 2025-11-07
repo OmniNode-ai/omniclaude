@@ -211,10 +211,10 @@ async def test_usage_stats():
     print(f"  Total Retrievals: {stats.get('total_retrievals', 0)}")
     print(f"  Times Applied: {stats.get('times_applied', 0)}")
     print(f"  Application Rate: {stats.get('application_rate_percent', 0)}%")
-    print(f"  Avg Confidence: {stats.get('avg_confidence', 0):.2f}")
-    print(f"  Avg Quality Impact: {stats.get('avg_quality_impact', 0) or 0:.2f}")
+    print(f"  Avg Confidence: {stats.get('avg_confidence') or 0:.2f}")
+    print(f"  Avg Quality Impact: {stats.get('avg_quality_impact') or 0:.2f}")
     print(f"  Success Contributions: {stats.get('success_contributions', 0)}")
-    print(f"  Avg Query Time: {stats.get('avg_query_time_ms', 0) or 0:.0f}ms")
+    print(f"  Avg Query Time: {stats.get('avg_query_time_ms') or 0:.0f}ms")
 
     if stats.get("total_retrievals", 0) > 0:
         print("\n✅ Usage statistics retrieved successfully")
@@ -298,7 +298,7 @@ async def test_database_view():
                         f"Rate: {row['application_rate_percent']}%"
                     )
                     print(
-                        f"    Confidence: {row['avg_confidence']:.2f}, "
+                        f"    Confidence: {row['avg_confidence'] or 0:.2f}, "
                         f"Quality Impact: {row['avg_quality_impact'] or 0:.2f}, "
                         f"Success Contributions: {row['success_contributions']}"
                     )

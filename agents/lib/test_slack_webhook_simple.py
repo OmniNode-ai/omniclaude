@@ -5,15 +5,24 @@ Simple Slack webhook test.
 This script sends a single test message to verify the webhook URL works.
 
 Usage:
+    # Set SLACK_WEBHOOK_URL in your .env file (already in .gitignore)
+    export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
     python3 agents/lib/test_slack_webhook_simple.py
 
 Requirements:
     - aiohttp (pip install aiohttp)
     - certifi (pip install certifi) - for SSL certificate verification
+
+Security:
+    ⚠️ NEVER hardcode webhook URLs in source code!
+    - Webhook URLs are secrets that grant access to your Slack workspace
+    - Always store in environment variables or .env files (add to .gitignore)
+    - If a webhook URL is exposed, revoke it immediately in Slack app settings
 """
 
 import asyncio
 import json
+import os
 import ssl
 
 try:
@@ -24,13 +33,29 @@ except ImportError:
     print("   pip install aiohttp certifi")
     exit(1)
 
-WEBHOOK_URL = (
-    "https://hooks.slack.com/services/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"
+# ⚠️ SECURITY: Load webhook URL from environment variable
+# NEVER hardcode webhook URLs in source code!
+WEBHOOK_URL = os.environ.get(
+    "SLACK_WEBHOOK_URL", ""  # Empty default - user must provide their own webhook URL
 )
 
 
 async def send_test_notification():
     """Send a simple test notification to Slack."""
+    # Validate webhook URL is provided
+    if not WEBHOOK_URL:
+        print("❌ ERROR: SLACK_WEBHOOK_URL environment variable not set!")
+        print("\n💡 To fix this:")
+        print("   1. Add to your .env file:")
+        print(
+            '      SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"'
+        )
+        print("   2. Source the .env file: source .env")
+        print('   3. Or export directly: export SLACK_WEBHOOK_URL="..."')
+        print("\n⚠️  Get your webhook URL from Slack app settings:")
+        print("   https://api.slack.com/apps")
+        return False
+
     message = {
         "text": "🧪 Test notification from OmniClaude",
         "blocks": [

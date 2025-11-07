@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
-_producer_lock = asyncio.Lock()
+_producer_lock: Optional[asyncio.Lock] = None
 
 
 def _get_kafka_bootstrap_servers() -> str:
@@ -58,10 +58,14 @@ async def _get_kafka_producer():
     Returns:
         AIOKafkaProducer instance or None if unavailable
     """
-    global _kafka_producer
+    global _kafka_producer, _producer_lock
 
     if _kafka_producer is not None:
         return _kafka_producer
+
+    # Lazy initialize the lock when first needed (event loop is running)
+    if _producer_lock is None:
+        _producer_lock = asyncio.Lock()
 
     async with _producer_lock:
         # Double-check after acquiring lock

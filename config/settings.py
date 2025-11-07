@@ -1158,28 +1158,46 @@ def get_settings() -> Settings:
         logger.error(f"Configuration validation failed:\n{error_msg}")
 
         # Send Slack notification for configuration validation failures
+        # Using synchronous HTTP since no event loop exists during settings initialization
         try:
             # Import here to avoid circular dependency
-            import asyncio
+            import httpx
 
             from agents.lib.slack_notifier import get_slack_notifier
 
             notifier = get_slack_notifier()
             if notifier.is_enabled():
-                # Create task for async notification
-                asyncio.create_task(
-                    notifier.send_error_notification(
-                        error=ValueError(
-                            f"Configuration validation failed: {len(errors)} error(s)"
-                        ),
-                        context={
-                            "service": "config_settings",
-                            "operation": "configuration_validation",
-                            "validation_errors": errors,
-                            "error_count": len(errors),
-                        },
-                    )
+                # Build notification message
+                error = ValueError(
+                    f"Configuration validation failed: {len(errors)} error(s)"
                 )
+                context = {
+                    "service": "config_settings",
+                    "operation": "configuration_validation",
+                    "validation_errors": errors,
+                    "error_count": len(errors),
+                }
+                payload = notifier._build_slack_message(error=error, context=context)
+
+                # Send synchronously (no event loop during initialization)
+                try:
+                    response = httpx.post(
+                        notifier.webhook_url,
+                        json=payload,
+                        timeout=10.0,
+                    )
+                    if response.status_code == 200:
+                        logger.debug(
+                            "Configuration validation error notification sent to Slack"
+                        )
+                    else:
+                        logger.debug(
+                            f"Slack webhook returned non-200 status: {response.status_code}"
+                        )
+                except httpx.TimeoutException:
+                    logger.debug("Slack webhook request timed out")
+                except Exception as send_error:
+                    logger.debug(f"Failed to send notification to Slack: {send_error}")
         except Exception as notify_error:
             logger.debug(f"Failed to send Slack notification: {notify_error}")
 

@@ -76,18 +76,8 @@ def test_session_start_output():
 
     # Use a temporary directory for test
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Mock environment to avoid database dependency
-        with patch.dict(
-            os.environ,
-            {
-                "USER": "testuser",
-                "POSTGRES_HOST": "localhost",
-                "POSTGRES_PORT": "5432",
-                "POSTGRES_USER": "postgres",
-                "POSTGRES_PASSWORD": "test",
-                "POSTGRES_DATABASE": "test_db",
-            },
-        ):
+        # Mock environment for username testing
+        with patch.dict(os.environ, {"USER": "testuser"}):
             # Test would normally call log_session_start here
             # But we'll just verify metadata capture works
             metadata = get_environment_metadata()

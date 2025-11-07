@@ -63,14 +63,14 @@ async def test_debug_agent_logging():
             print(f"✓ Root cause confidence: {confidence:.2f}")
 
         print("\n✅ TEST 1 PASSED: Debug agent execution logged successfully")
-        return True
+        return (True, correlation_id)
 
     except Exception as e:
         print(f"\n❌ TEST 1 FAILED: {e}")
         import traceback
 
         traceback.print_exc()
-        return False
+        return (False, correlation_id)
 
 
 async def test_coder_agent_logging():
@@ -115,14 +115,14 @@ async def test_coder_agent_logging():
             print(f"✓ Quality score: {quality:.2f}")
 
         print("\n✅ TEST 2 PASSED: Coder agent execution logged successfully")
-        return True
+        return (True, correlation_id)
 
     except Exception as e:
         print(f"\n❌ TEST 2 FAILED: {e}")
         import traceback
 
         traceback.print_exc()
-        return False
+        return (False, correlation_id)
 
 
 async def verify_database_records(correlation_ids):
@@ -211,17 +211,18 @@ async def main():
     results = []
 
     # Test 1: Debug agent
-    test1_passed = await test_debug_agent_logging()
+    test1_passed, test1_correlation_id = await test_debug_agent_logging()
     results.append(("Debug Agent", test1_passed))
+    correlation_ids.append(test1_correlation_id)
 
     # Test 2: Coder agent
-    test2_passed = await test_coder_agent_logging()
+    test2_passed, test2_correlation_id = await test_coder_agent_logging()
     results.append(("Coder Agent", test2_passed))
+    correlation_ids.append(test2_correlation_id)
 
     # Test 3: Database verification
-    # Note: We can't get correlation IDs from the tests above easily,
-    # so let's just verify recent records
-    test3_passed = await verify_database_records([])
+    # Pass captured correlation IDs to verify database records
+    test3_passed = await verify_database_records(correlation_ids)
     if test3_passed is not None:
         results.append(("Database Verification", test3_passed))
 

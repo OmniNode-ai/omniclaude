@@ -2012,12 +2012,20 @@ tags:
             elif "redis" in system.lower() or "cache" in system.lower():
                 target = f"redis://{settings.redis_host}:{settings.redis_port}"
             elif "kafka" in system.lower():
-                # Handle kafka_bootstrap_servers that may already include scheme
-                kafka_servers = settings.kafka_bootstrap_servers
-                if kafka_servers.startswith("kafka://"):
-                    target = kafka_servers
+                # Handle kafka_bootstrap_servers that may be comma-delimited
+                kafka_servers = settings.get_effective_kafka_bootstrap_servers()
+                # For manifest dependency, use first broker if multiple exist
+                if "," in kafka_servers:
+                    brokers = [broker.strip() for broker in kafka_servers.split(",")]
+                    first_broker = brokers[0]
                 else:
-                    target = f"kafka://{kafka_servers}"
+                    first_broker = kafka_servers
+
+                # Apply kafka:// prefix if not already present
+                if first_broker.startswith("kafka://"):
+                    target = first_broker
+                else:
+                    target = f"kafka://{first_broker}"
             else:
                 target = "http://localhost:8080"  # Default fallback
 
@@ -2060,12 +2068,20 @@ tags:
                     f'    - "redis://{settings.redis_host}:{settings.redis_port}"'
                 )
             elif "kafka" in system.lower():
-                # Handle kafka_bootstrap_servers that may already include scheme
-                kafka_servers = settings.kafka_bootstrap_servers
-                if kafka_servers.startswith("kafka://"):
-                    endpoints.append(f'    - "{kafka_servers}"')
+                # Handle kafka_bootstrap_servers that may be comma-delimited
+                kafka_servers = settings.get_effective_kafka_bootstrap_servers()
+                # For endpoint list, use first broker if multiple exist
+                if "," in kafka_servers:
+                    brokers = [broker.strip() for broker in kafka_servers.split(",")]
+                    first_broker = brokers[0]
                 else:
-                    endpoints.append(f'    - "kafka://{kafka_servers}"')
+                    first_broker = kafka_servers
+
+                # Apply kafka:// prefix if not already present
+                if first_broker.startswith("kafka://"):
+                    endpoints.append(f'    - "{first_broker}"')
+                else:
+                    endpoints.append(f'    - "kafka://{first_broker}"')
 
         return "\n".join(endpoints) if endpoints else "    []"
 

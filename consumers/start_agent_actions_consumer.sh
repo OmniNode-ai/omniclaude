@@ -6,7 +6,8 @@
 # It ensures all required variables are available before starting the Python consumer.
 #
 
-set -e  # Exit on error
+set -e          # Exit on error
+set -o pipefail # Propagate pipe failures
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -112,4 +113,21 @@ echo "Starting consumer..." | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
 # Start the consumer with output to both console and log file
-exec python3 agent_actions_consumer.py 2>&1 | tee -a "$LOG_FILE"
+# Note: Using command substitution with pipefail to ensure failures propagate
+python3 agent_actions_consumer.py 2>&1 | tee -a "$LOG_FILE"
+EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "" >&2
+    echo "========================================" >&2
+    echo "ERROR: Consumer failed with exit code $EXIT_CODE" >&2
+    echo "Timestamp: $(date)" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    echo "ERROR: Consumer failed with exit code $EXIT_CODE" >> "$LOG_FILE"
+    exit $EXIT_CODE
+fi
+
+echo "" | tee -a "$LOG_FILE"
+echo "Consumer exited successfully" | tee -a "$LOG_FILE"
+exit 0

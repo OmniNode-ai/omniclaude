@@ -700,9 +700,10 @@ class AgentActionsConsumer:
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             # Handle both old format (confidence_score) and new format (routing_confidence)
-            routing_confidence = event.get("routing_confidence") or event.get(
-                "confidence_score"
-            )
+            # IMPORTANT: Use explicit None check to preserve zero confidence values
+            routing_confidence = event.get("routing_confidence")
+            if routing_confidence is None:
+                routing_confidence = event.get("confidence_score")
 
             # Parse correlation_id and session_id as UUIDs
             correlation_id = event.get("correlation_id")

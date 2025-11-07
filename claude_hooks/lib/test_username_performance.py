@@ -16,7 +16,33 @@ from session_intelligence import get_environment_metadata, get_git_metadata
 
 
 def benchmark_metadata_capture(iterations=100):
-    """Benchmark metadata capture performance."""
+    """Benchmark metadata capture performance with statistical analysis.
+
+    Measures the performance of environment and git metadata capture operations
+    across multiple iterations, calculating average, minimum, and maximum times.
+    Validates performance against target thresholds (<25ms for metadata, <50ms total).
+
+    Args:
+        iterations: Number of times to run each metadata capture operation.
+                   Defaults to 100 for statistically significant results.
+
+    Returns:
+        dict: Performance statistics containing:
+            - avg_env (float): Average environment metadata capture time in ms
+            - avg_git (float): Average git metadata capture time in ms
+            - combined_avg (float): Combined average time in ms
+            - combined_max (float): Combined maximum time in ms
+            - overhead (float): Enhancement overhead compared to baseline in ms
+            - meets_target (bool): Whether performance meets <25ms target
+
+    Example:
+        >>> stats = benchmark_metadata_capture(iterations=100)
+        >>> print(f"Average time: {stats['combined_avg']:.1f}ms")
+        Average time: 12.3ms
+        >>> if stats['meets_target']:
+        ...     print("Performance target met!")
+        Performance target met!
+    """
     print("=" * 60)
     print("Performance Benchmark: Metadata Capture")
     print("=" * 60)
@@ -25,9 +51,9 @@ def benchmark_metadata_capture(iterations=100):
     # Benchmark environment metadata
     env_times = []
     for _ in range(iterations):
-        start = time.time()
+        start = time.perf_counter()
         metadata = get_environment_metadata()
-        elapsed_ms = (time.time() - start) * 1000
+        elapsed_ms = (time.perf_counter() - start) * 1000
         env_times.append(elapsed_ms)
 
     avg_env = sum(env_times) / len(env_times)
@@ -44,9 +70,9 @@ def benchmark_metadata_capture(iterations=100):
     # Benchmark git metadata
     git_times = []
     for _ in range(iterations):
-        start = time.time()
+        start = time.perf_counter()
         metadata = get_git_metadata(os.getcwd())
-        elapsed_ms = (time.time() - start) * 1000
+        elapsed_ms = (time.perf_counter() - start) * 1000
         git_times.append(elapsed_ms)
 
     avg_git = sum(git_times) / len(git_times)
@@ -134,7 +160,35 @@ def benchmark_metadata_capture(iterations=100):
 
 
 def test_metadata_fields():
-    """Verify all expected fields are captured."""
+    """Verify all expected fields are captured in environment metadata.
+
+    Validates that required fields (user, hostname, platform, python_version)
+    are present and non-null in metadata. Also checks for optional fields
+    (shell, uid, user_fullname, domain) and reports their availability.
+    Prints verification results with visual indicators.
+
+    Returns:
+        None: Prints verification results directly to stdout with checkmarks
+              for present fields and X marks for missing required fields.
+
+    Example:
+        >>> test_metadata_fields()
+        ============================================================
+        Metadata Fields Verification
+        ============================================================
+
+        Required fields:
+          ✅ user: jonah
+          ✅ hostname: MacBook-Pro.local
+          ✅ platform: darwin
+          ✅ python_version: 3.11.5
+
+        Optional fields:
+          ✅ shell: /bin/zsh
+          ✅ uid: 501
+          ⚪ user_fullname: not available
+          ⚪ domain: not available
+    """
     print("=" * 60)
     print("Metadata Fields Verification")
     print("=" * 60)
@@ -173,7 +227,42 @@ def test_metadata_fields():
 
 
 def main():
-    """Run performance benchmarks."""
+    """Run performance benchmarks and metadata field verification.
+
+    Orchestrates the complete test suite by executing metadata field verification
+    followed by performance benchmarking. Prints a comprehensive summary indicating
+    whether performance targets are met and provides key metrics for analysis.
+
+    The function performs two main operations:
+    1. Validates all expected metadata fields are captured correctly
+    2. Benchmarks metadata capture performance over 100 iterations
+
+    Returns:
+        None: Prints test results and summary directly to stdout. Exit code
+              is 0 regardless of test outcomes (informational testing only).
+
+    Example:
+        >>> main()
+
+        ============================================================
+        Metadata Fields Verification
+        ============================================================
+        ...
+        ============================================================
+        Performance Benchmark: Metadata Capture
+        ============================================================
+        ...
+        ============================================================
+        SUMMARY
+        ============================================================
+
+        ✅ All performance targets MET - enhancements are APPROVED
+
+        Key metrics:
+          • Average metadata capture: 12.3ms
+          • Enhancement overhead: 7.3ms
+          • Still well within 50ms target (using 12.3ms of 50ms budget)
+    """
     print()
     test_metadata_fields()
     print()

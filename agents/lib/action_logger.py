@@ -54,7 +54,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
-from action_event_publisher import (
+from agents.lib.action_event_publisher import (
     publish_action_event,
     publish_decision,
     publish_error,

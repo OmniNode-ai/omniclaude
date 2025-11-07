@@ -249,7 +249,13 @@ class IntelligenceUsageTracker:
             )
 
             # Store record in database
-            await self._store_record(record)
+            success = await self._store_record(record)
+            if not success:
+                logger.error(
+                    f"Failed to store intelligence retrieval record: {intelligence_type} '{intelligence_name}' "
+                    f"from {intelligence_source}"
+                )
+                return False
 
             logger.debug(
                 f"Tracked intelligence retrieval: {intelligence_type} '{intelligence_name}' "
@@ -292,7 +298,7 @@ class IntelligenceUsageTracker:
 
         try:
             # Update existing record with application details
-            await self._update_application(
+            success = await self._update_application(
                 correlation_id=correlation_id,
                 intelligence_name=intelligence_name,
                 was_applied=was_applied,
@@ -301,6 +307,12 @@ class IntelligenceUsageTracker:
                 contributed_to_success=contributed_to_success,
                 quality_impact=quality_impact,
             )
+            if not success:
+                logger.error(
+                    f"Failed to update intelligence application record: '{intelligence_name}' "
+                    f"for correlation_id {correlation_id}"
+                )
+                return False
 
             logger.debug(
                 f"Tracked intelligence application: '{intelligence_name}' "

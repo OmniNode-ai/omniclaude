@@ -8,6 +8,7 @@ This test verifies the enhanced console output shows username information.
 import os
 import sys
 import uuid
+from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -26,6 +27,10 @@ def main():
     # Generate test session ID
     session_id = str(uuid.uuid4())
 
+    # Determine project path portably
+    # This file is in claude_hooks/lib/, so project root is 2 levels up
+    project_path = Path(__file__).parent.parent.parent.resolve()
+
     # Log session start
     # Note: This will attempt to connect to the database
     # If database is unavailable, it will gracefully fail
@@ -33,7 +38,7 @@ def main():
 
     event_id = log_session_start(
         session_id=session_id,
-        project_path="/Volumes/PRO-G40/Code/omniclaude",
+        project_path=str(project_path),
         cwd=os.getcwd(),
         additional_metadata={"test": "username_logging_enhancement"},
     )
