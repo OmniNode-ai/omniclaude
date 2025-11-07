@@ -232,10 +232,19 @@ async def test_usage_stats():
         print(f"  Total Retrievals: {stats.get('total_retrievals', 0)}")
         print(f"  Times Applied: {stats.get('times_applied', 0)}")
         print(f"  Application Rate: {stats.get('application_rate_percent', 0)}%")
-        print(f"  Avg Confidence: {stats.get('avg_confidence') or 0:.2f}")
-        print(f"  Avg Quality Impact: {stats.get('avg_quality_impact') or 0:.2f}")
+        avg_confidence = stats.get("avg_confidence")
+        print(
+            f"  Avg Confidence: {avg_confidence if avg_confidence is not None else 0.0:.2f}"
+        )
+        avg_quality = stats.get("avg_quality_impact")
+        print(
+            f"  Avg Quality Impact: {avg_quality if avg_quality is not None else 0.0:.2f}"
+        )
         print(f"  Success Contributions: {stats.get('success_contributions', 0)}")
-        print(f"  Avg Query Time: {stats.get('avg_query_time_ms') or 0:.0f}ms")
+        avg_query_time = stats.get("avg_query_time_ms")
+        print(
+            f"  Avg Query Time: {avg_query_time if avg_query_time is not None else 0.0:.0f}ms"
+        )
 
         if stats.get("total_retrievals", 0) > 0:
             print("\n✅ Usage statistics retrieved successfully")
@@ -359,9 +368,11 @@ async def test_database_view():
                         f"Applied: {row['times_applied']}, "
                         f"Rate: {row['application_rate_percent']}%"
                     )
+                    row_confidence = row["avg_confidence"]
+                    row_quality = row["avg_quality_impact"]
                     print(
-                        f"    Confidence: {row['avg_confidence'] or 0:.2f}, "
-                        f"Quality Impact: {row['avg_quality_impact'] or 0:.2f}, "
+                        f"    Confidence: {row_confidence if row_confidence is not None else 0.0:.2f}, "
+                        f"Quality Impact: {row_quality if row_quality is not None else 0.0:.2f}, "
                         f"Success Contributions: {row['success_contributions']}"
                     )
                     print()

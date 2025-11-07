@@ -43,7 +43,23 @@ logger = logging.getLogger(__name__)
 
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
-_producer_lock = asyncio.Lock()
+_producer_lock = None
+
+
+async def get_producer_lock():
+    """
+    Get or create the producer lock lazily under a running event loop.
+
+    This ensures asyncio.Lock() is never created at module level, which
+    would cause RuntimeError in Python 3.12+ when no event loop exists.
+
+    Returns:
+        asyncio.Lock: The producer lock instance
+    """
+    global _producer_lock
+    if _producer_lock is None:
+        _producer_lock = asyncio.Lock()
+    return _producer_lock
 
 
 def _get_kafka_bootstrap_servers() -> str:
@@ -68,7 +84,8 @@ async def _get_kafka_producer():
     if _kafka_producer is not None:
         return _kafka_producer
 
-    async with _producer_lock:
+    # Get the lock (created lazily under running event loop)
+    async with await get_producer_lock():
         # Double-check after acquiring lock
         if _kafka_producer is not None:
             return _kafka_producer

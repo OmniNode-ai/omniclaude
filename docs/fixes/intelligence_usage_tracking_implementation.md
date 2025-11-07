@@ -1,8 +1,9 @@
 # Intelligence Usage Tracking Implementation
 
 **Date**: 2025-11-06
+**Last Updated**: 2025-11-07
 **Priority**: Medium
-**Status**: ✅ Complete
+**Status**: ✅ Complete (Enhanced with failure propagation)
 
 ---
 
@@ -66,8 +67,14 @@ async def get_usage_stats(
 - Tracks patterns from `code_patterns` collection
 - Records: confidence score, query time, rank, snapshot, metadata
 - Non-blocking async tracking with error handling
+- **Failure detection and reporting** (Added 2025-11-07):
+  - Captures boolean return values from tracking methods
+  - Counts successful vs failed tracking operations
+  - Logs individual failures with pattern names
+  - Alerts if systematic tracking failures detected (>0% failure rate)
+  - Provides actionable guidance (check database connectivity, POSTGRES_PASSWORD)
 
-**Code Location**: Lines 1744-1796 in `manifest_injector.py`
+**Code Location**: Lines 1745-1831 in `manifest_injector.py`
 
 ---
 
@@ -223,6 +230,65 @@ stats = await tracker.get_usage_stats(
 - **Database inserts**: Non-blocking async
 - **Error handling**: Graceful degradation (logs warning, continues)
 - **Minimal impact**: Pattern retrieval still <2000ms target
+
+---
+
+## Enhancement: Failure Propagation (2025-11-07)
+
+### Problem Identified
+
+Public methods in `intelligence_usage_tracker.py` correctly return `True`/`False` based on datastore operation success, but callers in `manifest_injector.py` were ignoring these return values. This meant:
+- Database failures were silently ignored
+- No visibility into tracking system health
+- No way for callers to detect and respond to failures
+
+### Solution Implemented
+
+**File**: `agents/lib/manifest_injector.py` (Lines 1745-1831)
+
+**Changes**:
+1. Capture boolean return values from `track_retrieval()` calls
+2. Track success/failure counts for each tracking operation
+3. Log warnings for individual tracking failures with pattern names
+4. Alert if systematic tracking failures detected (>0% failure rate)
+5. Provide actionable remediation guidance
+
+**Implementation**:
+```python
+tracking_successes = 0
+tracking_failures = 0
+
+# For each pattern tracked
+success = await self._usage_tracker.track_retrieval(...)
+if success:
+    tracking_successes += 1
+else:
+    tracking_failures += 1
+    self.logger.warning(f"Failed to track pattern: {pattern_name}")
+
+# Alert if systematic failures
+if tracking_failures > 0:
+    failure_rate = (tracking_failures / total_patterns) * 100
+    self.logger.warning(
+        f"Intelligence tracking failures: {tracking_failures}/{total_patterns} "
+        f"({failure_rate:.1f}% failure rate). Check database connectivity."
+    )
+```
+
+**Benefits**:
+- ✅ Fail-fast: Callers can detect tracking failures immediately
+- ✅ Observability: Clear visibility into tracking system health
+- ✅ Actionable alerts: Specific guidance for remediation
+- ✅ Graceful degradation: Manifest generation continues even if tracking fails
+- ✅ Detailed diagnostics: Per-pattern failure logging for debugging
+
+**Success Criteria**:
+- ✅ Methods return False when DB operations fail
+- ✅ Callers detect and log failures
+- ✅ Failure rate calculated and reported
+- ✅ Actionable guidance provided (check POSTGRES_PASSWORD, connectivity)
+- ✅ Syntax validation passed
+- ✅ Existing tests continue to pass
 
 ---
 

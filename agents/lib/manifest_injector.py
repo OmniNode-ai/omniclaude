@@ -1745,9 +1745,12 @@ class ManifestInjector:
             # Track intelligence usage for each pattern retrieved
             if self._usage_tracker:
                 try:
+                    tracking_successes = 0
+                    tracking_failures = 0
+
                     # Track execution_patterns
                     for i, pattern in enumerate(exec_patterns):
-                        await self._usage_tracker.track_retrieval(
+                        success = await self._usage_tracker.track_retrieval(
                             correlation_id=UUID(correlation_id),
                             agent_name=self.agent_name or "unknown",
                             intelligence_type="pattern",
@@ -1767,10 +1770,18 @@ class ManifestInjector:
                                 "parallel_query": True,
                             },
                         )
+                        if success:
+                            tracking_successes += 1
+                        else:
+                            tracking_failures += 1
+                            self.logger.warning(
+                                f"[{correlation_id}] Failed to track execution_pattern retrieval: "
+                                f"{pattern.get('name', 'unknown')}"
+                            )
 
                     # Track code_patterns
                     for i, pattern in enumerate(code_patterns):
-                        await self._usage_tracker.track_retrieval(
+                        success = await self._usage_tracker.track_retrieval(
                             correlation_id=UUID(correlation_id),
                             agent_name=self.agent_name or "unknown",
                             intelligence_type="pattern",
@@ -1790,10 +1801,34 @@ class ManifestInjector:
                                 "parallel_query": True,
                             },
                         )
+                        if success:
+                            tracking_successes += 1
+                        else:
+                            tracking_failures += 1
+                            self.logger.warning(
+                                f"[{correlation_id}] Failed to track code_pattern retrieval: "
+                                f"{pattern.get('name', 'unknown')}"
+                            )
 
-                    self.logger.debug(
-                        f"[{correlation_id}] Tracked {len(all_patterns)} pattern retrievals"
-                    )
+                    # Log summary of tracking results
+                    total_patterns = len(all_patterns)
+                    if tracking_successes > 0:
+                        self.logger.debug(
+                            f"[{correlation_id}] Tracked {tracking_successes}/{total_patterns} pattern retrievals successfully"
+                        )
+
+                    # Alert if systematic tracking failures
+                    if tracking_failures > 0:
+                        failure_rate = (
+                            (tracking_failures / total_patterns) * 100
+                            if total_patterns > 0
+                            else 0
+                        )
+                        self.logger.warning(
+                            f"[{correlation_id}] Intelligence tracking failures: {tracking_failures}/{total_patterns} "
+                            f"({failure_rate:.1f}% failure rate). Check database connectivity and POSTGRES_PASSWORD."
+                        )
+
                 except Exception as track_error:
                     self.logger.warning(
                         f"[{correlation_id}] Failed to track pattern retrievals: {track_error}"
