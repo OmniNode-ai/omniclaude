@@ -35,6 +35,10 @@ def benchmark_metadata_capture(iterations=100):
             - overhead (float): Enhancement overhead compared to baseline in ms
             - meets_target (bool): Whether performance meets <25ms target
 
+    Raises:
+        OSError: If git metadata capture fails due to filesystem access issues
+        subprocess.SubprocessError: If git commands fail during metadata capture
+
     Example:
         >>> stats = benchmark_metadata_capture(iterations=100)
         >>> print(f"Average time: {stats['combined_avg']:.1f}ms")
@@ -167,9 +171,15 @@ def test_metadata_fields():
     (shell, uid, user_fullname, domain) and reports their availability.
     Prints verification results with visual indicators.
 
+    Args:
+        None
+
     Returns:
         None: Prints verification results directly to stdout with checkmarks
               for present fields and X marks for missing required fields.
+
+    Raises:
+        OSError: If environment metadata capture fails due to system access issues
 
     Example:
         >>> test_metadata_fields()
@@ -237,9 +247,16 @@ def main():
     1. Validates all expected metadata fields are captured correctly
     2. Benchmarks metadata capture performance over 100 iterations
 
+    Args:
+        None
+
     Returns:
         None: Prints test results and summary directly to stdout. Exit code
               is 0 regardless of test outcomes (informational testing only).
+
+    Raises:
+        OSError: If metadata capture fails due to filesystem or system access issues
+        subprocess.SubprocessError: If git commands fail during metadata capture
 
     Example:
         >>> main()

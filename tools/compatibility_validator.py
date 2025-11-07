@@ -20,6 +20,7 @@ import argparse
 import ast
 import importlib
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -191,9 +192,24 @@ class OmniBaseCompatibilityValidator:
         """
         self.strict = strict
         self.template_mode = template_mode
-        self.omnibase_path = omnibase_path or Path(
-            "/Volumes/PRO-G40/Code/omnibase_core"
-        )
+
+        # Discover omnibase_core path dynamically
+        if omnibase_path:
+            self.omnibase_path = omnibase_path
+        else:
+            # Try environment variable first
+            env_path = os.getenv("OMNIBASE_CORE_PATH")
+            if env_path:
+                self.omnibase_path = Path(env_path)
+            else:
+                # Try to find as sibling repository
+                current_repo = Path(__file__).parent.parent.resolve()
+                sibling_path = current_repo.parent / "omnibase_core"
+                if sibling_path.exists():
+                    self.omnibase_path = sibling_path
+                else:
+                    # Fallback to None - import validation will be skipped
+                    self.omnibase_path = None
 
     def validate_file(self, file_path: Path) -> ValidationResult:
         """

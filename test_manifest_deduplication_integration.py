@@ -9,12 +9,15 @@ Tests the full flow:
 """
 
 import sys
+from pathlib import Path
 
 
 def test_manifest_integration():
     """Test deduplication in the context of full manifest generation."""
 
-    sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+    # Add project root to path dynamically
+    project_root = Path(__file__).parent.resolve()
+    sys.path.insert(0, str(project_root))
     from agents.lib.manifest_injector import ManifestInjector
 
     # Create ManifestInjector instance

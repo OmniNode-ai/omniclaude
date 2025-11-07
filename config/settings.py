@@ -1136,7 +1136,8 @@ def _send_config_error_notification(errors: list[str]) -> None:
     Send Slack notification for configuration errors (non-blocking).
 
     Separated from get_settings() to avoid coupling and circular dependencies.
-    Uses synchronous HTTP since no event loop exists during module initialization.
+    Intelligently uses async notifications when event loop is available,
+    falls back to synchronous HTTP when no event loop exists (e.g., module initialization).
 
     Args:
         errors: List of configuration validation error messages
@@ -1147,7 +1148,7 @@ def _send_config_error_notification(errors: list[str]) -> None:
     """
     try:
         # Import here to avoid circular dependency
-        import httpx
+        import asyncio
 
         from agents.lib.slack_notifier import get_slack_notifier
 
@@ -1164,27 +1165,43 @@ def _send_config_error_notification(errors: list[str]) -> None:
             "validation_errors": errors,
             "error_count": len(errors),
         }
-        payload = notifier._build_slack_message(error=error, context=context)
 
-        # Send synchronously (no event loop during initialization)
+        # Check if event loop is running - use async if available, sync if not
         try:
-            response = httpx.post(
-                notifier.webhook_url,
-                json=payload,
-                timeout=10.0,
+            loop = asyncio.get_running_loop()
+            # Event loop exists - schedule async notification (non-blocking)
+            logger.debug("Event loop detected - scheduling async Slack notification")
+            asyncio.create_task(
+                notifier.send_error_notification(error=error, context=context)
             )
-            if response.status_code == 200:
-                logger.debug(
-                    "Configuration validation error notification sent to Slack"
+        except RuntimeError:
+            # No event loop - use synchronous approach (safe for module initialization)
+            logger.debug(
+                "No event loop detected - using synchronous Slack notification"
+            )
+            import httpx
+
+            payload = notifier._build_slack_message(error=error, context=context)
+
+            # Send synchronously (no event loop during initialization)
+            try:
+                response = httpx.post(
+                    notifier.webhook_url,
+                    json=payload,
+                    timeout=10.0,
                 )
-            else:
-                logger.debug(
-                    f"Slack webhook returned non-200 status: {response.status_code}"
-                )
-        except httpx.TimeoutException:
-            logger.debug("Slack webhook request timed out")
-        except Exception as send_error:
-            logger.debug(f"Failed to send notification to Slack: {send_error}")
+                if response.status_code == 200:
+                    logger.debug(
+                        "Configuration validation error notification sent to Slack"
+                    )
+                else:
+                    logger.debug(
+                        f"Slack webhook returned non-200 status: {response.status_code}"
+                    )
+            except httpx.TimeoutException:
+                logger.debug("Slack webhook request timed out")
+            except Exception as send_error:
+                logger.debug(f"Failed to send notification to Slack: {send_error}")
 
     except Exception as notify_error:
         # Fail silently - notification is best-effort

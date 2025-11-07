@@ -12,7 +12,7 @@ Expected Results:
 - NOT all patterns scoring identically!
 
 Reference:
-- Archon API: /Volumes/PRO-G40/Code/omniarchon/docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
+- Archon API: See omniarchon repository - docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
 - Research: ARCHON_CAPABILITIES_RESEARCH.md
 """
 
@@ -258,12 +258,12 @@ async def test_p0_fix():
         print("\n⚠️  WARNING: Some irrelevant patterns scored too high")
 
     # Filter by threshold
-    THRESHOLD = 0.3
+    threshold = 0.3
     relevant_patterns = [
-        p for p in scored_patterns if p.get("hybrid_score", 0.0) > THRESHOLD
+        p for p in scored_patterns if p.get("hybrid_score", 0.0) > threshold
     ]
 
-    print(f"\n🔍 Filtering by Threshold (>{THRESHOLD}):")
+    print(f"\n🔍 Filtering by Threshold (>{threshold}):")
     print(f"   Before: {len(patterns)} patterns")
     print(
         f"   After:  {len(relevant_patterns)} patterns ({len(relevant_patterns)/len(patterns)*100:.1f}%)"

@@ -14,10 +14,11 @@ Run:
 import asyncio
 from uuid import uuid4
 
-from agent_execution_logger import log_agent_execution
-from agent_traceability_logger import create_traceability_logger
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
-from traceability_events import get_traceability_publisher
+
+from agents.lib.agent_execution_logger import log_agent_execution
+from agents.lib.agent_traceability_logger import create_traceability_logger
+from agents.lib.traceability_events import get_traceability_publisher
 
 
 async def test_complete_traceability():

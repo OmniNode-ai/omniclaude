@@ -47,6 +47,7 @@ from threading import Event, Thread
 from typing import Any, Dict, List, Optional
 
 import psycopg2
+import psycopg2.pool
 from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
 
@@ -131,7 +132,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
     consumer_instance = None
 
-    def do_GET(self):
+    def do_GET(self):  # noqa: N802 - Required by HTTPServer
         """Handle GET requests."""
         if self.path == "/health":
             self.send_health_response()
@@ -142,13 +143,12 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def send_health_response(self):
-        """Send health check response with thread-safe state verification."""
-        # Thread-safe atomic health check to prevent TOCTOU race conditions
-        # Check consumer_instance before accessing attributes to prevent NoneType errors
+        """Send health check response with atomic state verification."""
+        # Atomic health check using threading.Event to prevent race conditions
+        # Events provide atomic is_set() checks without requiring locks
         ci = self.consumer_instance
         if ci is not None:
-            with ci._health_lock:
-                is_healthy = ci.running and not ci.shutdown_event.is_set()
+            is_healthy = ci.running_event.is_set() and not ci.shutdown_event.is_set()
         else:
             is_healthy = False
 
@@ -188,16 +188,15 @@ class AgentActionsConsumer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.shutdown_event = Event()
-        self.running = False
+        self.running_event = (
+            Event()
+        )  # Atomic state management to prevent race conditions
         self.metrics = ConsumerMetrics()
 
         # Retry management for poison message handling
         self.retry_counts: Dict[str, int] = {}  # Track retries per message
         self.max_retries = 3
         self.backoff_base_ms = 100
-
-        # Thread safety for health checks
-        self._health_lock = threading.Lock()
 
         # Kafka configuration (no localhost default - must be explicitly configured)
         kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
@@ -271,7 +270,7 @@ class AgentActionsConsumer:
         # Components (initialized in start())
         self.consumer: Optional[KafkaConsumer] = None
         self.dlq_producer: Optional[KafkaProducer] = None
-        self.db_conn: Optional[Any] = None
+        self.db_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
         self.health_server: Optional[HTTPServer] = None
 
         logger.info(
@@ -410,43 +409,28 @@ class AgentActionsConsumer:
         logger.info("DLQ producer initialized")
 
     def setup_database(self):
-        """Initialize database connection."""
-        logger.info("Setting up database connection...")
-        self.db_conn = psycopg2.connect(**self.db_config)
-        self.db_conn.autocommit = False  # Use transactions
+        """Initialize database connection pool for improved scalability under load."""
+        logger.info("Setting up database connection pool...")
+        self.db_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=5, maxconn=20, **self.db_config
+        )
         logger.info(
-            "Database connection established: %s:%s/%s",
+            "Database connection pool established: %s:%s/%s (min=5, max=20)",
             self.db_config["host"],
             self.db_config["port"],
             self.db_config["database"],
         )
 
-    def _ensure_db_connection(self):
+    def _get_db_connection(self):
         """
-        Ensure database connection is healthy, reconnect if needed.
+        Get a connection from the pool.
 
-        Fixes: psycopg2.InterfaceError: connection already closed
+        Returns a connection that must be returned to the pool using putconn() when done.
+        Connection pool handles reconnection automatically for failed connections.
         """
-        try:
-            if self.db_conn is None or self.db_conn.closed:
-                logger.warning("Database connection is closed, reconnecting...")
-                self.db_conn = psycopg2.connect(**self.db_config)
-                self.db_conn.autocommit = False
-                logger.info("Database connection re-established")
-            else:
-                # Test connection with simple query
-                with self.db_conn.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-        except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
-            logger.warning("Database connection test failed: %s, reconnecting...", e)
-            try:
-                if self.db_conn and not self.db_conn.closed:
-                    self.db_conn.close()
-            except Exception:
-                pass
-            self.db_conn = psycopg2.connect(**self.db_config)
-            self.db_conn.autocommit = False
-            logger.info("Database connection restored after failure")
+        if self.db_pool is None:
+            raise RuntimeError("Database connection pool not initialized")
+        return self.db_pool.getconn()
 
     def setup_health_check(self):
         """Start health check HTTP server."""
@@ -455,7 +439,11 @@ class AgentActionsConsumer:
         )
         HealthCheckHandler.consumer_instance = self
         self.health_server = HTTPServer(
-            ("0.0.0.0", self.health_check_port), HealthCheckHandler
+            (
+                "0.0.0.0",  # noqa: S104 - Intentional for Docker health checks
+                self.health_check_port,
+            ),
+            HealthCheckHandler,
         )
 
         # Run in background thread
@@ -485,11 +473,13 @@ class AgentActionsConsumer:
         total_inserted = 0
         total_duplicates = 0
 
-        try:
-            # Ensure database connection is healthy before using it
-            self._ensure_db_connection()
+        # Get a connection from the pool
+        db_conn = self._get_db_connection()
 
-            with self.db_conn.cursor() as cursor:
+        try:
+            db_conn.autocommit = False  # Use transactions
+
+            with db_conn.cursor() as cursor:
                 # Process each topic's events
                 for topic, events in events_by_topic.items():
                     if not events:
@@ -528,7 +518,7 @@ class AgentActionsConsumer:
                     total_inserted += inserted
                     total_duplicates += duplicates
 
-                self.db_conn.commit()
+                db_conn.commit()
 
             logger.info(
                 "Batch insert: %d inserted, %d duplicates (total: %d)",
@@ -541,8 +531,11 @@ class AgentActionsConsumer:
 
         except Exception as e:
             logger.error("Batch insert failed: %s", e, exc_info=True)
-            self.db_conn.rollback()
+            db_conn.rollback()
             raise
+        finally:
+            # Always return connection to the pool
+            self.db_pool.putconn(db_conn)
 
     def _insert_agent_actions(
         self, cursor, events: List[Dict[str, Any]]
@@ -1156,7 +1149,7 @@ class AgentActionsConsumer:
             signal.signal(signal.SIGTERM, self._signal_handler)
             signal.signal(signal.SIGINT, self._signal_handler)
 
-            self.running = True
+            self.running_event.set()  # Atomic state update
             logger.info("Consumer started successfully")
 
             # Start consuming
@@ -1176,7 +1169,7 @@ class AgentActionsConsumer:
         """Graceful shutdown."""
         logger.info("Shutting down consumer...")
         self.shutdown_event.set()
-        self.running = False
+        self.running_event.clear()  # Atomic state update
 
         # Close Kafka consumer
         if self.consumer:
@@ -1188,10 +1181,10 @@ class AgentActionsConsumer:
             logger.info("Closing DLQ producer...")
             self.dlq_producer.close()
 
-        # Close database connection
-        if self.db_conn:
-            logger.info("Closing database connection...")
-            self.db_conn.close()
+        # Close database connection pool
+        if self.db_pool:
+            logger.info("Closing database connection pool...")
+            self.db_pool.closeall()
 
         # Shutdown health check server
         if self.health_server:

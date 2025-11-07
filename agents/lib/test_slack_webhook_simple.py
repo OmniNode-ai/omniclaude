@@ -82,7 +82,6 @@ async def send_test_notification():
     }
 
     print("📤 Sending test notification to Slack...")
-    print(f"   Webhook: {WEBHOOK_URL[:30]}...{WEBHOOK_URL[-10:]}")  # Mask middle part
 
     try:
         # Create SSL context using certifi's certificate bundle

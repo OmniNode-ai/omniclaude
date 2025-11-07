@@ -253,6 +253,7 @@ services:
 
       # Agent registry configuration
       - REGISTRY_PATH=${AGENT_REGISTRY_PATH:-/agent-definitions/agent-registry.yaml}
+      - AGENT_DEFINITIONS_PATH=/agent-definitions
 
       # Health check configuration
       - HEALTH_CHECK_PORT=${ARCHON_ROUTER_HEALTH_PORT:-8070}

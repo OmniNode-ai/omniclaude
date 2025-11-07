@@ -10,6 +10,7 @@ Tests the _deduplicate_patterns method to ensure:
 """
 
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
 
@@ -17,7 +18,9 @@ def test_deduplicate_patterns():
     """Test the deduplication logic with realistic pattern data."""
 
     # Import the ManifestInjector class
-    sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+    # Add project root to path dynamically
+    project_root = Path(__file__).parent.resolve()
+    sys.path.insert(0, str(project_root))
     from agents.lib.manifest_injector import ManifestInjector
 
     # Create test data with duplicates (simulating the PR #22 issue)
@@ -229,7 +232,8 @@ def test_deduplicate_patterns():
 
 def test_edge_cases():
     """Test edge cases for deduplication."""
-    sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+    # Import already available from test_deduplicate_patterns()
+    # which runs first and sets up the path
     from agents.lib.manifest_injector import ManifestInjector
 
     injector = ManifestInjector()

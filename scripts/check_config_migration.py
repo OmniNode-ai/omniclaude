@@ -64,7 +64,8 @@ def main():
             priority_filter = arg
 
     # Find all Python files
-    root = Path("/Volumes/PRO-G40/Code/omniclaude")
+    # Use project root dynamically (scripts/ is in project root)
+    root = Path(__file__).parent.parent.resolve()
     py_files = list(root.rglob("*.py"))
 
     # Categorize files

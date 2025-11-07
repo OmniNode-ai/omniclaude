@@ -17,9 +17,9 @@ from uuid import uuid4
 # Add agents lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
-from agent_coder import CoderAgent
-from agent_debug_intelligence import DebugIntelligenceAgent
-from agent_model import AgentTask
+from agents.parallel_execution.agent_coder import CoderAgent
+from agents.parallel_execution.agent_debug_intelligence import DebugIntelligenceAgent
+from agents.parallel_execution.agent_model import AgentTask
 
 
 async def test_debug_agent_logging():

@@ -10,7 +10,7 @@ Performance:
 - Graceful fallback to keyword-only scoring on error
 
 Reference:
-/Volumes/PRO-G40/Code/omniarchon/docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
+See omniarchon repository: docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
 """
 
 import asyncio

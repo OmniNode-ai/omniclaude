@@ -4,21 +4,18 @@ Test script for username logging enhancements.
 
 Tests:
 1. Username capture with fallback handling
-2. Enhanced console output with user context
-3. UID capture (Unix/Linux)
-4. Full name capture (if available)
-5. Windows domain capture (if applicable)
+2. Metadata capture (hostname, platform, UID, full name, domain)
+3. Security considerations (no sensitive data leakage)
 """
 
 import os
 import sys
-import tempfile
 from unittest.mock import patch
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from session_intelligence import get_environment_metadata, log_session_start
+from session_intelligence import get_environment_metadata
 
 
 def test_username_fallback():
@@ -70,26 +67,6 @@ def test_metadata_capture():
     print()
 
 
-def test_session_start_output():
-    """Test session start logging output includes username."""
-    print("=== Test 3: Session Start Output ===\n")
-
-    # Use a temporary directory for test
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Mock environment for username testing
-        with patch.dict(os.environ, {"USER": "testuser"}):
-            # Test would normally call log_session_start here
-            # But we'll just verify metadata capture works
-            metadata = get_environment_metadata()
-            username = metadata.get("user", "unknown")
-            hostname = metadata.get("hostname", "unknown")
-
-            expected_output = f"User: {username}@{hostname}"
-            print(f"✅ Expected output format: {expected_output}")
-
-    print()
-
-
 def test_security_considerations():
     """Test that sensitive information is handled appropriately."""
     print("=== Test 4: Security Considerations ===\n")
@@ -122,7 +99,6 @@ def main():
     try:
         test_username_fallback()
         test_metadata_capture()
-        test_session_start_output()
         test_security_considerations()
 
         print("=" * 60)

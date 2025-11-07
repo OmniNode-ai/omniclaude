@@ -171,8 +171,9 @@ class IntelligenceUsageTracker:
             self.db_user = db_user or settings.postgres_user
             self.db_password = db_password or settings.get_effective_postgres_password()
         else:
-            self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
-            self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
+            # Fall back to environment variables with safe defaults (no hardcoded environment-specific values)
+            self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
+            self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5432"))
             self.db_name = db_name or os.environ.get(
                 "POSTGRES_DATABASE", "omninode_bridge"
             )
@@ -499,7 +500,7 @@ class IntelligenceUsageTracker:
             )
 
             async with pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     UPDATE agent_intelligence_usage
                     SET
@@ -520,6 +521,16 @@ class IntelligenceUsageTracker:
                     str(correlation_id),
                     intelligence_name,
                 )
+
+                # Parse result to check if rows were updated
+                # asyncpg.execute() returns string like "UPDATE 0" or "UPDATE 1"
+                rows_updated = int(result.split()[1])
+                if rows_updated == 0:
+                    logger.warning(
+                        f"No rows updated for intelligence application: '{intelligence_name}' "
+                        f"with correlation_id {correlation_id}. Record may not exist."
+                    )
+                    return False
 
             return True
 

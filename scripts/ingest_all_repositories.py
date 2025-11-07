@@ -32,12 +32,50 @@ class MultiRepositoryIngester:
         self.lock = Lock()
 
         # Define repositories to process
-        self.repositories = {
-            "omnibase_core": "/Volumes/PRO-G40/Code/omnibase_core",
-            "omnibase_spi": "/Volumes/PRO-G40/Code/omnibase_spi",
-            "omniarchon": "/Volumes/PRO-G40/Code/omniarchon",
-            "omninode_bridge": "/Volumes/PRO-G40/Code/omninode_bridge",
-        }
+        # Try to discover repositories dynamically
+        self.repositories = self._discover_repositories()
+
+    def _discover_repositories(self) -> Dict[str, str]:
+        """
+        Discover repository paths dynamically.
+
+        Priority:
+        1. Environment variables (OMNI_REPOS_DIR or individual OMNI_<REPO>_PATH)
+        2. Sibling directories to current repository
+        3. Fallback to default paths (for backwards compatibility)
+        """
+        repos = {}
+        repo_names = ["omnibase_core", "omnibase_spi", "omniarchon", "omninode_bridge"]
+
+        # Check for base directory override
+        base_dir = os.getenv("OMNI_REPOS_DIR")
+        if base_dir:
+            base_path = Path(base_dir)
+            for repo_name in repo_names:
+                repo_path = base_path / repo_name
+                if repo_path.exists():
+                    repos[repo_name] = str(repo_path)
+            if repos:
+                return repos
+
+        # Try to find as sibling repositories
+        current_repo = Path(__file__).parent.parent.resolve()  # omniclaude root
+        parent_dir = current_repo.parent  # Code/ directory
+
+        for repo_name in repo_names:
+            # Check environment variable for specific repo
+            env_var = f"OMNI_{repo_name.upper()}_PATH"
+            env_path = os.getenv(env_var)
+            if env_path and Path(env_path).exists():
+                repos[repo_name] = env_path
+                continue
+
+            # Try sibling directory
+            sibling_path = parent_dir / repo_name
+            if sibling_path.exists():
+                repos[repo_name] = str(sibling_path)
+
+        return repos
 
     def find_python_files(self, root_dir: str) -> List[Path]:
         """Find all Python files in a repository."""

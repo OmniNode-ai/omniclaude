@@ -150,7 +150,8 @@ def main():
         sys.exit(1)
 
     filepath = sys.argv[1]
-    root = Path("/Volumes/PRO-G40/Code/omniclaude")
+    # Use project root dynamically (scripts/ is in project root)
+    root = Path(__file__).parent.parent.resolve()
     full_path = root / filepath if not filepath.startswith("/") else Path(filepath)
 
     if not full_path.exists():
