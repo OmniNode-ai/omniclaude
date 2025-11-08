@@ -300,7 +300,7 @@ async def rank_memories_by_intent(
 
     for item in scored_memories:
         if total_tokens + item["tokens"] > max_tokens:
-            break
+            continue
 
         selected[item["key"]] = item["memory"]
         total_tokens += item["tokens"]

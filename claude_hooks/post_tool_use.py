@@ -22,9 +22,11 @@ Performance Target: <50ms overhead
 import asyncio
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
+from time import time_ns
 from typing import Any, Dict, Optional
 
 # Add project root to path
@@ -51,14 +53,27 @@ def parse_tool_result(tool_name: str, result: str) -> Dict[str, Any]:
 
     # Common error indicators
     error_indicators = [
-        'error', 'failed', 'exception', 'traceback',
-        'not found', 'permission denied', 'cannot',
-        'invalid', 'unable to'
+        'error',
+        'errors',
+        'failed',
+        'exception',
+        'traceback',
+        'not found',
+        'permission denied',
+        'cannot',
+        'invalid',
+        'unable to'
     ]
 
-    result_lower = result.lower()
+    # Normalize: remove negated phrases to avoid false positives
+    normalized = result.lower()
+    normalized = re.sub(r'no\s+[\w-]*error[\w-]*', '', normalized)
+    normalized = re.sub(r'without\s+[\w-]*error[\w-]*', '', normalized)
+    normalized = re.sub(r'no\s+[\w-]*failure[\w-]*', '', normalized)
+    normalized = re.sub(r'no\s+[\w-]*exception[\w-]*', '', normalized)
+
     for indicator in error_indicators:
-        if indicator in result_lower:
+        if indicator in normalized:
             success = False
             error = result[:500]  # Capture first 500 chars of error
             break
@@ -91,7 +106,7 @@ async def store_execution_result(
 
     try:
         # Create execution record
-        execution_id = f"tool_execution_{tool_name}_{int(datetime.utcnow().timestamp())}"
+        execution_id = f"tool_execution_{tool_name}_{time_ns()}"
         execution_record = {
             "tool": tool_name,
             "success": success,

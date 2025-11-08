@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from memory_client import get_memory_client
+from .memory_client import get_memory_client
 
 # Configure logging
 logging.basicConfig(
@@ -262,7 +262,11 @@ async def validate_migration() -> bool:
 
     for category in categories:
         keys = await memory.list_memory(category)
-        migrated_memories = [k for k in keys if "migrated_from" in k or k.startswith("correlation_") or k.startswith("legacy_")]
+        migrated_memories = [
+            k
+            for k in keys
+            if k.startswith("correlation_") or k.startswith("legacy_") or k.startswith("agent_state_")
+        ]
         migrated_count += len(migrated_memories)
 
     logger.info(f"Original files: {original_count}")

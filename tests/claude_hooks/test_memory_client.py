@@ -14,6 +14,7 @@ Tests cover:
 import asyncio
 import json
 import pytest
+import pytest_asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
@@ -30,20 +31,20 @@ from claude_hooks.lib.memory_client import (
 )
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def temp_dir():
     """Create temporary directory for tests"""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield tmpdir
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def filesystem_backend(temp_dir):
     """Create filesystem backend with temp directory"""
     return FilesystemMemoryBackend(base_path=temp_dir)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def memory_client(filesystem_backend):
     """Create memory client with filesystem backend"""
     return MemoryClient(backend=filesystem_backend, enable_fallback=False)

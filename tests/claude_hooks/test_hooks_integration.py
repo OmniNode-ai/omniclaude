@@ -157,7 +157,7 @@ class TestPostToolUseHook:
                 patterns = await memory.get_memory("success_patterns", "patterns")
 
                 # Should have recorded the success
-                assert patterns is not None or True  # Pattern might not be stored in temp
+                assert patterns is not None, "Expected success_patterns to persist the execution result"
 
     @pytest.mark.asyncio
     async def test_failure_pattern_tracking(self, temp_memory_dir):

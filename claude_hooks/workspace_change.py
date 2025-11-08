@@ -26,6 +26,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from time import time_ns
 from typing import Any, Dict, List, Optional
 
 # Add project root to path
@@ -44,11 +45,21 @@ logger = logging.getLogger(__name__)
 
 
 def analyze_file_type(file_path: str) -> str:
-    """Determine file type from extension"""
+    """
+    Determine the canonical file classification for workspace tracking.
 
-    ext = Path(file_path).suffix.lower()
+    Args:
+        file_path: Relative or absolute path to the file on disk.
 
-    type_map = {
+    Returns:
+        Normalized file type string used for memory aggregation.
+    """
+
+    path = Path(file_path)
+    ext = path.suffix.lower()
+    name = path.name
+
+    extension_map = {
         # Code
         '.py': 'python',
         '.js': 'javascript',
@@ -78,9 +89,6 @@ def analyze_file_type(file_path: str) -> str:
         # Build/Deploy
         '.sh': 'script',
         '.bash': 'script',
-        'Dockerfile': 'docker',
-        'docker-compose.yml': 'docker',
-        'Makefile': 'build',
 
         # Data
         '.sql': 'database',
@@ -89,7 +97,16 @@ def analyze_file_type(file_path: str) -> str:
         '.xml': 'data',
     }
 
-    return type_map.get(ext, 'unknown')
+    name_map = {
+        'Dockerfile': 'docker',
+        'docker-compose.yml': 'docker',
+        'Makefile': 'build',
+    }
+
+    if name in name_map:
+        return name_map[name]
+
+    return extension_map.get(ext, 'unknown')
 
 
 def extract_dependencies(file_path: str, content: str) -> List[str]:
@@ -174,7 +191,7 @@ async def store_file_change_event(
 
     try:
         # Create change event
-        event_id = f"file_change_{int(datetime.utcnow().timestamp())}"
+        event_id = f"file_change_{time_ns()}"
         event = {
             "files": files,
             "change_type": change_type,
