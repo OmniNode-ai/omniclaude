@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/Users/jonah/Library/Caches/pypoetry/virtualenvs/omniclaude-agents-kzVi5DqF-py3.12/bin/python
 """
 Pre-Prompt-Submit Hook with Memory Management
 
@@ -29,8 +29,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
+# Add project root to path - MUST use .resolve() to follow symlinks!
+project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from claude_hooks.lib.memory_client import get_memory_client

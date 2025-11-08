@@ -1,0 +1,1 @@
+/Users/jonah/Code/omniclaude/claude_hooks/debug_hook.py
