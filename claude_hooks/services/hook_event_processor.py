@@ -83,10 +83,16 @@ class HookEventProcessor:
         # Database connection
         if connection_string is None:
             # Use POSTGRES_PASSWORD (standard variable)
-            db_password = os.getenv("POSTGRES_PASSWORD", "")
+            db_password = os.getenv("POSTGRES_PASSWORD")
+            if not db_password:
+                raise ValueError(
+                    "POSTGRES_PASSWORD environment variable is required but not set. "
+                    "See PASSWORD_ALIAS_MIGRATION.md for setup instructions."
+                )
+
             host = os.getenv("POSTGRES_HOST", "localhost")
             port = os.getenv("POSTGRES_PORT", "5436")
-            db = os.getenv("POSTGRES_DB", "omninode_bridge")
+            db = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
             user = os.getenv("POSTGRES_USER", "postgres")
             connection_string = (
                 f"host={host} port={port} "

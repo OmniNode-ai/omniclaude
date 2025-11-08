@@ -318,12 +318,24 @@ def query_session_statistics() -> Dict[str, Any]:
 
     try:
         # Note: Set POSTGRES_PASSWORD environment variable for database access
-        import os
+        db_password = os.getenv("POSTGRES_PASSWORD")
+        if not db_password:
+            print(
+                "⚠️  POSTGRES_PASSWORD not set, returning empty statistics",
+                file=sys.stderr,
+            )
+            return {
+                "duration_seconds": 0,
+                "total_prompts": 0,
+                "total_tools": 0,
+                "agents_invoked": [],
+                "agent_usage": {},
+                "tool_breakdown": {},
+            }
 
-        db_password = os.getenv("POSTGRES_PASSWORD", "")
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
-        db = os.getenv("POSTGRES_DB", "omninode_bridge")
+        db = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
         user = os.getenv("POSTGRES_USER", "postgres")
 
         # Connect to database

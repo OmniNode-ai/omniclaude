@@ -5,20 +5,26 @@
 
 set -e
 
+# Colors for output (define early for error messages)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
 # Database configuration
 # Note: Set POSTGRES_PASSWORD environment variable for database access
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+    echo -e "${RED}❌ ERROR${NC}: POSTGRES_PASSWORD environment variable is not set"
+    echo "   Please set POSTGRES_PASSWORD in your .env file"
+    exit 1
+fi
+
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 # Helper function to run SQL query
 run_sql() {

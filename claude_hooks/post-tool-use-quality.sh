@@ -186,7 +186,7 @@ if corr_context:
                 ' 2>/dev/null || echo '{"tool_input": {}}')
 
                 # Publish to Kafka via log-agent-action skill
-                python3 ~/.claude/skills/agent-tracking/log-agent-action/execute_kafka.py \
+                python3 "${SCRIPT_DIR}/../skills/agent-tracking/log-agent-action/execute_kafka.py" \
                     --agent "$AGENT_NAME" \
                     --action-type "tool_call" \
                     --action-name "$TOOL_NAME" \

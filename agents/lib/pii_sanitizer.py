@@ -370,18 +370,19 @@ def sanitize_api_key(value: str) -> str:
         value: Potential API key
 
     Returns:
-        Sanitized API key
+        Sanitized API key with ALL API keys masked
     """
+
+    # Helper function to mask a single API key match
+    def mask_key(match):
+        key = match.group(1)
+        # Keep prefix (first 4-8 chars), mask rest
+        prefix_len = min(8, len(key) // 3)
+        return key[:prefix_len] + "***"
+
+    # Apply masking to ALL matches (not just the first one)
     for pattern in API_KEY_PATTERNS:
-        match = pattern.search(value)
-        if match:
-            key = match.group(1)
-            # Keep prefix (first 4-8 chars), mask rest
-            prefix_len = min(8, len(key) // 3)
-            masked_key = key[:prefix_len] + "***"
-            # Replace the matched substring in the original value to preserve surrounding text
-            start, end = match.span(1)
-            return value[:start] + masked_key + value[end:]
+        value = pattern.sub(lambda m: mask_key(m), value)
 
     return value
 

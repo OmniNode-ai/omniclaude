@@ -54,7 +54,20 @@ class DatabaseConfig:
 
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
-        """Load configuration from environment variables."""
+        """
+        Load database configuration from environment variables.
+
+        Reads standard POSTGRES_* environment variables to construct a DatabaseConfig
+        instance with production defaults for missing values.
+
+        Returns:
+            DatabaseConfig: Configuration loaded from environment with defaults
+
+        Example:
+            >>> config = DatabaseConfig.from_env()
+            >>> print(config.host)
+            '192.168.86.200'
+        """
         # Note: Uses standard POSTGRES_* environment variables
         return cls(
             host=os.getenv("POSTGRES_HOST", "192.168.86.200"),  # Production default

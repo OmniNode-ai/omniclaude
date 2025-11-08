@@ -553,6 +553,7 @@ def record_manifest_injection(
         status: Status (success, failure)
     """
     manifest_injection_counter.labels(agent_name=agent_name, status=status).inc()
+    manifest_injection_duration.labels(agent_name=agent_name).observe(total_duration)
     manifest_pattern_count.labels(collection="execution_patterns").observe(
         pattern_count
     )
