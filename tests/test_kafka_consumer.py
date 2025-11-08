@@ -44,12 +44,12 @@ def postgres_dsn():
     if dsn:
         return dsn
 
-    # Fallback to individual traceability DB environment variables
-    host = os.getenv("TRACEABILITY_DB_HOST", "localhost")
-    port = os.getenv("TRACEABILITY_DB_PORT", "5436")
-    user = os.getenv("TRACEABILITY_DB_USER", "postgres")
-    password = os.getenv("TRACEABILITY_DB_PASSWORD", "")  # Must be set in environment
-    database = os.getenv("TRACEABILITY_DB_NAME", "omninode_bridge")
+    # Fallback to standard PostgreSQL environment variables
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5436")
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "")  # Must be set in environment
+    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 

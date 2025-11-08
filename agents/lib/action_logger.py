@@ -71,6 +71,20 @@ except ImportError:
     SLACK_NOTIFIER_AVAILABLE = False
     logging.warning("SlackNotifier not available - error notifications disabled")
 
+# Import Prometheus metrics
+try:
+    from agents.lib.prometheus_metrics import (
+        action_log_counter,
+        action_log_duration,
+        action_log_errors_counter,
+        record_action_log,
+    )
+
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
+
 logger = logging.getLogger(__name__)
 
 
@@ -191,6 +205,15 @@ class ActionLogger:
         Returns:
             bool: True if logged successfully
         """
+        # Record Prometheus metrics
+        if PROMETHEUS_AVAILABLE and duration_ms is not None:
+            record_action_log(
+                agent_name=self.agent_name,
+                action_type="tool_call",
+                duration=duration_ms / 1000.0,  # Convert ms to seconds
+                status="success" if success else "failure",
+            )
+
         return await publish_tool_call(
             agent_name=self.agent_name,
             tool_name=tool_name,
@@ -246,6 +269,15 @@ class ActionLogger:
         Returns:
             bool: True if logged successfully
         """
+        # Record Prometheus metrics
+        if PROMETHEUS_AVAILABLE and duration_ms is not None:
+            record_action_log(
+                agent_name=self.agent_name,
+                action_type="decision",
+                duration=duration_ms / 1000.0,
+                status="success",
+            )
+
         return await publish_decision(
             agent_name=self.agent_name,
             decision_name=decision_name,
@@ -283,6 +315,12 @@ class ActionLogger:
             - SLACK_WEBHOOK_URL is configured
             - Notification passes throttling check
         """
+        # Record Prometheus metrics for errors
+        if PROMETHEUS_AVAILABLE:
+            action_log_errors_counter.labels(
+                agent_name=self.agent_name, error_type=error_type
+            ).inc()
+
         # Publish error event to Kafka
         kafka_success = await publish_error(
             agent_name=self.agent_name,

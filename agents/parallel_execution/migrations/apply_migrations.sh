@@ -13,12 +13,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Database configuration
-# Note: Set DB_PASSWORD environment variable for database access
+# Note: Set POSTGRES_PASSWORD environment variable for database access
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD}"
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Migration directory
 MIGRATIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,7 +35,7 @@ run_migration() {
 
     echo -e "${YELLOW}→${NC} Applying migration: ${GREEN}${migration_name}${NC}"
 
-    if PGPASSWORD="$DB_PASSWORD" psql \
+    if PGPASSWORD="$POSTGRES_PASSWORD" psql \
         -h "$DB_HOST" \
         -p "$DB_PORT" \
         -U "$DB_USER" \
@@ -55,7 +55,7 @@ run_migration() {
 verify_connection() {
     echo -e "${YELLOW}→${NC} Verifying database connection..."
 
-    if PGPASSWORD="$DB_PASSWORD" psql \
+    if PGPASSWORD="$POSTGRES_PASSWORD" psql \
         -h "$DB_HOST" \
         -p "$DB_PORT" \
         -U "$DB_USER" \
@@ -78,7 +78,7 @@ verify_connection() {
 check_existing_tables() {
     echo -e "${YELLOW}→${NC} Checking for existing tables..."
 
-    local tables=$(PGPASSWORD="$DB_PASSWORD" psql \
+    local tables=$(PGPASSWORD="$POSTGRES_PASSWORD" psql \
         -h "$DB_HOST" \
         -p "$DB_PORT" \
         -U "$DB_USER" \
@@ -147,7 +147,7 @@ main() {
         # Display table info
         echo ""
         echo -e "${BLUE}Created tables:${NC}"
-        PGPASSWORD="$DB_PASSWORD" psql \
+        PGPASSWORD="$POSTGRES_PASSWORD" psql \
             -h "$DB_HOST" \
             -p "$DB_PORT" \
             -U "$DB_USER" \

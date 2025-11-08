@@ -22,8 +22,8 @@ LOG_FILE="$HOOK_DIR/logs/quality_enforcer.log"
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
 
 # Database credentials for hook event logging (required from .env)
-# Set DB_PASSWORD in your .env file or environment
-export DB_PASSWORD="${DB_PASSWORD:-}"
+# Set POSTGRES_PASSWORD in your .env file or environment
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"

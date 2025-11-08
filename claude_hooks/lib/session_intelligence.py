@@ -317,10 +317,10 @@ def query_session_statistics() -> Dict[str, Any]:
         }
 
     try:
-        # Note: Set DB_PASSWORD environment variable for database access
+        # Note: Set POSTGRES_PASSWORD environment variable for database access
         import os
 
-        db_password = os.getenv("DB_PASSWORD", "")
+        db_password = os.getenv("POSTGRES_PASSWORD", "")
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         db = os.getenv("POSTGRES_DB", "omninode_bridge")

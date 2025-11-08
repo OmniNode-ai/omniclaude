@@ -37,7 +37,7 @@ DB_HOST="${POSTGRES_HOST}"
 DB_PORT="${POSTGRES_PORT}"
 DB_NAME="${POSTGRES_DATABASE}"
 DB_USER="${POSTGRES_USER}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Verify required variables are set
 missing_vars=()
@@ -45,7 +45,7 @@ missing_vars=()
 [ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
 [ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
 [ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
-[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
 
 if [ ${#missing_vars[@]} -gt 0 ]; then
     echo "❌ ERROR: Required environment variables not set in .env:"
@@ -115,7 +115,7 @@ check_prerequisites() {
     fi
 
     # Check database connection
-    if [ -z "$DB_PASSWORD" ]; then
+    if [ -z "$POSTGRES_PASSWORD" ]; then
         print_error "POSTGRES_PASSWORD not set in environment"
         missing_prereqs=1
     fi
@@ -164,7 +164,7 @@ check_self_transformation_rate() {
     "
 
     local rate
-    rate=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
+    rate=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
 
     if [ -z "$rate" ] || [ "$rate" = "" ]; then
         rate="0"
@@ -188,7 +188,7 @@ check_bypass_attempts() {
     "
 
     local count
-    count=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
+    count=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
 
     if [ -z "$count" ] || [ "$count" = "" ]; then
         count="0"
@@ -207,7 +207,7 @@ check_avg_confidence() {
     "
 
     local avg
-    avg=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
+    avg=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
 
     if [ -z "$avg" ] || [ "$avg" = "" ]; then
         avg="0"
@@ -253,7 +253,7 @@ check_frontend_accuracy() {
     "
 
     local accuracy
-    accuracy=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
+    accuracy=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
 
     if [ -z "$accuracy" ] || [ "$accuracy" = "" ]; then
         accuracy="100"
@@ -281,7 +281,7 @@ check_failure_rate() {
     "
 
     local rate
-    rate=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
+    rate=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$query" 2>/dev/null | tr -d ' ')
 
     if [ -z "$rate" ] || [ "$rate" = "" ]; then
         rate="0"
@@ -403,7 +403,7 @@ main() {
     print_info "Running comprehensive routing metrics queries..."
     echo ""
 
-    if PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$SQL_FILE" 2>&1 | tee -a "$LOG_FILE"; then
+    if PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$SQL_FILE" 2>&1 | tee -a "$LOG_FILE"; then
         print_success "Metrics report completed successfully"
     else
         print_error "Metrics report execution failed"

@@ -25,10 +25,10 @@ class HookEventLogger:
             connection_string: PostgreSQL connection string (uses default if None)
         """
         if connection_string is None:
-            # Note: Set DB_PASSWORD environment variable for database access
+            # Note: Set POSTGRES_PASSWORD environment variable for database access
             import os
 
-            db_password = os.getenv("DB_PASSWORD", "")
+            db_password = os.getenv("POSTGRES_PASSWORD", "")
             host = os.getenv("POSTGRES_HOST", "localhost")
             port = os.getenv("POSTGRES_PORT", "5436")
             db = os.getenv("POSTGRES_DB", "omninode_bridge")
