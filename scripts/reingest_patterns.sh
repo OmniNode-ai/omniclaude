@@ -63,11 +63,20 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
 fi
 
 # Source directories for pattern extraction
-SOURCE_DIRS=(
-    "/Volumes/PRO-G40/Code/omniclaude"
-    "/Volumes/PRO-G40/Code/Omniarchon"
-    "/Volumes/PRO-G40/Code/omnidash"
-)
+# Use environment variable PATTERN_SOURCE_DIRS if set, otherwise use portable defaults
+if [ -n "${PATTERN_SOURCE_DIRS:-}" ]; then
+    # User-provided source directories (colon-separated)
+    IFS=':' read -ra SOURCE_DIRS <<< "$PATTERN_SOURCE_DIRS"
+else
+    # Default: Use portable relative paths
+    # PROJECT_ROOT is already set above (omniclaude directory)
+    CODE_DIR="$(cd "$PROJECT_ROOT/.." && pwd)"
+    SOURCE_DIRS=(
+        "$PROJECT_ROOT"
+        "$CODE_DIR/Omniarchon"
+        "$CODE_DIR/omnidash"
+    )
+fi
 
 # Output files
 EXTRACTED_PATTERNS="/tmp/extracted_patterns.json"

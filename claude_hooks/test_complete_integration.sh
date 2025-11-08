@@ -7,7 +7,20 @@ echo "=========================================="
 echo "Complete Manifest Injection Test"
 echo "=========================================="
 
-PROJECT_PATH="/Volumes/PRO-G40/Code/omniclaude"
+# Portable path resolution
+# Use environment variable if set, otherwise compute from script location
+if [ -n "${PROJECT_PATH:-}" ]; then
+    # Use provided PROJECT_PATH
+    :
+elif [ -n "${PROJECT_ROOT:-}" ]; then
+    # Use PROJECT_ROOT if available
+    PROJECT_PATH="$PROJECT_ROOT"
+else
+    # Fallback: Compute from script location (claude_hooks/ -> project root)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
 MANIFEST_LOADER="$HOME/.claude/hooks/lib/manifest_loader.py"
 
 # Test 1: Verify manifest_loader.py exists

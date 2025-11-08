@@ -4,6 +4,17 @@
 
 set -euo pipefail
 
+# Portable path resolution
+if [ -n "${PROJECT_PATH:-}" ]; then
+    REPO_ROOT="$PROJECT_PATH"
+elif [ -n "${PROJECT_ROOT:-}" ]; then
+    REPO_ROOT="$PROJECT_ROOT"
+else
+    # Compute from script location (claude_hooks/ -> project root)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -79,11 +90,11 @@ echo
 
 # Test 3: Verify hook file syntax
 echo -n "Test 3: Verifying hook file syntax... "
-if bash -n /Volumes/PRO-G40/Code/omniclaude/claude_hooks/user-prompt-submit.sh 2>/dev/null; then
+if bash -n "$REPO_ROOT/claude_hooks/user-prompt-submit.sh" 2>/dev/null; then
     echo -e "${GREEN}✓ Syntax is valid${NC}"
 else
     echo -e "${RED}✗ Syntax error detected${NC}"
-    bash -n /Volumes/PRO-G40/Code/omniclaude/claude_hooks/user-prompt-submit.sh
+    bash -n "$REPO_ROOT/claude_hooks/user-prompt-submit.sh"
 fi
 echo
 

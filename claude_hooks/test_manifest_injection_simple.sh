@@ -3,17 +3,29 @@
 
 set -euo pipefail
 
+# Portable path resolution
+if [ -n "${PROJECT_PATH:-}" ]; then
+    REPO_ROOT="$PROJECT_PATH"
+elif [ -n "${PROJECT_ROOT:-}" ]; then
+    REPO_ROOT="$PROJECT_ROOT"
+else
+    # Compute from script location (claude_hooks/ -> project root)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
 echo "=========================================="
 echo "Testing Manifest Injection"
 echo "=========================================="
 
 # Test 1: Direct Python import
 echo -e "\nTest 1: Direct ManifestInjector import"
-python3 <<'PYTEST'
+REPO_ROOT="$REPO_ROOT" python3 <<'PYTEST'
 import sys
+import os
 from pathlib import Path
 
-agents_lib = Path("/Volumes/PRO-G40/Code/omniclaude/agents/lib")
+agents_lib = Path(os.environ.get("REPO_ROOT", os.getcwd())) / "agents" / "lib"
 sys.path.insert(0, str(agents_lib))
 
 from manifest_injector import inject_manifest
@@ -42,16 +54,40 @@ fi
 
 # Test 2: Test the exact snippet used in the hook
 echo -e "\nTest 2: Hook inline snippet"
-cd /Volumes/PRO-G40/Code/omniclaude
+cd "$REPO_ROOT"
 
 # Create a temporary test file
-cat > /tmp/test_manifest_inline.py <<'PYCODE'
+REPO_ROOT="$REPO_ROOT" python3 -c "import os; repo_root = os.environ.get('REPO_ROOT'); exec(open('/tmp/test_manifest_inline.py', 'w').write(f'''
 import sys
+import os
+from pathlib import Path
+
+# Add agents/lib to path (exactly as in hook)
+agents_lib_path = Path.home() / \".claude\" / \"agents\" / \"lib\"
+repo_agents_lib = Path(\"{repo_root}\") / \"agents\" / \"lib\"
+
+for lib_path in [agents_lib_path, repo_agents_lib]:
+    if lib_path.exists():
+        sys.path.insert(0, str(lib_path))
+        break
+
+try:
+    from manifest_injector import inject_manifest
+    manifest = inject_manifest()
+    print(manifest)
+except FileNotFoundError:
+    print(\"System Manifest: Not available (file not found)\")
+except Exception as e:
+    print(f\"System Manifest: Not available (error: {{e}})\")
+'''))" || cat > /tmp/test_manifest_inline.py <<PYCODE
+import sys
+import os
 from pathlib import Path
 
 # Add agents/lib to path (exactly as in hook)
 agents_lib_path = Path.home() / ".claude" / "agents" / "lib"
-repo_agents_lib = Path("/Volumes/PRO-G40/Code/omniclaude") / "agents" / "lib"
+repo_root = os.environ.get("REPO_ROOT", os.getcwd())
+repo_agents_lib = Path(repo_root) / "agents" / "lib"
 
 for lib_path in [agents_lib_path, repo_agents_lib]:
     if lib_path.exists():
@@ -86,7 +122,7 @@ echo -e "\n✓ Test 2 PASSED"
 
 # Test 3: Verify it works from hook directory
 echo -e "\nTest 3: From hook directory context"
-cd /Volumes/PRO-G40/Code/omniclaude/claude_hooks
+cd "$REPO_ROOT/claude_hooks"
 
 python3 /tmp/test_manifest_inline.py > /tmp/manifest_test_output.txt 2>&1
 
