@@ -4,13 +4,33 @@ Agent Polymorphic Transformation Helper
 
 Loads YAML agent configs and formats them for identity assumption.
 Enables agent-workflow-coordinator to transform into any agent.
+
+Now with integrated transformation event logging to Kafka for observability.
 """
 
+import asyncio
+import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 import yaml
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Import transformation event publisher
+try:
+    from agents.lib.transformation_event_publisher import publish_transformation_event
+
+    KAFKA_AVAILABLE = True
+except ImportError:
+    logger.warning(
+        "transformation_event_publisher not available, transformation events will not be logged"
+    )
+    KAFKA_AVAILABLE = False
 
 
 @dataclass
@@ -196,6 +216,135 @@ class AgentTransformer:
         """
         identity = self.load_agent(agent_name)
         return identity.format_assumption_prompt()
+
+    async def transform_with_logging(
+        self,
+        agent_name: str,
+        source_agent: str = "polymorphic-agent",
+        transformation_reason: Optional[str] = None,
+        correlation_id: Optional[str | UUID] = None,
+        user_request: Optional[str] = None,
+        routing_confidence: Optional[float] = None,
+        routing_strategy: Optional[str] = None,
+    ) -> str:
+        """
+        Load agent, log transformation event to Kafka, and return formatted prompt.
+
+        This is the RECOMMENDED method for transformations as it provides full observability.
+
+        Args:
+            agent_name: Agent to transform into
+            source_agent: Original agent identity (default: "polymorphic-agent")
+            transformation_reason: Why this transformation occurred
+            correlation_id: Request correlation ID for tracing
+            user_request: Original user request
+            routing_confidence: Router confidence score (0.0-1.0)
+            routing_strategy: Routing strategy used
+
+        Returns:
+            Formatted prompt for identity assumption
+        """
+        start_time = time.time()
+
+        try:
+            # Load agent identity
+            identity = self.load_agent(agent_name)
+
+            # Calculate transformation duration
+            transformation_duration_ms = int((time.time() - start_time) * 1000)
+
+            # Log transformation event to Kafka (async, non-blocking)
+            if KAFKA_AVAILABLE:
+                await publish_transformation_event(
+                    source_agent=source_agent,
+                    target_agent=identity.name,
+                    transformation_reason=transformation_reason
+                    or f"Transformed to {identity.name}",
+                    correlation_id=correlation_id,
+                    user_request=user_request,
+                    routing_confidence=routing_confidence,
+                    routing_strategy=routing_strategy,
+                    transformation_duration_ms=transformation_duration_ms,
+                    success=True,
+                    event_type="transformation_complete",
+                )
+                logger.debug(
+                    f"Logged transformation: {source_agent} → {identity.name} "
+                    f"(duration={transformation_duration_ms}ms)"
+                )
+            else:
+                logger.warning(
+                    f"Transformation {source_agent} → {identity.name} not logged (Kafka unavailable)"
+                )
+
+            return identity.format_assumption_prompt()
+
+        except Exception as e:
+            # Log failed transformation
+            transformation_duration_ms = int((time.time() - start_time) * 1000)
+
+            if KAFKA_AVAILABLE:
+                await publish_transformation_event(
+                    source_agent=source_agent,
+                    target_agent=agent_name,
+                    transformation_reason=transformation_reason
+                    or f"Attempted to transform to {agent_name}",
+                    correlation_id=correlation_id,
+                    user_request=user_request,
+                    routing_confidence=routing_confidence,
+                    routing_strategy=routing_strategy,
+                    transformation_duration_ms=transformation_duration_ms,
+                    success=False,
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                    event_type="transformation_failed",
+                )
+                logger.error(
+                    f"Logged failed transformation: {source_agent} → {agent_name} "
+                    f"(error={e})"
+                )
+
+            # Re-raise the exception
+            raise
+
+    def transform_sync_with_logging(
+        self,
+        agent_name: str,
+        source_agent: str = "polymorphic-agent",
+        transformation_reason: Optional[str] = None,
+        correlation_id: Optional[str | UUID] = None,
+        user_request: Optional[str] = None,
+        routing_confidence: Optional[float] = None,
+        routing_strategy: Optional[str] = None,
+    ) -> str:
+        """
+        Synchronous wrapper for transform_with_logging.
+
+        Use async version when possible. This creates event loop if needed.
+
+        Args:
+            Same as transform_with_logging
+
+        Returns:
+            Formatted prompt for identity assumption
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(
+            self.transform_with_logging(
+                agent_name=agent_name,
+                source_agent=source_agent,
+                transformation_reason=transformation_reason,
+                correlation_id=correlation_id,
+                user_request=user_request,
+                routing_confidence=routing_confidence,
+                routing_strategy=routing_strategy,
+            )
+        )
 
 
 def main():

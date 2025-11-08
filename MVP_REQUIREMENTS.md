@@ -904,9 +904,15 @@ pytest -v --cov=agents --cov-report=html
 8. ~~`agents/configs/*.yaml`~~ - ✅ All 52 configs exist at `/Users/jonah/.claude/agent-definitions/`
 9. ~~`.env.dev`, `.env.staging`, `.env.prod`~~ - ✅ `.env.example` template exists, environment files as needed
 
-**To Be Archived**:
-10. `MVP_READINESS_REPORT_FINAL.md` - Outdated (Oct 30)
-11. `MVP_COMPLETION_FINAL_2025-10-30.md` - Outdated (Oct 30)
+**Archived** (Deleted 2025-11-06):
+- ~~`MVP_READINESS_REPORT_FINAL.md`~~ - Deleted (outdated Oct 30, 2025)
+- ~~`MVP_COMPLETION_FINAL_2025-10-30.md`~~ - Deleted (outdated Oct 30, 2025)
+- ~~`docs/planning/MVP_READINESS_ASSESSMENT.md`~~ - Deleted (outdated Oct 27, 2025)
+- ~~`docs/planning/TEST_REPORT_AGENT_WORKFLOW_2025-10-30.md`~~ - Deleted (historical test report)
+- ~~`docs/planning/TEST_REPORT_TOOL_EXECUTION_LOGGING_2025-10-30.md`~~ - Deleted (historical test report)
+- ~~`agents/templates/EVENT_BUS_TEMPLATES_COMPLETION.md`~~ - Deleted (task completion artifact)
+- ~~`skills/senior-architect/project-management/IMPLEMENTATION_SUMMARY.md`~~ - Deleted (delivery summary)
+- ~~`skills/agent-tracking/IMPLEMENTATION_SUMMARY.md`~~ - Deleted (completion artifact)
 
 ---
 

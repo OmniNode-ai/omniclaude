@@ -85,11 +85,21 @@ def load_manifest(correlation_id: str = None, agent_name: str = None):
 
 
 if __name__ == "__main__":
-    # Test with explicit correlation ID and agent_name from environment
-    test_correlation_id = str(uuid4())
-    agent_name = os.environ.get("AGENT_NAME")
-    print(
-        f"Testing manifest load (correlation_id: {test_correlation_id}, agent_name: {agent_name})"
+    import argparse
+
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Load dynamic system manifest")
+    parser.add_argument("--correlation-id", help="Correlation ID for tracking")
+    parser.add_argument("--agent-name", help="Agent name for logging/traceability")
+    args = parser.parse_args()
+
+    # Get correlation_id from args, environment, or generate new one
+    correlation_id = (
+        args.correlation_id or os.environ.get("CORRELATION_ID") or str(uuid4())
     )
-    print("=" * 70)
-    print(load_manifest(test_correlation_id, agent_name))
+
+    # Get agent_name from args or environment (command-line takes precedence)
+    agent_name = args.agent_name or os.environ.get("AGENT_NAME")
+
+    # Load and print manifest
+    print(load_manifest(correlation_id, agent_name))

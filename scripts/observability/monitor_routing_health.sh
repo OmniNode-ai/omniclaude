@@ -21,18 +21,41 @@ LOG_DIR="$PROJECT_ROOT/logs/observability"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/routing_health_${TIMESTAMP}.log"
 
-# Load environment variables
-if [ -f "$PROJECT_ROOT/.env" ]; then
-    # shellcheck disable=SC1091
-    source "$PROJECT_ROOT/.env"
+# Load environment variables from .env
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
 fi
 
-# Database connection parameters
-DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
-DB_PORT="${POSTGRES_PORT:-5436}"
-DB_NAME="${POSTGRES_DB:-omninode_bridge}"
-DB_USER="${POSTGRES_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-}"
+# Source .env file
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/.env"
+
+# Database connection parameters (no fallbacks - must be set in .env)
+DB_HOST="${POSTGRES_HOST}"
+DB_PORT="${POSTGRES_PORT}"
+DB_NAME="${POSTGRES_DATABASE}"
+DB_USER="${POSTGRES_USER}"
+DB_PASSWORD="${POSTGRES_PASSWORD}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "❌ ERROR: Required environment variables not set in .env:"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
+fi
 
 # Thresholds
 SELF_TRANSFORMATION_THRESHOLD=10

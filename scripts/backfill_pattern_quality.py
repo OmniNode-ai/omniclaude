@@ -12,10 +12,12 @@ Usage:
     python3 scripts/backfill_pattern_quality.py --min-confidence 0.7
     python3 scripts/backfill_pattern_quality.py --batch-size 50 --delay 1.0
 
-Environment Variables:
-    QDRANT_URL: Qdrant server URL (default: http://localhost:6333)
-    QDRANT_API_KEY: Optional Qdrant API key
-    DATABASE_URL: PostgreSQL connection string (default: postgresql://localhost/omniclaude)
+Configuration:
+    All configuration values are loaded from the Pydantic settings module (config.settings).
+    This provides type-safe access to:
+    - QDRANT_URL: Qdrant server URL
+    - QDRANT_API_KEY: Optional Qdrant API key
+    - POSTGRES_*: PostgreSQL connection parameters
 
 Requirements:
     - qdrant-client: pip install qdrant-client
@@ -35,6 +37,9 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
+
+# Import Pydantic Settings for type-safe configuration
+from config import settings
 
 try:
     from qdrant_client import QdrantClient
@@ -237,16 +242,15 @@ Examples:
     parser.add_argument(
         "--qdrant-url",
         type=str,
-        default=os.getenv("QDRANT_URL", "http://localhost:6333"),
-        help="Qdrant server URL (default: env QDRANT_URL or http://localhost:6333)",
+        default=settings.qdrant_url,
+        help="Qdrant server URL (default: from Pydantic settings)",
     )
 
     parser.add_argument(
         "--database-url",
         type=str,
-        default=os.getenv("HOST_DATABASE_URL")
-        or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude"),
-        help="PostgreSQL connection string (default: env HOST_DATABASE_URL, DATABASE_URL, or postgresql://localhost/omniclaude)",
+        default=settings.get_postgres_dsn(),
+        help="PostgreSQL connection string (default: from Pydantic settings)",
     )
 
     return parser.parse_args(argv)
@@ -510,7 +514,7 @@ async def backfill_pattern_quality(args: argparse.Namespace) -> int:
 
     # Connect to Qdrant
     print("\n1. Connecting to Qdrant...")
-    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    qdrant_api_key = settings.qdrant_api_key
     client = connect_to_qdrant(args.qdrant_url, qdrant_api_key)
 
     # Determine collections to process

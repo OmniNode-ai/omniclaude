@@ -22,8 +22,10 @@ from datetime import datetime
 
 import requests
 
+from config import settings
+
 # Test configuration
-PHASE4_BASE_URL = "http://localhost:8053"
+PHASE4_BASE_URL = str(settings.archon_intelligence_url)
 TIMEOUT_SECONDS = 5
 
 

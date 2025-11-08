@@ -37,6 +37,8 @@ import httpx
 import psutil
 import yaml
 
+from config import settings
+
 
 class ProcessingMode(Enum):
     """Processing modes for pattern tracking."""
@@ -179,7 +181,7 @@ class PatternTrackerConfig:
         return self.get(
             "INTELLIGENCE_SERVICE_URL",
             ["pattern_tracking", "intelligence_url"],
-            "http://localhost:8053",
+            str(settings.archon_intelligence_url),
         )
 
     @property

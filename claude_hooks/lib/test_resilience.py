@@ -18,6 +18,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from config import settings
 from lib.resilience import (
     CircuitBreaker,
     PatternCache,
@@ -343,7 +345,7 @@ async def test_health_checker_healthy_api():
             return_value=mock_response
         )
 
-        checker = Phase4HealthChecker(base_url="http://localhost:8053")
+        checker = Phase4HealthChecker(base_url=str(settings.archon_intelligence_url))
         is_healthy = await checker.check_health(force=True)
 
         assert is_healthy is True
@@ -360,7 +362,7 @@ async def test_health_checker_unhealthy_api():
             side_effect=ConnectionError("Connection refused")
         )
 
-        checker = Phase4HealthChecker(base_url="http://localhost:8053")
+        checker = Phase4HealthChecker(base_url=str(settings.archon_intelligence_url))
         is_healthy = await checker.check_health(force=True)
 
         assert is_healthy is False
@@ -380,7 +382,7 @@ async def test_health_checker_caching():
         mock_client.return_value.__aenter__.return_value.get = mock_get
 
         checker = Phase4HealthChecker(
-            base_url="http://localhost:8053", check_interval=60
+            base_url=str(settings.archon_intelligence_url), check_interval=60
         )
 
         # First check
@@ -470,7 +472,7 @@ async def test_resilient_client_successful_tracking(tmp_path):
         mock_http.return_value.__aenter__.return_value = mock_client_instance
 
         # Create client
-        client = ResilientAPIClient(base_url="http://localhost:8053")
+        client = ResilientAPIClient(base_url=str(settings.archon_intelligence_url))
         client.cache.cache_dir = tmp_path / "cache"
 
         # Track pattern
@@ -494,7 +496,7 @@ async def test_resilient_client_caches_when_api_down(tmp_path):
         )
 
         # Create client
-        client = ResilientAPIClient(base_url="http://localhost:8053")
+        client = ResilientAPIClient(base_url=str(settings.archon_intelligence_url))
         client.cache.cache_dir = tmp_path / "cache"
 
         # Track pattern (should cache)
@@ -516,7 +518,7 @@ async def test_resilient_client_caches_when_api_down(tmp_path):
 @pytest.mark.asyncio
 async def test_resilient_client_stats():
     """Test resilient client statistics"""
-    client = ResilientAPIClient(base_url="http://localhost:8053")
+    client = ResilientAPIClient(base_url=str(settings.archon_intelligence_url))
 
     stats = await client.get_stats()
 
@@ -540,7 +542,7 @@ async def test_complete_resilience_workflow(tmp_path):
             side_effect=ConnectionError("Connection refused")
         )
 
-        client = ResilientAPIClient(base_url="http://localhost:8053")
+        client = ResilientAPIClient(base_url=str(settings.archon_intelligence_url))
         client.cache.cache_dir = tmp_path / "cache"
 
         # Track multiple patterns while API is down

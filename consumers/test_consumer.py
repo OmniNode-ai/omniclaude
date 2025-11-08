@@ -23,6 +23,10 @@ import psycopg2
 import requests
 from kafka import KafkaProducer
 
+# Add config for type-safe settings
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import settings
+
 # Add _shared to path
 SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
@@ -34,7 +38,7 @@ DB_CONFIG = {
     "port": 5436,
     "database": "omninode_bridge",
     "user": "postgres",
-    "password": "omninode-bridge-postgres-dev-2024",
+    "password": settings.get_effective_postgres_password(),
 }
 
 

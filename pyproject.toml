@@ -68,6 +68,13 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 88
 target-version = ['py312']
+exclude = '''
+/(
+    agents/templates
+  | agents/parallel_execution/templates
+  | skills
+)/
+'''
 
 [tool.isort]
 profile = "black"
@@ -103,6 +110,7 @@ exclude = [
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "C4", "PT", "RUF"]
 ignore = [
     "S101",      # Allow assert statements in tests
+    "ISC001",    # Implicit string concatenation (conflicts with formatter)
     "E501",      # Line too long (technical debt - will fix incrementally)
     "E402",      # Module level import not at top (technical debt)
     "F841",      # Unused variable (technical debt - demo files)

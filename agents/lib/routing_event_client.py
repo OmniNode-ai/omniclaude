@@ -49,10 +49,16 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
-# Add routing adapter schemas to path
-sys.path.insert(
-    0, str(PathLib(__file__).parent.parent.parent / "services" / "routing_adapter")
-)
+# CRITICAL: Add project root FIRST to avoid config module conflicts
+# There's a config module in agents/lib/config/ that conflicts with main config/
+_project_root = PathLib(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Add routing adapter schemas to path (AFTER project root)
+_routing_adapter_path = str(_project_root / "services" / "routing_adapter")
+if _routing_adapter_path not in sys.path:
+    sys.path.append(_routing_adapter_path)
 
 # Import routing event schemas
 try:
@@ -64,10 +70,26 @@ except ImportError as e:
     SCHEMAS_AVAILABLE = False
     logging.error(f"Failed to import routing schemas: {e}")
 
-sys.path.insert(0, str(PathLib.home() / ".claude" / "lib"))
-from kafka_config import get_kafka_bootstrap_servers
-
 logger = logging.getLogger(__name__)
+
+try:
+    from config import settings
+
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+    logging.warning(
+        "config.settings not available, falling back to environment variables"
+    )
+
+# Import Slack notifier for error notifications
+try:
+    from agents.lib.slack_notifier import get_slack_notifier
+
+    SLACK_NOTIFIER_AVAILABLE = True
+except ImportError:
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 
 class RoutingEventClient:
@@ -141,21 +163,23 @@ class RoutingEventClient:
                 "Ensure services/routing_adapter/schemas/ exists."
             )
 
-        # Bootstrap servers - use centralized configuration if not provided
-        self.bootstrap_servers = bootstrap_servers or get_kafka_bootstrap_servers()
+        # Bootstrap servers - use type-safe configuration if not provided
+        if bootstrap_servers:
+            self.bootstrap_servers = bootstrap_servers
+        elif SETTINGS_AVAILABLE:
+            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
+        else:
+            # This should not happen - settings should always be available
+            raise RuntimeError(
+                "config.settings not available. Cannot initialize RoutingEventClient.\n"
+                "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env"
+            )
+
         if not self.bootstrap_servers:
             raise ValueError(
-                "bootstrap_servers must be provided or set via environment variables.\n"
-                "Checked variables (in order):\n"
-                "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
-                "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
-                "  3. KAFKA_BROKERS (legacy compatibility)\n"
+                "bootstrap_servers must be provided or set via KAFKA_BOOTSTRAP_SERVERS in .env file.\n"
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
-                "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
-                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
-                    os.getenv("KAFKA_BROKERS", "not set"),
-                )
+                f"Current value from settings: {self.bootstrap_servers!r}"
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = (
@@ -274,6 +298,25 @@ class RoutingEventClient:
 
         except Exception as e:
             self.logger.error(f"Failed to start routing event client: {e}")
+
+            # Send Slack notification for Kafka connection failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    await notifier.send_error_notification(
+                        error=e,
+                        context={
+                            "service": "routing_event_client",
+                            "operation": "kafka_connection",
+                            "kafka_servers": self.bootstrap_servers,
+                            "consumer_group": self.consumer_group_id,
+                        },
+                    )
+                except Exception as notify_error:
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
+
             await self.stop()
             raise KafkaError(f"Failed to start Kafka client: {e}") from e
 
@@ -283,39 +326,69 @@ class RoutingEventClient:
 
         Stops producer and consumer, cleans up pending requests.
         Should be called when client is no longer needed.
+
+        Always attempts cleanup of all resources independently, even if
+        start() failed mid-execution or if cleanup of one resource fails.
         """
+        # Always run cleanup, even after partial startup failures
         if not self._started:
-            return
+            self.logger.info(
+                "Stopping routing event client after partial startup failure"
+            )
+        else:
+            self.logger.info("Stopping routing event client")
 
-        self.logger.info("Stopping routing event client")
+        # Track cleanup errors to report at the end
+        cleanup_errors = []
 
-        try:
-            # Stop producer
-            if self._producer is not None:
+        # Stop producer (independent error handling)
+        if self._producer is not None:
+            try:
                 await self._producer.stop()
+                self.logger.debug("Producer stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping producer: {e}")
+                cleanup_errors.append(f"producer: {e}")
+            finally:
                 self._producer = None
 
-            # Stop consumer
-            if self._consumer is not None:
+        # Stop consumer (independent error handling)
+        if self._consumer is not None:
+            try:
                 await self._consumer.stop()
+                self.logger.debug("Consumer stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping consumer: {e}")
+                cleanup_errors.append(f"consumer: {e}")
+            finally:
                 self._consumer = None
 
-            # Cancel pending requests
+        # Cancel pending requests (independent error handling)
+        try:
             for correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
                         RuntimeError("Client stopped while request pending")
                     )
             self._pending_requests.clear()
-
-            # Clear consumer ready flag for restart capability
-            self._consumer_ready.clear()
-
-            self._started = False
-            self.logger.info("Routing event client stopped successfully")
-
+            self.logger.debug("Pending requests cancelled")
         except Exception as e:
-            self.logger.error(f"Error stopping routing event client: {e}")
+            self.logger.error(f"Error cancelling pending requests: {e}")
+            cleanup_errors.append(f"pending_requests: {e}")
+
+        # Clear consumer ready flag for restart capability
+        self._consumer_ready.clear()
+
+        # Reset state
+        self._started = False
+
+        # Report final status
+        if cleanup_errors:
+            self.logger.warning(
+                f"Routing event client stopped with {len(cleanup_errors)} error(s): {', '.join(cleanup_errors)}"
+            )
+        else:
+            self.logger.info("Routing event client stopped successfully")
 
     async def health_check(self) -> bool:
         """
@@ -438,10 +511,32 @@ class RoutingEventClient:
 
             return result.get("recommendations", [])
 
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as e:
             self.logger.warning(
                 f"Routing request timeout (correlation_id: {correlation_id}, timeout: {timeout}ms)"
             )
+
+            # Send Slack notification for timeout (indicates potential Kafka/router service issues)
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    await notifier.send_error_notification(
+                        error=TimeoutError(
+                            f"Routing request timeout after {timeout}ms"
+                        ),
+                        context={
+                            "service": "routing_event_client",
+                            "operation": "routing_request",
+                            "correlation_id": correlation_id,
+                            "timeout_ms": timeout,
+                            "user_request": user_request[:200],
+                        },
+                    )
+                except Exception as notify_error:
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
+
             raise TimeoutError(
                 f"Routing request timeout after {timeout}ms (correlation_id: {correlation_id})"
             )
@@ -450,6 +545,25 @@ class RoutingEventClient:
             self.logger.error(
                 f"Routing request failed (correlation_id: {correlation_id}): {e}"
             )
+
+            # Send Slack notification for routing failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    await notifier.send_error_notification(
+                        error=e,
+                        context={
+                            "service": "routing_event_client",
+                            "operation": "routing_request",
+                            "correlation_id": correlation_id,
+                            "user_request": user_request[:200],
+                        },
+                    )
+                except Exception as notify_error:
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
+
             raise
 
     async def _publish_and_wait(
@@ -687,7 +801,15 @@ async def route_via_events(
         )
     """
     # Feature flag: USE_EVENT_ROUTING (default: True)
-    use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in ("true", "1", "yes")
+    if SETTINGS_AVAILABLE:
+        use_events = settings.use_event_routing
+    else:
+        # Fallback for when settings not available
+        use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
 
     if not use_events and fallback_to_local:
         # Skip events, go straight to local routing

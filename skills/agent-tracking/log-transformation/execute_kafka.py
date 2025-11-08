@@ -43,8 +43,10 @@ if agents_lib_path.exists():
 # Load .env file from project directory
 def load_env_file():
     """Load environment variables from project .env file."""
+    # Calculate project root from this file's location (skills/agent-tracking/log-transformation/)
+    project_root = Path(__file__).parent.parent.parent.parent.resolve()
     env_paths = [
-        Path("/Volumes/PRO-G40/Code/omniclaude/.env"),
+        project_root / ".env",
         Path.home() / "Code" / "omniclaude" / ".env",
     ]
 

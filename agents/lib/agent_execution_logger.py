@@ -30,9 +30,16 @@ from uuid import UUID, uuid4
 
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
-from .db import get_pg_pool
-from .kafka_rpk_client import RpkKafkaClient
-from .structured_logger import StructuredLogger
+try:
+    # Try relative imports first (for package usage)
+    from .db import get_pg_pool
+    from .kafka_rpk_client import RpkKafkaClient
+    from .structured_logger import StructuredLogger
+except ImportError:
+    # Fall back to absolute imports (for standalone usage)
+    from db import get_pg_pool
+    from kafka_rpk_client import RpkKafkaClient
+    from structured_logger import StructuredLogger
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None
@@ -157,12 +164,24 @@ class AgentExecutionLogger:
         if self._kafka_enabled:
             try:
                 self._kafka_client = RpkKafkaClient()
-                self.logger.debug("Kafka event publishing enabled")
+                self.logger.debug("Kafka event publishing enabled (using rpk)")
             except Exception as e:
-                self.logger.warning(
-                    "Kafka client initialization failed, disabling event publishing",
-                    metadata={"error": str(e)},
-                )
+                # Gracefully disable if docker/rpk is not available
+                # This is expected in environments without docker installed
+                error_str = str(e)
+                if "Docker executable not found" in error_str:
+                    self.logger.debug(
+                        "Kafka event publishing disabled (docker not available). "
+                        "This is normal for non-Docker environments.",
+                        metadata={
+                            "hint": "Set KAFKA_ENABLE_LOGGING=false to silence this message"
+                        },
+                    )
+                else:
+                    self.logger.warning(
+                        "Kafka client initialization failed, disabling event publishing",
+                        metadata={"error": error_str},
+                    )
                 self._kafka_enabled = False
 
     def _should_retry_db(self) -> bool:
@@ -325,7 +344,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             INSERT INTO agent_execution_logs (
                                 execution_id, correlation_id, session_id,
@@ -345,6 +364,12 @@ class AgentExecutionLogger:
                             self.claude_session_id,
                             self.terminal_id,
                         )
+                        # Check if INSERT succeeded
+                        rows_inserted = int(result.split()[2])
+                        if rows_inserted == 0:
+                            raise Exception(
+                                f"Failed to insert execution log for execution_id={self.execution_id}"
+                            )
                     self._handle_db_success()
                     self.logger.info(
                         "Agent execution started",
@@ -431,7 +456,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             UPDATE agent_execution_logs
                             SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
@@ -440,6 +465,12 @@ class AgentExecutionLogger:
                             json.dumps({"progress": progress_data}),
                             self.execution_id,
                         )
+                        # Check if UPDATE succeeded
+                        rows_updated = int(result.split()[1])
+                        if rows_updated == 0:
+                            raise Exception(
+                                f"No rows updated for progress tracking: execution_id={self.execution_id}"
+                            )
                     self._handle_db_success()
                     self.logger.info(
                         f"Agent progress: {stage}",
@@ -526,7 +557,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             UPDATE agent_execution_logs
                             SET
@@ -548,6 +579,12 @@ class AgentExecutionLogger:
                             json.dumps(final_metadata),
                             self.execution_id,
                         )
+                        # Check if UPDATE succeeded
+                        rows_updated = int(result.split()[1])
+                        if rows_updated == 0:
+                            raise Exception(
+                                f"No rows updated for completion tracking: execution_id={self.execution_id}"
+                            )
 
                     self._handle_db_success()
                     log_method = (

@@ -39,7 +39,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -56,10 +55,17 @@ except ImportError:
 agents_lib_path = Path(__file__).parent.parent / "agents" / "lib"
 sys.path.insert(0, str(agents_lib_path))
 
+# Add project root for config imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 # Import required modules
 from manifest_injector import ManifestInjector
 from relevance_scorer import RelevanceScorer
 from task_classifier import TaskClassifier, TaskContext
+
+# Import Pydantic Settings for type-safe configuration
+from config import settings
 
 
 @dataclass
@@ -113,43 +119,31 @@ class PerformanceBenchmark:
         self._verify_environment()
 
     def _verify_environment(self) -> None:
-        """Verify required environment variables and services."""
-        required_vars = [
-            "POSTGRES_HOST",
-            "POSTGRES_PORT",
-            "POSTGRES_USER",
-            "POSTGRES_PASSWORD",
-            "KAFKA_BOOTSTRAP_SERVERS",
-        ]
-
-        # Set default for QDRANT_URL if not set
+        """Verify required configuration from Pydantic settings."""
+        # Set QDRANT_URL in environment for legacy code compatibility
         if not os.environ.get("QDRANT_URL"):
-            qdrant_host = os.environ.get("QDRANT_HOST", "localhost")
-            qdrant_port = os.environ.get("QDRANT_PORT", "6333")
-            os.environ["QDRANT_URL"] = f"http://{qdrant_host}:{qdrant_port}"
-            print(f"ℹ️  Using default QDRANT_URL: {os.environ['QDRANT_URL']}")
+            os.environ["QDRANT_URL"] = str(settings.qdrant_url)
+            print(
+                f"ℹ️  Using QDRANT_URL from Pydantic settings: {os.environ['QDRANT_URL']}"
+            )
 
-        missing = []
-        for var in required_vars:
-            if not os.environ.get(var):
-                missing.append(var)
+        # Validate required settings
+        validation_errors = settings.validate_required_services()
 
-        if missing:
-            print(f"❌ Missing required environment variables: {', '.join(missing)}")
-            print("   Available variables:")
-            for var in [
-                "POSTGRES_HOST",
-                "POSTGRES_PORT",
-                "KAFKA_BOOTSTRAP_SERVERS",
-                "QDRANT_URL",
-            ]:
-                value = os.environ.get(var, "(not set)")
-                print(f"      {var}={value}")
+        if validation_errors:
+            print(f"❌ Configuration validation failed:")
+            for error in validation_errors:
+                print(f"   - {error}")
+            print("\n   Available configuration:")
+            print(f"      POSTGRES_HOST={settings.postgres_host}")
+            print(f"      POSTGRES_PORT={settings.postgres_port}")
+            print(f"      KAFKA_BOOTSTRAP_SERVERS={settings.kafka_bootstrap_servers}")
+            print(f"      QDRANT_URL={settings.qdrant_url}")
             print("\n   Ensure .env file exists with proper configuration")
             print("   Or run: source .env")
             sys.exit(1)
 
-        print("✅ Environment variables verified")
+        print("✅ Configuration validated from Pydantic settings")
 
     async def benchmark_task_classification(self, prompt: str) -> float:
         """

@@ -51,8 +51,7 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
-sys.path.insert(0, str(PathLib.home() / ".claude" / "lib"))
-from kafka_config import get_kafka_bootstrap_servers
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +113,9 @@ class IntelligenceEventClient:
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
         # Bootstrap servers - use centralized configuration if not provided
-        self.bootstrap_servers = bootstrap_servers or get_kafka_bootstrap_servers()
+        self.bootstrap_servers = (
+            bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
+        )
         if not self.bootstrap_servers:
             raise ValueError(
                 "bootstrap_servers must be provided or set via environment variables.\n"
@@ -124,7 +125,7 @@ class IntelligenceEventClient:
                 "  3. KAFKA_BROKERS (legacy compatibility)\n"
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
                 "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
+                    getattr(settings, "kafka_bootstrap_servers", "not set"),
                     os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
                     os.getenv("KAFKA_BROKERS", "not set"),
                 )

@@ -29,14 +29,14 @@ WITH transformation_stats AS (
         COUNT(*) FILTER (
             WHERE source_agent = 'polymorphic-agent'
             AND target_agent = 'polymorphic-agent'
-            AND created_at > NOW() - INTERVAL '24 hours'
+            AND started_at > NOW() - INTERVAL '24 hours'
         ) as self_transformations_24h,
         COUNT(*) FILTER (
             WHERE source_agent = 'polymorphic-agent'
-            AND created_at > NOW() - INTERVAL '24 hours'
+            AND started_at > NOW() - INTERVAL '24 hours'
         ) as total_transformations_24h
     FROM agent_transformation_events
-    WHERE created_at > NOW() - INTERVAL '7 days'
+    WHERE started_at > NOW() - INTERVAL '7 days'
 )
 SELECT
     self_transformations,
@@ -399,7 +399,7 @@ LIMIT 10;
 \echo '=== METRIC 7: Transformations Per Hour (Last 24h) ==='
 
 SELECT
-    DATE_TRUNC('hour', created_at) as hour,
+    DATE_TRUNC('hour', started_at) as hour,
     COUNT(*) as total_transformations,
     COUNT(*) FILTER (
         WHERE source_agent = 'polymorphic-agent'
@@ -411,8 +411,8 @@ SELECT
     ) as self_transformations,
     ROUND(AVG(transformation_duration_ms), 2) as avg_duration_ms
 FROM agent_transformation_events
-WHERE created_at > NOW() - INTERVAL '24 hours'
-GROUP BY DATE_TRUNC('hour', created_at)
+WHERE started_at > NOW() - INTERVAL '24 hours'
+GROUP BY DATE_TRUNC('hour', started_at)
 ORDER BY hour DESC;
 
 \echo ''
@@ -437,27 +437,27 @@ SELECT
         END,
         2
     ) as cache_hit_rate_pct,
-    ROUND(AVG(routing_duration_ms), 2) as avg_routing_duration_ms,
-    ROUND(CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY routing_duration_ms) AS numeric), 2) as p50_routing_ms,
-    ROUND(CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_duration_ms) AS numeric), 2) as p95_routing_ms,
-    ROUND(CAST(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY routing_duration_ms) AS numeric), 2) as p99_routing_ms,
-    ROUND(AVG(candidates_evaluated), 2) as avg_candidates_evaluated
+    ROUND(AVG(total_routing_time_us / 1000.0), 2) as avg_routing_time_ms,
+    ROUND(CAST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_routing_time_us / 1000.0) AS numeric), 2) as p50_routing_ms,
+    ROUND(CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_routing_time_us / 1000.0) AS numeric), 2) as p95_routing_ms,
+    ROUND(CAST(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY total_routing_time_us / 1000.0) AS numeric), 2) as p99_routing_ms,
+    ROUND(AVG(alternatives_count), 2) as avg_alternatives_evaluated
 FROM router_performance_metrics
-WHERE created_at > NOW() - INTERVAL '7 days';
+WHERE measured_at > NOW() - INTERVAL '7 days';
 
 \echo ''
-\echo 'Performance by Trigger Match Strategy:'
+\echo 'Performance by Selection Strategy:'
 
 SELECT
-    trigger_match_strategy,
+    selection_strategy,
     COUNT(*) as count,
-    ROUND(AVG(routing_duration_ms), 2) as avg_duration_ms,
-    ROUND(CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_duration_ms) AS numeric), 2) as p95_duration_ms,
-    ROUND(AVG(candidates_evaluated), 2) as avg_candidates
+    ROUND(AVG(total_routing_time_us / 1000.0), 2) as avg_duration_ms,
+    ROUND(CAST(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_routing_time_us / 1000.0) AS numeric), 2) as p95_duration_ms,
+    ROUND(AVG(alternatives_count), 2) as avg_alternatives
 FROM router_performance_metrics
-WHERE created_at > NOW() - INTERVAL '7 days'
-AND trigger_match_strategy IS NOT NULL
-GROUP BY trigger_match_strategy
+WHERE measured_at > NOW() - INTERVAL '7 days'
+AND selection_strategy IS NOT NULL
+GROUP BY selection_strategy
 ORDER BY count DESC;
 
 \echo ''
@@ -479,7 +479,7 @@ WITH metrics AS (
             2
         ) as self_transformation_rate
     FROM agent_transformation_events
-    WHERE created_at > NOW() - INTERVAL '7 days'
+    WHERE started_at > NOW() - INTERVAL '7 days'
 ),
 routing_metrics AS (
     SELECT

@@ -150,9 +150,12 @@ REFACTORING_SYSTEM_PROMPT = """You are an expert code refactoring agent speciali
 **Your Task:**
 Analyze code thoroughly and provide actionable refactoring recommendations with clear before/after examples."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 refactoring_agent = Agent[AgentDeps, RefactoringPlan](
-    "google-gla:gemini-2.5-flash",
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=RefactoringPlan,
     system_prompt=REFACTORING_SYSTEM_PROMPT,
@@ -355,7 +358,7 @@ class RefactoringAgent:
                 "code_smells": refactoring_plan.code_smells,
                 "intelligence_gathered": intelligence,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 3,
                 },

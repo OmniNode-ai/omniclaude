@@ -49,6 +49,7 @@ class TestHealthCheckerDatabaseHealth:
         """Test degraded status when database responds slowly."""
         with patch("agents.lib.health_checker.get_pg_pool") as mock_pool:
             mock_conn = AsyncMock()
+
             # Simulate slow query response
             async def slow_fetchval(*args):
                 await asyncio.sleep(0.06)  # 60ms - above 50ms threshold
@@ -75,7 +76,10 @@ class TestHealthCheckerDatabaseHealth:
             assert result.healthy is True  # Still functional but slow
             assert "responding slowly" in result.message
             assert "query_latency_ms" in result.metadata
-            assert result.metadata["query_latency_ms"] > health_checker.config.database_max_latency_ms
+            assert (
+                result.metadata["query_latency_ms"]
+                > health_checker.config.database_max_latency_ms
+            )
 
     @pytest.mark.asyncio
     async def test_database_health_check_timeout(self, health_checker):
@@ -676,9 +680,7 @@ class TestHealthCheckerSystemHealth:
             assert "database" in results
             # Other components should have exception results
             critical_results = [
-                r
-                for r in results.values()
-                if r.status == HealthCheckStatus.CRITICAL
+                r for r in results.values() if r.status == HealthCheckStatus.CRITICAL
             ]
             assert len(critical_results) > 0
 
@@ -708,7 +710,9 @@ class TestHealthCheckerSystemHealth:
     async def test_system_health_check_unexpected_exception(self, health_checker):
         """Test system health check with unexpected exception."""
         with patch.object(
-            health_checker, "check_database_health", side_effect=ValueError("Unexpected error")
+            health_checker,
+            "check_database_health",
+            side_effect=ValueError("Unexpected error"),
         ):
             results = await health_checker.check_system_health()
 

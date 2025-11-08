@@ -44,11 +44,14 @@ def default_validator():
 
 
 @pytest.fixture
-def custom_config_validator():
+def custom_config_validator(monkeypatch):
     """Create validator with custom config"""
+    # Mock settings to provide custom values
+    from config import settings
+
+    monkeypatch.setattr(settings, "quality_threshold", 0.9)
+    monkeypatch.setattr(settings, "onex_compliance_threshold", 0.8)
     config = CodegenConfig()
-    config.quality_threshold = 0.9
-    config.onex_compliance_threshold = 0.8
     return QualityValidator(config=config)
 
 
@@ -1454,17 +1457,21 @@ class NodeTest
         assert any("syntax" in v.lower() for v in result.violations)
 
     @pytest.mark.asyncio
-    async def test_low_quality_score_fails_validation(self, default_validator):
+    async def test_low_quality_score_fails_validation(
+        self, default_validator, monkeypatch
+    ):
         """Test that low quality scores fail validation"""
         code = """
 class BadCode:
     def method(self, x):
         return x
 """
-        # Use stricter config
+        # Use stricter config by mocking settings
+        from config import settings
+
+        monkeypatch.setattr(settings, "quality_threshold", 0.95)
+        monkeypatch.setattr(settings, "onex_compliance_threshold", 0.95)
         config = CodegenConfig()
-        config.quality_threshold = 0.95
-        config.onex_compliance_threshold = 0.95
         validator = QualityValidator(config=config)
 
         result = await validator.validate_generated_code(
@@ -1653,7 +1660,7 @@ class TestEventDrivenIntegration:
         with pytest.raises(OnexError) as exc_info:
             await default_validator.wait_for_validation_response(correlation_id)
 
-        assert exc_info.value.code == EnumCoreErrorCode.NOT_IMPLEMENTED
+        assert exc_info.value.error_code == EnumCoreErrorCode.METHOD_NOT_IMPLEMENTED
 
 
 # ============================================================================
@@ -1678,10 +1685,15 @@ class TestConvenienceFunction:
         assert result.quality_score >= 0.0
 
     @pytest.mark.asyncio
-    async def test_validate_code_with_custom_config(self, valid_effect_code):
+    async def test_validate_code_with_custom_config(
+        self, valid_effect_code, monkeypatch
+    ):
         """Test convenience function with custom config"""
+        # Mock settings to provide custom values
+        from config import settings
+
+        monkeypatch.setattr(settings, "quality_threshold", 0.95)
         config = CodegenConfig()
-        config.quality_threshold = 0.95
 
         result = await validate_code(
             code=valid_effect_code,

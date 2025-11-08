@@ -9,6 +9,8 @@ import uuid
 
 import requests
 
+from config import settings
+
 
 def test_basic_performance():
     """Test basic performance improvements."""
@@ -56,7 +58,7 @@ def test_basic_performance():
 
     # Test 2: HTTP Connection Pooling Performance
     print("\n📊 Test 2: HTTP Connection Performance")
-    base_url = "http://localhost:8053"
+    base_url = str(settings.archon_intelligence_url)
 
     # Without connection pooling
     start_time = time.time()
@@ -90,7 +92,7 @@ def test_basic_performance():
     class SimpleTracker:
         def __init__(self):
             self.session_id = str(uuid.uuid4())
-            self.base_url = "http://localhost:8053"
+            self.base_url = str(settings.archon_intelligence_url)
             self.timeout = 5
             self._pattern_id_cache = {}
             self._metrics = {"total_requests": 0, "cache_hits": 0, "total_time": 0}

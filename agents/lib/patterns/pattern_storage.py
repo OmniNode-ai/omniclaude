@@ -22,6 +22,9 @@ import logging
 from datetime import datetime
 from typing import Any
 
+# Import Pydantic Settings for type-safe configuration
+from config import settings
+
 from ..models.model_code_pattern import ModelCodePattern, ModelPatternMatch
 
 logger = logging.getLogger(__name__)
@@ -50,7 +53,7 @@ class PatternStorage:
 
     def __init__(
         self,
-        qdrant_url: str = "http://localhost:6333",
+        qdrant_url: str | None = None,
         collection_name: str = "code_generation_patterns",
         use_in_memory: bool = False,
     ) -> None:
@@ -58,10 +61,13 @@ class PatternStorage:
         Initialize pattern storage.
 
         Args:
-            qdrant_url: Qdrant server URL
+            qdrant_url: Qdrant server URL (defaults to settings.qdrant_url if not provided)
             collection_name: Collection name for patterns
             use_in_memory: Use in-memory storage instead of Qdrant
         """
+        # Use Pydantic settings if qdrant_url not explicitly provided
+        if qdrant_url is None:
+            qdrant_url = settings.qdrant_url
         self.qdrant_url = qdrant_url
         self.collection_name = collection_name
         self.use_in_memory = use_in_memory
@@ -479,8 +485,9 @@ class PatternStorage:
         Returns:
             Integer ID
         """
-        # Use first 8 bytes of MD5 hash
-        hash_bytes = hashlib.md5(pattern_id.encode()).digest()[:8]
+        # Use first 8 bytes of SHA256 hash (B324 fix - replaced MD5 with SHA256)
+        # This is non-cryptographic use (just deterministic ID generation)
+        hash_bytes = hashlib.sha256(pattern_id.encode()).digest()[:8]
         return int.from_bytes(hash_bytes, byteorder="big") % (2**63 - 1)
 
     async def get_storage_stats(self) -> dict[str, Any]:

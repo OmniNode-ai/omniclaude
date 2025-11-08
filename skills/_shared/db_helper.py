@@ -14,15 +14,17 @@ from typing import Any, Dict, Optional, Tuple
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
+# Add config for type-safe settings
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+from config import settings
+
 # Database configuration
 DB_CONFIG = {
     "host": os.environ.get("POSTGRES_HOST", "localhost"),
     "port": int(os.environ.get("POSTGRES_PORT", "5436")),
     "database": os.environ.get("POSTGRES_DB", "omninode_bridge"),
     "user": os.environ.get("POSTGRES_USER", "postgres"),
-    "password": os.environ.get(
-        "POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024"
-    ),
+    "password": settings.get_effective_postgres_password(),
 }
 
 # Connection pool (lazy initialization)

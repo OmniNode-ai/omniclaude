@@ -51,6 +51,12 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,9 +75,15 @@ class IntelligenceCache:
             redis_url: Valkey connection URL (default: from env)
             enabled: Enable/disable caching (default: True)
         """
-        self.enabled = (
-            enabled and os.getenv("ENABLE_INTELLIGENCE_CACHE", "true").lower() == "true"
-        )
+        # Use Pydantic Settings if available, otherwise fall back to os.getenv
+        if settings is not None:
+            cache_enabled_str = str(settings.enable_intelligence_cache).lower()
+            self.enabled = enabled and cache_enabled_str == "true"
+        else:
+            self.enabled = (
+                enabled
+                and os.getenv("ENABLE_INTELLIGENCE_CACHE", "true").lower() == "true"
+            )
 
         if not self.enabled:
             logger.info("Intelligence cache disabled via configuration")
@@ -79,25 +91,44 @@ class IntelligenceCache:
 
         # Default uses Docker hostname (archon-valkey:6379); override with VALKEY_URL in .env for localhost development
         # Password 'archon_cache_2025' is Docker default; change via VALKEY_URL for production deployments
-        self.redis_url = redis_url or os.getenv(
-            "VALKEY_URL",
-            "redis://:archon_cache_2025@archon-valkey:6379/0",
-        )
+        if settings is not None:
+            self.redis_url = redis_url or settings.valkey_url
+        else:
+            self.redis_url = redis_url or os.getenv(
+                "VALKEY_URL",
+                "redis://:archon_cache_2025@archon-valkey:6379/0",
+            )
         self._client: Optional[Any] = None
 
         # Default TTLs by operation type (in seconds)
-        self._default_ttls: Dict[str, int] = {
-            "pattern_discovery": int(os.getenv("CACHE_TTL_PATTERNS", "300")),  # 5 min
-            "infrastructure_query": int(
-                os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")
-            ),  # 1 hour
-            "schema_query": int(os.getenv("CACHE_TTL_SCHEMAS", "1800")),  # 30 min
-            "model_query": int(os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")),  # 1 hour
-            "debug_intelligence_query": int(
-                os.getenv("CACHE_TTL_PATTERNS", "300")
-            ),  # 5 min
-            "filesystem_query": int(os.getenv("CACHE_TTL_PATTERNS", "300")),  # 5 min
-        }
+        if settings is not None:
+            self._default_ttls: Dict[str, int] = {
+                "pattern_discovery": settings.cache_ttl_patterns,
+                "infrastructure_query": settings.cache_ttl_infrastructure,
+                "schema_query": settings.cache_ttl_schemas,
+                "model_query": settings.cache_ttl_infrastructure,
+                "debug_intelligence_query": settings.cache_ttl_patterns,
+                "filesystem_query": settings.cache_ttl_patterns,
+            }
+        else:
+            self._default_ttls: Dict[str, int] = {
+                "pattern_discovery": int(
+                    os.getenv("CACHE_TTL_PATTERNS", "300")
+                ),  # 5 min
+                "infrastructure_query": int(
+                    os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")
+                ),  # 1 hour
+                "schema_query": int(os.getenv("CACHE_TTL_SCHEMAS", "1800")),  # 30 min
+                "model_query": int(
+                    os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")
+                ),  # 1 hour
+                "debug_intelligence_query": int(
+                    os.getenv("CACHE_TTL_PATTERNS", "300")
+                ),  # 5 min
+                "filesystem_query": int(
+                    os.getenv("CACHE_TTL_PATTERNS", "300")
+                ),  # 5 min
+            }
 
         logger.info(
             f"Intelligence cache initialized: enabled={self.enabled}, url={self.redis_url}"

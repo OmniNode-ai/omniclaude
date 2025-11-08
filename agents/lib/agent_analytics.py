@@ -293,10 +293,27 @@ class AgentAnalytics:
                 recommendations = []
                 for row in agent_performance:
                     # Calculate confidence score based on success rate and consistency
-                    success_rate = row["success_rate_percent"] or 0
-                    duration_consistency = 1.0 - (row["duration_stddev"] or 0) / max(
-                        row["avg_duration_ms"] or 1, 1
+                    # Use explicit None checks to preserve zero values
+                    success_rate = (
+                        row["success_rate_percent"]
+                        if row["success_rate_percent"] is not None
+                        else 0
                     )
+
+                    # Handle duration consistency calculation safely
+                    duration_stddev = (
+                        row["duration_stddev"]
+                        if row["duration_stddev"] is not None
+                        else 0
+                    )
+                    avg_duration = (
+                        row["avg_duration_ms"]
+                        if row["avg_duration_ms"] is not None
+                        else 1
+                    )
+                    # Avoid division by zero: use 1ms minimum for avg_duration
+                    avg_duration = max(avg_duration, 1)
+                    duration_consistency = 1.0 - duration_stddev / avg_duration
                     confidence_score = (
                         success_rate / 100.0
                     ) * 0.7 + duration_consistency * 0.3
@@ -401,27 +418,56 @@ class AgentAnalytics:
                     first_half = trends[: len(trends) // 2]
                     second_half = trends[len(trends) // 2 :]
 
+                    # Use explicit None checks to preserve zero values
                     first_avg_success = (
-                        sum(row["success_rate_percent"] or 0 for row in first_half)
+                        sum(
+                            (
+                                row["success_rate_percent"]
+                                if row["success_rate_percent"] is not None
+                                else 0
+                            )
+                            for row in first_half
+                        )
                         / len(first_half)
                         if first_half
                         else 0
                     )
                     second_avg_success = (
-                        sum(row["success_rate_percent"] or 0 for row in second_half)
+                        sum(
+                            (
+                                row["success_rate_percent"]
+                                if row["success_rate_percent"] is not None
+                                else 0
+                            )
+                            for row in second_half
+                        )
                         / len(second_half)
                         if second_half
                         else 0
                     )
 
                     first_avg_duration = (
-                        sum(row["avg_duration_ms"] or 0 for row in first_half)
+                        sum(
+                            (
+                                row["avg_duration_ms"]
+                                if row["avg_duration_ms"] is not None
+                                else 0
+                            )
+                            for row in first_half
+                        )
                         / len(first_half)
                         if first_half
                         else 0
                     )
                     second_avg_duration = (
-                        sum(row["avg_duration_ms"] or 0 for row in second_half)
+                        sum(
+                            (
+                                row["avg_duration_ms"]
+                                if row["avg_duration_ms"] is not None
+                                else 0
+                            )
+                            for row in second_half
+                        )
                         / len(second_half)
                         if second_half
                         else 0

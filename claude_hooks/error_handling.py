@@ -25,6 +25,8 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from config import settings
+
 
 class PatternTrackingLogger:
     def __init__(self, log_file: Optional[str] = None):
@@ -114,9 +116,7 @@ class PatternTrackingErrorHandler:
         # Specific handling for different error types
         if isinstance(error, requests.exceptions.ConnectError):
             error_category = "connection"
-            suggestion = (
-                "Check if the Phase 4 intelligence service is running on localhost:8053"
-            )
+            suggestion = "Check if the Phase 4 intelligence service is running (configured via settings.archon_intelligence_url)"
             retry_suggested = True
             retry_delay_seconds = 5
 

@@ -10,7 +10,7 @@ Performance:
 - Graceful fallback to keyword-only scoring on error
 
 Reference:
-/Volumes/PRO-G40/Code/omniarchon/docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
+See omniarchon repository: docs/api/PATTERN_LEARNING_API_FOR_OMNICLAUDE.md
 """
 
 import asyncio
@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from agents.lib.task_classifier import TaskContext
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class ArchonHybridScorer:
 
     def __init__(
         self,
-        archon_url: str = "http://localhost:8053",
+        archon_url: str = None,
         timeout: float = 5.0,
         max_retries: int = 2,
         enable_fallback: bool = True,
@@ -60,13 +61,15 @@ class ArchonHybridScorer:
         Initialize Archon hybrid scorer.
 
         Args:
-            archon_url: Archon Intelligence Service URL
+            archon_url: Archon Intelligence Service URL (defaults to settings.archon_intelligence_url)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             enable_fallback: Enable keyword-only fallback on error
         """
-        self.archon_url = archon_url
-        self.hybrid_score_endpoint = f"{archon_url}/api/pattern-learning/hybrid/score"
+        self.archon_url = archon_url or str(settings.archon_intelligence_url)
+        self.hybrid_score_endpoint = (
+            f"{self.archon_url}/api/pattern-learning/hybrid/score"
+        )
         self.timeout = timeout
         self.max_retries = max_retries
         self.enable_fallback = enable_fallback

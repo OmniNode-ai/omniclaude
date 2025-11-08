@@ -4,6 +4,19 @@
 
 set -e  # Exit on error
 
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
+fi
+
+# Source .env file
+source "$PROJECT_ROOT/.env"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -11,14 +24,33 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-KAFKA_BROKER=${KAFKA_BROKERS:-"localhost:29092"}
+# Configuration (no fallbacks - must be set in .env)
+KAFKA_BROKER="${KAFKA_BOOTSTRAP_SERVERS}"
 KAFKA_TOPIC="agent-actions"
-POSTGRES_HOST=${POSTGRES_HOST:-"localhost"}
-POSTGRES_PORT=${POSTGRES_PORT:-"5436"}
-POSTGRES_USER=${POSTGRES_USER:-"postgres"}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"omninode-bridge-postgres-dev-2024"}
-POSTGRES_DB=${POSTGRES_DATABASE:-"omninode_bridge"}
+POSTGRES_HOST="${POSTGRES_HOST}"
+POSTGRES_PORT="${POSTGRES_PORT}"
+POSTGRES_USER="${POSTGRES_USER}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+POSTGRES_DB="${POSTGRES_DATABASE}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$KAFKA_BROKER" ] && missing_vars+=("KAFKA_BOOTSTRAP_SERVERS")
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$POSTGRES_DB" ] && missing_vars+=("POSTGRES_DATABASE")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
+fi
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}🔍 Kafka Agent Logging Setup Validator${NC}"

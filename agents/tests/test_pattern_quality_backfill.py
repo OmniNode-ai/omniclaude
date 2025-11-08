@@ -623,28 +623,82 @@ def test_quality_stats_distribution():
 
 
 def test_database_url_environment_variable_priority():
-    """Test DATABASE_URL environment variable resolution priority."""
+    """Test Pydantic Settings environment variable priority for PostgreSQL DSN."""
     import os
 
-    # Test HOST_DATABASE_URL takes priority
+    from config import reload_settings
+
+    # Pydantic Settings priority (highest to lowest):
+    # 1. System environment variables (highest)
+    # 2. .env.{ENVIRONMENT} file
+    # 3. .env file (lowest)
+    #
+    # This test verifies system environment variables override .env file values
+    # Test that system environment variables override .env file
     with patch.dict(
         os.environ,
         {
-            "HOST_DATABASE_URL": "postgresql://host_url",
-            "DATABASE_URL": "postgresql://default_url",
+            "POSTGRES_HOST": "test-host",
+            "POSTGRES_PORT": "5555",
+            "POSTGRES_DATABASE": "test-db",
+            "POSTGRES_USER": "test-user",
+            "POSTGRES_PASSWORD": "test-password",
+        },
+        # Don't clear=True to keep other env vars that Settings needs
+    ):
+        # Force reload settings to pick up new environment variables
+        settings = reload_settings()
+
+        # Verify DSN is constructed from environment variables (not .env file)
+        dsn = settings.get_postgres_dsn()
+        assert "test-host" in dsn
+        assert "5555" in dsn
+        assert "test-db" in dsn
+        assert "test-user" in dsn
+        assert "test-password" in dsn
+        expected_dsn = "postgresql://test-user:test-password@test-host:5555/test-db"
+        assert dsn == expected_dsn
+
+    # Test command-line argument override (argparse default vs command-line)
+    with patch.dict(
+        os.environ,
+        {
+            "POSTGRES_HOST": "env-host",
+            "POSTGRES_PORT": "5432",
+            "POSTGRES_DATABASE": "env-db",
+            "POSTGRES_USER": "env-user",
+            "POSTGRES_PASSWORD": "env-password",
         },
     ):
+        # Force reload settings for new environment
+        import importlib
+        import sys
+
+        from config import get_settings
+
+        # Clear cache and reload all related modules
+        get_settings.cache_clear()
+        if "config.settings" in sys.modules:
+            importlib.reload(sys.modules["config.settings"])
+        if "config" in sys.modules:
+            importlib.reload(sys.modules["config"])
+
+        # Now reload backfill module to pick up new settings
+        # (argparse defaults are set at module import time)
+        if "scripts.backfill_pattern_quality" in sys.modules:
+            importlib.reload(sys.modules["scripts.backfill_pattern_quality"])
+
         from scripts.backfill_pattern_quality import parse_args
 
-        args = parse_args(["--dry-run"])
-        assert args.database_url == "postgresql://host_url"
+        # Command-line argument should override settings default
+        args = parse_args(["--dry-run", "--database-url", "postgresql://cli-override"])
+        assert args.database_url == "postgresql://cli-override"
 
-    # Test DATABASE_URL fallback
-    with patch.dict(
-        os.environ, {"DATABASE_URL": "postgresql://default_url"}, clear=True
-    ):
+        # Without command-line argument, should use settings.get_postgres_dsn()
+        # which reads from environment variables
         args = parse_args(["--dry-run"])
-        assert args.database_url == "postgresql://default_url"
+        assert "env-host" in args.database_url
+        assert "env-db" in args.database_url
 
 
 # ============================================================================

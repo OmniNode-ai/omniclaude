@@ -6,19 +6,22 @@ Real-time view of Claude Code hook system activity
 
 import json
 import os
+import sys
 from typing import Any, Dict, List
 
 import psycopg2
+
+# Add config for type-safe settings
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+from config import settings
 
 
 class HookDashboard:
     """Simple dashboard for hook intelligence data"""
 
     def __init__(self, db_password: str | None = None):
-        # Read from environment variable, fallback to dev default
-        password = db_password or os.getenv(
-            "DB_PASSWORD", "omninode-bridge-postgres-dev-2024"
-        )
+        # Read from environment variable, fallback to settings
+        password = db_password or settings.get_effective_postgres_password()
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         db = os.getenv("POSTGRES_DB", "omninode_bridge")

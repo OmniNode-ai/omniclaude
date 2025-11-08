@@ -25,6 +25,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +63,7 @@ class Phase4APIClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8053",
+        base_url: str = None,
         timeout: float = 2.0,
         max_retries: int = 3,
         api_key: Optional[str] = None,
@@ -70,12 +72,12 @@ class Phase4APIClient:
         Initialize Phase 4 API client.
 
         Args:
-            base_url: Intelligence Service base URL (default: http://localhost:8053)
+            base_url: Intelligence Service base URL (defaults to settings.archon_intelligence_url)
             timeout: Request timeout in seconds (default: 2.0 for production)
             max_retries: Maximum retry attempts (default: 3)
             api_key: Optional API key for authentication
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or str(settings.archon_intelligence_url)).rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         self.api_key = api_key

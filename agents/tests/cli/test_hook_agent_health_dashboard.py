@@ -13,6 +13,7 @@ Tests cover:
 
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -21,7 +22,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 # Import functions from the dashboard module
-sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+sys.path.insert(0, str(Path(__file__).parents[3].resolve()))
 from cli.hook_agent_health_dashboard import (
     create_agent_usage_table,
     create_dashboard_layout,

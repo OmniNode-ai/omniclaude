@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg2
@@ -125,7 +126,7 @@ def main():
         "status": "in_progress",
         "started_at": started_at.isoformat(),
         "metadata": {},
-        "project_path": "/Volumes/PRO-G40/Code/omniclaude",
+        "project_path": str(Path(__file__).parent.parent.resolve()),
         "project_name": "omniclaude",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -379,10 +379,16 @@ class MixinLearner:
 
             # Store historical data for feature extraction
             key = (mixin_a, mixin_b, node_type)
+            # Use explicit None check to preserve zero compatibility scores
+            compatibility = (
+                record["compatibility_score"]
+                if record["compatibility_score"] is not None
+                else 0.5
+            )
             historical_map[key] = {
                 "success_rate": success_rate,
                 "total_tests": total_tests,
-                "avg_compatibility": float(record["compatibility_score"] or 0.5),
+                "avg_compatibility": float(compatibility),
             }
 
         # Extract features
@@ -430,12 +436,16 @@ class MixinLearner:
                 if row:
                     total_tests = row["success_count"] + row["failure_count"]
                     if total_tests > 0:
+                        # Use explicit None check to preserve zero compatibility scores
+                        compatibility = (
+                            row["compatibility_score"]
+                            if row["compatibility_score"] is not None
+                            else 0.5
+                        )
                         return {
                             "success_rate": row["success_count"] / total_tests,
                             "total_tests": total_tests,
-                            "avg_compatibility": float(
-                                row["compatibility_score"] or 0.5
-                            ),
+                            "avg_compatibility": float(compatibility),
                         }
         except Exception as e:
             self.logger.debug(f"Could not fetch historical data: {e}")

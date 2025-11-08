@@ -18,7 +18,20 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 from uuid import uuid4
+
+# Add project root to path for centralized config import
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import centralized configuration
+try:
+    from config import settings
+except ImportError:
+    print("❌ config.settings not available. Ensure config module is installed.")
+    sys.exit(1)
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -50,15 +63,16 @@ async def test_postgres_logger():
     logger.info("PostgreSQL Logger Test")
     logger.info("=" * 70)
 
-    # Get configuration from environment
-    host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-    port = int(os.getenv("POSTGRES_PORT", "5436"))
-    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-    user = os.getenv("POSTGRES_USER", "postgres")
-    password = os.getenv("POSTGRES_PASSWORD")
+    # Get configuration from centralized settings (NO hardcoded defaults)
+    host = settings.postgres_host
+    port = settings.postgres_port
+    database = settings.postgres_database
+    user = settings.postgres_user
 
-    if not password:
-        logger.error("POSTGRES_PASSWORD environment variable not set")
+    try:
+        password = settings.get_effective_postgres_password()
+    except ValueError:
+        logger.error("POSTGRES_PASSWORD not configured in settings")
         logger.error("Run: source .env")
         return False
 

@@ -173,7 +173,9 @@ class PipelineResult(BaseModel):
         default=None, description="High-level error summary if pipeline failed"
     )
 
-    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat(), UUID: str})
+    model_config = ConfigDict(
+        json_encoders={datetime: lambda v: v.isoformat(), UUID: str}
+    )
 
     @property
     def success(self) -> bool:

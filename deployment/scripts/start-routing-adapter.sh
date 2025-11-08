@@ -2,7 +2,8 @@
 # Build and start routing adapter service
 # Usage: ./deployment/scripts/start-routing-adapter.sh
 
-set -e  # Exit on error
+set -e          # Exit on error
+set -o pipefail # Propagate pipe failures
 
 # Color codes
 RED='\033[0;31m'

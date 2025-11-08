@@ -86,8 +86,17 @@ async def main() -> None:
                 "payload": evt.payload,
             }
         )
-        cmd = f"docker exec omninode-bridge-redpanda bash -lc 'echo {shlex.quote(payload)} | rpk topic produce {shlex.quote(topic)} --brokers localhost:9092'"
-        subprocess.run(cmd, shell=True, check=False)
+        # Use list of arguments instead of shell=True to avoid shell injection (B602 fix)
+        # The bash command is safely contained as a single argument to 'bash -lc'
+        cmd = [
+            "docker",
+            "exec",
+            "omninode-bridge-redpanda",
+            "bash",
+            "-lc",
+            f"echo {shlex.quote(payload)} | rpk topic produce {shlex.quote(topic)} --brokers localhost:9092",
+        ]
+        subprocess.run(cmd, check=False)
         print("[rpk] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     elif args.confluent:

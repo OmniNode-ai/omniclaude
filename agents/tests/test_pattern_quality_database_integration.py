@@ -7,10 +7,23 @@ related to constraint errors, type casting issues, and transaction handling.
 """
 
 import os
+import sys
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+
+# Add project root to path for centralized config import
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import centralized configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
 
 # Skip all tests if no database connection available
 pytestmark = pytest.mark.skipif(
@@ -34,16 +47,36 @@ def db_connection_string():
     For CI/test environments:
     - Use empty password or set test-specific credentials
     """
-    # Priority: DATABASE_URL > construct from POSTGRES_PASSWORD
+    # Priority: DATABASE_URL > construct from settings or environment
     if os.getenv("DATABASE_URL"):
         return os.getenv("DATABASE_URL")
 
-    # Require explicit password configuration (no hardcoded defaults)
-    password = os.getenv("POSTGRES_PASSWORD", "")
-    host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-    port = os.getenv("POSTGRES_PORT", "5436")
-    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-    user = os.getenv("POSTGRES_USER", "postgres")
+    # Use centralized settings if available, otherwise fall back to environment (NO hardcoded defaults)
+    if settings:
+        try:
+            # Use settings.get_postgres_dsn() helper method
+            return settings.get_postgres_dsn()
+        except ValueError:
+            # Password not configured
+            password = ""
+            host = settings.postgres_host
+            port = settings.postgres_port
+            database = settings.postgres_database
+            user = settings.postgres_user
+    else:
+        # Fallback to environment variables (no hardcoded defaults)
+        password = os.getenv("POSTGRES_PASSWORD", "")
+        host = os.getenv("POSTGRES_HOST")
+        port = os.getenv("POSTGRES_PORT")
+        database = os.getenv("POSTGRES_DATABASE")
+        user = os.getenv("POSTGRES_USER")
+
+        # Validate required configuration
+        if not all([host, port, database, user]):
+            pytest.skip(
+                "Database configuration incomplete. Required: POSTGRES_HOST, POSTGRES_PORT, "
+                "POSTGRES_DATABASE, POSTGRES_USER. Run: source .env"
+            )
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 

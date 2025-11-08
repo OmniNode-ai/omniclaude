@@ -24,16 +24,12 @@ Reference: test_routing_event_flow.py (existing patterns)
 
 import asyncio
 import os
-import sys
-from pathlib import Path as PathLib
 from uuid import uuid4
 
 import pytest
 
-# Add routing event client to path
-sys.path.insert(0, str(PathLib(__file__).parent))
-
-from routing_event_client import (
+# Import from agents.lib module (project root is added by conftest.py)
+from agents.lib.routing_event_client import (
     RoutingEventClient,
     RoutingEventClientContext,
     route_via_events,

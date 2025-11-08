@@ -49,8 +49,9 @@ OmniClaude is a comprehensive toolkit for enhancing Claude Code capabilities wit
 10. [Provider Management](#provider-management)
 11. [Polymorphic Agent Framework](#polymorphic-agent-framework)
 12. [Event Bus Architecture](#event-bus-architecture)
-13. [Troubleshooting Guide](#troubleshooting-guide)
-14. [Quick Reference](#quick-reference)
+13. [Universal Agent Router (Planned)](#universal-agent-router-planned)
+14. [Troubleshooting Guide](#troubleshooting-guide)
+15. [Quick Reference](#quick-reference)
 
 ---
 
@@ -1437,6 +1438,198 @@ Agent receives manifest
 - **Replay Capability**: Complete event history available
 - **Fault Tolerance**: Services continue even if consumers temporarily fail
 - **Scalability**: Horizontal scaling via Kafka partitions
+
+---
+
+## Universal Agent Router (Planned)
+
+> **⚠️ STATUS**: Planning phase - Blocked by PR #22
+>
+> **Documentation**: See [`docs/architecture/UNIVERSAL_AGENT_ROUTER.md`](docs/architecture/UNIVERSAL_AGENT_ROUTER.md)
+>
+> **Implementation Plan**: See [`docs/planning/ROUTER_IMPLEMENTATION_PLAN.md`](docs/planning/ROUTER_IMPLEMENTATION_PLAN.md)
+>
+> **Blocking Status**: See [`docs/planning/BLOCKED_UNTIL_PR_MERGE.md`](docs/planning/BLOCKED_UNTIL_PR_MERGE.md)
+
+### Overview
+
+The **Universal Agent Router** is a planned framework-agnostic, multi-protocol routing service that will provide intelligent agent selection with GPU-accelerated inference, multi-tier caching, and comprehensive observability.
+
+**Key Features**:
+- ⚡ **20-50ms GPU-accelerated routing** using vLLM on RTX 5090
+- 💰 **Cost optimization**: $4 per 1M requests vs $3000 all-Anthropic baseline (99.87% savings)
+- 🎯 **60-70% cache hit rate** with Valkey L1 cache
+- 🌐 **Multi-protocol support**: HTTP, gRPC, Kafka, WebSocket
+- 📊 **Complete observability**: Correlation tracking across all tiers
+- 🔄 **Graceful degradation**: 4-tier fallback cascade
+- 🏗️ **Framework-agnostic**: Universal API works with any agent system (Claude Code, LangChain, AutoGPT, CrewAI, etc.)
+
+### Multi-Tier Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TIER 1: VALKEY CACHE      → 60-70% hit rate, <1ms         │
+│  TIER 2: vLLM GPU          → 25-35% usage, 20-50ms         │
+│  TIER 3: FUZZY FALLBACK    → 3-5% usage, 5-10ms            │
+│  TIER 4: REMOTE LLM        → <5% usage, 200-500ms          │
+│                                                             │
+│  Weighted Average Latency: ~36ms                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Status
+
+**Current Phase**: Planning / Documentation
+**Blocked By**: PR #22 (Observability infrastructure must merge first)
+
+**Blocking Dependencies**:
+1. ✅ Observability infrastructure (PR #22 - action logging, manifest traceability)
+2. ✅ Type-safe configuration (PR #22 - Pydantic Settings)
+3. ✅ Docker Compose consolidation (PR #22 - deployment architecture)
+4. ✅ Kafka event patterns (PR #22 - event bus architecture)
+
+**4-Phase Rollout Plan**:
+- **Phase 1 (Week 1)**: Foundation - HTTP API, Valkey caching, fuzzy fallback
+- **Phase 2 (Week 2)**: GPU Acceleration - vLLM integration with 4-tier cascade
+- **Phase 3 (Week 3)**: Multi-Protocol - gRPC, Kafka, WebSocket, framework adapters
+- **Phase 4 (Week 4)**: Observability & Production - Prometheus, Grafana, OpenTelemetry, hardening
+
+### Why Universal?
+
+Unlike the current `agent-router-service` (Claude Code specific), the Universal Router is designed to serve **ANY agent framework**:
+
+**Supported Frameworks** (via adapters):
+- **Claude Code** - Native integration
+- **LangChain** - Python package adapter
+- **AutoGPT** - Agent factory adapter
+- **CrewAI** - Multi-agent coordinator adapter
+- **Custom frameworks** - Universal API
+
+### Performance Projections
+
+| Tier | Hit Rate | Avg Latency | Cost per Request | Annual Cost (1M req) |
+|------|----------|-------------|------------------|---------------------|
+| Valkey Cache | 60-70% | <1ms | $0 | $0 |
+| vLLM GPU | 25-35% | 20-50ms | $0.000004 | $4 |
+| Fuzzy Fallback | 3-5% | 5-10ms | $0 | $0 |
+| Remote LLM | <5% | 200-500ms | $0.003 | $3000 |
+| **WEIGHTED AVG** | **100%** | **~36ms** | **$0.000004** | **~$4** |
+
+**Cost Comparison**:
+- Current (all-Anthropic): $3000 per 1M requests
+- Universal Router: ~$4 per 1M requests
+- **Savings**: 99.87% cost reduction
+
+### Configuration
+
+**Location**: `config/universal_router.yaml.example`
+
+**Key Configuration Sections**:
+- Service (HTTP/gRPC/WebSocket ports, workers)
+- Database (PostgreSQL connection pooling)
+- Cache (Valkey TTL, eviction policy)
+- Kafka (topics, consumer/producer config)
+- vLLM (GPU endpoint, model, timeout)
+- Fuzzy (agent registry, matching algorithm)
+- Remote LLM (provider priority, cost tracking)
+- Rate Limiting (per-user, per-IP, per-session)
+- Circuit Breaker (failure thresholds, recovery)
+- Observability (Prometheus, OpenTelemetry, Jaeger)
+
+### Next Steps
+
+**Before Starting Implementation**:
+1. ✅ Resolve PR #22 issues (CI/CD failures, CodeRabbit comments)
+2. ✅ Merge PR #22 to main
+3. ✅ Verify infrastructure (PostgreSQL, Kafka, vLLM endpoint)
+4. ✅ Delete `docs/planning/BLOCKED_UNTIL_PR_MERGE.md`
+5. ✅ Begin Phase 1 implementation
+
+**Estimated Timeline**:
+- PR #22 resolution: 1-2 days (by 2025-11-08 or 2025-11-09)
+- Phase 1-4 implementation: 4 weeks (20 working days)
+- **Total**: ~22-23 days from now
+
+### Documentation
+
+**Architecture**:
+- [Universal Agent Router Architecture](docs/architecture/UNIVERSAL_AGENT_ROUTER.md) - Complete technical specification
+  - Multi-tier routing strategy
+  - Multi-protocol API gateway (HTTP/gRPC/Kafka/WebSocket)
+  - vLLM integration with RTX 5090
+  - Valkey caching strategy
+  - Performance targets and cost analysis
+  - Observability and traceability
+  - Risk assessment and success metrics
+
+**Implementation**:
+- [Implementation Plan](docs/planning/ROUTER_IMPLEMENTATION_PLAN.md) - Phased rollout with daily task breakdown
+  - Prerequisites and infrastructure verification
+  - Phase 1: Foundation (5 days)
+  - Phase 2: GPU Acceleration (5 days)
+  - Phase 3: Multi-Protocol Support (5 days)
+  - Phase 4: Observability & Production (5 days)
+  - Success criteria and KPIs
+  - Risk mitigation strategies
+
+**Blocking**:
+- [Blocked Until PR Merge](docs/planning/BLOCKED_UNTIL_PR_MERGE.md) - Gate mechanism to ensure proper sequencing
+  - PR #22 status and issues
+  - Why Universal Router is blocked
+  - Action plan to unblock
+  - Prerequisites checklist
+  - Monitoring progress
+
+**Configuration**:
+- [Configuration Template](config/universal_router.yaml.example) - Complete configuration reference
+  - 200+ configuration options
+  - Environment variable support
+  - Development vs production settings
+  - Security and authentication
+  - Feature flags
+
+### Related Services
+
+**Current Router** (will coexist):
+- `agent-router-service` - Event-based routing for Claude Code agents
+- Location: `agents/services/agent_router_event_service.py`
+- Protocol: Kafka only
+- Performance: 7-8ms routing time
+- Scope: Claude Code specific
+
+**Universal Router** (planned):
+- Framework-agnostic routing service
+- Protocols: HTTP, gRPC, Kafka, WebSocket
+- Performance: ~36ms weighted average (with GPU acceleration)
+- Scope: Any agent framework
+
+**Integration Plan**:
+- Phase 1-2: Universal Router runs alongside current router
+- Phase 3: Framework adapters enable migration
+- Phase 4+: Gradual migration of Claude Code to Universal Router (optional)
+
+### Monitoring (Post-Launch)
+
+**Grafana Dashboards** (5 planned):
+1. **Routing Performance** - Latency (p50/p95/p99), request rate, error rate
+2. **Cost Analysis** - Cost per request, daily/weekly/monthly spend, savings vs baseline
+3. **Cache Performance** - Hit rate, cache size, evictions, top routes
+4. **GPU Monitoring** - GPU utilization, vLLM throughput, memory usage
+5. **Tier Distribution** - Requests by tier (pie chart), fallback rate, confidence distribution
+
+**Prometheus Metrics**:
+- `universal_router_requests_total` - Request counter by tier/status
+- `universal_router_latency_seconds` - Latency histogram by tier
+- `universal_router_cache_hit_rate` - Cache hit rate gauge
+- `vllm_gpu_utilization` - GPU utilization percentage
+- `universal_router_cost_usd_total` - Cost counter by tier
+
+**Alerts**:
+- High latency (p95 >100ms)
+- Low cache hit rate (<50%)
+- High remote LLM usage (>10%)
+- Budget threshold exceeded (>80% of daily budget)
+- Service unhealthy (circuit breaker open)
 
 ---
 

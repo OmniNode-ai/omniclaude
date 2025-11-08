@@ -4,6 +4,19 @@
 
 set -e
 
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
+fi
+
+# Source .env file
+source "$PROJECT_ROOT/.env"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -13,17 +26,28 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-# Configuration
-POSTGRES_HOST=${POSTGRES_HOST:-"192.168.86.200"}
-POSTGRES_PORT=${POSTGRES_PORT:-"5436"}
-POSTGRES_USER=${POSTGRES_USER:-"postgres"}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}  # Must be set in environment
-POSTGRES_DB=${POSTGRES_DATABASE:-"omninode_bridge"}
+# Configuration (no fallbacks - must be set in .env)
+POSTGRES_HOST="${POSTGRES_HOST}"
+POSTGRES_PORT="${POSTGRES_PORT}"
+POSTGRES_USER="${POSTGRES_USER}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+POSTGRES_DB="${POSTGRES_DATABASE}"
 
-# Verify password is set
-if [ -z "$POSTGRES_PASSWORD" ]; then
-    echo -e "${RED}❌ ERROR: POSTGRES_PASSWORD environment variable not set${NC}"
-    echo "   Please run: source .env"
+# Verify required variables are set
+missing_vars=()
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$POSTGRES_DB" ] && missing_vars+=("POSTGRES_DATABASE")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
     exit 1
 fi
 
@@ -138,14 +162,14 @@ SELECT
     id,
     source_agent,
     target_agent,
-    confidence_score,
+    routing_confidence,
     transformation_reason,
     transformation_duration_ms,
     success,
-    created_at
+    started_at
 FROM agent_transformation_events
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY created_at ASC;
+ORDER BY started_at ASC;
 "
 
 run_query "$TRANSFORM_QUERY" "Agent Transformations"
@@ -158,16 +182,19 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 METRICS_QUERY="
 SELECT
     id,
-    query_text,
-    routing_duration_ms,
+    selected_agent,
+    selection_strategy,
+    confidence_score,
+    total_routing_time_us,
     cache_hit,
-    trigger_match_strategy,
-    candidates_evaluated,
-    confidence_components::text,
-    created_at
+    trigger_confidence,
+    context_confidence,
+    capability_confidence,
+    alternatives_count,
+    measured_at
 FROM router_performance_metrics
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY created_at ASC;
+ORDER BY measured_at ASC;
 "
 
 run_query "$METRICS_QUERY" "Performance Metrics"
@@ -184,12 +211,12 @@ SELECT
     status,
     quality_score,
     duration_ms,
-    start_time,
-    end_time,
+    started_at,
+    completed_at,
     error_message
 FROM agent_execution_logs
 WHERE correlation_id = '$CORRELATION_ID'
-ORDER BY start_time ASC;
+ORDER BY started_at ASC;
 "
 
 run_query "$EXECUTION_QUERY" "Execution Logs" || echo -e "${YELLOW}  ℹ️  agent_execution_logs table may not exist${NC}\n"

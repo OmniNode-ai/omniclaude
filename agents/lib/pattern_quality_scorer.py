@@ -18,6 +18,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Dict, List, Optional
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 try:
     import psycopg2
     from psycopg2.extras import Json
@@ -342,6 +348,23 @@ class PatternQualityScorer:
 
         return 0.6
 
+    def _build_connection_string_from_env(self) -> str:
+        """
+        Build PostgreSQL connection string from environment variables.
+
+        Uses production defaults that match Pydantic settings.
+
+        Returns:
+            PostgreSQL connection string
+        """
+        host = os.getenv("POSTGRES_HOST", "192.168.86.200")
+        port = os.getenv("POSTGRES_PORT", "5436")
+        database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+        user = os.getenv("POSTGRES_USER", "postgres")
+        password = os.getenv("POSTGRES_PASSWORD", "")
+
+        return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
     def _store_quality_metrics_sync(
         self, score: PatternQualityScore, connection_string: str
     ) -> None:
@@ -449,11 +472,23 @@ class PatternQualityScorer:
         if psycopg2 is None:
             raise ImportError("psycopg2 is required for database operations")
 
-        connection_string = (
-            db_connection_string
-            or os.getenv("HOST_DATABASE_URL")
-            or os.getenv("DATABASE_URL", "postgresql://localhost/omniclaude")
-        )
+        # Get database connection string with production defaults
+        if db_connection_string:
+            connection_string = db_connection_string
+        elif os.getenv("HOST_DATABASE_URL"):
+            connection_string = os.getenv("HOST_DATABASE_URL")
+        elif os.getenv("DATABASE_URL"):
+            connection_string = os.getenv("DATABASE_URL")
+        elif settings:
+            # Use Pydantic settings to build production connection string
+            try:
+                connection_string = settings.get_postgres_dsn()
+            except Exception:
+                # Fall back to environment-based construction
+                connection_string = self._build_connection_string_from_env()
+        else:
+            # Last resort: build from environment variables with production defaults
+            connection_string = self._build_connection_string_from_env()
 
         # Run synchronous database operations in thread pool to avoid blocking event loop
         await asyncio.to_thread(

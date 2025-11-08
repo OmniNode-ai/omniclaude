@@ -40,9 +40,9 @@ def temp_db():
 @pytest.fixture
 def event_store(temp_db):
     """Create EventStore instance for testing."""
+    # EventStore now uses settings.qdrant_url by default
     store = EventStore(
         storage_path=temp_db,
-        qdrant_url="http://localhost:6333",
         ollama_url="http://192.168.86.200:11434",
         retention_days=90,
     )

@@ -6,9 +6,9 @@ Tests routing accuracy by sending various prompts via Kafka events
 and verifying routing decisions in the database.
 
 Requirements:
-- Kafka/Redpanda running (192.168.86.200:9092)
-- PostgreSQL running (192.168.86.200:5436)
-- Environment variables configured in .env
+- Kafka/Redpanda running (configured in .env)
+- PostgreSQL running (configured in .env)
+- Environment variables configured in .env (run: source .env)
 
 Usage:
     python3 agents/services/test_router_consumer.py
@@ -19,6 +19,18 @@ import os
 import sys
 import time
 from pathlib import Path
+
+# Add project root to path for centralized config import
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import centralized configuration
+try:
+    from config import settings
+except ImportError:
+    print("❌ config.settings not available. Ensure config module is installed.")
+    sys.exit(1)
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
@@ -47,15 +59,42 @@ class RouterConsumerTester:
     """Test harness for router consumer service."""
 
     def __init__(self):
-        # Load configuration from environment
-        self.kafka_bootstrap = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-        )
-        self.postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-        self.postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))
-        self.postgres_db = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-        self.postgres_user = os.getenv("POSTGRES_USER", "postgres")
-        self.postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+        # Load configuration from centralized settings (NO hardcoded defaults)
+        # NOTE: For host scripts, use external port 29102, not internal port 9092
+        # Docker containers use omninode-bridge-redpanda:9092 (internal)
+        # Host scripts use localhost:29102 or 192.168.86.200:29102 (external)
+
+        # Get bootstrap servers from settings, but convert to external port for host access
+        kafka_servers = settings.get_effective_kafka_bootstrap_servers()
+
+        # If using omninode-bridge-redpanda hostname, convert to external port
+        # NOTE: Must use IP address from settings for Kafka advertised listeners
+        if "omninode-bridge-redpanda" in kafka_servers:
+            # Replace hostname with IP address and use external port 29102
+            self.kafka_bootstrap = f"{settings.postgres_host}:29102"
+            print(
+                f"🔧 Converted Docker hostname to host-accessible: {self.kafka_bootstrap}"
+            )
+        elif ":9092" in kafka_servers:
+            # If using internal port 9092, switch to external port 29102
+            self.kafka_bootstrap = kafka_servers.replace(":9092", ":29102")
+            print(
+                f"🔧 Converted internal port to external port: {self.kafka_bootstrap}"
+            )
+        else:
+            self.kafka_bootstrap = kafka_servers
+
+        # PostgreSQL configuration from settings
+        self.postgres_host = settings.postgres_host
+        self.postgres_port = settings.postgres_port
+        self.postgres_db = settings.postgres_database
+        self.postgres_user = settings.postgres_user
+
+        try:
+            self.postgres_password = settings.get_effective_postgres_password()
+        except ValueError:
+            print("❌ POSTGRES_PASSWORD not configured in settings. Run: source .env")
+            self.postgres_password = ""
 
         # Test cases with expected routing
         self.test_cases = [

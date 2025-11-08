@@ -1913,10 +1913,17 @@ class GenerationPipeline:
             }
 
             # Render event bus templates
-            from jinja2 import Environment, FileSystemLoader
+            from jinja2 import Environment, FileSystemLoader, select_autoescape
 
             template_dir = Path(__file__).parent.parent / "templates"
-            env = Environment(loader=FileSystemLoader(str(template_dir)))
+            # Enable autoescape for security (B701 fix)
+            # Using select_autoescape() to automatically enable for .html, .xml, .jinja2 templates
+            env = Environment(
+                loader=FileSystemLoader(str(template_dir)),
+                autoescape=select_autoescape(
+                    enabled_extensions=("jinja2",), default_for_string=True
+                ),
+            )
 
             # 1. Render introspection event method
             introspection_template = env.get_template("introspection_event.py.jinja2")

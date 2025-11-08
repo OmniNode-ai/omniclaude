@@ -3,18 +3,29 @@
 
 set -euo pipefail
 
+# Portable path resolution
+if [ -n "${PROJECT_PATH:-}" ]; then
+    REPO_ROOT="$PROJECT_PATH"
+elif [ -n "${PROJECT_ROOT:-}" ]; then
+    REPO_ROOT="$PROJECT_ROOT"
+else
+    # Compute from script location (claude_hooks/ -> project root)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
 LOG_FILE="/tmp/manifest_injection_test.log"
 echo "Testing manifest injection..." > "$LOG_FILE"
 
 # Test 1: Test ManifestInjector directly
 echo "Test 1: Direct ManifestInjector test"
-python3 - <<'PYTEST' 2>&1 | tee -a "$LOG_FILE"
+REPO_ROOT="$REPO_ROOT" python3 - <<'PYTEST' 2>&1 | tee -a "$LOG_FILE"
 import sys
 from pathlib import Path
 import os
 
-# Add agents/lib to path
-repo_root = Path("/Volumes/PRO-G40/Code/omniclaude")
+# Add agents/lib to path - use environment variable for portability
+repo_root = Path(os.environ.get("REPO_ROOT", os.getcwd()))
 agents_lib_path = repo_root / "agents" / "lib"
 
 if agents_lib_path.exists():
@@ -68,16 +79,18 @@ fi
 
 # Test 2: Test inline Python snippet (as used in hook)
 echo -e "\nTest 2: Inline Python snippet test (simulating hook)" | tee -a "$LOG_FILE"
-PROJECT_PATH="/Volumes/PRO-G40/Code/omniclaude"
+# REPO_ROOT is already set above with portable resolution
 SYSTEM_MANIFEST="$(
-  python3 - <<\PYMANIFEST 2>&1 || echo "FAILED"
+  REPO_ROOT="$REPO_ROOT" python3 - <<\PYMANIFEST 2>&1 || echo "FAILED"
 import sys
+import os
 from pathlib import Path
 
 # Add agents/lib to path
 agents_lib_path = Path.home() / ".claude" / "agents" / "lib"
-# Also try relative to current repo
-repo_agents_lib = Path("$PROJECT_PATH") / "agents" / "lib"
+# Also try relative to current repo (from environment variable)
+repo_root = os.environ.get("REPO_ROOT", os.getcwd())
+repo_agents_lib = Path(repo_root) / "agents" / "lib"
 
 for lib_path in [agents_lib_path, repo_agents_lib]:
     if lib_path.exists():

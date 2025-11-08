@@ -124,17 +124,48 @@ def get_environment_metadata() -> Dict[str, Any]:
     """Extract environment metadata.
 
     Returns:
-        Dict with user, hostname, platform, python_version
+        Dict with user, username, uid, hostname, platform, python_version
+
+    Enhanced to capture:
+    - user: Primary username from environment (USER or USERNAME)
+    - uid: User ID for multi-user system traceability (Unix/Linux only)
+    - hostname: System hostname for distributed debugging
+    - platform: OS platform information
+    - python_version: Python runtime version
+    - shell: Shell environment (helps identify execution context)
     """
     import platform
 
+    # Capture username with better fallback handling
+    username = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+
     metadata = {
-        "user": os.environ.get("USER") or os.environ.get("USERNAME"),
+        "user": username,
         "hostname": platform.node(),
         "platform": platform.system(),
         "python_version": platform.python_version(),
         "shell": os.environ.get("SHELL"),
     }
+
+    # Add user ID (UID) for Unix/Linux systems (better traceability)
+    # This helps distinguish between different users with same username
+    # or identify sessions in multi-user environments
+    try:
+        import pwd
+
+        metadata["uid"] = os.getuid()
+        # Add full name if available for better audit trail
+        try:
+            user_info = pwd.getpwuid(os.getuid())
+            if user_info.pw_gecos:
+                metadata["user_fullname"] = user_info.pw_gecos.split(",")[0]
+        except (KeyError, AttributeError):
+            pass
+    except (ImportError, AttributeError):
+        # Windows or other platforms - UID not available
+        # Add Windows-specific user info if available
+        if platform.system() == "Windows":
+            metadata["domain"] = os.environ.get("USERDOMAIN")
 
     return metadata
 
@@ -205,7 +236,26 @@ def log_session_start(
         elapsed_ms = (time.time() - start_time) * 1000
 
         if event_id:
+            # Enhanced logging with username for better debugging/auditing
+            username = env_metadata.get("user", "unknown")
+            hostname = env_metadata.get("hostname", "unknown")
+
+            # Show user context in session start message
             print(f"✅ Session start logged: {event_id} ({elapsed_ms:.1f}ms)")
+            print(f"   User: {username}@{hostname}")
+
+            # Show additional context if available (full name, UID)
+            if env_metadata.get("user_fullname"):
+                print(f"   Name: {env_metadata['user_fullname']}")
+            if env_metadata.get("uid") is not None:
+                print(f"   UID: {env_metadata['uid']}")
+
+            # Show git context if available
+            if git_metadata.get("git_branch"):
+                branch_info = git_metadata["git_branch"]
+                if git_metadata.get("git_dirty"):
+                    branch_info += " (uncommitted changes)"
+                print(f"   Branch: {branch_info}")
 
             # Warn if exceeded performance target
             if elapsed_ms > 50:

@@ -75,29 +75,19 @@ async def test_routing():
     # Check database logging
     print("\nChecking database logging...")
     try:
-        import os
-
-        # Load .env
-        from pathlib import Path as PathLib
-
         import asyncpg
 
-        env_path = PathLib(__file__).parent / ".env"
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        os.environ.setdefault(key, value)
+        # Add project root to path
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from config import settings
 
-        # Connect to database
+        # Connect to database using settings (auto-loaded from .env)
         conn = await asyncpg.connect(
-            host=os.getenv("POSTGRES_HOST", "192.168.86.200"),
-            port=int(os.getenv("POSTGRES_PORT", "5436")),
-            database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
-            user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", ""),
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            database=settings.postgres_database,
+            user=settings.postgres_user,
+            password=settings.get_effective_postgres_password(),
         )
 
         # Query recent routing decisions

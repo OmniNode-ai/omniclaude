@@ -47,6 +47,7 @@ from threading import Event, Thread
 from typing import Any, Dict, List, Optional
 
 import psycopg2
+import psycopg2.pool
 from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
 
@@ -68,8 +69,16 @@ except ImportError as e:
     logger_temp.warning(f"AgentTraceabilityLogger not available: {e}")
     TRACEABILITY_AVAILABLE = False
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+
 # Configure logging
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_LEVEL = settings.log_level if SETTINGS_AVAILABLE else os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -131,7 +140,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
     consumer_instance = None
 
-    def do_GET(self):
+    def do_GET(self):  # noqa: N802 - Required by HTTPServer
         """Handle GET requests."""
         if self.path == "/health":
             self.send_health_response()
@@ -142,13 +151,12 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def send_health_response(self):
-        """Send health check response with thread-safe state verification."""
-        # Thread-safe atomic health check to prevent TOCTOU race conditions
-        # Check consumer_instance before accessing attributes to prevent NoneType errors
+        """Send health check response with atomic state verification."""
+        # Atomic health check using threading.Event to prevent race conditions
+        # Events provide atomic is_set() checks without requiring locks
         ci = self.consumer_instance
         if ci is not None:
-            with ci._health_lock:
-                is_healthy = ci.running and not ci.shutdown_event.is_set()
+            is_healthy = ci.running_event.is_set() and not ci.shutdown_event.is_set()
         else:
             is_healthy = False
 
@@ -188,7 +196,9 @@ class AgentActionsConsumer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.shutdown_event = Event()
-        self.running = False
+        self.running_event = (
+            Event()
+        )  # Atomic state management to prevent race conditions
         self.metrics = ConsumerMetrics()
 
         # Retry management for poison message handling
@@ -196,22 +206,30 @@ class AgentActionsConsumer:
         self.max_retries = 3
         self.backoff_base_ms = 100
 
-        # Thread safety for health checks
-        self._health_lock = threading.Lock()
-
         # Kafka configuration (no localhost default - must be explicitly configured)
-        kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS"
-        )
+        if SETTINGS_AVAILABLE:
+            kafka_brokers_str = (
+                config.get("kafka_brokers")
+                or settings.get_effective_kafka_bootstrap_servers()
+            )
+        else:
+            kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS"
+            )
+
         if not kafka_brokers_str:
             raise ValueError(
                 "KAFKA_BOOTSTRAP_SERVERS must be set via config file or environment variable. "
                 "Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
-        self.group_id = config.get(
-            "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
-        )
+
+        if SETTINGS_AVAILABLE:
+            self.group_id = config.get("group_id", settings.kafka_group_id)
+        else:
+            self.group_id = config.get(
+                "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
+            )
         # Subscribe to all agent observability topics
         self.topics = config.get(
             "topics",
@@ -226,16 +244,33 @@ class AgentActionsConsumer:
         )
 
         # Batch configuration
-        self.batch_size = int(config.get("batch_size", os.getenv("BATCH_SIZE", "100")))
-        self.batch_timeout_ms = int(
-            config.get("batch_timeout_ms", os.getenv("BATCH_TIMEOUT_MS", "1000"))
-        )
+        if SETTINGS_AVAILABLE:
+            self.batch_size = int(config.get("batch_size", settings.batch_size))
+            self.batch_timeout_ms = int(
+                config.get("batch_timeout_ms", settings.batch_timeout_ms)
+            )
+        else:
+            self.batch_size = int(
+                config.get("batch_size", os.getenv("BATCH_SIZE", "100"))
+            )
+            self.batch_timeout_ms = int(
+                config.get("batch_timeout_ms", os.getenv("BATCH_TIMEOUT_MS", "1000"))
+            )
 
         # PostgreSQL configuration
         # Security: POSTGRES_PASSWORD must be set via environment variable (no default)
-        postgres_password = config.get("postgres_password") or os.getenv(
-            "POSTGRES_PASSWORD"
-        )
+        if SETTINGS_AVAILABLE:
+            postgres_password = (
+                config.get("postgres_password")
+                or settings.get_effective_postgres_password()
+            )
+            postgres_host = config.get("postgres_host", settings.postgres_host)
+        else:
+            postgres_password = config.get("postgres_password") or os.getenv(
+                "POSTGRES_PASSWORD"
+            )
+            postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
+
         if not postgres_password:
             raise ValueError(
                 "POSTGRES_PASSWORD environment variable must be set. "
@@ -244,34 +279,50 @@ class AgentActionsConsumer:
             )
 
         # Database host (no localhost default - must be explicitly configured)
-        postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
         if not postgres_host:
             raise ValueError(
                 "POSTGRES_HOST environment variable must be set. "
                 "Example: POSTGRES_HOST=192.168.86.200"
             )
 
-        self.db_config = {
-            "host": postgres_host,
-            "port": int(
-                config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
-            ),
-            "database": config.get(
-                "postgres_database", os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-            ),
-            "user": config.get("postgres_user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": postgres_password,
-        }
+        if SETTINGS_AVAILABLE:
+            self.db_config = {
+                "host": postgres_host,
+                "port": int(config.get("postgres_port", settings.postgres_port)),
+                "database": config.get("postgres_database", settings.postgres_database),
+                "user": config.get("postgres_user", settings.postgres_user),
+                "password": postgres_password,
+            }
+        else:
+            self.db_config = {
+                "host": postgres_host,
+                "port": int(
+                    config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
+                ),
+                "database": config.get(
+                    "postgres_database",
+                    os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
+                ),
+                "user": config.get(
+                    "postgres_user", os.getenv("POSTGRES_USER", "postgres")
+                ),
+                "password": postgres_password,
+            }
 
         # Health check configuration
-        self.health_check_port = int(
-            config.get("health_check_port", os.getenv("HEALTH_CHECK_PORT", "8080"))
-        )
+        if SETTINGS_AVAILABLE:
+            self.health_check_port = int(
+                config.get("health_check_port", settings.health_check_port)
+            )
+        else:
+            self.health_check_port = int(
+                config.get("health_check_port", os.getenv("HEALTH_CHECK_PORT", "8080"))
+            )
 
         # Components (initialized in start())
         self.consumer: Optional[KafkaConsumer] = None
         self.dlq_producer: Optional[KafkaProducer] = None
-        self.db_conn: Optional[Any] = None
+        self.db_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
         self.health_server: Optional[HTTPServer] = None
 
         logger.info(
@@ -410,43 +461,28 @@ class AgentActionsConsumer:
         logger.info("DLQ producer initialized")
 
     def setup_database(self):
-        """Initialize database connection."""
-        logger.info("Setting up database connection...")
-        self.db_conn = psycopg2.connect(**self.db_config)
-        self.db_conn.autocommit = False  # Use transactions
+        """Initialize database connection pool for improved scalability under load."""
+        logger.info("Setting up database connection pool...")
+        self.db_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=5, maxconn=20, **self.db_config
+        )
         logger.info(
-            "Database connection established: %s:%s/%s",
+            "Database connection pool established: %s:%s/%s (min=5, max=20)",
             self.db_config["host"],
             self.db_config["port"],
             self.db_config["database"],
         )
 
-    def _ensure_db_connection(self):
+    def _get_db_connection(self):
         """
-        Ensure database connection is healthy, reconnect if needed.
+        Get a connection from the pool.
 
-        Fixes: psycopg2.InterfaceError: connection already closed
+        Returns a connection that must be returned to the pool using putconn() when done.
+        Connection pool handles reconnection automatically for failed connections.
         """
-        try:
-            if self.db_conn is None or self.db_conn.closed:
-                logger.warning("Database connection is closed, reconnecting...")
-                self.db_conn = psycopg2.connect(**self.db_config)
-                self.db_conn.autocommit = False
-                logger.info("Database connection re-established")
-            else:
-                # Test connection with simple query
-                with self.db_conn.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-        except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
-            logger.warning("Database connection test failed: %s, reconnecting...", e)
-            try:
-                if self.db_conn and not self.db_conn.closed:
-                    self.db_conn.close()
-            except Exception:
-                pass
-            self.db_conn = psycopg2.connect(**self.db_config)
-            self.db_conn.autocommit = False
-            logger.info("Database connection restored after failure")
+        if self.db_pool is None:
+            raise RuntimeError("Database connection pool not initialized")
+        return self.db_pool.getconn()
 
     def setup_health_check(self):
         """Start health check HTTP server."""
@@ -455,7 +491,11 @@ class AgentActionsConsumer:
         )
         HealthCheckHandler.consumer_instance = self
         self.health_server = HTTPServer(
-            ("0.0.0.0", self.health_check_port), HealthCheckHandler
+            (
+                "0.0.0.0",  # noqa: S104 - Intentional for Docker health checks
+                self.health_check_port,
+            ),
+            HealthCheckHandler,
         )
 
         # Run in background thread
@@ -485,11 +525,13 @@ class AgentActionsConsumer:
         total_inserted = 0
         total_duplicates = 0
 
-        try:
-            # Ensure database connection is healthy before using it
-            self._ensure_db_connection()
+        # Get a connection from the pool
+        db_conn = self._get_db_connection()
 
-            with self.db_conn.cursor() as cursor:
+        try:
+            db_conn.autocommit = False  # Use transactions
+
+            with db_conn.cursor() as cursor:
                 # Process each topic's events
                 for topic, events in events_by_topic.items():
                     if not events:
@@ -528,7 +570,7 @@ class AgentActionsConsumer:
                     total_inserted += inserted
                     total_duplicates += duplicates
 
-                self.db_conn.commit()
+                db_conn.commit()
 
             logger.info(
                 "Batch insert: %d inserted, %d duplicates (total: %d)",
@@ -541,8 +583,11 @@ class AgentActionsConsumer:
 
         except Exception as e:
             logger.error("Batch insert failed: %s", e, exc_info=True)
-            self.db_conn.rollback()
+            db_conn.rollback()
             raise
+        finally:
+            # Always return connection to the pool
+            self.db_pool.putconn(db_conn)
 
     def _insert_agent_actions(
         self, cursor, events: List[Dict[str, Any]]
@@ -666,14 +711,30 @@ class AgentActionsConsumer:
     def _insert_transformation_events(
         self, cursor, events: List[Dict[str, Any]]
     ) -> tuple[int, int]:
-        """Insert agent_transformation_events events."""
+        """
+        Insert agent_transformation_events events with comprehensive schema support.
+
+        Handles both old format (confidence_score) and new format (routing_confidence).
+        """
         insert_sql = """
             INSERT INTO agent_transformation_events (
-                id, source_agent, target_agent, transformation_reason,
-                confidence_score, transformation_duration_ms, success, created_at,
-                project_path, project_name, claude_session_id
+                id, event_type, correlation_id, session_id,
+                source_agent, target_agent, transformation_reason,
+                user_request, routing_confidence, routing_strategy,
+                transformation_duration_ms, initialization_duration_ms, total_execution_duration_ms,
+                success, error_message, error_type, quality_score,
+                context_snapshot, context_keys, context_size_bytes,
+                agent_definition_id, parent_event_id,
+                started_at, completed_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s,
+                %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -683,21 +744,75 @@ class AgentActionsConsumer:
             event_id = str(uuid.uuid4())
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
+            # Handle both old format (confidence_score) and new format (routing_confidence)
+            # IMPORTANT: Use explicit None check to preserve zero confidence values
+            routing_confidence = event.get("routing_confidence")
+            if routing_confidence is None:
+                routing_confidence = event.get("confidence_score")
+
+            # Parse correlation_id and session_id as UUIDs
+            correlation_id = event.get("correlation_id")
+            if correlation_id and not isinstance(correlation_id, uuid.UUID):
+                try:
+                    correlation_id = uuid.UUID(correlation_id)
+                except ValueError:
+                    correlation_id = uuid.uuid4()
+            elif not correlation_id:
+                correlation_id = uuid.uuid4()
+
+            session_id = event.get("session_id")
+            if session_id and not isinstance(session_id, uuid.UUID):
+                try:
+                    session_id = uuid.UUID(session_id)
+                except ValueError:
+                    session_id = None
+
+            # Parse context_snapshot as JSONB
+            context_snapshot = event.get("context_snapshot")
+            if context_snapshot and not isinstance(context_snapshot, str):
+                context_snapshot = json.dumps(context_snapshot)
+
+            # Parse agent_definition_id and parent_event_id as UUIDs
+            agent_definition_id = event.get("agent_definition_id")
+            if agent_definition_id:
+                try:
+                    agent_definition_id = uuid.UUID(agent_definition_id)
+                except ValueError:
+                    agent_definition_id = None
+
+            parent_event_id = event.get("parent_event_id")
+            if parent_event_id:
+                try:
+                    parent_event_id = uuid.UUID(parent_event_id)
+                except ValueError:
+                    parent_event_id = None
+
             batch_data.append(
                 (
                     event_id,
+                    event.get("event_type", "transformation_complete"),
+                    correlation_id,
+                    session_id,
                     event.get("source_agent"),
                     event.get("target_agent"),
                     event.get("transformation_reason"),
-                    event.get("confidence_score"),
+                    event.get("user_request"),
+                    routing_confidence,
+                    event.get("routing_strategy"),
                     event.get("transformation_duration_ms"),
+                    event.get("initialization_duration_ms"),
+                    event.get("total_execution_duration_ms"),
                     event.get("success", True),
-                    timestamp,
-                    event.get("project_path"),  # Extract project context
-                    event.get("project_name"),
-                    event.get(
-                        "session_id"
-                    ),  # Note: event uses session_id, DB uses claude_session_id
+                    event.get("error_message"),
+                    event.get("error_type"),
+                    event.get("quality_score"),
+                    context_snapshot,
+                    event.get("context_keys"),
+                    event.get("context_size_bytes"),
+                    agent_definition_id,
+                    parent_event_id,
+                    event.get("started_at", timestamp),
+                    event.get("completed_at"),
                 )
             )
 
@@ -1086,7 +1201,7 @@ class AgentActionsConsumer:
             signal.signal(signal.SIGTERM, self._signal_handler)
             signal.signal(signal.SIGINT, self._signal_handler)
 
-            self.running = True
+            self.running_event.set()  # Atomic state update
             logger.info("Consumer started successfully")
 
             # Start consuming
@@ -1106,7 +1221,7 @@ class AgentActionsConsumer:
         """Graceful shutdown."""
         logger.info("Shutting down consumer...")
         self.shutdown_event.set()
-        self.running = False
+        self.running_event.clear()  # Atomic state update
 
         # Close Kafka consumer
         if self.consumer:
@@ -1118,10 +1233,10 @@ class AgentActionsConsumer:
             logger.info("Closing DLQ producer...")
             self.dlq_producer.close()
 
-        # Close database connection
-        if self.db_conn:
-            logger.info("Closing database connection...")
-            self.db_conn.close()
+        # Close database connection pool
+        if self.db_pool:
+            logger.info("Closing database connection pool...")
+            self.db_pool.closeall()
 
         # Shutdown health check server
         if self.health_server:

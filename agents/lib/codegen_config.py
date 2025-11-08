@@ -3,105 +3,107 @@
 Code Generation Configuration
 
 Centralizes configuration for Kafka and generation behavior with env overrides.
+
+Migration Note (Phase 2):
+    This file has been migrated from os.getenv() to Pydantic Settings framework.
+    All configuration now comes from config.settings with automatic type validation.
+
+Usage:
+    from agents.lib.codegen_config import config
+
+    # Access configuration with type safety
+    print(config.kafka_bootstrap_servers)  # str
+    print(config.generate_contracts)       # bool
+    print(config.quality_threshold)        # float
 """
 
-import os
-from dataclasses import dataclass
+from config import settings
 
 
-@dataclass
 class CodegenConfig:
-    # Kafka configuration
-    kafka_bootstrap_servers: str = "omninode-bridge-redpanda:9092"
-    consumer_group: str = "omniclaude-codegen"
+    """
+    Code generation configuration proxy to Pydantic Settings.
+
+    Provides backward-compatible interface while delegating to the
+    centralized Settings class for type-safe configuration management.
+
+    All values are loaded from environment variables and validated by Pydantic.
+    """
+
+    @property
+    def kafka_bootstrap_servers(self) -> str:
+        """Kafka bootstrap servers for code generation events."""
+        return settings.kafka_bootstrap_servers
+
+    @property
+    def consumer_group(self) -> str:
+        """Kafka consumer group for code generation service."""
+        return settings.codegen_consumer_group
 
     # Generation control
-    generate_contracts: bool = True
-    generate_models: bool = True
-    generate_enums: bool = True
-    generate_business_logic: bool = False  # Start with stubs
-    generate_tests: bool = True
+    @property
+    def generate_contracts(self) -> bool:
+        """Enable automatic contract generation."""
+        return settings.codegen_generate_contracts
+
+    @property
+    def generate_models(self) -> bool:
+        """Enable automatic model generation."""
+        return settings.codegen_generate_models
+
+    @property
+    def generate_enums(self) -> bool:
+        """Enable automatic enum generation."""
+        return settings.codegen_generate_enums
+
+    @property
+    def generate_business_logic(self) -> bool:
+        """Enable business logic generation (starts with stubs)."""
+        return settings.codegen_generate_business_logic
+
+    @property
+    def generate_tests(self) -> bool:
+        """Enable automatic test generation."""
+        return settings.codegen_generate_tests
 
     # Quality gates
-    quality_threshold: float = 0.8
-    onex_compliance_threshold: float = 0.7
-    require_human_review: bool = True
+    @property
+    def quality_threshold(self) -> float:
+        """Minimum quality threshold for code generation (0.0-1.0)."""
+        return settings.quality_threshold
+
+    @property
+    def onex_compliance_threshold(self) -> float:
+        """Minimum ONEX compliance threshold (0.0-1.0)."""
+        return settings.onex_compliance_threshold
+
+    @property
+    def require_human_review(self) -> bool:
+        """Require human review for generated code."""
+        return settings.require_human_review
 
     # Intelligence timeouts (seconds)
-    analysis_timeout_seconds: int = 30
-    validation_timeout_seconds: int = 20
+    @property
+    def analysis_timeout_seconds(self) -> int:
+        """Code analysis timeout in seconds."""
+        return settings.analysis_timeout_seconds
+
+    @property
+    def validation_timeout_seconds(self) -> int:
+        """Validation timeout in seconds."""
+        return settings.validation_timeout_seconds
 
     # Mixin configuration
-    auto_select_mixins: bool = True
-    mixin_confidence_threshold: float = 0.7
+    @property
+    def auto_select_mixins(self) -> bool:
+        """Automatically select appropriate mixins for generated code."""
+        return settings.codegen_auto_select_mixins
 
-    def load_env_overrides(self) -> None:
-        self.kafka_bootstrap_servers = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", self.kafka_bootstrap_servers
-        )
-        self.consumer_group = os.getenv("CODEGEN_CONSUMER_GROUP", self.consumer_group)
-        self.generate_contracts = (
-            os.getenv(
-                "CODEGEN_GENERATE_CONTRACTS", str(self.generate_contracts)
-            ).lower()
-            == "true"
-        )
-        self.generate_models = (
-            os.getenv("CODEGEN_GENERATE_MODELS", str(self.generate_models)).lower()
-            == "true"
-        )
-        self.generate_enums = (
-            os.getenv("CODEGEN_GENERATE_ENUMS", str(self.generate_enums)).lower()
-            == "true"
-        )
-        self.generate_business_logic = (
-            os.getenv(
-                "CODEGEN_GENERATE_BUSINESS_LOGIC", str(self.generate_business_logic)
-            ).lower()
-            == "true"
-        )
-        self.generate_tests = (
-            os.getenv("CODEGEN_GENERATE_TESTS", str(self.generate_tests)).lower()
-            == "true"
-        )
-        self.quality_threshold = float(
-            os.getenv("CODEGEN_QUALITY_THRESHOLD", str(self.quality_threshold))
-        )
-        self.onex_compliance_threshold = float(
-            os.getenv(
-                "CODEGEN_ONEX_COMPLIANCE_THRESHOLD", str(self.onex_compliance_threshold)
-            )
-        )
-        self.require_human_review = (
-            os.getenv(
-                "CODEGEN_REQUIRE_HUMAN_REVIEW", str(self.require_human_review)
-            ).lower()
-            == "true"
-        )
-        self.analysis_timeout_seconds = int(
-            os.getenv(
-                "CODEGEN_ANALYSIS_TIMEOUT_SECONDS", str(self.analysis_timeout_seconds)
-            )
-        )
-        self.validation_timeout_seconds = int(
-            os.getenv(
-                "CODEGEN_VALIDATION_TIMEOUT_SECONDS",
-                str(self.validation_timeout_seconds),
-            )
-        )
-        self.auto_select_mixins = (
-            os.getenv(
-                "CODEGEN_AUTO_SELECT_MIXINS", str(self.auto_select_mixins)
-            ).lower()
-            == "true"
-        )
-        self.mixin_confidence_threshold = float(
-            os.getenv(
-                "CODEGEN_MIXIN_CONFIDENCE_THRESHOLD",
-                str(self.mixin_confidence_threshold),
-            )
-        )
+    @property
+    def mixin_confidence_threshold(self) -> float:
+        """Minimum confidence threshold for mixin selection (0.0-1.0)."""
+        return settings.codegen_mixin_confidence_threshold
 
 
+# Singleton instance for backward compatibility
 config = CodegenConfig()
-config.load_env_overrides()
