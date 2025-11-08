@@ -4,4 +4,7 @@ OmniClaude FastAPI Application
 Main application package for OmniClaude with Prometheus metrics integration.
 """
 
-__version__ = "0.1.0"
+# Import version for backward compatibility
+from .version import __version__
+
+__all__ = ["__version__"]

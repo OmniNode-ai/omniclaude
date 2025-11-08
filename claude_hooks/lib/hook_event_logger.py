@@ -28,7 +28,13 @@ class HookEventLogger:
             # Note: Set POSTGRES_PASSWORD environment variable for database access
             import os
 
-            db_password = os.getenv("POSTGRES_PASSWORD", "")
+            db_password = os.getenv("POSTGRES_PASSWORD")
+            if not db_password:
+                raise ValueError(
+                    "POSTGRES_PASSWORD environment variable is required. "
+                    "Please set it in your .env file or environment."
+                )
+
             host = os.getenv("POSTGRES_HOST", "localhost")
             port = os.getenv("POSTGRES_PORT", "5436")
             db = os.getenv("POSTGRES_DB", "omninode_bridge")

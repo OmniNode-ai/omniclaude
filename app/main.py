@@ -142,7 +142,9 @@ async def prometheus_middleware(request: Request, call_next):
     duration = time.time() - start_time
 
     # Extract endpoint and method
-    endpoint = request.url.path
+    # Use route template instead of raw path to avoid cardinality explosion
+    route = request.scope.get("route")
+    endpoint = getattr(route, "path", request.url.path)
     method = request.method
     status_code = response.status_code
 
@@ -297,7 +299,7 @@ if __name__ == "__main__":
     # Development server configuration
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104  # Bind to all interfaces for Docker development
         port=8000,
         reload=True,
         log_level="info",

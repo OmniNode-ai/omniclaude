@@ -494,8 +494,22 @@ def reset_metrics():
         return
 
     # Clear all collectors and re-register
-    # This is a bit hacky but works for testing
     logger.info("Resetting all Prometheus metrics")
+
+    # Get list of collectors before modifying registry
+    collectors = list(_metrics_registry._collector_to_names.keys())
+
+    # Clear each collector or unregister if no clear method
+    for collector in collectors:
+        clear_method = getattr(collector, "clear", None)
+        if callable(clear_method):
+            clear_method()
+        else:
+            # If no clear method, unregister the collector
+            try:
+                _metrics_registry.unregister(collector)
+            except Exception as e:
+                logger.debug(f"Could not unregister collector {collector}: {e}")
 
 
 # ============================================================================

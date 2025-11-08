@@ -145,8 +145,11 @@ class TestDeprecationWarnings:
                 _ = settings.get_effective_postgres_password()
 
                 # Should trigger deprecation warning
-                # Note: Actual warning behavior depends on implementation
-                # This test documents expected behavior
+                assert any(
+                    issubclass(record.category, DeprecationWarning)
+                    and "POSTGRES_PASSWORD_OMNINODE" in str(record.message)
+                    for record in w
+                ), "Expected DeprecationWarning when only POSTGRES_PASSWORD_OMNINODE is set"
 
     def test_new_password_no_deprecation_warning(self):
         """Test that using new password does not trigger deprecation warning"""
@@ -168,7 +171,9 @@ class TestDeprecationWarnings:
                 _ = settings.get_effective_postgres_password()
 
                 # Should not trigger deprecation warning for new variable
-                # (Other warnings may exist, but not for password deprecation)
+                assert not any(
+                    issubclass(record.category, DeprecationWarning) for record in w
+                ), f"Unexpected DeprecationWarning(s): {w}"
 
 
 # ============================================================================
@@ -580,7 +585,9 @@ class TestValidationEdgeCases:
             errors = settings.validate_required_services()
 
             # Should not include password-related errors
-            # (May have other errors for missing services)
+            assert not any(
+                "password" in error.lower() for error in errors
+            ), f"Unexpected password validation error(s): {errors}"
             # This is a positive test that password is validated correctly
 
 

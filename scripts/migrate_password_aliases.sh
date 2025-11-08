@@ -10,6 +10,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Detect OS for sed compatibility
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    SED_INPLACE="sed -i ''"
+else
+    SED_INPLACE="sed -i"
+fi
+
 echo -e "${YELLOW}Starting password alias migration...${NC}"
 echo ""
 
@@ -57,28 +64,28 @@ for file in "${FILES[@]}"; do
 
     # Perform replacements
     # 1. Replace $DB_PASSWORD with $POSTGRES_PASSWORD
-    sed -i '' 's/\$DB_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
-    sed -i '' 's/\${DB_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
+    $SED_INPLACE 's/\$DB_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
+    $SED_INPLACE 's/\${DB_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
 
     # 2. Replace $DATABASE_PASSWORD with $POSTGRES_PASSWORD
-    sed -i '' 's/\$DATABASE_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
-    sed -i '' 's/\${DATABASE_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
+    $SED_INPLACE 's/\$DATABASE_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
+    $SED_INPLACE 's/\${DATABASE_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
 
     # 3. Replace $TRACEABILITY_DB_PASSWORD with $POSTGRES_PASSWORD
-    sed -i '' 's/\$TRACEABILITY_DB_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
-    sed -i '' 's/\${TRACEABILITY_DB_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
+    $SED_INPLACE 's/\$TRACEABILITY_DB_PASSWORD/\$POSTGRES_PASSWORD/g' "$file"
+    $SED_INPLACE 's/\${TRACEABILITY_DB_PASSWORD}/\${POSTGRES_PASSWORD}/g' "$file"
 
     # 4. Replace DB_PASSWORD= assignments
-    sed -i '' 's/^DB_PASSWORD="${POSTGRES_PASSWORD}"$/# Note: Using POSTGRES_PASSWORD directly (no alias)/g' "$file"
-    sed -i '' 's/^export DB_PASSWORD="${DB_PASSWORD:-.*}"$/# Note: Using POSTGRES_PASSWORD directly (no alias)/g' "$file"
+    $SED_INPLACE 's/^DB_PASSWORD="${POSTGRES_PASSWORD}"$/# Note: Using POSTGRES_PASSWORD directly (no alias)/g' "$file"
+    $SED_INPLACE 's/^export DB_PASSWORD="${DB_PASSWORD:-.*}"$/# Note: Using POSTGRES_PASSWORD directly (no alias)/g' "$file"
 
     # 5. Update comments
-    sed -i '' 's/Set DB_PASSWORD environment variable/Set POSTGRES_PASSWORD environment variable/g' "$file"
-    sed -i '' 's/DB_PASSWORD for database/POSTGRES_PASSWORD for database/g' "$file"
-    sed -i '' 's/Ensure .env file is set up with DB_PASSWORD/Ensure .env file is set up with POSTGRES_PASSWORD/g' "$file"
+    $SED_INPLACE 's/Set DB_PASSWORD environment variable/Set POSTGRES_PASSWORD environment variable/g' "$file"
+    $SED_INPLACE 's/DB_PASSWORD for database/POSTGRES_PASSWORD for database/g' "$file"
+    $SED_INPLACE 's/Ensure .env file is set up with DB_PASSWORD/Ensure .env file is set up with POSTGRES_PASSWORD/g' "$file"
 
     # 6. Update validation messages
-    sed -i '' 's/missing_vars+=("DB_PASSWORD")/missing_vars+=("POSTGRES_PASSWORD")/g' "$file"
+    $SED_INPLACE 's/missing_vars+=("DB_PASSWORD")/missing_vars+=("POSTGRES_PASSWORD")/g' "$file"
 
     # Verify migration worked
     if grep -q 'DB_PASSWORD\|DATABASE_PASSWORD\|TRACEABILITY_DB_PASSWORD' "$file"; then

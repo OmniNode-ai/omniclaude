@@ -378,7 +378,10 @@ def sanitize_api_key(value: str) -> str:
             key = match.group(1)
             # Keep prefix (first 4-8 chars), mask rest
             prefix_len = min(8, len(key) // 3)
-            return key[:prefix_len] + "***"
+            masked_key = key[:prefix_len] + "***"
+            # Replace the matched substring in the original value to preserve surrounding text
+            start, end = match.span(1)
+            return value[:start] + masked_key + value[end:]
 
     return value
 

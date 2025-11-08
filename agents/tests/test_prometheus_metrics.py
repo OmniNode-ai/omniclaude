@@ -399,8 +399,7 @@ class TestEventPublisherIntegration:
 class TestMetricsEndpoint:
     """Test FastAPI /metrics endpoint."""
 
-    @pytest.mark.asyncio
-    async def test_metrics_endpoint(self):
+    def test_metrics_endpoint(self):
         """Test that /metrics endpoint returns Prometheus format."""
         from fastapi.testclient import TestClient
 
@@ -416,8 +415,7 @@ class TestMetricsEndpoint:
         assert "text/plain" in response.headers["content-type"]
         assert b"omniclaude" in response.content
 
-    @pytest.mark.asyncio
-    async def test_metrics_endpoint_content(self):
+    def test_metrics_endpoint_content(self):
         """Test metrics endpoint content format."""
         from fastapi.testclient import TestClient
 
