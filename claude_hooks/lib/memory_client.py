@@ -70,7 +70,10 @@ class MemoryBackend:
 
 
 class FilesystemMemoryBackend(MemoryBackend):
-    """Filesystem-based storage backend for memory tool"""
+    """Filesystem-based storage backend for memory tool
+
+    Stores memory as Markdown (.md) files per Claude Code specification.
+    """
 
     def __init__(self, base_path: str = None):
         """Initialize filesystem backend
@@ -86,30 +89,71 @@ class FilesystemMemoryBackend(MemoryBackend):
         self.base_path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Initialized filesystem memory backend at {self.base_path}")
 
+    def _format_as_markdown(self, key: str, value: Any, category: str, metadata: Optional[Dict] = None) -> str:
+        """Format memory item as markdown
+
+        Per Claude Code docs: Simple markdown with headings and bullet points.
+        No frontmatter required.
+        """
+        lines = [f"# {key.replace('_', ' ').title()}", ""]
+
+        # Add metadata as bullet points if present
+        if metadata:
+            lines.append("## Metadata")
+            for k, v in metadata.items():
+                lines.append(f"- **{k}**: {v}")
+            lines.append("")
+
+        # Format value based on type
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if isinstance(v, (list, tuple)):
+                    lines.append(f"## {k.replace('_', ' ').title()}")
+                    for item in v:
+                        lines.append(f"- {item}")
+                else:
+                    lines.append(f"- **{k}**: {v}")
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                lines.append(f"- {item}")
+        else:
+            lines.append(str(value))
+
+        lines.append("")  # Trailing newline
+        return "\n".join(lines)
+
+    def _parse_markdown(self, content: str) -> Any:
+        """Parse markdown content back to structured data
+
+        Simple parser for our markdown format.
+        """
+        # For now, return the raw content
+        # Can be enhanced to parse back to dict/list if needed
+        return content.strip()
+
     def _get_file_path(self, category: str, key: str) -> Path:
         """Get file path for a memory item"""
         category_path = self.base_path / category
         category_path.mkdir(exist_ok=True)
         # Use safe filename (replace problematic characters)
         safe_key = key.replace("/", "_").replace("\\", "_").replace(":", "_")
-        return category_path / f"{safe_key}.json"
+        return category_path / f"{safe_key}.md"
 
     async def store(self, category: str, key: str, value: Any, metadata: Optional[Dict] = None) -> None:
-        """Store memory item to filesystem"""
+        """Store memory item to filesystem as markdown"""
         file_path = self._get_file_path(category, key)
 
-        memory_item = {
-            "key": key,
-            "value": value,
-            "category": category,
-            "timestamp": datetime.utcnow().isoformat(),
-            "version": 1,
-            "metadata": metadata or {}
-        }
+        # Add timestamp to metadata
+        full_metadata = metadata or {}
+        full_metadata["timestamp"] = datetime.utcnow().isoformat()
+        full_metadata["category"] = category
+
+        # Format as markdown
+        content = self._format_as_markdown(key, value, category, full_metadata)
 
         try:
             async with aiofiles.open(file_path, 'w') as f:
-                await f.write(json.dumps(memory_item, indent=2))
+                await f.write(content)
             logger.debug(f"Stored memory: {category}/{key}")
         except Exception as e:
             logger.error(f"Failed to store memory {category}/{key}: {e}")
@@ -126,8 +170,8 @@ class FilesystemMemoryBackend(MemoryBackend):
         try:
             async with aiofiles.open(file_path, 'r') as f:
                 content = await f.read()
-                data = json.loads(content)
-                return data["value"]
+                # Return markdown content directly
+                return self._parse_markdown(content)
         except Exception as e:
             logger.error(f"Failed to retrieve memory {category}/{key}: {e}")
             return None
@@ -186,12 +230,12 @@ class FilesystemMemoryBackend(MemoryBackend):
 
         try:
             keys = []
-            for file_path in category_path.glob("*.json"):
-                # Read the file to get the original key (not the safe filename)
-                async with aiofiles.open(file_path, 'r') as f:
-                    content = await f.read()
-                    data = json.loads(content)
-                    keys.append(data["key"])
+            for file_path in category_path.glob("*.md"):
+                # Extract key from filename (remove .md extension)
+                key = file_path.stem
+                # Reverse the safe filename transformation
+                original_key = key.replace("_", "_")  # Keep as is for now
+                keys.append(original_key)
             return keys
         except Exception as e:
             logger.error(f"Failed to list keys in category {category}: {e}")

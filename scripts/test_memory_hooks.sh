@@ -87,7 +87,7 @@ if [ -d "$MEMORY_DIR" ]; then
     # Check categories
     for category in workspace execution_history patterns; do
         if [ -d "$MEMORY_DIR/$category" ]; then
-            count=$(find "$MEMORY_DIR/$category" -type f -name "*.json" | wc -l | xargs)
+            count=$(find "$MEMORY_DIR/$category" -type f -name "*.md" | wc -l | xargs)
             echo "   ✅ Category: $category ($count files)"
         else
             echo "   ⚠️  Category: $category (directory not created yet)"
