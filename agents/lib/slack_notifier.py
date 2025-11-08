@@ -146,6 +146,7 @@ class SlackNotifier:
         self,
         webhook_url: Optional[str] = None,
         throttle_seconds: Optional[int] = None,
+        logger: Optional[logging.Logger] = None,
     ):
         """
         Initialize Slack notifier.
@@ -153,7 +154,13 @@ class SlackNotifier:
         Args:
             webhook_url: Slack webhook URL (optional, defaults to config/env)
             throttle_seconds: Throttle window in seconds (optional, defaults to config/env)
+            logger: Logger instance (optional, defaults to module logger)
         """
+        # CRITICAL: Initialize logger FIRST (before any method calls that might use it)
+        # This prevents AttributeError if _init_cache() or other methods access self.logger
+        self.logger = logger or logging.getLogger(__name__)
+
+        # Initialize simple attributes (no method calls yet)
         # Load webhook URL from config or environment
         if webhook_url:
             self.webhook_url = webhook_url
@@ -178,19 +185,18 @@ class SlackNotifier:
                 os.getenv("SLACK_NOTIFICATION_THROTTLE_SECONDS", "300")
             )
 
-        # Initialize logger first (needed by _init_cache)
-        self.logger = logging.getLogger(__name__)
-
-        # Distributed cache client for throttling (Valkey/Redis)
+        # Initialize cache client attribute (will be set by _init_cache)
         self._cache_client: Optional[Any] = None
-        self._init_cache()
 
-        # Metrics
+        # Initialize metrics
         self._notifications_sent = 0
         self._notifications_throttled = 0
         self._notifications_failed = 0
 
-        # Log initialization status
+        # NOW call initialization methods (logger is available for use)
+        self._init_cache()
+
+        # Log initialization status (after _init_cache so we know cache status)
         if self.webhook_url:
             throttle_mode = "distributed" if self._cache_client else "disabled"
             self.logger.info(

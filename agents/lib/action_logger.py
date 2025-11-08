@@ -307,6 +307,9 @@ class ActionLogger:
                     pass
 
                 # Create dynamic exception class with the desired name
+                # IMPORTANT: Use type() to create class with desired __name__
+                # DO NOT try to modify error_obj.__class__.__name__ directly - it's readonly!
+                # Attempting error_obj.__class__.__name__ = error_type raises TypeError
                 error_cls = type(error_type, (LoggedError,), {})
                 error_obj = error_cls(error_message)
 
@@ -317,6 +320,8 @@ class ActionLogger:
                     "correlation_id": self.correlation_id,
                     "project": self.project_name,
                     "severity": severity,
+                    "error_type": error_type,  # Include error type for debugging
+                    "error_class": error_obj.__class__.__name__,  # Verify class name
                 }
 
                 # Add error_context fields to notification context
@@ -325,19 +330,27 @@ class ActionLogger:
 
                 # Get notifier and send
                 notifier = get_slack_notifier()
-                await notifier.send_error_notification(
+                notification_success = await notifier.send_error_notification(
                     error=error_obj, context=notification_context
                 )
 
-                logger.debug(
-                    f"Slack notification sent for error: {error_type} (correlation_id: {self.correlation_id})"
-                )
+                if notification_success:
+                    logger.debug(
+                        f"Slack notification sent successfully: {error_type} "
+                        f"(correlation_id: {self.correlation_id})"
+                    )
+                else:
+                    logger.warning(
+                        f"Slack notification failed to send: {error_type} "
+                        f"(correlation_id: {self.correlation_id})"
+                    )
 
             except Exception as slack_error:
                 # Never fail main flow due to notification errors
-                logger.debug(
-                    f"Failed to send Slack notification: {slack_error}",
-                    exc_info=False,
+                # Log at WARNING level so failures are visible
+                logger.warning(
+                    f"Failed to send Slack notification for {error_type}: {slack_error}",
+                    exc_info=True,
                 )
 
         return kafka_success

@@ -1171,16 +1171,11 @@ def _send_config_error_notification(errors: list[str]) -> None:
             loop = asyncio.get_running_loop()
             # Event loop exists - schedule async notification (non-blocking)
             logger.debug("Event loop detected - scheduling async Slack notification")
-            try:
-                asyncio.create_task(
-                    notifier.send_error_notification(error=error, context=context)
-                )
-            except RuntimeError as create_task_error:
-                # create_task() failed even though loop exists - fall through to sync
-                logger.debug(
-                    f"create_task() failed despite loop existence: {create_task_error}"
-                )
-                raise  # Re-raise to be caught by outer except
+            # Use loop.create_task() instead of asyncio.create_task() to avoid
+            # implicit loop lookup and potential TOCTOU race condition
+            loop.create_task(
+                notifier.send_error_notification(error=error, context=context)
+            )
         except RuntimeError:
             # No event loop - use synchronous approach (safe for module initialization)
             logger.debug(

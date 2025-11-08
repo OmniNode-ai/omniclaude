@@ -42,6 +42,14 @@ import os
 import sys
 from typing import List, Optional
 
+# Import Pydantic Settings for type-safe configuration validation
+try:
+    from config import settings
+
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+
 # =============================================================================
 # Required Environment Variables
 # =============================================================================
@@ -102,7 +110,37 @@ def validate_required_env_vars(
         - QDRANT_URL format: http://host:port (e.g., from settings.qdrant_url)
         - Consider using the Pydantic settings module (config.settings) for type-safe access
     """
-    # Combine required and additional variables
+    # Use Pydantic Settings validation if available (more comprehensive)
+    if SETTINGS_AVAILABLE:
+        try:
+            validation_errors = settings.validate_required_services()
+            if validation_errors:
+                error_message = "\n".join(
+                    [
+                        "Required configuration variables are missing or invalid:",
+                        "",
+                    ]
+                    + [f"  - {error}" for error in validation_errors]
+                    + [
+                        "",
+                        "Check your .env file and ensure all required variables are set.",
+                        "See config/README.md for complete configuration reference.",
+                    ]
+                )
+
+                if strict:
+                    raise EnvironmentError(error_message)
+                else:
+                    print(f"⚠️  WARNING: {error_message}", file=sys.stderr)
+                return
+        except Exception as e:
+            # If Pydantic validation fails, fall back to os.getenv checks
+            print(
+                f"⚠️  Pydantic Settings validation failed: {e}. Falling back to environment variable checks.",
+                file=sys.stderr,
+            )
+
+    # Fallback: Check environment variables directly
     vars_to_check = REQUIRED_ENV_VARS.copy()
     if additional_vars:
         vars_to_check.extend(additional_vars)

@@ -34,21 +34,35 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
-_producer_lock = None
+_producer_lock: Optional[asyncio.Lock] = None
+
+# Threading lock for thread-safe asyncio.Lock creation
+_lock_creation_lock = threading.Lock()
 
 
 async def get_producer_lock():
     """
     Get or create the producer lock lazily under a running event loop.
+
+    Uses double-checked locking pattern to ensure thread-safe lock creation.
+    This prevents race conditions where multiple coroutines could create
+    separate lock instances.
 
     This ensures asyncio.Lock() is never created at module level, which
     would cause RuntimeError in Python 3.12+ when no event loop exists.
@@ -57,18 +71,38 @@ async def get_producer_lock():
         asyncio.Lock: The producer lock instance
     """
     global _producer_lock
+
+    # First check (no lock) - fast path for already-initialized case
     if _producer_lock is None:
-        _producer_lock = asyncio.Lock()
+        # Acquire threading lock for creation
+        with _lock_creation_lock:
+            # Second check (with lock) - ensures only one coroutine creates the lock
+            if _producer_lock is None:
+                _producer_lock = asyncio.Lock()
+
     return _producer_lock
 
 
 def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment."""
+    """Get Kafka bootstrap servers from environment or settings."""
+    # Try Pydantic settings first (if available)
+    if settings:
+        try:
+            servers = settings.get_effective_kafka_bootstrap_servers()
+            return servers
+        except Exception as e:
+            logger.debug(f"Failed to get Kafka servers from settings: {e}")
+
+    # Fall back to environment variable
     servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
     if not servers:
-        # Fallback to default for local development
-        servers = "localhost:29092"
-        logger.warning(f"KAFKA_BOOTSTRAP_SERVERS not set, using default: {servers}")
+        # Use production external endpoint as last resort (matches Pydantic settings default for host)
+        # Note: For Docker contexts, KAFKA_BOOTSTRAP_SERVERS should be explicitly set to internal endpoint
+        servers = "192.168.86.200:29092"
+        logger.warning(
+            f"KAFKA_BOOTSTRAP_SERVERS not configured. Using production external endpoint: {servers}. "
+            f"For Docker containers, set KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
+        )
     return servers
 
 

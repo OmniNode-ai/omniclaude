@@ -69,8 +69,16 @@ except ImportError as e:
     logger_temp.warning(f"AgentTraceabilityLogger not available: {e}")
     TRACEABILITY_AVAILABLE = False
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+
 # Configure logging
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_LEVEL = settings.log_level if SETTINGS_AVAILABLE else os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -199,18 +207,29 @@ class AgentActionsConsumer:
         self.backoff_base_ms = 100
 
         # Kafka configuration (no localhost default - must be explicitly configured)
-        kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS"
-        )
+        if SETTINGS_AVAILABLE:
+            kafka_brokers_str = (
+                config.get("kafka_brokers")
+                or settings.get_effective_kafka_bootstrap_servers()
+            )
+        else:
+            kafka_brokers_str = config.get("kafka_brokers") or os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS"
+            )
+
         if not kafka_brokers_str:
             raise ValueError(
                 "KAFKA_BOOTSTRAP_SERVERS must be set via config file or environment variable. "
                 "Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
-        self.group_id = config.get(
-            "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
-        )
+
+        if SETTINGS_AVAILABLE:
+            self.group_id = config.get("group_id", settings.kafka_group_id)
+        else:
+            self.group_id = config.get(
+                "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")
+            )
         # Subscribe to all agent observability topics
         self.topics = config.get(
             "topics",
@@ -225,16 +244,33 @@ class AgentActionsConsumer:
         )
 
         # Batch configuration
-        self.batch_size = int(config.get("batch_size", os.getenv("BATCH_SIZE", "100")))
-        self.batch_timeout_ms = int(
-            config.get("batch_timeout_ms", os.getenv("BATCH_TIMEOUT_MS", "1000"))
-        )
+        if SETTINGS_AVAILABLE:
+            self.batch_size = int(config.get("batch_size", settings.batch_size))
+            self.batch_timeout_ms = int(
+                config.get("batch_timeout_ms", settings.batch_timeout_ms)
+            )
+        else:
+            self.batch_size = int(
+                config.get("batch_size", os.getenv("BATCH_SIZE", "100"))
+            )
+            self.batch_timeout_ms = int(
+                config.get("batch_timeout_ms", os.getenv("BATCH_TIMEOUT_MS", "1000"))
+            )
 
         # PostgreSQL configuration
         # Security: POSTGRES_PASSWORD must be set via environment variable (no default)
-        postgres_password = config.get("postgres_password") or os.getenv(
-            "POSTGRES_PASSWORD"
-        )
+        if SETTINGS_AVAILABLE:
+            postgres_password = (
+                config.get("postgres_password")
+                or settings.get_effective_postgres_password()
+            )
+            postgres_host = config.get("postgres_host", settings.postgres_host)
+        else:
+            postgres_password = config.get("postgres_password") or os.getenv(
+                "POSTGRES_PASSWORD"
+            )
+            postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
+
         if not postgres_password:
             raise ValueError(
                 "POSTGRES_PASSWORD environment variable must be set. "
@@ -243,29 +279,45 @@ class AgentActionsConsumer:
             )
 
         # Database host (no localhost default - must be explicitly configured)
-        postgres_host = config.get("postgres_host") or os.getenv("POSTGRES_HOST")
         if not postgres_host:
             raise ValueError(
                 "POSTGRES_HOST environment variable must be set. "
                 "Example: POSTGRES_HOST=192.168.86.200"
             )
 
-        self.db_config = {
-            "host": postgres_host,
-            "port": int(
-                config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
-            ),
-            "database": config.get(
-                "postgres_database", os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-            ),
-            "user": config.get("postgres_user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": postgres_password,
-        }
+        if SETTINGS_AVAILABLE:
+            self.db_config = {
+                "host": postgres_host,
+                "port": int(config.get("postgres_port", settings.postgres_port)),
+                "database": config.get("postgres_database", settings.postgres_database),
+                "user": config.get("postgres_user", settings.postgres_user),
+                "password": postgres_password,
+            }
+        else:
+            self.db_config = {
+                "host": postgres_host,
+                "port": int(
+                    config.get("postgres_port", os.getenv("POSTGRES_PORT", "5436"))
+                ),
+                "database": config.get(
+                    "postgres_database",
+                    os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
+                ),
+                "user": config.get(
+                    "postgres_user", os.getenv("POSTGRES_USER", "postgres")
+                ),
+                "password": postgres_password,
+            }
 
         # Health check configuration
-        self.health_check_port = int(
-            config.get("health_check_port", os.getenv("HEALTH_CHECK_PORT", "8080"))
-        )
+        if SETTINGS_AVAILABLE:
+            self.health_check_port = int(
+                config.get("health_check_port", settings.health_check_port)
+            )
+        else:
+            self.health_check_port = int(
+                config.get("health_check_port", os.getenv("HEALTH_CHECK_PORT", "8080"))
+            )
 
         # Components (initialized in start())
         self.consumer: Optional[KafkaConsumer] = None

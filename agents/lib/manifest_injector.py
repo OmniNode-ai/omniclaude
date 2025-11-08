@@ -744,10 +744,8 @@ class ManifestInjector:
 
         # Quality scoring configuration
         self.quality_scorer = PatternQualityScorer()
-        self.enable_quality_filtering = (
-            os.getenv("ENABLE_PATTERN_QUALITY_FILTER", "false").lower() == "true"
-        )
-        self.min_quality_threshold = float(os.getenv("MIN_PATTERN_QUALITY", "0.5"))
+        self.enable_quality_filtering = settings.enable_pattern_quality_filter
+        self.min_quality_threshold = settings.min_pattern_quality
 
         self.logger = logging.getLogger(__name__)
 
@@ -1998,12 +1996,16 @@ class ManifestInjector:
             """Blocking PostgreSQL operations."""
             import psycopg2
 
-            # Get connection details from environment
-            host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-            port = int(os.getenv("POSTGRES_PORT", "5436"))
-            database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-            user = os.getenv("POSTGRES_USER", "postgres")
-            password = os.getenv("POSTGRES_PASSWORD", "")
+            # Get connection details from centralized settings (NO hardcoded defaults)
+            host = settings.postgres_host
+            port = settings.postgres_port
+            database = settings.postgres_database
+            user = settings.postgres_user
+
+            try:
+                password = settings.get_effective_postgres_password()
+            except ValueError:
+                password = ""
 
             if not password:
                 return {
@@ -2065,10 +2067,8 @@ class ManifestInjector:
             """Blocking Kafka operations."""
             from kafka import KafkaAdminClient
 
-            # Get bootstrap servers from environment
-            bootstrap_servers = os.getenv(
-                "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-            )
+            # Get bootstrap servers from settings
+            bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
 
             # Try to connect and list topics
             admin = KafkaAdminClient(
@@ -2109,8 +2109,8 @@ class ManifestInjector:
         try:
             import aiohttp
 
-            # Get Qdrant URL from environment (defaults to Pydantic settings)
-            qdrant_url = os.getenv("QDRANT_URL", str(settings.qdrant_url))
+            # Get Qdrant URL from settings
+            qdrant_url = settings.qdrant_url
 
             # Try to fetch collections
             async with aiohttp.ClientSession() as session:
@@ -3456,33 +3456,71 @@ class ManifestInjector:
         self, patterns: List[Dict[str, Any]]
     ) -> tuple[List[Dict[str, Any]], int]:
         """
-        Deduplicate patterns by name, keeping the highest confidence version.
+        Deduplicate patterns by name, keeping the highest confidence version
+        and tracking instance counts and metadata from all occurrences.
 
         Args:
             patterns: List of pattern dictionaries
 
         Returns:
-            Tuple of (deduplicated_patterns, duplicates_removed_count)
+            Tuple of (deduplicated_patterns_with_metadata, duplicates_removed_count)
         """
         if not patterns:
             return [], 0
 
-        # Track patterns by name
-        pattern_map = {}
+        # Group patterns by name
+        pattern_groups = {}
 
         for pattern in patterns:
             name = pattern.get("name", "Unknown Pattern")
             confidence = pattern.get("confidence", 0.0)
 
-            # If pattern name not seen before, or this version has higher confidence
-            if name not in pattern_map or confidence > pattern_map[name].get(
-                "confidence", 0.0
-            ):
-                pattern_map[name] = pattern
+            if name not in pattern_groups:
+                pattern_groups[name] = {
+                    "pattern": pattern,  # Will be replaced with highest confidence version
+                    "count": 0,
+                    "node_types": set(),
+                    "domains": set(),
+                    "services": set(),
+                    "files": set(),
+                }
+
+            group = pattern_groups[name]
+            group["count"] += 1
+
+            # Update to highest confidence version
+            if confidence > group["pattern"].get("confidence", 0.0):
+                group["pattern"] = pattern
+
+            # Accumulate metadata from all instances
+            if pattern.get("node_types"):
+                group["node_types"].update(pattern["node_types"])
+            if pattern.get("file_path"):
+                group["files"].add(pattern["file_path"])
+
+            # Extract domain and service from source context
+            source_context = pattern.get("source_context", {})
+            if source_context.get("domain"):
+                group["domains"].add(source_context["domain"])
+            if source_context.get("service_name"):
+                group["services"].add(source_context["service_name"])
+
+        # Build deduplicated list with enhanced metadata
+        deduplicated = []
+        for name, group in pattern_groups.items():
+            pattern = group["pattern"].copy()
+
+            # Add aggregated metadata to pattern
+            pattern["instance_count"] = group["count"]
+            pattern["all_node_types"] = sorted(group["node_types"])
+            pattern["all_domains"] = sorted(group["domains"])
+            pattern["all_services"] = sorted(group["services"])
+            pattern["all_files"] = sorted(group["files"])
+
+            deduplicated.append(pattern)
 
         # Calculate duplicates removed
         original_count = len(patterns)
-        deduplicated = list(pattern_map.values())
         duplicates_removed = original_count - len(deduplicated)
 
         # Sort by confidence (highest first) to show best patterns
@@ -3514,6 +3552,12 @@ class ManifestInjector:
                     "node_types": p.get("node_types", []),
                     "confidence": p.get("confidence", 0.0),
                     "use_cases": p.get("use_cases", []),
+                    # Enhanced metadata from deduplication
+                    "instance_count": p.get("instance_count", 1),
+                    "all_node_types": p.get("all_node_types", p.get("node_types", [])),
+                    "all_domains": p.get("all_domains", []),
+                    "all_services": p.get("all_services", []),
+                    "all_files": p.get("all_files", []),
                 }
                 for p in deduplicated_patterns
             ],
@@ -3778,7 +3822,7 @@ class ManifestInjector:
         return formatted
 
     def _format_patterns(self, patterns_data: Dict) -> str:
-        """Format patterns section."""
+        """Format patterns section with grouped duplicate counts."""
         output = ["AVAILABLE PATTERNS:"]
 
         patterns = patterns_data.get("available", [])
@@ -3809,13 +3853,42 @@ class ManifestInjector:
         # Show top 20 patterns (increased from 10 to show more variety)
         display_limit = 20
         for pattern in patterns[:display_limit]:
-            output.append(
-                f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence)"
+            # Get instance count (defaults to 1 if not present)
+            instance_count = pattern.get("instance_count", 1)
+
+            # Format pattern name with instance count for duplicates
+            if instance_count > 1:
+                pattern_header = (
+                    f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence) "
+                    f"[{instance_count} instances]"
+                )
+            else:
+                pattern_header = f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence)"
+
+            output.append(pattern_header)
+
+            # Show aggregated node types (from all instances)
+            all_node_types = pattern.get(
+                "all_node_types", pattern.get("node_types", [])
             )
-            if pattern.get("file"):
+            if all_node_types:
+                output.append(f"    Node Types: {', '.join(all_node_types)}")
+
+            # Show domains for multi-instance patterns
+            all_domains = pattern.get("all_domains", [])
+            if all_domains and instance_count > 1:
+                domains_str = ", ".join(all_domains[:3])  # Show first 3 domains
+                if len(all_domains) > 3:
+                    domains_str += f", +{len(all_domains) - 3} more"
+                output.append(f"    Domains: {domains_str}")
+
+            # Show representative file (only for single instance or if needed)
+            if instance_count == 1 and pattern.get("file"):
                 output.append(f"    File: {pattern['file']}")
-            if pattern.get("node_types"):
-                output.append(f"    Node Types: {', '.join(pattern['node_types'])}")
+            elif instance_count > 1:
+                file_count = len(pattern.get("all_files", []))
+                if file_count > 0:
+                    output.append(f"    Files: {file_count} files across services")
 
         if len(patterns) > display_limit:
             output.append(f"  ... and {len(patterns) - display_limit} more patterns")

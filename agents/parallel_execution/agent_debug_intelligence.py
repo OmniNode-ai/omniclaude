@@ -148,9 +148,12 @@ Analyze the problematic code and error to:
 
 Analyze thoroughly using available tools and generate complete debug analysis."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 debug_intelligence_agent = Agent[AgentDeps, DebugAnalysis](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=DebugAnalysis,
     system_prompt=DEBUG_SYSTEM_PROMPT,
@@ -463,7 +466,7 @@ class DebugIntelligenceAgent(AgentExecutionMixin):
                 "intelligence_sources": debug_output.intelligence_sources_used,
                 "analysis_completeness": debug_output.analysis_completeness,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 3,
                 },

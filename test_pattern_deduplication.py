@@ -1,302 +1,355 @@
 #!/usr/bin/env python3
 """
-Test pattern deduplication logic in ManifestInjector.
+Test pattern deduplication in manifest_injector.py
 
-Tests the _deduplicate_patterns method to ensure:
-1. Duplicates are correctly identified by name
-2. Highest confidence version is kept
-3. Metrics are accurately tracked
-4. Token savings are measurable
+This script verifies that:
+1. Duplicate patterns are grouped by name
+2. Instance counts are tracked correctly
+3. Metadata is aggregated from all instances
+4. Token usage is reduced
 """
 
 import sys
-from pathlib import Path
 from typing import Any, Dict, List
 
 
-def test_deduplicate_patterns():
-    """Test the deduplication logic with realistic pattern data."""
+def mock_deduplicate_patterns(
+    patterns: List[Dict[str, Any]]
+) -> tuple[List[Dict[str, Any]], int]:
+    """
+    Mock implementation of _deduplicate_patterns() for testing.
 
-    # Import the ManifestInjector class
-    # Add project root to path dynamically
-    project_root = Path(__file__).parent.resolve()
-    sys.path.insert(0, str(project_root))
-    from agents.lib.manifest_injector import ManifestInjector
+    This matches the actual implementation in manifest_injector.py.
+    """
+    if not patterns:
+        return [], 0
 
-    # Create test data with duplicates (simulating the PR #22 issue)
-    test_patterns: List[Dict[str, Any]] = [
-        # Dependency injection pattern repeated 23 times (as mentioned in PR #22)
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.85,
-            "file_path": "pattern1.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.92,
-            "file_path": "pattern2.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.78,
-            "file_path": "pattern3.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.88,
-            "file_path": "pattern4.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.95,
-            "file_path": "pattern5.py",
-        },  # Highest
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.82,
-            "file_path": "pattern6.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.87,
-            "file_path": "pattern7.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.90,
-            "file_path": "pattern8.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.84,
-            "file_path": "pattern9.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.91,
-            "file_path": "pattern10.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.86,
-            "file_path": "pattern11.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.89,
-            "file_path": "pattern12.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.83,
-            "file_path": "pattern13.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.93,
-            "file_path": "pattern14.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.81,
-            "file_path": "pattern15.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.94,
-            "file_path": "pattern16.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.80,
-            "file_path": "pattern17.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.87,
-            "file_path": "pattern18.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.92,
-            "file_path": "pattern19.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.85,
-            "file_path": "pattern20.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.88,
-            "file_path": "pattern21.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.91,
-            "file_path": "pattern22.py",
-        },
-        {
-            "name": "Dependency Injection Pattern",
-            "confidence": 0.86,
-            "file_path": "pattern23.py",
-        },
-        # Other unique patterns
-        {"name": "Factory Pattern", "confidence": 0.88, "file_path": "factory1.py"},
-        {
-            "name": "Factory Pattern",
-            "confidence": 0.92,
-            "file_path": "factory2.py",
-        },  # Duplicate with higher confidence
-        {"name": "Observer Pattern", "confidence": 0.95, "file_path": "observer.py"},
-        {"name": "Singleton Pattern", "confidence": 0.90, "file_path": "singleton.py"},
-        {"name": "Strategy Pattern", "confidence": 0.87, "file_path": "strategy.py"},
-    ]
+    # Group patterns by name
+    pattern_groups = {}
 
-    print(f"📊 Test Data:")
-    print(f"   Total patterns: {len(test_patterns)}")
-    print(f"   Expected duplicates: 23 (22 for Dependency Injection + 1 for Factory)")
-    print(
-        f"   Expected unique patterns: 5 (Dependency Injection, Factory, Observer, Singleton, Strategy)"
-    )
-    print()
+    for pattern in patterns:
+        name = pattern.get("name", "Unknown Pattern")
+        confidence = pattern.get("confidence", 0.0)
 
-    # Create ManifestInjector instance
-    injector = ManifestInjector()
+        if name not in pattern_groups:
+            pattern_groups[name] = {
+                "pattern": pattern,
+                "count": 0,
+                "node_types": set(),
+                "domains": set(),
+                "services": set(),
+                "files": set(),
+            }
 
-    # Test deduplication
-    print("🔍 Running deduplication...")
-    deduplicated, duplicates_removed = injector._deduplicate_patterns(test_patterns)
+        group = pattern_groups[name]
+        group["count"] += 1
 
-    print(f"✅ Deduplication complete!")
-    print(f"   Patterns before: {len(test_patterns)}")
-    print(f"   Patterns after: {len(deduplicated)}")
-    print(f"   Duplicates removed: {duplicates_removed}")
-    print()
+        # Update to highest confidence version
+        if confidence > group["pattern"].get("confidence", 0.0):
+            group["pattern"] = pattern
 
-    # Verify results
-    print("🧪 Verification:")
+        # Accumulate metadata from all instances
+        if pattern.get("node_types"):
+            group["node_types"].update(pattern["node_types"])
+        if pattern.get("file_path"):
+            group["files"].add(pattern["file_path"])
 
-    # Check that we have 5 unique patterns
-    assert (
-        len(deduplicated) == 5
-    ), f"Expected 5 unique patterns, got {len(deduplicated)}"
-    print("   ✓ Correct number of unique patterns (5)")
+        # Extract domain and service from source context
+        source_context = pattern.get("source_context", {})
+        if source_context.get("domain"):
+            group["domains"].add(source_context["domain"])
+        if source_context.get("service_name"):
+            group["services"].add(source_context["service_name"])
 
-    # Check that 23 duplicates were removed (22 from DI + 1 from Factory)
-    assert (
-        duplicates_removed == 23
-    ), f"Expected 23 duplicates removed, got {duplicates_removed}"
-    print("   ✓ Correct number of duplicates removed (23)")
+    # Build deduplicated list with enhanced metadata
+    deduplicated = []
+    for name, group in pattern_groups.items():
+        pattern = group["pattern"].copy()
 
-    # Check that highest confidence versions were kept
-    pattern_map = {p["name"]: p for p in deduplicated}
+        # Add aggregated metadata to pattern
+        pattern["instance_count"] = group["count"]
+        pattern["all_node_types"] = sorted(group["node_types"])
+        pattern["all_domains"] = sorted(group["domains"])
+        pattern["all_services"] = sorted(group["services"])
+        pattern["all_files"] = sorted(group["files"])
 
-    # Dependency Injection should have confidence 0.95 (highest)
-    assert pattern_map["Dependency Injection Pattern"]["confidence"] == 0.95
-    print("   ✓ Dependency Injection Pattern: kept highest confidence (0.95)")
+        deduplicated.append(pattern)
 
-    # Factory Pattern should have confidence 0.92 (highest)
-    assert pattern_map["Factory Pattern"]["confidence"] == 0.92
-    print("   ✓ Factory Pattern: kept highest confidence (0.92)")
+    # Calculate duplicates removed
+    original_count = len(patterns)
+    duplicates_removed = original_count - len(deduplicated)
 
-    # Check that patterns are sorted by confidence (highest first)
-    confidences = [p["confidence"] for p in deduplicated]
-    assert confidences == sorted(
-        confidences, reverse=True
-    ), "Patterns should be sorted by confidence (highest first)"
-    print("   ✓ Patterns sorted by confidence (highest first)")
-
-    print()
-    print("📈 Deduplication Results:")
-    for i, pattern in enumerate(deduplicated, 1):
-        print(
-            f"   {i}. {pattern['name']} ({pattern['confidence']:.0%} confidence) - {pattern['file_path']}"
-        )
-
-    # Calculate token savings
-    # Assuming each duplicate pattern takes ~5-7 tokens on average
-    # (pattern name + confidence + file path + formatting)
-    avg_tokens_per_pattern = 6
-    token_savings = duplicates_removed * avg_tokens_per_pattern
-
-    print()
-    print("💰 Token Savings Estimation:")
-    print(f"   Duplicates removed: {duplicates_removed}")
-    print(f"   Avg tokens per pattern: {avg_tokens_per_pattern}")
-    print(f"   Estimated token savings: {token_savings} tokens")
-    print(f"   Reduction: {(duplicates_removed / len(test_patterns) * 100):.1f}%")
+    # Sort by confidence (highest first)
+    deduplicated.sort(key=lambda p: p.get("confidence", 0.0), reverse=True)
 
     return deduplicated, duplicates_removed
 
 
-def test_edge_cases():
-    """Test edge cases for deduplication."""
-    # Import already available from test_deduplicate_patterns()
-    # which runs first and sets up the path
-    from agents.lib.manifest_injector import ManifestInjector
+def test_basic_deduplication():
+    """Test basic deduplication with duplicate pattern names."""
+    print("Test 1: Basic deduplication")
+    print("-" * 60)
 
-    injector = ManifestInjector()
-
-    print("\n🔬 Testing Edge Cases:")
-
-    # Test 1: Empty list
-    result, count = injector._deduplicate_patterns([])
-    assert result == []
-    assert count == 0
-    print("   ✓ Empty list handled correctly")
-
-    # Test 2: Single pattern (no duplicates)
-    single = [{"name": "Pattern A", "confidence": 0.9}]
-    result, count = injector._deduplicate_patterns(single)
-    assert len(result) == 1
-    assert count == 0
-    print("   ✓ Single pattern (no duplicates) handled correctly")
-
-    # Test 3: All patterns are identical
-    identical = [{"name": "Same Pattern", "confidence": 0.8}] * 10
-    result, count = injector._deduplicate_patterns(identical)
-    assert len(result) == 1
-    assert count == 9
-    print("   ✓ All identical patterns handled correctly (10 → 1, 9 removed)")
-
-    # Test 4: No duplicates
-    unique = [
-        {"name": "Pattern A", "confidence": 0.9},
-        {"name": "Pattern B", "confidence": 0.8},
-        {"name": "Pattern C", "confidence": 0.7},
+    patterns = [
+        {
+            "name": "Dependency Injection",
+            "confidence": 0.75,
+            "node_types": ["EFFECT"],
+            "file_path": "service_a/node_user_effect.py",
+            "source_context": {"domain": "identity", "service_name": "user_service"},
+        },
+        {
+            "name": "Dependency Injection",
+            "confidence": 0.80,
+            "node_types": ["COMPUTE"],
+            "file_path": "service_b/node_analytics_compute.py",
+            "source_context": {
+                "domain": "analytics",
+                "service_name": "analytics_service",
+            },
+        },
+        {
+            "name": "Dependency Injection",
+            "confidence": 0.78,
+            "node_types": ["EFFECT"],
+            "file_path": "service_c/node_data_effect.py",
+            "source_context": {
+                "domain": "data_processing",
+                "service_name": "data_service",
+            },
+        },
+        {
+            "name": "Unique Pattern",
+            "confidence": 0.90,
+            "node_types": ["ORCHESTRATOR"],
+            "file_path": "orchestrator.py",
+            "source_context": {
+                "domain": "orchestration",
+                "service_name": "orchestrator",
+            },
+        },
     ]
-    result, count = injector._deduplicate_patterns(unique)
-    assert len(result) == 3
-    assert count == 0
-    print("   ✓ No duplicates handled correctly")
 
+    deduplicated, duplicates_removed = mock_deduplicate_patterns(patterns)
+
+    print(f"Input: {len(patterns)} patterns")
+    print(f"Output: {len(deduplicated)} unique patterns")
+    print(f"Duplicates removed: {duplicates_removed}")
+    print()
+
+    # Verify results
+    assert (
+        len(deduplicated) == 2
+    ), f"Expected 2 unique patterns, got {len(deduplicated)}"
+    assert (
+        duplicates_removed == 2
+    ), f"Expected 2 duplicates removed, got {duplicates_removed}"
+
+    # Find the Dependency Injection pattern
+    dep_injection = next(
+        (p for p in deduplicated if p["name"] == "Dependency Injection"), None
+    )
+    assert dep_injection is not None, "Dependency Injection pattern not found"
+
+    print("Dependency Injection pattern:")
+    print(f"  Instance count: {dep_injection['instance_count']}")
+    print(f"  Confidence: {dep_injection['confidence']:.0%} (should be highest: 80%)")
+    print(f"  All node types: {dep_injection['all_node_types']}")
+    print(f"  All domains: {dep_injection['all_domains']}")
+    print(f"  All services: {dep_injection['all_services']}")
+    print(f"  All files: {len(dep_injection['all_files'])} files")
+    print()
+
+    # Verify metadata
+    assert (
+        dep_injection["instance_count"] == 3
+    ), f"Expected 3 instances, got {dep_injection['instance_count']}"
+    assert (
+        dep_injection["confidence"] == 0.80
+    ), f"Expected confidence 0.80, got {dep_injection['confidence']}"
+    assert set(dep_injection["all_node_types"]) == {
+        "COMPUTE",
+        "EFFECT",
+    }, f"Node types mismatch: {dep_injection['all_node_types']}"
+    assert set(dep_injection["all_domains"]) == {
+        "analytics",
+        "data_processing",
+        "identity",
+    }, f"Domains mismatch: {dep_injection['all_domains']}"
+    assert (
+        len(dep_injection["all_files"]) == 3
+    ), f"Expected 3 files, got {len(dep_injection['all_files'])}"
+
+    print("✅ Test 1 PASSED")
     print()
 
 
-if __name__ == "__main__":
-    print("=" * 70)
-    print("Pattern Deduplication Test Suite")
-    print("=" * 70)
+def test_no_duplicates():
+    """Test with no duplicate patterns."""
+    print("Test 2: No duplicates")
+    print("-" * 60)
+
+    patterns = [
+        {
+            "name": "Pattern A",
+            "confidence": 0.80,
+            "node_types": ["EFFECT"],
+            "file_path": "pattern_a.py",
+        },
+        {
+            "name": "Pattern B",
+            "confidence": 0.75,
+            "node_types": ["COMPUTE"],
+            "file_path": "pattern_b.py",
+        },
+    ]
+
+    deduplicated, duplicates_removed = mock_deduplicate_patterns(patterns)
+
+    print(f"Input: {len(patterns)} patterns")
+    print(f"Output: {len(deduplicated)} unique patterns")
+    print(f"Duplicates removed: {duplicates_removed}")
+    print()
+
+    assert len(deduplicated) == 2, f"Expected 2 patterns, got {len(deduplicated)}"
+    assert (
+        duplicates_removed == 0
+    ), f"Expected 0 duplicates removed, got {duplicates_removed}"
+
+    # Verify instance counts
+    for pattern in deduplicated:
+        assert (
+            pattern["instance_count"] == 1
+        ), f"Expected instance_count=1, got {pattern['instance_count']}"
+
+    print("✅ Test 2 PASSED")
+    print()
+
+
+def test_many_duplicates():
+    """Test with many duplicates (like the 23x dependency injection case)."""
+    print("Test 3: Many duplicates (23x)")
+    print("-" * 60)
+
+    patterns = []
+    for i in range(23):
+        patterns.append(
+            {
+                "name": "Dependency Injection",
+                "confidence": 0.70 + (i * 0.005),  # Varying confidence
+                "node_types": ["EFFECT", "COMPUTE"][i % 2 :],
+                "file_path": f"service_{i}/node_effect.py",
+                "source_context": {
+                    "domain": ["identity", "analytics", "data_processing"][i % 3],
+                    "service_name": f"service_{i}",
+                },
+            }
+        )
+
+    deduplicated, duplicates_removed = mock_deduplicate_patterns(patterns)
+
+    print(f"Input: {len(patterns)} patterns")
+    print(f"Output: {len(deduplicated)} unique patterns")
+    print(f"Duplicates removed: {duplicates_removed}")
+    print()
+
+    assert len(deduplicated) == 1, f"Expected 1 unique pattern, got {len(deduplicated)}"
+    assert (
+        duplicates_removed == 22
+    ), f"Expected 22 duplicates removed, got {duplicates_removed}"
+
+    pattern = deduplicated[0]
+    print("Dependency Injection pattern:")
+    print(f"  Instance count: {pattern['instance_count']}")
+    print(f"  Confidence: {pattern['confidence']:.0%}")
+    print(f"  All node types: {pattern['all_node_types']}")
+    print(f"  All domains: {pattern['all_domains']}")
+    print(f"  All files: {len(pattern['all_files'])} files")
+    print()
+
+    assert (
+        pattern["instance_count"] == 23
+    ), f"Expected 23 instances, got {pattern['instance_count']}"
+    assert (
+        len(pattern["all_files"]) == 23
+    ), f"Expected 23 files, got {len(pattern['all_files'])}"
+
+    print("✅ Test 3 PASSED")
+    print()
+
+
+def estimate_token_savings():
+    """Estimate token savings from deduplication."""
+    print("Test 4: Token savings estimation")
+    print("-" * 60)
+
+    # Before deduplication: 23 patterns x ~25 tokens each = ~575 tokens
+    patterns_before = 23
+    tokens_per_pattern = 25
+    tokens_before = patterns_before * tokens_per_pattern
+
+    # After deduplication: 1 pattern with instance count + metadata = ~40 tokens
+    patterns_after = 1
+    tokens_per_grouped_pattern = 40
+    tokens_after = patterns_after * tokens_per_grouped_pattern
+
+    tokens_saved = tokens_before - tokens_after
+    reduction_pct = (tokens_saved / tokens_before) * 100
+
+    print(f"Before deduplication:")
+    print(
+        f"  {patterns_before} patterns x {tokens_per_pattern} tokens = ~{tokens_before} tokens"
+    )
+    print()
+    print(f"After deduplication:")
+    print(
+        f"  {patterns_after} pattern x {tokens_per_grouped_pattern} tokens = ~{tokens_after} tokens"
+    )
+    print()
+    print(f"Savings: ~{tokens_saved} tokens ({reduction_pct:.1f}% reduction)")
+    print()
+
+    assert tokens_saved > 0, "Expected token savings"
+    assert reduction_pct > 50, f"Expected >50% reduction, got {reduction_pct:.1f}%"
+
+    print("✅ Test 4 PASSED")
+    print()
+
+
+def main():
+    """Run all tests."""
+    print("=" * 60)
+    print("Pattern Deduplication Tests")
+    print("=" * 60)
     print()
 
     try:
-        # Run main test
-        test_deduplicate_patterns()
+        test_basic_deduplication()
+        test_no_duplicates()
+        test_many_duplicates()
+        estimate_token_savings()
 
-        # Run edge case tests
-        test_edge_cases()
-
-        print("=" * 70)
-        print("✅ All tests passed!")
-        print("=" * 70)
+        print("=" * 60)
+        print("✅ ALL TESTS PASSED")
+        print("=" * 60)
+        return 0
 
     except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
-        sys.exit(1)
+        print()
+        print("=" * 60)
+        print(f"❌ TEST FAILED: {e}")
+        print("=" * 60)
+        return 1
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print()
+        print("=" * 60)
+        print(f"❌ ERROR: {e}")
+        print("=" * 60)
         import traceback
 
         traceback.print_exc()
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

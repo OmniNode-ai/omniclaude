@@ -11,11 +11,29 @@ try:
 except Exception:
     pass
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+
+    SETTINGS_AVAILABLE = True
+except ImportError:
+    SETTINGS_AVAILABLE = False
+
 
 _pool: Optional[asyncpg.Pool] = None
 
 
 def _build_dsn_from_env() -> Optional[str]:
+    """Build PostgreSQL DSN from environment variables or Pydantic Settings."""
+    # Prefer Pydantic Settings if available (type-safe, validated)
+    if SETTINGS_AVAILABLE:
+        try:
+            # Use Pydantic Settings helper method for DSN generation
+            return settings.get_postgres_dsn()
+        except Exception:
+            pass  # Fall through to os.getenv
+
+    # Fallback to os.getenv() for backward compatibility
     host = os.getenv("POSTGRES_HOST")
     port = os.getenv("POSTGRES_PORT")
     db = (
@@ -40,6 +58,7 @@ async def get_pg_pool() -> Optional[asyncpg.Pool]:
     if _pool is not None:
         return _pool
 
+    # Try PG_DSN from environment first, then build from individual vars
     dsn = os.getenv("PG_DSN") or _build_dsn_from_env()
     if not dsn:
         return None

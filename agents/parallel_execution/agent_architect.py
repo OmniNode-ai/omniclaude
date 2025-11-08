@@ -125,9 +125,12 @@ Execution: sequential (tasks have clear dependencies)
 **Your Task:**
 Break down the user's request into optimal subtasks with clear responsibilities."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 task_architect_agent = Agent[AgentDeps, TaskBreakdown](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=TaskBreakdown,
     system_prompt=ARCHITECT_SYSTEM_PROMPT,
@@ -328,7 +331,7 @@ class ArchitectAgent:
                 "num_subtasks": len(breakdown.subtasks),
                 "parallel_capable": breakdown.execution_order == "parallel",
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 3,
                 },

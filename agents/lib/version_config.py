@@ -67,8 +67,8 @@ class VersionConfig:
     auto_select_mixins: bool = True
     mixin_confidence_threshold: float = 0.7
 
-    # Database configuration
-    postgres_host: str = "localhost"
+    # Database configuration (production defaults - sync with config.settings)
+    postgres_host: str = "192.168.86.200"
     postgres_port: int = 5436
     postgres_db: str = "omninode_bridge"
     postgres_user: str = "postgres"
@@ -76,12 +76,12 @@ class VersionConfig:
         ""  # REQUIRED: Set via POSTGRES_PASSWORD environment variable
     )
 
-    # ONEX MCP Service configuration
-    onex_mcp_host: str = "localhost"  # Set via ONEX_MCP_HOST environment variable
+    # ONEX MCP Service configuration (production defaults - sync with config.settings)
+    onex_mcp_host: str = "192.168.86.101"  # Set via ONEX_MCP_HOST environment variable
     onex_mcp_port: int = 8151
 
-    # Redis configuration
-    redis_host: str = "localhost"
+    # Redis configuration (production defaults - sync with config.settings)
+    redis_host: str = "192.168.86.200"
     redis_port: int = 6379
 
     # Kafka configuration

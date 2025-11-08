@@ -2014,12 +2014,13 @@ tags:
             elif "kafka" in system.lower():
                 # Handle kafka_bootstrap_servers that may be comma-delimited
                 kafka_servers = settings.get_effective_kafka_bootstrap_servers()
-                # For manifest dependency, use first broker if multiple exist
+                # For manifest dependency, use first broker with kafka:// URI scheme
                 if "," in kafka_servers:
                     brokers = [broker.strip() for broker in kafka_servers.split(",")]
-                    target = brokers[0]
+                    first_broker = brokers[0]
                 else:
-                    target = kafka_servers
+                    first_broker = kafka_servers
+                target = f"kafka://{first_broker}"
             else:
                 target = "http://localhost:8080"  # Default fallback
 
@@ -2064,14 +2065,14 @@ tags:
             elif "kafka" in system.lower():
                 # Handle kafka_bootstrap_servers that may be comma-delimited
                 kafka_servers = settings.get_effective_kafka_bootstrap_servers()
-                # For endpoint list, use first broker if multiple exist
+                # For endpoint list, use first broker with kafka:// URI scheme
                 if "," in kafka_servers:
                     brokers = [broker.strip() for broker in kafka_servers.split(",")]
                     first_broker = brokers[0]
                 else:
                     first_broker = kafka_servers
 
-                endpoints.append(f'    - "{first_broker}"')
+                endpoints.append(f'    - "kafka://{first_broker}"')
 
         return "\n".join(endpoints) if endpoints else "    []"
 

@@ -151,9 +151,12 @@ Conduct comprehensive research on the given topic:
 
 Conduct thorough research using available tools and generate complete research report."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 research_intelligence_agent = Agent[AgentDeps, ResearchReport](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=ResearchReport,
     system_prompt=RESEARCH_SYSTEM_PROMPT,
@@ -434,7 +437,7 @@ class ResearchIntelligenceAgent:
                 "research_depth": research_output.research_depth_achieved,
                 "sources_consulted": research_output.sources_consulted,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 4,
                 },

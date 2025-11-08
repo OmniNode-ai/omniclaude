@@ -213,6 +213,13 @@ PR_DESCRIPTION.md
 *_errors*.txt
 mypy_*.txt
 
+# Security scan outputs (ephemeral, should not be committed)
+bandit*.json
+bandit-*.json
+safety*.json
+trivy*.json
+*security-scan.*
+
 # OmniBase / ONEX .gitignore
 
 # VS Code

@@ -344,7 +344,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             INSERT INTO agent_execution_logs (
                                 execution_id, correlation_id, session_id,
@@ -364,6 +364,12 @@ class AgentExecutionLogger:
                             self.claude_session_id,
                             self.terminal_id,
                         )
+                        # Check if INSERT succeeded
+                        rows_inserted = int(result.split()[2])
+                        if rows_inserted == 0:
+                            raise Exception(
+                                f"Failed to insert execution log for execution_id={self.execution_id}"
+                            )
                     self._handle_db_success()
                     self.logger.info(
                         "Agent execution started",
@@ -450,7 +456,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             UPDATE agent_execution_logs
                             SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
@@ -459,6 +465,12 @@ class AgentExecutionLogger:
                             json.dumps({"progress": progress_data}),
                             self.execution_id,
                         )
+                        # Check if UPDATE succeeded
+                        rows_updated = int(result.split()[1])
+                        if rows_updated == 0:
+                            raise Exception(
+                                f"No rows updated for progress tracking: execution_id={self.execution_id}"
+                            )
                     self._handle_db_success()
                     self.logger.info(
                         f"Agent progress: {stage}",
@@ -545,7 +557,7 @@ class AgentExecutionLogger:
                 pool = await get_pg_pool()
                 if pool:
                     async with pool.acquire() as conn:
-                        await conn.execute(
+                        result = await conn.execute(
                             """
                             UPDATE agent_execution_logs
                             SET
@@ -567,6 +579,12 @@ class AgentExecutionLogger:
                             json.dumps(final_metadata),
                             self.execution_id,
                         )
+                        # Check if UPDATE succeeded
+                        rows_updated = int(result.split()[1])
+                        if rows_updated == 0:
+                            raise Exception(
+                                f"No rows updated for completion tracking: execution_id={self.execution_id}"
+                            )
 
                     self._handle_db_success()
                     log_method = (

@@ -162,7 +162,7 @@ class AgentTraceabilityLogger:
             prompt_id = str(uuid4())
 
             async with pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     INSERT INTO agent_prompts (
                         id, correlation_id, session_id, execution_id,
@@ -196,6 +196,12 @@ class AgentTraceabilityLogger:
                     self.project_path,
                     self.project_name,
                 )
+                # Check if INSERT succeeded
+                rows_inserted = int(result.split()[2])
+                if rows_inserted == 0:
+                    raise Exception(
+                        f"Failed to insert agent prompt: prompt_id={prompt_id}, correlation_id={self.correlation_id}"
+                    )
 
             self.prompt_id = prompt_id
             self.manifest_injection_id = (
@@ -308,7 +314,7 @@ class AgentTraceabilityLogger:
             )
 
             async with pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     INSERT INTO agent_file_operations (
                         id, correlation_id, execution_id, prompt_id,
@@ -348,6 +354,12 @@ class AgentTraceabilityLogger:
                     bytes_written,
                     duration_ms,
                 )
+                # Check if INSERT succeeded
+                rows_inserted = int(result.split()[2])
+                if rows_inserted == 0:
+                    raise Exception(
+                        f"Failed to insert file operation: file_op_id={file_op_id}, correlation_id={self.correlation_id}"
+                    )
 
             self.logger.info(
                 f"File operation logged: {operation_type}",
@@ -440,7 +452,7 @@ class AgentTraceabilityLogger:
             )
 
             async with pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     INSERT INTO agent_intelligence_usage (
                         id, correlation_id, execution_id, manifest_injection_id, prompt_id,
@@ -486,6 +498,12 @@ class AgentTraceabilityLogger:
                     quality_impact,
                     datetime.now(timezone.utc) if was_applied else None,
                 )
+                # Check if INSERT succeeded
+                rows_inserted = int(result.split()[2])
+                if rows_inserted == 0:
+                    raise Exception(
+                        f"Failed to insert intelligence usage: intel_usage_id={intel_usage_id}, correlation_id={self.correlation_id}"
+                    )
 
             self.logger.info(
                 f"Intelligence usage logged: {intelligence_type}",

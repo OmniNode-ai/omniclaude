@@ -326,6 +326,9 @@ class RoutingEventClient:
 
         Stops producer and consumer, cleans up pending requests.
         Should be called when client is no longer needed.
+
+        Always attempts cleanup of all resources independently, even if
+        start() failed mid-execution or if cleanup of one resource fails.
         """
         # Always run cleanup, even after partial startup failures
         if not self._started:
@@ -335,33 +338,57 @@ class RoutingEventClient:
         else:
             self.logger.info("Stopping routing event client")
 
-        try:
-            # Stop producer
-            if self._producer is not None:
+        # Track cleanup errors to report at the end
+        cleanup_errors = []
+
+        # Stop producer (independent error handling)
+        if self._producer is not None:
+            try:
                 await self._producer.stop()
+                self.logger.debug("Producer stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping producer: {e}")
+                cleanup_errors.append(f"producer: {e}")
+            finally:
                 self._producer = None
 
-            # Stop consumer
-            if self._consumer is not None:
+        # Stop consumer (independent error handling)
+        if self._consumer is not None:
+            try:
                 await self._consumer.stop()
+                self.logger.debug("Consumer stopped successfully")
+            except Exception as e:
+                self.logger.error(f"Error stopping consumer: {e}")
+                cleanup_errors.append(f"consumer: {e}")
+            finally:
                 self._consumer = None
 
-            # Cancel pending requests
+        # Cancel pending requests (independent error handling)
+        try:
             for correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
                         RuntimeError("Client stopped while request pending")
                     )
             self._pending_requests.clear()
-
-            # Clear consumer ready flag for restart capability
-            self._consumer_ready.clear()
-
-            self._started = False
-            self.logger.info("Routing event client stopped successfully")
-
+            self.logger.debug("Pending requests cancelled")
         except Exception as e:
-            self.logger.error(f"Error stopping routing event client: {e}")
+            self.logger.error(f"Error cancelling pending requests: {e}")
+            cleanup_errors.append(f"pending_requests: {e}")
+
+        # Clear consumer ready flag for restart capability
+        self._consumer_ready.clear()
+
+        # Reset state
+        self._started = False
+
+        # Report final status
+        if cleanup_errors:
+            self.logger.warning(
+                f"Routing event client stopped with {len(cleanup_errors)} error(s): {', '.join(cleanup_errors)}"
+            )
+        else:
+            self.logger.info("Routing event client stopped successfully")
 
     async def health_check(self) -> bool:
         """

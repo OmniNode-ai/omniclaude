@@ -143,9 +143,12 @@ Evaluate the target content against validation rules to:
 
 Validate thoroughly and generate complete compliance report."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 validation_agent = Agent[AgentDeps, ComplianceReport](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=ComplianceReport,
     system_prompt=VALIDATION_SYSTEM_PROMPT,
@@ -408,7 +411,7 @@ class AgentValidator:
                     "overall_status": compliance_report.overall_status,
                 },
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 4,
                 },

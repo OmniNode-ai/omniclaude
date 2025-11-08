@@ -160,9 +160,12 @@ Generate production-quality ONEX code that:
 
 Generate code that matches the EXACT node name and follows canonical patterns."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 code_generator_agent = Agent[AgentDeps, ONEXNodeCode](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=ONEXNodeCode,
     system_prompt=ONEX_SYSTEM_PROMPT,
@@ -410,7 +413,7 @@ class CoderAgent(AgentExecutionMixin):
                 "validation_passed": quality_metrics.get("quality_score", 0.0) >= 0.7,
                 "onex_compliance_notes": generated_output.onex_compliance_notes,
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 3,
                 },

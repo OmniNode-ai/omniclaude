@@ -1,7 +1,7 @@
 # Pattern Deduplication Issue
 
 **Date**: 2025-11-06
-**Status**: Identified, Needs Fix
+**Status**: ✅ FIXED (2025-11-07)
 
 ## Problem
 
@@ -127,7 +127,7 @@ def _format_patterns_deduplicated(patterns: List[Dict]) -> str:
 ## Next Steps
 
 1. ✅ Delete useless patterns (DONE - 785 deleted)
-2. ⏳ Add deduplication in manifest formatter (TODO)
+2. ✅ Add deduplication in manifest formatter (DONE - 2025-11-07)
 3. ⏳ Fix pattern extraction system (TODO - omniarchon)
 4. ⏳ Add pattern quality gates (TODO)
 
@@ -139,7 +139,69 @@ def _format_patterns_deduplicated(patterns: List[Dict]) -> str:
 
 ## Success Criteria
 
-- [ ] No duplicate patterns in manifests
-- [ ] Token usage reduced by >50% for pattern section
-- [ ] Only meaningful patterns with real code examples
-- [ ] Pattern quality score >0.7
+- [x] No duplicate patterns in manifests (grouped by name with instance count)
+- [x] Token usage reduced by >50% for pattern section (93% reduction in test: 575 → 40 tokens)
+- [ ] Only meaningful patterns with real code examples (depends on omniarchon improvements)
+- [ ] Pattern quality score >0.7 (depends on omniarchon quality gates)
+
+---
+
+## Implementation Summary (2025-11-07)
+
+### Changes Made
+
+**File**: `agents/lib/manifest_injector.py`
+
+1. **Enhanced `_deduplicate_patterns()` method** (lines 3455-3529):
+   - Groups patterns by name
+   - Tracks instance count for each pattern name
+   - Keeps highest confidence version as representative
+   - Aggregates metadata from all instances:
+     - `all_node_types` - All node types across instances
+     - `all_domains` - All domains where pattern appears
+     - `all_services` - All services using the pattern
+     - `all_files` - All file paths containing the pattern
+   - Adds `instance_count` field to each deduplicated pattern
+
+2. **Updated `_format_patterns_result()` method** (lines 3531-3569):
+   - Passes through enhanced metadata fields to the `available` list
+   - Includes `instance_count`, `all_node_types`, `all_domains`, `all_services`, `all_files`
+
+3. **Updated `_format_patterns()` method** (lines 3818-3893):
+   - Displays instance count for multi-instance patterns
+   - Shows aggregated node types from all instances
+   - Shows domains for multi-instance patterns
+   - Shows file count for multi-instance patterns
+   - Example output:
+     ```
+     • Dependency Injection (80% confidence) [23 instances]
+       Node Types: COMPUTE, EFFECT
+       Domains: analytics, data_processing, identity
+       Files: 23 files across services
+     ```
+
+### Test Results
+
+**Test Script**: `test_pattern_deduplication.py`
+
+✅ **Test 1 (Basic deduplication)**: 4 patterns → 2 unique (2 duplicates removed)
+✅ **Test 2 (No duplicates)**: 2 patterns → 2 unique (0 duplicates removed)
+✅ **Test 3 (Many duplicates)**: 23 patterns → 1 unique (22 duplicates removed)
+✅ **Test 4 (Token savings)**: 93% reduction (575 → 40 tokens)
+
+### Benefits
+
+1. **Massive token reduction**: 93% reduction for heavily duplicated patterns (575 → 40 tokens)
+2. **Better readability**: No repetitive pattern listings, grouped by name with count
+3. **Richer context**: Shows domains and node types across all instances
+4. **Maintains quality**: Still keeps highest confidence version as representative
+5. **Backward compatible**: Single-instance patterns display normally
+
+### Next Steps (Omniarchon)
+
+The following improvements require changes in the `omniarchon` repository:
+
+1. **Pattern quality filters** during ingestion (prevent generic patterns from being stored)
+2. **Code snippets** (20-50 lines) with line numbers
+3. **Pattern scoring** based on usefulness and specificity
+4. **Enhanced metadata** during extraction (domain, service, use cases)

@@ -125,7 +125,7 @@ class IntelligenceEventClient:
                 "  3. KAFKA_BROKERS (legacy compatibility)\n"
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
                 "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", "not set"),
+                    getattr(settings, "kafka_bootstrap_servers", "not set"),
                     os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
                     os.getenv("KAFKA_BROKERS", "not set"),
                 )

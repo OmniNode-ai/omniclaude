@@ -24,6 +24,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncpg
 from pydantic import BaseModel
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +53,7 @@ class CircuitState(str, Enum):
 class DatabaseConfig(BaseModel):
     """Database configuration from environment."""
 
-    host: str = "localhost"
+    host: str = "192.168.86.200"  # Production default (matches Pydantic settings)
     port: int = 5436
     database: str = "omninode_bridge"
     user: str = "postgres"
@@ -80,15 +86,33 @@ class DatabaseConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
-        """Load configuration from environment variables."""
+        """Load configuration from environment variables or Pydantic Settings."""
+        # Prefer Pydantic Settings if available (type-safe, validated)
+        if settings is not None:
+            return cls(
+                host=settings.postgres_host,
+                port=settings.postgres_port,
+                database=settings.postgres_database,
+                user=settings.postgres_user,
+                password=settings.get_effective_postgres_password(),
+                pool_min_size=settings.postgres_pool_min_size,
+                pool_max_size=settings.postgres_pool_max_size,
+                pool_exhaustion_threshold=settings.postgres_pool_exhaustion_threshold,
+                max_queries_per_connection=settings.postgres_max_queries_per_connection,
+                connection_max_age=settings.postgres_connection_max_age,
+                query_timeout=settings.postgres_query_timeout,
+                acquire_timeout=settings.postgres_acquire_timeout,
+            )
+
+        # Fallback to os.getenv() for backward compatibility
         import os
 
         return cls(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=os.getenv("POSTGRES_HOST", "192.168.86.200"),
             port=int(os.getenv("POSTGRES_PORT", "5436")),
             database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
             user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", ""),  # Must be set via environment
+            password=os.getenv("POSTGRES_PASSWORD", ""),
             pool_min_size=int(os.getenv("POSTGRES_POOL_MIN_SIZE", "5")),
             pool_max_size=int(os.getenv("POSTGRES_POOL_MAX_SIZE", "20")),
             pool_exhaustion_threshold=float(

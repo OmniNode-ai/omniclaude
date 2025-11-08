@@ -12,6 +12,8 @@ Run:
 """
 
 import asyncio
+import os
+from pathlib import Path
 from uuid import uuid4
 
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
@@ -19,6 +21,17 @@ from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 from agents.lib.agent_execution_logger import log_agent_execution
 from agents.lib.agent_traceability_logger import create_traceability_logger
 from agents.lib.traceability_events import get_traceability_publisher
+
+# Portable path resolution
+# Use environment variable if set, otherwise compute relative path
+PROJECT_ROOT = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT:
+    # This file is in agents/lib/, so project root is 2 levels up
+    PROJECT_ROOT = str(Path(__file__).parent.parent.parent.resolve())
+
+# Example test project path (configurable via environment)
+TEST_PROJECT_PATH = os.getenv("TEST_PROJECT_PATH", f"{PROJECT_ROOT}/../Omniarchon")
+TEST_PROJECT_NAME = os.getenv("TEST_PROJECT_NAME", "Omniarchon")
 
 
 async def test_complete_traceability():
@@ -41,8 +54,8 @@ async def test_complete_traceability():
         agent_name="test-agent",
         user_prompt="Create a new ONEX Effect node for database operations",
         correlation_id=correlation_id,
-        project_path="/Volumes/PRO-G40/Code/Omniarchon",
-        project_name="Omniarchon",
+        project_path=TEST_PROJECT_PATH,
+        project_name=TEST_PROJECT_NAME,
     )
     print(f"   Execution ID: {exec_logger.execution_id}")
     print()
@@ -53,8 +66,8 @@ async def test_complete_traceability():
         agent_name="test-agent",
         correlation_id=correlation_id,
         execution_id=exec_logger.execution_id,
-        project_path="/Volumes/PRO-G40/Code/Omniarchon",
-        project_name="Omniarchon",
+        project_path=TEST_PROJECT_PATH,
+        project_name=TEST_PROJECT_NAME,
     )
     print("   Traceability logger ready")
     print()
@@ -81,7 +94,7 @@ async def test_complete_traceability():
         manifest_injection_id=uuid4(),  # Simulated manifest ID
         manifest_sections=["patterns", "infrastructure", "models"],
         system_context={
-            "cwd": "/Volumes/PRO-G40/Code/Omniarchon",
+            "cwd": TEST_PROJECT_PATH,
             "git_branch": "main",
             "git_status": "clean",
         },
@@ -102,7 +115,7 @@ async def test_complete_traceability():
 
     file_op_id_1 = await tracer.log_file_operation(
         operation_type="read",
-        file_path="/Volumes/PRO-G40/Code/Omniarchon/services/core/nodes/node_database_writer_effect.py",
+        file_path=f"{TEST_PROJECT_PATH}/services/core/nodes/node_database_writer_effect.py",
         content_before=read_content,
         content_after=read_content,
         tool_name="Read",
@@ -124,7 +137,7 @@ async def test_complete_traceability():
 
     file_op_id_2 = await tracer.log_file_operation(
         operation_type="edit",
-        file_path="/Volumes/PRO-G40/Code/Omniarchon/services/core/nodes/node_database_writer_effect.py",
+        file_path=f"{TEST_PROJECT_PATH}/services/core/nodes/node_database_writer_effect.py",
         content_before=read_content,
         content_after=new_content,
         tool_name="Edit",
@@ -166,7 +179,7 @@ async def test_complete_traceability():
         query_results_rank=1,
         was_applied=True,
         application_details={
-            "applied_to": "/Volumes/PRO-G40/Code/Omniarchon/services/core/nodes/node_database_writer_effect.py",
+            "applied_to": f"{TEST_PROJECT_PATH}/services/core/nodes/node_database_writer_effect.py",
             "lines_added": 3,
             "functions_created": 1,
         },
@@ -229,7 +242,7 @@ async def test_complete_traceability():
             correlation_id=correlation_id,
             agent_name="test-agent",
             operation_type="edit",
-            file_path="/Volumes/PRO-G40/Code/Omniarchon/services/core/nodes/node_database_writer_effect.py",
+            file_path=f"{TEST_PROJECT_PATH}/services/core/nodes/node_database_writer_effect.py",
             file_op_id=file_op_id_2,
             content_changed=True,
             matched_pattern_count=1,

@@ -181,14 +181,26 @@ class IntelligenceUsageTracker:
                 )
                 self.db_password = None
         else:
-            # Fall back to environment variables with safe defaults (no hardcoded environment-specific values)
-            self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
-            self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5432"))
-            self.db_name = db_name or os.environ.get(
-                "POSTGRES_DATABASE", "omninode_bridge"
+            # Fall back to environment variables (NO hardcoded defaults - fail fast if not configured)
+            self.db_host = db_host or os.environ.get("POSTGRES_HOST")
+            self.db_port = db_port or (
+                int(os.environ.get("POSTGRES_PORT"))
+                if os.environ.get("POSTGRES_PORT")
+                else None
             )
-            self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
+            self.db_name = db_name or os.environ.get("POSTGRES_DATABASE")
+            self.db_user = db_user or os.environ.get("POSTGRES_USER")
             self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
+
+            # Validate required configuration
+            if not all([self.db_host, self.db_port, self.db_name, self.db_user]):
+                logger.warning(
+                    "Database configuration incomplete. Required: POSTGRES_HOST, POSTGRES_PORT, "
+                    "POSTGRES_DATABASE, POSTGRES_USER. Intelligence usage tracking disabled. Run: source .env"
+                )
+                self.enable_tracking = False
+                self._pool = None
+                return
 
         self.enable_tracking = enable_tracking
 
@@ -197,6 +209,9 @@ class IntelligenceUsageTracker:
                 "POSTGRES_PASSWORD not set. Intelligence usage tracking disabled. Run: source .env"
             )
             self.enable_tracking = False
+            # Initialize pool to None for cleanup in close() method
+            self._pool = None
+            return  # Early return from __init__ - no need to initialize pool config
 
         # Connection pool for async database operations
         self._pool: Optional[asyncpg.Pool] = None
@@ -321,14 +336,13 @@ class IntelligenceUsageTracker:
                     f"Failed to store intelligence retrieval record: {intelligence_type} '{intelligence_name}' "
                     f"from {intelligence_source}"
                 )
-                return False
+            else:
+                logger.debug(
+                    f"Tracked intelligence retrieval: {intelligence_type} '{intelligence_name}' "
+                    f"from {intelligence_source} (confidence: {confidence_score})"
+                )
 
-            logger.debug(
-                f"Tracked intelligence retrieval: {intelligence_type} '{intelligence_name}' "
-                f"from {intelligence_source} (confidence: {confidence_score})"
-            )
-
-            return True
+            return success
 
         except Exception as e:
             logger.error(f"Failed to track intelligence retrieval: {e}", exc_info=True)
@@ -378,14 +392,13 @@ class IntelligenceUsageTracker:
                     f"Failed to update intelligence application record: '{intelligence_name}' "
                     f"for correlation_id {correlation_id}"
                 )
-                return False
+            else:
+                logger.debug(
+                    f"Tracked intelligence application: '{intelligence_name}' "
+                    f"(applied: {was_applied}, quality_impact: {quality_impact})"
+                )
 
-            logger.debug(
-                f"Tracked intelligence application: '{intelligence_name}' "
-                f"(applied: {was_applied}, quality_impact: {quality_impact})"
-            )
-
-            return True
+            return success
 
         except Exception as e:
             logger.error(
@@ -415,7 +428,7 @@ class IntelligenceUsageTracker:
             metadata_json = json.dumps(record.metadata) if record.metadata else None
 
             async with pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     INSERT INTO agent_intelligence_usage (
                         correlation_id,
@@ -480,6 +493,18 @@ class IntelligenceUsageTracker:
                     record.created_at,
                     record.applied_at,
                 )
+
+                # Parse result to check if rows were inserted
+                # asyncpg.execute() returns string like "INSERT 0 0" or "INSERT 0 1"
+                rows_inserted = int(result.split()[2])
+                if rows_inserted == 0:
+                    logger.error(
+                        f"No rows inserted for intelligence usage record: "
+                        f"correlation_id={record.correlation_id}, "
+                        f"intelligence_name='{record.intelligence_name}'. "
+                        f"This indicates a database constraint violation or other issue."
+                    )
+                    return False
 
             return True
 

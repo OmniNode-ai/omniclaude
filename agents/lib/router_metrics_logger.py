@@ -30,6 +30,12 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -117,13 +123,27 @@ class RouterMetricsLogger:
 
     def _load_db_config(self) -> Dict[str, Any]:
         """
-        Load database configuration from environment.
+        Load database configuration from Pydantic Settings or environment.
 
         Returns:
             Database configuration dictionary
         """
+        # Prefer Pydantic Settings if available (type-safe, validated)
+        if settings is not None:
+            return {
+                "host": settings.postgres_host,
+                "port": settings.postgres_port,
+                "database": settings.postgres_database,
+                "user": settings.postgres_user,
+                "password": settings.get_effective_postgres_password(),
+                "min_size": settings.postgres_pool_min_size,
+                "max_size": settings.postgres_pool_max_size,
+                "timeout": settings.postgres_query_timeout,
+            }
+
+        # Fallback to os.getenv() for backward compatibility
         return {
-            "host": os.getenv("POSTGRES_HOST", "localhost"),
+            "host": os.getenv("POSTGRES_HOST", "192.168.86.200"),
             "port": int(os.getenv("POSTGRES_PORT", 5436)),
             "database": os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
             "user": os.getenv("POSTGRES_USER", "postgres"),
