@@ -65,7 +65,10 @@ def get_terminal_size() -> Tuple[int, int]:
 
 def clear_screen():
     """Clear terminal screen"""
-    os.system("clear" if os.name != "nt" else "cls")
+    # Use ANSI escape sequence to clear screen (B605 fix - avoids os.system)
+    # \033[2J clears entire screen, \033[H moves cursor to home position
+    # This is safer than os.system() and works across platforms
+    print("\033[2J\033[H", end="")
 
 
 def colorize(text: str, color: str, bold: bool = False) -> str:
@@ -165,14 +168,21 @@ def print_system_health(health: Dict[str, Any], width: int):
         return
 
     # Calculate health score
-    avg_conf = float(health.get("avg_confidence", 0) or 0)
+    # Use explicit None check to preserve zero values
+    avg_conf_raw = health.get("avg_confidence")
+    avg_conf = float(avg_conf_raw if avg_conf_raw is not None else 0)
     routing_health = min(100, avg_conf * 100)
 
-    total_events = int(health.get("total_events", 0) or 0)
-    processed_events = int(health.get("processed_events", 0) or 0)
+    total_events_raw = health.get("total_events")
+    total_events = int(total_events_raw if total_events_raw is not None else 0)
+    processed_events_raw = health.get("processed_events")
+    processed_events = int(
+        processed_events_raw if processed_events_raw is not None else 0
+    )
     hook_health = 100 if total_events == 0 else (100 * processed_events / total_events)
 
-    cache_health = float(health.get("hit_rate", 0) or 0)
+    hit_rate_raw = health.get("hit_rate")
+    cache_health = float(hit_rate_raw if hit_rate_raw is not None else 0)
 
     overall_score = routing_health * 0.5 + hook_health * 0.3 + cache_health * 0.2
 
@@ -201,7 +211,11 @@ def print_metrics(health: Dict[str, Any], width: int):
     print(colorize("│  " + "─" * 60, Colors.BRIGHT_BLACK))
 
     # Routing decisions
-    routing_decisions = int(health.get("total_decisions", 0) or 0)
+    # Use explicit None check to preserve zero values
+    total_decisions_raw = health.get("total_decisions")
+    routing_decisions = int(
+        total_decisions_raw if total_decisions_raw is not None else 0
+    )
     status = status_icon("excellent") if routing_decisions > 0 else status_icon("fair")
     print(
         colorize("│  ", Colors.BRIGHT_MAGENTA)
@@ -211,7 +225,9 @@ def print_metrics(health: Dict[str, Any], width: int):
     )
 
     # Avg confidence
-    avg_conf = float(health.get("avg_confidence", 0) or 0) * 100
+    # Use explicit None check to preserve zero values
+    avg_conf_raw = health.get("avg_confidence")
+    avg_conf = float(avg_conf_raw if avg_conf_raw is not None else 0) * 100
     status = metric_status(avg_conf, 85, 70)
     print(
         colorize("│  ", Colors.BRIGHT_MAGENTA)
@@ -225,7 +241,9 @@ def print_metrics(health: Dict[str, Any], width: int):
     )
 
     # Avg routing time
-    avg_routing_ms = float(health.get("avg_routing_ms", 0) or 0)
+    # Use explicit None check to preserve zero values
+    avg_routing_ms_raw = health.get("avg_routing_ms")
+    avg_routing_ms = float(avg_routing_ms_raw if avg_routing_ms_raw is not None else 0)
     status = metric_status(avg_routing_ms, 100, 500, reverse=True)
     color = (
         Colors.BRIGHT_GREEN
@@ -240,9 +258,15 @@ def print_metrics(health: Dict[str, Any], width: int):
     )
 
     # Hook events
-    total_events = int(health.get("total_events", 0) or 0)
-    processed_events = int(health.get("processed_events", 0) or 0)
-    pending_events = int(health.get("pending_events", 0) or 0)
+    # Use explicit None check to preserve zero values
+    total_events_raw = health.get("total_events")
+    total_events = int(total_events_raw if total_events_raw is not None else 0)
+    processed_events_raw = health.get("processed_events")
+    processed_events = int(
+        processed_events_raw if processed_events_raw is not None else 0
+    )
+    pending_events_raw = health.get("pending_events")
+    pending_events = int(pending_events_raw if pending_events_raw is not None else 0)
     status = (
         status_icon("excellent")
         if pending_events == 0
@@ -258,7 +282,9 @@ def print_metrics(health: Dict[str, Any], width: int):
     )
 
     # Cache hit rate
-    cache_hit_rate = float(health.get("hit_rate", 0) or 0)
+    # Use explicit None check to preserve zero values
+    hit_rate_raw = health.get("hit_rate")
+    cache_hit_rate = float(hit_rate_raw if hit_rate_raw is not None else 0)
     status = metric_status(cache_hit_rate, 60, 30)
     color = (
         Colors.BRIGHT_GREEN
@@ -326,15 +352,19 @@ def print_alerts(health: Dict[str, Any], width: int):
 
     alerts = []
 
-    pending_events = int(health.get("pending_events", 0) or 0)
+    # Use explicit None check to preserve zero values
+    pending_events_raw = health.get("pending_events")
+    pending_events = int(pending_events_raw if pending_events_raw is not None else 0)
     if pending_events > 100:
         alerts.append(("CRITICAL", "Hook event backlog >100 - processor may be down"))
 
-    cache_hit_rate = float(health.get("hit_rate", 0) or 0)
+    hit_rate_raw = health.get("hit_rate")
+    cache_hit_rate = float(hit_rate_raw if hit_rate_raw is not None else 0)
     if cache_hit_rate == 0:
         alerts.append(("CRITICAL", "Cache system not functioning (0% hit rate)"))
 
-    avg_conf = float(health.get("avg_confidence", 0) or 0) * 100
+    avg_conf_raw = health.get("avg_confidence")
+    avg_conf = float(avg_conf_raw if avg_conf_raw is not None else 0) * 100
     if avg_conf < 70:
         alerts.append(
             (
@@ -343,7 +373,8 @@ def print_alerts(health: Dict[str, Any], width: int):
             )
         )
 
-    total_decisions = int(health.get("total_decisions", 0) or 0)
+    total_decisions_raw = health.get("total_decisions")
+    total_decisions = int(total_decisions_raw if total_decisions_raw is not None else 0)
     if total_decisions == 0:
         alerts.append(("INFO", "No routing activity in last 24 hours"))
 
@@ -539,7 +570,8 @@ def print_system_info(health: Dict[str, Any], width: int):
     )
 
     # Total queries
-    total_queries = int(health.get("total_queries", 0) or 0)
+    total_queries_raw = health.get("total_queries")
+    total_queries = int(total_queries_raw if total_queries_raw is not None else 0)
     if total_queries > 0:
         print(
             colorize("│  ", Colors.BRIGHT_MAGENTA)

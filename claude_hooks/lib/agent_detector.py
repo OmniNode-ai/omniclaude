@@ -148,9 +148,9 @@ class AgentDetector:
             if match and match.groups():
                 task_description = match.group(1).strip()
                 return {
-                    'type': 'generic',
-                    'task_description': task_description,
-                    'original_prompt': prompt
+                    "type": "generic",
+                    "task_description": task_description,
+                    "original_prompt": prompt,
                 }
 
         return None

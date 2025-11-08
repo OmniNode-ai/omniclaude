@@ -78,7 +78,7 @@ async def log_llm_call(
         )
 
     async with pool.acquire() as conn:
-        await conn.execute(
+        result = await conn.execute(
             """
             INSERT INTO llm_calls (
                 id, run_id, model, provider, model_version, provider_region,
@@ -109,3 +109,9 @@ async def log_llm_call(
             json.dumps(request or {}),
             json.dumps(response or {}),
         )
+        # Check if INSERT succeeded
+        rows_inserted = int(result.split()[2])
+        if rows_inserted == 0:
+            raise Exception(
+                f"Failed to insert LLM call log: run_id={run_id}, model={model}"
+            )

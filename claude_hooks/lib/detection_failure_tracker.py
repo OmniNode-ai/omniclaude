@@ -5,20 +5,23 @@ Captures failed, missed, or low-confidence agent detections for system improveme
 
 import hashlib
 import os
+import sys
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import psycopg2
 from psycopg2.extras import Json
 
+# Add config for type-safe settings
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+from config import settings
+
 
 class DetectionFailureTracker:
     """Track detection failures for system improvement"""
 
     def __init__(self, db_password: str = None):
-        password = db_password or os.getenv(
-            "OMNINODE_BRIDGE_PASSWORD", "omninode-bridge-postgres-dev-2024"
-        )
+        password = db_password or settings.get_effective_postgres_password()
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         db = os.getenv("POSTGRES_DB", "omninode_bridge")

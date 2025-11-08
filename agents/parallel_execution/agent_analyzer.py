@@ -643,7 +643,7 @@ class ArchitecturalAnalyzerAgent:
                     ),
                 },
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": FALLBACK_MODELS[0],
                     "structured_output": True,
                     "tools_available": 4,
                 },

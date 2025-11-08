@@ -14,13 +14,15 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from config import settings
+
 
 class PatternTrackerSync:
     """Synchronous pattern tracker using blocking HTTP calls with performance optimizations."""
 
     def __init__(self, session_id: Optional[str] = None):
         self.session_id = session_id or str(uuid.uuid4())
-        self.base_url = "http://localhost:8053"
+        self.base_url = str(settings.archon_intelligence_url)
         self.timeout = 5  # seconds
 
         # Performance optimizations

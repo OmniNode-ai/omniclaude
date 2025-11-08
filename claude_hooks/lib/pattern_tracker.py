@@ -47,6 +47,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import requests
+
+from config import settings
 from lib.resilience import ResilientAPIClient, graceful_tracking
 
 logger = logging.getLogger(__name__)
@@ -74,20 +76,33 @@ class PatternTracker:
     """
 
     _instance: Optional["PatternTracker"] = None
-    _lock = asyncio.Lock()
+    _lock: Optional[asyncio.Lock] = None
+
+    @classmethod
+    async def _get_lock(cls) -> asyncio.Lock:
+        """
+        Get or create the singleton lock lazily under a running event loop.
+
+        This ensures asyncio.Lock() is never created at module level, which
+        would cause RuntimeError in Python 3.12+ when no event loop exists.
+
+        Returns:
+            asyncio.Lock: The singleton lock instance
+        """
+        if cls._lock is None:
+            cls._lock = asyncio.Lock()
+        return cls._lock
 
     def __init__(self, base_url: Optional[str] = None, enable_tracking: bool = True):
         """
         Initialize pattern tracker.
 
         Args:
-            base_url: Base URL for Phase 4 API (default: from env or localhost:8053)
+            base_url: Base URL for Phase 4 API (defaults to settings.archon_intelligence_url)
             enable_tracking: Enable/disable tracking (useful for testing)
         """
-        # Get base URL from environment or use default
-        self.base_url = base_url or os.getenv(
-            "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
-        )
+        # Get base URL from settings
+        self.base_url = base_url or str(settings.archon_intelligence_url)
 
         self.enable_tracking = enable_tracking
 
@@ -153,7 +168,9 @@ class PatternTracker:
             PatternTracker singleton instance
         """
         if cls._instance is None:
-            async with cls._lock:
+            # Get the lock (created lazily under running event loop)
+            lock = await cls._get_lock()
+            async with lock:
                 if cls._instance is None:
                     cls._instance = cls()
 
@@ -163,6 +180,7 @@ class PatternTracker:
     def reset_instance(cls):
         """Reset singleton instance (useful for testing)"""
         cls._instance = None
+        cls._lock = None  # Also reset the lock for clean slate
 
     def _generate_pattern_id(self, code: str, context: Dict[str, Any]) -> str:
         """

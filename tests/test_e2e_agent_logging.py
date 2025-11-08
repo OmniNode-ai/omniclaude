@@ -19,6 +19,8 @@ import asyncio
 import json
 import os
 import subprocess
+
+# Add config for type-safe settings
 import sys
 import time
 import uuid
@@ -27,6 +29,9 @@ from pathlib import Path
 
 import asyncpg
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import settings
 
 # Add paths
 sys.path.insert(
@@ -53,7 +58,7 @@ def postgres_dsn():
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5436")
     user = os.getenv("POSTGRES_USER", "postgres")
-    password = os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024")
+    password = settings.get_effective_postgres_password()
     database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"

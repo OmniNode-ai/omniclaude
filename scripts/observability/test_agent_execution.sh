@@ -17,18 +17,18 @@
 #   ./test_agent_execution.sh --timeout 30    # Custom timeout in seconds
 #
 # Prerequisites:
-#   - PostgreSQL credentials in .env or environment variables
+#   - PostgreSQL credentials in .env file
 #   - Docker access (for checking Kafka)
 #   - Agent tracking skills available
-#   - Kafka broker running (192.168.86.200:9092)
+#   - Kafka broker running
 #
-# Environment Variables:
-#   POSTGRES_HOST (default: 192.168.86.200)
-#   POSTGRES_PORT (default: 5436)
-#   POSTGRES_USER (default: postgres)
+# Environment Variables (configured in .env):
+#   POSTGRES_HOST (required)
+#   POSTGRES_PORT (required)
+#   POSTGRES_USER (required)
 #   POSTGRES_PASSWORD (required)
-#   POSTGRES_DB (default: omninode_bridge)
-#   KAFKA_BOOTSTRAP_SERVERS (default: 192.168.86.200:9092)
+#   POSTGRES_DATABASE (required)
+#   KAFKA_BOOTSTRAP_SERVERS (required)
 #
 # Exit Codes:
 #   0 - Test passed successfully
@@ -79,19 +79,42 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Load environment
-if [ -f "$PROJECT_ROOT/.env" ]; then
-    set -a
-    source "$PROJECT_ROOT/.env"
-    set +a
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    echo -e "${RED}❌ ERROR: .env file not found at $PROJECT_ROOT/.env${NC}"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
 fi
 
-# Configuration with defaults
-POSTGRES_HOST=${POSTGRES_HOST:-"192.168.86.200"}
-POSTGRES_PORT=${POSTGRES_PORT:-"5436"}
-POSTGRES_USER=${POSTGRES_USER:-"postgres"}
-POSTGRES_DB=${POSTGRES_DB:-"omninode_bridge"}
-KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-"192.168.86.200:9092"}
+set -a
+source "$PROJECT_ROOT/.env"
+set +a
+
+# Configuration (no fallbacks - must be set in .env)
+POSTGRES_HOST="${POSTGRES_HOST}"
+POSTGRES_PORT="${POSTGRES_PORT}"
+POSTGRES_USER="${POSTGRES_USER}"
+POSTGRES_DB="${POSTGRES_DATABASE}"
+KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS}"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_DB" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$PGPASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$KAFKA_BOOTSTRAP_SERVERS" ] && missing_vars+=("KAFKA_BOOTSTRAP_SERVERS")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
+fi
 
 # Helper functions
 log_info() {

@@ -24,7 +24,7 @@ Usage:
     executor = ResilientExecutor()
     circuit_breaker = CircuitBreaker(failure_threshold=3, timeout=60)
     cache = PatternCache()
-    health_checker = Phase4HealthChecker(base_url="http://localhost:8053")
+    health_checker = Phase4HealthChecker()  # Uses settings.archon_intelligence_url by default
 
     # Fire-and-forget pattern tracking
     executor.fire_and_forget(
@@ -51,6 +51,8 @@ from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -643,9 +645,7 @@ class Phase4HealthChecker:
     - Minimal overhead (<30s check interval)
 
     Example:
-        health_checker = Phase4HealthChecker(
-            base_url="http://localhost:8053"
-        )
+        health_checker = Phase4HealthChecker()  # Uses settings.archon_intelligence_url
 
         is_healthy = await health_checker.check_health()
         if is_healthy:
@@ -654,7 +654,7 @@ class Phase4HealthChecker:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8053",
+        base_url: str = None,
         check_interval: int = 30,
         timeout: float = 1.0,
     ):
@@ -662,11 +662,11 @@ class Phase4HealthChecker:
         Initialize health checker.
 
         Args:
-            base_url: Base URL for Phase 4 API
+            base_url: Base URL for Phase 4 API (defaults to settings.archon_intelligence_url)
             check_interval: Seconds between health checks
             timeout: Health check timeout in seconds
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or str(settings.archon_intelligence_url)).rstrip("/")
         self.check_interval = check_interval
         self.timeout = timeout
 
@@ -803,7 +803,7 @@ class ResilientAPIClient:
     - Fire-and-forget execution for non-blocking
 
     Example:
-        client = ResilientAPIClient(base_url="http://localhost:8053")
+        client = ResilientAPIClient()  # Uses settings.archon_intelligence_url
 
         # Track pattern (resilient, non-blocking)
         await client.track_pattern_resilient(
@@ -815,7 +815,7 @@ class ResilientAPIClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8053",
+        base_url: str = None,
         enable_caching: bool = True,
         enable_circuit_breaker: bool = True,
     ):
@@ -823,11 +823,11 @@ class ResilientAPIClient:
         Initialize resilient API client.
 
         Args:
-            base_url: Base URL for Phase 4 API
+            base_url: Base URL for Phase 4 API (defaults to settings.archon_intelligence_url)
             enable_caching: Enable local caching for offline scenarios
             enable_circuit_breaker: Enable circuit breaker pattern
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or str(settings.archon_intelligence_url)).rstrip("/")
         self.enable_caching = enable_caching
         self.enable_circuit_breaker = enable_circuit_breaker
 
@@ -1000,7 +1000,7 @@ async def example_usage():
     """Example of using resilient pattern tracking"""
 
     # Initialize resilient client
-    client = ResilientAPIClient(base_url="http://localhost:8053")
+    client = ResilientAPIClient()  # Uses settings.archon_intelligence_url
 
     # Track pattern creation (fully resilient)
     result = await client.track_pattern_resilient(

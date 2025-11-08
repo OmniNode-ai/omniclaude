@@ -80,9 +80,10 @@ class TestIntelligenceCacheInitialization:
         cache = IntelligenceCache(enabled=False)
         assert cache.enabled is False
 
-    @patch.dict(os.environ, {"ENABLE_INTELLIGENCE_CACHE": "false"})
-    def test_cache_disabled_via_env_var(self):
-        """Test cache disabled via environment variable (covers lines 77-78)."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_cache_disabled_via_env_var(self, mock_settings):
+        """Test cache disabled via Pydantic settings (covers lines 79-81)."""
+        mock_settings.enable_intelligence_cache = False
         cache = IntelligenceCache()
         assert cache.enabled is False
 
@@ -98,9 +99,11 @@ class TestIntelligenceCacheInitialization:
         cache = IntelligenceCache(redis_url=custom_url)
         assert cache.redis_url == custom_url
 
-    @patch.dict(os.environ, {"VALKEY_URL": "redis://env_url:6379/0"})
-    def test_redis_url_from_env(self):
-        """Test Redis URL from environment variable."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_redis_url_from_env(self, mock_settings):
+        """Test Redis URL from Pydantic settings."""
+        mock_settings.enable_intelligence_cache = True
+        mock_settings.valkey_url = "redis://env_url:6379/0"
         cache = IntelligenceCache()
         assert cache.redis_url == "redis://env_url:6379/0"
 
@@ -112,9 +115,16 @@ class TestIntelligenceCacheInitialization:
         assert cache._default_ttls["schema_query"] == 1800
         assert cache._default_ttls["model_query"] == 3600
 
-    @patch.dict(os.environ, {"CACHE_TTL_PATTERNS": "600"})
-    def test_custom_ttl_from_env(self):
-        """Test custom TTL from environment variable."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_custom_ttl_from_env(self, mock_settings):
+        """Test custom TTL from Pydantic settings."""
+        mock_settings.enable_intelligence_cache = True
+        mock_settings.valkey_url = (
+            "redis://localhost:6379/0"  # Required for initialization
+        )
+        mock_settings.cache_ttl_patterns = 600
+        mock_settings.cache_ttl_infrastructure = 3600
+        mock_settings.cache_ttl_schemas = 1800
         cache = IntelligenceCache()
         assert cache._default_ttls["pattern_discovery"] == 600
 
@@ -134,8 +144,11 @@ class TestIntelligenceCacheConnection:
         """Test successful connection to Redis (covers line 123)."""
         cache = IntelligenceCache()
 
-        with patch("redis.asyncio.Redis") as mock_redis_class:
-            mock_redis_class.from_url = AsyncMock(return_value=mock_redis_client)
+        # Mock the redis.asyncio.Redis class at the module level where it's imported
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.from_url = AsyncMock(return_value=mock_redis_client)
+
+        with patch.dict("sys.modules", {"redis.asyncio": mock_redis_module}):
             await cache.connect()
 
             assert cache._client is mock_redis_client
@@ -148,7 +161,9 @@ class TestIntelligenceCacheConnection:
 
         # Patch the import itself
         with patch.dict("sys.modules", {"redis.asyncio": None}):
-            with patch("builtins.__import__", side_effect=ImportError("redis not found")):
+            with patch(
+                "builtins.__import__", side_effect=ImportError("redis not found")
+            ):
                 await cache.connect()
 
                 assert cache.enabled is False
@@ -159,8 +174,11 @@ class TestIntelligenceCacheConnection:
         cache = IntelligenceCache()
         mock_redis_client.ping.side_effect = Exception("Connection refused")
 
-        with patch("redis.asyncio.Redis") as mock_redis_class:
-            mock_redis_class.from_url = AsyncMock(return_value=mock_redis_client)
+        # Mock the redis.asyncio.Redis class at the module level where it's imported
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.from_url = AsyncMock(return_value=mock_redis_client)
+
+        with patch.dict("sys.modules", {"redis.asyncio": mock_redis_module}):
             await cache.connect()
 
             assert cache.enabled is False
@@ -170,16 +188,19 @@ class TestIntelligenceCacheConnection:
         """Test successful connection close."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
+        # Add aclose method which is what's actually called
+        mock_redis_client.aclose = AsyncMock()
 
         await cache.close()
-        mock_redis_client.close.assert_awaited_once()
+        mock_redis_client.aclose.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_close_with_error(self, mock_redis_client):
         """Test close() handles errors gracefully (covers lines 141-142)."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
-        mock_redis_client.close.side_effect = Exception("Close error")
+        # Add aclose method with error
+        mock_redis_client.aclose = AsyncMock(side_effect=Exception("Close error"))
 
         # Should not raise exception
         await cache.close()
@@ -334,7 +355,9 @@ class TestIntelligenceCacheSet:
         await cache.set("pattern_discovery", sample_params, sample_result)
 
     @pytest.mark.asyncio
-    async def test_set_with_default_ttl(self, mock_redis_client, sample_params, sample_result):
+    async def test_set_with_default_ttl(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test set() uses default TTL (covers lines 189-194)."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
@@ -347,20 +370,26 @@ class TestIntelligenceCacheSet:
         assert call_args[0][1] == 300  # Default TTL for pattern_discovery
 
     @pytest.mark.asyncio
-    async def test_set_with_custom_ttl(self, mock_redis_client, sample_params, sample_result):
+    async def test_set_with_custom_ttl(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test set() uses custom TTL when provided (covers lines 186-197)."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
 
         custom_ttl = 600
-        await cache.set("pattern_discovery", sample_params, sample_result, ttl_seconds=custom_ttl)
+        await cache.set(
+            "pattern_discovery", sample_params, sample_result, ttl_seconds=custom_ttl
+        )
 
         # Verify setex was called with custom TTL
         call_args = mock_redis_client.setex.call_args
         assert call_args[0][1] == custom_ttl
 
     @pytest.mark.asyncio
-    async def test_set_with_error(self, mock_redis_client, sample_params, sample_result):
+    async def test_set_with_error(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test set() handles errors gracefully (covers lines 198-200)."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
@@ -372,7 +401,9 @@ class TestIntelligenceCacheSet:
         await cache.set("pattern_discovery", sample_params, sample_result)
 
     @pytest.mark.asyncio
-    async def test_set_serializes_result(self, mock_redis_client, sample_params, sample_result):
+    async def test_set_serializes_result(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test set() correctly serializes result to JSON."""
         cache = IntelligenceCache()
         cache._client = mock_redis_client
@@ -410,13 +441,18 @@ class TestIntelligenceCacheInvalidation:
         cache._client = mock_redis_client
 
         # Mock finding keys
-        mock_keys = ["intelligence:pattern_discovery:abc123", "intelligence:pattern_discovery:def456"]
+        mock_keys = [
+            "intelligence:pattern_discovery:abc123",
+            "intelligence:pattern_discovery:def456",
+        ]
         mock_redis_client.keys.return_value = mock_keys
 
         await cache.invalidate_pattern("pattern_discovery")
 
         # Verify keys were searched and deleted
-        mock_redis_client.keys.assert_awaited_once_with("intelligence:*pattern_discovery*")
+        mock_redis_client.keys.assert_awaited_once_with(
+            "intelligence:*pattern_discovery*"
+        )
         mock_redis_client.delete.assert_awaited_once_with(*mock_keys)
 
     @pytest.mark.asyncio
@@ -599,13 +635,17 @@ class TestIntelligenceCacheIntegration:
     """Integration tests for cache workflows."""
 
     @pytest.mark.asyncio
-    async def test_full_cache_workflow(self, mock_redis_client, sample_params, sample_result):
+    async def test_full_cache_workflow(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test complete cache workflow: connect -> get (miss) -> set -> get (hit) -> close."""
         cache = IntelligenceCache()
 
         # Connect
-        with patch("redis.asyncio.Redis") as mock_redis_class:
-            mock_redis_class.from_url = AsyncMock(return_value=mock_redis_client)
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.from_url = AsyncMock(return_value=mock_redis_client)
+
+        with patch.dict("sys.modules", {"redis.asyncio": mock_redis_module}):
             await cache.connect()
 
         # First get - cache miss
@@ -641,12 +681,16 @@ class TestIntelligenceCacheIntegration:
         # No need to close when disabled - _client never initialized
 
     @pytest.mark.asyncio
-    async def test_cache_resilience_on_failures(self, mock_redis_client, sample_params, sample_result):
+    async def test_cache_resilience_on_failures(
+        self, mock_redis_client, sample_params, sample_result
+    ):
         """Test cache continues to work after individual operation failures."""
         cache = IntelligenceCache()
 
-        with patch("redis.asyncio.Redis") as mock_redis_class:
-            mock_redis_class.from_url = AsyncMock(return_value=mock_redis_client)
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.from_url = AsyncMock(return_value=mock_redis_client)
+
+        with patch.dict("sys.modules", {"redis.asyncio": mock_redis_module}):
             await cache.connect()
 
         # Simulate get failure
@@ -691,7 +735,9 @@ class TestIntelligenceCacheEdgeCases:
 
         # Create large result
         large_result = {
-            "patterns": [{"name": f"pattern_{i}", "data": "x" * 1000} for i in range(100)]
+            "patterns": [
+                {"name": f"pattern_{i}", "data": "x" * 1000} for i in range(100)
+            ]
         }
 
         params = {"test": "large"}

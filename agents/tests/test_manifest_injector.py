@@ -589,7 +589,7 @@ def test_dual_collection_formatted_output(_mock_intelligence_client):
     # Should show collection statistics
     assert "execution_patterns" in formatted
     assert "code_patterns" in formatted
-    assert "Total: 4 patterns available" in formatted
+    assert "Total: 4 unique patterns available" in formatted
 
 
 # =============================================================================
@@ -887,10 +887,11 @@ async def test_quality_filtering_enabled():
         {"name": "Bad Pattern", "confidence": 0.3},
     ]
 
-    with patch.dict(
-        "os.environ",
-        {"ENABLE_PATTERN_QUALITY_FILTER": "true", "MIN_PATTERN_QUALITY": "0.5"},
-    ):
+    # Phase 2: Patch settings object instead of os.environ (Pydantic Settings)
+    with patch("agents.lib.manifest_injector.settings") as mock_settings:
+        mock_settings.enable_pattern_quality_filter = True
+        mock_settings.min_pattern_quality = 0.5
+
         injector = ManifestInjector(enable_intelligence=False)
 
         # Mock quality scorer
@@ -995,10 +996,13 @@ async def test_query_postgresql_no_password():
     from unittest.mock import patch
 
     from agents.lib.manifest_injector import ManifestInjector
+    from config.settings import Settings
 
     injector = ManifestInjector(enable_intelligence=False)
 
-    with patch.dict("os.environ", {"POSTGRES_PASSWORD": ""}, clear=True):
+    # Phase 2: Patch the class method (not instance) to avoid Pydantic Settings issues
+    # (code now uses Pydantic Settings instead of os.environ)
+    with patch.object(Settings, "get_effective_postgres_password", return_value=""):
         result = await injector._query_postgresql()
 
         assert result["status"] == "unavailable"

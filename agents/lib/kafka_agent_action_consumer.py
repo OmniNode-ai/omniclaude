@@ -24,6 +24,12 @@ from typing import Dict, List, Optional
 import asyncpg
 from kafka import KafkaConsumer
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,7 +81,8 @@ class KafkaAgentActionConsumer:
 
         Requires POSTGRES_PASSWORD to be set in environment (source .env file).
         """
-        host = os.getenv("POSTGRES_HOST", "localhost")
+        # Use production defaults that match Pydantic settings
+        host = os.getenv("POSTGRES_HOST", "192.168.86.200")
         port = os.getenv("POSTGRES_PORT", "5436")
         user = os.getenv("POSTGRES_USER", "postgres")
         password = os.getenv("POSTGRES_PASSWORD", "")  # Require explicit configuration

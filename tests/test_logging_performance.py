@@ -30,6 +30,10 @@ import psutil
 import pytest
 from kafka import KafkaConsumer, KafkaProducer
 
+# Add config for type-safe settings
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import settings
+
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
 from kafka_agent_action_consumer import KafkaAgentActionConsumer
@@ -47,7 +51,7 @@ def postgres_dsn():
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5436")
     user = os.getenv("POSTGRES_USER", "postgres")
-    password = os.getenv("POSTGRES_PASSWORD", "omninode-bridge-postgres-dev-2024")
+    password = settings.get_effective_postgres_password()
     database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
 
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"

@@ -33,13 +33,16 @@ Correlation ID: 2ae9c54b-73e4-42df-a902-cf41503efa56
 
 import asyncio
 import json
-import os
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
+
+# Add project root to path for config import
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import settings
 
 # Add services to path (parent of routing_adapter)
 services_path = Path(__file__).parent / "services"
@@ -72,13 +75,16 @@ except ImportError:
     print("   Install with: pip install psycopg2-binary")
     POSTGRES_AVAILABLE = False
 
-# Configuration from environment
-KAFKA_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "192.168.86.200")
-POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5436"))
-POSTGRES_DB = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")  # Must be set in environment
+# Configuration from settings (auto-loaded from .env)
+KAFKA_SERVERS = settings.kafka_bootstrap_servers
+POSTGRES_HOST = settings.postgres_host
+POSTGRES_PORT = settings.postgres_port
+POSTGRES_DB = settings.postgres_database
+POSTGRES_USER = settings.postgres_user
+try:
+    POSTGRES_PASSWORD = settings.get_effective_postgres_password()
+except ValueError:
+    POSTGRES_PASSWORD = ""  # Will fail Test 4 if not set
 
 # Timeouts
 REQUEST_TIMEOUT_MS = 5000  # 5 seconds

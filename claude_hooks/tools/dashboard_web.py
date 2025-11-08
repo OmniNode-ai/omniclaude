@@ -288,14 +288,21 @@ async def get_dashboard_data():
     issues = dashboard.get_system_issues()
 
     # Calculate health score
-    avg_conf = float(health.get("avg_confidence", 0) or 0)
+    # Use explicit None check to preserve zero values
+    avg_conf_raw = health.get("avg_confidence")
+    avg_conf = float(avg_conf_raw if avg_conf_raw is not None else 0)
     routing_health = min(100, avg_conf * 100)
 
-    total_events = int(health.get("total_events", 0) or 0)
-    processed_events = int(health.get("processed_events", 0) or 0)
+    total_events_raw = health.get("total_events")
+    total_events = int(total_events_raw if total_events_raw is not None else 0)
+    processed_events_raw = health.get("processed_events")
+    processed_events = int(
+        processed_events_raw if processed_events_raw is not None else 0
+    )
     hook_health = 100 if total_events == 0 else (100 * processed_events / total_events)
 
-    cache_health = float(health.get("hit_rate", 0) or 0)
+    hit_rate_raw = health.get("hit_rate")
+    cache_health = float(hit_rate_raw if hit_rate_raw is not None else 0)
     overall_score = routing_health * 0.5 + hook_health * 0.3 + cache_health * 0.2
 
     # Format recent activity

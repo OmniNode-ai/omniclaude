@@ -5,11 +5,16 @@ Auto-generates markdown dashboard from database metrics
 """
 
 import os
+import sys
 from datetime import datetime
 from typing import Any, Dict, List
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+# Add config for type-safe settings
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+from config import settings
 
 
 class SystemDashboard:
@@ -20,9 +25,7 @@ class SystemDashboard:
         db_password: str = None,
         output_file: str = "SYSTEM_DASHBOARD.md",
     ):
-        password = db_password or os.getenv(
-            "OMNINODE_BRIDGE_PASSWORD", "omninode-bridge-postgres-dev-2024"
-        )
+        password = db_password or settings.get_effective_postgres_password()
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
         db = os.getenv("POSTGRES_DB", "omninode_bridge")
@@ -449,15 +452,22 @@ class SystemDashboard:
             return "⚠️ **SYSTEM OFFLINE** - No recent activity"
 
         # Calculate health score (convert Decimal to float for math operations)
-        avg_conf = float(health.get("avg_confidence", 0) or 0)
+        # Use explicit None check to preserve zero values
+        avg_conf_raw = health.get("avg_confidence")
+        avg_conf = float(avg_conf_raw if avg_conf_raw is not None else 0)
         routing_health = min(100, avg_conf * 100)
 
-        total_events = int(health.get("total_events", 0) or 0)
-        processed_events = int(health.get("processed_events", 0) or 0)
+        total_events_raw = health.get("total_events")
+        total_events = int(total_events_raw if total_events_raw is not None else 0)
+        processed_events_raw = health.get("processed_events")
+        processed_events = int(
+            processed_events_raw if processed_events_raw is not None else 0
+        )
         hook_health = (
             100 if total_events == 0 else (100 * processed_events / total_events)
         )
-        cache_health = float(health.get("hit_rate", 0) or 0)
+        hit_rate_raw = health.get("hit_rate")
+        cache_health = float(hit_rate_raw if hit_rate_raw is not None else 0)
 
         overall_score = routing_health * 0.5 + hook_health * 0.3 + cache_health * 0.2
 

@@ -5,11 +5,13 @@ Test script to validate polymorphic-agent.md updates.
 Verifies that mandatory routing workflow is present and properly documented.
 """
 
+from pathlib import Path
+
 
 def test_polymorphic_agent_updates():
     """Test that all required sections are present in polymorphic-agent.md"""
 
-    file_path = "/Volumes/PRO-G40/Code/omniclaude/agents/polymorphic-agent.md"
+    file_path = str(Path(__file__).parent / "polymorphic-agent.md")
 
     with open(file_path, "r") as f:
         content = f.read()

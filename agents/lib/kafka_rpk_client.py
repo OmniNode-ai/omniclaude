@@ -27,8 +27,30 @@ class RpkKafkaClient:
 
         Args:
             container_name: Docker container name for Redpanda
+
+        Raises:
+            RuntimeError: If docker executable is not available
         """
         self.container_name = container_name
+
+        # Verify docker is available
+        try:
+            subprocess.run(
+                ["docker", "--version"],
+                capture_output=True,
+                check=True,
+                timeout=5,
+            )
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "Docker executable not found in PATH. "
+                "RpkKafkaClient requires docker to be installed and accessible. "
+                "Set KAFKA_ENABLE_LOGGING=false to disable Kafka event publishing."
+            ) from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Docker is installed but not functional: {e}") from e
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Docker check timed out. Docker may not be running.")
 
     def publish(self, topic: str, payload: Dict[str, Any]) -> None:
         """

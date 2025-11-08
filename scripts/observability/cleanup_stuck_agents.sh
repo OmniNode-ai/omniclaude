@@ -3,7 +3,7 @@
 # Cleanup Stuck Agents Script
 # =====================================================================
 # Purpose: Mark agents stuck in "in_progress" for >threshold as "error"
-# Database: omninode_bridge on 192.168.86.200:5436
+# Database: Configured via .env file (POSTGRES_* variables)
 # Usage: ./cleanup_stuck_agents.sh [threshold_minutes] [--dry-run]
 # =====================================================================
 
@@ -25,27 +25,42 @@ if [[ "${2:-}" == "--dry-run" ]] || [[ "${1:-}" == "--dry-run" ]]; then
     fi
 fi
 
-# Database connection (load from .env if available)
-if [[ -f .env ]]; then
-    source .env
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
+    echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
+    echo "   Please copy .env.example to .env and configure it"
+    exit 1
 fi
 
-DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
-DB_PORT="${POSTGRES_PORT:-5436}"
-DB_NAME="${POSTGRES_DATABASE:-omninode_bridge}"
-DB_USER="${POSTGRES_USER:-postgres}"
+# Source .env file
+source "$PROJECT_ROOT/.env"
 
-# Ensure PGPASSWORD is set
-if [[ -z "${PGPASSWORD:-}" ]]; then
-    echo "⚠️  PGPASSWORD not set. Attempting to load from .env..."
-    if [[ -f .env ]]; then
-        export PGPASSWORD=$(grep POSTGRES_PASSWORD .env | cut -d= -f2 | tr -d '"' | tr -d "'")
-    fi
-    if [[ -z "${PGPASSWORD:-}" ]]; then
-        echo "❌ ERROR: PGPASSWORD not set and not found in .env"
-        echo "   Please set PGPASSWORD environment variable or add to .env file"
-        exit 1
-    fi
+# Database connection (no fallbacks - must be set in .env)
+DB_HOST="${POSTGRES_HOST}"
+DB_PORT="${POSTGRES_PORT}"
+DB_NAME="${POSTGRES_DATABASE}"
+DB_USER="${POSTGRES_USER}"
+export PGPASSWORD="${POSTGRES_PASSWORD}"
+
+# Verify required variables are set
+missing_vars=()
+[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$PGPASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "❌ ERROR: Required environment variables not set in .env:"
+    for var in "${missing_vars[@]}"; do
+        echo "   - $var"
+    done
+    echo ""
+    echo "Please update your .env file with these variables."
+    exit 1
 fi
 
 # =====================================================================

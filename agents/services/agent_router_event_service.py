@@ -40,6 +40,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Import type-safe configuration
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config import settings
+
 # Kafka imports
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -58,16 +62,36 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
     logging.error("asyncpg not available. Install with: pip install asyncpg")
 
+# HTTP server for health checks
+try:
+    from aiohttp import web
+
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    AIOHTTP_AVAILABLE = False
+    logging.error("aiohttp not available. Install with: pip install aiohttp")
+
 # Add lib directory to Python path for AgentRouter imports
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
 try:
+    from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
+    from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 except ImportError as e:
-    logging.error(f"Failed to import AgentRouter: {e}")
+    logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
     raise
+
+# Import Slack notifier for error notifications
+try:
+    from slack_notifier import get_slack_notifier
+
+    SLACK_NOTIFIER_AVAILABLE = True
+except ImportError:
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 # Configure logging
 logging.basicConfig(
@@ -148,6 +172,27 @@ class PostgresLogger:
         except Exception as e:
             logger.error(f"Failed to initialize PostgreSQL pool: {e}", exc_info=True)
             self._initialized = False
+
+            # Send Slack notification for database connection failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    import asyncio
+
+                    asyncio.create_task(
+                        notifier.send_error_notification(
+                            error=e,
+                            context={
+                                "service": "agent_router_event_service",
+                                "operation": "postgres_initialization",
+                                "db_host": self.host,
+                                "db_port": self.port,
+                                "db_name": self.database,
+                            },
+                        )
+                    )
+                except Exception as notify_error:
+                    logger.debug(f"Failed to send Slack notification: {notify_error}")
 
     async def close(self) -> None:
         """Close database connection pool."""
@@ -262,6 +307,140 @@ class PostgresLogger:
             "failed_logs": self._error_count,
         }
 
+    async def log_performance_metrics(
+        self,
+        metric_type: str,
+        selected_agent: str,
+        selection_strategy: str,
+        confidence_score: float,
+        alternatives_count: int,
+        total_routing_time_us: int,
+        cache_lookup_us: int,
+        trigger_matching_us: int,
+        confidence_scoring_us: int,
+        cache_hit: bool,
+        trigger_confidence: float,
+        context_confidence: float,
+        capability_confidence: float,
+        historical_confidence: float,
+        correlation_id: Optional[str] = None,
+        user_request_hash: Optional[str] = None,
+        context_hash: Optional[str] = None,
+        alternative_agents: Optional[List[Dict[str, Any]]] = None,
+        max_retries: int = 3,
+    ) -> Optional[str]:
+        """
+        Log router performance metrics to database with retry logic.
+
+        Non-blocking - will not raise exceptions even if logging fails.
+
+        Args:
+            metric_type: Type of metric (e.g., 'routing_decision')
+            selected_agent: Agent selected by router
+            selection_strategy: Strategy used for routing
+            confidence_score: Overall confidence score (0.0-1.0)
+            alternatives_count: Number of alternative recommendations
+            total_routing_time_us: Total routing time in microseconds
+            cache_lookup_us: Cache lookup time in microseconds
+            trigger_matching_us: Trigger matching time in microseconds
+            confidence_scoring_us: Confidence scoring time in microseconds
+            cache_hit: Whether cache was hit
+            trigger_confidence: Trigger component of confidence (0.0-1.0)
+            context_confidence: Context component of confidence (0.0-1.0)
+            capability_confidence: Capability component of confidence (0.0-1.0)
+            historical_confidence: Historical component of confidence (0.0-1.0)
+            correlation_id: Correlation ID for traceability
+            user_request_hash: Hash of user request
+            context_hash: Hash of context
+            alternative_agents: Alternative recommendations (JSONB)
+            max_retries: Maximum retry attempts (default: 3)
+
+        Returns:
+            Record ID on success, None on failure
+        """
+        if not self._initialized or not self._pool:
+            logger.debug(
+                "PostgresLogger not initialized - skipping performance metrics log"
+            )
+            return None
+
+        # Prepare data
+        alternative_agents_json = json.dumps(alternative_agents or [])
+
+        insert_sql = """
+            INSERT INTO router_performance_metrics (
+                metric_type,
+                correlation_id,
+                user_request_hash,
+                context_hash,
+                selected_agent,
+                selection_strategy,
+                confidence_score,
+                alternative_agents,
+                alternatives_count,
+                cache_lookup_us,
+                trigger_matching_us,
+                confidence_scoring_us,
+                total_routing_time_us,
+                trigger_confidence,
+                context_confidence,
+                capability_confidence,
+                historical_confidence,
+                cache_hit,
+                measured_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING id
+        """
+
+        # Retry loop with exponential backoff
+        retry_delay = 0.1
+
+        for attempt in range(max_retries):
+            try:
+                async with self._pool.acquire() as conn:
+                    record_id = await conn.fetchval(
+                        insert_sql,
+                        metric_type,
+                        correlation_id,
+                        user_request_hash,
+                        context_hash,
+                        selected_agent,
+                        selection_strategy,
+                        confidence_score,
+                        alternative_agents_json,
+                        alternatives_count,
+                        cache_lookup_us,
+                        trigger_matching_us,
+                        confidence_scoring_us,
+                        total_routing_time_us,
+                        trigger_confidence,
+                        context_confidence,
+                        capability_confidence,
+                        historical_confidence,
+                        cache_hit,
+                        datetime.now(UTC),
+                    )
+
+                    logger.debug(
+                        f"Performance metrics logged (record_id: {record_id}, agent: {selected_agent}, total_time_us: {total_routing_time_us})"
+                    )
+                    return str(record_id)
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Performance metrics logging failed (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s: {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2
+                else:
+                    logger.error(
+                        f"Performance metrics logging failed after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+
+        return None
+
 
 class AgentRouterEventService:
     """
@@ -286,6 +465,7 @@ class AgentRouterEventService:
         db_name: str = "omninode_bridge",
         db_user: str = "postgres",
         db_password: str = "",
+        health_check_port: int = 8070,
     ):
         """
         Initialize agent router event service.
@@ -299,18 +479,26 @@ class AgentRouterEventService:
             db_name: PostgreSQL database name
             db_user: PostgreSQL user
             db_password: PostgreSQL password
+            health_check_port: Port for HTTP health check endpoint
         """
         if not KAFKA_AVAILABLE:
             raise RuntimeError("aiokafka not available - cannot start event service")
 
         self.bootstrap_servers = bootstrap_servers
         self.consumer_group_id = consumer_group_id
+        self.health_check_port = health_check_port
 
         # Default registry path
+        # Priority: 1) explicit parameter, 2) REGISTRY_PATH env var, 3) home directory default
         if registry_path is None:
-            registry_path = str(
-                Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-            )
+            registry_path = os.getenv("REGISTRY_PATH")
+            if registry_path is None:
+                registry_path = str(
+                    Path.home()
+                    / ".claude"
+                    / "agent-definitions"
+                    / "agent-registry.yaml"
+                )
         self.registry_path = registry_path
 
         # Database config
@@ -327,6 +515,8 @@ class AgentRouterEventService:
         self._producer: Optional[AIOKafkaProducer] = None
         self._consumer: Optional[AIOKafkaConsumer] = None
         self._postgres_logger: Optional[PostgresLogger] = None
+        self._health_app: Optional[web.Application] = None
+        self._health_runner: Optional[web.AppRunner] = None
         self._shutdown_event = asyncio.Event()
         self._started = False
 
@@ -343,7 +533,7 @@ class AgentRouterEventService:
         """
         Start the event service.
 
-        Initializes AgentRouter, Kafka producer/consumer, and PostgreSQL logger.
+        Initializes AgentRouter, Kafka producer/consumer, PostgreSQL logger, and health check server.
         """
         if self._started:
             self.logger.warning("Service already started")
@@ -384,11 +574,17 @@ class AgentRouterEventService:
             bootstrap_servers=self.bootstrap_servers,
             group_id=self.consumer_group_id,
             enable_auto_commit=True,
-            auto_offset_reset="latest",
+            auto_offset_reset="earliest",
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
         )
         await self._consumer.start()
         self.logger.info(f"Kafka consumer started (group: {self.consumer_group_id})")
+
+        # Start health check server
+        if AIOHTTP_AVAILABLE:
+            await self._start_health_server()
+        else:
+            self.logger.warning("aiohttp not available - health check server disabled")
 
         self._started = True
         self.logger.info("=" * 60)
@@ -397,7 +593,62 @@ class AgentRouterEventService:
         self.logger.info(
             f"  Publishing to: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}"
         )
+        self.logger.info(
+            f"  Health check: http://localhost:{self.health_check_port}/health"
+        )
         self.logger.info("=" * 60)
+
+    async def _start_health_server(self) -> None:
+        """Start HTTP health check server."""
+        try:
+            # Create health check endpoint
+            async def health_handler(request):
+                """Health check endpoint handler."""
+                return web.json_response(
+                    {
+                        "status": "healthy",
+                        "service": "router-consumer",
+                        "uptime_seconds": int(time.time() - self._start_time),
+                        "metrics": {
+                            "requests_processed": self._requests_processed,
+                            "requests_succeeded": self._requests_succeeded,
+                            "requests_failed": self._requests_failed,
+                            "success_rate": (
+                                self._requests_succeeded / self._requests_processed
+                                if self._requests_processed > 0
+                                else 0.0
+                            ),
+                            "average_routing_time_ms": (
+                                self._total_routing_time_ms / self._requests_processed
+                                if self._requests_processed > 0
+                                else 0.0
+                            ),
+                        },
+                    }
+                )
+
+            # Create aiohttp application
+            self._health_app = web.Application()
+            self._health_app.router.add_get("/health", health_handler)
+
+            # Create and start runner
+            self._health_runner = web.AppRunner(self._health_app)
+            await self._health_runner.setup()
+
+            # Start site (bind to all interfaces for Docker container accessibility)
+            site = web.TCPSite(
+                self._health_runner, "0.0.0.0", self.health_check_port  # noqa: S104
+            )
+            await site.start()
+
+            self.logger.info(
+                f"Health check server started on port {self.health_check_port}"
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to start health check server: {e}", exc_info=True
+            )
 
     async def stop(self) -> None:
         """Stop the event service gracefully."""
@@ -406,6 +657,11 @@ class AgentRouterEventService:
 
         self.logger.info("Stopping agent router event service...")
         self._shutdown_event.set()
+
+        # Stop health check server
+        if self._health_runner:
+            await self._health_runner.cleanup()
+            self.logger.info("Health check server stopped")
 
         # Stop consumer
         if self._consumer:
@@ -523,9 +779,32 @@ class AgentRouterEventService:
         """
         start_time = time.time()
 
+        # Initialize execution logger for lifecycle tracking
+        execution_logger = None
+        try:
+            execution_logger = await log_agent_execution(
+                agent_name="agent-router-service",
+                user_prompt=user_request,
+                correlation_id=correlation_id,
+            )
+        except Exception as e:
+            # Non-blocking - log error but continue routing
+            self.logger.warning(f"Failed to initialize execution logger: {e}")
+
         try:
             # Extract routing options
             max_recommendations = options.get("max_recommendations", 5)
+
+            # Log progress: starting routing analysis
+            if execution_logger:
+                try:
+                    await execution_logger.progress(
+                        stage="routing_analysis",
+                        percent=25,
+                        metadata={"max_recommendations": max_recommendations},
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Progress logging failed: {e}")
 
             # Route using AgentRouter
             if not self._router:
@@ -538,6 +817,17 @@ class AgentRouterEventService:
             )
 
             routing_time_ms = (time.time() - start_time) * 1000
+
+            # Log progress: routing completed
+            if execution_logger:
+                try:
+                    await execution_logger.progress(
+                        stage="routing_completed",
+                        percent=75,
+                        metadata={"routing_time_ms": routing_time_ms},
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Progress logging failed: {e}")
 
             # Handle no recommendations (fallback)
             if not recommendations:
@@ -604,10 +894,64 @@ class AgentRouterEventService:
                     reasoning=primary.reason,
                 )
 
+                # Log performance metrics if timing data is available
+                if self._router and self._router.last_routing_timing:
+                    timing = self._router.last_routing_timing
+                    try:
+                        await self._postgres_logger.log_performance_metrics(
+                            metric_type="routing_decision",
+                            selected_agent=primary.agent_name,
+                            selection_strategy="enhanced_fuzzy_matching",
+                            confidence_score=primary.confidence.total,
+                            alternatives_count=len(recommendations) - 1,
+                            total_routing_time_us=timing.total_routing_time_us,
+                            cache_lookup_us=timing.cache_lookup_us,
+                            trigger_matching_us=timing.trigger_matching_us,
+                            confidence_scoring_us=timing.confidence_scoring_us,
+                            cache_hit=timing.cache_hit,
+                            trigger_confidence=primary.confidence.trigger_score,
+                            context_confidence=primary.confidence.context_score,
+                            capability_confidence=primary.confidence.capability_score,
+                            historical_confidence=primary.confidence.historical_score,
+                            correlation_id=correlation_id,
+                            alternative_agents=[
+                                {
+                                    "agent_name": rec.agent_name,
+                                    "confidence": rec.confidence.total,
+                                    "reason": rec.reason,
+                                }
+                                for rec in recommendations[1:]
+                            ],
+                        )
+                        self.logger.debug(
+                            f"Performance metrics logged (total_time_us: {timing.total_routing_time_us}, cache_hit: {timing.cache_hit})"
+                        )
+                    except Exception as e:
+                        # Non-blocking - log error but don't fail routing
+                        self.logger.warning(
+                            f"Failed to log performance metrics: {e}", exc_info=True
+                        )
+
             self._requests_succeeded += 1
             self.logger.info(
                 f"Routing completed (correlation_id: {correlation_id}, agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%}, time: {routing_time_ms:.1f}ms)"
             )
+
+            # Log execution completion: success
+            if execution_logger:
+                try:
+                    await execution_logger.complete(
+                        status=EnumOperationStatus.SUCCESS,
+                        quality_score=primary.confidence.total,
+                        metadata={
+                            "selected_agent": primary.agent_name,
+                            "confidence": primary.confidence.total,
+                            "routing_time_ms": routing_time_ms,
+                            "recommendation_count": len(recommendations),
+                        },
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Execution completion logging failed: {e}")
 
         except Exception as e:
             self._requests_failed += 1
@@ -617,6 +961,27 @@ class AgentRouterEventService:
                 f"Routing failed (correlation_id: {correlation_id}): {e}",
                 exc_info=True,
             )
+
+            # Send Slack notification for routing failure
+            if SLACK_NOTIFIER_AVAILABLE:
+                try:
+                    notifier = get_slack_notifier()
+                    asyncio.create_task(
+                        notifier.send_error_notification(
+                            error=e,
+                            context={
+                                "service": "agent_router_event_service",
+                                "operation": "routing_execution",
+                                "correlation_id": correlation_id,
+                                "user_request": user_request[:200],
+                                "routing_time_ms": routing_time_ms,
+                            },
+                        )
+                    )
+                except Exception as notify_error:
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
 
             # Publish failed event
             if self._producer:
@@ -636,6 +1001,22 @@ class AgentRouterEventService:
                     )
                 except Exception as publish_error:
                     self.logger.error(f"Failed to publish error event: {publish_error}")
+
+            # Log execution completion: failure
+            if execution_logger:
+                try:
+                    await execution_logger.complete(
+                        status=EnumOperationStatus.FAILED,
+                        error_message=str(e),
+                        error_type=type(e).__name__,
+                        metadata={
+                            "routing_time_ms": routing_time_ms,
+                        },
+                    )
+                except Exception as log_error:
+                    self.logger.warning(
+                        f"Execution completion logging failed: {log_error}"
+                    )
 
     def _create_fallback_recommendation(self):
         """Create fallback recommendation when routing fails."""
@@ -662,20 +1043,19 @@ class AgentRouterEventService:
 
 async def main():
     """Main entry point for the service."""
-    # Load configuration from environment
-    bootstrap_servers = os.getenv(
-        "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
-    )
-    consumer_group_id = os.getenv("KAFKA_GROUP_ID", "agent-router-service")
-    registry_path = os.getenv("REGISTRY_PATH")
+    # Load configuration from type-safe settings
+    bootstrap_servers = settings.kafka_bootstrap_servers
+    consumer_group_id = settings.kafka_group_id
+    registry_path = os.getenv("REGISTRY_PATH")  # Optional override
+    health_check_port = settings.health_check_port
 
     # PostgreSQL configuration
     db_config = {
-        "db_host": os.getenv("POSTGRES_HOST", "192.168.86.200"),
-        "db_port": int(os.getenv("POSTGRES_PORT", "5436")),
-        "db_name": os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
-        "db_user": os.getenv("POSTGRES_USER", "postgres"),
-        "db_password": os.getenv("POSTGRES_PASSWORD", ""),
+        "db_host": settings.postgres_host,
+        "db_port": settings.postgres_port,
+        "db_name": settings.postgres_database,
+        "db_user": settings.postgres_user,
+        "db_password": settings.get_effective_postgres_password(),
     }
 
     # Create service
@@ -683,6 +1063,7 @@ async def main():
         bootstrap_servers=bootstrap_servers,
         consumer_group_id=consumer_group_id,
         registry_path=registry_path,
+        health_check_port=health_check_port,
         **db_config,
     )
 

@@ -7,7 +7,17 @@ echo "=========================================="
 echo "Testing Hook Manifest Integration"
 echo "=========================================="
 
-PROJECT_PATH="/Volumes/PRO-G40/Code/omniclaude"
+# Portable path resolution
+if [ -n "${PROJECT_PATH:-}" ]; then
+    # Use provided PROJECT_PATH
+    :
+elif [ -n "${PROJECT_ROOT:-}" ]; then
+    PROJECT_PATH="$PROJECT_ROOT"
+else
+    # Compute from script location (claude_hooks/ -> project root)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 # Test the exact code snippet from the hook
 echo "Test: Manifest loading (exact hook code)"

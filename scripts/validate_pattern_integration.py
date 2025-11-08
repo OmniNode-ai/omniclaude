@@ -18,6 +18,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import Pydantic Settings for type-safe configuration
+from config import settings
+
 
 def test_pattern_library_import():
     """Test PatternLibrary can be imported"""
@@ -143,7 +146,7 @@ def test_qdrant_connectivity():
     try:
         import requests
 
-        response = requests.get("http://localhost:6333/collections", timeout=2)
+        response = requests.get(f"{settings.qdrant_url}/collections", timeout=2)
 
         if response.status_code == 200:
             collections = response.json().get("result", {}).get("collections", [])
@@ -163,8 +166,8 @@ def test_pattern_storage_initialization():
     try:
         from agents.lib.patterns.pattern_storage import PatternStorage
 
+        # PatternStorage now uses settings.qdrant_url by default
         storage = PatternStorage(
-            qdrant_url="http://localhost:6333",
             collection_name="test_patterns",
             use_in_memory=False,  # Try Qdrant first
         )

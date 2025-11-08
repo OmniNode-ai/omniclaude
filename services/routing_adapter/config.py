@@ -1,8 +1,12 @@
 """
 Routing Adapter Service Configuration.
 
-Loads configuration from environment variables with sensible defaults.
-Follows ONEX v2.0 patterns for configuration management.
+Loads configuration from centralized settings (config.settings module).
+Provides service-specific validation and configuration methods.
+
+Configuration uses Pydantic Settings framework for type safety and validation.
+
+See config/settings.py for all available configuration options.
 
 Environment Variables:
     # Kafka Configuration
@@ -29,13 +33,15 @@ Environment Variables:
     REQUEST_TIMEOUT_MS - Kafka request timeout (default: 5000)
     MAX_BATCH_SIZE - Max routing requests per batch (default: 100)
 
-Implementation: Phase 1 - Event-Driven Routing Adapter
+Implementation: Phase 2 - Pydantic Settings Migration
+Note: As of Phase 2, configuration uses centralized Pydantic Settings framework.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Optional
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -44,43 +50,41 @@ class RoutingAdapterConfig:
     """Configuration container for routing adapter service."""
 
     def __init__(self):
-        """Initialize configuration from environment variables."""
+        """
+        Initialize configuration from centralized settings.
+
+        Configuration is loaded from config.settings module for consistency.
+        This class provides service-specific configuration and validation.
+        """
         # Kafka Configuration
-        self.kafka_bootstrap_servers = os.getenv(
-            "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:9092"
-        )
+        self.kafka_bootstrap_servers = settings.kafka_bootstrap_servers
 
         # PostgreSQL Configuration
-        self.postgres_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-        self.postgres_port = int(os.getenv("POSTGRES_PORT", "5436"))
-        self.postgres_database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-        self.postgres_user = os.getenv("POSTGRES_USER", "postgres")
-        self.postgres_password = os.getenv("POSTGRES_PASSWORD", "")
-        self.postgres_pool_min_size = int(os.getenv("POSTGRES_POOL_MIN_SIZE", "2"))
-        self.postgres_pool_max_size = int(os.getenv("POSTGRES_POOL_MAX_SIZE", "10"))
+        self.postgres_host = settings.postgres_host
+        self.postgres_port = settings.postgres_port  # Already int
+        self.postgres_database = settings.postgres_database
+        self.postgres_user = settings.postgres_user
+        self.postgres_password = settings.get_effective_postgres_password()
+        self.postgres_pool_min_size = settings.postgres_pool_min_size  # Already int
+        self.postgres_pool_max_size = settings.postgres_pool_max_size  # Already int
 
         # Service Configuration
-        self.service_port = int(os.getenv("ROUTING_ADAPTER_PORT", "8055"))
-        self.service_host = os.getenv("ROUTING_ADAPTER_HOST", "0.0.0.0")
-        self.health_check_interval = int(os.getenv("HEALTH_CHECK_INTERVAL", "30"))
+        self.service_port = settings.routing_adapter_port  # Already int
+        self.service_host = settings.routing_adapter_host
+        self.health_check_interval = settings.health_check_interval  # Already int
 
         # Agent Router Configuration
-        home_dir = Path.home()
-        self.agent_registry_path = os.getenv(
-            "AGENT_REGISTRY_PATH",
-            str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml"),
-        )
-        self.agent_definitions_path = os.getenv(
-            "AGENT_DEFINITIONS_PATH", str(home_dir / ".claude" / "agent-definitions")
-        )
+        # Uses settings.agent_registry_path which handles REGISTRY_PATH env var for Docker
+        self.agent_registry_path = settings.agent_registry_path
+        self.agent_definitions_path = settings.agent_definitions_path
 
         # Performance Configuration
-        self.routing_timeout_ms = int(os.getenv("ROUTING_TIMEOUT_MS", "5000"))
-        self.request_timeout_ms = int(os.getenv("REQUEST_TIMEOUT_MS", "5000"))
-        self.max_batch_size = int(os.getenv("MAX_BATCH_SIZE", "100"))
-        self.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
+        self.routing_timeout_ms = settings.routing_timeout_ms  # Already int
+        self.request_timeout_ms = settings.kafka_request_timeout_ms  # Already int
+        self.max_batch_size = settings.max_batch_size  # Already int
+        self.cache_ttl_seconds = settings.cache_ttl_seconds  # Already int
 
-        # Kafka Topics
+        # Kafka Topics (service-specific, keep as is)
         self.topic_routing_request = "dev.routing-adapter.routing.request.v1"
         self.topic_routing_response = "dev.routing-adapter.routing.response.v1"
         self.topic_routing_failed = "dev.routing-adapter.routing.failed.v1"
@@ -93,29 +97,24 @@ class RoutingAdapterConfig:
 
     def _validate_config(self) -> None:
         """
-        Validate required configuration values.
+        Validate service-specific configuration.
+
+        Note: Core configuration validation (types, formats) is handled by
+        Pydantic Settings on startup. This validates service-specific requirements.
 
         Raises:
-            ValueError: If required configuration is missing or invalid
+            ValueError: If service-specific configuration is invalid
         """
         errors = []
 
-        # Validate PostgreSQL password
-        if not self.postgres_password:
-            errors.append("POSTGRES_PASSWORD environment variable is required")
-
-        # Validate Kafka bootstrap servers
-        if not self.kafka_bootstrap_servers:
-            errors.append("KAFKA_BOOTSTRAP_SERVERS environment variable is required")
-
-        # Validate agent registry path exists
+        # Validate agent registry path exists (service-specific requirement)
         if not Path(self.agent_registry_path).exists():
             errors.append(
                 f"Agent registry not found at: {self.agent_registry_path}. "
                 f"Set AGENT_REGISTRY_PATH environment variable."
             )
 
-        # Validate agent definitions directory exists
+        # Validate agent definitions directory exists (service-specific requirement)
         if not Path(self.agent_definitions_path).is_dir():
             errors.append(
                 f"Agent definitions directory not found at: {self.agent_definitions_path}. "
@@ -124,7 +123,9 @@ class RoutingAdapterConfig:
 
         if errors:
             error_msg = "\n".join(f"  - {error}" for error in errors)
-            raise ValueError(f"Configuration validation failed:\n{error_msg}")
+            raise ValueError(f"Service configuration validation failed:\n{error_msg}")
+
+        # Note: Removed password/kafka validation - Pydantic handles this
 
     def _log_config(self) -> None:
         """Log configuration (with sanitization of sensitive values)."""

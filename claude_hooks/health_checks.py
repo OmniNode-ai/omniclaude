@@ -43,6 +43,9 @@ try:
 except ImportError:
     HAS_PATTERN_TRACKER = False
 
+# Import settings for configuration
+from config import settings
+
 
 class HealthStatus(Enum):
     """Health check status levels."""
@@ -80,17 +83,17 @@ class Phase4HealthChecker:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8053",
+        base_url: str = None,
         config: Optional[PatternTrackerConfig] = None,
     ):
         """
         Initialize Phase 4 health checker.
 
         Args:
-            base_url: Base URL for Phase 4 intelligence service
+            base_url: Base URL for Phase 4 intelligence service (defaults to settings.archon_intelligence_url)
             config: Optional pattern tracker configuration
         """
-        self.base_url = base_url
+        self.base_url = base_url or str(settings.archon_intelligence_url)
         self.config = config or (get_tracker().config if HAS_PATTERN_TRACKER else None)
         self._health_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
         self.cache_duration = 30.0  # Cache results for 30 seconds

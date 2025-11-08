@@ -329,7 +329,13 @@ class HookEventProcessor:
                     else:
                         batch_metrics["failed"] += 1
                         self.metrics["events_failed"] += 1
-                        if (event["retry_count"] or 0) < self.max_retry_count:
+                        # Use explicit None check to preserve zero retry_count
+                        retry_count = (
+                            event["retry_count"]
+                            if event.get("retry_count") is not None
+                            else 0
+                        )
+                        if retry_count < self.max_retry_count:
                             self.metrics["events_retried"] += 1
                 else:
                     logger.error(f"Failed to update event {event_id} in database")

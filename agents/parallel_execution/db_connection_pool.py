@@ -25,6 +25,12 @@ from typing import AsyncGenerator, Optional
 import asyncpg
 from asyncpg.pool import Pool
 
+# Import Pydantic Settings for type-safe configuration
+try:
+    from config import settings
+except ImportError:
+    settings = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +38,7 @@ logger = logging.getLogger(__name__)
 class DatabaseConfig:
     """Database connection configuration."""
 
-    host: str = "localhost"
+    host: str = "192.168.86.200"  # Production default (matches Pydantic settings)
     port: int = 5436
     database: str = "omninode_bridge"
     user: str = "postgres"
@@ -49,8 +55,9 @@ class DatabaseConfig:
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
         """Load configuration from environment variables."""
+        # Note: Uses DB_* env vars (not POSTGRES_*) for backwards compatibility
         return cls(
-            host=os.getenv("DB_HOST", "localhost"),
+            host=os.getenv("DB_HOST", "192.168.86.200"),  # Production default
             port=int(os.getenv("DB_PORT", "5436")),
             database=os.getenv("DB_NAME", "omninode_bridge"),
             user=os.getenv("DB_USER", "postgres"),

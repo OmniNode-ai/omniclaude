@@ -9,7 +9,9 @@ This package provides centralized, type-safe configuration for all OmniClaude se
 ### Key Features
 
 - ✅ **Type Safety**: All configuration values have proper type hints and validation
+- ✅ **Auto-Loading**: `.env` files loaded automatically from project root (no manual `source .env` needed)
 - ✅ **Environment Files**: Support for `.env`, `.env.dev`, `.env.test`, `.env.prod`
+- ✅ **Works Anywhere**: Configuration loads correctly from any directory
 - ✅ **Validation**: Configuration validated on startup with clear error messages
 - ✅ **Security**: Sensitive values sanitized in logs and exports
 - ✅ **Developer Experience**: IDE autocomplete, type checking, inline documentation
@@ -19,16 +21,33 @@ This package provides centralized, type-safe configuration for all OmniClaude se
 
 ### Installation
 
-The configuration framework uses Pydantic Settings:
+The configuration framework uses Pydantic Settings and python-dotenv:
 
 ```bash
-pip install pydantic pydantic-settings
+pip install pydantic pydantic-settings python-dotenv
 ```
+
+### Setup
+
+1. **Copy environment template**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit with your values**:
+   ```bash
+   nano .env  # Set POSTGRES_PASSWORD, GEMINI_API_KEY, etc.
+   ```
+
+3. **Start using immediately** - no need to `source .env`!
 
 ### Basic Usage
 
 ```python
 from config import settings
+
+# .env is loaded automatically - no manual exports needed!
+# Works from any directory (tests/, scripts/, agents/, etc.)
 
 # Access configuration with full type safety
 print(settings.postgres_host)  # str: "192.168.86.200"
@@ -42,6 +61,41 @@ dsn = settings.get_postgres_dsn()
 # Async connection (for asyncpg)
 async_dsn = settings.get_postgres_dsn(async_driver=True)
 # postgresql+asyncpg://postgres:password@192.168.86.200:5436/omninode_bridge
+```
+
+### How Auto-Loading Works
+
+The configuration module automatically loads `.env` files at import time:
+
+1. **Project root detection**: Searches upward from `config/` directory for `.env` or `.git`
+2. **Automatic loading**: Uses `python-dotenv` to load environment files
+3. **Environment-specific files**: Loads `.env.{ENVIRONMENT}` if `ENVIRONMENT` variable is set
+4. **Works anywhere**: Loads from project root regardless of current working directory
+
+**Example**:
+```python
+# Run from project root
+$ python3 tests/test_routing_flow.py
+✅ .env loaded from /path/to/project/.env
+
+# Run from tests/ directory
+$ cd tests && python3 test_routing_flow.py
+✅ .env loaded from /path/to/project/.env
+
+# Run from any directory
+$ cd /tmp && python3 /path/to/project/tests/test_routing_flow.py
+✅ .env loaded from /path/to/project/.env
+```
+
+**No manual exports needed**:
+```bash
+# ❌ OLD WAY (no longer required)
+source .env
+export KAFKA_BOOTSTRAP_SERVERS="..."
+python3 tests/test_routing_flow.py
+
+# ✅ NEW WAY (automatic)
+python3 tests/test_routing_flow.py
 ```
 
 ## Configuration Sections

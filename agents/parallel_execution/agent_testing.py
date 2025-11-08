@@ -148,9 +148,12 @@ TESTING_SYSTEM_PROMPT = """You are an expert test generation agent specializing 
 **Your Task:**
 Generate production-quality pytest test suites that thoroughly validate code correctness."""
 
+# Model configuration
+MODEL_NAME = "google-gla:gemini-2.5-flash"  # Latest Gemini Flash model
+
 # Create the Pydantic AI agent
 testing_agent = Agent[AgentDeps, TestSuite](
-    "google-gla:gemini-2.5-flash",  # Latest Gemini Flash model
+    MODEL_NAME,
     deps_type=AgentDeps,
     output_type=TestSuite,
     system_prompt=TESTING_SYSTEM_PROMPT,
@@ -358,7 +361,7 @@ class TestingAgent:
                 "intelligence_gathered": intelligence,
                 "lines_generated": len(final_test_code.split("\n")),
                 "pydantic_ai_metadata": {
-                    "model_used": "gemini-2.5-flash",
+                    "model_used": MODEL_NAME,
                     "structured_output": True,
                     "tools_available": 3,
                 },

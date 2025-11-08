@@ -2,8 +2,9 @@
 # Entrypoint script for routing adapter service
 # Validates environment, starts service, handles graceful shutdown
 
-set -e  # Exit on error
-set -u  # Exit on undefined variable
+set -e          # Exit on error
+set -u          # Exit on undefined variable
+set -o pipefail # Propagate pipe failures
 
 # Color codes for output
 RED='\033[0;31m'

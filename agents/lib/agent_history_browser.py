@@ -447,9 +447,13 @@ class AgentHistoryBrowser:
         summary_table.add_row(
             "Database Schemas", str(run.get("database_schemas_count", 0))
         )
-        summary_table.add_row(
-            "Manifest Size", f"{run.get('manifest_size_bytes') or 0:,} bytes"
+        # Use explicit None check to preserve zero bytes
+        manifest_size = (
+            run.get("manifest_size_bytes")
+            if run.get("manifest_size_bytes") is not None
+            else 0
         )
+        summary_table.add_row("Manifest Size", f"{manifest_size:,} bytes")
 
         self.console.print(summary_table)
         print()
@@ -543,7 +547,13 @@ class AgentHistoryBrowser:
         print(f"  Infrastructure Services: {run.get('infrastructure_services', 0)}")
         print(f"  Models: {run.get('models_count', 0)}")
         print(f"  Database Schemas: {run.get('database_schemas_count', 0)}")
-        print(f"  Manifest Size: {run.get('manifest_size_bytes') or 0:,} bytes")
+        # Use explicit None check to preserve zero bytes
+        manifest_size = (
+            run.get("manifest_size_bytes")
+            if run.get("manifest_size_bytes") is not None
+            else 0
+        )
+        print(f"  Manifest Size: {manifest_size:,} bytes")
         print()
 
         # Debug intelligence
