@@ -80,9 +80,10 @@ class TestIntelligenceCacheInitialization:
         cache = IntelligenceCache(enabled=False)
         assert cache.enabled is False
 
-    @patch.dict(os.environ, {"ENABLE_INTELLIGENCE_CACHE": "false"})
-    def test_cache_disabled_via_env_var(self):
-        """Test cache disabled via environment variable (covers lines 77-78)."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_cache_disabled_via_env_var(self, mock_settings):
+        """Test cache disabled via Pydantic settings (covers lines 79-81)."""
+        mock_settings.enable_intelligence_cache = False
         cache = IntelligenceCache()
         assert cache.enabled is False
 
@@ -98,9 +99,11 @@ class TestIntelligenceCacheInitialization:
         cache = IntelligenceCache(redis_url=custom_url)
         assert cache.redis_url == custom_url
 
-    @patch.dict(os.environ, {"VALKEY_URL": "redis://env_url:6379/0"})
-    def test_redis_url_from_env(self):
-        """Test Redis URL from environment variable."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_redis_url_from_env(self, mock_settings):
+        """Test Redis URL from Pydantic settings."""
+        mock_settings.enable_intelligence_cache = True
+        mock_settings.valkey_url = "redis://env_url:6379/0"
         cache = IntelligenceCache()
         assert cache.redis_url == "redis://env_url:6379/0"
 
@@ -112,9 +115,16 @@ class TestIntelligenceCacheInitialization:
         assert cache._default_ttls["schema_query"] == 1800
         assert cache._default_ttls["model_query"] == 3600
 
-    @patch.dict(os.environ, {"CACHE_TTL_PATTERNS": "600"})
-    def test_custom_ttl_from_env(self):
-        """Test custom TTL from environment variable."""
+    @patch("agents.lib.intelligence_cache.settings")
+    def test_custom_ttl_from_env(self, mock_settings):
+        """Test custom TTL from Pydantic settings."""
+        mock_settings.enable_intelligence_cache = True
+        mock_settings.valkey_url = (
+            "redis://localhost:6379/0"  # Required for initialization
+        )
+        mock_settings.cache_ttl_patterns = 600
+        mock_settings.cache_ttl_infrastructure = 3600
+        mock_settings.cache_ttl_schemas = 1800
         cache = IntelligenceCache()
         assert cache._default_ttls["pattern_discovery"] == 600
 
