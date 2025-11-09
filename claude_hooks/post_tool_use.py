@@ -24,7 +24,7 @@ import json
 import logging
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from time import time_ns
 from typing import Any, Dict, Optional
@@ -89,7 +89,7 @@ def parse_tool_result(tool_name: str, result: str) -> Dict[str, Any]:
         "success": success,
         "error": error,
         "metadata": metadata,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).isoformat()
     }
 
 
@@ -113,7 +113,7 @@ async def store_execution_result(
             "duration_ms": duration_ms,
             "error": error,
             "context": context or {},
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(UTC).isoformat()
         }
 
         # Store in execution history
@@ -165,7 +165,7 @@ async def update_success_patterns(
             # Add context if provided
             if context:
                 tool_pattern["last_context"] = context
-                tool_pattern["last_success"] = datetime.utcnow().isoformat()
+                tool_pattern["last_success"] = datetime.now(UTC).isoformat()
 
             patterns[tool_name] = tool_pattern
 
@@ -198,7 +198,7 @@ async def update_success_patterns(
 
             # Add to recent errors (keep last 5)
             error_entry = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "context": context or {}
             }
             tool_pattern["recent_errors"].append(error_entry)
@@ -237,7 +237,7 @@ async def update_tool_sequences(
         sequence.append({
             "tool": tool_name,
             "success": success,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(UTC).isoformat()
         })
 
         # Keep last 10 tools
@@ -277,7 +277,7 @@ async def main(tool_name: str, result: str, duration_ms: float = 0) -> None:
         result: Tool execution result/output
         duration_ms: Execution duration in milliseconds
     """
-    start_time = datetime.utcnow()
+    start_time = datetime.now(UTC)
 
     try:
         # Check if memory client is enabled
@@ -317,7 +317,7 @@ async def main(tool_name: str, result: str, duration_ms: float = 0) -> None:
         )
 
         # Log performance
-        hook_duration = (datetime.utcnow() - start_time).total_seconds() * 1000
+        hook_duration = (datetime.now(UTC) - start_time).total_seconds() * 1000
         logger.info(f"Hook completed in {hook_duration:.0f}ms")
 
         if hook_duration > 50:
@@ -328,14 +328,40 @@ async def main(tool_name: str, result: str, duration_ms: float = 0) -> None:
 
 
 if __name__ == "__main__":
-    # Parse arguments: tool_name result [duration_ms]
-    if len(sys.argv) < 3:
-        logger.error("Usage: post_tool_use.py <tool_name> <result> [duration_ms]")
-        sys.exit(1)
+    # Support two modes:
+    # 1. JSON from stdin (production mode - Claude Code)
+    # 2. Command-line args (testing mode)
 
-    tool = sys.argv[1]
-    result_text = sys.argv[2]
-    duration = float(sys.argv[3]) if len(sys.argv) > 3 else 0
+    if len(sys.argv) > 1:
+        # Testing mode: command-line args
+        # Usage: post_tool_use.py <tool_name> <result> [duration_ms]
+        if len(sys.argv) < 3:
+            logger.error("Usage: post_tool_use.py <tool_name> <result> [duration_ms]")
+            sys.exit(1)
+
+        tool = sys.argv[1]
+        result_text = sys.argv[2]
+        duration = float(sys.argv[3]) if len(sys.argv) > 3 else 0
+    else:
+        # Production mode: JSON from stdin
+        try:
+            hook_data = json.loads(sys.stdin.read())
+            tool = hook_data.get("tool_name", "unknown")
+
+            # Convert tool_response to string for pattern analysis
+            tool_response = hook_data.get("tool_response", {})
+            if isinstance(tool_response, dict):
+                result_text = json.dumps(tool_response)
+            else:
+                result_text = str(tool_response)
+
+            duration = hook_data.get("duration_ms", 0)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from stdin: {e}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to read hook data: {e}")
+            sys.exit(1)
 
     # Run async main
     asyncio.run(main(tool, result_text, duration))
