@@ -946,6 +946,11 @@ class Settings(BaseSettings):
 
         Warnings:
             Emits deprecation warnings if legacy aliases are used
+
+        Example:
+            >>> settings = Settings()
+            >>> password = settings.get_effective_postgres_password()
+            >>> # Returns value from POSTGRES_PASSWORD (or legacy alias with warning)
         """
         # Check primary password field
         if self.postgres_password:

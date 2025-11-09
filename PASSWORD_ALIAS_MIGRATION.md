@@ -351,6 +351,206 @@ else:
 
 ---
 
+## Rollback Procedure
+
+**Use this procedure if the migration causes production issues and you need to temporarily revert.**
+
+### When to Rollback
+
+Consider rollback if you experience:
+- ❌ **Critical service failures**: Multiple services unable to connect to database
+- ❌ **Authentication failures**: Persistent "password authentication failed" errors
+- ❌ **Production impact**: End-user facing services down >5 minutes
+- ❌ **Data access blocked**: Critical workflows unable to access PostgreSQL
+
+**Timeline Window**: Rollback recommended within **15 minutes** of detecting critical issues.
+
+### Emergency Restoration Steps
+
+#### 1. Identify Failing Services
+
+```bash
+# Quick service health check
+cd deployment && docker-compose ps
+
+# Check logs for authentication errors
+docker-compose logs --tail=50 | grep -i "password\|auth\|connection"
+
+# Identify specific failing services
+for service in $(docker-compose ps --services); do
+    echo "Checking $service..."
+    docker-compose logs --tail=10 "$service" 2>&1 | grep -i "error\|failed" && echo "❌ $service FAILING"
+done
+```
+
+#### 2. Emergency Revert to Legacy Alias
+
+**Step 2a: Restore Legacy Variable**
+
+Edit `.env` to temporarily restore the legacy alias that was working:
+
+```bash
+# Backup current .env (IMPORTANT!)
+cp .env .env.migration-backup-$(date +%Y%m%d-%H%M%S)
+
+# Add legacy alias back (choose the one you were using)
+# Option 1: If you were using DB_PASSWORD
+echo "DB_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+
+# Option 2: If you were using OMNINODE_BRIDGE_POSTGRES_PASSWORD
+echo "OMNINODE_BRIDGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+
+# Verify both are now set
+source .env
+echo "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:+SET}"
+echo "DB_PASSWORD: ${DB_PASSWORD:+SET}"  # If using this alias
+```
+
+**Step 2b: Reload Environment**
+
+```bash
+# Reload environment variables
+source .env
+
+# Verify all required passwords are set
+env | grep -E "POSTGRES_PASSWORD|DB_PASSWORD|OMNINODE_BRIDGE"
+```
+
+#### 3. Restart Services Immediately
+
+```bash
+# Restart all services with updated environment
+cd deployment && docker-compose down
+cd deployment && docker-compose up -d
+
+# Watch services start
+cd deployment && docker-compose logs -f
+```
+
+**Expected Recovery Time**: 1-3 minutes
+
+#### 4. Verify Service Recovery
+
+```bash
+# Check all services are running
+cd deployment && docker-compose ps
+
+# Test database connectivity
+source .env
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -c "SELECT 1"
+
+# Check for remaining errors
+docker-compose logs --tail=100 | grep -i "error\|failed"
+
+# Run health check
+./scripts/health_check.sh
+```
+
+### Service-Specific Rollback
+
+**For individual service failures** (when only specific services fail):
+
+```bash
+# Identify failing service
+SERVICE_NAME="archon-router-consumer"  # Replace with actual service
+
+# Check service logs
+docker logs ${SERVICE_NAME} --tail=50
+
+# Restart individual service
+docker restart ${SERVICE_NAME}
+
+# Verify recovery
+docker logs ${SERVICE_NAME} --tail=20 | grep -i "connected\|ready"
+```
+
+### Rollback Timeline Expectations
+
+| Step | Duration | Critical Actions |
+|------|----------|-----------------|
+| **Detection** | 0-5 min | Identify failing services, check logs |
+| **Decision** | 5-7 min | Assess impact, decide to rollback |
+| **Restoration** | 7-10 min | Restore legacy alias, reload environment |
+| **Service Restart** | 10-13 min | Restart services, verify startup |
+| **Verification** | 13-15 min | Test connections, check health |
+| **Total** | **~15 min** | Full rollback with verification |
+
+### Post-Rollback Actions
+
+After successful rollback:
+
+1. **Document the Issue**:
+   ```bash
+   # Create incident log
+   cat > /tmp/migration_rollback_$(date +%Y%m%d).log <<EOF
+   Timestamp: $(date)
+   Issue: [Describe what failed]
+   Affected Services: [List services]
+   Legacy Alias Restored: [DB_PASSWORD/OMNINODE_BRIDGE_POSTGRES_PASSWORD]
+   Recovery Time: [Duration]
+   EOF
+   ```
+
+2. **Preserve Evidence**:
+   ```bash
+   # Save logs before they rotate
+   docker-compose logs > /tmp/migration_failure_logs_$(date +%Y%m%d-%H%M%S).txt
+
+   # Save container state
+   docker-compose ps > /tmp/migration_container_state_$(date +%Y%m%d-%H%M%S).txt
+   ```
+
+3. **Plan Retry Strategy**:
+   - Review logs to identify root cause
+   - Check if issue was configuration vs. timing
+   - Test migration in non-production environment first
+   - Schedule retry during low-traffic window
+
+4. **Keep Legacy Alias Temporarily**:
+   ```bash
+   # Keep BOTH variables in .env until ready to retry
+   POSTGRES_PASSWORD=your_password_here
+   DB_PASSWORD=${POSTGRES_PASSWORD}  # Temporary for stability
+   ```
+
+5. **Monitor for 24 Hours**:
+   ```bash
+   # Verify stability
+   watch -n 300 './scripts/health_check.sh'  # Every 5 minutes
+
+   # Check for any late-appearing issues
+   docker-compose logs --since 1h | grep -i "error\|warn"
+   ```
+
+### Preventing Future Rollback Needs
+
+**Before Next Migration Attempt**:
+
+1. **Test in Non-Production**:
+   ```bash
+   # Use test environment
+   docker-compose --env-file .env.test up -d --profile test
+   ```
+
+2. **Gradual Migration**:
+   - Migrate one service at a time
+   - Verify each service before proceeding
+   - Keep legacy alias until ALL services confirmed working
+
+3. **Staging Period**:
+   - Run BOTH variables for 7 days minimum
+   - Monitor for any issues
+   - Remove legacy alias only after proven stability
+
+4. **Backup Everything**:
+   ```bash
+   # Before retry
+   cp .env .env.backup
+   cp deployment/docker-compose.yml deployment/docker-compose.yml.backup
+   ```
+
+---
+
 ## Security Best Practices
 
 ### Password Strength Requirements

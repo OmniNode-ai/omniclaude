@@ -20,43 +20,38 @@ fi
 echo -e "${YELLOW}Starting password alias migration...${NC}"
 echo ""
 
-# Files to migrate
-FILES=(
-    "agents/migrations/test_004_migration.sh"
-    "agents/parallel_execution/migrations/apply_migrations.sh"
-    "claude_hooks/post-tool-use-quality.sh"
-    "claude_hooks/pre-tool-use-quality.sh"
-    "claude_hooks/services/run_processor.sh"
-    "claude_hooks/setup-symlinks.sh"
-    "claude_hooks/tests/validate_database.sh"
-    "claude_hooks/user-prompt-submit.sh"
-    "claude_hooks/validate_monitoring_indexes.sh"
-    "deployment/scripts/start-routing-adapter.sh"
-    "scripts/apply_migration.sh"
-    "scripts/dump_omninode_db.sh"
-    "scripts/observability/monitor_routing_health.sh"
-    "scripts/reingest_patterns.sh"
-    "scripts/rollback_patterns.sh"
-    "scripts/validate_patterns.sh"
-)
+# Discover files containing deprecated aliases dynamically
+echo -e "${YELLOW}Discovering files with deprecated password aliases...${NC}"
+FILES=()
+
+# Check if fd is available, otherwise use find
+if command -v fd &> /dev/null; then
+    # Use fd for faster file discovery
+    while IFS= read -r file; do
+        FILES+=("$file")
+    done < <(fd -e sh -e py --type f | xargs grep -l 'DB_PASSWORD\|DATABASE_PASSWORD\|TRACEABILITY_DB_PASSWORD' 2>/dev/null || true)
+else
+    # Fallback to find
+    while IFS= read -r file; do
+        FILES+=("$file")
+    done < <(find . -type f \( -name "*.sh" -o -name "*.py" \) | xargs grep -l 'DB_PASSWORD\|DATABASE_PASSWORD\|TRACEABILITY_DB_PASSWORD' 2>/dev/null || true)
+fi
+
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo -e "${GREEN}✓ No files found containing deprecated aliases${NC}"
+    exit 0
+fi
+
+echo -e "${YELLOW}Found ${#FILES[@]} files to migrate:${NC}"
+for file in "${FILES[@]}"; do
+    echo "  - $file"
+done
+echo ""
 
 MIGRATED=0
 SKIPPED=0
 
 for file in "${FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo -e "${YELLOW}⚠️  Skipping (not found): $file${NC}"
-        ((SKIPPED++))
-        continue
-    fi
-
-    # Check if file contains aliases
-    if ! grep -q 'DB_PASSWORD\|DATABASE_PASSWORD\|TRACEABILITY_DB_PASSWORD' "$file"; then
-        echo -e "${GREEN}✓ Already migrated: $file${NC}"
-        ((SKIPPED++))
-        continue
-    fi
-
     echo -e "${YELLOW}Migrating: $file${NC}"
 
     # Create backup

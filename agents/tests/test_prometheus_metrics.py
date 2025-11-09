@@ -630,7 +630,7 @@ class TestLabelCardinalityLimits:
             test_counter.labels(label=f"value_{i}").inc()
 
         metrics = list(registry.collect())
-        assert any(m.name == "test_high_cardinality_total" for m in metrics)
+        assert any(m.name == "test_high_cardinality" for m in metrics)
 
     def test_label_with_special_characters(self):
         """Test labels with special characters"""

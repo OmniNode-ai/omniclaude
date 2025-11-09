@@ -128,7 +128,7 @@ if enhanced_metadata:
     quality_score = enhanced_metadata.get('quality_metrics', {}).get('quality_score', 0.0)
     exec_time = enhanced_metadata.get('performance_metrics', {}).get('execution_time_ms', 0)
     print(f'[PostToolUse] Success: {success}, Quality: {quality_score:.2f}, Time: {exec_time:.2f}ms', file=sys.stderr)
-" 2>/dev/null
+" 2>> "$LOG_FILE"
     ) &
 fi
 
@@ -159,6 +159,9 @@ if corr_context:
         AGENT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.agent_name // "polymorphic-agent"')
         PROJECT_PATH=$(echo "$CORRELATION_DATA" | jq -r '.project_path // empty')
         PROJECT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.project_name // empty')
+
+        # Debug: Log correlation context extraction
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Correlation context extracted: id=$CORRELATION_ID, agent=$AGENT_NAME" >> "$LOG_FILE"
 
         # Log tool execution to agent_actions table via Kafka (non-blocking)
         if [[ -n "$CORRELATION_ID" ]]; then
