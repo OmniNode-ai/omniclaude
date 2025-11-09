@@ -1660,7 +1660,7 @@ class TestEventDrivenIntegration:
         with pytest.raises(OnexError) as exc_info:
             await default_validator.wait_for_validation_response(correlation_id)
 
-        assert exc_info.value.error_code == EnumCoreErrorCode.METHOD_NOT_IMPLEMENTED
+        assert exc_info.value.error_code == EnumCoreErrorCode.NOT_IMPLEMENTED
 
 
 # ============================================================================

@@ -232,8 +232,12 @@ class TestNodeTemplate:
         assert "Missing required placeholders" in error.message
         # Error context contains additional information
         assert "additional_context" in error.context
-        assert "context" in error.context["additional_context"]
-        assert "missing_placeholders" in error.context["additional_context"]["context"]
+        assert "details" in error.context["additional_context"]
+        assert "context" in error.context["additional_context"]["details"]
+        assert (
+            "missing_placeholders"
+            in error.context["additional_context"]["details"]["context"]
+        )
 
     def test_validate_context_extra_variables(
         self, sample_template_content, sample_context

@@ -33,11 +33,9 @@ def test_production_invalid_config():
 
     # Set environment to production with missing required config
     os.environ["ENVIRONMENT"] = "production"
-    # Set password env vars to empty to trigger validation error
+    # Set password to empty to trigger validation error
     # (must override .env file values with empty strings, not just unset)
     os.environ["POSTGRES_PASSWORD"] = ""
-    os.environ["PG_PASSWORD"] = ""
-    os.environ["DATABASE_PASSWORD"] = ""
     # Set Kafka to empty to trigger another validation error
     os.environ["KAFKA_BOOTSTRAP_SERVERS"] = ""
 
@@ -73,11 +71,9 @@ def test_development_invalid_config():
 
     # Set environment to development with missing required config
     os.environ["ENVIRONMENT"] = "development"
-    # Set password env vars to empty to trigger validation error
+    # Set password to empty to trigger validation error
     # (must override .env file values with empty strings, not just unset)
     os.environ["POSTGRES_PASSWORD"] = ""
-    os.environ["PG_PASSWORD"] = ""
-    os.environ["DATABASE_PASSWORD"] = ""
     # Set Kafka to empty to trigger another validation error
     os.environ["KAFKA_BOOTSTRAP_SERVERS"] = ""
 

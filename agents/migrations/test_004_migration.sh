@@ -10,16 +10,16 @@ DB_HOST="${DB_HOST:-192.168.86.200}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"  # Must be set in environment
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Verify password is set
-if [ -z "$DB_PASSWORD" ]; then
+if [ -z "$POSTGRES_PASSWORD" ]; then
     echo "❌ ERROR: POSTGRES_PASSWORD environment variable not set"
     echo "   Please run: source .env"
     exit 1
 fi
 
-export PGPASSWORD="$DB_PASSWORD"
+export PGPASSWORD="$POSTGRES_PASSWORD"
 
 echo "=========================================="
 echo "Migration 004 Test Script"

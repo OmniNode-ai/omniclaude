@@ -430,26 +430,56 @@ class SlackNotifier:
         """
         Build Slack message payload with rich context.
 
+        Sanitizes all PII and sensitive data before building message.
+
         Args:
             error: Exception instance
             context: Error context
 
         Returns:
-            Slack message payload (dict)
+            Slack message payload (dict) with PII sanitized
         """
-        # Extract context fields
-        service = context.get("service", "unknown")
-        operation = context.get("operation", "unknown")
-        correlation_id = context.get("correlation_id", "N/A")
+        # Import PII sanitizer
+        try:
+            from agents.lib.pii_sanitizer import sanitize_for_slack, sanitize_string
+
+            pii_sanitizer_available = True
+        except ImportError:
+            self.logger.warning(
+                "PII sanitizer not available - sending unsanitized data"
+            )
+            pii_sanitizer_available = False
+
+        # Sanitize context dictionary (deep sanitization)
+        if pii_sanitizer_available:
+            sanitized_context = sanitize_for_slack(context, sanitize_all_strings=False)
+        else:
+            sanitized_context = context
+
+        # Extract context fields (from sanitized context)
+        service = sanitized_context.get("service", "unknown")
+        operation = sanitized_context.get("operation", "unknown")
+        correlation_id = sanitized_context.get("correlation_id", "N/A")
 
         # Get error details
         error_type = type(error).__name__
+
+        # Sanitize error message (may contain PII)
         error_message = str(error)
+        if pii_sanitizer_available:
+            error_message = sanitize_string(error_message)
+        else:
+            error_message = str(error)
 
         # Get stack trace
         tb_str = "".join(
             traceback.format_exception(type(error), error, error.__traceback__)
         )
+
+        # Sanitize stack trace (may contain file paths with usernames, etc.)
+        if pii_sanitizer_available:
+            tb_str = sanitize_string(tb_str)
+
         # Truncate stack trace if too long (Slack has message limits)
         if len(tb_str) > 2000:
             tb_str = tb_str[:2000] + "\n... (truncated)"
@@ -512,13 +542,14 @@ class SlackNotifier:
                 }
             )
 
-        # Add additional context if available
+        # Add additional context if available (from sanitized context)
         extra_context = {
             k: v
-            for k, v in context.items()
+            for k, v in sanitized_context.items()
             if k not in ("service", "operation", "correlation_id")
         }
         if extra_context:
+            # Context is already sanitized, just format it
             context_str = "\n".join(f"• {k}: {v}" for k, v in extra_context.items())
             message["blocks"].append(
                 {

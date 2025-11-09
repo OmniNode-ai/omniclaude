@@ -384,7 +384,129 @@ For macOS users, you may also need to install certificates:
    notifier.clear_throttle_cache()
    ```
 
-## Security Best Practices
+## PII Sanitization
+
+**Status**: ✅ Implemented (2025-11-08)
+
+All Slack notifications automatically sanitize Personally Identifiable Information (PII) and sensitive data before sending to prevent data leaks.
+
+### What Gets Sanitized
+
+**Sensitive Field Values** (completely masked with `***`):
+- Passwords, API keys, tokens, secrets
+- Email addresses (field: `email`, `user_email`, etc.)
+- IP addresses (field: `ip`, `ip_address`, `server_ip`, etc.)
+- Usernames (field: `username`, `user_name`)
+- Correlation IDs (field: `correlation_id`)
+- Database credentials (field: `password`, `connection_string`, etc.)
+- Session tokens, bearer tokens
+- Phone numbers, credit cards, SSNs
+- Webhook URLs
+
+**Pattern-Based Sanitization** (in error messages and non-sensitive fields):
+- Email addresses: `user@example.com` → `u***@example.com`
+- IP addresses: `192.168.1.100` → `192.*.*.*`
+- File paths: `/home/username/file.py` → `/home/***/file.py`
+- Database connections: `postgresql://user:pass@host/db` → `postgresql://***:***@host/db`
+- API keys: `sk-1234567890abcdef` → `sk-***`
+- Phone numbers: `(555) 123-4567` → `(***) ***-4567`
+- Credit cards: `4532-1234-5678-9010` → `****-****-****-9010`
+- SSNs: `123-45-6789` → `***-**-6789`
+- UUIDs: `550e8400-e29b-41d4-a716-446655440000` → `550e8400***`
+
+### How It Works
+
+**Automatic Sanitization**:
+```python
+# No code changes required!
+# PII sanitization is automatic in all Slack notifications
+
+await logger.log_error(
+    error_type="DatabaseError",
+    error_message="Failed to connect as admin@example.com from 192.168.1.1",
+    error_context={
+        "email": "admin@example.com",  # Completely masked: ***
+        "ip_address": "192.168.1.1",   # Completely masked: ***
+        "note": "Contact support@company.com"  # Pattern sanitized: s***@company.com
+    },
+    severity="critical"
+)
+
+# Slack notification will show:
+# - Error message: "Failed to connect as a***@example.com from 192.*.*.*"
+# - email field: "***"
+# - ip_address field: "***"
+# - note field: "Contact s***@company.com"
+```
+
+**Deep Sanitization**:
+- Recursively sanitizes nested dictionaries, lists, tuples, sets
+- Preserves data structure (types remain unchanged)
+- Sensitive field names detected case-insensitively
+- Context fields sanitized before message building
+
+### Implementation
+
+**Module**: `agents/lib/pii_sanitizer.py`
+
+**Integration Points**:
+1. `SlackNotifier._build_slack_message()` - Sanitizes all context and messages
+2. `ActionLogger.log_error()` - Context sanitized before Slack notification
+3. Error messages, stack traces, additional context - All sanitized
+
+**Comprehensive Test Coverage**:
+- 74 unit tests for sanitization patterns
+- Integration tests for SlackNotifier
+- Edge cases and error handling
+- 100% test coverage for PII sanitization
+
+### Example
+
+**Before Sanitization**:
+```python
+context = {
+    "user_email": "john.doe@company.com",
+    "client_ip": "192.168.86.100",
+    "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "database_url": "postgresql://admin:secret@192.168.86.200:5436/db",
+    "api_key": "sk-1234567890abcdefghijklmnopqrstuvwxyz",
+}
+```
+
+**After Sanitization** (sent to Slack):
+```python
+{
+    "user_email": "***",          # Sensitive field completely masked
+    "client_ip": "***",           # Sensitive field completely masked
+    "correlation_id": "***",      # Sensitive field completely masked
+    "database_url": "***",        # Sensitive field completely masked
+    "api_key": "***",             # Sensitive field completely masked
+}
+```
+
+### Compliance Benefits
+
+- ✅ **GDPR**: Prevents personal data leaks to third parties (Slack)
+- ✅ **CCPA**: Reduces exposure of California resident data
+- ✅ **HIPAA**: Prevents health information disclosure (if applicable)
+- ✅ **PCI DSS**: Masks credit card data automatically
+- ✅ **SOC 2**: Defense-in-depth security control
+- ✅ **ISO 27001**: Data minimization principle
+
+### Testing PII Sanitization
+
+```bash
+# Run unit tests
+python3 agents/lib/test_pii_sanitizer.py
+
+# Run integration tests
+python3 agents/lib/test_slack_pii_sanitization.py
+
+# All tests (74 unit + integration tests)
+pytest agents/lib/test_pii_sanitizer.py agents/lib/test_slack_pii_sanitization.py -v
+```
+
+### Security Best Practices
 
 1. **Never commit webhook URLs to version control**
    - Use `.env` file (excluded in `.gitignore`)
@@ -407,6 +529,12 @@ For macOS users, you may also need to install certificates:
    ```bash
    chmod 600 .env
    ```
+
+6. **PII sanitization is defense-in-depth**
+   - Sanitization is automatic, but don't rely on it exclusively
+   - Avoid logging PII in the first place when possible
+   - Review error contexts before adding sensitive fields
+   - Use structured logging to separate PII from operational data
 
 ## Migration Guide
 

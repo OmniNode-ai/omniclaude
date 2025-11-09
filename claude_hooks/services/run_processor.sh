@@ -13,7 +13,7 @@ if [ -f "../../.env" ]; then
 fi
 
 # Set default environment if not provided
-export DB_PASSWORD="${DB_PASSWORD:-omninode-bridge-postgres-dev-2024}"
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 export POLL_INTERVAL="${POLL_INTERVAL:-1.0}"
 export BATCH_SIZE="${BATCH_SIZE:-100}"
 export MAX_RETRY_COUNT="${MAX_RETRY_COUNT:-3}"

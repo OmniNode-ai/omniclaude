@@ -46,6 +46,21 @@ try:
 except ImportError:
     settings = None
 
+# Import Prometheus metrics
+try:
+    from agents.lib.prometheus_metrics import (
+        event_publish_bytes,
+        event_publish_counter,
+        event_publish_duration,
+        event_publish_errors_counter,
+        record_event_publish,
+    )
+
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
+
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded Kafka producer (singleton)
@@ -220,13 +235,33 @@ async def publish_action_event(
         producer = await _get_kafka_producer()
         if producer is None:
             logger.warning("Kafka producer unavailable, action event not published")
+            if PROMETHEUS_AVAILABLE:
+                event_publish_counter.labels(
+                    topic="agent-actions", status="unavailable"
+                ).inc()
             return False
 
         # Publish to Kafka
         topic = "agent-actions"
         partition_key = correlation_id.encode("utf-8")
 
+        # Track timing for Prometheus
+        start_time = time.time()
+
         await producer.send_and_wait(topic, value=event, key=partition_key)
+
+        # Calculate metrics
+        duration = time.time() - start_time
+        event_bytes = len(json.dumps(event).encode("utf-8"))
+
+        # Record Prometheus metrics
+        if PROMETHEUS_AVAILABLE:
+            record_event_publish(
+                topic=topic,
+                duration=duration,
+                size_bytes=event_bytes,
+                status="success",
+            )
 
         logger.debug(
             f"Published action event: {action_type}/{action_name} "
@@ -237,6 +272,14 @@ async def publish_action_event(
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution
         logger.error(f"Failed to publish action event: {e}", exc_info=True)
+
+        # Record failure in Prometheus
+        if PROMETHEUS_AVAILABLE:
+            event_publish_counter.labels(topic="agent-actions", status="failure").inc()
+            event_publish_errors_counter.labels(
+                topic="agent-actions", error_type=type(e).__name__
+            ).inc()
+
         return False
 
 
