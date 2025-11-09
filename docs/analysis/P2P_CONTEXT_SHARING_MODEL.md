@@ -169,39 +169,85 @@ Savings: 90% cost reduction
 - Can query "who has X?" without downloading X
 - RAG-optimized (embedding vectors for similarity search)
 
-#### 3. Compute Token Ledger
+#### 3. Compute Token Ledger (Kafka Event Sourcing)
 
-**Database**: PostgreSQL table (or local SQLite)
+**Leverage Existing Infrastructure**: Use Kafka/Redpanda as the distributed ledger (you already have this!)
 
-```sql
-CREATE TABLE token_ledger (
-    id UUID PRIMARY KEY,
-    peer_id TEXT NOT NULL,
-    transaction_type TEXT, -- 'earned', 'spent'
-    amount NUMERIC NOT NULL,
-    reason TEXT,
-    context_hash TEXT, -- What context was served/retrieved
-    requester_peer_id TEXT, -- Who requested (if earned)
-    timestamp TIMESTAMPTZ DEFAULT NOW()
-);
+**Key Insight**: Kafka IS a ledger - durable, distributed, append-only event log with replay capability.
 
-CREATE TABLE peer_balances (
-    peer_id TEXT PRIMARY KEY,
-    balance NUMERIC DEFAULT 0,
-    total_earned NUMERIC DEFAULT 0,
-    total_spent NUMERIC DEFAULT 0,
-    contexts_served INT DEFAULT 0,
-    contexts_retrieved INT DEFAULT 0,
-    reputation NUMERIC DEFAULT 1.0
-);
+**Kafka Topics**:
+```yaml
+# Token transaction events (source of truth)
+token.transactions.v1:
+  partitions: 10 (by peer_id)
+  retention: unlimited (compact by peer_id for balances)
+
+# Materialized peer balances (computed from transactions)
+token.balances.v1:
+  partitions: 10 (by peer_id)
+  retention: unlimited (compacted - latest balance only)
 ```
 
-**Token Flow**:
+**Event Schema** (token.transactions.v1):
+```json
+{
+  "transaction_id": "uuid",
+  "peer_id": "abc123",
+  "transaction_type": "earned" | "spent",
+  "amount": 10,
+  "reason": "context_served" | "context_retrieved" | "llm_query",
+  "context_hash": "sha256:...",
+  "counterparty_peer_id": "def456",
+  "timestamp": "2025-11-09T10:30:00Z"
+}
+```
+
+**Balance Event Schema** (token.balances.v1):
+```json
+{
+  "peer_id": "abc123",
+  "balance": 5000,
+  "total_earned": 10000,
+  "total_spent": 5000,
+  "contexts_served": 250,
+  "contexts_retrieved": 125,
+  "reputation": 0.95,
+  "updated_at": "2025-11-09T10:30:00Z"
+}
+```
+
+**Token Flow** (Event Sourcing):
 1. Peer A requests context from Peer B
 2. Peer B serves context (5KB)
-3. Peer B earns 10 tokens (2 tokens per KB)
-4. Peer A spends 10 tokens (deducted from balance)
-5. Transaction logged in ledger
+3. Publish event to `token.transactions.v1`:
+   ```json
+   {"peer_id": "peer_b", "type": "earned", "amount": 10, "context_hash": "..."}
+   {"peer_id": "peer_a", "type": "spent", "amount": 10, "context_hash": "..."}
+   ```
+4. Consumer updates `token.balances.v1` (compacted topic):
+   ```json
+   {"peer_id": "peer_b", "balance": 5010, ...}
+   {"peer_id": "peer_a", "balance": 4990, ...}
+   ```
+5. Valkey cache updated for fast reads
+
+**Benefits of Kafka Ledger**:
+1. ✅ **Already deployed** - no new infrastructure
+2. ✅ **Distributed** - Redpanda handles replication
+3. ✅ **Durable** - retention unlimited, events never lost
+4. ✅ **Replay** - rebuild balances from transaction log
+5. ✅ **Audit trail** - complete transaction history
+6. ✅ **Performance** - Kafka optimized for high-throughput
+7. ✅ **Event sourcing** - natural fit for token ledger
+
+**Architecture**:
+```
+Token Transaction (event) → Kafka topic → Balance Consumer → Compacted balance topic
+                                              ↓
+                                         Valkey cache (fast reads)
+                                              ↓
+                                         PostgreSQL (analytics only)
+```
 
 #### 4. Context Serving Protocol
 
@@ -314,7 +360,10 @@ reputation_decay_rate: 0.01/day (if offline)
 **Deliverables**:
 - Tracker server (announce, scrape, peer_list endpoints)
 - Peer client library (announce context, discover peers)
-- Basic token ledger (PostgreSQL)
+- **Token ledger (Kafka topics)** ⭐ **LEVERAGE EXISTING INFRASTRUCTURE**
+  - Create `token.transactions.v1` and `token.balances.v1` topics
+  - Token balance consumer (updates compacted topic)
+  - Valkey cache integration (fast balance reads)
 - Context serving protocol (HTTP API)
 - Metadata graph (local SQLite or Memgraph)
 
@@ -327,13 +376,28 @@ reputation_decay_rate: 0.01/day (if offline)
      │                                    │
      └────────── P2P content ────────────┘
               (direct connection)
+                       ↓
+            Token transaction events
+                       ↓
+         ┌────────────────────────────┐
+         │  Kafka/Redpanda (ledger)   │
+         │  - token.transactions.v1   │
+         │  - token.balances.v1       │
+         └────────────────────────────┘
 ```
+
+**Benefits of Kafka Ledger**:
+- ✅ **No new database** - use existing Redpanda infrastructure
+- ✅ **Event sourcing** - natural audit trail
+- ✅ **Replay capability** - rebuild state from transaction log
+- ✅ **Distributed** - already replicated and durable
 
 **Success metrics**:
 - 10+ peers register with tracker
 - 100+ context chunks served peer-to-peer
-- Token earning/spending works correctly
+- Token earning/spending via Kafka events works correctly
 - 50%+ cost reduction vs full-context LLM queries
+- Token balance consumer lag <100ms
 
 ### Phase 2: DHT for Decentralization (3-4 weeks)
 
@@ -568,22 +632,59 @@ CREATE INDEX idx_peer_contexts_peer ON peer_contexts(peer_id);
 CREATE INDEX idx_peer_contexts_context ON peer_contexts(context_hash);
 ```
 
-### Token Ledger
+### Token Ledger (Kafka/Redpanda Topics)
 
+**Source of Truth**: Kafka topics (already deployed in your infrastructure)
+
+```yaml
+# Token transaction events (append-only log)
+token.transactions.v1:
+  partitions: 10
+  replication_factor: 3
+  retention: unlimited
+  cleanup_policy: delete  # Keep all transactions
+
+# Peer balances (compacted topic - latest balance only)
+token.balances.v1:
+  partitions: 10
+  replication_factor: 3
+  retention: unlimited
+  cleanup_policy: compact  # Only keep latest balance per peer_id
+
+# Token analytics (materialized view for queries)
+token.analytics.v1:
+  partitions: 1
+  replication_factor: 3
+  retention: 30 days
+  cleanup_policy: delete
+```
+
+**Consumer Groups**:
+- `token-balance-updater`: Consumes transactions, updates balances
+- `token-analytics`: Materializes to PostgreSQL for complex queries
+- `token-cache-updater`: Updates Valkey cache for fast reads
+
+**PostgreSQL** (analytics only, not source of truth):
 ```sql
-CREATE TABLE token_transactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    peer_id TEXT REFERENCES peers(peer_id),
-    transaction_type TEXT CHECK (transaction_type IN ('earned', 'spent')),
-    amount NUMERIC NOT NULL,
-    reason TEXT, -- 'context_served', 'context_retrieved', 'llm_query', etc.
-    context_hash TEXT REFERENCES contexts(hash),
-    counterparty_peer_id TEXT REFERENCES peers(peer_id),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- Materialized view of balances (rebuilt from Kafka if needed)
+CREATE TABLE peer_token_balances_mv (
+    peer_id TEXT PRIMARY KEY,
+    balance NUMERIC DEFAULT 0,
+    total_earned NUMERIC DEFAULT 0,
+    total_spent NUMERIC DEFAULT 0,
+    last_transaction_id UUID,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_token_transactions_peer ON token_transactions(peer_id, created_at DESC);
-CREATE INDEX idx_token_transactions_type ON token_transactions(transaction_type, created_at DESC);
+-- Analytics queries (time-series, aggregates)
+CREATE TABLE token_analytics (
+    date DATE,
+    peer_id TEXT,
+    earned_today NUMERIC,
+    spent_today NUMERIC,
+    balance_end_of_day NUMERIC,
+    PRIMARY KEY (date, peer_id)
+);
 ```
 
 ---
