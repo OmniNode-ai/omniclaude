@@ -199,17 +199,53 @@ echo ""
 # Test 7: Cleanup
 echo "TEST 7: Cleanup"
 echo "-----------------------------------"
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "redpanda\|kafka"; then
-    CONTAINER=$(docker ps --format '{{.Names}}' | grep -E "redpanda|kafka" | head -1)
-    if [ -n "${CONTAINER}" ]; then
-        if docker exec "${CONTAINER}" rpk topic delete "${TEST_TOPIC}" 2>/dev/null; then
-            pass "Deleted test topic: ${TEST_TOPIC}"
-        else
-            warn "Could not delete test topic (may need manual cleanup)"
+
+# Try multiple cleanup methods in order of preference
+CLEANUP_SUCCESS=false
+
+# Method 1: SSH to remote server and use docker exec (most reliable)
+# Extract hostname from KAFKA_BOOTSTRAP_SERVERS (e.g., 192.168.86.200:29092)
+KAFKA_HOST=$(echo "${KAFKA_BOOTSTRAP_SERVERS}" | sed 's|:.*||')
+
+# Only attempt SSH if we have a remote host (not localhost)
+if [ "${KAFKA_HOST}" != "localhost" ] && [ "${KAFKA_HOST}" != "127.0.0.1" ]; then
+    # Try SSH with common usernames (assumes SSH keys are configured)
+    for SSH_USER in jonah $USER; do
+        if ssh -o ConnectTimeout=2 -o BatchMode=yes "${SSH_USER}@${KAFKA_HOST}" "docker ps --format '{{.Names}}' | grep -q redpanda" 2>/dev/null; then
+            if ssh "${SSH_USER}@${KAFKA_HOST}" "docker exec \$(docker ps --format '{{.Names}}' | grep redpanda | head -1) rpk topic delete ${TEST_TOPIC}" 2>/dev/null; then
+                pass "Deleted test topic via SSH: ${TEST_TOPIC}"
+                CLEANUP_SUCCESS=true
+                break
+            fi
+        fi
+    done
+fi
+
+# Method 2: Use kafka-topics CLI if available (works with remote Kafka/Redpanda)
+if [ "$CLEANUP_SUCCESS" = false ] && command -v kafka-topics &> /dev/null; then
+    if kafka-topics --bootstrap-server "${KAFKA_BOOTSTRAP_SERVERS}" --delete --topic "${TEST_TOPIC}" 2>/dev/null; then
+        pass "Deleted test topic via kafka-topics CLI: ${TEST_TOPIC}"
+        CLEANUP_SUCCESS=true
+    fi
+fi
+
+# Method 3: Local docker access (for local Redpanda/Kafka)
+if [ "$CLEANUP_SUCCESS" = false ]; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "redpanda\|kafka"; then
+        CONTAINER=$(docker ps --format '{{.Names}}' | grep -E "redpanda|kafka" | head -1)
+        if [ -n "${CONTAINER}" ]; then
+            if docker exec "${CONTAINER}" rpk topic delete "${TEST_TOPIC}" 2>/dev/null; then
+                pass "Deleted test topic via local Docker: ${TEST_TOPIC}"
+                CLEANUP_SUCCESS=true
+            fi
         fi
     fi
-else
-    warn "Cannot delete test topic (no Kafka/Redpanda container access)"
+fi
+
+# Method 4: Inform about manual cleanup if automated methods failed
+if [ "$CLEANUP_SUCCESS" = false ]; then
+    warn "Automated cleanup not available - test topic remains: ${TEST_TOPIC}"
+    info "Manual cleanup: ssh ${KAFKA_HOST} 'docker exec \$(docker ps --format '{{.Names}}' | grep redpanda) rpk topic delete ${TEST_TOPIC}'"
 fi
 echo ""
 
