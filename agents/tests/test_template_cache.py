@@ -27,10 +27,15 @@ pytestmark = pytest.mark.integration
 class TestCacheBasics:
     """Test basic cache operations"""
 
-    def test_cache_initialization(self):
+    def test_cache_initialization(self, cache_cleanup):
         """Test cache initialization with different configurations"""
-        cache = TemplateCache(
-            max_templates=50, max_size_mb=25, ttl_seconds=1800, enable_persistence=False
+        cache = cache_cleanup(
+            TemplateCache(
+                max_templates=50,
+                max_size_mb=25,
+                ttl_seconds=1800,
+                enable_persistence=False,
+            )
         )
 
         assert cache.max_templates == 50
@@ -40,9 +45,9 @@ class TestCacheBasics:
         assert cache.hits == 0
         assert cache.misses == 0
 
-    def test_cache_miss_then_hit(self, tmp_path):
+    def test_cache_miss_then_hit(self, tmp_path, cache_cleanup):
         """Test cache miss followed by cache hit"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Create test template
         template_file = tmp_path / "test_template.py"
@@ -74,9 +79,9 @@ class TestCacheBasics:
         assert cache.misses == 1
         assert content1 == content2
 
-    def test_cache_multiple_templates(self, tmp_path):
+    def test_cache_multiple_templates(self, tmp_path, cache_cleanup):
         """Test caching multiple templates"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         templates = []
         for i in range(5):
@@ -110,9 +115,9 @@ class TestCacheBasics:
         assert cache.hits == 5
         assert cache.misses == 5
 
-    def test_manual_invalidation(self, tmp_path):
+    def test_manual_invalidation(self, tmp_path, cache_cleanup):
         """Test manual cache invalidation"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Original content\n")
@@ -140,9 +145,9 @@ class TestCacheBasics:
         assert not hit
         assert cache.misses == 2
 
-    def test_invalidate_all(self, tmp_path):
+    def test_invalidate_all(self, tmp_path, cache_cleanup):
         """Test invalidating all cached templates"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Cache multiple templates
         for i in range(3):
@@ -169,9 +174,9 @@ class TestCacheBasics:
 class TestContentBasedInvalidation:
     """Test content-based cache invalidation"""
 
-    def test_file_modification_invalidates_cache(self, tmp_path):
+    def test_file_modification_invalidates_cache(self, tmp_path, cache_cleanup):
         """Test that modifying file invalidates cache"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Original content\n")
@@ -200,9 +205,9 @@ class TestContentBasedInvalidation:
         assert "Modified content" in content3
         assert cache.invalidations == 1
 
-    def test_file_hash_computation(self, tmp_path):
+    def test_file_hash_computation(self, tmp_path, cache_cleanup):
         """Test file hash computation"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Test content\n")
@@ -225,9 +230,9 @@ class TestContentBasedInvalidation:
 class TestLRUEviction:
     """Test LRU eviction strategy"""
 
-    def test_count_limit_eviction(self, tmp_path):
+    def test_count_limit_eviction(self, tmp_path, cache_cleanup):
         """Test eviction based on template count limit"""
-        cache = TemplateCache(max_templates=3, enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(max_templates=3, enable_persistence=False))
 
         # Add 4 templates (should evict oldest)
         for i in range(4):
@@ -254,11 +259,11 @@ class TestLRUEviction:
         )
         assert not hit, "Evicted template should be cache miss"
 
-    def test_size_limit_eviction(self, tmp_path):
+    def test_size_limit_eviction(self, tmp_path, cache_cleanup):
         """Test eviction based on size limit"""
         # Create small cache (1MB)
-        cache = TemplateCache(
-            max_size_mb=1, max_templates=100, enable_persistence=False
+        cache = cache_cleanup(
+            TemplateCache(max_size_mb=1, max_templates=100, enable_persistence=False)
         )
 
         # Create large templates
@@ -281,9 +286,9 @@ class TestLRUEviction:
         assert cache.evictions > 0, "Should have evicted templates due to size limit"
         assert stats["total_size_mb"] <= cache.max_size_mb
 
-    def test_lru_ordering(self, tmp_path):
+    def test_lru_ordering(self, tmp_path, cache_cleanup):
         """Test that least recently used template is evicted first"""
-        cache = TemplateCache(max_templates=2, enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(max_templates=2, enable_persistence=False))
 
         # Add template 0
         t0 = tmp_path / "template_0.py"
@@ -321,10 +326,10 @@ class TestLRUEviction:
 class TestTTLExpiration:
     """Test TTL-based cache expiration"""
 
-    def test_ttl_expiration(self, tmp_path):
+    def test_ttl_expiration(self, tmp_path, cache_cleanup):
         """Test that templates expire after TTL"""
         # Very short TTL for testing
-        cache = TemplateCache(ttl_seconds=1, enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(ttl_seconds=1, enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Test content\n")
@@ -350,9 +355,9 @@ class TestTTLExpiration:
         assert not hit2, "Template should expire after TTL"
         assert cache.invalidations == 1
 
-    def test_ttl_within_limit(self, tmp_path):
+    def test_ttl_within_limit(self, tmp_path, cache_cleanup):
         """Test that templates remain cached within TTL"""
-        cache = TemplateCache(ttl_seconds=5, enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(ttl_seconds=5, enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Test content\n")
@@ -377,9 +382,9 @@ class TestTTLExpiration:
 class TestCacheWarmup:
     """Test cache warmup functionality"""
 
-    def test_warmup_loads_all_templates(self, tmp_path):
+    def test_warmup_loads_all_templates(self, tmp_path, cache_cleanup):
         """Test that warmup preloads all templates"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Create standard template files
         for template_type in ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]:
@@ -403,9 +408,9 @@ class TestCacheWarmup:
         )
         assert hit, "Warmed template should be cache hit"
 
-    def test_warmup_skips_missing_templates(self, tmp_path):
+    def test_warmup_skips_missing_templates(self, tmp_path, cache_cleanup):
         """Test that warmup handles missing template files gracefully"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Only create EFFECT template
         effect_template = tmp_path / "effect_node_template.py"
@@ -421,9 +426,9 @@ class TestCacheWarmup:
 class TestStatistics:
     """Test cache statistics tracking"""
 
-    def test_basic_statistics(self, tmp_path):
+    def test_basic_statistics(self, tmp_path, cache_cleanup):
         """Test basic statistics collection"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Test content\n")
@@ -444,9 +449,9 @@ class TestStatistics:
         assert stats["cached_templates"] == 1
         assert stats["total_size_bytes"] > 0
 
-    def test_performance_metrics(self, tmp_path):
+    def test_performance_metrics(self, tmp_path, cache_cleanup):
         """Test performance metrics calculation"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# " + ("X" * 10000))  # Make it non-trivial size
@@ -471,9 +476,9 @@ class TestStatistics:
         assert stats["time_saved_ms"] >= 0
         assert stats["improvement_percent"] >= 0
 
-    def test_detailed_statistics(self, tmp_path):
+    def test_detailed_statistics(self, tmp_path, cache_cleanup):
         """Test detailed statistics with per-template breakdown"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Add multiple templates
         for i in range(3):
@@ -497,10 +502,10 @@ class TestStatistics:
         assert templates[0]["access_count"] >= templates[1]["access_count"]
         assert templates[1]["access_count"] >= templates[2]["access_count"]
 
-    def test_capacity_usage_metrics(self, tmp_path):
+    def test_capacity_usage_metrics(self, tmp_path, cache_cleanup):
         """Test capacity usage percentage calculations"""
-        cache = TemplateCache(
-            max_templates=10, max_size_mb=10, enable_persistence=False
+        cache = cache_cleanup(
+            TemplateCache(max_templates=10, max_size_mb=10, enable_persistence=False)
         )
 
         # Add 3 templates
@@ -522,9 +527,9 @@ class TestStatistics:
 class TestThreadSafety:
     """Test thread-safety of cache operations"""
 
-    def test_concurrent_access_same_template(self, tmp_path):
+    def test_concurrent_access_same_template(self, tmp_path, cache_cleanup):
         """Test concurrent access to the same template"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         template_file = tmp_path / "template.py"
         template_file.write_text("# Test content\n" * 100)
@@ -549,9 +554,9 @@ class TestThreadSafety:
         assert stats["cached_templates"] == 1
         assert stats["hits"] + stats["misses"] == 50  # 10 threads * 5 accesses
 
-    def test_concurrent_access_different_templates(self, tmp_path):
+    def test_concurrent_access_different_templates(self, tmp_path, cache_cleanup):
         """Test concurrent access to different templates"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Create multiple templates
         templates = []
@@ -585,7 +590,7 @@ class TestThreadSafety:
 class TestPerformanceBenchmark:
     """Performance benchmark tests"""
 
-    def test_cache_performance_improvement(self, tmp_path):
+    def test_cache_performance_improvement(self, tmp_path, cache_cleanup):
         """Test that cache provides significant performance improvement"""
         # Create realistic large template (5000 classes = ~135KB)
         # Larger size ensures I/O time dominates over cache overhead
@@ -619,7 +624,7 @@ class TestPerformanceBenchmark:
         avg_uncached_ms = sum(uncached_times) / len(uncached_times)
 
         # Test with cache
-        cache_enabled = TemplateCache(enable_persistence=False)
+        cache_enabled = cache_cleanup(TemplateCache(enable_persistence=False))
 
         def cached_loader(p: Path) -> str:
             """Cached loader with processing"""
@@ -662,9 +667,9 @@ class TestPerformanceBenchmark:
         assert stats["misses"] == 1, "Should have 1 cache miss (initial load)"
         assert stats["hit_rate"] >= 0.90, "Hit rate should be ≥90%"
 
-    def test_hit_rate_after_warmup(self, tmp_path):
+    def test_hit_rate_after_warmup(self, tmp_path, cache_cleanup):
         """Test that hit rate reaches target after warmup"""
-        cache = TemplateCache(enable_persistence=False)
+        cache = cache_cleanup(TemplateCache(enable_persistence=False))
 
         # Create templates
         templates = []
@@ -696,8 +701,39 @@ def tmp_path(tmp_path_factory):
 
 
 @pytest.fixture
+def cache_cleanup():
+    """
+    Synchronous cleanup fixture for TemplateCache instances.
+
+    Tracks all created caches and ensures proper cleanup of background tasks
+    to prevent "TemplateCache destroyed with pending background tasks" warnings.
+    """
+    caches = []
+
+    def register_cache(cache):
+        """Register a cache for cleanup"""
+        caches.append(cache)
+        return cache
+
+    yield register_cache
+
+    # Cleanup all registered caches synchronously
+    # Background tasks are cleaned up when cache is destroyed
+    for cache in caches:
+        # Cancel all pending background tasks
+        for task in cache._background_tasks:
+            if not task.done():
+                task.cancel()
+        cache._background_tasks.clear()
+
+        # Close persistence if created
+        if cache._persistence_instance is not None:
+            cache._persistence_instance = None
+
+
+@pytest.fixture
 async def async_cleanup():
-    """Cleanup fixture for async background tasks"""
+    """Cleanup fixture for async background tasks (for async tests)"""
     caches = []
 
     def register_cache(cache):

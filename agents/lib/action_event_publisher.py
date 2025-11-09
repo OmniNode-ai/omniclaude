@@ -31,6 +31,7 @@ Features:
 """
 
 import asyncio
+import atexit
 import json
 import logging
 import os
@@ -463,6 +464,74 @@ async def close_producer():
             logger.error(f"Error closing Kafka producer: {e}")
         finally:
             _kafka_producer = None
+
+
+def _cleanup_producer_sync():
+    """
+    Synchronous wrapper for close_producer() to be called by atexit.
+
+    This ensures the Kafka producer is closed when the Python interpreter
+    exits, preventing resource leak warnings.
+
+    Note: This function attempts graceful cleanup, but if the event loop
+    is already closed (e.g., after asyncio.run()), it will forcefully
+    close the producer's client connection to avoid resource warnings.
+    """
+    global _kafka_producer
+    if _kafka_producer is not None:
+        try:
+            # Try to get existing event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Loop is running, can't cleanup synchronously
+                # This will be handled by async cleanup
+                return
+            except RuntimeError:
+                # No running loop, try to get the main event loop
+                pass
+
+            # Try to use existing event loop if available and not closed
+            try:
+                loop = asyncio.get_event_loop()
+                if not loop.is_closed():
+                    loop.run_until_complete(close_producer())
+                    return
+            except RuntimeError:
+                pass
+
+            # Event loop is closed. The producer was created on a closed loop.
+            # We can't use async cleanup, so directly close the underlying components.
+            # This prevents ResourceWarning about unclosed producers.
+            try:
+                # Close all internal components to prevent resource warnings
+                if hasattr(_kafka_producer, "_client") and _kafka_producer._client:
+                    _kafka_producer._client.close()
+
+                # Close sender if it exists
+                if hasattr(_kafka_producer, "_sender"):
+                    _kafka_producer._sender = None
+
+                # Mark as closed
+                if hasattr(_kafka_producer, "_closed"):
+                    _kafka_producer._closed = True
+
+                # Mark producer as None to prevent further cleanup attempts
+                _kafka_producer = None
+                logger.debug("Kafka producer fully closed (synchronous cleanup)")
+            except Exception as inner_e:
+                logger.debug(f"Error during synchronous client close: {inner_e}")
+                # Last resort: just set to None
+                _kafka_producer = None
+
+        except Exception as e:
+            # Best effort cleanup - don't raise on exit
+            logger.debug(f"Error during atexit producer cleanup: {e}")
+            # Ensure producer is cleared to avoid repeated cleanup attempts
+            _kafka_producer = None
+
+
+# Register cleanup on interpreter exit
+atexit.register(_cleanup_producer_sync)
 
 
 # Synchronous wrapper for backward compatibility
