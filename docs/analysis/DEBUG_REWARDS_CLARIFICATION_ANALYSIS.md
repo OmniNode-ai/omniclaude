@@ -17,6 +17,8 @@ This document analyzes the feasibility and alignment of the proposed "Debug Loop
 
 **UPDATE (2025-11-09)**: With **compute tokens** as the reward currency, Phase 3 (Reward System) becomes **significantly more feasible** - reducing from 8-12 weeks + legal review to 4-6 weeks with minimal legal risk. This changes the priority from "defer indefinitely" to "feasible after Phase 1".
 
+**UPDATE v2.1 (2025-11-09)**: Phase 3 expanded to include **P2P context-sharing network** (BitTorrent-like). Participants earn tokens by sharing context/knowledge with peers, creating a decentralized intelligence marketplace. See [P2P_CONTEXT_SHARING_MODEL.md](./P2P_CONTEXT_SHARING_MODEL.md) for full specification. This transforms Phase 3 from a single-sided market (contribute STFs) to a **two-sided marketplace** (contribute STFs + share context).
+
 ---
 
 ## Current Architecture Analysis
@@ -214,6 +216,69 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 3. **Anti-abuse**: Rate limits on earning? Account reputation decay?
 4. **Verification**: Automated sandbox testing sufficient? Human review threshold?
 5. **Governance minimum**: Core team decisions? Community voting? Hybrid?
+
+### Phase 3b: P2P Context-Sharing Network (6-8 weeks) ⭐ **NEW - TWO-SIDED MARKETPLACE**
+
+**Extension of Phase 3**: Add decentralized knowledge-sharing layer
+
+**Vision**: BitTorrent-like P2P network where participants earn tokens by sharing context/intelligence with other peers. Instead of sending full context to LLMs (expensive), store metadata/pointers in distributed graph and use RAG to retrieve only what's needed.
+
+**Core Concept**:
+- **Problem**: Sending 500KB context to LLM = $2-5 per query (expensive)
+- **Solution**: P2P graph stores metadata → RAG retrieves 50KB → LLM query = $0.20-0.50 (90% savings)
+- **Incentive**: Peers earn 2 tokens/KB for serving context to others
+
+**Economic Model**:
+
+| Activity | Tokens | Model |
+|----------|--------|-------|
+| **Contribute STF** (Phase 3a) | 100-1000 | One-time + ongoing when used |
+| **Share context** (Phase 3b) | 2/KB | Ongoing passive income |
+| **Verify quality** | 5/verification | Ongoing active income |
+| **LLM compute** | Variable | Spend based on usage |
+| **Context retrieval** | 2/KB | Spend to access peer context |
+
+**Architecture** (BitTorrent-like):
+```
+Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
+   ↓ (serve 50KB)                         ↓ (retrieve 50KB)
+   Earns 100 tokens                        Spends 100 tokens
+```
+
+**Two-Sided Marketplace**:
+- **Supply side**: Contribute STFs + share context + verify quality
+- **Demand side**: Retrieve context + use LLM compute
+- **Network effects**: More peers → more context → lower latency → more value
+
+**Implementation Phases**:
+1. **Phase 3a** (weeks 5-10): STF contribution rewards (from original Phase 3)
+2. **Phase 3b** (weeks 11-18): P2P context-sharing network (new)
+   - Weeks 11-13: Centralized tracker + token ledger
+   - Weeks 14-16: DHT for decentralization
+   - Weeks 17-18: Advanced features (reputation, verification)
+
+**Cost Reduction**:
+- **Current**: 500KB context × 1000 queries/day × $5/1M tokens = $2500/day
+- **P2P model**: 50KB context × 1000 queries/day × $5/1M tokens = $250/day
+- **Savings**: $2250/day = $67,500/month = $810,000/year (90% reduction)
+
+**Success Metrics**:
+- >100 active peers sharing context
+- >10,000 context chunks in network
+- >60% cost reduction vs full-context LLM
+- Token velocity >1 cycle/week
+- <500ms avg query latency
+
+**See**: [P2P_CONTEXT_SHARING_MODEL.md](./P2P_CONTEXT_SHARING_MODEL.md) for complete specification (40+ pages)
+
+**Integration with STF Rewards**:
+- STF contributors can share implementation examples via P2P
+- Context sharers discover new STFs from network
+- Both paths earn tokens → spend on compute → sustainable economy
+
+**Timeline Impact**: Phase 3 total = 14 weeks (3a: 4-6 weeks + 3b: 6-8 weeks) vs 4-6 weeks originally
+
+**Value Proposition**: Creates **self-sustaining knowledge economy** with dual token-earning paths (contribution + bandwidth)
 
 ---
 
