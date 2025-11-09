@@ -43,6 +43,9 @@ from config import settings
 
 from ..models.event_envelope import (
     BaseEventEnvelope,
+    ContextQueryRequestedEvent,
+    ContextRewriteRequestedEvent,
+    ContextForwardRequestedEvent,
     ContextResponseCompletedEvent,
     EventType,
     KafkaTopics,
@@ -92,18 +95,24 @@ class NodeContextProxyOrchestrator:
         self.consumer: Optional[AIOKafkaConsumer] = None
         self.producer: Optional[AIOKafkaProducer] = None
 
+        # Step results cache: correlation_id → {intelligence, rewritten_context, anthropic_response}
+        self._step_results: Dict[str, Dict[str, Any]] = {}
+
         # Running flag
         self._running = False
 
-        logger.info("NodeContextProxyOrchestrator initialized (Phase 1 - Skeleton)")
+        logger.info(f"NodeContextProxyOrchestrator initialized (fsm_poll_interval={fsm_poll_interval_ms}ms)")
 
     async def start(self) -> None:
         """Start Kafka consumer and producer."""
         logger.info("Starting NodeContextProxyOrchestrator...")
 
-        # Create Kafka consumer (listens for request events)
+        # Create Kafka consumer (listens for request events AND completed events for result caching)
         self.consumer = AIOKafkaConsumer(
             KafkaTopics.CONTEXT_REQUEST_RECEIVED,
+            KafkaTopics.CONTEXT_QUERY_COMPLETED,
+            KafkaTopics.CONTEXT_REWRITE_COMPLETED,
+            KafkaTopics.CONTEXT_FORWARD_COMPLETED,
             bootstrap_servers=self.bootstrap_servers,
             group_id="orchestrator-group",
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
@@ -163,19 +172,37 @@ class NodeContextProxyOrchestrator:
                 try:
                     # Parse event
                     event = message.value
+                    event_type = event.get("event_type")
                     correlation_id = event.get("correlation_id")
                     payload = event.get("payload", {})
 
-                    logger.info(f"Orchestrating request (correlation_id={correlation_id})")
+                    # Handle different event types
+                    if event_type == "REQUEST_RECEIVED":
+                        logger.info(f"Orchestrating request (correlation_id={correlation_id})")
 
-                    # Orchestrate workflow (async task to avoid blocking)
-                    asyncio.create_task(
-                        self.orchestrate_proxy_request(
-                            request_data=payload.get("request_data", {}),
-                            oauth_token=payload.get("oauth_token", ""),
-                            correlation_id=correlation_id,
+                        # Orchestrate workflow (async task to avoid blocking)
+                        asyncio.create_task(
+                            self.orchestrate_proxy_request(
+                                request_data=payload.get("request_data", {}),
+                                oauth_token=payload.get("oauth_token", ""),
+                                correlation_id=correlation_id,
+                            )
                         )
-                    )
+
+                    elif event_type == "QUERY_COMPLETED":
+                        # Cache intelligence results
+                        self._cache_step_result(correlation_id, "intelligence", payload)
+                        logger.debug(f"Cached intelligence results (correlation_id={correlation_id})")
+
+                    elif event_type == "REWRITE_COMPLETED":
+                        # Cache rewritten context
+                        self._cache_step_result(correlation_id, "rewritten_context", payload)
+                        logger.debug(f"Cached rewritten context (correlation_id={correlation_id})")
+
+                    elif event_type == "FORWARD_COMPLETED":
+                        # Cache Anthropic response
+                        self._cache_step_result(correlation_id, "anthropic_response", payload)
+                        logger.debug(f"Cached Anthropic response (correlation_id={correlation_id})")
 
                 except Exception as e:
                     logger.error(f"Error processing orchestration event: {e}", exc_info=True)
@@ -220,29 +247,82 @@ class NodeContextProxyOrchestrator:
 
             logger.info(f"FSM state confirmed: request_received (correlation_id={correlation_id})")
 
+
             # ========================================================================
-            # Phase 1 (Skeleton): Return mock response immediately
-            # ========================================================================
-            # In Phase 2+, we'll add:
-            # - Query Intelligence Effect
-            # - Context Rewriter Compute
-            # - Anthropic Forwarder Effect
-            #
-            # For now, just return a mock response to test round-trip flow
+            # Phase 2+: Full Workflow Implementation
             # ========================================================================
 
-            mock_response = self._create_mock_response(request_data)
+            # Step 2: Query Intelligence
+            logger.info(f"→ Step 1/3: Querying intelligence (correlation_id={correlation_id})")
+            await self._publish_query_event(correlation_id=correlation_id, request_data=request_data)
+            
+            # Wait for FSM transition: request_received → intelligence_queried
+            await self._wait_for_fsm_state(
+                correlation_id=correlation_id,
+                expected_state=WorkflowState.INTELLIGENCE_QUERIED,
+                timeout_ms=5000,
+            )
+            
+            intelligence_result = self._get_step_result(correlation_id, "intelligence")
+            logger.info(f"✓ Intelligence queried (correlation_id={correlation_id})")
 
-            # Publish response event
+            # Step 3: Rewrite Context
+            logger.info(f"→ Step 2/3: Rewriting context (correlation_id={correlation_id})")
+            await self._publish_rewrite_event(
+                correlation_id=correlation_id,
+                messages=request_data.get("messages", []),
+                system_prompt=request_data.get("system", ""),
+                intelligence=intelligence_result.get("intelligence", {}),
+                intent=intelligence_result.get("intent", {}),
+            )
+            
+            # Wait for FSM transition: intelligence_queried → context_rewritten
+            await self._wait_for_fsm_state(
+                correlation_id=correlation_id,
+                expected_state=WorkflowState.CONTEXT_REWRITTEN,
+                timeout_ms=2000,
+            )
+            
+            rewrite_result = self._get_step_result(correlation_id, "rewritten_context")
+            logger.info(f"✓ Context rewritten (correlation_id={correlation_id})")
+
+            # Step 4: Forward to Anthropic
+            logger.info(f"→ Step 3/3: Forwarding to Anthropic (correlation_id={correlation_id})")
+            await self._publish_forward_event(
+                correlation_id=correlation_id,
+                rewritten_request={
+                    "model": request_data.get("model", "claude-sonnet-4"),
+                    "messages": rewrite_result.get("messages", []),
+                    "system": rewrite_result.get("system", ""),
+                    "max_tokens": request_data.get("max_tokens", 4096),
+                },
+                oauth_token=oauth_token,
+            )
+            
+            # Wait for FSM transition: context_rewritten → completed
+            await self._wait_for_fsm_state(
+                correlation_id=correlation_id,
+                expected_state=WorkflowState.COMPLETED,
+                timeout_ms=30000,
+            )
+            
+            anthropic_result = self._get_step_result(correlation_id, "anthropic_response")
+            logger.info(f"✓ Anthropic response received (correlation_id={correlation_id})")
+
+            # Step 5: Send Response
             await self._publish_response(
                 correlation_id=correlation_id,
-                response_data=mock_response,
-                intelligence_query_time_ms=0,
-                context_rewrite_time_ms=0,
-                anthropic_forward_time_ms=0,
+                response_data=anthropic_result.get("response_data", {}),
+                intelligence_query_time_ms=intelligence_result.get("query_time_ms", 0),
+                context_rewrite_time_ms=rewrite_result.get("processing_time_ms", 0),
+                anthropic_forward_time_ms=anthropic_result.get("forward_time_ms", 0),
                 total_time_ms=0,
             )
 
+            # Clean up
+            self._step_results.pop(correlation_id, None)
+
+            logger.info(f"✅ Full workflow completed (correlation_id={correlation_id})")
             logger.info(f"✅ Workflow completed successfully (correlation_id={correlation_id})")
 
         except asyncio.TimeoutError:
@@ -442,3 +522,81 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+    # ============================================================================
+    # Phase 2+ Helper Methods (Full Workflow)
+    # ============================================================================
+
+    def _cache_step_result(self, correlation_id: str, step_name: str, result: Dict[str, Any]) -> None:
+        """Cache step result for workflow aggregation."""
+        if correlation_id not in self._step_results:
+            self._step_results[correlation_id] = {}
+        self._step_results[correlation_id][step_name] = result
+
+    def _get_step_result(self, correlation_id: str, step_name: str) -> Dict[str, Any]:
+        """Get cached step result."""
+        if correlation_id not in self._step_results:
+            logger.warning(f"No step results for correlation_id={correlation_id}")
+            return {}
+        return self._step_results[correlation_id].get(step_name, {})
+
+    async def _publish_query_event(self, correlation_id: str, request_data: Dict[str, Any]) -> None:
+        """Publish intelligence query event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+        
+        event = ContextQueryRequestedEvent(
+            correlation_id=correlation_id,
+            payload={"request_data": request_data, "intent": None},
+        )
+        
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_QUERY_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
+
+    async def _publish_rewrite_event(
+        self, correlation_id: str, messages: List[Dict[str, Any]], system_prompt: str,
+        intelligence: Dict[str, Any], intent: Dict[str, Any]
+    ) -> None:
+        """Publish context rewrite event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+        
+        event = ContextRewriteRequestedEvent(
+            correlation_id=correlation_id,
+            payload={
+                "messages": messages,
+                "system_prompt": system_prompt,
+                "intelligence": intelligence,
+                "intent": intent,
+            },
+        )
+        
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_REWRITE_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
+
+    async def _publish_forward_event(
+        self, correlation_id: str, rewritten_request: Dict[str, Any], oauth_token: str
+    ) -> None:
+        """Publish Anthropic forward event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+        
+        event = ContextForwardRequestedEvent(
+            correlation_id=correlation_id,
+            payload={
+                "rewritten_request": rewritten_request,
+                "oauth_token": oauth_token,
+            },
+        )
+        
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_FORWARD_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
