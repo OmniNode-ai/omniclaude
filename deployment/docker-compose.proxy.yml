@@ -1,0 +1,97 @@
+# Docker Compose for Intelligent Context Proxy
+#
+# Services:
+# 1. proxy-api: FastAPI entry point (port 8080)
+# 2. proxy-nodes: Reducer & Orchestrator (Kafka consumers)
+#
+# Usage:
+#   cd deployment
+#   docker-compose -f docker-compose.proxy.yml up -d
+#
+# Prerequisites:
+#   - Kafka/Redpanda running (192.168.86.200:29092)
+#   - omninode-bridge-network external network
+#   - .env file configured
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # FastAPI Entry Point (HTTP Server)
+  # ============================================================================
+  proxy-api:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.proxy-api
+    image: omniclaude-proxy-api:latest
+    container_name: omniclaude_proxy_api
+    ports:
+      - "8080:8080"
+    environment:
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}
+
+      # Anthropic API
+      - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-https://api.anthropic.com}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app_network
+      - omninode-bridge-network
+    depends_on:
+      - proxy-nodes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "com.omniclaude.service=intelligent-context-proxy"
+      - "com.omniclaude.component=api"
+
+  # ============================================================================
+  # Reducer & Orchestrator Nodes (Kafka Consumers)
+  # ============================================================================
+  proxy-nodes:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.context-proxy-nodes
+    image: omniclaude-proxy-nodes:latest
+    container_name: omniclaude_proxy_nodes
+    environment:
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app_network
+      - omninode-bridge-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ps", "aux", "|", "grep", "python.*run.py", "|", "grep", "-v", "grep"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.omniclaude.service=intelligent-context-proxy"
+      - "com.omniclaude.component=nodes"
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  # Local application network
+  app_network:
+    driver: bridge
+
+  # External network (created by omninode_bridge)
+  omninode-bridge-network:
+    external: true
+    name: omninode-bridge-network

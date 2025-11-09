@@ -1,0 +1,47 @@
+# Dockerfile for Intelligent Context Proxy - Reducer & Orchestrator Nodes
+#
+# This builds the Reducer (FSM state tracker) and Orchestrator (workflow coordinator)
+# nodes that run as Kafka consumers.
+#
+# Usage:
+#   docker build -f deployment/Dockerfile.context-proxy-nodes -t omniclaude-proxy-nodes .
+#   docker run omniclaude-proxy-nodes
+
+FROM python:3.11-slim
+
+LABEL maintainer="OmniClaude"
+LABEL description="Intelligent Context Proxy - Reducer & Orchestrator Nodes"
+LABEL version="1.0.0"
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies
+RUN pip install --no-cache-dir \
+    aiokafka \
+    pydantic \
+    pydantic-settings
+
+# Copy project files
+COPY config/ /app/config/
+COPY services/intelligent_context_proxy/ /app/services/intelligent_context_proxy/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Health check (checks if process is running)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ps aux | grep "python.*run.py" | grep -v grep || exit 1
+
+# Start Reducer & Orchestrator
+CMD ["python", "services/intelligent_context_proxy/run.py"]
