@@ -337,18 +337,40 @@ echo "TEST 6: Cache Availability (Optional)"
 echo "--------------------------------------"
 
 VALKEY_URL="${VALKEY_URL:-redis://localhost:6379}"
-REDIS_HOST=$(echo "$VALKEY_URL" | sed -E 's|.*://([^:]+):.*|\1|')
-REDIS_PORT=$(echo "$VALKEY_URL" | sed -E 's|.*:([0-9]+).*|\1|')
+
+# Parse Redis URL (handles both redis://host:port and redis://:password@host:port/db)
+if echo "$VALKEY_URL" | grep -q "@"; then
+    # URL has authentication: redis://:password@host:port/db
+    REDIS_PASSWORD=$(echo "$VALKEY_URL" | sed 's|redis://:\([^@]*\)@.*|\1|')
+    REDIS_HOST=$(echo "$VALKEY_URL" | sed 's|.*@\([^:]*\):.*|\1|')
+    REDIS_PORT=$(echo "$VALKEY_URL" | sed 's|.*:\([0-9][0-9]*\)/.*|\1|; s|.*:\([0-9][0-9]*\)$|\1|')
+else
+    # URL has no authentication: redis://host:port
+    REDIS_PASSWORD=""
+    REDIS_HOST=$(echo "$VALKEY_URL" | sed 's|redis://\([^:]*\):.*|\1|')
+    REDIS_PORT=$(echo "$VALKEY_URL" | sed 's|.*:\([0-9][0-9]*\).*|\1|')
+fi
+
+# Override Docker internal hostnames for host scripts (same pattern as PostgreSQL test)
+if [ "$REDIS_HOST" = "archon-valkey" ]; then
+    REDIS_HOST="localhost"
+fi
 
 echo "Testing cache at: $REDIS_HOST:$REDIS_PORT"
 
 if command -v redis-cli &> /dev/null; then
-    if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" PING > /dev/null 2>&1; then
+    # Build redis-cli command with optional password
+    REDIS_CMD="redis-cli -h $REDIS_HOST -p $REDIS_PORT"
+    if [ -n "$REDIS_PASSWORD" ]; then
+        REDIS_CMD="$REDIS_CMD -a $REDIS_PASSWORD"
+    fi
+
+    if $REDIS_CMD PING > /dev/null 2>&1; then
         pass_test "Cache (Valkey/Redis) is available"
 
         # Check cache keys
-        KEY_COUNT=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" DBSIZE 2>/dev/null | awk '{print $2}')
-        echo "   Cache keys: $KEY_COUNT"
+        KEY_COUNT=$($REDIS_CMD DBSIZE 2>/dev/null | awk '{print $2}')
+        echo "   Cache keys: ${KEY_COUNT:-0}"
     else
         warn_test "Cache (Valkey/Redis) not available (this is optional)"
     fi
