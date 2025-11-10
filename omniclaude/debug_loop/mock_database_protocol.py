@@ -75,6 +75,14 @@ class MockDatabaseProtocol:
         elif "insert into model_price_catalog" in query_lower:
             return await self._insert_model(params)
 
+        # Handle UPDATE for model pricing
+        elif "update model_price_catalog" in query_lower and "is_active = false" in query_lower:
+            return await self._mark_model_deprecated(params)
+
+        # Handle UPDATE for model pricing (general)
+        elif "update model_price_catalog" in query_lower:
+            return await self._update_model_pricing(query, params)
+
         # Default: return success
         return {"success": True}
 
@@ -183,9 +191,26 @@ class MockDatabaseProtocol:
 
             # Apply filters if present
             if params:
-                provider = params.get("1")
+                # is_active filter (param 1)
+                is_active = params.get("1")
+                if is_active is not None:
+                    results = [m for m in results if m.get("is_active") == is_active]
+
+                # provider filter (param 2)
+                provider = params.get("2")
                 if provider:
                     results = [m for m in results if m.get("provider") == provider]
+
+                # supports_streaming filter (param 3)
+                supports_streaming = params.get("3")
+                if supports_streaming is not None:
+                    results = [m for m in results if m.get("supports_streaming") == supports_streaming]
+
+                # max_price_per_million filter (param 4)
+                max_price = params.get("4")
+                if max_price:
+                    max_price_float = float(max_price)
+                    results = [m for m in results if m.get("output_price_per_million", 999999) <= max_price_float]
 
             return results
 
@@ -292,13 +317,88 @@ class MockDatabaseProtocol:
             "output_price_per_million": float(params.get("5", 0.0)),
             "max_tokens": int(params.get("6", 0)) if params.get("6") else None,
             "context_window": int(params.get("7", 0)) if params.get("7") else None,
+            "supports_streaming": params.get("8", False),
+            "supports_function_calling": params.get("9", False),
+            "supports_vision": params.get("10", False),
+            "requests_per_minute": int(params.get("11", 0)) if params.get("11") else None,
+            "tokens_per_minute": int(params.get("12", 0)) if params.get("12") else None,
             "is_active": True,
             "created_at": datetime.utcnow().isoformat(),
+            "updated_at": None,
         }
 
         self.models[catalog_id] = model_data
 
         return {"success": True, "catalog_id": catalog_id}
+
+    async def _update_model_pricing(self, query: str, params: Optional[Dict]) -> Dict[str, Any]:
+        """Handle model pricing update."""
+        if not params:
+            return {"success": False}
+
+        # Find provider and model_name (last two params in WHERE clause)
+        max_key = max((int(k) for k in params.keys() if k.isdigit()), default=0)
+        if max_key < 2:
+            return {"success": False, "invalid_params": True}
+
+        provider = params.get(str(max_key - 1))
+        model_name = params.get(str(max_key))
+
+        # Find the model
+        model = None
+        catalog_id = None
+        for cid, model_data in self.models.items():
+            if model_data.get("provider") == provider and model_data.get("model_name") == model_name:
+                model = model_data
+                catalog_id = cid
+                break
+
+        if not model:
+            return {"success": False, "not_found": True}
+
+        # Update fields (params 1 through max-2 are values)
+        # This is simplified - in real implementation would parse SET clause
+        for i in range(1, max_key - 1):
+            param_key = str(i)
+            if param_key in params:
+                value = params[param_key]
+                # Determine field from query
+                if "input_price_per_million" in query:
+                    model["input_price_per_million"] = float(value)
+                elif "output_price_per_million" in query:
+                    model["output_price_per_million"] = float(value)
+                elif "max_tokens" in query:
+                    model["max_tokens"] = int(value) if value else None
+                elif "context_window" in query:
+                    model["context_window"] = int(value) if value else None
+
+        model["updated_at"] = datetime.utcnow().isoformat()
+
+        return {"success": True, "catalog_id": catalog_id}
+
+    async def _mark_model_deprecated(self, params: Optional[Dict]) -> Dict[str, Any]:
+        """Handle marking model as deprecated."""
+        if not params:
+            return {"success": False}
+
+        model_name = params.get("1")
+        if not model_name:
+            return {"success": False, "invalid_params": True}
+
+        # Find and update all models with this name
+        updated_count = 0
+        last_catalog_id = None
+        for catalog_id, model in self.models.items():
+            if model.get("model_name") == model_name:
+                model["is_active"] = False
+                model["updated_at"] = datetime.utcnow().isoformat()
+                updated_count += 1
+                last_catalog_id = catalog_id
+
+        if updated_count == 0:
+            return {"success": False, "not_found": True}
+
+        return {"success": True, "catalog_id": last_catalog_id}
 
     def _log_query(self, query: str, params: Optional[Dict]):
         """Log query execution for debugging."""
