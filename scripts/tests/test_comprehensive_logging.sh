@@ -62,7 +62,8 @@ if command -v nc >/dev/null 2>&1; then
     fi
 else
     # If nc not available, try Python kafka-python
-    if python3 -c "from kafka import KafkaProducer; p = KafkaProducer(bootstrap_servers='${KAFKA_BOOTSTRAP_SERVERS}'); p.close()" 2>/dev/null; then
+    # Use sys.argv to safely pass bootstrap servers (prevents shell injection)
+    if python3 -c "import sys; from kafka import KafkaProducer; p = KafkaProducer(bootstrap_servers=sys.argv[1]); p.close()" "${KAFKA_BOOTSTRAP_SERVERS}" 2>/dev/null; then
         echo -e "${GREEN}✓ Kafka accessible at ${KAFKA_BOOTSTRAP_SERVERS}${NC}"
     else
         echo -e "${RED}✗ Kafka not accessible at ${KAFKA_BOOTSTRAP_SERVERS}${NC}"
@@ -97,9 +98,16 @@ export CORRELATION_ID="$TEST_CORRELATION_ID"
 echo "Test Correlation ID: $TEST_CORRELATION_ID"
 
 # Test error logging
-python3 -c "
+# Use environment variables to prevent shell injection
+export TEST_CORRELATION_ID HOOKS_LIB
+python3 << 'EOF'
 import sys
-sys.path.insert(0, '$HOOKS_LIB')
+import os
+
+hooks_lib = os.environ['HOOKS_LIB']
+correlation_id = os.environ['TEST_CORRELATION_ID']
+
+sys.path.insert(0, hooks_lib)
 from action_logging_helpers import log_error
 
 result = log_error(
@@ -107,7 +115,7 @@ result = log_error(
     error_type='TestError',
     error_message='This is a test error',
     error_context={'test_key': 'test_value'},
-    correlation_id='$TEST_CORRELATION_ID'
+    correlation_id=correlation_id
 )
 
 if result:
@@ -116,7 +124,7 @@ if result:
 else:
     print('✗ Error logging failed')
     sys.exit(1)
-"
+EOF
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Error logging works${NC}"
@@ -126,9 +134,15 @@ else
 fi
 
 # Test success logging
-python3 -c "
+# Use environment variables to prevent shell injection
+python3 << 'EOF'
 import sys
-sys.path.insert(0, '$HOOKS_LIB')
+import os
+
+hooks_lib = os.environ['HOOKS_LIB']
+correlation_id = os.environ['TEST_CORRELATION_ID']
+
+sys.path.insert(0, hooks_lib)
 from action_logging_helpers import log_success
 
 result = log_success(
@@ -137,7 +151,7 @@ result = log_success(
     success_message='This is a test success',
     success_context={'test_key': 'test_value'},
     quality_score=0.95,
-    correlation_id='$TEST_CORRELATION_ID'
+    correlation_id=correlation_id
 )
 
 if result:
@@ -146,7 +160,7 @@ if result:
 else:
     print('✗ Success logging failed')
     sys.exit(1)
-"
+EOF
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Success logging works${NC}"
@@ -156,9 +170,15 @@ else
 fi
 
 # Test tool call logging
-python3 -c "
+# Use environment variables to prevent shell injection
+python3 << 'EOF'
 import sys
-sys.path.insert(0, '$HOOKS_LIB')
+import os
+
+hooks_lib = os.environ['HOOKS_LIB']
+correlation_id = os.environ['TEST_CORRELATION_ID']
+
+sys.path.insert(0, hooks_lib)
 from action_logging_helpers import log_tool_call
 
 result = log_tool_call(
@@ -166,7 +186,7 @@ result = log_tool_call(
     tool_parameters={'param1': 'value1'},
     tool_result={'result_key': 'result_value'},
     duration_ms=125,
-    correlation_id='$TEST_CORRELATION_ID'
+    correlation_id=correlation_id
 )
 
 if result:
@@ -175,7 +195,7 @@ if result:
 else:
     print('✗ Tool call logging failed')
     sys.exit(1)
-"
+EOF
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Tool call logging works${NC}"
@@ -185,15 +205,21 @@ else
 fi
 
 # Test decision logging
-python3 -c "
+# Use environment variables to prevent shell injection
+python3 << 'EOF'
 import sys
-sys.path.insert(0, '$HOOKS_LIB')
+import os
+
+hooks_lib = os.environ['HOOKS_LIB']
+correlation_id = os.environ['TEST_CORRELATION_ID']
+
+sys.path.insert(0, hooks_lib)
 from action_logging_helpers import log_decision
 
 result = log_decision(
     decision_type='test_decision',
     decision_details={'option': 'A', 'confidence': 0.8},
-    correlation_id='$TEST_CORRELATION_ID'
+    correlation_id=correlation_id
 )
 
 if result:
@@ -202,7 +228,7 @@ if result:
 else:
     print('✗ Decision logging failed')
     sys.exit(1)
-"
+EOF
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Decision logging works${NC}"
@@ -266,16 +292,22 @@ echo "Waiting ${KAFKA_WAIT_TIME} seconds for Kafka async processing..."
 sleep "$KAFKA_WAIT_TIME"
 
 # Check if events were published to Kafka (via Python)
-KAFKA_CHECK=$(python3 -c "
+# Use environment variables to prevent shell injection
+export KAFKA_BOOTSTRAP_SERVERS KAFKA_CONSUMER_TIMEOUT
+KAFKA_CHECK=$(python3 << 'EOF' 2>&1
 from kafka import KafkaConsumer
 import sys
+import os
 
 try:
+    bootstrap_servers = os.environ['KAFKA_BOOTSTRAP_SERVERS']
+    consumer_timeout = int(os.environ['KAFKA_CONSUMER_TIMEOUT'])
+
     consumer = KafkaConsumer(
         'agent-actions',
-        bootstrap_servers='${KAFKA_BOOTSTRAP_SERVERS}',
+        bootstrap_servers=bootstrap_servers,
         auto_offset_reset='earliest',
-        consumer_timeout_ms=${KAFKA_CONSUMER_TIMEOUT},
+        consumer_timeout_ms=consumer_timeout,
         max_poll_records=10
     )
 
@@ -291,7 +323,8 @@ try:
 except Exception as e:
     print(f'✗ Failed to read from Kafka: {e}', file=sys.stderr)
     sys.exit(1)
-" 2>&1)
+EOF
+)
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}${KAFKA_CHECK}${NC}"
@@ -313,8 +346,8 @@ sleep "$CONSUMER_WAIT_TIME"
 
 # Query database for test events
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-DB_COUNT=$(psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -t -c \
-    "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = '$TEST_CORRELATION_ID';" | tr -d '[:space:]')
+DB_COUNT=$(psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -v corr_id="$TEST_CORRELATION_ID" -t -c \
+    "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = :'corr_id'::uuid;" | tr -d '[:space:]')
 
 if [ "$DB_COUNT" -gt 0 ]; then
     echo -e "${GREEN}✓ PostgreSQL has $DB_COUNT test events${NC}"
@@ -327,10 +360,10 @@ fi
 echo ""
 echo "Event breakdown by type:"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -c \
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -v corr_id="$TEST_CORRELATION_ID" -c \
     "SELECT action_type, COUNT(*) as count
      FROM agent_actions
-     WHERE correlation_id = '$TEST_CORRELATION_ID'
+     WHERE correlation_id = :'corr_id'::uuid
      GROUP BY action_type
      ORDER BY count DESC;" 2>/dev/null || true
 
@@ -346,14 +379,14 @@ echo ""
 # Query and display all test events
 echo "All test events logged:"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
-psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -c \
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -v corr_id="$TEST_CORRELATION_ID" -c \
     "SELECT
         action_type,
         action_name,
         duration_ms,
         created_at
      FROM agent_actions
-     WHERE correlation_id = '$TEST_CORRELATION_ID'
+     WHERE correlation_id = :'corr_id'::uuid
      ORDER BY created_at ASC;" 2>/dev/null || true
 
 echo ""

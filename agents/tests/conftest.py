@@ -92,18 +92,18 @@ def _cleanup_kafka_producers():
 
     # Run cleanup in event loop
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we can't await directly in a fixture
-            # So we schedule cleanup and wait briefly for completion
-            import time
+        # Try to get existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, get or create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-            task = asyncio.create_task(cleanup())
-            # Give it a moment to complete (prevents race condition)
-            time.sleep(0.1)
-        else:
-            # If loop is not running, run cleanup synchronously
-            loop.run_until_complete(cleanup())
-    except RuntimeError:
-        # No event loop exists, create new one
+        # Always use run_until_complete to ensure cleanup completes before fixture exits
+        # This is safe in pytest fixtures which are not async contexts
+        loop.run_until_complete(cleanup())
+    except Exception as e:
+        # Fallback to asyncio.run if event loop management fails
+        print(f"Warning: Event loop error during cleanup, using asyncio.run: {e}")
         asyncio.run(cleanup())

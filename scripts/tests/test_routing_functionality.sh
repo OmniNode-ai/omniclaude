@@ -3,6 +3,10 @@
 # Tests event-based routing via Kafka with performance validation
 set -e
 
+# Dynamic path resolution for portability
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -180,15 +184,17 @@ echo ""
 echo "6. Testing Routing Query:"
 if command -v python3 &> /dev/null; then
     # Test if routing module exists
-    if python3 -c "import sys; sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude'); from agents.lib.routing_event_client import route_via_events; print('OK')" 2>/dev/null | grep -q "OK"; then
+    if python3 -c "import sys; sys.path.insert(0, '$PROJECT_ROOT'); from agents.lib.routing_event_client import route_via_events; print('OK')" 2>/dev/null | grep -q "OK"; then
         pass "Routing event client module available"
 
         # Try actual routing request (with timeout)
         echo "  Testing live routing request..."
+        export PROJECT_ROOT
         ROUTING_TEST=$(timeout 10s python3 << 'EOF' 2>&1 || echo "TIMEOUT"
 import sys
 import asyncio
-sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude')
+import os
+sys.path.insert(0, os.environ.get('PROJECT_ROOT', '.'))
 
 async def test_routing():
     try:
