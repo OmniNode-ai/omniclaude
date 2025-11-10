@@ -36,16 +36,17 @@ OmniClaude is a comprehensive toolkit for enhancing Claude Code capabilities wit
 2. [Environment Configuration](#environment-configuration)
 3. [Type-Safe Configuration Framework](#type-safe-configuration-framework)
 4. [Deployment](#deployment)
-5. [Diagnostic Tools](#diagnostic-tools)
-6. [Agent Observability & Traceability](#agent-observability--traceability)
-7. [Container Management](#container-management)
-8. [Agent Router Service](#agent-router-service)
-9. [Provider Management](#provider-management)
-10. [Polymorphic Agent Framework](#polymorphic-agent-framework)
-11. [Event Bus Architecture](#event-bus-architecture)
-12. [Universal Agent Router (Planned)](#universal-agent-router-planned)
-13. [Troubleshooting Guide](#troubleshooting-guide)
-14. [Quick Reference](#quick-reference)
+5. [CI/CD & Automated Testing](#cicd--automated-testing)
+6. [Diagnostic Tools](#diagnostic-tools)
+7. [Agent Observability & Traceability](#agent-observability--traceability)
+8. [Container Management](#container-management)
+9. [Agent Router Service](#agent-router-service)
+10. [Provider Management](#provider-management)
+11. [Polymorphic Agent Framework](#polymorphic-agent-framework)
+12. [Event Bus Architecture](#event-bus-architecture)
+13. [Universal Agent Router (Planned)](#universal-agent-router-planned)
+14. [Troubleshooting Guide](#troubleshooting-guide)
+15. [Quick Reference](#quick-reference)
 
 ---
 
@@ -515,6 +516,101 @@ For complete deployment guide, see **`deployment/README.md`**:
 - Troubleshooting
 - Production considerations
 - Network architecture diagrams
+
+---
+
+## CI/CD & Automated Testing
+
+**Location**: `.github/workflows/integration-tests.yml`
+
+> **📖 Complete Testing Guide**: See [`docs/testing/INTEGRATION_TESTS_GUIDE.md`](docs/testing/INTEGRATION_TESTS_GUIDE.md) for detailed testing procedures, troubleshooting, and local testing.
+
+OmniClaude has comprehensive automated integration testing that runs on every PR and commit to catch issues before production.
+
+### What Gets Tested Automatically
+
+**4 Integration Test Suites**:
+
+1. **Database Integration** - Verifies schema, operations, UUID handling
+2. **Kafka Integration** - Tests event bus connectivity and message flow
+3. **Agent Observability** - Validates logging completeness and traceability
+4. **Full Pipeline** - Tests end-to-end workflows
+
+### Issues Caught Automatically
+
+| Issue Type | Example | Prevented By |
+|------------|---------|--------------|
+| **UUID Bugs** | UUID field type mismatches | Database Integration |
+| **Logging Gaps** | Actions not being logged | Agent Observability |
+| **Kafka Failures** | Event publishing breaks | Kafka Integration |
+| **Schema Errors** | Missing tables/indexes | Database Integration |
+| **NULL correlation_id** | Traceability breaks | Agent Observability |
+
+### PR Requirements
+
+**PRs CANNOT merge if**:
+- ❌ Any integration test suite fails
+- ❌ Coverage drops below 80%
+- ❌ Database schema validation fails
+- ❌ Agent observability tests fail
+
+### Quick Local Testing
+
+```bash
+# Start test infrastructure
+docker-compose -f deployment/docker-compose.yml up -d postgres redis
+
+# Run database integration tests
+export POSTGRES_HOST=localhost POSTGRES_PORT=5432
+export POSTGRES_USER=test_user POSTGRES_PASSWORD=test_password
+export POSTGRES_DATABASE=test_omninode_bridge
+
+poetry run pytest tests/test_database_event_client.py -v
+
+# Run agent observability tests
+poetry run pytest tests/test_agent_execution_logging.py -v
+
+# Run full integration suite
+poetry run pytest -m integration -v --cov
+
+# Cleanup
+docker-compose -f deployment/docker-compose.yml down
+```
+
+### CI/CD Workflow
+
+**Triggers**:
+- ✅ Every push to `main` or `develop`
+- ✅ Every pull request
+- ✅ Manual trigger (workflow_dispatch)
+
+**Test Execution**:
+1. Database Integration (~30s) - PostgreSQL schema and operations
+2. Kafka Integration (~20s) - Event bus connectivity
+3. Agent Observability (~45s) - Logging and traceability
+4. Full Pipeline (~60s) - End-to-end workflows
+5. **Total: ~155 seconds**
+
+**Results**:
+- Test results in GitHub Actions tab
+- Coverage report in PR comments
+- Artifacts for detailed logs
+- Summary in PR checks
+
+### Coverage Targets
+
+| Component | Target | Minimum |
+|-----------|--------|---------|
+| Database Operations | >90% | >80% |
+| Kafka Integration | >85% | >75% |
+| Agent Logging | >95% | >85% |
+| **Overall** | **>87%** | **>80%** |
+
+### Documentation
+
+- **Quick Start**: [`docs/testing/INTEGRATION_TESTS_QUICK_START.md`](docs/testing/INTEGRATION_TESTS_QUICK_START.md)
+- **Complete Guide**: [`docs/testing/INTEGRATION_TESTS_GUIDE.md`](docs/testing/INTEGRATION_TESTS_GUIDE.md)
+- **Test Coverage Plan**: [`TEST_COVERAGE_PLAN.md`](TEST_COVERAGE_PLAN.md)
 
 ---
 

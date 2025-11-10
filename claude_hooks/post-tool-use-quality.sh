@@ -133,6 +133,41 @@ if enhanced_metadata:
 fi
 
 # ============================================================================
+# ERROR DETECTION AND LOGGING
+# ============================================================================
+
+# Check if tool execution failed (error in tool_response)
+TOOL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // .error // empty' 2>/dev/null)
+TOOL_ERROR_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_response.error_type // empty' 2>/dev/null)
+
+if [[ -n "$TOOL_ERROR" ]]; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool execution error detected for $TOOL_NAME: $TOOL_ERROR" >> "$LOG_FILE"
+
+    # Log error event to Kafka (non-blocking)
+    (
+        python3 -c "
+import sys
+sys.path.insert(0, '${SCRIPT_DIR}/lib')
+from action_logging_helpers import log_error
+import json
+
+tool_info = json.loads('''$TOOL_INFO''')
+tool_error = tool_info.get('tool_response', {}).get('error', '$TOOL_ERROR')
+error_type = tool_info.get('tool_response', {}).get('error_type', '${TOOL_ERROR_TYPE:-ToolExecutionError}')
+
+log_error(
+    error_type=error_type or 'ToolExecutionError',
+    error_message=f'Tool ${TOOL_NAME} execution failed: {tool_error}',
+    error_context={
+        'tool_name': '${TOOL_NAME}',
+        'tool_info': tool_info
+    }
+)
+" 2>>"$LOG_FILE"
+    ) &
+fi
+
+# ============================================================================
 # TOOL EXECUTION LOGGING TO agent_actions TABLE VIA KAFKA
 # ============================================================================
 

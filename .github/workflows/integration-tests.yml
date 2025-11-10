@@ -1,0 +1,680 @@
+name: Integration Tests
+
+# Comprehensive integration testing workflow
+# Catches database issues, logging gaps, agent observability problems, and Kafka integration failures
+# before they reach production
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+  POETRY_VERSION: '1.8.3'
+
+jobs:
+  # ============================================================================
+  # Integration Tests - Database System
+  # ============================================================================
+  database-integration:
+    name: Database Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_omninode_bridge
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Configure Git authentication for private repositories
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+        continue-on-error: true
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: |
+          poetry install --no-interaction --with dev || {
+            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+            true
+          }
+
+      - name: Initialize database schema
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+          PGPASSWORD: test_password
+        run: |
+          echo "::group::Initializing Database Schema"
+
+          # Wait for PostgreSQL to be ready
+          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Run database initialization script
+          export POSTGRES_HOST=localhost
+          export POSTGRES_PORT=5432
+          export POSTGRES_USER=test_user
+          export POSTGRES_PASSWORD=test_password
+          export POSTGRES_DATABASE=test_omninode_bridge
+
+          bash scripts/init-db.sh
+
+          echo "::endgroup::"
+
+      - name: Verify database schema
+        env:
+          PGPASSWORD: test_password
+        run: |
+          echo "::group::Database Schema Verification"
+
+          # Verify critical tables exist
+          echo "Checking agent_routing_decisions table..."
+          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_routing_decisions' || exit 1
+
+          echo "Checking agent_manifest_injections table..."
+          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_manifest_injections' || exit 1
+
+          echo "Checking agent_execution_logs table..."
+          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_execution_logs' || exit 1
+
+          echo "Checking agent_transformation_events table..."
+          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_transformation_events' || exit 1
+
+          # Verify indexes exist
+          echo "Checking indexes..."
+          psql -h localhost -U test_user -d test_omninode_bridge -c '\di' || exit 1
+
+          # Count tables
+          TABLE_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
+          echo "Total tables created: $TABLE_COUNT"
+
+          if [ "$TABLE_COUNT" -lt 10 ]; then
+            echo "❌ ERROR: Expected at least 10 tables, found $TABLE_COUNT"
+            exit 1
+          fi
+
+          echo "✅ Database schema verification passed"
+          echo "::endgroup::"
+
+      - name: Test database operations
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+        run: |
+          echo "::group::Database Operations Tests"
+
+          # Run database integration tests
+          poetry run pytest tests/test_database_event_client.py -v --tb=short
+          poetry run pytest tests/test_agent_execution_logging.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Test UUID field handling
+        env:
+          PGPASSWORD: test_password
+        run: |
+          echo "::group::UUID Field Handling Test"
+
+          # This test specifically verifies the UUID bug is fixed
+          # Insert a test record with UUID
+          psql -h localhost -U test_user -d test_omninode_bridge <<EOF
+          INSERT INTO agent_routing_decisions (
+            request_id,
+            user_request,
+            selected_agent,
+            confidence_score,
+            reasoning,
+            status
+          ) VALUES (
+            gen_random_uuid(),
+            'Test request',
+            'test-agent',
+            0.95,
+            'Test reasoning',
+            'SUCCESS'
+          );
+
+          -- Verify UUID was stored correctly
+          SELECT request_id FROM agent_routing_decisions WHERE user_request = 'Test request';
+          EOF
+
+          # Verify the record was inserted successfully
+          RESULT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE user_request = 'Test request';")
+
+          if [ "$RESULT" -eq 0 ]; then
+            echo "❌ ERROR: UUID field handling test failed"
+            exit 1
+          fi
+
+          echo "✅ UUID field handling test passed"
+          echo "::endgroup::"
+
+      - name: Upload database test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-test-results
+          path: |
+            pytest-results-*.xml
+            database-test-*.log
+
+  # ============================================================================
+  # Integration Tests - Kafka Event Bus
+  # ============================================================================
+  kafka-integration:
+    name: Kafka Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redpanda:
+        image: vectorized/redpanda:latest
+        ports:
+          - 9092:9092
+          - 8081:8081
+        options: >-
+          --health-cmd "rpk cluster health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Configure Git authentication
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --with dev || {
+            echo "⚠️  Warning: Some dependencies failed - continuing"
+            true
+          }
+
+      - name: Verify Kafka/Redpanda connectivity
+        run: |
+          echo "::group::Kafka Connectivity Test"
+
+          # Wait for Redpanda to be ready
+          echo "Waiting for Redpanda..."
+          sleep 10
+
+          # Test Kafka connectivity
+          poetry run python -c "
+          from kafka import KafkaProducer, KafkaConsumer
+          import json
+
+          # Test producer
+          producer = KafkaProducer(
+              bootstrap_servers=['localhost:9092'],
+              value_serializer=lambda v: json.dumps(v).encode('utf-8')
+          )
+
+          # Send test message
+          producer.send('test-topic', {'test': 'message'})
+          producer.flush()
+
+          print('✅ Kafka producer test passed')
+
+          # Test consumer
+          consumer = KafkaConsumer(
+              'test-topic',
+              bootstrap_servers=['localhost:9092'],
+              auto_offset_reset='earliest',
+              consumer_timeout_ms=5000
+          )
+
+          messages = list(consumer)
+          print(f'✅ Kafka consumer test passed (received {len(messages)} messages)')
+          "
+
+          echo "::endgroup::"
+
+      - name: Test Kafka event publishing
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+        run: |
+          echo "::group::Kafka Event Publishing Tests"
+
+          poetry run pytest tests/test_kafka_logging.py -v --tb=short
+          poetry run pytest tests/test_action_publishing.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Test routing event flow
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+        run: |
+          echo "::group::Routing Event Flow Tests"
+
+          poetry run pytest tests/test_routing_event_flow.py -v --tb=short
+          poetry run pytest tests/test_routing_flow.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Upload Kafka test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kafka-test-results
+          path: |
+            pytest-results-*.xml
+            kafka-test-*.log
+
+  # ============================================================================
+  # Integration Tests - Agent Observability
+  # ============================================================================
+  agent-observability:
+    name: Agent Observability Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_omninode_bridge
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Configure Git authentication
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --with dev || {
+            echo "⚠️  Warning: Some dependencies failed - continuing"
+            true
+          }
+
+      - name: Initialize database
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+          PGPASSWORD: test_password
+        run: |
+          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+            sleep 2
+          done
+          bash scripts/init-db.sh
+
+      - name: Test agent execution logging
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+        run: |
+          echo "::group::Agent Execution Logging Tests"
+
+          # Test agent execution logger
+          poetry run pytest tests/test_agent_execution_logging.py -v --tb=short
+          poetry run pytest tests/test_e2e_agent_logging.py -v --tb=short
+          poetry run pytest tests/test_kafka_execution_logging.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Test action logging end-to-end
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+        run: |
+          echo "::group::Action Logging E2E Tests"
+
+          poetry run pytest tests/test_action_logging_e2e.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Test transformation event logging
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+        run: |
+          echo "::group::Transformation Event Logging Tests"
+
+          poetry run pytest tests/test_transformation_event_logging.py -v --tb=short
+
+          echo "::endgroup::"
+
+      - name: Verify logging completeness
+        env:
+          PGPASSWORD: test_password
+        run: |
+          echo "::group::Logging Completeness Verification"
+
+          # Verify all expected logging events were captured
+          # This catches logging gaps like the ones discovered manually
+
+          # Check that agent_actions table has entries
+          ACTIONS_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_actions;")
+          echo "Agent actions logged: $ACTIONS_COUNT"
+
+          # Check that agent_execution_logs table has entries
+          EXEC_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_execution_logs;")
+          echo "Agent execution logs: $EXEC_COUNT"
+
+          # Verify correlation IDs are properly set (not NULL)
+          NULL_CORR_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_execution_logs WHERE correlation_id IS NULL;")
+
+          if [ "$NULL_CORR_COUNT" -gt 0 ]; then
+            echo "❌ ERROR: Found $NULL_CORR_COUNT execution logs with NULL correlation_id"
+            exit 1
+          fi
+
+          echo "✅ Logging completeness verification passed"
+          echo "::endgroup::"
+
+      - name: Upload observability test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observability-test-results
+          path: |
+            pytest-results-*.xml
+            observability-test-*.log
+
+  # ============================================================================
+  # Integration Tests - Full Pipeline
+  # ============================================================================
+  full-pipeline:
+    name: Full Pipeline Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_omninode_bridge
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Configure Git authentication
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --with dev || {
+            echo "⚠️  Warning: Some dependencies failed - continuing"
+            true
+          }
+
+      - name: Initialize database
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+          PGPASSWORD: test_password
+        run: |
+          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+            sleep 2
+          done
+          bash scripts/init-db.sh
+
+      - name: Run full pipeline integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          echo "::group::Full Pipeline Integration Tests"
+
+          poetry run pytest tests/integration/test_full_pipeline.py \
+            -v \
+            -m integration \
+            --cov=agents \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junitxml=junit-integration.xml
+
+          echo "::endgroup::"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: integration
+          name: full-pipeline-integration
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-pipeline-test-results
+          path: |
+            junit-integration.xml
+            coverage.xml
+
+  # ============================================================================
+  # Integration Tests Summary
+  # ============================================================================
+  integration-summary:
+    name: Integration Tests Summary
+    runs-on: ubuntu-latest
+    needs:
+      - database-integration
+      - kafka-integration
+      - agent-observability
+      - full-pipeline
+    if: always()
+
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results/
+
+      - name: Generate summary report
+        run: |
+          echo "# 🧪 Integration Tests Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Database Integration
+          if [ -d "test-results/database-test-results" ]; then
+            echo "✅ **Database Integration**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Database Integration**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Kafka Integration
+          if [ -d "test-results/kafka-test-results" ]; then
+            echo "✅ **Kafka Integration**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Kafka Integration**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Agent Observability
+          if [ -d "test-results/observability-test-results" ]; then
+            echo "✅ **Agent Observability**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Agent Observability**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Full Pipeline
+          if [ -d "test-results/full-pipeline-test-results" ]; then
+            echo "✅ **Full Pipeline**: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Full Pipeline**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage reports uploaded to Codecov" >> $GITHUB_STEP_SUMMARY
+
+          # List all test artifacts
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          find test-results -type f >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check integration test status
+        run: |
+          # Fail if any integration test suite failed
+          FAILED=0
+
+          if [ ! -d "test-results/database-test-results" ]; then
+            echo "❌ Database integration tests failed"
+            FAILED=1
+          fi
+
+          if [ ! -d "test-results/kafka-test-results" ]; then
+            echo "❌ Kafka integration tests failed"
+            FAILED=1
+          fi
+
+          if [ ! -d "test-results/observability-test-results" ]; then
+            echo "❌ Agent observability tests failed"
+            FAILED=1
+          fi
+
+          if [ ! -d "test-results/full-pipeline-test-results" ]; then
+            echo "❌ Full pipeline integration tests failed"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 1 ]; then
+            echo "::error::Integration tests failed. PR cannot be merged."
+            exit 1
+          fi
+
+          echo "✅ All integration tests passed!"

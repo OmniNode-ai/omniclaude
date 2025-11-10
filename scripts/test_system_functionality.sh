@@ -61,6 +61,7 @@ run_test() {
 # Run all tests
 run_test "Kafka Message Bus" "scripts/tests/test_kafka_functionality.sh" || true
 run_test "PostgreSQL Database" "scripts/tests/test_postgres_functionality.sh" || true
+run_test "Database System Verification" "scripts/verify_database_system.sh" || true
 run_test "Intelligence Integration" "scripts/tests/test_intelligence_functionality.sh" || true
 run_test "Agent Routing" "scripts/tests/test_routing_functionality.sh" || true
 
