@@ -70,7 +70,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from uuid import uuid4
 
 
@@ -149,6 +149,7 @@ def log_error(
     duration_ms: Optional[int] = None,
     project_path: Optional[str] = None,
     project_name: Optional[str] = None,
+    on_failure: Optional[Callable[[Exception], None]] = None,
 ) -> bool:
     """
     Log an error event to Kafka via execute_kafka.py.
@@ -162,9 +163,22 @@ def log_error(
         duration_ms: How long the failed operation took in milliseconds
         project_path: Absolute path to project directory
         project_name: Project name
+        on_failure: Optional callback invoked if publishing fails
 
     Returns:
-        True if logged successfully, False otherwise
+        bool: True if published successfully, False otherwise
+
+    Example:
+        # With failure callback for debugging
+        def handle_logging_failure(error: Exception):
+            logger.warning(f"Failed to log error action: {error}")
+
+        log_error(
+            error_type="DatabaseConnectionError",
+            error_message="Failed to connect to PostgreSQL",
+            error_context={"host": "192.168.86.200"},
+            on_failure=handle_logging_failure
+        )
     """
     # Auto-detect agent name and correlation ID if not provided
     agent_name = agent_name or get_agent_name()
@@ -235,6 +249,8 @@ def log_error(
             return False
 
     except Exception as e:
+        if on_failure:
+            on_failure(e)
         print(f"Failed to log error: {e}", file=sys.stderr)
         return False
 
@@ -249,6 +265,7 @@ def log_success(
     quality_score: Optional[float] = None,
     project_path: Optional[str] = None,
     project_name: Optional[str] = None,
+    on_failure: Optional[Callable[[Exception], None]] = None,
 ) -> bool:
     """
     Log a success event to Kafka via execute_kafka.py.
@@ -263,9 +280,23 @@ def log_success(
         quality_score: Quality score (0.0 to 1.0)
         project_path: Absolute path to project directory
         project_name: Project name
+        on_failure: Optional callback invoked if publishing fails
 
     Returns:
-        True if logged successfully, False otherwise
+        bool: True if published successfully, False otherwise
+
+    Example:
+        # With failure callback for debugging
+        def handle_logging_failure(error: Exception):
+            logger.warning(f"Failed to log success action: {error}")
+
+        log_success(
+            success_type="TaskCompleted",
+            success_message="Generated 3 ONEX nodes successfully",
+            success_context={"nodes": ["NodeEffect", "NodeCompute", "NodeReducer"]},
+            quality_score=0.95,
+            on_failure=handle_logging_failure
+        )
     """
     # Auto-detect agent name and correlation ID if not provided
     agent_name = agent_name or get_agent_name()
@@ -338,6 +369,8 @@ def log_success(
             return False
 
     except Exception as e:
+        if on_failure:
+            on_failure(e)
         print(f"Failed to log success: {e}", file=sys.stderr)
         return False
 
@@ -351,6 +384,7 @@ def log_tool_call(
     duration_ms: Optional[int] = None,
     project_path: Optional[str] = None,
     project_name: Optional[str] = None,
+    on_failure: Optional[Callable[[Exception], None]] = None,
 ) -> bool:
     """
     Log a tool call event to Kafka via execute_kafka.py.
@@ -364,9 +398,23 @@ def log_tool_call(
         duration_ms: How long the tool call took in milliseconds
         project_path: Absolute path to project directory
         project_name: Project name
+        on_failure: Optional callback invoked if publishing fails
 
     Returns:
-        True if logged successfully, False otherwise
+        bool: True if published successfully, False otherwise
+
+    Example:
+        # With failure callback for debugging
+        def handle_logging_failure(error: Exception):
+            logger.warning(f"Failed to log tool call: {error}")
+
+        log_tool_call(
+            tool_name="Read",
+            tool_parameters={"file_path": "/path/to/file.py"},
+            tool_result={"success": True, "lines_read": 100},
+            duration_ms=50,
+            on_failure=handle_logging_failure
+        )
     """
     # Auto-detect agent name and correlation ID if not provided
     agent_name = agent_name or get_agent_name()
@@ -436,6 +484,8 @@ def log_tool_call(
             return False
 
     except Exception as e:
+        if on_failure:
+            on_failure(e)
         print(f"Failed to log tool call: {e}", file=sys.stderr)
         return False
 
@@ -449,6 +499,7 @@ def log_decision(
     duration_ms: Optional[int] = None,
     project_path: Optional[str] = None,
     project_name: Optional[str] = None,
+    on_failure: Optional[Callable[[Exception], None]] = None,
 ) -> bool:
     """
     Log a decision event to Kafka via execute_kafka.py.
@@ -461,9 +512,22 @@ def log_decision(
         duration_ms: How long the decision took in milliseconds
         project_path: Absolute path to project directory
         project_name: Project name
+        on_failure: Optional callback invoked if publishing fails
 
     Returns:
-        True if logged successfully, False otherwise
+        bool: True if published successfully, False otherwise
+
+    Example:
+        # With failure callback for debugging
+        def handle_logging_failure(error: Exception):
+            logger.warning(f"Failed to log decision: {error}")
+
+        log_decision(
+            decision_type="agent_selected",
+            decision_details={"agent": "agent-researcher", "confidence": 0.87},
+            duration_ms=15,
+            on_failure=handle_logging_failure
+        )
     """
     # Auto-detect agent name and correlation ID if not provided
     agent_name = agent_name or get_agent_name()
@@ -526,6 +590,8 @@ def log_decision(
             return False
 
     except Exception as e:
+        if on_failure:
+            on_failure(e)
         print(f"Failed to log decision: {e}", file=sys.stderr)
         return False
 

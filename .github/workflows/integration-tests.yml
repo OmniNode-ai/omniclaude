@@ -14,6 +14,8 @@ on:
 env:
   PYTHON_VERSION: '3.12'
   POETRY_VERSION: '1.8.3'
+  # Minimum table count validation threshold (update as schema evolves)
+  EXPECTED_MIN_TABLES: 10
 
 jobs:
   # ============================================================================
@@ -132,15 +134,15 @@ jobs:
           TABLE_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
           echo "Total tables created: $TABLE_COUNT"
 
-          # Expected minimum table count (update as schema evolves)
-          EXPECTED_MIN_TABLES=10
+          # Use configurable threshold (configurable via EXPECTED_MIN_TABLES env var)
+          MIN_TABLES="${EXPECTED_MIN_TABLES:-10}"
 
-          if [ "$TABLE_COUNT" -lt "$EXPECTED_MIN_TABLES" ]; then
-            echo "❌ ERROR: Expected at least $EXPECTED_MIN_TABLES tables, found $TABLE_COUNT"
+          if [ "$TABLE_COUNT" -lt "$MIN_TABLES" ]; then
+            echo "❌ ERROR: Expected at least $MIN_TABLES tables, found $TABLE_COUNT"
             exit 1
           fi
 
-          echo "✅ Table count validation passed: $TABLE_COUNT tables (minimum: $EXPECTED_MIN_TABLES)"
+          echo "✅ Table count validation passed: $TABLE_COUNT tables (minimum: $MIN_TABLES)"
           echo "✅ Database schema verification passed"
           echo "::endgroup::"
 
