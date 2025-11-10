@@ -1,0 +1,123 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "STFHashCompute"
+description: "Generate SHA-256 hash of normalized STF code for deduplication"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
+# Input Contract
+input:
+  stf_code:
+    type: "string"
+    required: true
+    description: "STF code to hash"
+
+  normalization_options:
+    type: "object"
+    required: false
+    properties:
+      strip_whitespace:
+        type: "boolean"
+        default: true
+        description: "Remove leading/trailing whitespace"
+      strip_comments:
+        type: "boolean"
+        default: true
+        description: "Remove comments before hashing"
+      normalize_indentation:
+        type: "boolean"
+        default: true
+        description: "Normalize indentation to 4 spaces"
+      remove_docstrings:
+        type: "boolean"
+        default: false
+        description: "Remove docstrings (keep functional code only)"
+
+# Output Contract
+output:
+  stf_hash:
+    type: "string"
+    required: true
+    description: "SHA-256 hash (64 characters)"
+    pattern: "^[a-f0-9]{64}$"
+
+  normalized_code:
+    type: "string"
+    required: true
+    description: "Code after normalization (for debugging)"
+
+  normalization_applied:
+    type: "array"
+    items: string
+    required: true
+    description: "List of normalizations applied"
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: false  # Hashing is fast, caching not needed
+cache_key: null
+
+# Performance Targets
+performance:
+  target_latency_ms: 10
+  max_latency_ms: 50
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true
+
+# Algorithm
+algorithm:
+  steps:
+    - "Apply normalization options to code"
+    - "Generate SHA-256 hash of normalized code"
+    - "Return hash + normalized code"
+
+  normalization_order:
+    - "Strip leading/trailing whitespace"
+    - "Remove comments (if enabled)"
+    - "Remove docstrings (if enabled)"
+    - "Normalize indentation (if enabled)"
+    - "Convert to UTF-8 bytes"
+    - "Generate SHA-256 hash"
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test same code → same hash (deterministic)"
+    - "Test different whitespace → same hash (normalized)"
+    - "Test with/without comments"
+    - "Test with/without docstrings"
+    - "Test empty code"
+    - "Test hash format (64 hex chars)"
+
+  fixtures:
+    - name: "simple_function"
+      code: |
+        def add(a, b):
+            return a + b
+      expected_hash_length: 64
+
+    - name: "same_code_different_whitespace"
+      code1: "def add(a, b):\n    return a + b"
+      code2: "def add(a,b):\n  return a+b"
+      expected: "same_hash_after_normalization"

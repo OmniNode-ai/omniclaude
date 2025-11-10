@@ -1,0 +1,229 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "DebugSTFExtractorCompute"
+description: "Extract Specific Transformation Functions (STFs) from successful agent executions using AST parsing"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
+# Input Contract
+input:
+  execution_data:
+    type: "object"
+    required: true
+    properties:
+      code_written:
+        type: "string"
+        required: true
+        description: "Code that was written during execution"
+      files_modified:
+        type: "array"
+        items: string
+        required: false
+        description: "List of file paths modified"
+      tools_used:
+        type: "array"
+        items: string
+        required: true
+        description: "Tools used (Read, Edit, Write, Bash, etc)"
+      execution_id:
+        type: "string"
+        format: "uuid"
+        required: true
+      correlation_id:
+        type: "string"
+        format: "uuid"
+        required: true
+
+  extraction_options:
+    type: "object"
+    required: false
+    properties:
+      min_lines_of_code:
+        type: "integer"
+        default: 5
+        description: "Minimum lines for a valid STF"
+      max_lines_of_code:
+        type: "integer"
+        default: 500
+        description: "Maximum lines for a single STF"
+      require_function:
+        type: "boolean"
+        default: true
+        description: "Require extracted code to be a function"
+      extract_classes:
+        type: "boolean"
+        default: false
+        description: "Also extract class definitions"
+      language:
+        type: "string"
+        default: "python"
+        enum: ["python", "javascript", "typescript"]
+
+# Output Contract
+output:
+  success:
+    type: "boolean"
+    required: true
+
+  stf_extracted:
+    type: "boolean"
+    required: true
+
+  stf_code:
+    type: "string"
+    required: false
+    description: "Extracted STF code (if found)"
+
+  stf_name:
+    type: "string"
+    required: false
+    description: "Function/class name"
+
+  stf_metadata:
+    type: "object"
+    required: false
+    properties:
+      has_docstring:
+        type: "boolean"
+      has_type_hints:
+        type: "boolean"
+      has_error_handling:
+        type: "boolean"
+      has_tests:
+        type: "boolean"
+      lines_of_code:
+        type: "integer"
+      cyclomatic_complexity:
+        type: "integer"
+      parameters:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            name: string
+            type: string
+            default: string
+      return_type:
+        type: "string"
+
+  extraction_method:
+    type: "string"
+    required: true
+    enum: ["ast_parse", "regex_pattern", "heuristic", "none"]
+    description: "Method used to extract STF"
+
+  confidence_score:
+    type: "float"
+    required: true
+    min: 0.0
+    max: 1.0
+    description: "Confidence that extracted code is a reusable STF"
+
+  # For cases where multiple STFs found
+  alternative_stfs:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        stf_code: string
+        stf_name: string
+        confidence_score: float
+    required: false
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: false  # Execution data varies too much
+cache_key: null
+
+# Performance Targets
+performance:
+  target_latency_ms: 200
+  max_latency_ms: 500
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true
+
+# Extraction Algorithm
+algorithm:
+  steps:
+    - "Parse code with AST (Python ast module)"
+    - "Find function definitions and class definitions"
+    - "Extract docstrings and type hints"
+    - "Calculate cyclomatic complexity"
+    - "Check for error handling (try/except blocks)"
+    - "Calculate confidence score based on completeness"
+    - "Return highest confidence STF"
+
+  confidence_calculation:
+    formula: |
+      confidence = 0.0
+      if has_function_def: confidence += 0.3
+      if has_docstring: confidence += 0.2
+      if has_type_hints: confidence += 0.2
+      if has_error_handling: confidence += 0.15
+      if 10 <= lines <= 100: confidence += 0.15
+      return min(1.0, confidence)
+
+  edge_cases:
+    - "No function found → return success=false, stf_extracted=false"
+    - "Code too short (<5 lines) → low confidence"
+    - "Code too long (>500 lines) → extract first function only"
+    - "Multiple functions → return highest quality + alternatives"
+    - "Syntax errors → attempt regex fallback"
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test with simple function (high confidence)"
+    - "Test with complex function (medium confidence)"
+    - "Test with class definition"
+    - "Test with multiple functions"
+    - "Test with no function (returns false)"
+    - "Test with syntax errors (graceful failure)"
+    - "Test with type hints and docstring"
+    - "Test confidence score calculation"
+
+  fixtures:
+    - name: "simple_function"
+      code: |
+        def add(a: int, b: int) -> int:
+            """Add two numbers."""
+            return a + b
+      expected_confidence: 0.85
+
+    - name: "no_function"
+      code: "x = 1 + 2"
+      expected_stf_extracted: false
+
+    - name: "complex_function"
+      code: |
+        def process_data(data: dict) -> dict:
+            """Process data with error handling."""
+            try:
+                result = {}
+                for key, value in data.items():
+                    result[key] = value * 2
+                return result
+            except Exception as e:
+                return {"error": str(e)}
+      expected_confidence: 0.95

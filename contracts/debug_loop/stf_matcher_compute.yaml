@@ -1,0 +1,178 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "STFMatcherCompute"
+description: "Match current problem to existing STFs using similarity search with confidence scoring"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
+# Input Contract
+input:
+  problem_signature:
+    type: "string"
+    required: true
+    description: "Normalized problem description"
+
+  problem_category:
+    type: "string"
+    required: false
+    description: "Problem category for filtering"
+
+  existing_stfs:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        stf_id:
+          type: "string"
+          format: "uuid"
+        stf_name: string
+        stf_description: string
+        problem_signature: string
+        quality_score: float
+        usage_count: integer
+    required: true
+    description: "Pool of existing STFs to match against"
+
+  matching_options:
+    type: "object"
+    required: false
+    properties:
+      min_quality:
+        type: "float"
+        default: 0.7
+      min_similarity:
+        type: "float"
+        default: 0.5
+        description: "Minimum similarity threshold"
+      limit:
+        type: "integer"
+        default: 5
+        max: 20
+      algorithm:
+        type: "string"
+        enum: ["tfidf", "embedding", "levenshtein"]
+        default: "tfidf"
+
+# Output Contract
+output:
+  matched_stfs:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        stf_id:
+          type: "string"
+          format: "uuid"
+        stf_name: string
+        stf_description: string
+        similarity_score:
+          type: "float"
+          min: 0.0
+          max: 1.0
+        quality_score: float
+        composite_score:
+          type: "float"
+          description: "Combined similarity + quality score"
+        rank: integer
+    required: true
+
+  match_count:
+    type: "integer"
+    required: true
+
+  best_match:
+    type: "object"
+    required: false
+    description: "Highest scoring match (if any)"
+    properties:
+      stf_id: string
+      composite_score: float
+
+  matching_algorithm_used:
+    type: "string"
+    required: true
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  cache_hit:
+    type: "boolean"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: true
+cache_key: "problem_signature"
+cache_ttl_seconds: 1800  # 30 minutes
+
+# Performance Targets
+performance:
+  target_latency_ms: 100
+  max_latency_ms: 200
+  cache_hit_rate_target: 0.60
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true  # Pure computation
+
+# Matching Algorithm
+algorithm:
+  tfidf:
+    description: "TF-IDF with cosine similarity"
+    steps:
+      - "Tokenize problem_signature and stf problem_signatures"
+      - "Build TF-IDF vectors"
+      - "Calculate cosine similarity"
+      - "Rank by similarity score"
+
+  composite_score:
+    formula: |
+      # Weight similarity and quality
+      composite = (similarity * 0.6) + (quality * 0.4)
+      # Boost by usage count (popular STFs)
+      if usage_count > 10:
+        composite *= 1.1
+      return min(1.0, composite)
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test exact match (similarity = 1.0)"
+    - "Test partial match (similarity 0.5-0.9)"
+    - "Test no match (similarity < min_threshold)"
+    - "Test quality filtering (min_quality)"
+    - "Test ranking (composite score)"
+    - "Test cache hit/miss"
+    - "Test different algorithms (TF-IDF, etc)"
+
+  fixtures:
+    - name: "exact_match"
+      problem: "Convert Fahrenheit to Celsius"
+      stf_problem: "Convert Fahrenheit to Celsius"
+      expected_similarity: 1.0
+
+    - name: "similar_match"
+      problem: "Convert temperature F to C"
+      stf_problem: "Convert Fahrenheit to Celsius"
+      expected_similarity: 0.8
+
+    - name: "no_match"
+      problem: "Calculate fibonacci sequence"
+      stf_problem: "Convert Fahrenheit to Celsius"
+      expected_similarity: 0.0

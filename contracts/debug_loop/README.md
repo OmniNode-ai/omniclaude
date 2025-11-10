@@ -4,19 +4,30 @@ This directory contains ONEX v2.0 contracts for all 11 debug intelligence nodes.
 
 ## Contract Status
 
+**ALL 11 CONTRACTS COMPLETE** ✅
+
 | # | Contract File | Node Type | Status |
 |---|---------------|-----------|--------|
 | 1 | debug_stf_storage_effect.yaml | Effect | ✅ Complete |
-| 2 | model_price_catalog_effect.yaml | Effect | 📝 TODO |
-| 3 | debug_stf_extractor_compute.yaml | Compute | 📝 TODO |
+| 2 | model_price_catalog_effect.yaml | Effect | ✅ Complete |
+| 3 | debug_stf_extractor_compute.yaml | Compute | ✅ Complete |
 | 4 | stf_quality_compute.yaml | Compute | ✅ Complete |
-| 5 | stf_matcher_compute.yaml | Compute | 📝 TODO |
-| 6 | stf_hash_compute.yaml | Compute | 📝 TODO |
-| 7 | error_pattern_extractor_compute.yaml | Compute | 📝 TODO |
-| 8 | cost_tracker_compute.yaml | Compute | 📝 TODO |
-| 9 | error_success_mapping_reducer.yaml | Reducer | 📝 TODO |
-| 10 | golden_state_manager_reducer.yaml | Reducer | 📝 TODO |
+| 5 | stf_matcher_compute.yaml | Compute | ✅ Complete |
+| 6 | stf_hash_compute.yaml | Compute | ✅ Complete |
+| 7 | error_pattern_extractor_compute.yaml | Compute | ✅ Complete |
+| 8 | cost_tracker_compute.yaml | Compute | ✅ Complete |
+| 9 | error_success_mapping_reducer.yaml | Reducer | ✅ Complete |
+| 10 | golden_state_manager_reducer.yaml | Reducer | ✅ Complete |
 | 11 | debug_loop_orchestrator.yaml | Orchestrator | ✅ Complete |
+
+## Key Features
+
+All contracts include:
+- **omnibase_core models**: ModelSemVer, ModelOnexError, ModelIntent, etc.
+- **Type-safe schemas**: Full input/output validation
+- **FSM patterns**: Reducer nodes use pure FSM with intent emission
+- **Performance targets**: <100ms for Compute, <2s for Orchestrator
+- **Testing requirements**: Unit tests, fixtures, mocks specified
 
 ## Usage
 

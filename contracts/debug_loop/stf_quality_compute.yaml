@@ -5,6 +5,12 @@ node_type: "compute"
 node_name: "STFQualityCompute"
 description: "Calculate 5-dimension STF quality score with caching for performance"
 
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
 # Input Contract
 input:
   stf_code:

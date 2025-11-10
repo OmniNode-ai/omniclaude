@@ -1,0 +1,211 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "effect"
+node_name: "ModelPriceCatalogEffect"
+description: "Manage LLM model pricing catalog with CRUD operations for cost tracking and optimization"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.primitives.model_semver.ModelSemVer"
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+    - "omnibase_core.models.common.model_error_context.ModelErrorContext"
+
+# Input Contract
+input:
+  operation:
+    type: "enum"
+    values: ["add_model", "update_pricing", "get_pricing", "list_models", "mark_deprecated"]
+    required: true
+
+  # For add_model and update_pricing
+  model_data:
+    type: "object"
+    required_for: ["add_model", "update_pricing"]
+    properties:
+      provider:
+        type: "string"
+        required: true
+        enum: ["anthropic", "openai", "google", "zai", "together"]
+      model_name:
+        type: "string"
+        required: true
+      model_version:
+        type: "ModelSemVer"
+        from: "omnibase_core.primitives.model_semver"
+        required: false
+        description: "Semantic version (e.g., 3.5.0)"
+      input_price_per_million:
+        type: "float"
+        required: true
+        description: "Price per 1M input tokens in USD"
+      output_price_per_million:
+        type: "float"
+        required: true
+        description: "Price per 1M output tokens in USD"
+      max_tokens:
+        type: "integer"
+        required: false
+      context_window:
+        type: "integer"
+        required: false
+      supports_streaming:
+        type: "boolean"
+        default: false
+      supports_function_calling:
+        type: "boolean"
+        default: false
+      supports_vision:
+        type: "boolean"
+        default: false
+      requests_per_minute:
+        type: "integer"
+        required: false
+      tokens_per_minute:
+        type: "integer"
+        required: false
+
+  # For get_pricing
+  provider:
+    type: "string"
+    required_for: ["get_pricing"]
+
+  model_name:
+    type: "string"
+    required_for: ["get_pricing", "mark_deprecated"]
+
+  # For list_models
+  filter:
+    type: "object"
+    required_for: ["list_models"]
+    properties:
+      provider:
+        type: "string"
+        required: false
+      is_active:
+        type: "boolean"
+        default: true
+      supports_streaming:
+        type: "boolean"
+        required: false
+      max_price_per_million:
+        type: "float"
+        required: false
+        description: "Filter models cheaper than this"
+
+# Output Contract
+output:
+  success:
+    type: "boolean"
+    required: true
+
+  operation:
+    type: "string"
+    required: true
+
+  # For add_model, update_pricing, get_pricing
+  catalog_id:
+    type: "string"
+    format: "uuid"
+    required_for: ["add_model", "update_pricing", "get_pricing"]
+
+  model_pricing:
+    type: "object"
+    required_for: ["get_pricing"]
+    properties:
+      provider: string
+      model_name: string
+      model_version: ModelSemVer
+      input_price_per_million: float
+      output_price_per_million: float
+      max_tokens: integer
+      context_window: integer
+      is_active: boolean
+
+  # For list_models
+  models:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        catalog_id: string
+        provider: string
+        model_name: string
+        input_price_per_million: float
+        output_price_per_million: float
+        is_active: boolean
+    required_for: ["list_models"]
+
+  result_count:
+    type: "integer"
+    required_for: ["list_models"]
+
+  error:
+    type: "string"
+    required: false
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Error Handling
+error_handling:
+  - error_code: "DB_CONNECTION_ERROR"
+    retry: true
+    max_retries: 3
+
+  - error_code: "MODEL_NOT_FOUND"
+    retry: false
+
+  - error_code: "DUPLICATE_MODEL_ERROR"
+    retry: false
+    description: "Model with same provider/name/version already exists"
+
+  - error_code: "VALIDATION_ERROR"
+    retry: false
+
+# Dependencies
+dependencies:
+  protocols:
+    - "IDatabaseProtocol"
+
+  mixins:
+    - "RetryMixin"
+    - "CircuitBreakerMixin"
+    - "ObservabilityMixin"
+
+# Performance Targets
+performance:
+  target_latency_ms: 50
+  max_latency_ms: 150
+  target_throughput_rps: 50
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeEffectService"
+  method_signature: "async def execute_effect(self, contract: ModelContractEffect) -> ModelEffectOutput"
+  side_effects: true
+  idempotent: false
+  thread_safe: false
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test add_model with valid data"
+    - "Test update_pricing for existing model"
+    - "Test get_pricing for existing model"
+    - "Test list_models with filters"
+    - "Test mark_deprecated"
+    - "Test duplicate model handling"
+
+  mocks:
+    - "MockDatabaseProtocol for unit tests"
+    - "In-memory catalog storage"
+
+  seed_data:
+    - provider: "anthropic"
+      model_name: "claude-3-5-sonnet-20241022"
+      input_price: 3.00
+      output_price: 15.00

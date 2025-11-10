@@ -5,6 +5,13 @@ node_type: "orchestrator"
 node_name: "DebugLoopOrchestrator"
 description: "Coordinate debug intelligence extraction and application workflow across all debug loop nodes"
 
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+    - "omnibase_core.models.common.model_error_context.ModelErrorContext"
+
 # Input Contract
 input:
   execution_id:

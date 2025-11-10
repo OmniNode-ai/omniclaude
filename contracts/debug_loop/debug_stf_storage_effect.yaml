@@ -5,6 +5,13 @@ node_type: "effect"
 node_name: "DebugSTFStorageEffect"
 description: "Store and retrieve Specific Transformation Functions (STFs) in PostgreSQL with quality metrics"
 
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+    - "omnibase_core.models.common.model_error_context.ModelErrorContext"
+
 # Input Contract
 input:
   operation:

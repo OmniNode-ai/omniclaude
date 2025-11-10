@@ -1,0 +1,180 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "CostTrackerCompute"
+description: "Calculate LLM execution costs based on token usage and model pricing"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+    - "omnibase_core.primitives.model_semver.ModelSemVer"
+
+# Input Contract
+input:
+  tokens_input:
+    type: "integer"
+    required: true
+    min: 0
+    description: "Number of input tokens"
+
+  tokens_output:
+    type: "integer"
+    required: true
+    min: 0
+    description: "Number of output tokens"
+
+  model_used:
+    type: "string"
+    required: true
+    description: "Model identifier (e.g., claude-3-5-sonnet-20241022)"
+
+  model_pricing:
+    type: "object"
+    required: true
+    description: "Pricing data from model_price_catalog"
+    properties:
+      provider:
+        type: "string"
+      model_name:
+        type: "string"
+      model_version:
+        type: "ModelSemVer"
+      input_price_per_million:
+        type: "float"
+        description: "USD per 1M input tokens"
+      output_price_per_million:
+        type: "float"
+        description: "USD per 1M output tokens"
+
+  execution_duration_ms:
+    type: "integer"
+    required: false
+    description: "Execution duration for latency-based pricing (future)"
+
+# Output Contract
+output:
+  total_cost_usd:
+    type: "float"
+    required: true
+    description: "Total cost in USD"
+
+  input_cost_usd:
+    type: "float"
+    required: true
+    description: "Cost of input tokens"
+
+  output_cost_usd:
+    type: "float"
+    required: true
+    description: "Cost of output tokens"
+
+  cost_breakdown:
+    type: "object"
+    required: true
+    properties:
+      tokens_input:
+        type: "integer"
+      tokens_output:
+        type: "integer"
+      total_tokens:
+        type: "integer"
+      input_price_per_million:
+        type: "float"
+      output_price_per_million:
+        type: "float"
+      model_used:
+        type: "string"
+
+  cost_per_token:
+    type: "float"
+    required: true
+    description: "Average cost per token (for comparison)"
+
+  cost_category:
+    type: "string"
+    required: true
+    enum: ["cheap", "moderate", "expensive"]
+    description: "Cost category for this execution"
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: false  # Token counts vary too much
+cache_key: null
+
+# Performance Targets
+performance:
+  target_latency_ms: 10
+  max_latency_ms: 50
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true
+
+# Algorithm
+algorithm:
+  cost_calculation:
+    formula: |
+      # Calculate cost per token type
+      input_cost = (tokens_input / 1_000_000) * input_price_per_million
+      output_cost = (tokens_output / 1_000_000) * output_price_per_million
+      total_cost = input_cost + output_cost
+
+      # Average cost per token
+      total_tokens = tokens_input + tokens_output
+      cost_per_token = total_cost / total_tokens if total_tokens > 0 else 0
+
+      return total_cost
+
+  categorization:
+    cheap: "total_cost < $0.01"
+    moderate: "$0.01 <= total_cost < $0.10"
+    expensive: "total_cost >= $0.10"
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test cost calculation (Claude 3.5 Sonnet)"
+    - "Test cost calculation (GPT-4)"
+    - "Test zero tokens"
+    - "Test large token counts"
+    - "Test cost categorization"
+    - "Test cost_per_token calculation"
+    - "Test with different models"
+
+  fixtures:
+    - name: "claude_sonnet_small"
+      model: "claude-3-5-sonnet-20241022"
+      tokens_input: 1000
+      tokens_output: 500
+      input_price: 3.00
+      output_price: 15.00
+      expected_cost: 0.0105  # (1000/1M * 3) + (500/1M * 15) = 0.003 + 0.0075
+
+    - name: "gpt4_large"
+      model: "gpt-4-turbo"
+      tokens_input: 10000
+      tokens_output: 5000
+      input_price: 10.00
+      output_price: 30.00
+      expected_cost: 0.25  # (10000/1M * 10) + (5000/1M * 30) = 0.1 + 0.15
+
+    - name: "zero_tokens"
+      tokens_input: 0
+      tokens_output: 0
+      expected_cost: 0.0
