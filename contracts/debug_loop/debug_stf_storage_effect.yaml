@@ -1,0 +1,240 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "effect"
+node_name: "DebugSTFStorageEffect"
+description: "Store and retrieve Specific Transformation Functions (STFs) in PostgreSQL with quality metrics"
+
+# Input Contract
+input:
+  operation:
+    type: "enum"
+    values: ["store", "retrieve", "search", "update_usage", "update_quality"]
+    required: true
+    description: "Operation to perform on STF storage"
+
+  # For store operation
+  stf_data:
+    type: "object"
+    required_for: ["store"]
+    properties:
+      stf_name:
+        type: "string"
+        required: true
+      stf_code:
+        type: "string"
+        required: true
+      stf_hash:
+        type: "string"
+        required: true
+        description: "SHA-256 hash of normalized STF code"
+      stf_description:
+        type: "string"
+        required: false
+      problem_category:
+        type: "string"
+        required: false
+      problem_signature:
+        type: "string"
+        required: false
+      quality_score:
+        type: "float"
+        required: false
+        min: 0.0
+        max: 1.0
+      source_execution_id:
+        type: "string"
+        format: "uuid"
+        required: false
+      source_correlation_id:
+        type: "string"
+        format: "uuid"
+        required: false
+      contributor_agent_name:
+        type: "string"
+        required: false
+
+  # For retrieve operation
+  stf_id:
+    type: "string"
+    format: "uuid"
+    required_for: ["retrieve", "update_usage", "update_quality"]
+
+  # For search operation
+  search_criteria:
+    type: "object"
+    required_for: ["search"]
+    properties:
+      problem_signature:
+        type: "string"
+        required: false
+      problem_category:
+        type: "string"
+        required: false
+      min_quality:
+        type: "float"
+        required: false
+        default: 0.7
+      approval_status:
+        type: "string"
+        enum: ["pending", "approved", "rejected"]
+        required: false
+        default: "approved"
+      limit:
+        type: "integer"
+        required: false
+        default: 10
+        min: 1
+        max: 100
+
+  # For update_quality operation
+  quality_scores:
+    type: "object"
+    required_for: ["update_quality"]
+    properties:
+      quality_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      completeness_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      documentation_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      onex_compliance_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      metadata_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      complexity_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+
+# Output Contract
+output:
+  success:
+    type: "boolean"
+    required: true
+
+  operation:
+    type: "string"
+    required: true
+
+  # For store/retrieve/update operations
+  stf_id:
+    type: "string"
+    format: "uuid"
+    required_for: ["store", "retrieve", "update_usage", "update_quality"]
+
+  stf_data:
+    type: "object"
+    required_for: ["retrieve"]
+    properties:
+      stf_name: string
+      stf_code: string
+      stf_hash: string
+      stf_description: string
+      problem_category: string
+      quality_score: float
+      usage_count: integer
+      success_count: integer
+      approval_status: string
+      created_at: datetime
+      last_used_at: datetime
+
+  # For search operation
+  search_results:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        stf_id: string
+        stf_name: string
+        stf_description: string
+        problem_category: string
+        quality_score: float
+        usage_count: integer
+        success_rate: float
+    required_for: ["search"]
+
+  result_count:
+    type: "integer"
+    required_for: ["search"]
+
+  # Error information
+  error:
+    type: "string"
+    required: false
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Error Handling
+error_handling:
+  - error_code: "DB_CONNECTION_ERROR"
+    description: "Failed to connect to PostgreSQL"
+    retry: true
+    max_retries: 3
+
+  - error_code: "DUPLICATE_STF_ERROR"
+    description: "STF with same hash already exists"
+    retry: false
+
+  - error_code: "STF_NOT_FOUND"
+    description: "STF with given ID not found"
+    retry: false
+
+  - error_code: "VALIDATION_ERROR"
+    description: "Invalid input data"
+    retry: false
+
+# Dependencies (from ModelONEXContainer)
+dependencies:
+  protocols:
+    - "IDatabaseProtocol"  # PostgreSQL connection protocol from omnibase_spi
+
+  mixins:
+    - "RetryMixin"  # Automatic retry logic
+    - "CircuitBreakerMixin"  # Circuit breaker pattern
+    - "ObservabilityMixin"  # Logging and tracing
+
+# Performance Targets
+performance:
+  target_latency_ms: 50
+  max_latency_ms: 200
+  target_throughput_rps: 100
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeEffectService"
+  method_signature: "async def execute_effect(self, contract: ModelContractEffect) -> ModelEffectOutput"
+  side_effects: true
+  idempotent: false  # Database writes are not idempotent
+  thread_safe: false  # Uses connection pool
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test store operation with valid STF"
+    - "Test retrieve operation with existing STF"
+    - "Test search with quality filter"
+    - "Test duplicate STF handling"
+    - "Test update_usage increments counter"
+
+  integration_tests:
+    - "Test with mock database protocol"
+    - "Test with real PostgreSQL (E2E)"
+    - "Test retry logic on connection failure"
+    - "Test circuit breaker pattern"
+
+  mocks:
+    - "MockDatabaseProtocol for unit tests"
+    - "In-memory STF storage for fast tests"

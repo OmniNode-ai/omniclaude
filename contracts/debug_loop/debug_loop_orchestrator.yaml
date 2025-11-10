@@ -1,0 +1,316 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "orchestrator"
+node_name: "DebugLoopOrchestrator"
+description: "Coordinate debug intelligence extraction and application workflow across all debug loop nodes"
+
+# Input Contract
+input:
+  execution_id:
+    type: "string"
+    format: "uuid"
+    required: true
+    description: "Unique execution identifier"
+
+  correlation_id:
+    type: "string"
+    format: "uuid"
+    required: true
+    description: "Correlation ID for tracing across systems"
+
+  user_request:
+    type: "string"
+    required: true
+    description: "Original user request/prompt"
+
+  execution_status:
+    type: "enum"
+    values: ["success", "error", "partial", "cancelled"]
+    required: true
+
+  execution_data:
+    type: "object"
+    required: true
+    properties:
+      tools_used:
+        type: "array"
+        items: string
+        description: "List of tools used (Read, Edit, Bash, etc)"
+      code_written:
+        type: "string"
+        required: false
+        description: "Code that was written during execution"
+      files_modified:
+        type: "array"
+        items: string
+        required: false
+      model_used:
+        type: "string"
+        required: true
+      tokens_input:
+        type: "integer"
+        required: false
+      tokens_output:
+        type: "integer"
+        required: false
+      quality_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+        required: false
+      duration_ms:
+        type: "integer"
+        required: false
+      error_type:
+        type: "string"
+        required_for_status: ["error"]
+      error_message:
+        type: "string"
+        required_for_status: ["error"]
+
+  options:
+    type: "object"
+    required: false
+    properties:
+      extract_stf:
+        type: "boolean"
+        default: true
+        description: "Whether to extract STF from execution"
+      calculate_quality:
+        type: "boolean"
+        default: true
+      match_similar:
+        type: "boolean"
+        default: true
+      create_error_mapping:
+        type: "boolean"
+        default: true
+      nominate_golden_state:
+        type: "boolean"
+        default: true
+      min_quality_for_golden:
+        type: "float"
+        default: 0.9
+        description: "Minimum quality score to nominate as golden state"
+
+# Output Contract
+output:
+  workflow_status:
+    type: "enum"
+    values: ["completed", "partial", "failed"]
+    required: true
+
+  steps_completed:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        step_name: string
+        node_name: string
+        status: string  # success, error, skipped
+        duration_ms: integer
+        error_message: string
+
+  # STF Extraction Results
+  stf_extracted:
+    type: "boolean"
+    required: true
+
+  stf_id:
+    type: "string"
+    format: "uuid"
+    required: false
+    description: "ID of extracted STF (if successful)"
+
+  stf_quality_score:
+    type: "float"
+    required: false
+
+  # Similarity Matching Results
+  similar_stfs_found:
+    type: "integer"
+    required: true
+
+  similar_stfs:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        stf_id: string
+        stf_name: string
+        similarity_score: float
+        quality_score: float
+    required: false
+
+  # Error Mapping Results
+  error_mapping_created:
+    type: "boolean"
+    required: true
+
+  error_mapping_id:
+    type: "string"
+    format: "uuid"
+    required: false
+
+  # Golden State Results
+  golden_state_nominated:
+    type: "boolean"
+    required: true
+
+  golden_state_id:
+    type: "string"
+    format: "uuid"
+    required: false
+
+  # Intelligence Summary
+  intelligence_summary:
+    type: "object"
+    required: true
+    properties:
+      stfs_matched:
+        type: "integer"
+      confidence_score:
+        type: "float"
+        min: 0.0
+        max: 1.0
+      recommendations:
+        type: "array"
+        items: string
+        description: "Actionable recommendations based on patterns"
+      estimated_cost_usd:
+        type: "float"
+        description: "Estimated cost of this execution"
+
+  # Workflow Metadata
+  total_duration_ms:
+    type: "integer"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Workflow Steps (executed in order)
+workflow_steps:
+  - step: "extract_stf"
+    node: "NodeDebugSTFExtractorCompute"
+    input_from: "execution_data.code_written"
+    condition: "execution_status == 'success' AND code_written IS NOT NULL"
+    on_error: "continue"  # Non-critical, continue workflow
+
+  - step: "calculate_quality"
+    node: "NodeSTFQualityCompute"
+    input_from: "extract_stf.stf_code"
+    condition: "extract_stf.success == true"
+    on_error: "continue"
+
+  - step: "generate_hash"
+    node: "NodeSTFHashCompute"
+    input_from: "extract_stf.stf_code"
+    condition: "extract_stf.success == true"
+    on_error: "fail"  # Critical for deduplication
+
+  - step: "store_stf"
+    node: "NodeDebugSTFStorageEffect"
+    input_from: "extract_stf.stf_code + calculate_quality.quality_score + generate_hash.stf_hash"
+    condition: "extract_stf.success == true AND generate_hash.success == true"
+    on_error: "continue"  # Log error but continue
+
+  - step: "match_similar"
+    node: "NodeSTFMatcherCompute"
+    input_from: "user_request"
+    condition: "always"
+    on_error: "continue"
+
+  - step: "calculate_cost"
+    node: "NodeCostTrackerCompute"
+    input_from: "execution_data.tokens_input + execution_data.tokens_output + execution_data.model_used"
+    condition: "execution_data.tokens_input IS NOT NULL"
+    on_error: "continue"
+
+  - step: "extract_error_pattern"
+    node: "NodeErrorPatternExtractorCompute"
+    input_from: "execution_data.error_message"
+    condition: "execution_status == 'error'"
+    on_error: "continue"
+
+  - step: "create_error_mapping"
+    node: "NodeErrorSuccessMappingReducer"
+    input_from: "extract_error_pattern.error_pattern + stf_id"
+    condition: "execution_status == 'error' AND extract_error_pattern.success == true"
+    on_error: "continue"
+
+  - step: "nominate_golden_state"
+    node: "NodeGoldenStateManagerReducer"
+    input_from: "execution_data + stf_id + calculate_quality.quality_score"
+    condition: "execution_status == 'success' AND calculate_quality.quality_score >= options.min_quality_for_golden"
+    on_error: "continue"
+
+# Dependencies (all debug loop nodes injected via container)
+dependencies:
+  nodes:
+    - "NodeDebugSTFExtractorCompute"
+    - "NodeDebugSTFStorageEffect"
+    - "NodeSTFQualityCompute"
+    - "NodeSTFMatcherCompute"
+    - "NodeSTFHashCompute"
+    - "NodeErrorPatternExtractorCompute"
+    - "NodeCostTrackerCompute"
+    - "NodeErrorSuccessMappingReducer"
+    - "NodeGoldenStateManagerReducer"
+
+  protocols:
+    - "IDatabaseProtocol"  # For direct DB access if needed
+
+# Error Handling
+error_handling:
+  strategy: "graceful_degradation"
+  description: "Continue workflow even if non-critical steps fail"
+
+  critical_steps:
+    - "generate_hash"  # Must succeed for deduplication
+
+  non_critical_steps:
+    - "extract_stf"
+    - "calculate_quality"
+    - "store_stf"
+    - "match_similar"
+    - "calculate_cost"
+    - "extract_error_pattern"
+    - "create_error_mapping"
+    - "nominate_golden_state"
+
+# Performance Targets
+performance:
+  target_latency_ms: 2000
+  max_latency_ms: 5000
+  target_throughput_rps: 10
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeOrchestratorService"
+  method_signature: "async def execute_orchestration(self, contract: ModelContractOrchestrator) -> ModelOrchestratorOutput"
+  coordinates_nodes: true
+  uses_dependency_injection: true
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test successful execution workflow (all steps)"
+    - "Test error execution workflow (error mapping)"
+    - "Test partial execution (some steps fail)"
+    - "Test golden state nomination (high quality)"
+    - "Test golden state skip (low quality)"
+    - "Test graceful degradation (non-critical failure)"
+
+  integration_tests:
+    - "Test with all mocked nodes"
+    - "Test with real node implementations"
+    - "Test with mixed success/failure scenarios"
+
+  mocks:
+    - "MockDebugSTFExtractorCompute"
+    - "MockDebugSTFStorageEffect"
+    - "MockSTFQualityCompute"
+    - "Mock all 9 debug loop nodes"
