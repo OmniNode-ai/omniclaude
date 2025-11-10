@@ -303,9 +303,10 @@ check_router() {
     check_service "archon-bridge"
     check_service "archon-search"
     check_service "archon-memgraph"
-    check_service "archon-kafka-consumer"
-    check_service "archon-server"
-    check_service "archon-router"
+
+    # Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
+    # Those services are managed by omniarchon repository, not checked here
+    # Similarly, archon-server and archon-router services do not exist
 
     # Check Omninode services (if they exist)
     if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then

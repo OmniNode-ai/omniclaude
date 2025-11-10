@@ -791,8 +791,10 @@ class AgentActionsConsumer:
                 (
                     event_id,
                     event.get("event_type", "transformation_complete"),
-                    correlation_id,
-                    session_id,
+                    str(correlation_id),  # Convert UUID to string for psycopg2
+                    (
+                        str(session_id) if session_id else None
+                    ),  # Convert UUID to string for psycopg2
                     event.get("source_agent"),
                     event.get("target_agent"),
                     event.get("transformation_reason"),
@@ -809,8 +811,12 @@ class AgentActionsConsumer:
                     context_snapshot,
                     event.get("context_keys"),
                     event.get("context_size_bytes"),
-                    agent_definition_id,
-                    parent_event_id,
+                    (
+                        str(agent_definition_id) if agent_definition_id else None
+                    ),  # Convert UUID to string for psycopg2
+                    (
+                        str(parent_event_id) if parent_event_id else None
+                    ),  # Convert UUID to string for psycopg2
                     event.get("started_at", timestamp),
                     event.get("completed_at"),
                 )

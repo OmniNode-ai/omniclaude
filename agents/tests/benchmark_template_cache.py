@@ -85,58 +85,67 @@ def benchmark_cached_loads(templates_dir: Path, iterations: int = 100):
     cache = TemplateCache(enable_persistence=False)
     template_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
 
-    # Warmup cache
-    print("\n  Warming up cache...")
-    cache.warmup(templates_dir, template_types)
-    warmup_stats = cache.get_stats()
-    print(f"  Cached templates: {warmup_stats['cached_templates']}")
-    print(f"  Total size: {warmup_stats['total_size_mb']:.2f}MB")
+    try:
+        # Warmup cache
+        print("\n  Warming up cache...")
+        cache.warmup(templates_dir, template_types)
+        warmup_stats = cache.get_stats()
+        print(f"  Cached templates: {warmup_stats['cached_templates']}")
+        print(f"  Total size: {warmup_stats['total_size_mb']:.2f}MB")
 
-    # Benchmark cached loads
-    print("\n  Benchmarking cached loads...")
-    load_times = []
+        # Benchmark cached loads
+        print("\n  Benchmarking cached loads...")
+        load_times = []
 
-    for i in range(iterations):
-        for template_type in template_types:
-            template_path = templates_dir / f"{template_type.lower()}_node_template.py"
-
-            if template_path.exists():
-                start = time.perf_counter()
-                content, hit = cache.get(
-                    template_name=f"{template_type}_template",
-                    template_type=template_type,
-                    file_path=template_path,
-                    loader_func=lambda p: p.read_text(encoding="utf-8"),
+        for i in range(iterations):
+            for template_type in template_types:
+                template_path = (
+                    templates_dir / f"{template_type.lower()}_node_template.py"
                 )
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                load_times.append(elapsed_ms)
 
-    stats = cache.get_stats()
-    avg_time = statistics.mean(load_times)
-    median_time = statistics.median(load_times)
-    p95_time = statistics.quantiles(load_times, n=20)[18]
-    total_time = sum(load_times)
+                if template_path.exists():
+                    start = time.perf_counter()
+                    content, hit = cache.get(
+                        template_name=f"{template_type}_template",
+                        template_type=template_type,
+                        file_path=template_path,
+                        loader_func=lambda p: p.read_text(encoding="utf-8"),
+                    )
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    load_times.append(elapsed_ms)
 
-    print(f"\n  Iterations: {iterations}")
-    print(f"  Total loads: {len(load_times)}")
-    print(f"  Cache hits: {stats['hits']}")
-    print(f"  Cache misses: {stats['misses']}")
-    print(f"  Hit rate: {stats['hit_rate']:.1%}")
-    print(f"  Average load time: {avg_time:.3f}ms")
-    print(f"  Median load time: {median_time:.3f}ms")
-    print(f"  P95 load time: {p95_time:.3f}ms")
-    print(f"  Total time: {total_time:.2f}ms")
+        stats = cache.get_stats()
+        avg_time = statistics.mean(load_times)
+        median_time = statistics.median(load_times)
+        p95_time = statistics.quantiles(load_times, n=20)[18]
+        total_time = sum(load_times)
 
-    return {
-        "avg_ms": avg_time,
-        "median_ms": median_time,
-        "p95_ms": p95_time,
-        "total_ms": total_time,
-        "count": len(load_times),
-        "hit_rate": stats["hit_rate"],
-        "hits": stats["hits"],
-        "misses": stats["misses"],
-    }
+        print(f"\n  Iterations: {iterations}")
+        print(f"  Total loads: {len(load_times)}")
+        print(f"  Cache hits: {stats['hits']}")
+        print(f"  Cache misses: {stats['misses']}")
+        print(f"  Hit rate: {stats['hit_rate']:.1%}")
+        print(f"  Average load time: {avg_time:.3f}ms")
+        print(f"  Median load time: {median_time:.3f}ms")
+        print(f"  P95 load time: {p95_time:.3f}ms")
+        print(f"  Total time: {total_time:.2f}ms")
+
+        return {
+            "avg_ms": avg_time,
+            "median_ms": median_time,
+            "p95_ms": p95_time,
+            "total_ms": total_time,
+            "count": len(load_times),
+            "hit_rate": stats["hit_rate"],
+            "hits": stats["hits"],
+            "misses": stats["misses"],
+        }
+    finally:
+        # Cleanup background tasks
+        for task in cache._background_tasks:
+            if not task.done():
+                task.cancel()
+        cache._background_tasks.clear()
 
 
 def benchmark_concurrent_loads(
@@ -150,54 +159,61 @@ def benchmark_concurrent_loads(
     cache = TemplateCache(enable_persistence=False)
     template_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
 
-    # Warmup
-    cache.warmup(templates_dir, template_types)
+    try:
+        # Warmup
+        cache.warmup(templates_dir, template_types)
 
-    def worker_task(worker_id: int):
-        """Worker task for concurrent loading"""
-        for _ in range(iterations_per_thread):
-            for template_type in template_types:
-                template_path = (
-                    templates_dir / f"{template_type.lower()}_node_template.py"
-                )
-                if template_path.exists():
-                    cache.get(
-                        template_name=f"{template_type}_template",
-                        template_type=template_type,
-                        file_path=template_path,
-                        loader_func=lambda p: p.read_text(encoding="utf-8"),
+        def worker_task(worker_id: int):
+            """Worker task for concurrent loading"""
+            for _ in range(iterations_per_thread):
+                for template_type in template_types:
+                    template_path = (
+                        templates_dir / f"{template_type.lower()}_node_template.py"
                     )
+                    if template_path.exists():
+                        cache.get(
+                            template_name=f"{template_type}_template",
+                            template_type=template_type,
+                            file_path=template_path,
+                            loader_func=lambda p: p.read_text(encoding="utf-8"),
+                        )
 
-    print(f"\n  Threads: {num_threads}")
-    print(f"  Iterations per thread: {iterations_per_thread}")
-    print(
-        f"  Expected total loads: {num_threads * iterations_per_thread * len(template_types)}"
-    )
+        print(f"\n  Threads: {num_threads}")
+        print(f"  Iterations per thread: {iterations_per_thread}")
+        print(
+            f"  Expected total loads: {num_threads * iterations_per_thread * len(template_types)}"
+        )
 
-    start_time = time.perf_counter()
+        start_time = time.perf_counter()
 
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        futures = [executor.submit(worker_task, i) for i in range(num_threads)]
-        for future in futures:
-            future.result()
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [executor.submit(worker_task, i) for i in range(num_threads)]
+            for future in futures:
+                future.result()
 
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-    stats = cache.get_stats()
+        stats = cache.get_stats()
 
-    print(f"\n  Total time: {elapsed_ms:.2f}ms")
-    print(f"  Cache hits: {stats['hits']}")
-    print(f"  Cache misses: {stats['misses']}")
-    print(f"  Hit rate: {stats['hit_rate']:.1%}")
-    print(
-        f"  Throughput: {(stats['hits'] + stats['misses']) / (elapsed_ms / 1000):.0f} loads/sec"
-    )
+        print(f"\n  Total time: {elapsed_ms:.2f}ms")
+        print(f"  Cache hits: {stats['hits']}")
+        print(f"  Cache misses: {stats['misses']}")
+        print(f"  Hit rate: {stats['hit_rate']:.1%}")
+        print(
+            f"  Throughput: {(stats['hits'] + stats['misses']) / (elapsed_ms / 1000):.0f} loads/sec"
+        )
 
-    return {
-        "total_ms": elapsed_ms,
-        "hit_rate": stats["hit_rate"],
-        "throughput": (stats["hits"] + stats["misses"]) / (elapsed_ms / 1000),
-    }
+        return {
+            "total_ms": elapsed_ms,
+            "hit_rate": stats["hit_rate"],
+            "throughput": (stats["hits"] + stats["misses"]) / (elapsed_ms / 1000),
+        }
+    finally:
+        # Cleanup background tasks
+        for task in cache._background_tasks:
+            if not task.done():
+                task.cancel()
+        cache._background_tasks.clear()
 
 
 def benchmark_template_engine_integration(templates_dir: Path):
