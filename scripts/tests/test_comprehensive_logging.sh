@@ -218,6 +218,13 @@ echo ""
 # -----------------------------------------------------------------------------
 echo -e "${YELLOW}[3/6] Testing Bash logging API...${NC}"
 
+# Validate log_action.sh exists before sourcing
+if [[ ! -f "$HOOKS_LIB/log_action.sh" ]]; then
+    echo -e "${RED}✗ log_action.sh not found at $HOOKS_LIB/log_action.sh${NC}"
+    echo "  Check HOOKS_LIB path: $HOOKS_LIB"
+    exit 1
+fi
+
 source "$HOOKS_LIB/log_action.sh"
 
 # Test error logging via bash

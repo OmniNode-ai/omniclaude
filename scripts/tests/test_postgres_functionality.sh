@@ -3,6 +3,25 @@
 # Tests actual database operations, not just container status
 set -e
 
+# Ensure cleanup runs even on failure or interruption
+cleanup_test_data() {
+    if [ -n "$TEST_ID" ]; then
+        echo ""
+        echo "🧹 Cleaning up test data for correlation_id: $TEST_ID"
+        PGPASSWORD=$POSTGRES_PASSWORD psql \
+            -h $POSTGRES_HOST \
+            -p $POSTGRES_PORT \
+            -U $POSTGRES_USER \
+            -d $POSTGRES_DATABASE \
+            -c "DELETE FROM agent_actions WHERE correlation_id='$TEST_ID'" \
+            > /dev/null 2>&1 || true
+        echo "✅ Cleanup complete"
+    fi
+}
+
+# Register cleanup to run on EXIT (success, failure, or interrupt)
+trap cleanup_test_data EXIT
+
 # Load environment variables
 if [ ! -f .env ]; then
     echo "❌ Error: .env file not found"
@@ -94,14 +113,7 @@ else
     exit 1
 fi
 
-# Cleanup
-echo -n "  Cleaning up test data... "
-if PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE -c "DELETE FROM agent_actions WHERE correlation_id='$TEST_ID'" > /dev/null 2>&1; then
-    echo "✅ Cleaned"
-else
-    echo "❌ Cleanup failed"
-    exit 1
-fi
+# Note: Cleanup is automatic via EXIT trap (see cleanup_test_data function)
 
 # 4. Performance checks
 echo ""
