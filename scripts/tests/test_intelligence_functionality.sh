@@ -54,7 +54,9 @@ warn_test() {
 echo "TEST 1: Qdrant Connectivity"
 echo "----------------------------"
 
-QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
+QDRANT_HOST="${QDRANT_HOST:-localhost}"
+QDRANT_PORT="${QDRANT_PORT:-6333}"
+QDRANT_URL="${QDRANT_URL:-http://${QDRANT_HOST}:${QDRANT_PORT}}"
 echo "Testing connection to: $QDRANT_URL"
 
 if curl -sf "$QDRANT_URL/collections" > /dev/null; then
@@ -126,6 +128,7 @@ echo "Testing pattern retrieval via Python..."
 
 python3 << EOF
 import sys
+import os
 import json
 from pathlib import Path
 
@@ -136,7 +139,10 @@ sys.path.insert(0, str(project_root / "agents" / "lib"))
 try:
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(host="localhost", port=6333)
+    client = QdrantClient(
+        host=os.getenv("QDRANT_HOST", "localhost"),
+        port=int(os.getenv("QDRANT_PORT", "6333"))
+    )
 
     # Test archon_vectors collection (main pattern collection)
     print("Querying archon_vectors collection...")
@@ -200,11 +206,6 @@ from pathlib import Path
 project_root = Path("$PROJECT_ROOT")
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "agents" / "lib"))
-
-# Set required environment variables
-os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
-os.environ.setdefault("POSTGRES_HOST", "192.168.86.200")
-os.environ.setdefault("POSTGRES_PORT", "5436")
 
 try:
     # Test 1: Check if manifest_injector module exists
@@ -270,6 +271,7 @@ echo "Testing query response times..."
 
 python3 << EOF
 import sys
+import os
 import time
 from pathlib import Path
 
@@ -280,7 +282,10 @@ sys.path.insert(0, str(project_root / "agents" / "lib"))
 try:
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(host="localhost", port=6333)
+    client = QdrantClient(
+        host=os.getenv("QDRANT_HOST", "localhost"),
+        port=int(os.getenv("QDRANT_PORT", "6333"))
+    )
 
     # Perform 3 test queries and measure time
     query_times = []
@@ -336,7 +341,9 @@ echo ""
 echo "TEST 6: Cache Availability (Optional)"
 echo "--------------------------------------"
 
-VALKEY_URL="${VALKEY_URL:-redis://localhost:6379}"
+VALKEY_HOST="${VALKEY_HOST:-localhost}"
+VALKEY_PORT="${VALKEY_PORT:-6379}"
+VALKEY_URL="${VALKEY_URL:-redis://${VALKEY_HOST}:${VALKEY_PORT}}"
 
 # Parse Redis URL (handles both redis://host:port and redis://:password@host:port/db)
 if echo "$VALKEY_URL" | grep -q "@"; then
@@ -353,7 +360,7 @@ fi
 
 # Override Docker internal hostnames for host scripts (same pattern as PostgreSQL test)
 if [ "$REDIS_HOST" = "archon-valkey" ]; then
-    REDIS_HOST="localhost"
+    REDIS_HOST="${VALKEY_HOST:-localhost}"
 fi
 
 echo "Testing cache at: $REDIS_HOST:$REDIS_PORT"
@@ -406,7 +413,7 @@ else
     echo "Troubleshooting:"
     echo "  1. Check Qdrant container: docker ps | grep qdrant"
     echo "  2. Check Qdrant logs: docker logs archon-qdrant"
-    echo "  3. Verify collections: curl http://localhost:6333/collections"
+    echo "  3. Verify collections: curl ${QDRANT_URL}/collections"
     echo "  4. Check .env configuration"
     exit 1
 fi

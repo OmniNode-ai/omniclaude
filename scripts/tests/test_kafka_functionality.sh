@@ -50,7 +50,7 @@ fi
 TEST_TOPIC="test-kafka-functional-$(date +%s)"
 TEST_CORRELATION_ID="test-corr-$(uuidgen 2>/dev/null || echo "$(date +%s)-$$")"
 TEST_MESSAGE="{\"correlation_id\":\"${TEST_CORRELATION_ID}\",\"test\":\"message\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
-CONSUME_TIMEOUT=5
+CONSUME_TIMEOUT="${KAFKA_CONSUME_TIMEOUT:-5}"
 
 echo "======================================================================="
 echo "Kafka Functional Test"
@@ -207,8 +207,11 @@ CLEANUP_SUCCESS=false
 # Extract hostname from KAFKA_BOOTSTRAP_SERVERS (e.g., 192.168.86.200:29092)
 KAFKA_HOST=$(echo "${KAFKA_BOOTSTRAP_SERVERS}" | sed 's|:.*||')
 
-# Only attempt SSH if we have a remote host (not localhost)
-if [ "${KAFKA_HOST}" != "localhost" ] && [ "${KAFKA_HOST}" != "127.0.0.1" ]; then
+# Configurable list of local hosts (can be overridden via environment)
+LOCAL_KAFKA_HOSTS="${LOCAL_KAFKA_HOSTS:-localhost,127.0.0.1}"
+
+# Only attempt SSH if we have a remote host (not in local list)
+if [[ ! "$LOCAL_KAFKA_HOSTS" =~ (^|,)"${KAFKA_HOST}"(,|$) ]]; then
     # Try SSH with common usernames (assumes SSH keys are configured)
     for SSH_USER in jonah $USER; do
         if ssh -o ConnectTimeout=2 -o BatchMode=yes "${SSH_USER}@${KAFKA_HOST}" "docker ps --format '{{.Names}}' | grep -q redpanda" 2>/dev/null; then

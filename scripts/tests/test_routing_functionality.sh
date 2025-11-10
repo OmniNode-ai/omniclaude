@@ -20,10 +20,16 @@ set -a
 source .env
 set +a
 
+# Configurable list of local/docker hostnames (can be overridden via environment)
+LOCAL_POSTGRES_HOSTS="${LOCAL_POSTGRES_HOSTS:-omninode-bridge-postgres,localhost,127.0.0.1}"
+
 # For host scripts, use REMOTE_INFRASTRUCTURE_IP instead of Docker hostname
-if [[ "$POSTGRES_HOST" == "omninode-bridge-postgres" ]] || [[ "$POSTGRES_HOST" == "localhost" ]]; then
+if [[ "$LOCAL_POSTGRES_HOSTS" =~ (^|,)"$POSTGRES_HOST"(,|$) ]]; then
     POSTGRES_HOST="${REMOTE_INFRASTRUCTURE_IP}"
 fi
+
+# Configurable thresholds (with sensible defaults)
+ROUTING_RECENT_HOURS="${ROUTING_RECENT_HOURS:-24}"
 
 echo "=== Agent Routing Functional Test ==="
 echo "Timestamp: $(date)"
@@ -112,13 +118,13 @@ done
 # 4. Check recent routing activity
 echo ""
 echo "4. Checking Recent Routing Activity:"
-RECENT_ROUTES=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours'" 2>/dev/null | tr -d ' ' || echo "0")
+RECENT_ROUTES=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours'" 2>/dev/null | tr -d ' ' || echo "0")
 
 if [[ "$RECENT_ROUTES" -gt "0" ]]; then
-    pass "$RECENT_ROUTES routing decisions in last 24h"
+    pass "$RECENT_ROUTES routing decisions in last ${ROUTING_RECENT_HOURS}h"
 
     # Get success rate
-    SUCCESS_RATE=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(COUNT(*) FILTER (WHERE selected_agent IS NOT NULL)::numeric / COUNT(*)::numeric * 100, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours'" 2>/dev/null | tr -d ' ' || echo "N/A")
+    SUCCESS_RATE=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(COUNT(*) FILTER (WHERE selected_agent IS NOT NULL)::numeric / COUNT(*)::numeric * 100, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours'" 2>/dev/null | tr -d ' ' || echo "N/A")
 
     if [[ "$SUCCESS_RATE" != "N/A" ]]; then
         if (( $(echo "$SUCCESS_RATE > 90" | bc -l) )); then
@@ -130,7 +136,7 @@ if [[ "$RECENT_ROUTES" -gt "0" ]]; then
         fi
     fi
 else
-    warn "No routing decisions in last 24h (system may be idle)"
+    warn "No routing decisions in last ${ROUTING_RECENT_HOURS}h (system may be idle)"
 fi
 
 # 5. Check routing performance
@@ -138,7 +144,7 @@ echo ""
 echo "5. Checking Routing Performance:"
 if [[ "$RECENT_ROUTES" -gt "0" ]]; then
     # Average routing time
-    AVG_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    AVG_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
 
     if [[ "$AVG_TIME" != "N/A" ]] && [[ "$AVG_TIME" != "" ]]; then
         # Target: <10ms excellent, <100ms acceptable
@@ -154,7 +160,7 @@ if [[ "$RECENT_ROUTES" -gt "0" ]]; then
     fi
 
     # P95 latency
-    P95_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    P95_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
 
     if [[ "$P95_TIME" != "N/A" ]] && [[ "$P95_TIME" != "" ]]; then
         if (( $(echo "$P95_TIME < 50" | bc -l) )); then
@@ -229,13 +235,13 @@ fi
 # 7. Check manifest injection integration
 echo ""
 echo "7. Checking Manifest Injection Integration:"
-RECENT_MANIFESTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '24 hours'" 2>/dev/null | tr -d ' ' || echo "0")
+RECENT_MANIFESTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours'" 2>/dev/null | tr -d ' ' || echo "0")
 
 if [[ "$RECENT_MANIFESTS" -gt "0" ]]; then
-    pass "$RECENT_MANIFESTS manifest injections in last 24h"
+    pass "$RECENT_MANIFESTS manifest injections in last ${ROUTING_RECENT_HOURS}h"
 
     # Check average query time
-    AVG_MANIFEST_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(total_query_time_ms)::numeric, 2) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '24 hours' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    AVG_MANIFEST_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(total_query_time_ms)::numeric, 2) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '${ROUTING_RECENT_HOURS} hours' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
 
     if [[ "$AVG_MANIFEST_TIME" != "N/A" ]] && [[ "$AVG_MANIFEST_TIME" != "" ]]; then
         if (( $(echo "$AVG_MANIFEST_TIME < 2000" | bc -l) )); then
@@ -247,7 +253,7 @@ if [[ "$RECENT_MANIFESTS" -gt "0" ]]; then
         fi
     fi
 else
-    warn "No manifest injections in last 24h (system may be idle)"
+    warn "No manifest injections in last ${ROUTING_RECENT_HOURS}h (system may be idle)"
 fi
 
 # Summary

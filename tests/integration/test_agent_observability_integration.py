@@ -87,8 +87,8 @@ def db_connection():
 
     # Load credentials from environment
     db_config = {
-        "host": os.getenv("POSTGRES_HOST", "192.168.86.200"),
-        "port": int(os.getenv("POSTGRES_PORT", "5436")),
+        "host": os.getenv("POSTGRES_HOST", "localhost"),
+        "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "database": os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
         "user": os.getenv("POSTGRES_USER", "postgres"),
         "password": os.getenv("POSTGRES_PASSWORD"),
@@ -143,7 +143,7 @@ def consumer_wait_time() -> int:
 
     Increase this value if tests are flaky due to timing issues.
     """
-    return 5  # seconds
+    return int(os.getenv("TEST_CONSUMER_WAIT_TIME", "5"))  # seconds
 
 
 # =============================================================================
@@ -421,12 +421,14 @@ class TestAgentActionsLogging:
         logger.info(f"Testing error logging (correlation_id: {correlation_id})")
 
         # Publish error action
+        test_host = os.getenv("POSTGRES_HOST", "localhost")
+        test_port = int(os.getenv("POSTGRES_PORT", "5432"))
         await action_logger.log_error(
             error_type="DatabaseConnectionError",
-            error_message="Failed to connect to PostgreSQL at 192.168.86.200:5436",
+            error_message=f"Failed to connect to PostgreSQL at {test_host}:{test_port}",
             error_context={
-                "host": "192.168.86.200",
-                "port": 5436,
+                "host": test_host,
+                "port": test_port,
                 "database": "omninode_bridge",
                 "retry_count": 3,
             },
@@ -457,7 +459,8 @@ class TestAgentActionsLogging:
         assert "error_message" in action["action_details"]
         assert "error_context" in action["action_details"]
         assert action["action_details"]["error_type"] == "DatabaseConnectionError"
-        assert "192.168.86.200" in action["action_details"]["error_message"]
+        expected_host = os.getenv("POSTGRES_HOST", "localhost")
+        assert expected_host in action["action_details"]["error_message"]
 
         logger.info(f"✓ Error action verified in database: {action['id']}")
 

@@ -125,6 +125,21 @@ def get_agent_name() -> str:
     return "polymorphic-agent"
 
 
+def get_action_log_timeout() -> float:
+    """
+    Get configurable timeout for action logging subprocess calls.
+
+    Returns:
+        Timeout in seconds (default: 10.0)
+    """
+    try:
+        timeout_seconds = float(os.getenv("ACTION_LOG_TIMEOUT_SECONDS", "10"))
+    except (TypeError, ValueError):
+        timeout_seconds = 10.0
+
+    return timeout_seconds
+
+
 def log_error(
     agent_name: Optional[str] = None,
     error_type: str = "UnknownError",
@@ -210,7 +225,7 @@ def log_error(
             cmd,
             capture_output=True,
             text=True,
-            timeout=2.0,
+            timeout=get_action_log_timeout(),
         )
 
         if result.returncode == 0:
@@ -313,7 +328,7 @@ def log_success(
             cmd,
             capture_output=True,
             text=True,
-            timeout=2.0,
+            timeout=get_action_log_timeout(),
         )
 
         if result.returncode == 0:
@@ -411,7 +426,7 @@ def log_tool_call(
             cmd,
             capture_output=True,
             text=True,
-            timeout=2.0,
+            timeout=get_action_log_timeout(),
         )
 
         if result.returncode == 0:
@@ -501,7 +516,7 @@ def log_decision(
             cmd,
             capture_output=True,
             text=True,
-            timeout=2.0,
+            timeout=get_action_log_timeout(),
         )
 
         if result.returncode == 0:

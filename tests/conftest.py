@@ -373,8 +373,13 @@ def _cleanup_kafka_producers():
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # If loop is running, schedule cleanup
-            asyncio.create_task(cleanup())
+            # If loop is running, we can't await directly in a fixture
+            # So we schedule cleanup and wait briefly for completion
+            import time
+
+            task = asyncio.create_task(cleanup())
+            # Give it a moment to complete (prevents race condition)
+            time.sleep(0.1)
         else:
             # If loop is not running, run cleanup synchronously
             loop.run_until_complete(cleanup())

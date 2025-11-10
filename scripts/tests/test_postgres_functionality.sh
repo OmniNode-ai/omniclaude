@@ -19,6 +19,10 @@ if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_USER" ]
     exit 1
 fi
 
+# Configurable thresholds (with sensible defaults)
+POSTGRES_LATENCY_EXCELLENT_MS="${POSTGRES_LATENCY_EXCELLENT_MS:-1000}"
+POSTGRES_LATENCY_ACCEPTABLE_MS="${POSTGRES_LATENCY_ACCEPTABLE_MS:-3000}"
+
 echo "=== PostgreSQL Functional Test ==="
 echo "Host: $POSTGRES_HOST:$POSTGRES_PORT"
 echo "Database: $POSTGRES_DATABASE"
@@ -115,9 +119,9 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTG
 END_TIME=$(date +%s%N)
 LATENCY_MS=$(( (END_TIME - START_TIME) / 1000000 ))
 
-if [ $LATENCY_MS -lt 1000 ]; then
+if [ $LATENCY_MS -lt $POSTGRES_LATENCY_EXCELLENT_MS ]; then
     echo "✅ ${LATENCY_MS}ms (excellent)"
-elif [ $LATENCY_MS -lt 3000 ]; then
+elif [ $LATENCY_MS -lt $POSTGRES_LATENCY_ACCEPTABLE_MS ]; then
     echo "⚠️  ${LATENCY_MS}ms (acceptable)"
 else
     echo "❌ ${LATENCY_MS}ms (slow)"

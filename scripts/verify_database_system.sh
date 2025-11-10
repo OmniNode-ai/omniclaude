@@ -38,9 +38,10 @@ if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_DATABASE" ]; then
 fi
 
 # Determine connection parameters
-# For host scripts, we need to use the IP address
-DB_HOST="192.168.86.200"
-DB_PORT="5436"
+# Use environment variables if available, fallback to defaults for backward compatibility
+# This supports different environments (Docker, remote, local) without breaking existing setups
+DB_HOST="${POSTGRES_HOST:-192.168.86.200}"
+DB_PORT="${POSTGRES_PORT:-5436}"
 DB_NAME="$POSTGRES_DATABASE"
 DB_USER="$POSTGRES_USER"
 

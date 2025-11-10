@@ -61,7 +61,10 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Configure Git authentication for private repositories
+      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # The workflow will continue without this if all dependencies are public
+      # Set GH_PAT secret in repository settings if you have private dependencies
+      - name: Configure Git authentication for private repositories (OPTIONAL)
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
         continue-on-error: true
@@ -129,11 +132,15 @@ jobs:
           TABLE_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
           echo "Total tables created: $TABLE_COUNT"
 
-          if [ "$TABLE_COUNT" -lt 10 ]; then
-            echo "❌ ERROR: Expected at least 10 tables, found $TABLE_COUNT"
+          # Expected minimum table count (update as schema evolves)
+          EXPECTED_MIN_TABLES=10
+
+          if [ "$TABLE_COUNT" -lt "$EXPECTED_MIN_TABLES" ]; then
+            echo "❌ ERROR: Expected at least $EXPECTED_MIN_TABLES tables, found $TABLE_COUNT"
             exit 1
           fi
 
+          echo "✅ Table count validation passed: $TABLE_COUNT tables (minimum: $EXPECTED_MIN_TABLES)"
           echo "✅ Database schema verification passed"
           echo "::endgroup::"
 
@@ -211,15 +218,12 @@ jobs:
 
     services:
       redpanda:
-        image: vectorized/redpanda:latest
+        image: docker.redpanda.com/redpandadata/redpanda:latest
         ports:
           - 9092:9092
           - 8081:8081
         options: >-
-          --health-cmd "rpk cluster health"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --command "redpanda start --smp 1 --memory 1G --overprovisioned --node-id 0 --kafka-addr PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr PLAINTEXT://localhost:9092"
 
     steps:
       - name: Checkout code
@@ -235,7 +239,10 @@ jobs:
         with:
           version: ${{ env.POETRY_VERSION }}
 
-      - name: Configure Git authentication
+      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # The workflow will continue without this if all dependencies are public
+      # Set GH_PAT secret in repository settings if you have private dependencies
+      - name: Configure Git authentication for private repositories (OPTIONAL)
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
         continue-on-error: true
@@ -363,7 +370,10 @@ jobs:
         with:
           version: ${{ env.POETRY_VERSION }}
 
-      - name: Configure Git authentication
+      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # The workflow will continue without this if all dependencies are public
+      # Set GH_PAT secret in repository settings if you have private dependencies
+      - name: Configure Git authentication for private repositories (OPTIONAL)
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
         continue-on-error: true
@@ -517,7 +527,10 @@ jobs:
         with:
           version: ${{ env.POETRY_VERSION }}
 
-      - name: Configure Git authentication
+      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # The workflow will continue without this if all dependencies are public
+      # Set GH_PAT secret in repository settings if you have private dependencies
+      - name: Configure Git authentication for private repositories (OPTIONAL)
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
         continue-on-error: true

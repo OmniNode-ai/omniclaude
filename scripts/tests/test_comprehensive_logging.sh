@@ -15,6 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOOKS_LIB="$HOME/.claude/hooks/lib"
 
+# Configurable wait times (can be overridden via environment variables)
+KAFKA_WAIT_TIME="${KAFKA_WAIT_TIME:-2}"
+CONSUMER_WAIT_TIME="${CONSUMER_WAIT_TIME:-5}"
+KAFKA_CONSUMER_TIMEOUT="${KAFKA_CONSUMER_TIMEOUT:-2000}"
+
 echo "======================================================================="
 echo "Comprehensive Logging Infrastructure Integration Test"
 echo "======================================================================="
@@ -250,7 +255,8 @@ echo ""
 echo -e "${YELLOW}[4/6] Verifying Kafka topic has events...${NC}"
 
 # Wait for Kafka async processing
-sleep 2
+echo "Waiting ${KAFKA_WAIT_TIME} seconds for Kafka async processing..."
+sleep "$KAFKA_WAIT_TIME"
 
 # Check if events were published to Kafka (via Python)
 KAFKA_CHECK=$(python3 -c "
@@ -262,7 +268,7 @@ try:
         'agent-actions',
         bootstrap_servers='${KAFKA_BOOTSTRAP_SERVERS}',
         auto_offset_reset='earliest',
-        consumer_timeout_ms=2000,
+        consumer_timeout_ms=${KAFKA_CONSUMER_TIMEOUT},
         max_poll_records=10
     )
 
@@ -295,8 +301,8 @@ echo ""
 echo -e "${YELLOW}[5/6] Verifying PostgreSQL table has events...${NC}"
 
 # Wait for consumer to process events
-echo "Waiting 5 seconds for consumer to process events..."
-sleep 5
+echo "Waiting ${CONSUMER_WAIT_TIME} seconds for consumer to process events..."
+sleep "$CONSUMER_WAIT_TIME"
 
 # Query database for test events
 export PGPASSWORD="${POSTGRES_PASSWORD}"
