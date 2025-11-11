@@ -34,10 +34,24 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Add omniclaude agents/lib to path for IntelligenceEventClient
+# Determine project root (skills are in ~/.claude/skills, not in project)
 OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", str(Path(__file__).parent.parent.parent.parent))
+    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
 )
+if not OMNICLAUDE_PATH.exists():
+    # Fallback to common locations
+    for fallback in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Volumes/PRO-G40/Code/omniclaude"),
+    ]:
+        if fallback.exists():
+            OMNICLAUDE_PATH = fallback
+            break
+
+sys.path.insert(0, str(OMNICLAUDE_PATH))
+from config import settings
+
+# Add omniclaude agents/lib to path for IntelligenceEventClient
 sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
 
 try:
@@ -59,10 +73,6 @@ except ImportError as e:
 # Add _shared to path for helper functions
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id  # noqa: E402
-
-# Add lib to path for kafka_config
-sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
-from kafka_config import get_kafka_bootstrap_servers  # noqa: E402
 
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",
@@ -283,7 +293,7 @@ async def main():
     # Intelligence adapter configuration
     parser.add_argument(
         "--kafka-brokers",
-        default=get_kafka_bootstrap_servers(),
+        default=settings.get_effective_kafka_bootstrap_servers(),
         help="Kafka bootstrap servers (default: from centralized config)",
     )
 

@@ -322,6 +322,40 @@ kafka_servers = settings.kafka_bootstrap_servers  # str, validated
 postgres_port = settings.postgres_port            # int, validated
 ```
 
+**📚 Comprehensive Migration Resources**:
+
+For detailed migration instructions, see **`docs/configuration/`**:
+
+1. **[STANDARDIZATION_GUIDE.md](docs/configuration/STANDARDIZATION_GUIDE.md)** (20KB)
+   - Complete migration guide with context-specific patterns
+   - Why Pydantic Settings is the standard
+   - Common pitfalls and solutions
+   - Migration checklist and testing strategies
+   - Examples for every use case (DB, Kafka, API keys, etc.)
+
+2. **[QUICK_REFERENCE.md](docs/configuration/QUICK_REFERENCE.md)** (5KB)
+   - Quick reference card to keep open while migrating
+   - Setup patterns by location (hooks/skills/services)
+   - Common replacements table
+   - Helper methods cheat sheet
+
+3. **[MIGRATION_TEMPLATE.py](docs/configuration/MIGRATION_TEMPLATE.py)** (10KB)
+   - Working Python template with before/after patterns
+   - Copy-paste examples for common scenarios
+   - Validation and testing examples
+
+**Quick Start**:
+```bash
+# Read quick reference (1 minute)
+cat docs/configuration/QUICK_REFERENCE.md
+
+# Copy template for your migration
+cp docs/configuration/MIGRATION_TEMPLATE.py my_migration.py
+
+# Follow comprehensive guide
+cat docs/configuration/STANDARDIZATION_GUIDE.md
+```
+
 ### Validation
 
 Validate configuration on application startup:
@@ -355,10 +389,16 @@ print("Configuration is valid!")
 
 ### Documentation
 
-- **Complete reference**: `config/README.md`
-- **Environment template**: `.env.example`
-- **Type definitions**: `config/settings.py`
-- **Security guide**: `SECURITY_KEY_ROTATION.md`
+**Configuration Framework**:
+- **Complete reference**: `config/README.md` - Usage documentation and API reference
+- **Environment template**: `.env.example` - All available configuration variables
+- **Type definitions**: `config/settings.py` - Settings class source code
+- **Security guide**: `SECURITY_KEY_ROTATION.md` - API key management
+
+**Migration Guides** (for migrating to Pydantic Settings):
+- **Standardization Guide**: `docs/configuration/STANDARDIZATION_GUIDE.md` - Complete migration guide
+- **Quick Reference**: `docs/configuration/QUICK_REFERENCE.md` - Quick lookup while migrating
+- **Migration Template**: `docs/configuration/MIGRATION_TEMPLATE.py` - Working code template
 
 ---
 

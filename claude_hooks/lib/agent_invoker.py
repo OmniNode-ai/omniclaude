@@ -14,21 +14,26 @@ Version: 1.0.0
 
 import asyncio
 import json
-import os
 import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Add agent framework to path (use environment variable or relative path)
-AGENT_FRAMEWORK_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
-if AGENT_FRAMEWORK_PATH:
-    AGENT_FRAMEWORK_PATH = Path(AGENT_FRAMEWORK_PATH)
+# Add project root to path for config import
+project_root = (
+    Path(__file__).resolve().parents[2]
+)  # lib → claude_hooks → omniclaude root
+sys.path.insert(0, str(project_root))
+
+from config import settings
+
+# Add agent framework to path (use settings or relative path)
+if settings.omniclaude_agents_path:
+    AGENT_FRAMEWORK_PATH = Path(settings.omniclaude_agents_path)
 else:
     # Try to find it relative to the project root
-    current_dir = Path(__file__).resolve().parent.parent.parent
-    AGENT_FRAMEWORK_PATH = current_dir / "agents" / "parallel_execution"
+    AGENT_FRAMEWORK_PATH = project_root / "agents" / "parallel_execution"
 
 if AGENT_FRAMEWORK_PATH.exists():
     sys.path.insert(0, str(AGENT_FRAMEWORK_PATH))

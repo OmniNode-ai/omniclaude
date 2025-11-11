@@ -31,20 +31,20 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 # Add project root to path for imports
-project_root = Path(__file__).resolve().parents[5] / "omniclaude"
-if project_root.exists():
-    sys.path.insert(0, str(project_root))
+sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
 
 try:
     import asyncpg
-    from dotenv import load_dotenv
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
+
+    from config import settings
 except ImportError as e:
     print(f"❌ Missing required dependency: {e}")
-    print("\nInstall with: pip install asyncpg rich python-dotenv")
+    print("\nInstall with: pip install asyncpg rich")
+    print("Ensure config module is available in omniclaude")
     sys.exit(2)
 
 
@@ -58,17 +58,12 @@ class DebugLoopHealthCheck:
 
     def __init__(self):
         """Initialize health checker with environment configuration."""
-        # Load environment variables from .env file
-        env_path = project_root / ".env"
-        if env_path.exists():
-            load_dotenv(env_path)
-
-        # Database configuration
-        self.db_host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-        self.db_port = os.getenv("POSTGRES_PORT", "5436")
-        self.db_name = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-        self.db_user = os.getenv("POSTGRES_USER", "postgres")
-        self.db_password = os.getenv("POSTGRES_PASSWORD")
+        # Database configuration from Pydantic Settings
+        self.db_host = settings.postgres_host
+        self.db_port = settings.postgres_port
+        self.db_name = settings.postgres_database
+        self.db_user = settings.postgres_user
+        self.db_password = settings.postgres_password
 
         # Rich console for formatted output
         self.console = Console()

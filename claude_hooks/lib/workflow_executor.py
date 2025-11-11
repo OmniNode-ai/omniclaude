@@ -13,21 +13,26 @@ Integrates with agent-workflow-coordinator to execute:
 
 import asyncio
 import json
-import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Add agents directory to path (use environment variable or relative path)
-AGENTS_PATH = os.getenv("OMNICLAUDE_AGENTS_PATH")
-if AGENTS_PATH:
-    AGENTS_PATH = Path(AGENTS_PATH)
+# Add project root to path for config import
+project_root = (
+    Path(__file__).resolve().parents[2]
+)  # lib → claude_hooks → omniclaude root
+sys.path.insert(0, str(project_root))
+
+from config import settings
+
+# Add agents directory to path (use settings or relative path)
+if settings.omniclaude_agents_path:
+    AGENTS_PATH = Path(settings.omniclaude_agents_path)
 else:
-    # Try relative to current file location
-    current_dir = Path(__file__).resolve().parent.parent.parent
-    AGENTS_PATH = current_dir / "agents" / "parallel_execution"
+    # Try relative to project root
+    AGENTS_PATH = project_root / "agents" / "parallel_execution"
 
 if AGENTS_PATH.exists():
     sys.path.insert(0, str(AGENTS_PATH))

@@ -24,6 +24,12 @@ from typing import Dict, List, Optional
 
 import yaml
 
+# Add project root to path for config import
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
+from config import settings
+
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
@@ -47,51 +53,17 @@ def load_config() -> Dict:
 # Load configuration
 CONFIG = load_config()
 
+# Configuration flags from Pydantic Settings (type-safe)
+ENABLE_PHASE_1_VALIDATION = settings.enable_phase_1_validation
+ENABLE_PHASE_2_RAG = settings.enable_phase_2_rag
+ENABLE_PHASE_3_CORRECTION = settings.enable_phase_3_correction
+ENABLE_PHASE_4_AI_QUORUM = settings.enable_phase_4_ai_quorum
 
-def get_bool_config(env_var: str, yaml_path: List[str], default: bool) -> bool:
-    """Get boolean config from env var (priority) or YAML config."""
-    # Environment variable takes precedence
-    env_value = os.getenv(env_var)
-    if env_value is not None:
-        return env_value.lower() == "true"
+# Performance budget from Pydantic Settings
+PERFORMANCE_BUDGET_SECONDS = settings.performance_budget_seconds
 
-    # Check YAML config
-    value = CONFIG
-    for key in yaml_path:
-        if isinstance(value, dict) and key in value:
-            value = value[key]
-        else:
-            return default
-
-    if isinstance(value, bool):
-        return value
-    return default
-
-
-# Configuration flags for phased rollout (env var or config.yaml)
-ENABLE_PHASE_1_VALIDATION = get_bool_config(
-    "ENABLE_PHASE_1_VALIDATION", ["enforcement", "enabled"], True
-)
-ENABLE_PHASE_2_RAG = get_bool_config("ENABLE_PHASE_2_RAG", ["rag", "enabled"], False)
-ENABLE_PHASE_3_CORRECTION = get_bool_config(
-    "ENABLE_PHASE_3_CORRECTION", ["correction", "enabled"], False
-)
-ENABLE_PHASE_4_AI_QUORUM = get_bool_config(
-    "ENABLE_PHASE_4_AI_QUORUM", ["quorum", "enabled"], False
-)
-
-# Performance budget (env var or config.yaml)
-PERFORMANCE_BUDGET_SECONDS = float(
-    os.getenv(
-        "PERFORMANCE_BUDGET_SECONDS",
-        str(CONFIG.get("enforcement", {}).get("performance_budget_seconds", 2.0)),
-    )
-)
-
-# Enforcement mode: "warn" or "block"
-ENFORCEMENT_MODE = os.getenv(
-    "ENFORCEMENT_MODE", str(CONFIG.get("enforcement", {}).get("mode", "warn"))
-).lower()
+# Enforcement mode from Pydantic Settings
+ENFORCEMENT_MODE = settings.enforcement_mode
 
 
 class ViolationsLogger:

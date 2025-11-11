@@ -26,7 +26,14 @@ from typing import Any, Dict, Optional
 # Add hooks lib to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Add project root to path for config import (before other imports)
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
+
 from hook_event_logger import HookEventLogger
+
+# Import settings for type-safe configuration
+from config import settings
 
 # PostgreSQL connection (lazy import to avoid dependency issues)
 try:
@@ -317,22 +324,40 @@ def query_session_statistics() -> Dict[str, Any]:
         }
 
     try:
-        # Note: Set DB_PASSWORD environment variable for database access
-        import os
+        # Use Pydantic Settings to generate connection string
+        connection_string = settings.get_postgres_dsn()
+        # Convert SQLAlchemy-style DSN to psycopg2 format
+        connection_string = connection_string.replace("postgresql://", "")
 
-        db_password = os.getenv("DB_PASSWORD", "")
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("POSTGRES_PORT", "5436")
-        db = os.getenv("POSTGRES_DB", "omninode_bridge")
-        user = os.getenv("POSTGRES_USER", "postgres")
+        # Parse DSN: user:password@host:port/database
+        if "@" in connection_string:
+            user_pass, host_db = connection_string.split("@", 1)
+            if ":" in user_pass:
+                user, password = user_pass.split(":", 1)
+            else:
+                user = user_pass
+                password = ""
+
+            if "/" in host_db:
+                host_port, db = host_db.split("/", 1)
+                if ":" in host_port:
+                    host, port = host_port.split(":", 1)
+                else:
+                    host = host_port
+                    port = "5432"
+            else:
+                host = host_db
+                port = "5432"
+                db = "postgres"
+
+            connection_string = (
+                f"host={host} port={port} "
+                f"dbname={db} "
+                f"user={user} "
+                f"password={password}"
+            )
 
         # Connect to database
-        connection_string = (
-            f"host={host} port={port} "
-            f"dbname={db} "
-            f"user={user} "
-            f"password={db_password}"
-        )
         conn = psycopg2.connect(connection_string)
 
         # Get session start time from state file

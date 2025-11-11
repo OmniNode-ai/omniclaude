@@ -21,7 +21,6 @@ Performance Optimizations:
 import asyncio
 import hashlib
 import json
-import os
 import threading
 import time
 import uuid
@@ -155,18 +154,9 @@ class PatternTrackerConfig:
             return {}
 
     def get(self, key: str, yaml_path: List[str], default: Any) -> Any:
-        """Get configuration value with environment variable override."""
-        env_value = os.getenv(key)
-        if env_value is not None:
-            if isinstance(default, bool):
-                return env_value.lower() in ("true", "1", "yes")
-            if isinstance(default, (int, float)):
-                try:
-                    return type(default)(env_value)
-                except ValueError:
-                    pass
-            return env_value
-
+        """Get configuration value with YAML config (no env override needed - handled by settings)."""
+        # Note: Environment variable override is now handled by Pydantic Settings
+        # This method now only checks YAML config and uses default if not found
         value = self._config
         for path_key in yaml_path:
             if isinstance(value, dict) and path_key in value:
