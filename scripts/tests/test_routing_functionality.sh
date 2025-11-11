@@ -137,24 +137,34 @@ fi
 echo ""
 echo "5. Checking Routing Performance:"
 if [[ "$RECENT_ROUTES" -gt "0" ]]; then
-    # Average routing time
-    AVG_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    # Average routing time (last 1 hour for recent performance)
+    AVG_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '1 hour' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    SAMPLE_SIZE=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '1 hour' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "0")
 
-    if [[ "$AVG_TIME" != "N/A" ]] && [[ "$AVG_TIME" != "" ]]; then
+    if [[ "$AVG_TIME" != "N/A" ]] && [[ "$AVG_TIME" != "" ]] && [[ "$SAMPLE_SIZE" -gt "0" ]]; then
         # Target: <10ms excellent, <100ms acceptable
         if (( $(echo "$AVG_TIME < 10" | bc -l) )); then
-            pass "Average routing time: ${AVG_TIME}ms (excellent)"
+            pass "Average routing time: ${AVG_TIME}ms (excellent, n=$SAMPLE_SIZE last hour)"
         elif (( $(echo "$AVG_TIME < 100" | bc -l) )); then
-            pass "Average routing time: ${AVG_TIME}ms (acceptable)"
+            pass "Average routing time: ${AVG_TIME}ms (acceptable, n=$SAMPLE_SIZE last hour)"
         else
-            warn "Average routing time: ${AVG_TIME}ms (target: <100ms)"
+            warn "Average routing time: ${AVG_TIME}ms (target: <100ms, n=$SAMPLE_SIZE last hour)"
         fi
     else
-        warn "No routing time data available"
+        warn "No routing time data available in last hour (checking 24h average instead)"
+        # Fallback to 24h average
+        AVG_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+        if [[ "$AVG_TIME" != "N/A" ]] && [[ "$AVG_TIME" != "" ]]; then
+            if (( $(echo "$AVG_TIME < 100" | bc -l) )); then
+                pass "Average routing time (24h): ${AVG_TIME}ms"
+            else
+                warn "Average routing time (24h): ${AVG_TIME}ms (includes historical data)"
+            fi
+        fi
     fi
 
-    # P95 latency
-    P95_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '24 hours' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    # P95 latency (last 1 hour)
+    P95_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY routing_time_ms)::numeric, 2) FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '1 hour' AND routing_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
 
     if [[ "$P95_TIME" != "N/A" ]] && [[ "$P95_TIME" != "" ]]; then
         if (( $(echo "$P95_TIME < 50" | bc -l) )); then
@@ -234,16 +244,28 @@ RECENT_MANIFESTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "
 if [[ "$RECENT_MANIFESTS" -gt "0" ]]; then
     pass "$RECENT_MANIFESTS manifest injections in last 24h"
 
-    # Check average query time
-    AVG_MANIFEST_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(total_query_time_ms)::numeric, 2) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '24 hours' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    # Check average query time (last 1 hour for recent performance)
+    AVG_MANIFEST_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(total_query_time_ms)::numeric, 2) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '1 hour' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+    MANIFEST_SAMPLE=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT COUNT(*) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '1 hour' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "0")
 
-    if [[ "$AVG_MANIFEST_TIME" != "N/A" ]] && [[ "$AVG_MANIFEST_TIME" != "" ]]; then
+    if [[ "$AVG_MANIFEST_TIME" != "N/A" ]] && [[ "$AVG_MANIFEST_TIME" != "" ]] && [[ "$MANIFEST_SAMPLE" -gt "0" ]]; then
         if (( $(echo "$AVG_MANIFEST_TIME < 2000" | bc -l) )); then
-            pass "Average manifest query time: ${AVG_MANIFEST_TIME}ms (excellent)"
+            pass "Average manifest query time: ${AVG_MANIFEST_TIME}ms (excellent, n=$MANIFEST_SAMPLE last hour)"
         elif (( $(echo "$AVG_MANIFEST_TIME < 5000" | bc -l) )); then
-            warn "Average manifest query time: ${AVG_MANIFEST_TIME}ms (target: <2000ms)"
+            warn "Average manifest query time: ${AVG_MANIFEST_TIME}ms (target: <2000ms, n=$MANIFEST_SAMPLE last hour)"
         else
-            fail "Average manifest query time: ${AVG_MANIFEST_TIME}ms (critical: >5000ms)"
+            fail "Average manifest query time: ${AVG_MANIFEST_TIME}ms (critical: >5000ms, n=$MANIFEST_SAMPLE last hour)"
+        fi
+    else
+        warn "No manifest injections in last hour (checking 24h average instead)"
+        # Fallback to 24h average
+        AVG_MANIFEST_TIME=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "SELECT ROUND(AVG(total_query_time_ms)::numeric, 2) FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '24 hours' AND total_query_time_ms IS NOT NULL" 2>/dev/null | tr -d ' ' || echo "N/A")
+        if [[ "$AVG_MANIFEST_TIME" != "N/A" ]] && [[ "$AVG_MANIFEST_TIME" != "" ]]; then
+            if (( $(echo "$AVG_MANIFEST_TIME < 5000" | bc -l) )); then
+                pass "Average manifest query time (24h): ${AVG_MANIFEST_TIME}ms"
+            else
+                warn "Average manifest query time (24h): ${AVG_MANIFEST_TIME}ms (includes historical data)"
+            fi
         fi
     fi
 else

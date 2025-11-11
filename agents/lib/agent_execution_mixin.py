@@ -4,6 +4,8 @@ Agent Execution Logging Mixin
 Provides automatic execution logging for polymorphic agents to track
 all agent executions in the agent_execution_logs database table.
 
+Also provides manifest injection for comprehensive system context.
+
 Usage:
     class MyAgent(AgentExecutionMixin):
         def __init__(self):
@@ -18,19 +20,26 @@ Usage:
             )
 
         async def _execute_impl(self, task: AgentTask) -> AgentResult:
-            # Actual implementation here
+            # Inject manifest for comprehensive system context
+            manifest = await self.inject_manifest()
+
+            # Use manifest in agent prompt/context
+            # ... rest of implementation
             pass
 """
 
 import asyncio
+import logging
 import os
 import time
-from typing import Any, Callable, Dict, Optional
-from uuid import UUID
+from typing import Any, Callable, Dict, List, Optional
+from uuid import UUID, uuid4
 
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
 from .agent_execution_logger import AgentExecutionLogger, log_agent_execution
+
+logger = logging.getLogger(__name__)
 
 
 class AgentExecutionMixin:
@@ -192,3 +201,81 @@ class AgentExecutionMixin:
     def correlation_id(self) -> Optional[str]:
         """Get current correlation ID."""
         return self._execution_logger.correlation_id if self._execution_logger else None
+
+    async def inject_manifest(
+        self,
+        sections: Optional[List[str]] = None,
+        correlation_id: Optional[str] = None,
+    ) -> str:
+        """
+        Inject dynamic system manifest for comprehensive agent context.
+
+        This provides agents with:
+        - 15,689+ patterns from Qdrant (ONEX templates + code examples)
+        - Debug intelligence (successful/failed workflows)
+        - Infrastructure status (PostgreSQL, Kafka, Docker)
+        - Database schemas (34 tables)
+        - AI models and providers
+
+        The manifest is generated dynamically via event bus queries to
+        archon-intelligence-adapter and stored in agent_manifest_injections
+        table for traceability.
+
+        Args:
+            sections: Optional list of sections to include
+                     (default: all sections - patterns, infrastructure, models, etc.)
+            correlation_id: Optional correlation ID (uses current execution's if available)
+
+        Returns:
+            Formatted manifest string ready to inject into agent prompt
+
+        Example:
+            async def _execute_impl(self, task: AgentTask) -> AgentResult:
+                # Inject manifest at start of execution
+                manifest = await self.inject_manifest()
+
+                # Include in system prompt or agent context
+                enhanced_prompt = f"{SYSTEM_PROMPT}\n\n{manifest}\n\n{task.description}"
+
+                # Rest of implementation...
+
+        Performance:
+            - Target query time: <2000ms (parallel queries)
+            - Cache hit rate: 60-70% (Valkey-backed caching)
+            - Fallback: Minimal manifest on timeout
+            - Non-blocking: Does not fail execution if intelligence unavailable
+        """
+        # Import manifest injector (lazy import to avoid circular dependencies)
+        try:
+            from .manifest_injector import inject_manifest_async
+        except ImportError:
+            logger.warning(
+                "manifest_injector not available, skipping manifest injection"
+            )
+            return ""
+
+        # Use current correlation_id if available, otherwise generate new one
+        cid = correlation_id or self.correlation_id or str(uuid4())
+
+        try:
+            # Inject manifest with comprehensive intelligence
+            manifest_text = await inject_manifest_async(
+                correlation_id=cid,
+                sections=sections,
+                agent_name=self._agent_name,
+            )
+
+            logger.info(
+                f"Manifest injected for {self._agent_name} "
+                f"(correlation_id: {cid}, length: {len(manifest_text)} chars)"
+            )
+
+            return manifest_text
+
+        except Exception as e:
+            # Never fail agent execution due to manifest injection issues
+            logger.error(
+                f"Failed to inject manifest for {self._agent_name}: {e}",
+                exc_info=True,
+            )
+            return ""

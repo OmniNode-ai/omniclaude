@@ -67,7 +67,7 @@ class PatternStorage:
         """
         # Use Pydantic settings if qdrant_url not explicitly provided
         if qdrant_url is None:
-            qdrant_url = settings.qdrant_url
+            qdrant_url = str(settings.qdrant_url)  # Convert HttpUrl to string
         self.qdrant_url = qdrant_url
         self.collection_name = collection_name
         self.use_in_memory = use_in_memory

@@ -114,7 +114,7 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
     )
 
     # Create a mock ForeignKeyViolation error (needed for mock setup)
-    class MockForeignKeyViolation(Exception):
+    class MockForeignKeyViolationError(Exception):
         """Mock for psycopg2.errors.ForeignKeyViolation."""
 
         pass
@@ -135,10 +135,10 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
-        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolation
+        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolationError
 
         # Should handle gracefully and raise wrapped exception
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(MockDatabaseError, match="duplicate key value") as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
 
         # Verify error message
@@ -226,21 +226,30 @@ async def test_store_quality_metrics_with_invalid_uuid_format():
     )
 
     # Create a mock ForeignKeyViolation error
-    class MockForeignKeyViolation(Exception):
+    class MockForeignKeyViolationError(Exception):
         """Mock for psycopg2.errors.ForeignKeyViolation."""
 
         pass
 
+    class MockInvalidUUIDError(Exception):
+        """Mock for invalid UUID syntax error."""
+
+        pass
+
     mock_cursor = MagicMock()
-    mock_cursor.execute.side_effect = Exception("invalid input syntax for type uuid")
+    mock_cursor.execute.side_effect = MockInvalidUUIDError(
+        "invalid input syntax for type uuid"
+    )
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
         mock_psycopg2.connect.return_value = mock_conn
-        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolation
+        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolationError
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(
+            MockInvalidUUIDError, match="invalid input syntax for type uuid"
+        ) as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
 
         assert "Failed to store quality metrics" in str(exc_info.value)
@@ -380,7 +389,7 @@ def test_extract_pattern_handles_different_field_names():
     assert pattern1["code"] == "archon code"
     assert pattern1["confidence"] == 0.95
 
-    # Test code_patterns collection schema
+    # Test code_generation_patterns collection schema
     record2 = Mock()
     record2.id = str(uuid.uuid4())
     record2.payload = {
@@ -431,7 +440,7 @@ async def test_query_patterns_performance_with_pagination():
     mock_collections = Mock()
     # Create mock collection with .name attribute
     mock_collection = Mock()
-    mock_collection.name = "code_patterns"
+    mock_collection.name = "code_generation_patterns"
     mock_collections.collections = [mock_collection]
     mock_client.get_collections.return_value = mock_collections
 
@@ -457,7 +466,10 @@ async def test_query_patterns_performance_with_pagination():
     mock_client.scroll.side_effect = page_results
 
     patterns = await query_patterns(
-        mock_client, collection_name="code_patterns", min_confidence=0.5, limit=None
+        mock_client,
+        collection_name="code_generation_patterns",
+        min_confidence=0.5,
+        limit=None,
     )
 
     # Should have collected all 300 patterns
@@ -475,7 +487,7 @@ async def test_query_patterns_respects_limit():
     mock_collections = Mock()
     # Create mock collection with .name attribute
     mock_collection = Mock()
-    mock_collection.name = "code_patterns"
+    mock_collection.name = "code_generation_patterns"
     mock_collections.collections = [mock_collection]
     mock_client.get_collections.return_value = mock_collections
 
@@ -492,7 +504,7 @@ async def test_query_patterns_respects_limit():
 
     patterns = await query_patterns(
         mock_client,
-        collection_name="code_patterns",
+        collection_name="code_generation_patterns",
         min_confidence=0.5,
         limit=50,  # Limit to 50
     )
@@ -715,7 +727,7 @@ async def test_full_backfill_workflow_integration():
     Requires:
     - Qdrant running at localhost:6333
     - PostgreSQL at connection string from env
-    - Test patterns in code_patterns collection
+    - Test patterns in code_generation_patterns collection
     """
     pytest.skip("Integration test - requires real services")
 

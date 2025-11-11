@@ -55,12 +55,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+
+# Import Pydantic Settings for type-safe configuration
+# Use absolute import to avoid conflict with agents/lib/config directory
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path as _Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-# Import Pydantic Settings for type-safe configuration
+_project_root = _Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 from config import settings
 
 # Import nest_asyncio for nested event loop support
@@ -122,19 +129,6 @@ except ImportError:
     if str(lib_path) not in sys.path:
         sys.path.insert(0, str(lib_path))
     from task_classifier import TaskClassifier, TaskContext, TaskIntent
-
-# Import ArchonHybridScorer for pattern relevance filtering via Archon Intelligence API
-try:
-    from archon_hybrid_scorer import ArchonHybridScorer
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from archon_hybrid_scorer import ArchonHybridScorer
 
 
 # Import IntelligenceUsageTracker for intelligence effectiveness tracking
@@ -413,6 +407,62 @@ class ManifestInjectionStorage:
                 "POSTGRES_PASSWORD environment variable not set. Run: source .env"
             )
 
+    @staticmethod
+    def _serialize_for_json(obj: Any) -> Any:
+        """
+        Recursively convert Pydantic types to JSON-serializable types.
+
+        Handles:
+        - All Pydantic URL types (HttpUrl, AnyUrl, Url) → str
+        - Pydantic models → dict
+        - dict → recursively process values
+        - list → recursively process items
+
+        Args:
+            obj: Object to serialize
+
+        Returns:
+            JSON-serializable version of obj
+        """
+        from pydantic import BaseModel
+
+        # Handle None
+        if obj is None:
+            return None
+
+        # Handle Pydantic URL types - check class name to avoid import issues
+        # This catches HttpUrl, AnyUrl, Url, and other Pydantic URL types
+        obj_type_name = type(obj).__name__
+        if "Url" in obj_type_name or obj_type_name in ("HttpUrl", "AnyUrl", "Url"):
+            return str(obj)
+
+        # Alternative: check if object has __str__ and looks like a URL
+        # This is a fallback for any URL-like objects we might have missed
+        if hasattr(obj, "__str__") and hasattr(obj, "__class__"):
+            module_name = type(obj).__module__
+            if "pydantic" in module_name and (
+                "url" in obj_type_name.lower() or "uri" in obj_type_name.lower()
+            ):
+                return str(obj)
+
+        # Handle Pydantic models
+        if isinstance(obj, BaseModel):
+            return obj.model_dump(mode="json")
+
+        # Handle dicts recursively
+        if isinstance(obj, dict):
+            return {
+                k: ManifestInjectionStorage._serialize_for_json(v)
+                for k, v in obj.items()
+            }
+
+        # Handle lists recursively
+        if isinstance(obj, (list, tuple)):
+            return [ManifestInjectionStorage._serialize_for_json(item) for item in obj]
+
+        # Handle other types (str, int, bool, etc.)
+        return obj
+
     def store_manifest_injection(
         self,
         correlation_id: UUID,
@@ -442,11 +492,17 @@ class ManifestInjectionStorage:
             import psycopg2
             import psycopg2.extras
 
+            # Serialize manifest_data to handle HttpUrl and other Pydantic types
+            manifest_data = self._serialize_for_json(manifest_data)
+
             # Extract metadata
             metadata = manifest_data.get("manifest_metadata", {})
             manifest_version = metadata.get("version", "unknown")
             generation_source = metadata.get("source", "unknown")
             is_fallback = generation_source == "fallback"
+
+            # Serialize query_times to handle any Pydantic types
+            query_times = self._serialize_for_json(query_times)
 
             # Calculate totals
             total_query_time_ms = sum(query_times.values())
@@ -460,11 +516,13 @@ class ManifestInjectionStorage:
             debug_intelligence_successes = kwargs.get("debug_intelligence_successes", 0)
             debug_intelligence_failures = kwargs.get("debug_intelligence_failures", 0)
 
-            # Collections queried
-            collections_queried = kwargs.get("collections_queried", {})
+            # Collections queried (serialize for JSON)
+            collections_queried = self._serialize_for_json(
+                kwargs.get("collections_queried", {})
+            )
 
-            # Query failures
-            query_failures = kwargs.get("query_failures", {})
+            # Query failures (serialize for JSON)
+            query_failures = self._serialize_for_json(kwargs.get("query_failures", {}))
 
             # Warnings
             warnings = kwargs.get("warnings", [])
@@ -1027,16 +1085,7 @@ class ManifestInjector:
                 )
 
         # Always query filesystem (local operation, doesn't require intelligence service)
-        # Create a dummy client for filesystem query (not actually used)
-        # Note: IntelligenceEventClient already imported at module level
-
-        dummy_client = IntelligenceEventClient(
-            bootstrap_servers=self.kafka_brokers,
-            enable_intelligence=False,
-        )
-
-        # Query filesystem first (always)
-        filesystem_result = await self._query_filesystem(dummy_client, correlation_id)
+        filesystem_result = await self._query_filesystem(correlation_id)
 
         # If intelligence disabled, return minimal manifest with filesystem
         if not self.enable_intelligence:
@@ -1075,16 +1124,16 @@ class ManifestInjector:
 
             if "patterns" in sections_to_query:
                 query_tasks["patterns"] = self._query_patterns(
-                    client, correlation_id, task_context, user_prompt
+                    correlation_id, task_context, user_prompt
                 )
 
             if "infrastructure" in sections_to_query:
                 query_tasks["infrastructure"] = self._query_infrastructure(
-                    client, correlation_id
+                    correlation_id
                 )
 
             if "models" in sections_to_query:
-                query_tasks["models"] = self._query_models(client, correlation_id)
+                query_tasks["models"] = self._query_models(correlation_id)
 
             if "database_schemas" in sections_to_query:
                 query_tasks["database_schemas"] = self._query_database_schemas(
@@ -1094,6 +1143,13 @@ class ManifestInjector:
             if "debug_intelligence" in sections_to_query:
                 query_tasks["debug_intelligence"] = self._query_debug_intelligence(
                     client, correlation_id
+                )
+
+            if "archon_search" in sections_to_query:
+                # Use user_prompt for semantic search, or default query
+                search_query = user_prompt or "ONEX patterns implementation examples"
+                query_tasks["archon_search"] = self._query_archon_search(
+                    query=search_query, limit=10
                 )
 
             # Wait for all queries with timeout
@@ -1139,46 +1195,55 @@ class ManifestInjector:
             # Stop client
             await client.stop()
 
-    async def _embed_text(self, text: str, model: str = None) -> Optional[List[float]]:
+    async def _embed_text(self, text: str, model: str = None) -> List[float]:
         """
-        Embed text using Ollama embedding model.
+        Embed text using GTE-Qwen2-1.5B embedding service.
 
         Args:
             text: Text to embed
-            model: Embedding model name (default: rjmalagon/gte-qwen2-1.5b-instruct-embed-f16 for 1536-dim)
+            model: Embedding model name (default: Alibaba-NLP/gte-Qwen2-1.5B-instruct for 1536-dim)
 
         Returns:
-            Embedding vector as list of floats, or None on error
+            Embedding vector as list of floats (1536 dimensions)
+
+        Raises:
+            RuntimeError: If embedding service is unavailable or returns an error
         """
         import aiohttp
 
         if model is None:
-            # Default to model that matches archon_vectors collection (1536 dimensions)
-            model = "rjmalagon/gte-qwen2-1.5b-instruct-embed-f16"
+            # Default to GTE-Qwen2-1.5B (1536 dimensions, matches archon_vectors collection)
+            model = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
+
+        # GTE-Qwen2 embedding service (OpenAI-compatible API)
+        embedding_url = os.environ.get(
+            "EMBEDDING_SERVICE_URL", "http://192.168.86.201:8002/v1/embeddings"
+        )
 
         try:
-            ollama_url = os.environ.get(
-                "OLLAMA_BASE_URL", "http://192.168.86.200:11434"
-            )
-            url = f"{ollama_url}/api/embeddings"
-
-            payload = {"model": model, "prompt": text}
+            payload = {
+                "input": text,
+                "model": model,
+            }
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
+                    embedding_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
-                        return data.get("embedding")
+                        # OpenAI-compatible format: data[0].embedding
+                        return data["data"][0]["embedding"]
                     else:
-                        self.logger.warning(
-                            f"Ollama embedding failed with status {response.status}"
+                        error_text = await response.text()
+                        raise RuntimeError(
+                            f"GTE-Qwen2 embedding failed with status {response.status}: {error_text}"
                         )
-                        return None
         except Exception as e:
-            self.logger.warning(f"Failed to embed text: {e}")
-            return None
+            self.logger.error(f"GTE-Qwen2 embedding service error: {e}")
+            raise RuntimeError(
+                f"Embedding service unavailable at {embedding_url}"
+            ) from e
 
     async def _query_patterns_direct_qdrant(
         self,
@@ -1219,21 +1284,29 @@ class ManifestInjector:
         # Embed user prompt for semantic search
         query_vector = None
         if user_prompt:
-            self.logger.info(
-                f"[{correlation_id}] Embedding user prompt for semantic search"
-            )
-            query_vector = await self._embed_text(user_prompt)
-            if query_vector:
+            try:
+                self.logger.info(
+                    f"[{correlation_id}] Embedding user prompt for semantic search"
+                )
+                query_vector = await self._embed_text(user_prompt)
                 self.logger.info(
                     f"[{correlation_id}] Generated embedding vector (dim={len(query_vector)})"
                 )
-            else:
-                self.logger.warning(
-                    f"[{correlation_id}] Failed to embed prompt, falling back to scroll API"
+            except Exception as e:
+                # NO FALLBACKS - fail loudly if embedding service is unavailable
+                self.logger.error(
+                    f"[{correlation_id}] GTE-Qwen2 embedding service unavailable: {e}"
                 )
+                raise RuntimeError(
+                    "Embedding service required for semantic search. "
+                    "Ensure GTE-Qwen2 service is running at http://192.168.86.201:8002"
+                ) from e
 
         try:
-            qdrant_url = os.environ.get("QDRANT_URL", str(settings.qdrant_url))
+            # Get Qdrant URL and strip trailing slashes to avoid double-slash in URL
+            qdrant_url = os.environ.get("QDRANT_URL", str(settings.qdrant_url)).rstrip(
+                "/"
+            )
 
             async with aiohttp.ClientSession() as session:
                 for collection_name in collections:
@@ -1318,6 +1391,26 @@ class ManifestInjector:
                                         if not file_path and isinstance(metadata, dict):
                                             file_path = metadata.get("file_path", "")
 
+                                        # Extract full content for code snippets (don't truncate here)
+                                        full_content = point_payload.get("content", "")
+
+                                        # Extract language information
+                                        language = point_payload.get("language", "")
+                                        if not language and isinstance(metadata, dict):
+                                            language = metadata.get("language", "")
+                                        if not language and file_path:
+                                            # Infer language from file extension
+                                            if file_path.endswith(".py"):
+                                                language = "python"
+                                            elif file_path.endswith((".ts", ".tsx")):
+                                                language = "typescript"
+                                            elif file_path.endswith((".js", ".jsx")):
+                                                language = "javascript"
+                                            elif file_path.endswith(".go"):
+                                                language = "go"
+                                            elif file_path.endswith(".rs"):
+                                                language = "rust"
+
                                         # Extract semantic score from point.score (for search API)
                                         # This is the vector similarity score from Qdrant search
                                         semantic_score = point.get("score", 0.5)
@@ -1381,9 +1474,11 @@ class ManifestInjector:
                                                     ),
                                                 )[
                                                     :500
-                                                ],  # Limit content length
+                                                ],  # Limit description length for display
                                             ),
                                             "file_path": file_path,
+                                            "content": full_content,  # Preserve full content for code snippets
+                                            "language": language,  # Language for syntax highlighting
                                             "node_types": (
                                                 node_types
                                                 if isinstance(node_types, list)
@@ -1496,25 +1591,37 @@ class ManifestInjector:
             # Apply relevance filtering if task_context and user_prompt are provided
             if task_context and user_prompt and all_patterns:
                 original_count = len(all_patterns)
-                scorer = ArchonHybridScorer()
 
-                # Use batch scoring for better performance
-                scored_patterns_list = await scorer.score_patterns_batch(
-                    patterns=all_patterns,
-                    user_prompt=user_prompt,
-                    task_context=task_context,
-                    max_concurrent=50,
-                )
-
-                # Filter by threshold (>0.3)
+                # Use Qdrant semantic scores directly (from GTE-Qwen2 vector similarity)
+                # These are already high-quality semantic scores, no need to re-score
                 relevance_threshold = 0.3
+
+                # Extract semantic_score from metadata and use as hybrid_score
+                for pattern in all_patterns:
+                    metadata = pattern.get("metadata", {})
+                    semantic_score = metadata.get("semantic_score", 0.5)
+
+                    # Map semantic_score to hybrid_score for consistency with downstream code
+                    pattern["hybrid_score"] = semantic_score
+                    pattern["score_breakdown"] = {"semantic_score": semantic_score}
+                    pattern["score_metadata"] = {
+                        "source": "qdrant_vector_similarity",
+                        "model": "GTE-Qwen2-7B-instruct",
+                    }
+
+                # Filter by semantic score threshold
                 filtered_patterns = [
                     p
-                    for p in scored_patterns_list
+                    for p in all_patterns
                     if p.get("hybrid_score", 0.0) > relevance_threshold
                 ]
 
-                # Already sorted by score (descending) from batch scoring
+                # Sort by score descending
+                filtered_patterns.sort(
+                    key=lambda p: p.get("hybrid_score", 0.0), reverse=True
+                )
+
+                # Limit to configured maximum
                 all_patterns = filtered_patterns[:limit_per_collection]
 
                 if filtered_patterns:
@@ -1522,13 +1629,13 @@ class ManifestInjector:
                         p.get("hybrid_score", 0.0) for p in filtered_patterns
                     ) / len(filtered_patterns)
                     self.logger.info(
-                        f"[{correlation_id}] Filtered patterns by relevance (Archon Hybrid Scoring): "
+                        f"[{correlation_id}] Filtered patterns by Qdrant semantic score: "
                         f"{len(all_patterns)} relevant (from {original_count} total), "
                         f"threshold={relevance_threshold}, avg_score={avg_score:.2f}"
                     )
                 else:
                     self.logger.warning(
-                        f"[{correlation_id}] No patterns met relevance threshold (>{relevance_threshold})"
+                        f"[{correlation_id}] No patterns met semantic score threshold (>{relevance_threshold})"
                     )
 
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -1557,7 +1664,6 @@ class ManifestInjector:
 
     async def _query_patterns(
         self,
-        client: IntelligenceEventClient,
         correlation_id: str,
         task_context: Optional[TaskContext] = None,
         user_prompt: Optional[str] = None,
@@ -1565,13 +1671,12 @@ class ManifestInjector:
         """
         Query available code generation patterns from BOTH collections.
 
-        Queries both execution_patterns (ONEX templates) and code_patterns
-        (real code implementations) from Qdrant vector database.
+        Queries both archon_vectors (ONEX templates) and code_generation_patterns
+        (real code implementations) from Qdrant vector database via direct HTTP.
 
-        Uses event-based approach first, falls back to direct Qdrant HTTP queries if needed.
+        Uses direct Qdrant HTTP queries (no Kafka event bus dependency).
 
         Args:
-            client: Intelligence event client
             correlation_id: Correlation ID for tracking
             task_context: Classified task context for relevance filtering (optional)
             user_prompt: Original user prompt for relevance filtering (optional)
@@ -1586,8 +1691,8 @@ class ManifestInjector:
         # Check Valkey cache first (distributed, persistent)
         if self._valkey_cache:
             cache_params = {
-                "collections": ["execution_patterns", "code_patterns"],
-                "limits": {"execution_patterns": 50, "code_patterns": 100},
+                "collections": ["archon_vectors", "code_generation_patterns"],
+                "limits": {"archon_vectors": 50, "code_generation_patterns": 100},
             }
             try:
                 cached_result = await self._valkey_cache.get(
@@ -1619,66 +1724,58 @@ class ManifestInjector:
 
         try:
             self.logger.debug(
-                f"[{correlation_id}] Querying patterns from both collections (PARALLEL)"
+                f"[{correlation_id}] Querying patterns from both collections via direct HTTP (PARALLEL)"
             )
 
-            # Execute BOTH collection queries in parallel using asyncio.gather
-            # This reduces total query time from sum(query_times) to max(query_times)
-            exec_task = client.request_code_analysis(
-                content="",  # Empty content for pattern discovery
-                source_path="node_*_*.py",  # Pattern for ONEX nodes
-                language="python",
-                options={
-                    "operation_type": "PATTERN_EXTRACTION",
-                    "include_patterns": True,
-                    "include_metrics": False,
-                    "collection_name": "execution_patterns",
-                    "limit": 50,  # Get more patterns from this collection
-                },
-                timeout_ms=self.query_timeout_ms,
+            # Execute BOTH collection queries in parallel using direct Qdrant HTTP
+            # Query archon_vectors (ONEX templates) and code_generation_patterns (real implementations)
+            archon_task = self._query_patterns_direct_qdrant(
+                correlation_id=correlation_id,
+                collections=["archon_vectors"],
+                limit_per_collection=50,
+                task_context=task_context,
+                user_prompt=user_prompt,
             )
 
-            code_task = client.request_code_analysis(
-                content="",  # Empty content for pattern discovery
-                source_path="*.py",  # All Python files
-                language="python",
-                options={
-                    "operation_type": "PATTERN_EXTRACTION",
-                    "include_patterns": True,
-                    "include_metrics": False,
-                    "collection_name": "code_patterns",
-                    "limit": 100,  # Get more patterns from this collection
-                },
-                timeout_ms=self.query_timeout_ms,
+            codegen_task = self._query_patterns_direct_qdrant(
+                correlation_id=correlation_id,
+                collections=["code_generation_patterns"],
+                limit_per_collection=100,
+                task_context=task_context,
+                user_prompt=user_prompt,
             )
 
             # Wait for both queries to complete in parallel
             self.logger.debug(
                 "Waiting for both pattern queries to complete in parallel..."
             )
-            results = await asyncio.gather(exec_task, code_task, return_exceptions=True)
-            exec_result, code_result = results
+            results = await asyncio.gather(
+                archon_task, codegen_task, return_exceptions=True
+            )
+            archon_result, codegen_result = results
 
             # Handle exceptions from gather
-            if isinstance(exec_result, Exception):
-                self.logger.warning(f"execution_patterns query failed: {exec_result}")
-                exec_result = None
-            if isinstance(code_result, Exception):
-                self.logger.warning(f"code_patterns query failed: {code_result}")
-                code_result = None
+            if isinstance(archon_result, Exception):
+                self.logger.warning(f"archon_vectors query failed: {archon_result}")
+                archon_result = {"patterns": [], "query_time_ms": 0}
+            if isinstance(codegen_result, Exception):
+                self.logger.warning(
+                    f"code_generation_patterns query failed: {codegen_result}"
+                )
+                codegen_result = {"patterns": [], "query_time_ms": 0}
 
             # Merge results from both collections
-            exec_patterns = exec_result.get("patterns", []) if exec_result else []
-            code_patterns = code_result.get("patterns", []) if code_result else []
+            archon_patterns = archon_result.get("patterns", [])
+            codegen_patterns = codegen_result.get("patterns", [])
 
-            all_patterns = exec_patterns + code_patterns
+            all_patterns = archon_patterns + codegen_patterns
 
             # Apply quality filtering if enabled
             all_patterns = await self._filter_by_quality(all_patterns)
 
             # Calculate combined query time
-            exec_time = exec_result.get("query_time_ms", 0) if exec_result else 0
-            code_time = code_result.get("query_time_ms", 0) if code_result else 0
+            exec_time = archon_result.get("query_time_ms", 0)
+            code_time = codegen_result.get("query_time_ms", 0)
             total_query_time = exec_time + code_time
 
             # Track timing
@@ -1689,8 +1786,8 @@ class ManifestInjector:
             speedup = round(total_query_time / max(elapsed_ms, 1), 1)
 
             self.logger.info(
-                f"[{correlation_id}] Pattern query results (PARALLEL): {len(exec_patterns)} from execution_patterns, "
-                f"{len(code_patterns)} from code_patterns, "
+                f"[{correlation_id}] Pattern query results (PARALLEL via direct HTTP): {len(archon_patterns)} from archon_vectors, "
+                f"{len(codegen_patterns)} from code_generation_patterns, "
                 f"{len(all_patterns)} total patterns, "
                 f"query_time={total_query_time}ms, elapsed={elapsed_ms}ms, speedup={speedup}x"
             )
@@ -1700,43 +1797,17 @@ class ManifestInjector:
                     f"[{correlation_id}] First pattern: {all_patterns[0].get('name', 'unknown')}"
                 )
             else:
-                # No patterns returned from event-based approach - try direct fallback
                 self.logger.warning(
-                    f"[{correlation_id}] Event-based pattern query returned 0 patterns, trying direct Qdrant fallback..."
+                    f"[{correlation_id}] Direct Qdrant query returned 0 patterns from both collections"
                 )
-                try:
-                    fallback_result = await self._query_patterns_direct_qdrant(
-                        correlation_id=correlation_id,
-                        collections=["code_generation_patterns"],
-                        limit_per_collection=20,
-                        task_context=task_context,
-                        user_prompt=user_prompt,
-                    )
-
-                    if fallback_result.get("patterns"):
-                        self.logger.info(
-                            f"[{correlation_id}] Direct Qdrant fallback succeeded: {len(fallback_result.get('patterns', []))} patterns"
-                        )
-                        # Cache and return fallback result
-                        if self.enable_cache and self._cache:
-                            self._cache.set("patterns", fallback_result)
-                        return fallback_result
-                    else:
-                        self.logger.warning(
-                            f"[{correlation_id}] Direct Qdrant fallback also returned no patterns"
-                        )
-                except Exception as fallback_error:
-                    self.logger.error(
-                        f"[{correlation_id}] Direct Qdrant fallback failed: {fallback_error}"
-                    )
 
             result = {
                 "patterns": all_patterns,
                 "query_time_ms": total_query_time,
                 "total_count": len(all_patterns),
                 "collections_queried": {
-                    "execution_patterns": len(exec_patterns),
-                    "code_patterns": len(code_patterns),
+                    "archon_vectors": len(archon_patterns),
+                    "code_generation_patterns": len(codegen_patterns),
                 },
             }
 
@@ -1746,15 +1817,15 @@ class ManifestInjector:
                     tracking_successes = 0
                     tracking_failures = 0
 
-                    # Track execution_patterns
-                    for i, pattern in enumerate(exec_patterns):
+                    # Track archon_vectors
+                    for i, pattern in enumerate(archon_patterns):
                         success = await self._usage_tracker.track_retrieval(
                             correlation_id=UUID(correlation_id),
                             agent_name=self.agent_name or "unknown",
                             intelligence_type="pattern",
                             intelligence_source="qdrant",
                             intelligence_name=pattern.get("name", "unknown"),
-                            collection_name="execution_patterns",
+                            collection_name="archon_vectors",
                             confidence_score=pattern.get(
                                 "confidence", pattern.get("confidence_score")
                             ),
@@ -1764,7 +1835,7 @@ class ManifestInjector:
                             intelligence_snapshot=pattern,
                             intelligence_summary=pattern.get("description", ""),
                             metadata={
-                                "source": "event-based",
+                                "source": "direct_http",
                                 "parallel_query": True,
                             },
                         )
@@ -1773,19 +1844,19 @@ class ManifestInjector:
                         else:
                             tracking_failures += 1
                             self.logger.warning(
-                                f"[{correlation_id}] Failed to track execution_pattern retrieval: "
+                                f"[{correlation_id}] Failed to track archon_vectors pattern retrieval: "
                                 f"{pattern.get('name', 'unknown')}"
                             )
 
-                    # Track code_patterns
-                    for i, pattern in enumerate(code_patterns):
+                    # Track code_generation_patterns
+                    for i, pattern in enumerate(codegen_patterns):
                         success = await self._usage_tracker.track_retrieval(
                             correlation_id=UUID(correlation_id),
                             agent_name=self.agent_name or "unknown",
                             intelligence_type="pattern",
                             intelligence_source="qdrant",
                             intelligence_name=pattern.get("name", "unknown"),
-                            collection_name="code_patterns",
+                            collection_name="code_generation_patterns",
                             confidence_score=pattern.get(
                                 "confidence", pattern.get("confidence_score")
                             ),
@@ -1795,7 +1866,7 @@ class ManifestInjector:
                             intelligence_snapshot=pattern,
                             intelligence_summary=pattern.get("description", ""),
                             metadata={
-                                "source": "event-based",
+                                "source": "direct_http",
                                 "parallel_query": True,
                             },
                         )
@@ -1804,7 +1875,7 @@ class ManifestInjector:
                         else:
                             tracking_failures += 1
                             self.logger.warning(
-                                f"[{correlation_id}] Failed to track code_pattern retrieval: "
+                                f"[{correlation_id}] Failed to track code_generation_patterns pattern retrieval: "
                                 f"{pattern.get('name', 'unknown')}"
                             )
 
@@ -1836,8 +1907,8 @@ class ManifestInjector:
             # Valkey cache (distributed, persistent)
             if self._valkey_cache:
                 cache_params = {
-                    "collections": ["execution_patterns", "code_patterns"],
-                    "limits": {"execution_patterns": 50, "code_patterns": 100},
+                    "collections": ["archon_vectors", "code_generation_patterns"],
+                    "limits": {"archon_vectors": 50, "code_generation_patterns": 100},
                 }
                 try:
                     await self._valkey_cache.set(
@@ -1859,39 +1930,14 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["patterns"] = elapsed_ms
             self._current_query_failures["patterns"] = str(e)
-            self.logger.warning(
-                f"[{correlation_id}] Pattern query via events failed ({e}), trying direct Qdrant fallback..."
+            self.logger.error(
+                f"[{correlation_id}] Pattern query via direct HTTP failed: {e}"
             )
-
-            # Try direct Qdrant fallback
-            try:
-                fallback_result = await self._query_patterns_direct_qdrant(
-                    correlation_id=correlation_id,
-                    collections=["code_generation_patterns"],
-                    limit_per_collection=20,
-                    task_context=task_context,
-                    user_prompt=user_prompt,
-                )
-
-                if fallback_result.get("patterns"):
-                    self.logger.info(
-                        f"[{correlation_id}] Direct Qdrant fallback succeeded: {len(fallback_result.get('patterns', []))} patterns"
-                    )
-                    return fallback_result
-                else:
-                    self.logger.warning(
-                        f"[{correlation_id}] Direct Qdrant fallback returned no patterns"
-                    )
-            except Exception as fallback_error:
-                self.logger.error(
-                    f"[{correlation_id}] Direct Qdrant fallback also failed: {fallback_error}"
-                )
 
             return {"patterns": [], "error": str(e)}
 
     async def _query_infrastructure(
         self,
-        client: IntelligenceEventClient,
         correlation_id: str,
     ) -> Dict[str, Any]:
         """
@@ -1901,10 +1947,10 @@ class ManifestInjector:
         - PostgreSQL databases and schemas
         - Kafka/Redpanda topics
         - Qdrant collections
+        - Memgraph graph database
         - Docker services
 
         Args:
-            client: Intelligence event client
             correlation_id: Correlation ID for tracking
 
         Returns:
@@ -1921,14 +1967,16 @@ class ManifestInjector:
             postgres_task = self._query_postgresql()
             kafka_task = self._query_kafka()
             qdrant_task = self._query_qdrant()
+            memgraph_task = self._query_memgraph()
             docker_task = self._query_docker_services()
 
             # Wait for all queries to complete
-            postgres_info, kafka_info, qdrant_info, docker_services = (
+            postgres_info, kafka_info, qdrant_info, memgraph_info, docker_services = (
                 await asyncio.gather(
                     postgres_task,
                     kafka_task,
                     qdrant_task,
+                    memgraph_task,
                     docker_task,
                     return_exceptions=True,
                 )
@@ -1947,6 +1995,10 @@ class ManifestInjector:
                 self.logger.warning(f"Qdrant query failed: {qdrant_info}")
                 qdrant_info = {"status": "unavailable", "error": str(qdrant_info)}
 
+            if isinstance(memgraph_info, Exception):
+                self.logger.warning(f"Memgraph query failed: {memgraph_info}")
+                memgraph_info = {"status": "unavailable", "error": str(memgraph_info)}
+
             if isinstance(docker_services, Exception):
                 self.logger.warning(f"Docker query failed: {docker_services}")
                 docker_services = []
@@ -1956,10 +2008,7 @@ class ManifestInjector:
                 "remote_services": {"postgresql": postgres_info, "kafka": kafka_info},
                 "local_services": {
                     "qdrant": qdrant_info,
-                    "archon_mcp": {
-                        "url": "http://192.168.86.101:8151/mcp",
-                        "note": "Archon MCP server with 114 intelligence tools",
-                    },
+                    "memgraph": memgraph_info,
                 },
                 "docker_services": docker_services,
             }
@@ -1979,7 +2028,7 @@ class ManifestInjector:
             self.logger.warning(f"[{correlation_id}] Infrastructure query failed: {e}")
             return {
                 "remote_services": {"postgresql": {}, "kafka": {}},
-                "local_services": {"qdrant": {}, "archon_mcp": {}},
+                "local_services": {"qdrant": {}, "memgraph": {}},
                 "docker_services": [],
                 "error": str(e),
             }
@@ -2109,8 +2158,8 @@ class ManifestInjector:
         try:
             import aiohttp
 
-            # Get Qdrant URL from settings
-            qdrant_url = settings.qdrant_url
+            # Get Qdrant URL from settings and strip trailing slashes to avoid double-slash in URL
+            qdrant_url = str(settings.qdrant_url).rstrip("/")
 
             # Try to fetch collections
             async with aiohttp.ClientSession() as session:
@@ -2202,9 +2251,230 @@ class ManifestInjector:
             self.logger.debug(f"Docker query failed: {e}")
             return []
 
+    async def _query_memgraph(self) -> Dict[str, Any]:
+        """
+        Query Memgraph for graph database statistics and file relationships.
+
+        Returns:
+            Dictionary with Memgraph connection info, statistics, and insights
+        """
+
+        def _blocking_memgraph_query():
+            """Blocking Memgraph operations using neo4j driver."""
+            try:
+                from neo4j import GraphDatabase
+            except ImportError:
+                return {
+                    "status": "unavailable",
+                    "error": "neo4j driver not installed (pip install neo4j)",
+                }
+
+            driver = None
+            try:
+                # Connect to Memgraph at bolt://192.168.86.101:7687
+                driver = GraphDatabase.driver("bolt://192.168.86.101:7687")
+
+                with driver.session() as session:
+                    # Query file statistics by language
+                    file_stats_result = session.run(
+                        """
+                        MATCH (f:FILE)
+                        WHERE f.language IS NOT NULL
+                        RETURN f.language as lang, count(f) as count
+                        ORDER BY count DESC
+                        LIMIT 10
+                        """
+                    )
+                    file_stats = [
+                        {"language": record["lang"], "count": record["count"]}
+                        for record in file_stats_result
+                    ]
+
+                    # Query relationship statistics
+                    rel_stats_result = session.run(
+                        """
+                        MATCH ()-[r]->()
+                        RETURN type(r) as rel_type, count(r) as count
+                        ORDER BY count DESC
+                        LIMIT 10
+                        """
+                    )
+                    relationships = [
+                        {"type": record["rel_type"], "count": record["count"]}
+                        for record in rel_stats_result
+                    ]
+
+                    # Query total entities and files
+                    total_stats_result = session.run(
+                        """
+                        MATCH (n)
+                        WITH labels(n) as labels, count(n) as count
+                        UNWIND labels as label
+                        RETURN label, sum(count) as total
+                        ORDER BY total DESC
+                        LIMIT 5
+                        """
+                    )
+                    entity_stats = [
+                        {"label": record["label"], "count": record["total"]}
+                        for record in total_stats_result
+                    ]
+
+                    # Count total files with pattern-related content
+                    pattern_files_result = session.run(
+                        """
+                        MATCH (f:FILE)
+                        WHERE f.file_path CONTAINS 'pattern' OR f.file_path CONTAINS 'node_'
+                        RETURN count(f) as pattern_file_count
+                        """
+                    )
+                    pattern_count = pattern_files_result.single()
+                    pattern_files = (
+                        pattern_count["pattern_file_count"] if pattern_count else 0
+                    )
+
+                    return {
+                        "url": "bolt://192.168.86.101:7687",
+                        "status": "connected",
+                        "file_stats": file_stats,
+                        "relationships": relationships,
+                        "entity_stats": entity_stats,
+                        "pattern_files": pattern_files,
+                        "note": f"Connected to Memgraph with {len(entity_stats)} entity types, {len(file_stats)} languages",
+                    }
+
+            except Exception as e:
+                return {
+                    "url": "bolt://192.168.86.101:7687",
+                    "status": "unavailable",
+                    "error": f"Connection failed: {str(e)}",
+                }
+            finally:
+                if driver:
+                    driver.close()
+
+        try:
+            # Run blocking I/O in thread pool
+            return await asyncio.to_thread(_blocking_memgraph_query)
+        except Exception as e:
+            self.logger.debug(f"Memgraph query failed: {e}")
+            return {
+                "url": "bolt://192.168.86.101:7687",
+                "status": "unavailable",
+                "error": str(e),
+            }
+
+    async def _query_archon_search(
+        self,
+        query: str = "ONEX patterns implementation examples",
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Query archon-search service for semantic code search.
+
+        Uses archon-search hybrid search (full-text + semantic) to find
+        relevant code examples, ONEX patterns, and implementation examples
+        from the codebase graph (Memgraph + embeddings).
+
+        Args:
+            query: Search query (default: ONEX patterns)
+            limit: Maximum results to return (default: 10)
+
+        Returns:
+            Dictionary with search results and metadata:
+            {
+                "status": "success" | "unavailable" | "error",
+                "query": str,
+                "total_results": int,
+                "returned_results": int,
+                "results": List[Dict],  # Search result objects
+                "query_time_ms": float,
+                "error": str (if error/unavailable)
+            }
+
+        Example result format:
+            {
+                "entity_id": "/path/to/file.py",
+                "entity_type": "page",
+                "title": "file.py",
+                "content": "...",  # Full file content
+                "relevance_score": 0.85,
+                "semantic_score": 0.82,
+                "project_name": "omniarchon",
+                ...
+            }
+        """
+        import time
+
+        start_time = time.time()
+        archon_search_url = "http://192.168.86.101:8055"
+
+        try:
+            import aiohttp
+
+            # Try the /search endpoint (confirmed working)
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "query": query,
+                    "limit": limit,
+                }
+
+                async with session.post(
+                    f"{archon_search_url}/search",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=5.0),
+                ) as response:
+                    query_time_ms = (time.time() - start_time) * 1000
+
+                    if response.status == 200:
+                        data = await response.json()
+
+                        return {
+                            "status": "success",
+                            "query": data.get("query", query),
+                            "mode": data.get("mode", "hybrid"),
+                            "total_results": data.get("total_results", 0),
+                            "returned_results": data.get("returned_results", 0),
+                            "results": data.get("results", []),
+                            "query_time_ms": query_time_ms,
+                        }
+                    else:
+                        error_text = await response.text()
+                        self.logger.warning(
+                            f"archon-search returned HTTP {response.status}: {error_text}"
+                        )
+                        return {
+                            "status": "unavailable",
+                            "error": f"HTTP {response.status}: {error_text}",
+                            "query_time_ms": query_time_ms,
+                        }
+
+        except ImportError:
+            return {
+                "status": "unavailable",
+                "error": "aiohttp not installed (pip install aiohttp)",
+            }
+        except asyncio.TimeoutError:
+            query_time_ms = (time.time() - start_time) * 1000
+            self.logger.warning(
+                f"archon-search query timed out after {query_time_ms:.0f}ms"
+            )
+            return {
+                "status": "unavailable",
+                "error": f"Query timed out after {query_time_ms:.0f}ms",
+                "query_time_ms": query_time_ms,
+            }
+        except Exception as e:
+            query_time_ms = (time.time() - start_time) * 1000
+            self.logger.warning(f"archon-search query failed: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "error": f"Connection failed: {str(e)}",
+                "query_time_ms": query_time_ms,
+            }
+
     async def _query_models(
         self,
-        client: IntelligenceEventClient,
         correlation_id: str,
     ) -> Dict[str, Any]:
         """
@@ -2216,7 +2486,6 @@ class ManifestInjector:
         - Model quorum configuration
 
         Args:
-            client: Intelligence event client
             correlation_id: Correlation ID for tracking
 
         Returns:
@@ -2233,12 +2502,6 @@ class ManifestInjector:
 
             # Initialize result structure
             ai_models = {}
-            onex_models = {
-                "effect": "Available",
-                "compute": "Available",
-                "reducer": "Available",
-                "orchestrator": "Available",
-            }
             intelligence_models = []
 
             # 1. Read environment variables for API keys
@@ -2354,7 +2617,6 @@ class ManifestInjector:
             # Build result
             result = {
                 "ai_models": ai_models,
-                "onex_models": onex_models,
                 "intelligence_models": intelligence_models,
             }
 
@@ -2362,7 +2624,7 @@ class ManifestInjector:
             self._current_query_times["models"] = elapsed_ms
             self.logger.info(
                 f"[{correlation_id}] Models query completed in {elapsed_ms}ms - "
-                f"Found {len(ai_models)} AI providers, {len(onex_models)} ONEX node types"
+                f"Found {len(ai_models)} AI providers"
             )
 
             return result
@@ -2374,12 +2636,6 @@ class ManifestInjector:
             self.logger.warning(f"[{correlation_id}] Model query failed: {e}")
             return {
                 "ai_models": {},
-                "onex_models": {
-                    "effect": "Available",
-                    "compute": "Available",
-                    "reducer": "Available",
-                    "orchestrator": "Available",
-                },
                 "intelligence_models": [],
                 "error": str(e),
             }
@@ -2428,7 +2684,26 @@ class ManifestInjector:
             )
 
             try:
-                # Query table schemas
+                # First, get table descriptions from pg_description
+                table_descriptions_query = """
+                    SELECT
+                        c.relname as table_name,
+                        pgd.description as table_description
+                    FROM pg_class c
+                    LEFT JOIN pg_description pgd ON pgd.objoid = c.oid AND pgd.objsubid = 0
+                    WHERE c.relkind = 'r'
+                      AND c.relnamespace = 'public'::regnamespace
+                    ORDER BY c.relname;
+                """
+
+                table_desc_rows = await conn.fetch(table_descriptions_query)
+                table_descriptions = {
+                    row["table_name"]: row["table_description"]
+                    or "No description available"
+                    for row in table_desc_rows
+                }
+
+                # Then, query table schemas (columns)
                 query = """
                     SELECT
                         table_name,
@@ -2443,12 +2718,18 @@ class ManifestInjector:
 
                 rows = await conn.fetch(query)
 
-                # Group columns by table
+                # Group columns by table and include descriptions
                 tables = {}
                 for row in rows:
                     table_name = row["table_name"]
                     if table_name not in tables:
-                        tables[table_name] = {"name": table_name, "columns": []}
+                        tables[table_name] = {
+                            "name": table_name,
+                            "purpose": table_descriptions.get(
+                                table_name, "No description available"
+                            ),
+                            "columns": [],
+                        }
 
                     tables[table_name]["columns"].append(
                         {
@@ -3067,7 +3348,6 @@ class ManifestInjector:
 
     async def _query_filesystem(
         self,
-        client: IntelligenceEventClient,
         correlation_id: str,
     ) -> Dict[str, Any]:
         """
@@ -3080,7 +3360,6 @@ class ManifestInjector:
         - File counts by type
 
         Args:
-            client: Intelligence event client (not used for filesystem scan)
             correlation_id: Correlation ID for tracking
 
         Returns:
@@ -3301,69 +3580,27 @@ class ManifestInjector:
         """
         Select manifest sections based on task intent.
 
-        Dynamically determines which manifest sections to include based on
-        the classified task intent, reducing token usage by excluding
-        irrelevant sections.
+        Returns all core sections to provide complete system context to agents.
+        Previous conditional logic was excluding critical information.
 
         Args:
-            task_context: Classified task context (None if classification failed)
+            task_context: Classified task context (unused - kept for API compatibility)
 
         Returns:
-            List of section names to include in manifest
-
-        Example:
-            >>> context = TaskContext(primary_intent=TaskIntent.DEBUG, ...)
-            >>> sections = self._select_sections_for_task(context)
-            >>> # Returns: ["debug_intelligence", "infrastructure"]
+            List of all core section names to include in manifest
         """
-        if not task_context:
-            # No context - include minimal set with debug intelligence for learning
-            self.logger.debug("No task context available, using minimal sections")
-            return ["patterns", "infrastructure", "debug_intelligence"]
+        # ALWAYS include all core sections - agents need complete context
+        sections = [
+            "patterns",  # Code patterns from Qdrant
+            "database_schemas",  # Database table structures
+            "infrastructure",  # Service connectivity info
+            "models",  # AI models and ONEX node types
+            "debug_intelligence",  # Historical workflow data
+            "archon_search",  # Semantic search capability
+        ]
 
-        sections = []
-
-        # Patterns: Include for code-related tasks
-        if task_context.primary_intent in [
-            TaskIntent.IMPLEMENT,
-            TaskIntent.REFACTOR,
-            TaskIntent.TEST,
-        ]:
-            sections.append("patterns")
-
-        # Database schemas: Include for database tasks or if tables mentioned
-        if task_context.primary_intent == TaskIntent.DATABASE or any(
-            kw in task_context.keywords for kw in ["table", "schema", "query", "sql"]
-        ):
-            sections.append("database_schemas")
-
-        # Infrastructure: Include for debug tasks or if services mentioned
-        if (
-            task_context.primary_intent == TaskIntent.DEBUG
-            or len(task_context.mentioned_services) > 0
-        ):
-            sections.append("infrastructure")
-
-        # Debug intelligence: ALWAYS include to enable learning from past executions
-        # This allows agents to learn from historical patterns regardless of task type
-        sections.append("debug_intelligence")
-
-        # Models: Include if ONEX nodes mentioned
-        if len(task_context.mentioned_node_types) > 0 or "onex" in " ".join(
-            task_context.keywords
-        ):
-            sections.append("models")
-
-        # Fallback: If no sections selected, include patterns + infrastructure + debug_intelligence
-        if not sections:
-            self.logger.debug(
-                f"No sections matched for intent {task_context.primary_intent.value}, "
-                f"using fallback sections"
-            )
-            sections = ["patterns", "infrastructure", "debug_intelligence"]
-
-        self.logger.debug(
-            f"Selected {len(sections)} sections for intent {task_context.primary_intent.value}: {sections}"
+        self.logger.info(
+            f"Including all {len(sections)} core sections for complete context"
         )
         return sections
 
@@ -3446,9 +3683,38 @@ class ManifestInjector:
         else:
             manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
 
+        # Extract archon_search results
+        archon_search_result = results.get("archon_search", {})
+        if isinstance(archon_search_result, Exception):
+            self.logger.warning(f"Archon search query failed: {archon_search_result}")
+            manifest["archon_search"] = {"error": str(archon_search_result)}
+        else:
+            manifest["archon_search"] = self._format_archon_search_result(
+                archon_search_result
+            )
+
         # Add action logging (always included - uses local context only)
         # No Kafka query needed - correlation_id and agent_name come from self
-        manifest["action_logging"] = {}
+        manifest["action_logging"] = {
+            "status": "available",
+            "framework": "ActionLogger (agents.lib.action_logger)",
+            "kafka_integration": {
+                "enabled": True,
+                "topic": "agent-actions",
+                "bootstrap_servers": os.environ.get(
+                    "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"
+                ),
+            },
+            "correlation_tracking": True,
+            "performance_overhead": "<5ms per action",
+            "features": [
+                "Tool call logging with timing",
+                "Decision logging with context",
+                "Error logging with stack traces",
+                "Success milestone tracking",
+                "Non-blocking async publishing",
+            ],
+        }
 
         return manifest
 
@@ -3489,7 +3755,13 @@ class ManifestInjector:
             group["count"] += 1
 
             # Update to highest confidence version
-            if confidence > group["pattern"].get("confidence", 0.0):
+            # Handle None confidence values (treat as 0.0)
+            current_confidence = confidence if confidence is not None else 0.0
+            existing_confidence = group["pattern"].get("confidence")
+            if existing_confidence is None:
+                existing_confidence = 0.0
+
+            if current_confidence > existing_confidence:
                 group["pattern"] = pattern
 
             # Accumulate metadata from all instances
@@ -3583,7 +3855,6 @@ class ManifestInjector:
             },
             "local_services": {
                 "qdrant": result.get("qdrant", {}),
-                "archon_mcp": result.get("archon_mcp", {}),
             },
             "docker_services": result.get("docker_services", []),
         }
@@ -3655,6 +3926,46 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
+    def _format_archon_search_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format archon-search query result into manifest structure."""
+        if result.get("status") != "success":
+            return {
+                "status": result.get("status", "error"),
+                "error": result.get("error", "Unknown error"),
+                "query_time_ms": result.get("query_time_ms", 0),
+            }
+
+        # Format search results for manifest
+        formatted_results = []
+        for item in result.get("results", [])[:5]:  # Top 5 results only
+            # Extract key information
+            formatted_results.append(
+                {
+                    "title": item.get("title", "Unknown"),
+                    "entity_id": item.get("entity_id", ""),
+                    "entity_type": item.get("entity_type", "page"),
+                    "relevance_score": item.get("relevance_score", 0.0),
+                    "semantic_score": item.get("semantic_score", 0.0),
+                    "project_name": item.get("project_name", "unknown"),
+                    # Include first 500 chars of content as preview
+                    "content_preview": (
+                        item.get("content", "")[:500] + "..."
+                        if len(item.get("content", "")) > 500
+                        else item.get("content", "")
+                    ),
+                }
+            )
+
+        return {
+            "status": "success",
+            "query": result.get("query", ""),
+            "mode": result.get("mode", "hybrid"),
+            "total_results": result.get("total_results", 0),
+            "returned_results": len(formatted_results),
+            "results": formatted_results,
+            "query_time_ms": result.get("query_time_ms", 0),
+        }
+
     def _is_cache_valid(self) -> bool:
         """
         Check if cached manifest is still valid.
@@ -3710,12 +4021,6 @@ class ManifestInjector:
                         + os.environ.get("QDRANT_PORT", "6333"),
                         "note": "Connection details only - collections unavailable",
                     },
-                    "archon_mcp": {
-                        "endpoint": os.environ.get(
-                            "ARCHON_MCP_URL", "http://localhost:8051"
-                        ),
-                        "note": "Use archon_menu() MCP tool for intelligence queries",
-                    },
                 },
             },
             "models": {
@@ -3731,6 +4036,10 @@ class ManifestInjector:
                     ]
                 },
             },
+            "archon_search": {
+                "status": "unavailable",
+                "error": "Intelligence service unavailable (fallback manifest)",
+            },
             "note": "This is a minimal fallback manifest. Full system context requires intelligence service.",
         }
 
@@ -3745,7 +4054,7 @@ class ManifestInjector:
                      If None, includes all sections.
                      Available: ['patterns', 'models', 'infrastructure',
                                 'database_schemas', 'debug_intelligence',
-                                'filesystem', 'action_logging']
+                                'filesystem', 'action_logging', 'archon_search']
 
         Returns:
             Formatted string ready for prompt injection
@@ -3786,6 +4095,7 @@ class ManifestInjector:
             "debug_intelligence": self._format_debug_intelligence,
             "filesystem": self._format_filesystem,
             "action_logging": self._format_action_logging,
+            "archon_search": self._format_archon_search,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -3804,9 +4114,6 @@ class ManifestInjector:
             output.append(
                 "Full system context requires archon-intelligence-adapter service."
             )
-            output.append(
-                "Use archon_menu() MCP tool for dynamic intelligence queries."
-            )
             output.append("")
 
         output.append("=" * 70)
@@ -3820,6 +4127,73 @@ class ManifestInjector:
             self._cached_formatted = formatted
 
         return formatted
+
+    def _extract_code_snippet(
+        self, content: str, language: str = "", max_lines: int = 15
+    ) -> str:
+        """
+        Extract a meaningful code snippet from file content.
+
+        Tries to extract the first class or function definition, falling back
+        to the first N lines if no clear definition is found.
+
+        Args:
+            content: Full file content
+            language: Programming language for language-specific extraction
+            max_lines: Maximum number of lines to include
+
+        Returns:
+            Extracted code snippet (may be truncated with "...")
+        """
+        if not content:
+            return ""
+
+        lines = content.split("\n")
+        if not lines:
+            return ""
+
+        # Remove empty lines from start
+        while lines and not lines[0].strip():
+            lines.pop(0)
+
+        if not lines:
+            return ""
+
+        # For Python, try to extract first class or function
+        if language == "python":
+            # Look for class or def keyword
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith("class ") or stripped.startswith("def "):
+                    # Found a definition, extract it with docstring if present
+                    snippet_lines = [lines[i]]
+                    j = i + 1
+
+                    # Check for docstring
+                    while j < len(lines) and j < i + max_lines:
+                        snippet_lines.append(lines[j])
+                        # Stop after docstring ends or max lines reached
+                        if '"""' in lines[j] and j > i:
+                            # Count quotes
+                            quote_count = sum(
+                                1 for k in range(i, j + 1) if '"""' in lines[k]
+                            )
+                            if quote_count >= 2:  # Docstring complete
+                                break
+                        j += 1
+
+                    # Add ellipsis if truncated
+                    if j >= len(lines) or len(snippet_lines) >= max_lines:
+                        snippet_lines.append("    ...")
+
+                    return "\n".join(snippet_lines[:max_lines])
+
+        # For other languages or if no definition found, take first N lines
+        snippet_lines = lines[:max_lines]
+        if len(lines) > max_lines:
+            snippet_lines.append("...")
+
+        return "\n".join(snippet_lines)
 
     def _format_patterns(self, patterns_data: Dict) -> str:
         """Format patterns section with grouped duplicate counts."""
@@ -3837,8 +4211,8 @@ class ManifestInjector:
         # Show collection statistics
         if collections_queried:
             output.append(
-                f"  Collections: execution_patterns ({collections_queried.get('execution_patterns', 0)}), "
-                f"code_patterns ({collections_queried.get('code_patterns', 0)})"
+                f"  Collections: archon_vectors ({collections_queried.get('archon_vectors', 0)}), "
+                f"code_generation_patterns ({collections_queried.get('code_generation_patterns', 0)})"
             )
 
             # Show deduplication metrics if duplicates were removed
@@ -3857,15 +4231,30 @@ class ManifestInjector:
             instance_count = pattern.get("instance_count", 1)
 
             # Format pattern name with instance count for duplicates
+            # Handle None values for name and confidence
+            pattern_name = pattern.get("name") or "Unnamed Pattern"
+            confidence = pattern.get("confidence")
+            confidence_str = f"{confidence:.0%}" if confidence is not None else "N/A"
+
             if instance_count > 1:
                 pattern_header = (
-                    f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence) "
+                    f"  • {pattern_name} ({confidence_str} confidence) "
                     f"[{instance_count} instances]"
                 )
             else:
-                pattern_header = f"  • {pattern['name']} ({pattern.get('confidence', 0):.0%} confidence)"
+                pattern_header = f"  • {pattern_name} ({confidence_str} confidence)"
 
             output.append(pattern_header)
+
+            # Show file path if available
+            file_path = pattern.get("file_path", pattern.get("file", ""))
+            if file_path and instance_count == 1:
+                output.append(f"    File: {file_path}")
+
+            # Show language if available
+            language = pattern.get("language", "")
+            if language:
+                output.append(f"    Language: {language}")
 
             # Show aggregated node types (from all instances)
             all_node_types = pattern.get(
@@ -3882,13 +4271,27 @@ class ManifestInjector:
                     domains_str += f", +{len(all_domains) - 3} more"
                 output.append(f"    Domains: {domains_str}")
 
-            # Show representative file (only for single instance or if needed)
-            if instance_count == 1 and pattern.get("file"):
-                output.append(f"    File: {pattern['file']}")
-            elif instance_count > 1:
+            # Show files count for multi-instance patterns
+            if instance_count > 1:
                 file_count = len(pattern.get("all_files", []))
                 if file_count > 0:
                     output.append(f"    Files: {file_count} files across services")
+
+            # Show code snippet if content is available
+            content = pattern.get("content", "")
+            if content and instance_count == 1:
+                snippet = self._extract_code_snippet(content, language)
+                if snippet:
+                    output.append("")
+                    output.append("    Code Preview:")
+                    # Add markdown code block with language syntax highlighting
+                    lang_tag = language if language else ""
+                    output.append(f"    ```{lang_tag}")
+                    # Indent each line of the snippet
+                    for line in snippet.split("\n"):
+                        output.append(f"    {line}")
+                    output.append("    ```")
+                    output.append("")
 
         if len(patterns) > display_limit:
             output.append(f"  ... and {len(patterns) - display_limit} more patterns")
@@ -4016,16 +4419,45 @@ class ManifestInjector:
             else:
                 output.append("  Qdrant: unknown (scan failed)")
 
-        # Archon MCP
-        if "archon_mcp" in local:
-            archon = local["archon_mcp"]
-            if archon is not None and archon:  # Check not empty dict
-                endpoint = archon.get("url", archon.get("endpoint", "unknown"))
-                output.append(f"  Archon MCP: {endpoint}")
-                if "note" in archon:
-                    output.append(f"    Note: {archon['note']}")
+        # Memgraph
+        if "memgraph" in local:
+            memgraph = local["memgraph"]
+            if memgraph is not None and memgraph:  # Check not empty dict
+                endpoint = memgraph.get("url", "unknown")
+                status = memgraph.get("status", "unknown")
+                output.append(f"  Memgraph: {endpoint} ({status})")
+
+                # Entity statistics
+                entity_stats = memgraph.get("entity_stats", [])
+                if entity_stats:
+                    entities_str = ", ".join(
+                        [f"{e['label']}: {e['count']}" for e in entity_stats[:3]]
+                    )
+                    output.append(f"    Entities: {entities_str}")
+
+                # File statistics by language
+                file_stats = memgraph.get("file_stats", [])
+                if file_stats:
+                    files_str = ", ".join(
+                        [f"{f['language']}: {f['count']}" for f in file_stats[:3]]
+                    )
+                    output.append(f"    Files: {files_str}")
+
+                # Relationship statistics
+                relationships = memgraph.get("relationships", [])
+                if relationships:
+                    total_rels = sum(r["count"] for r in relationships)
+                    output.append(f"    Relationships: {total_rels:,} total")
+
+                # Pattern files count
+                pattern_files = memgraph.get("pattern_files", 0)
+                if pattern_files > 0:
+                    output.append(f"    Pattern Files: {pattern_files}")
+
+                if "note" in memgraph:
+                    output.append(f"    Note: {memgraph['note']}")
             else:
-                output.append("  Archon MCP: unknown (scan failed)")
+                output.append("  Memgraph: unknown (scan failed)")
 
         return "\n".join(output)
 
@@ -4093,6 +4525,69 @@ class ManifestInjector:
                     output.append(f"    • {tool}: {error[:80]}")
                 else:
                     output.append(f"    • {tool}")
+
+        return "\n".join(output)
+
+    def _format_archon_search(self, search_data: Dict) -> str:
+        """Format archon-search section with semantic search results."""
+        output = ["ARCHON SEARCH RESULTS:"]
+
+        # Check status
+        status = search_data.get("status", "unknown")
+
+        if status == "error" or status == "unavailable":
+            error_msg = search_data.get("error", "Unknown error")
+            output.append(f"  Service: http://192.168.86.101:8055 (unavailable)")
+            output.append(f"  Status: ❌ {error_msg}")
+            return "\n".join(output)
+
+        # Show query information
+        query = search_data.get("query", "unknown")
+        mode = search_data.get("mode", "hybrid")
+        total_results = search_data.get("total_results", 0)
+        returned_results = search_data.get("returned_results", 0)
+        query_time_ms = search_data.get("query_time_ms", 0)
+
+        output.append(f"  Service: http://192.168.86.101:8055")
+        output.append(f"  Status: ✅ Available")
+        output.append(f'  Query: "{query}"')
+        output.append(f"  Mode: {mode} (full-text + semantic)")
+        output.append(f"  Results: {returned_results} of {total_results} total")
+        output.append(f"  Query Time: {query_time_ms:.0f}ms")
+        output.append("")
+
+        # Show search results
+        results = search_data.get("results", [])
+        if not results:
+            output.append("  (No results found)")
+            return "\n".join(output)
+
+        output.append("  Top Results:")
+        for i, result in enumerate(results[:5], 1):  # Top 5 results
+            title = result.get("title", "Unknown")
+            entity_id = result.get("entity_id", "")
+            entity_type = result.get("entity_type", "page")
+            relevance_score = result.get("relevance_score", 0.0)
+            semantic_score = result.get("semantic_score", 0.0)
+            project_name = result.get("project_name", "unknown")
+            content_preview = result.get("content_preview", "")
+
+            output.append(f"  {i}. {title}")
+            output.append(f"     Project: {project_name}")
+            output.append(f"     Type: {entity_type}")
+            output.append(f"     Path: {entity_id}")
+            output.append(
+                f"     Relevance: {relevance_score:.2%} | Semantic: {semantic_score:.2%}"
+            )
+
+            # Show content preview if available (first 200 chars)
+            if content_preview:
+                preview_text = content_preview[:200].strip()
+                if len(content_preview) > 200:
+                    preview_text += "..."
+                output.append(f"     Preview: {preview_text}")
+
+            output.append("")
 
         return "\n".join(output)
 
