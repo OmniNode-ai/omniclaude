@@ -40,6 +40,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Configure logging FIRST (before any logging calls)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 # Import type-safe configuration
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import settings
@@ -93,11 +99,7 @@ except ImportError:
     SLACK_NOTIFIER_AVAILABLE = False
     logging.warning("SlackNotifier not available - error notifications disabled")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# Get logger instance (basicConfig already called at module top)
 logger = logging.getLogger(__name__)
 
 
@@ -136,7 +138,7 @@ class PostgresLogger:
         self._error_count = 0
 
     async def initialize(self) -> None:
-        """Initialize database connection pool."""
+        """Initialize database connection pool with retry logic for Docker network timing issues."""
         if self._initialized:
             logger.warning("PostgresLogger already initialized")
             return
@@ -145,54 +147,106 @@ class PostgresLogger:
             logger.error("asyncpg not available - database logging disabled")
             return
 
-        logger.info(
-            f"Initializing PostgreSQL connection pool (host: {self.host}:{self.port}, db: {self.database})"
-        )
+        max_retries = 3
+        base_delay = 2.0
 
-        try:
-            self._pool = await asyncpg.create_pool(
-                host=self.host,
-                port=self.port,
-                database=self.database,
-                user=self.user,
-                password=self.password,
-                min_size=self.pool_min_size,
-                max_size=self.pool_max_size,
-                command_timeout=10.0,
-                timeout=5.0,
-            )
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    f"Initializing PostgreSQL connection pool (attempt {attempt}/{max_retries}, "
+                    f"host: {self.host}:{self.port}, db: {self.database})"
+                )
 
-            # Test connection
-            async with self._pool.acquire() as conn:
-                await conn.fetchval("SELECT 1")
+                self._pool = await asyncpg.create_pool(
+                    host=self.host,
+                    port=self.port,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password,
+                    min_size=self.pool_min_size,
+                    max_size=self.pool_max_size,
+                    command_timeout=10.0,
+                    timeout=5.0,
+                )
 
-            self._initialized = True
-            logger.info("PostgreSQL connection pool initialized successfully")
+                # Test connection
+                async with self._pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
 
-        except Exception as e:
-            logger.error(f"Failed to initialize PostgreSQL pool: {e}", exc_info=True)
-            self._initialized = False
+                self._initialized = True
+                logger.info("PostgreSQL connection pool initialized successfully")
+                return
 
-            # Send Slack notification for database connection failure
-            if SLACK_NOTIFIER_AVAILABLE:
-                try:
-                    notifier = get_slack_notifier()
-                    import asyncio
-
-                    asyncio.create_task(
-                        notifier.send_error_notification(
-                            error=e,
-                            context={
-                                "service": "agent_router_event_service",
-                                "operation": "postgres_initialization",
-                                "db_host": self.host,
-                                "db_port": self.port,
-                                "db_name": self.database,
-                            },
-                        )
+            except (ConnectionRefusedError, asyncio.TimeoutError, OSError) as e:
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"PostgreSQL pool initialization failed (attempt {attempt}/{max_retries}): {e}. "
+                        f"Retrying in {delay}s... (Docker network may still be initializing)"
                     )
-                except Exception as notify_error:
-                    logger.debug(f"Failed to send Slack notification: {notify_error}")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        f"Failed to initialize PostgreSQL pool after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+                    self._initialized = False
+
+                    # Send Slack notification for database connection failure
+                    if SLACK_NOTIFIER_AVAILABLE:
+                        try:
+                            notifier = get_slack_notifier()
+
+                            asyncio.create_task(
+                                notifier.send_error_notification(
+                                    error=e,
+                                    context={
+                                        "service": "agent_router_event_service",
+                                        "operation": "postgres_initialization",
+                                        "db_host": self.host,
+                                        "db_port": self.port,
+                                        "db_name": self.database,
+                                        "attempts": max_retries,
+                                    },
+                                )
+                            )
+                        except Exception as notify_error:
+                            logger.debug(
+                                f"Failed to send Slack notification: {notify_error}"
+                            )
+
+            except Exception as e:
+                # Non-connection errors (auth, config, etc.) - fail immediately
+                logger.error(
+                    f"Failed to initialize PostgreSQL pool (non-retryable error): {e}",
+                    exc_info=True,
+                )
+                self._initialized = False
+
+                # Send Slack notification for database connection failure
+                if SLACK_NOTIFIER_AVAILABLE:
+                    try:
+                        notifier = get_slack_notifier()
+
+                        asyncio.create_task(
+                            notifier.send_error_notification(
+                                error=e,
+                                context={
+                                    "service": "agent_router_event_service",
+                                    "operation": "postgres_initialization",
+                                    "db_host": self.host,
+                                    "db_port": self.port,
+                                    "db_name": self.database,
+                                    "error_type": "non_retryable",
+                                },
+                            )
+                        )
+                    except Exception as notify_error:
+                        logger.debug(
+                            f"Failed to send Slack notification: {notify_error}"
+                        )
+
+                return  # Exit retry loop on non-retryable errors
 
     async def close(self) -> None:
         """Close database connection pool."""
