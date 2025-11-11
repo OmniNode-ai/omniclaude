@@ -3,25 +3,6 @@
 # Tests actual database operations, not just container status
 set -e
 
-# Ensure cleanup runs even on failure or interruption
-cleanup_test_data() {
-    if [ -n "$TEST_ID" ]; then
-        echo ""
-        echo "🧹 Cleaning up test data for correlation_id: $TEST_ID"
-        PGPASSWORD=$POSTGRES_PASSWORD psql \
-            -h $POSTGRES_HOST \
-            -p $POSTGRES_PORT \
-            -U $POSTGRES_USER \
-            -d $POSTGRES_DATABASE \
-            -c "DELETE FROM agent_actions WHERE correlation_id='$TEST_ID'" \
-            > /dev/null 2>&1 || true
-        echo "✅ Cleanup complete"
-    fi
-}
-
-# Register cleanup to run on EXIT (success, failure, or interrupt)
-trap cleanup_test_data EXIT
-
 # Load environment variables
 if [ ! -f .env ]; then
     echo "❌ Error: .env file not found"
@@ -37,10 +18,6 @@ if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_USER" ]
     echo "Required: POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_DATABASE, POSTGRES_PASSWORD"
     exit 1
 fi
-
-# Configurable thresholds (with sensible defaults)
-POSTGRES_LATENCY_EXCELLENT_MS="${POSTGRES_LATENCY_EXCELLENT_MS:-1000}"
-POSTGRES_LATENCY_ACCEPTABLE_MS="${POSTGRES_LATENCY_ACCEPTABLE_MS:-3000}"
 
 echo "=== PostgreSQL Functional Test ==="
 echo "Host: $POSTGRES_HOST:$POSTGRES_PORT"
@@ -113,7 +90,14 @@ else
     exit 1
 fi
 
-# Note: Cleanup is automatic via EXIT trap (see cleanup_test_data function)
+# Cleanup
+echo -n "  Cleaning up test data... "
+if PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE -c "DELETE FROM agent_actions WHERE correlation_id='$TEST_ID'" > /dev/null 2>&1; then
+    echo "✅ Cleaned"
+else
+    echo "❌ Cleanup failed"
+    exit 1
+fi
 
 # 4. Performance checks
 echo ""
@@ -131,9 +115,9 @@ PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTG
 END_TIME=$(date +%s%N)
 LATENCY_MS=$(( (END_TIME - START_TIME) / 1000000 ))
 
-if [ $LATENCY_MS -lt $POSTGRES_LATENCY_EXCELLENT_MS ]; then
+if [ $LATENCY_MS -lt 1000 ]; then
     echo "✅ ${LATENCY_MS}ms (excellent)"
-elif [ $LATENCY_MS -lt $POSTGRES_LATENCY_ACCEPTABLE_MS ]; then
+elif [ $LATENCY_MS -lt 3000 ]; then
     echo "⚠️  ${LATENCY_MS}ms (acceptable)"
 else
     echo "❌ ${LATENCY_MS}ms (slow)"

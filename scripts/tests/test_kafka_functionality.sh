@@ -50,7 +50,7 @@ fi
 TEST_TOPIC="test-kafka-functional-$(date +%s)"
 TEST_CORRELATION_ID="test-corr-$(uuidgen 2>/dev/null || echo "$(date +%s)-$$")"
 TEST_MESSAGE="{\"correlation_id\":\"${TEST_CORRELATION_ID}\",\"test\":\"message\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
-CONSUME_TIMEOUT="${KAFKA_CONSUME_TIMEOUT:-5}"
+CONSUME_TIMEOUT=5
 
 echo "======================================================================="
 echo "Kafka Functional Test"
@@ -145,11 +145,11 @@ else
 fi
 echo ""
 
-# Test 5: Critical Topic Verification
-echo "TEST 5: Critical Topic Verification"
+# Test 5: Topic Verification
+echo "TEST 5: Topic Verification"
 echo "-----------------------------------"
 
-# Define critical topics
+# Define critical topics (must exist for core functionality)
 CRITICAL_TOPICS=(
     "agent-actions"
     "agent.routing.requested.v1"
@@ -158,16 +158,31 @@ CRITICAL_TOPICS=(
     "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
     "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
     "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
-    "documentation-changed"
     "agent-transformation-events"
     "router-performance-metrics"
 )
 
+# Define optional topics (will be auto-created on first publish)
+OPTIONAL_TOPICS=(
+    "documentation-changed"
+)
+
+info "Critical Topics:"
 for topic in "${CRITICAL_TOPICS[@]}"; do
     if echo "${TOPIC_LIST}" | grep -q "^${topic}$"; then
         pass "${topic}"
     else
-        warn "${topic} (not found - may need creation)"
+        fail "${topic} (missing - required for core functionality)"
+    fi
+done
+
+info ""
+info "Optional Topics (auto-created on first use):"
+for topic in "${OPTIONAL_TOPICS[@]}"; do
+    if echo "${TOPIC_LIST}" | grep -q "^${topic}$"; then
+        pass "${topic}"
+    else
+        info "  ${topic} (not yet created - will auto-create on first publish)"
     fi
 done
 echo ""
@@ -199,56 +214,17 @@ echo ""
 # Test 7: Cleanup
 echo "TEST 7: Cleanup"
 echo "-----------------------------------"
-
-# Try multiple cleanup methods in order of preference
-CLEANUP_SUCCESS=false
-
-# Method 1: SSH to remote server and use docker exec (most reliable)
-# Extract hostname from KAFKA_BOOTSTRAP_SERVERS (e.g., 192.168.86.200:29092)
-KAFKA_HOST=$(echo "${KAFKA_BOOTSTRAP_SERVERS}" | sed 's|:.*||')
-
-# Configurable list of local hosts (can be overridden via environment)
-LOCAL_KAFKA_HOSTS="${LOCAL_KAFKA_HOSTS:-localhost,127.0.0.1}"
-
-# Only attempt SSH if we have a remote host (not in local list)
-if [[ ! "$LOCAL_KAFKA_HOSTS" =~ (^|,)"${KAFKA_HOST}"(,|$) ]]; then
-    # Try SSH with common usernames (assumes SSH keys are configured)
-    for SSH_USER in jonah $USER; do
-        if ssh -o ConnectTimeout=2 -o BatchMode=yes "${SSH_USER}@${KAFKA_HOST}" "docker ps --format '{{.Names}}' | grep -q redpanda" 2>/dev/null; then
-            if ssh "${SSH_USER}@${KAFKA_HOST}" "docker exec \$(docker ps --format '{{.Names}}' | grep redpanda | head -1) rpk topic delete ${TEST_TOPIC}" 2>/dev/null; then
-                pass "Deleted test topic via SSH: ${TEST_TOPIC}"
-                CLEANUP_SUCCESS=true
-                break
-            fi
-        fi
-    done
-fi
-
-# Method 2: Use kafka-topics CLI if available (works with remote Kafka/Redpanda)
-if [ "$CLEANUP_SUCCESS" = false ] && command -v kafka-topics &> /dev/null; then
-    if kafka-topics --bootstrap-server "${KAFKA_BOOTSTRAP_SERVERS}" --delete --topic "${TEST_TOPIC}" 2>/dev/null; then
-        pass "Deleted test topic via kafka-topics CLI: ${TEST_TOPIC}"
-        CLEANUP_SUCCESS=true
-    fi
-fi
-
-# Method 3: Local docker access (for local Redpanda/Kafka)
-if [ "$CLEANUP_SUCCESS" = false ]; then
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "redpanda\|kafka"; then
-        CONTAINER=$(docker ps --format '{{.Names}}' | grep -E "redpanda|kafka" | head -1)
-        if [ -n "${CONTAINER}" ]; then
-            if docker exec "${CONTAINER}" rpk topic delete "${TEST_TOPIC}" 2>/dev/null; then
-                pass "Deleted test topic via local Docker: ${TEST_TOPIC}"
-                CLEANUP_SUCCESS=true
-            fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "redpanda\|kafka"; then
+    CONTAINER=$(docker ps --format '{{.Names}}' | grep -E "redpanda|kafka" | head -1)
+    if [ -n "${CONTAINER}" ]; then
+        if docker exec "${CONTAINER}" rpk topic delete "${TEST_TOPIC}" 2>/dev/null; then
+            pass "Deleted test topic: ${TEST_TOPIC}"
+        else
+            warn "Could not delete test topic (may need manual cleanup)"
         fi
     fi
-fi
-
-# Method 4: Inform about manual cleanup if automated methods failed
-if [ "$CLEANUP_SUCCESS" = false ]; then
-    warn "Automated cleanup not available - test topic remains: ${TEST_TOPIC}"
-    info "Manual cleanup: ssh ${KAFKA_HOST} 'docker exec \$(docker ps --format '{{.Names}}' | grep redpanda) rpk topic delete ${TEST_TOPIC}'"
+else
+    warn "Cannot delete test topic (no Kafka/Redpanda container access)"
 fi
 echo ""
 
