@@ -128,7 +128,7 @@ class ArchonHybridScorer:
         """
         # Skip API if consecutively failing
         if not self._api_available:
-            logger.warning("Archon API marked as unavailable, using fallback")
+            logger.debug("Archon API unavailable, using fallback scoring")
             return await self._fallback_scoring(pattern, task_context)
 
         # Try API scoring with retries
@@ -158,6 +158,10 @@ class ArchonHybridScorer:
                     # Bad request - don't retry
                     logger.error(f"Invalid input to Archon API: {e.response.text}")
                     break
+                elif e.response.status_code == 404:
+                    # Not found - endpoint doesn't exist, silently fall back
+                    logger.debug(f"Archon API endpoint not found (404), using fallback")
+                    break
                 elif e.response.status_code >= 500:
                     # Server error - retry
                     logger.warning(
@@ -176,10 +180,14 @@ class ArchonHybridScorer:
         # All retries failed - mark API as unavailable and use fallback
         self._consecutive_failures += 1
 
-        if self._consecutive_failures >= self._max_consecutive_failures:
-            logger.error(
+        if (
+            self._consecutive_failures >= self._max_consecutive_failures
+            and self._api_available
+        ):
+            # Log ONCE when transitioning to unavailable state
+            logger.warning(
                 f"Archon API failed {self._consecutive_failures} times consecutively, "
-                f"marking as unavailable"
+                f"marking as unavailable and using fallback"
             )
             self._api_available = False
 

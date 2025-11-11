@@ -4,9 +4,9 @@
 # Integration: agent-polymorphic-agent (Polly) dynamic transformation system
 
 schema_version: "1.0.0"
-total_agents: 51
+total_agents: 52
 registry_type: "dynamic_role_system"
-last_updated: "2025-10-28"
+last_updated: "2025-11-10"
 
 # Registry Metadata
 registry_info:
@@ -47,6 +47,11 @@ categories:
     description: "Documentation and knowledge agents"
     count: 5
     priority: "low"
+
+  content_processing:
+    description: "Content processing and summarization agents"
+    count: 1
+    priority: "medium"
 
 # Agent Registry
 agents:
@@ -345,6 +350,20 @@ agents:
     activation_triggers: ["create PR workflow", "systematic PR creation", "complete PR process", "PR with validation", "full PR workflow", "comprehensive PR creation"]
     domain_context: "pull_request_workflow_automation"
     specialization_level: "specialist"
+
+  content-summarizer:
+    name: "agent-content-summarizer"
+    title: "Content Summarizer Specialist"
+    description: "Intelligent content summarization with multiple strategies for handling large text content, deployment logs, API responses, and documentation using NodeContentSummarizerEffect"
+    category: "content_processing"
+    color: "teal"
+    task_agent_type: "content_summarizer"
+    definition_path: "agent-definitions/content-summarizer.yaml"
+    priority: "medium"
+    capabilities: ["content_summarization", "intelligent_extraction", "log_analysis", "text_reduction", "structure_preservation", "key_information_extraction"]
+    activation_triggers: ["summarize", "summarize content", "reduce text", "condense", "extract key information", "summarize log", "summarize deployment", "reduce output", "make summary", "content summarization", "intelligent summary", "extract key lines"]
+    domain_context: "content_processing"
+    specialization_level: "expert"
 
 # Dynamic Transformation Configuration
 transformation_config:

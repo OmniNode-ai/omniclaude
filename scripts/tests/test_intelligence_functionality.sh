@@ -89,11 +89,15 @@ echo ""
 echo "TEST 2: Collection Verification"
 echo "--------------------------------"
 
-COLLECTIONS=("archon_vectors" "code_generation_patterns" "archon-intelligence" "quality_vectors")
+# Active collections (should have data)
+ACTIVE_COLLECTIONS=("archon_vectors" "code_generation_patterns")
+# Planned collections (expected to be empty)
+PLANNED_COLLECTIONS=("archon-intelligence" "quality_vectors")
 COLLECTION_STATS_FILE="/tmp/qdrant_collection_stats.json"
 
-for collection in "${COLLECTIONS[@]}"; do
-    echo -n "Checking collection: $collection... "
+echo "Active Collections (should have data):"
+for collection in "${ACTIVE_COLLECTIONS[@]}"; do
+    echo -n "  Checking collection: $collection... "
 
     if curl -sf "$QDRANT_URL/collections/$collection" > "$COLLECTION_STATS_FILE" 2>&1; then
         if jq -e '.result' "$COLLECTION_STATS_FILE" > /dev/null 2>&1; then
@@ -103,13 +107,36 @@ for collection in "${COLLECTIONS[@]}"; do
             if [ "$POINTS_COUNT" -gt 0 ]; then
                 pass_test "$collection exists with $POINTS_COUNT vectors"
             else
-                warn_test "$collection exists but is empty (0 vectors)"
+                warn_test "$collection exists but is empty (0 vectors) - should be populated!"
             fi
         else
             fail_test "$collection - invalid response"
         fi
     else
-        warn_test "$collection does not exist (this may be expected)"
+        fail_test "$collection does not exist - required for pattern discovery!"
+    fi
+done
+
+echo ""
+echo "Planned Collections (reserved for future use):"
+for collection in "${PLANNED_COLLECTIONS[@]}"; do
+    echo -n "  Checking collection: $collection... "
+
+    if curl -sf "$QDRANT_URL/collections/$collection" > "$COLLECTION_STATS_FILE" 2>&1; then
+        if jq -e '.result' "$COLLECTION_STATS_FILE" > /dev/null 2>&1; then
+            POINTS_COUNT=$(jq -r '.result.points_count' "$COLLECTION_STATS_FILE")
+            VECTORS_COUNT=$(jq -r '.result.vectors_count // .result.points_count' "$COLLECTION_STATS_FILE")
+
+            if [ "$POINTS_COUNT" -gt 0 ]; then
+                echo -e "${GREEN}✅ $collection has $POINTS_COUNT vectors (populated)${NC}"
+            else
+                echo -e "${GREEN}ℹ️  $collection exists and is empty (as expected - planned for future use)${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  $collection - invalid response${NC}"
+        fi
+    else
+        echo -e "${GREEN}ℹ️  $collection does not exist yet (will be created when needed)${NC}"
     fi
 done
 
@@ -184,17 +211,19 @@ fi
 echo ""
 
 # ============================================
-# TEST 4: Manifest Injection (Lightweight)
+# TEST 4: Manifest Injection (Async)
 # ============================================
-echo "TEST 4: Manifest Injection (Lightweight Test)"
+echo "TEST 4: Manifest Injection (Async Test)"
 echo "-----------------------------------------------"
 
-echo "Testing ManifestInjector availability and basic functionality..."
+echo "Testing async manifest injection with real intelligence gathering..."
 
 python3 << EOF
 import sys
 import os
+import asyncio
 from pathlib import Path
+from datetime import datetime, UTC
 
 # Add project paths
 project_root = Path("$PROJECT_ROOT")
@@ -206,56 +235,57 @@ os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 os.environ.setdefault("POSTGRES_HOST", "192.168.86.200")
 os.environ.setdefault("POSTGRES_PORT", "5436")
 
-try:
-    # Test 1: Check if manifest_injector module exists
-    print("Checking if manifest_injector.py exists...")
-    manifest_file = project_root / "agents" / "lib" / "manifest_injector.py"
-    if manifest_file.exists():
-        print(f"✅ manifest_injector.py found at {manifest_file}")
-    else:
-        print(f"❌ manifest_injector.py not found")
-        sys.exit(1)
-
-    # Test 2: Try to import (may fail due to config issues)
-    print("\nAttempting to import ManifestInjector...")
+async def test_manifest_injection():
     try:
-        from manifest_injector import ManifestInjector
-        print("✅ ManifestInjector imported successfully")
+        from manifest_injector import inject_manifest_async
 
-        # Test 3: Check required methods exist
-        required_methods = ['generate_manifest']
-        for method in required_methods:
-            if hasattr(ManifestInjector, method):
-                print(f"✅ Method '{method}' exists")
-            else:
-                print(f"❌ Method '{method}' missing")
-                sys.exit(1)
+        # Generate test correlation ID
+        correlation_id = f"test-intelligence-{datetime.now(UTC).isoformat()}"
 
-        print("\n✅ Manifest injection infrastructure is available")
-        print("   (Full async test skipped - requires running services)")
-        sys.exit(0)
+        print(f"Testing manifest injection...")
+        print(f"Correlation ID: {correlation_id}")
 
-    except ImportError as e:
-        if "circular import" in str(e) or "reload_settings" in str(e):
-            print(f"⚠️  Import issue detected (likely circular import in config): {e}")
-            print("   This is a known issue and doesn't affect runtime functionality")
-            print("   manifest_injector.py exists and will work when services are running")
-            sys.exit(0)  # Don't fail test for this
-        else:
-            print(f"❌ Failed to import: {e}")
+        # Run manifest injection
+        import time
+        start = time.time()
+        manifest = await inject_manifest_async(correlation_id)
+        elapsed_ms = (time.time() - start) * 1000
+
+        # Validate results
+        if not manifest or len(manifest) < 100:
+            print(f"❌ Manifest generation failed (length: {len(manifest) if manifest else 0})")
             sys.exit(1)
 
-except Exception as e:
-    print(f"❌ Test failed: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+        print(f"✅ Manifest generated: {len(manifest)} characters")
+        print(f"✅ Query time: {elapsed_ms:.0f}ms", end="")
+
+        if elapsed_ms < 2000:
+            print(" (excellent)")
+        elif elapsed_ms < 5000:
+            print(" (acceptable)")
+        else:
+            print(" (slow but functional)")
+
+        # Check for patterns in manifest
+        pattern_count = manifest.count("pattern") + manifest.count("Pattern")
+        if pattern_count > 0:
+            print(f"✅ Patterns found in manifest: ~{pattern_count} references")
+
+        sys.exit(0)
+
+    except Exception as e:
+        print(f"❌ Manifest injection test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+asyncio.run(test_manifest_injection())
 EOF
 
 if [ $? -eq 0 ]; then
-    pass_test "Manifest injection infrastructure available"
+    pass_test "Manifest injection test passed"
 else
-    fail_test "Manifest injection infrastructure check failed"
+    fail_test "Manifest injection test failed"
 fi
 
 echo ""

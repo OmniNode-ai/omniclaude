@@ -84,14 +84,7 @@ MOCK_MODELS_RESPONSE = {
             {"name": "Google Gemini", "models": ["gemini-pro", "gemini-flash"]},
         ]
     },
-    "onex_models": {
-        "node_types": [
-            {"name": "EFFECT", "naming_pattern": "Node<Name>Effect"},
-            {"name": "COMPUTE", "naming_pattern": "Node<Name>Compute"},
-            {"name": "REDUCER", "naming_pattern": "Node<Name>Reducer"},
-            {"name": "ORCHESTRATOR", "naming_pattern": "Node<Name>Orchestrator"},
-        ]
-    },
+    "intelligence_models": [],
 }
 
 MOCK_DATABASE_SCHEMAS_RESPONSE = {
@@ -132,10 +125,10 @@ class MockIntelligenceEventClient:
 
         if operation == "PATTERN_EXTRACTION":
             # Return different patterns based on collection_name
-            collection_name = options.get("collection_name", "execution_patterns")
-            if collection_name == "execution_patterns":
+            collection_name = options.get("collection_name", "archon_vectors")
+            if collection_name == "archon_vectors":
                 return MOCK_EXECUTION_PATTERNS_RESPONSE
-            elif collection_name == "code_patterns":
+            elif collection_name == "code_generation_patterns":
                 return MOCK_CODE_PATTERNS_RESPONSE
             else:
                 return {"patterns": [], "query_time_ms": 0}
@@ -151,16 +144,119 @@ class MockIntelligenceEventClient:
 
 @pytest.fixture
 def _mock_intelligence_client():
-    """Fixture to mock IntelligenceEventClient."""
-    with patch(
-        "agents.lib.manifest_injector.IntelligenceEventClient",
-        MockIntelligenceEventClient,
+    """Fixture to mock IntelligenceEventClient and Qdrant HTTP calls."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    def create_mock_response(url):
+        """Create a mock response based on URL."""
+        mock_response = AsyncMock()
+        mock_response.status = 200
+
+        # Determine which collection is being queried from the URL
+        if "archon_vectors" in url:
+            # Return 2 unique patterns from archon_vectors
+            mock_response.json = AsyncMock(
+                return_value={
+                    "result": {
+                        "points": [
+                            {
+                                "id": "archon_pattern_1",
+                                "payload": {
+                                    "name": "CRUD Pattern",
+                                    "file_path": "node_crud_effect.py",
+                                    "description": "Standard CRUD operations",
+                                    "node_types": ["EFFECT"],
+                                    "confidence": 0.95,
+                                    "use_cases": ["database operations"],
+                                },
+                            },
+                            {
+                                "id": "archon_pattern_2",
+                                "payload": {
+                                    "name": "Transformation Pattern",
+                                    "file_path": "node_transform_compute.py",
+                                    "description": "Data transformation",
+                                    "node_types": ["COMPUTE"],
+                                    "confidence": 0.92,
+                                    "use_cases": ["data processing"],
+                                },
+                            },
+                        ],
+                        "next_page_offset": None,
+                    }
+                }
+            )
+        elif "code_generation_patterns" in url:
+            # Return 2 unique patterns from code_generation_patterns
+            mock_response.json = AsyncMock(
+                return_value={
+                    "result": {
+                        "points": [
+                            {
+                                "id": "codegen_pattern_1",
+                                "payload": {
+                                    "name": "Aggregation Pattern",
+                                    "file_path": "node_aggregate_reducer.py",
+                                    "description": "Data aggregation",
+                                    "node_types": ["REDUCER"],
+                                    "confidence": 0.88,
+                                    "use_cases": ["analytics"],
+                                },
+                            },
+                            {
+                                "id": "codegen_pattern_2",
+                                "payload": {
+                                    "name": "Orchestration Pattern",
+                                    "file_path": "node_orchestrate_orchestrator.py",
+                                    "description": "Workflow orchestration",
+                                    "node_types": ["ORCHESTRATOR"],
+                                    "confidence": 0.91,
+                                    "use_cases": ["workflows"],
+                                },
+                            },
+                        ],
+                        "next_page_offset": None,
+                    }
+                }
+            )
+        else:
+            # Unknown collection, return empty
+            mock_response.json = AsyncMock(
+                return_value={"result": {"points": [], "next_page_offset": None}}
+            )
+
+        return mock_response
+
+    def mock_post(url, json=None, **kwargs):
+        """Mock session.post() to return an async context manager."""
+        mock_response = create_mock_response(url)
+
+        # Create a mock that acts as an async context manager
+        mock_ctx_manager = MagicMock()
+        mock_ctx_manager.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_ctx_manager.__aexit__ = AsyncMock(return_value=None)
+
+        return mock_ctx_manager
+
+    # Create mock aiohttp session
+    mock_session = MagicMock()
+    mock_session.post = MagicMock(side_effect=mock_post)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            "agents.lib.manifest_injector.IntelligenceEventClient",
+            MockIntelligenceEventClient,
+        ),
+        patch("aiohttp.ClientSession", return_value=mock_session),
     ):
         yield
 
 
 @pytest.mark.asyncio
-async def test_generate_dynamic_manifest_async(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_generate_dynamic_manifest_async():
     """Test async manifest generation with event bus."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -176,7 +272,8 @@ async def test_generate_dynamic_manifest_async(_mock_intelligence_client):
     assert manifest["manifest_metadata"]["source"] == "archon-intelligence-adapter"
 
 
-def test_generate_dynamic_manifest_sync(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_generate_dynamic_manifest_sync():
     """Test synchronous manifest generation (wrapper)."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -190,7 +287,8 @@ def test_generate_dynamic_manifest_sync(_mock_intelligence_client):
     assert "models" in manifest
 
 
-def test_format_for_prompt_with_data(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_for_prompt_with_data():
     """Test formatting manifest for prompt injection."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -207,7 +305,8 @@ def test_format_for_prompt_with_data(_mock_intelligence_client):
     assert "AI MODELS & DATA MODELS" in formatted
 
 
-def test_format_for_prompt_selective_sections(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_for_prompt_selective_sections():
     """Test formatting specific sections only."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -222,7 +321,8 @@ def test_format_for_prompt_selective_sections(_mock_intelligence_client):
     assert "INFRASTRUCTURE TOPOLOGY" not in formatted
 
 
-def test_format_for_prompt_multiple_sections(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_for_prompt_multiple_sections():
     """Test formatting multiple specific sections."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -238,7 +338,8 @@ def test_format_for_prompt_multiple_sections(_mock_intelligence_client):
     assert "AI MODELS & DATA MODELS" not in formatted
 
 
-def test_manifest_summary(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_summary():
     """Test manifest summary statistics."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -255,7 +356,8 @@ def test_manifest_summary(_mock_intelligence_client):
     assert summary["cache_valid"] is True
 
 
-def test_manifest_caching(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_caching():
     """Test that manifest is cached after first generation."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -271,7 +373,8 @@ def test_manifest_caching(_mock_intelligence_client):
     assert injector._is_cache_valid()
 
 
-def test_manifest_patterns_section(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_patterns_section():
     """Test patterns section formatting."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -287,7 +390,8 @@ def test_manifest_patterns_section(_mock_intelligence_client):
     assert "Transformation Pattern" in formatted
 
 
-def test_manifest_infrastructure_section(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_infrastructure_section():
     """Test infrastructure section formatting."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -304,7 +408,8 @@ def test_manifest_infrastructure_section(_mock_intelligence_client):
     assert "Qdrant" in formatted
 
 
-def test_manifest_contains_all_sections(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_contains_all_sections():
     """Test that formatted output contains all expected sections."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -325,7 +430,8 @@ def test_manifest_contains_all_sections(_mock_intelligence_client):
         assert section in formatted, f"Missing section: {section}"
 
 
-def test_manifest_selective_no_cache(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_selective_no_cache():
     """Test that selective sections don't use full cache."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -344,7 +450,8 @@ def test_manifest_selective_no_cache(_mock_intelligence_client):
     assert len(selective_formatted) < len(full_formatted)
 
 
-def test_manifest_metadata_extraction(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_manifest_metadata_extraction():
     """Test that manifest metadata can be extracted."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -359,7 +466,8 @@ def test_manifest_metadata_extraction(_mock_intelligence_client):
     assert "target_agents" in metadata
 
 
-def test_inject_manifest_convenience_function(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_inject_manifest_convenience_function():
     """Test convenience function for quick manifest injection."""
     formatted = inject_manifest()
 
@@ -367,7 +475,8 @@ def test_inject_manifest_convenience_function(_mock_intelligence_client):
     assert "END SYSTEM MANIFEST" in formatted
 
 
-def test_inject_manifest_with_sections(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_inject_manifest_with_sections():
     """Test convenience function with selective sections."""
     formatted = inject_manifest(sections=["patterns", "models"])
 
@@ -376,7 +485,8 @@ def test_inject_manifest_with_sections(_mock_intelligence_client):
     assert "INFRASTRUCTURE TOPOLOGY" not in formatted
 
 
-def test_inject_manifest_with_agent_name(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_inject_manifest_with_agent_name():
     """Test convenience function with agent_name parameter."""
     # Test with agent_name
     formatted = inject_manifest(agent_name="test-agent")
@@ -412,7 +522,8 @@ def test_minimal_manifest_fallback():
 
 
 @pytest.mark.asyncio
-async def test_query_timeout_handling(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_query_timeout_handling():
     """Test timeout handling for event bus queries."""
     injector = ManifestInjector(enable_intelligence=True, query_timeout_ms=100)
     correlation_id = str(uuid.uuid4())
@@ -424,7 +535,8 @@ async def test_query_timeout_handling(_mock_intelligence_client):
     assert "manifest_metadata" in manifest
 
 
-def test_cache_validity(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_cache_validity():
     """Test cache TTL and validity checking."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -441,7 +553,8 @@ def test_cache_validity(_mock_intelligence_client):
     assert injector._last_update is not None
 
 
-def test_force_refresh_ignores_cache(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_force_refresh_ignores_cache():
     """Test that force_refresh bypasses cache."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -464,7 +577,8 @@ def test_force_refresh_ignores_cache(_mock_intelligence_client):
 
 
 @pytest.mark.asyncio
-async def test_event_bus_client_lifecycle(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_event_bus_client_lifecycle():
     """Test that event bus client is properly started and stopped."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -551,8 +665,9 @@ def test_format_for_prompt_without_loading():
     assert "fallback" in formatted.lower() or "minimal" in formatted.lower()
 
 
-def test_dual_collection_query(_mock_intelligence_client):
-    """Test that both execution_patterns and code_patterns collections are queried."""
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_dual_collection_query():
+    """Test that both archon_vectors and code_generation_patterns collections are queried."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
 
@@ -563,19 +678,21 @@ def test_dual_collection_query(_mock_intelligence_client):
     patterns = manifest.get("patterns", {})
     all_patterns = patterns.get("available", [])
 
-    # Should have 4 patterns total (2 from execution_patterns + 2 from code_patterns)
+    # Should have 4 patterns total (2 from archon_vectors + 2 from code_generation_patterns)
     assert len(all_patterns) == 4
 
     # Verify collections_queried metadata
     collections_queried = patterns.get("collections_queried", {})
-    assert collections_queried.get("execution_patterns") == 2
-    assert collections_queried.get("code_patterns") == 2
+    assert collections_queried.get("archon_vectors") == 2
+    assert collections_queried.get("code_generation_patterns") == 2
 
-    # Verify query time is combined
-    assert patterns.get("query_time_ms") == 160  # 75 + 85
+    # Verify query time is present and reasonable
+    assert "query_time_ms" in patterns
+    assert patterns.get("query_time_ms") >= 0
 
 
-def test_dual_collection_formatted_output(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_dual_collection_formatted_output():
     """Test that formatted output shows collection statistics."""
     injector = ManifestInjector(enable_intelligence=True)
     correlation_id = str(uuid.uuid4())
@@ -587,8 +704,8 @@ def test_dual_collection_formatted_output(_mock_intelligence_client):
     formatted = injector.format_for_prompt()
 
     # Should show collection statistics
-    assert "execution_patterns" in formatted
-    assert "code_patterns" in formatted
+    assert "archon_vectors" in formatted
+    assert "code_generation_patterns" in formatted
     assert "Total: 4 unique patterns available" in formatted
 
 
@@ -790,7 +907,8 @@ def test_manifest_injection_storage_missing_password():
 
 
 @pytest.mark.asyncio
-async def test_manifest_injection_storage_lifecycle(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_manifest_injection_storage_lifecycle():
     """Test manifest storage and lifecycle tracking."""
     from unittest.mock import MagicMock, patch
 
@@ -842,7 +960,8 @@ async def test_manifest_injection_storage_lifecycle(_mock_intelligence_client):
 
 
 @pytest.mark.asyncio
-async def test_context_manager_lifecycle(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_context_manager_lifecycle():
     """Test ManifestInjector async context manager."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -858,7 +977,8 @@ async def test_context_manager_lifecycle(_mock_intelligence_client):
 
 
 @pytest.mark.asyncio
-async def test_context_manager_with_statement(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_context_manager_with_statement():
     """Test using ManifestInjector with async with statement."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -932,33 +1052,44 @@ async def test_quality_filtering_disabled():
 
 def test_sync_manifest_generation_event_loop_error():
     """Test sync manifest generation handles event loop errors."""
-    from unittest.mock import MagicMock, patch
+    import asyncio
+    import warnings
+    from unittest.mock import AsyncMock, patch
 
     from agents.lib.manifest_injector import ManifestInjector
 
-    injector = ManifestInjector(enable_intelligence=False)
-    correlation_id = str(uuid.uuid4())
+    # Expected return value for the manifest
+    expected_manifest = {
+        "manifest_metadata": {"version": "2.0.0-minimal", "source": "fallback"}
+    }
 
-    # Mock asyncio.get_event_loop to raise RuntimeError
-    with (
-        patch(
-            "asyncio.get_event_loop",
-            side_effect=RuntimeError("no running event loop"),
-        ),
-        patch("asyncio.new_event_loop") as mock_new_loop,
-        patch("asyncio.set_event_loop"),
+    # Mock the async method to return expected manifest directly
+    # Using AsyncMock ensures proper coroutine handling
+    with patch.object(
+        ManifestInjector,
+        "generate_dynamic_manifest_async",
+        new_callable=AsyncMock,
+        return_value=expected_manifest,
     ):
-        mock_loop = MagicMock()
-        mock_loop.run_until_complete.return_value = {
-            "manifest_metadata": {"version": "2.0.0-minimal", "source": "fallback"}
-        }
-        mock_new_loop.return_value = mock_loop
+        injector = ManifestInjector(enable_intelligence=False)
+        correlation_id = str(uuid.uuid4())
 
-        manifest = injector.generate_dynamic_manifest(correlation_id)
+        # Mock asyncio.get_event_loop to raise RuntimeError
+        # This tests the fallback logic that creates a new event loop
+        with (
+            patch(
+                "asyncio.get_event_loop",
+                side_effect=RuntimeError("no running event loop"),
+            ),
+            patch("asyncio.set_event_loop") as mock_set_loop,
+        ):
+            # AsyncMock creates coroutines that are properly awaited by run_until_complete
+            manifest = injector.generate_dynamic_manifest(correlation_id)
 
-        # Should create new loop and return manifest
-        assert mock_new_loop.called
-        assert manifest is not None
+            # Should set a new loop (verifies the fallback logic was executed)
+            assert mock_set_loop.called
+            assert manifest is not None
+            assert manifest == expected_manifest
 
 
 # =============================================================================
@@ -983,7 +1114,7 @@ async def test_query_infrastructure_error_handling():
     injector._query_docker_services = AsyncMock(side_effect=Exception("Docker error"))
 
     # Should handle exceptions gracefully
-    result = await injector._query_infrastructure(None, correlation_id)
+    result = await injector._query_infrastructure(correlation_id)
 
     assert "remote_services" in result
     assert result["remote_services"]["postgresql"]["status"] == "unavailable"
@@ -1017,7 +1148,7 @@ async def test_query_filesystem():
     injector = ManifestInjector(enable_intelligence=False)
     correlation_id = str(uuid.uuid4())
 
-    result = await injector._query_filesystem(None, correlation_id)
+    result = await injector._query_filesystem(correlation_id)
 
     assert "root_path" in result
     assert "file_tree" in result
@@ -1030,7 +1161,8 @@ async def test_query_filesystem():
 # =============================================================================
 
 
-def test_format_infrastructure(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_infrastructure():
     """Test infrastructure section formatting."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1056,7 +1188,8 @@ def test_format_infrastructure(_mock_intelligence_client):
     assert "Kafka" in formatted or "kafka" in formatted.lower()
 
 
-def test_format_models(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_models():
     """Test models section formatting."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1064,7 +1197,6 @@ def test_format_models(_mock_intelligence_client):
 
     models = {
         "ai_models": {"anthropic": {"provider": "anthropic", "available": True}},
-        "onex_models": {"effect": "Available", "compute": "Available"},
     }
 
     formatted = injector._format_models(models)
@@ -1073,7 +1205,8 @@ def test_format_models(_mock_intelligence_client):
     assert "anthropic" in formatted.lower()
 
 
-def test_format_database_schemas(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_database_schemas():
     """Test database schemas section formatting."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1092,7 +1225,8 @@ def test_format_database_schemas(_mock_intelligence_client):
     assert "agent_routing_decisions" in formatted
 
 
-def test_format_debug_intelligence(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_debug_intelligence():
     """Test debug intelligence section formatting."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1121,7 +1255,8 @@ def test_format_debug_intelligence(_mock_intelligence_client):
     assert "FAILED APPROACHES" in formatted
 
 
-def test_format_filesystem(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_filesystem():
     """Test filesystem section formatting (intentionally returns empty string to reduce noise)."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1364,8 +1499,8 @@ async def test_query_qdrant_success():
         return_value={
             "result": {
                 "collections": [
-                    {"name": "code_patterns", "points_count": 100},
-                    {"name": "execution_patterns", "points_count": 50},
+                    {"name": "code_generation_patterns", "points_count": 100},
+                    {"name": "archon_vectors", "points_count": 50},
                 ]
             }
         }
@@ -1443,7 +1578,8 @@ async def test_build_manifest_from_results():
     assert "models" in manifest
 
 
-def test_format_patterns_section(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_patterns_section():
     """Test complete patterns section formatting."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1557,7 +1693,10 @@ async def test_embed_text_success():
     # Mock aiohttp response
     mock_response = AsyncMock()
     mock_response.status = 200
-    mock_response.json = AsyncMock(return_value={"embedding": [0.1, 0.2, 0.3]})
+    # OpenAI-compatible format: {"data": [{"embedding": [...]}]}
+    mock_response.json = AsyncMock(
+        return_value={"data": [{"embedding": [0.1, 0.2, 0.3]}]}
+    )
 
     mock_session = MagicMock()
     mock_session.post.return_value.__aenter__ = AsyncMock(return_value=mock_response)
@@ -1583,6 +1722,7 @@ async def test_embed_text_failure():
     # Mock aiohttp response with error
     mock_response = AsyncMock()
     mock_response.status = 500
+    mock_response.text = AsyncMock(return_value="Embedding service error")
 
     mock_session = MagicMock()
     mock_session.post.return_value.__aenter__ = AsyncMock(return_value=mock_response)
@@ -1591,12 +1731,13 @@ async def test_embed_text_failure():
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
     with patch("aiohttp.ClientSession", return_value=mock_session):
-        embedding = await injector._embed_text("test text")
+        # The code raises RuntimeError on failure, not returns None
+        with pytest.raises(RuntimeError, match="Embedding service unavailable"):
+            await injector._embed_text("test text")
 
-        assert embedding is None
 
-
-def test_format_patterns_empty(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_patterns_empty():
     """Test formatting patterns with empty data."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1611,7 +1752,8 @@ def test_format_patterns_empty(_mock_intelligence_client):
     assert "Total: 0 patterns" in formatted or "No patterns discovered" in formatted
 
 
-def test_format_infrastructure_with_errors(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+def test_format_infrastructure_with_errors():
     """Test infrastructure formatting with service errors."""
     from agents.lib.manifest_injector import ManifestInjector
 
@@ -1730,10 +1872,10 @@ async def test_query_models_with_providers():
         ),
         patch("pathlib.Path.exists", return_value=False),
     ):
-        result = await injector._query_models(None, correlation_id)
+        result = await injector._query_models(correlation_id)
 
         assert "ai_models" in result
-        assert "onex_models" in result
+        assert "intelligence_models" in result
 
 
 @pytest.mark.asyncio
@@ -1831,14 +1973,13 @@ def test_format_models_result():
 
     raw_result = {
         "ai_models": {"anthropic": {"available": True}},
-        "onex_models": {"effect": "Available"},
         "intelligence_models": [],
     }
 
     formatted = injector._format_models_result(raw_result)
 
     assert "ai_models" in formatted
-    assert "onex_models" in formatted
+    assert "intelligence_models" in formatted
 
 
 def test_format_schemas_result():
@@ -1879,7 +2020,8 @@ def test_format_filesystem_result():
 
 
 @pytest.mark.asyncio
-async def test_generate_dynamic_manifest_with_user_prompt(_mock_intelligence_client):
+@pytest.mark.usefixtures("_mock_intelligence_client")
+async def test_generate_dynamic_manifest_with_user_prompt():
     """Test manifest generation with task-aware section selection."""
     from agents.lib.manifest_injector import ManifestInjector
 

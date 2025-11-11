@@ -145,11 +145,11 @@ else
 fi
 echo ""
 
-# Test 5: Critical Topic Verification
-echo "TEST 5: Critical Topic Verification"
+# Test 5: Topic Verification
+echo "TEST 5: Topic Verification"
 echo "-----------------------------------"
 
-# Define critical topics
+# Define critical topics (must exist for core functionality)
 CRITICAL_TOPICS=(
     "agent-actions"
     "agent.routing.requested.v1"
@@ -158,16 +158,31 @@ CRITICAL_TOPICS=(
     "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
     "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
     "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
-    "documentation-changed"
     "agent-transformation-events"
     "router-performance-metrics"
 )
 
+# Define optional topics (will be auto-created on first publish)
+OPTIONAL_TOPICS=(
+    "documentation-changed"
+)
+
+info "Critical Topics:"
 for topic in "${CRITICAL_TOPICS[@]}"; do
     if echo "${TOPIC_LIST}" | grep -q "^${topic}$"; then
         pass "${topic}"
     else
-        warn "${topic} (not found - may need creation)"
+        fail "${topic} (missing - required for core functionality)"
+    fi
+done
+
+info ""
+info "Optional Topics (auto-created on first use):"
+for topic in "${OPTIONAL_TOPICS[@]}"; do
+    if echo "${TOPIC_LIST}" | grep -q "^${topic}$"; then
+        pass "${topic}"
+    else
+        info "  ${topic} (not yet created - will auto-create on first publish)"
     fi
 done
 echo ""

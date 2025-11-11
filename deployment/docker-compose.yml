@@ -32,6 +32,9 @@
 # See deployment/README.md for detailed configuration guide.
 # ==============================================================================
 
+# Project name - ensures containers show as "omniclaude" instead of "deployment"
+name: omniclaude
+
 services:
   # ============================================================================
   # Application Service - OmniClaude

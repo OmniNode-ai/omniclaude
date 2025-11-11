@@ -546,6 +546,97 @@ Examples:
 
 ---
 
+#### 9. `documentation-changed` Topic
+
+**Purpose**: Notification events when documentation files (CLAUDE.md, README.md, etc.) are modified.
+
+**Partitions**: 1 (low volume, ordering not critical)
+**Retention**: 30 days
+**Replication Factor**: 3
+**Status**: **Optional** - Auto-created on first publish
+
+**Event Schema**:
+
+```json
+{
+  "event_id": "uuid",
+  "correlation_id": "uuid",
+  "file_path": "CLAUDE.md",
+  "change_type": "created | modified | deleted",
+  "repository": "omniclaude",
+  "changed_sections": [
+    "Environment Configuration",
+    "Type-Safe Configuration Framework"
+  ],
+  "summary": "Added type-safe configuration framework documentation",
+  "affected_services": [
+    "archon-intelligence",
+    "agent-router-service"
+  ],
+  "change_metadata": {
+    "author": "polymorphic-agent",
+    "lines_added": 150,
+    "lines_removed": 20
+  },
+  "timestamp": "2025-10-20T18:30:00.123Z"
+}
+```
+
+**Partitioning Key**: `repository` (ensures all changes to same repo are in order)
+
+**Consumer Groups**:
+- `doc-indexer-group` - Updates documentation search indexes
+- `notification-group` - Sends alerts to relevant teams
+- `intelligence-group` - Updates manifest injector with new patterns/conventions
+
+**Creation Strategy**:
+- **Auto-created** on first documentation change event
+- No manual creation required
+- Kafka will create topic with default cluster settings
+- Can be manually created if specific configuration needed (see manual creation below)
+
+**Manual Creation** (optional, if custom configuration needed):
+
+```bash
+kafka-topics --create \
+    --bootstrap-server kafka1:9092 \
+    --topic documentation-changed \
+    --partitions 1 \
+    --replication-factor 3 \
+    --config retention.ms=2592000000 \
+    --config compression.type=snappy \
+    --config min.insync.replicas=2
+
+echo "✅ Created topic: documentation-changed"
+```
+
+**Usage Example**:
+
+```python
+from kafka import KafkaProducer
+import json
+
+producer = KafkaProducer(
+    bootstrap_servers=['192.168.86.200:29092'],
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+
+event = {
+    "event_id": str(uuid.uuid4()),
+    "file_path": "CLAUDE.md",
+    "change_type": "modified",
+    "repository": "omniclaude",
+    "summary": "Updated configuration documentation",
+    "timestamp": datetime.utcnow().isoformat() + 'Z'
+}
+
+producer.send('documentation-changed', value=event)
+producer.flush()
+producer.close()
+```
+
+---
+
 ## Producer Implementation (Skills)
 
 ### Skill Template
@@ -1129,6 +1220,9 @@ create_topic "task-executions" 12 7776000000  # 90 days
 create_topic "code-quality-metrics" 6 7776000000  # 90 days
 create_topic "success-patterns" 6 31536000000  # 365 days
 create_topic "failure-patterns" 6 31536000000  # 365 days
+
+# Optional topics (auto-created on first use, but can be created manually for custom config)
+# create_topic "documentation-changed" 1 2592000000  # 30 days (uncomment if manual creation needed)
 
 echo "✅ All topics created successfully"
 

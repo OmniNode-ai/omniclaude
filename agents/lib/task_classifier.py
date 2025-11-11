@@ -59,6 +59,9 @@ class TaskClassifier:
             "why",
         ],
         TaskIntent.IMPLEMENT: [
+            # Explicit action verbs only
+            # Note: Domain-specific terms (system, authentication, etc.) are handled
+            # by the confidence boost logic to avoid overriding other intent signals
             "create",
             "implement",
             "add",
@@ -68,6 +71,9 @@ class TaskClassifier:
             "write",
             "make",
             "generate",
+            "design",
+            "setup",
+            "configure",
         ],
         TaskIntent.DATABASE: [
             "database",
@@ -169,9 +175,84 @@ class TaskClassifier:
         if intent_scores:
             primary_intent = max(intent_scores, key=intent_scores.get)
             confidence = intent_scores[primary_intent] / 10.0  # Normalize
+
+            # Boost confidence for IMPLEMENT intent with domain-specific terminology
+            # Domain terms are strong implementation signals even without explicit verbs
+            if primary_intent == TaskIntent.IMPLEMENT:
+                domain_indicators = [
+                    "onex",
+                    "node",
+                    "effect",
+                    "compute",
+                    "reducer",
+                    "orchestrator",
+                    "authentication",
+                    "authorization",
+                    "system",
+                    "architecture",
+                    "component",
+                    "module",
+                    "service",
+                    "api",
+                    "endpoint",
+                    "handler",
+                    "middleware",
+                    "workflow",
+                    "pipeline",
+                    "integration",
+                ]
+                domain_matches = sum(
+                    1 for indicator in domain_indicators if indicator in prompt_lower
+                )
+
+                if domain_matches >= 1 and confidence < 0.5:
+                    # Strong domain terminology → boost to at least 0.5 confidence
+                    confidence = min(0.5 + (domain_matches * 0.1), 0.9)
+
         else:
-            primary_intent = TaskIntent.UNKNOWN
-            confidence = 0.0
+            # Fallback heuristic: If no explicit keywords matched but prompt contains
+            # domain-specific/technical terms, assume IMPLEMENT intent
+            # This catches prompts like "ONEX authentication system" that describe
+            # WHAT to build without explicit action verbs
+            domain_indicators = [
+                "onex",
+                "node",
+                "effect",
+                "compute",
+                "reducer",
+                "orchestrator",
+                "contract",
+                "model",
+                "pattern",
+                "template",
+                "mixin",
+                "authentication",
+                "authorization",
+                "system",
+                "architecture",
+                "component",
+                "module",
+                "service",
+                "api",
+                "endpoint",
+                "handler",
+                "middleware",
+                "workflow",
+                "pipeline",
+                "integration",
+            ]
+
+            domain_matches = sum(
+                1 for indicator in domain_indicators if indicator in prompt_lower
+            )
+
+            if domain_matches >= 1:
+                # Domain-specific terminology detected -> likely implementation request
+                primary_intent = TaskIntent.IMPLEMENT
+                confidence = min(0.5 + (domain_matches * 0.1), 0.9)  # 0.5-0.9 range
+            else:
+                primary_intent = TaskIntent.UNKNOWN
+                confidence = 0.0
 
         # Extract keywords (intent keywords + domain terms + significant words)
         keywords = []

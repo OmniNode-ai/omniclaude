@@ -69,16 +69,22 @@ fi
 # Collect enhanced metrics and log to database (async, non-blocking)
 if [[ -f "${SCRIPT_DIR}/lib/hook_event_logger.py" && -f "${SCRIPT_DIR}/lib/post_tool_metrics.py" ]]; then
     (
-        python3 -c "
+        # Export variables to avoid shell injection
+        export TOOL_INFO SCRIPT_DIR LOG_FILE
+
+        # Use single-quoted here-doc to prevent shell expansion
+        python3 << 'EOF' 2>>"${LOG_FILE}"
 import sys
-sys.path.insert(0, '${SCRIPT_DIR}/lib')
+import os
+import json
+
+sys.path.insert(0, os.environ['SCRIPT_DIR'] + '/lib')
 from hook_event_logger import HookEventLogger
 from post_tool_metrics import collect_post_tool_metrics
 from correlation_manager import get_correlation_context
-import json
 
-# Get tool info
-tool_info = json.loads('''$TOOL_INFO''')
+# Get tool info safely from environment
+tool_info = json.loads(os.environ['TOOL_INFO'])
 tool_name = tool_info.get('tool_name', 'unknown')
 file_path = tool_info.get('tool_input', {}).get('file_path', None)
 tool_output = tool_info.get('tool_response', None)
@@ -128,7 +134,48 @@ if enhanced_metadata:
     quality_score = enhanced_metadata.get('quality_metrics', {}).get('quality_score', 0.0)
     exec_time = enhanced_metadata.get('performance_metrics', {}).get('execution_time_ms', 0)
     print(f'[PostToolUse] Success: {success}, Quality: {quality_score:.2f}, Time: {exec_time:.2f}ms', file=sys.stderr)
-" 2>> "$LOG_FILE"
+EOF
+    ) &
+fi
+
+# ============================================================================
+# ERROR DETECTION AND LOGGING
+# ============================================================================
+
+# Check if tool execution failed (error in tool_response)
+TOOL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // .error // empty' 2>/dev/null)
+TOOL_ERROR_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_response.error_type // empty' 2>/dev/null)
+
+if [[ -n "$TOOL_ERROR" ]]; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool execution error detected for $TOOL_NAME: $TOOL_ERROR" >> "$LOG_FILE"
+
+    # Log error event to Kafka (non-blocking)
+    (
+        # Export variables to avoid shell injection
+        export TOOL_INFO TOOL_NAME TOOL_ERROR TOOL_ERROR_TYPE SCRIPT_DIR LOG_FILE
+
+        # Use single-quoted here-doc to prevent shell expansion
+        python3 << 'EOF' 2>>"${LOG_FILE}"
+import sys
+import os
+import json
+
+# Read from environment variables (safe)
+sys.path.insert(0, os.environ['SCRIPT_DIR'] + '/lib')
+from action_logging_helpers import log_error
+
+# Parse tool info safely
+tool_info = json.loads(os.environ['TOOL_INFO'])
+tool_name = os.environ['TOOL_NAME']
+tool_error = tool_info.get('tool_response', {}).get('error', os.environ.get('TOOL_ERROR', ''))
+error_type = tool_info.get('tool_response', {}).get('error_type', os.environ.get('TOOL_ERROR_TYPE', 'ToolExecutionError'))
+
+log_error(
+    error_type=error_type or 'ToolExecutionError',
+    error_message=f'Tool {tool_name} execution failed: {tool_error}',
+    error_context={'tool_name': tool_name, 'tool_info': tool_info}
+)
+EOF
     ) &
 fi
 
@@ -138,11 +185,17 @@ fi
 
 # Extract correlation context for Kafka logging
 if [[ -f "${SCRIPT_DIR}/lib/correlation_manager.py" ]]; then
-    CORRELATION_DATA=$(python3 -c "
+    # Export variables to avoid shell injection
+    export SCRIPT_DIR
+
+    # Use single-quoted here-doc to prevent shell expansion
+    CORRELATION_DATA=$(python3 << 'EOF' 2>/dev/null
 import sys
-sys.path.insert(0, '${SCRIPT_DIR}/lib')
-from correlation_manager import get_correlation_context
+import os
 import json
+
+sys.path.insert(0, os.environ['SCRIPT_DIR'] + '/lib')
+from correlation_manager import get_correlation_context
 
 corr_context = get_correlation_context()
 if corr_context:
@@ -152,7 +205,8 @@ if corr_context:
         'project_path': corr_context.get('project_path', ''),
         'project_name': corr_context.get('project_name', '')
     }))
-" 2>/dev/null)
+EOF
+)
 
     if [[ -n "$CORRELATION_DATA" ]]; then
         CORRELATION_ID=$(echo "$CORRELATION_DATA" | jq -r '.correlation_id // empty')
