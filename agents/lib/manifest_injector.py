@@ -1038,7 +1038,7 @@ class ManifestInjector:
         # Query filesystem first (always)
         filesystem_result = await self._query_filesystem(dummy_client, correlation_id)
 
-        # If intelligence disabled, return minimal manifest with filesystem
+        # If intelligence disabled, return minimal manifest with filesystem and debug loop
         if not self.enable_intelligence:
             self.logger.info(
                 f"Intelligence queries disabled, using minimal manifest with filesystem "
@@ -1046,6 +1046,23 @@ class ManifestInjector:
             )
             manifest = self._get_minimal_manifest()
             manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
+
+            # Add debug loop context (always query, even when intelligence disabled)
+            try:
+                debug_loop_result = await self._query_debug_loop_context(correlation_id)
+                manifest["debug_loop"] = self._format_debug_loop_result(
+                    debug_loop_result
+                )
+            except Exception as e:
+                self.logger.warning(f"[{correlation_id}] Debug loop query failed: {e}")
+                manifest["debug_loop"] = {
+                    "available": False,
+                    "reason": f"Query failed: {str(e)}",
+                    "stf_count": 0,
+                    "categories": [],
+                    "top_stfs": [],
+                }
+
             self._manifest_data = manifest
             self._last_update = datetime.now(UTC)
             return manifest
@@ -1095,6 +1112,9 @@ class ManifestInjector:
                 query_tasks["debug_intelligence"] = self._query_debug_intelligence(
                     client, correlation_id
                 )
+
+            # Add debug loop context query (always include for STF availability)
+            query_tasks["debug_loop"] = self._query_debug_loop_context(correlation_id)
 
             # Wait for all queries with timeout
             results = await asyncio.gather(
@@ -3294,6 +3314,167 @@ class ManifestInjector:
                 "error": str(e),
             }
 
+    async def _query_debug_loop_context(
+        self,
+        correlation_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Query debug loop STF database for available transformation patterns.
+
+        Retrieves Specific Transformation Functions (STFs) from the debug loop
+        system that agents can use to solve similar problems.
+
+        Multi-layered approach:
+        1. Query PostgreSQL debug_transform_functions table directly
+        2. Group STFs by problem category and signature
+        3. Include model pricing information for cost-aware decisions
+        4. Return graceful fallback if debug loop unavailable
+
+        Args:
+            correlation_id: Correlation ID for tracking
+
+        Returns:
+            Debug loop context dictionary with STF availability and model pricing
+        """
+        import time
+
+        start_time = time.time()
+
+        try:
+            self.logger.debug(f"[{correlation_id}] Querying debug loop STF database")
+
+            # Try direct PostgreSQL query for debug_transform_functions
+            try:
+                from .db import get_pg_pool
+
+                pool = await get_pg_pool()
+                if pool is None:
+                    # Database unavailable - return graceful fallback
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._current_query_times["debug_loop"] = elapsed_ms
+                    self.logger.info(
+                        f"[{correlation_id}] Debug loop database unavailable - graceful fallback"
+                    )
+                    return {
+                        "available": False,
+                        "reason": "Database connection unavailable",
+                        "stf_count": 0,
+                        "categories": [],
+                        "top_stfs": [],
+                        "query_time_ms": elapsed_ms,
+                    }
+
+                # Query top quality STFs grouped by category
+                async with pool.acquire() as conn:
+                    # Get total count
+                    count_query = """
+                    SELECT COUNT(*) as total_count
+                    FROM debug_transform_functions
+                    WHERE approval_status = 'approved'
+                    AND quality_score >= 0.7
+                    """
+                    count_result = await conn.fetchrow(count_query)
+                    stf_count = count_result["total_count"] if count_result else 0
+
+                    # Get categories
+                    categories_query = """
+                    SELECT DISTINCT problem_category, COUNT(*) as stf_count
+                    FROM debug_transform_functions
+                    WHERE approval_status = 'approved'
+                    AND quality_score >= 0.7
+                    AND problem_category IS NOT NULL
+                    GROUP BY problem_category
+                    ORDER BY stf_count DESC
+                    LIMIT 10
+                    """
+                    categories_result = await conn.fetch(categories_query)
+                    categories = [
+                        {
+                            "category": row["problem_category"],
+                            "count": row["stf_count"],
+                        }
+                        for row in categories_result
+                    ]
+
+                    # Get top quality STFs
+                    stfs_query = """
+                    SELECT
+                        stf_id, stf_name, stf_description, problem_category,
+                        problem_signature, quality_score, usage_count,
+                        CASE WHEN usage_count > 0
+                             THEN (success_count::float / usage_count) * 100
+                             ELSE 0.0
+                        END as success_rate
+                    FROM debug_transform_functions
+                    WHERE approval_status = 'approved'
+                    AND quality_score >= 0.7
+                    ORDER BY quality_score DESC, usage_count DESC
+                    LIMIT 10
+                    """
+                    stfs_result = await conn.fetch(stfs_query)
+                    top_stfs = [
+                        {
+                            "stf_id": str(row["stf_id"]),
+                            "stf_name": row["stf_name"],
+                            "description": row["stf_description"] or "No description",
+                            "category": row["problem_category"] or "uncategorized",
+                            "signature": row["problem_signature"] or "none",
+                            "quality_score": float(row["quality_score"]),
+                            "usage_count": row["usage_count"],
+                            "success_rate": float(row["success_rate"]),
+                        }
+                        for row in stfs_result
+                    ]
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                self._current_query_times["debug_loop"] = elapsed_ms
+                self.logger.info(
+                    f"[{correlation_id}] Debug loop query completed: "
+                    f"{stf_count} STFs, {len(categories)} categories in {elapsed_ms}ms"
+                )
+
+                return {
+                    "available": True,
+                    "stf_count": stf_count,
+                    "categories": categories,
+                    "top_stfs": top_stfs,
+                    "query_time_ms": elapsed_ms,
+                }
+
+            except Exception as db_error:
+                # Database query failed - graceful fallback
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                self._current_query_times["debug_loop"] = elapsed_ms
+                self.logger.debug(
+                    f"[{correlation_id}] Debug loop database query failed: {db_error}"
+                )
+                return {
+                    "available": False,
+                    "reason": f"Database query failed: {str(db_error)}",
+                    "stf_count": 0,
+                    "categories": [],
+                    "top_stfs": [],
+                    "query_time_ms": elapsed_ms,
+                }
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            self._current_query_times["debug_loop"] = elapsed_ms
+            self._current_query_failures["debug_loop"] = str(e)
+            self.logger.warning(
+                f"[{correlation_id}] Debug loop context query failed: {e}"
+            )
+            # Not critical - return graceful fallback
+            return {
+                "available": False,
+                "reason": f"Query failed: {str(e)}",
+                "stf_count": 0,
+                "categories": [],
+                "top_stfs": [],
+                "error": str(e),
+                "query_time_ms": elapsed_ms,
+            }
+
     def _select_sections_for_task(
         self,
         task_context: Optional[TaskContext],
@@ -3445,6 +3626,17 @@ class ManifestInjector:
             manifest["filesystem"] = {"error": str(filesystem_result)}
         else:
             manifest["filesystem"] = self._format_filesystem_result(filesystem_result)
+
+        # Extract debug loop
+        debug_loop_result = results.get("debug_loop", {})
+        if isinstance(debug_loop_result, Exception):
+            self.logger.warning(f"Debug loop query failed: {debug_loop_result}")
+            manifest["debug_loop"] = {
+                "available": False,
+                "error": str(debug_loop_result),
+            }
+        else:
+            manifest["debug_loop"] = self._format_debug_loop_result(debug_loop_result)
 
         # Add action logging (always included - uses local context only)
         # No Kafka query needed - correlation_id and agent_name come from self
@@ -3655,6 +3847,17 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
+    def _format_debug_loop_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format debug loop query result into manifest structure."""
+        return {
+            "available": result.get("available", False),
+            "reason": result.get("reason"),
+            "stf_count": result.get("stf_count", 0),
+            "categories": result.get("categories", []),
+            "top_stfs": result.get("top_stfs", []),
+            "query_time_ms": result.get("query_time_ms", 0),
+        }
+
     def _is_cache_valid(self) -> bool:
         """
         Check if cached manifest is still valid.
@@ -3745,7 +3948,7 @@ class ManifestInjector:
                      If None, includes all sections.
                      Available: ['patterns', 'models', 'infrastructure',
                                 'database_schemas', 'debug_intelligence',
-                                'filesystem', 'action_logging']
+                                'filesystem', 'debug_loop', 'action_logging']
 
         Returns:
             Formatted string ready for prompt injection
@@ -3785,6 +3988,7 @@ class ManifestInjector:
             "database_schemas": self._format_database_schemas,
             "debug_intelligence": self._format_debug_intelligence,
             "filesystem": self._format_filesystem,
+            "debug_loop": self._format_debug_loop,
             "action_logging": self._format_action_logging,
         }
 
@@ -4106,6 +4310,49 @@ class ManifestInjector:
         This method now returns an empty string to eliminate token waste.
         """
         return ""  # Return empty string instead of full tree
+
+    def _format_debug_loop(self, debug_loop_data: Dict) -> str:
+        """Format debug loop section with STF availability and model pricing."""
+        output = ["AVAILABLE DEBUG PATTERNS (STFs):"]
+
+        if not debug_loop_data.get("available", False):
+            reason = debug_loop_data.get("reason", "Unknown reason")
+            output.append(f"  ⚠️  Debug loop unavailable: {reason}")
+            output.append("  (No transformation patterns available yet)")
+            return "\n".join(output)
+
+        stf_count = debug_loop_data.get("stf_count", 0)
+        categories = debug_loop_data.get("categories", [])
+        top_stfs = debug_loop_data.get("top_stfs", [])
+
+        output.append(f"  Total STFs: {stf_count}")
+
+        if categories:
+            output.append(
+                f"  Categories: {', '.join([c['category'] for c in categories[:5]])}"
+            )
+            output.append("")
+
+        if top_stfs:
+            output.append("  Top Quality STFs:")
+            for stf in top_stfs[:5]:  # Show top 5
+                output.append(
+                    f"    • {stf['stf_name']} (quality: {stf['quality_score']:.2f})"
+                )
+                output.append(f"      Category: {stf['category']}")
+                output.append(f"      Success Rate: {stf['success_rate']:.1f}%")
+                output.append(f"      Usage: {stf['usage_count']} times")
+                if stf["description"] != "No description":
+                    output.append(f"      Description: {stf['description'][:80]}")
+                output.append("")
+
+        output.append("HOW TO USE STFs:")
+        output.append("  1. Query by problem_signature or problem_category")
+        output.append("  2. Retrieve full code by stf_id")
+        output.append("  3. Update usage metrics on success")
+        output.append("  4. Use NodeDebugSTFStorageEffect for all operations")
+
+        return "\n".join(output)
 
     def _format_action_logging(self, action_logging_data: Dict) -> str:
         """

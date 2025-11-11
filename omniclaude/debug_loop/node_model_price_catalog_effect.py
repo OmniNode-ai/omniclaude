@@ -6,7 +6,7 @@ with CRUD operations for cost tracking and optimization.
 
 Contract: contracts/debug_loop/model_price_catalog_effect.yaml
 Node Type: EFFECT
-Base Class: NodeEffectService
+Base Class: NodeEffect
 
 Operations:
 - add_model: Add new model to catalog
@@ -16,16 +16,15 @@ Operations:
 - mark_deprecated: Mark model as deprecated
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-# omnibase_core imports
-from omnibase_core.core.infrastructure_service_bases import NodeEffectService
-from omnibase_core.primitives.model_semver import ModelSemVer
-from omnibase_core.errors.model_onex_error import ModelOnexError
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
-from omnibase_core.models.common.model_error_context import ModelErrorContext
+from omnibase_core.errors.model_onex_error import ModelOnexError
+
+# omnibase_core imports
+from omnibase_core.nodes import NodeEffect
 
 # omnibase_spi imports (protocol for database access)
 try:
@@ -36,12 +35,19 @@ except ImportError:
 
     class IDatabaseProtocol(Protocol):
         """Mock protocol for database operations"""
-        async def execute_query(self, query: str, params: Optional[Dict] = None) -> Any: ...
-        async def fetch_one(self, query: str, params: Optional[Dict] = None) -> Optional[Dict]: ...
-        async def fetch_all(self, query: str, params: Optional[Dict] = None) -> List[Dict]: ...
+
+        async def execute_query(
+            self, query: str, params: Optional[Dict] = None
+        ) -> Any: ...
+        async def fetch_one(
+            self, query: str, params: Optional[Dict] = None
+        ) -> Optional[Dict]: ...
+        async def fetch_all(
+            self, query: str, params: Optional[Dict] = None
+        ) -> List[Dict]: ...
 
 
-class NodeModelPriceCatalogEffect(NodeEffectService):
+class NodeModelPriceCatalogEffect(NodeEffect):
     """
     Effect node for model pricing catalog operations in PostgreSQL.
 
@@ -49,14 +55,15 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
     retry logic, and observability.
     """
 
-    def __init__(self, db_protocol: IDatabaseProtocol):
+    def __init__(self, db_protocol: IDatabaseProtocol, container=None):
         """
         Initialize with database protocol dependency.
 
         Args:
             db_protocol: Database connection protocol from omnibase_spi
+            container: Optional DI container (for v0.1.0 API compatibility)
         """
-        super().__init__()
+        super().__init__(container=container)
         self.db = db_protocol
         self._operation_handlers = {
             "add_model": self._handle_add_model,
@@ -86,10 +93,6 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
                 raise ModelOnexError(
                     error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message="Missing required field: operation",
-                    context=ModelErrorContext(
-                        operation="execute_effect",
-                        input_data=contract,
-                    ),
                 )
 
             # Dispatch to handler
@@ -98,10 +101,6 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
                 raise ModelOnexError(
                     error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Invalid operation: {operation}",
-                    context=ModelErrorContext(
-                        operation="execute_effect",
-                        input_data=contract,
-                    ),
                 )
 
             # Execute handler
@@ -109,7 +108,7 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
 
             # Add metadata
             result["operation"] = operation
-            result["timestamp"] = datetime.utcnow().isoformat()
+            result["timestamp"] = datetime.now(UTC).isoformat()
 
             return result
 
@@ -117,13 +116,8 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
             raise
         except Exception as e:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.EXECUTION_ERROR,
+                error_code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Model pricing catalog operation failed: {str(e)}",
-                context=ModelErrorContext(
-                    operation="execute_effect",
-                    input_data=contract,
-                    error=str(e),
-                ),
             ) from e
 
     async def _handle_add_model(self, contract: Dict[str, Any]) -> Dict[str, Any]:
@@ -206,7 +200,7 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
             if not result:
                 # Duplicate model - return existing catalog_id
                 raise ModelOnexError(
-                    error_code=EnumCoreErrorCode.DUPLICATE_ERROR,
+                    error_code=EnumCoreErrorCode.INVALID_OPERATION,
                     message=f"Model already exists: {provider}/{model_data['model_name']}/{model_version}",
                 )
 
@@ -219,7 +213,7 @@ class NodeModelPriceCatalogEffect(NodeEffectService):
             raise
         except Exception as e:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.DB_ERROR,
+                error_code=EnumCoreErrorCode.DATABASE_OPERATION_ERROR,
                 message=f"Database error during add_model: {str(e)}",
             ) from e
 

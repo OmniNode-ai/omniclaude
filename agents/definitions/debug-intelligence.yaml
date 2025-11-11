@@ -210,6 +210,71 @@ debug_patterns:
     - "Configuration drift detection"
     - "Resource constraint analysis"
 
+# Debug Loop Integration (STF System)
+debug_loop_integration:
+  stf_query_triggers:
+    - "Error message pattern detected and matches known signatures"
+    - "Similar problem signature found in STF database"
+    - "Recurring issue with established solution patterns"
+    - "Performance degradation matching known STF categories"
+    - "Integration failure with documented transformation patterns"
+
+  stf_storage_criteria:
+    - "Debugging successful with root cause identified"
+    - "Solution is reusable and generalizable to similar problems"
+    - "Quality score meets minimum threshold (≥0.7)"
+    - "Solution validated through testing and verification"
+    - "Pattern has clear problem signature and category"
+
+  workflows:
+    debugging_with_stf:
+      phases:
+        - "Query STFs by problem signature and category using STFHelper.query_stfs()"
+        - "Evaluate relevance and match to current debugging context"
+        - "Retrieve full STF details including code and metadata"
+        - "Apply pattern with context-specific adaptations"
+        - "Validate solution through testing and evidence collection"
+        - "Update usage metrics on success/failure using STFHelper.update_stf_usage()"
+
+    stf_contribution:
+      phases:
+        - "Identify reusable pattern from successful debugging session"
+        - "Normalize and document transformation code"
+        - "Assess quality score based on effectiveness and clarity"
+        - "Store new STF using STFHelper.store_stf() with full metadata"
+        - "Tag with problem category and signature for discoverability"
+        - "Contribute to collective debugging intelligence"
+
+  stf_helper_integration:
+    api_methods:
+      - "query_stfs(problem_signature, problem_category, min_quality): Search for matching STFs"
+      - "retrieve_stf(stf_id): Get complete STF details including code"
+      - "store_stf(name, code, description, category, signature, quality, correlation_id): Save new STF"
+      - "update_stf_usage(stf_id, success): Increment usage and track success rate"
+      - "get_top_stfs(problem_category, limit): Get highest quality STFs for category"
+
+    example_usage: |
+      # Query STFs when error detected
+      if "No module named" in error_message:
+          stfs = await stf_helper.query_stfs(
+              problem_signature="No module named",
+              problem_category="import_error",
+              min_quality=0.8
+          )
+          # Apply top-ranked STF...
+
+      # Store new STF after successful debugging
+      if debugging_successful:
+          stf_id = await stf_helper.store_stf(
+              stf_name="fix_import_error",
+              stf_code=solution_code,
+              stf_description="Add current directory to Python path",
+              problem_category="import_error",
+              problem_signature="No module named",
+              quality_score=0.85,
+              correlation_id=correlation_id
+          )
+
 # Quality Gates
 quality_gates:
   investigation_quality:

@@ -5,28 +5,31 @@ Tests the STF storage Effect node using MockDatabaseProtocol.
 Demonstrates ONEX compliance with type-safe contracts and error handling.
 """
 
-import pytest
 from datetime import datetime
 from uuid import uuid4
 
-from node_debug_stf_storage_effect import NodeDebugSTFStorageEffect
-from mock_database_protocol import MockDatabaseProtocol
+import pytest
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+
+from .mock_database_protocol import MockDatabaseProtocol
+from .node_debug_stf_storage_effect import NodeDebugSTFStorageEffect
 
 
 class TestDebugSTFStorageEffect:
     """Test suite for STF storage operations."""
 
     @pytest.fixture
-    async def setup(self):
-        """Setup mock database and node instance."""
+    def setup(self):
+        """Setup mock database, container, and node instance."""
         mock_db = MockDatabaseProtocol()
-        node = NodeDebugSTFStorageEffect(db_protocol=mock_db)
+        container = ModelONEXContainer()
+        node = NodeDebugSTFStorageEffect(db_protocol=mock_db, container=container)
         return node, mock_db
 
     @pytest.mark.asyncio
     async def test_store_stf_success(self, setup):
         """Test storing a new STF."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         contract = {
             "operation": "store",
@@ -55,7 +58,7 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_store_duplicate_stf(self, setup):
         """Test storing duplicate STF (same hash)."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         stf_data = {
             "stf_name": "fix_import_error_stf",
@@ -82,7 +85,7 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_retrieve_stf(self, setup):
         """Test retrieving an STF by ID."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         # First store an STF
         store_contract = {
@@ -116,7 +119,7 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_search_stfs(self, setup):
         """Test searching STFs by criteria."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         # Store multiple STFs
         stfs = [
@@ -173,7 +176,7 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_update_usage(self, setup):
         """Test incrementing usage counter."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         # Store STF
         store_contract = {
@@ -205,7 +208,7 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_update_quality(self, setup):
         """Test updating quality scores."""
-        node, mock_db = await setup
+        node, mock_db = setup
 
         # Store STF
         store_contract = {
@@ -242,37 +245,32 @@ class TestDebugSTFStorageEffect:
     @pytest.mark.asyncio
     async def test_missing_operation(self, setup):
         """Test error handling for missing operation."""
-        node, _ = await setup
+        node, _ = setup
 
         contract = {
             "stf_data": {"stf_name": "test"},
         }
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="operation"):
             await node.execute_effect(contract)
-
-        # Should raise ModelOnexError with VALIDATION_ERROR code
-        assert "operation" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_invalid_operation(self, setup):
         """Test error handling for invalid operation."""
-        node, _ = await setup
+        node, _ = setup
 
         contract = {
             "operation": "invalid_op",
             "stf_data": {},
         }
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="invalid operation"):
             await node.execute_effect(contract)
-
-        assert "invalid operation" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_missing_required_fields(self, setup):
         """Test error handling for missing required fields."""
-        node, _ = await setup
+        node, _ = setup
 
         contract = {
             "operation": "store",
@@ -282,25 +280,21 @@ class TestDebugSTFStorageEffect:
             },
         }
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="missing required fields"):
             await node.execute_effect(contract)
-
-        assert "missing required fields" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_stf_not_found(self, setup):
         """Test error handling for non-existent STF."""
-        node, _ = await setup
+        node, _ = setup
 
         contract = {
             "operation": "retrieve",
             "stf_id": str(uuid4()),  # Random UUID that doesn't exist
         }
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="not found"):
             await node.execute_effect(contract)
-
-        assert "not found" in str(exc_info.value).lower()
 
 
 if __name__ == "__main__":

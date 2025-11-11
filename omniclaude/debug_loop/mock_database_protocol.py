@@ -10,7 +10,7 @@ Usage:
     result = await node.execute_effect(contract)
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -39,7 +39,9 @@ class MockDatabaseProtocol:
         self.mappings: Dict[str, Dict[str, Any]] = {}  # mapping_id -> mapping_data
 
         # Golden states
-        self.golden_states: Dict[str, Dict[str, Any]] = {}  # golden_state_id -> state_data
+        self.golden_states: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # golden_state_id -> state_data
 
         # Query execution log (for debugging)
         self.query_log: List[Dict[str, Any]] = []
@@ -64,7 +66,10 @@ class MockDatabaseProtocol:
             return await self._insert_stf(params)
 
         # Handle UPDATE for STF usage
-        elif "update debug_transform_functions" in query_lower and "usage_count" in query_lower:
+        elif (
+            "update debug_transform_functions" in query_lower
+            and "usage_count" in query_lower
+        ):
             return await self._update_stf_usage(params)
 
         # Handle UPDATE for STF quality
@@ -76,7 +81,10 @@ class MockDatabaseProtocol:
             return await self._insert_model(params)
 
         # Handle UPDATE for model pricing
-        elif "update model_price_catalog" in query_lower and "is_active = false" in query_lower:
+        elif (
+            "update model_price_catalog" in query_lower
+            and "is_active = false" in query_lower
+        ):
             return await self._mark_model_deprecated(params)
 
         # Handle UPDATE for model pricing (general)
@@ -86,7 +94,9 @@ class MockDatabaseProtocol:
         # Default: return success
         return {"success": True}
 
-    async def fetch_one(self, query: str, params: Optional[Dict] = None) -> Optional[Dict]:
+    async def fetch_one(
+        self, query: str, params: Optional[Dict] = None
+    ) -> Optional[Dict]:
         """
         Fetch single row.
 
@@ -101,8 +111,56 @@ class MockDatabaseProtocol:
 
         query_lower = query.lower().strip()
 
+        # Handle INSERT with RETURNING (execute the insert first)
+        if (
+            "insert into debug_transform_functions" in query_lower
+            and "returning" in query_lower
+        ):
+            result = await self._insert_stf(params)
+            # ON CONFLICT DO NOTHING returns None when duplicate
+            if result.get("duplicate"):
+                return None
+            # Return stf_id on success
+            return {"stf_id": result.get("stf_id")} if result.get("success") else None
+
+        # Handle INSERT with RETURNING for models
+        elif (
+            "insert into model_price_catalog" in query_lower
+            and "returning" in query_lower
+        ):
+            result = await self._insert_model(params)
+            return (
+                {"catalog_id": result.get("catalog_id")}
+                if result.get("success")
+                else None
+            )
+
+        # Handle UPDATE with RETURNING for STFs
+        elif (
+            "update debug_transform_functions" in query_lower
+            and "returning" in query_lower
+        ):
+            if "usage_count" in query_lower:
+                result = await self._update_stf_usage(params)
+            else:
+                result = await self._update_stf_quality(query, params)
+            return {"stf_id": result.get("stf_id")} if result.get("success") else None
+
+        # Handle UPDATE with RETURNING for models
+        elif "update model_price_catalog" in query_lower and "returning" in query_lower:
+            # Check if it's a deprecation (is_active = false) or pricing update
+            if "is_active = false" in query_lower or "is_active=false" in query_lower:
+                result = await self._mark_model_deprecated(params)
+            else:
+                result = await self._update_model_pricing(query, params)
+            return (
+                {"catalog_id": result.get("catalog_id")}
+                if result.get("success")
+                else None
+            )
+
         # Handle SELECT from STFs
-        if "from debug_transform_functions" in query_lower:
+        elif "from debug_transform_functions" in query_lower:
             if "where stf_id" in query_lower:
                 stf_id = params.get("1") if params else None
                 return self.stfs.get(stf_id)
@@ -111,17 +169,17 @@ class MockDatabaseProtocol:
         elif "from model_price_catalog" in query_lower:
             provider = params.get("1") if params else None
             model_name = params.get("2") if params else None
+            # Check if query includes is_active = true filter
+            check_is_active = "is_active = true" in query_lower
             for model in self.models.values():
-                if model.get("provider") == provider and model.get("model_name") == model_name:
+                if (
+                    model.get("provider") == provider
+                    and model.get("model_name") == model_name
+                ):
+                    # If query filters by is_active, only return if model is active
+                    if check_is_active and not model.get("is_active", True):
+                        continue
                     return model
-
-        # Handle RETURNING from INSERT
-        elif "returning stf_id" in query_lower:
-            # Return from last insert
-            if self.query_log:
-                last_result = self.query_log[-1].get("result")
-                if isinstance(last_result, dict) and "stf_id" in last_result:
-                    return last_result
 
         return None
 
@@ -144,25 +202,42 @@ class MockDatabaseProtocol:
         if "from debug_transform_functions" in query_lower:
             results = []
 
+            # Parse query to determine parameter mapping
+            param_mapping = {}
+            if params:
+                for param_num, value in params.items():
+                    param_placeholder = f"${param_num}"
+                    if f"problem_signature = {param_placeholder}" in query_lower:
+                        param_mapping["problem_signature"] = value
+                    elif f"problem_category = {param_placeholder}" in query_lower:
+                        param_mapping["problem_category"] = value
+                    elif f"quality_score >= {param_placeholder}" in query_lower:
+                        param_mapping["min_quality"] = float(value)
+                    elif f"approval_status = {param_placeholder}" in query_lower:
+                        param_mapping["approval_status"] = value
+
             # Apply filters
             for stf in self.stfs.values():
                 # Check problem_signature filter
-                if params and "problem_signature" in str(params.get("1", "")):
-                    if stf.get("problem_signature") != params.get("1"):
+                if "problem_signature" in param_mapping:
+                    if (
+                        stf.get("problem_signature")
+                        != param_mapping["problem_signature"]
+                    ):
                         continue
 
                 # Check problem_category filter
-                if params and params.get("2"):
-                    if stf.get("problem_category") != params.get("2"):
+                if "problem_category" in param_mapping:
+                    if stf.get("problem_category") != param_mapping["problem_category"]:
                         continue
 
                 # Check min_quality filter
-                min_quality = float(params.get("3", 0.7)) if params else 0.7
+                min_quality = param_mapping.get("min_quality", 0.7)
                 if stf.get("quality_score", 0.0) < min_quality:
                     continue
 
                 # Check approval_status filter
-                approval_status = params.get("4", "approved") if params else "approved"
+                approval_status = param_mapping.get("approval_status", "approved")
                 if stf.get("approval_status") != approval_status:
                     continue
 
@@ -179,7 +254,7 @@ class MockDatabaseProtocol:
             if "limit" in query_lower:
                 try:
                     limit_idx = query_lower.index("limit") + 6
-                    limit = int(query_lower[limit_idx:limit_idx + 10].split()[0])
+                    limit = int(query_lower[limit_idx : limit_idx + 10].split()[0])
                 except (ValueError, IndexError):
                     pass
 
@@ -189,28 +264,50 @@ class MockDatabaseProtocol:
         elif "from model_price_catalog" in query_lower:
             results = list(self.models.values())
 
-            # Apply filters if present
+            # Parse query to determine which params correspond to which filters
+            # Parameters are added dynamically based on which filters are present
             if params:
-                # is_active filter (param 1)
-                is_active = params.get("1")
-                if is_active is not None:
+                param_mapping = {}
+                for param_num, value in params.items():
+                    param_placeholder = f"${param_num}"
+                    # Check which filter this parameter corresponds to
+                    if f"is_active = {param_placeholder}" in query_lower:
+                        param_mapping["is_active"] = value
+                    elif f"provider = {param_placeholder}" in query_lower:
+                        param_mapping["provider"] = value
+                    elif f"supports_streaming = {param_placeholder}" in query_lower:
+                        param_mapping["supports_streaming"] = value
+                    elif (
+                        f"output_price_per_million <= {param_placeholder}"
+                        in query_lower
+                    ):
+                        param_mapping["max_price_per_million"] = value
+
+                # Apply filters based on parsed mapping
+                if "is_active" in param_mapping:
+                    is_active = param_mapping["is_active"]
                     results = [m for m in results if m.get("is_active") == is_active]
 
-                # provider filter (param 2)
-                provider = params.get("2")
-                if provider:
+                if "provider" in param_mapping:
+                    provider = param_mapping["provider"]
                     results = [m for m in results if m.get("provider") == provider]
 
-                # supports_streaming filter (param 3)
-                supports_streaming = params.get("3")
-                if supports_streaming is not None:
-                    results = [m for m in results if m.get("supports_streaming") == supports_streaming]
+                if "supports_streaming" in param_mapping:
+                    supports_streaming = param_mapping["supports_streaming"]
+                    results = [
+                        m
+                        for m in results
+                        if m.get("supports_streaming") == supports_streaming
+                    ]
 
-                # max_price_per_million filter (param 4)
-                max_price = params.get("4")
-                if max_price:
+                if "max_price_per_million" in param_mapping:
+                    max_price = param_mapping["max_price_per_million"]
                     max_price_float = float(max_price)
-                    results = [m for m in results if m.get("output_price_per_million", 999999) <= max_price_float]
+                    results = [
+                        m
+                        for m in results
+                        if m.get("output_price_per_million", 999999) <= max_price_float
+                    ]
 
             return results
 
@@ -244,7 +341,7 @@ class MockDatabaseProtocol:
             "usage_count": 0,
             "success_count": 0,
             "approval_status": "pending",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "last_used_at": None,
             "updated_at": None,
         }
@@ -266,11 +363,13 @@ class MockDatabaseProtocol:
 
         # Increment usage
         self.stfs[stf_id]["usage_count"] += 1
-        self.stfs[stf_id]["last_used_at"] = datetime.utcnow().isoformat()
+        self.stfs[stf_id]["last_used_at"] = datetime.now(UTC).isoformat()
 
         return {"success": True, "stf_id": stf_id}
 
-    async def _update_stf_quality(self, query: str, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _update_stf_quality(
+        self, query: str, params: Optional[Dict]
+    ) -> Dict[str, Any]:
         """Handle STF quality update."""
         if not params:
             return {"success": False}
@@ -297,7 +396,7 @@ class MockDatabaseProtocol:
                     self.stfs[stf_id]["completeness_score"] = score
                 # Add more fields as needed
 
-        self.stfs[stf_id]["updated_at"] = datetime.utcnow().isoformat()
+        self.stfs[stf_id]["updated_at"] = datetime.now(UTC).isoformat()
 
         return {"success": True, "stf_id": stf_id}
 
@@ -306,24 +405,35 @@ class MockDatabaseProtocol:
         if not params:
             return {"success": False}
 
-        catalog_id = str(uuid4())
+        # Use catalog_id from params (position 1)
+        catalog_id = params.get("1")
+        if not catalog_id:
+            catalog_id = str(uuid4())
+
+        # Convert None to 0.0 before calling float()
+        input_price = params.get("5", 0.0)
+        output_price = params.get("6", 0.0)
 
         model_data = {
             "catalog_id": catalog_id,
-            "provider": params.get("1"),
-            "model_name": params.get("2"),
-            "model_version": params.get("3"),
-            "input_price_per_million": float(params.get("4", 0.0)),
-            "output_price_per_million": float(params.get("5", 0.0)),
-            "max_tokens": int(params.get("6", 0)) if params.get("6") else None,
-            "context_window": int(params.get("7", 0)) if params.get("7") else None,
-            "supports_streaming": params.get("8", False),
-            "supports_function_calling": params.get("9", False),
-            "supports_vision": params.get("10", False),
-            "requests_per_minute": int(params.get("11", 0)) if params.get("11") else None,
-            "tokens_per_minute": int(params.get("12", 0)) if params.get("12") else None,
+            "provider": params.get("2"),
+            "model_name": params.get("3"),
+            "model_version": params.get("4"),
+            "input_price_per_million": (
+                float(input_price) if input_price is not None else 0.0
+            ),
+            "output_price_per_million": (
+                float(output_price) if output_price is not None else 0.0
+            ),
+            "max_tokens": int(params.get("7")) if params.get("7") else None,
+            "context_window": int(params.get("8")) if params.get("8") else None,
+            "supports_streaming": params.get("9", False),
+            "supports_function_calling": params.get("10", False),
+            "supports_vision": params.get("11", False),
+            "requests_per_minute": int(params.get("12")) if params.get("12") else None,
+            "tokens_per_minute": int(params.get("13")) if params.get("13") else None,
             "is_active": True,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "updated_at": None,
         }
 
@@ -331,7 +441,9 @@ class MockDatabaseProtocol:
 
         return {"success": True, "catalog_id": catalog_id}
 
-    async def _update_model_pricing(self, query: str, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _update_model_pricing(
+        self, query: str, params: Optional[Dict]
+    ) -> Dict[str, Any]:
         """Handle model pricing update."""
         if not params:
             return {"success": False}
@@ -348,7 +460,10 @@ class MockDatabaseProtocol:
         model = None
         catalog_id = None
         for cid, model_data in self.models.items():
-            if model_data.get("provider") == provider and model_data.get("model_name") == model_name:
+            if (
+                model_data.get("provider") == provider
+                and model_data.get("model_name") == model_name
+            ):
                 model = model_data
                 catalog_id = cid
                 break
@@ -357,22 +472,37 @@ class MockDatabaseProtocol:
             return {"success": False, "not_found": True}
 
         # Update fields (params 1 through max-2 are values)
-        # This is simplified - in real implementation would parse SET clause
-        for i in range(1, max_key - 1):
-            param_key = str(i)
+        # Parse the SET clause to determine which fields to update
+        set_clause_fields = []
+        if "input_price_per_million" in query:
+            set_clause_fields.append("input_price_per_million")
+        if "output_price_per_million" in query:
+            set_clause_fields.append("output_price_per_million")
+        if "max_tokens" in query:
+            set_clause_fields.append("max_tokens")
+        if "context_window" in query:
+            set_clause_fields.append("context_window")
+        if "requests_per_minute" in query:
+            set_clause_fields.append("requests_per_minute")
+        if "tokens_per_minute" in query:
+            set_clause_fields.append("tokens_per_minute")
+
+        # Apply updates in order
+        for idx, field in enumerate(set_clause_fields, start=1):
+            param_key = str(idx)
             if param_key in params:
                 value = params[param_key]
-                # Determine field from query
-                if "input_price_per_million" in query:
-                    model["input_price_per_million"] = float(value)
-                elif "output_price_per_million" in query:
-                    model["output_price_per_million"] = float(value)
-                elif "max_tokens" in query:
-                    model["max_tokens"] = int(value) if value else None
-                elif "context_window" in query:
-                    model["context_window"] = int(value) if value else None
+                if field in ["input_price_per_million", "output_price_per_million"]:
+                    model[field] = float(value) if value is not None else None
+                elif field in [
+                    "max_tokens",
+                    "context_window",
+                    "requests_per_minute",
+                    "tokens_per_minute",
+                ]:
+                    model[field] = int(value) if value else None
 
-        model["updated_at"] = datetime.utcnow().isoformat()
+        model["updated_at"] = datetime.now(UTC).isoformat()
 
         return {"success": True, "catalog_id": catalog_id}
 
@@ -391,7 +521,7 @@ class MockDatabaseProtocol:
         for catalog_id, model in self.models.items():
             if model.get("model_name") == model_name:
                 model["is_active"] = False
-                model["updated_at"] = datetime.utcnow().isoformat()
+                model["updated_at"] = datetime.now(UTC).isoformat()
                 updated_count += 1
                 last_catalog_id = catalog_id
 
@@ -402,11 +532,13 @@ class MockDatabaseProtocol:
 
     def _log_query(self, query: str, params: Optional[Dict]):
         """Log query execution for debugging."""
-        self.query_log.append({
-            "timestamp": datetime.utcnow().isoformat(),
-            "query": query[:200],  # Truncate long queries
-            "params": params,
-        })
+        self.query_log.append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "query": query[:200],  # Truncate long queries
+                "params": params,
+            }
+        )
 
     def reset(self):
         """Reset all in-memory data (useful for tests)."""

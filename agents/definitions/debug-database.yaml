@@ -210,6 +210,69 @@ database_patterns:
     - "Deadlock detection and prevention strategies"
     - "Database logging and audit trail analysis"
 
+# Debug Loop Integration (STF System)
+debug_loop_integration:
+  stf_query_triggers:
+    - "Database connection timeout errors with known patterns"
+    - "SQL query performance issues matching STF signatures"
+    - "Deadlock scenarios with documented resolution patterns"
+    - "Connection pool exhaustion with established solutions"
+    - "Index optimization opportunities matching known STFs"
+
+  stf_storage_criteria:
+    - "Database issue resolved with verified optimization"
+    - "SQL query optimization proven through performance testing"
+    - "Connection troubleshooting solution validated and reusable"
+    - "Quality score meets database optimization standards (≥0.7)"
+    - "Pattern documented with database-specific signatures"
+
+  workflows:
+    database_debugging_with_stf:
+      phases:
+        - "Query database-specific STFs using problem signature (e.g., 'connection timeout')"
+        - "Evaluate SQL optimization patterns for current context"
+        - "Retrieve full database transformation details and code"
+        - "Apply database optimization with context-specific tuning"
+        - "Validate through query performance testing and monitoring"
+        - "Track usage metrics for database optimization effectiveness"
+
+    database_stf_contribution:
+      phases:
+        - "Extract reusable database optimization pattern from successful resolution"
+        - "Document SQL query improvements and index recommendations"
+        - "Assess database optimization quality through performance metrics"
+        - "Store database STF with clear problem category (e.g., 'query_optimization')"
+        - "Tag with database-specific signatures and metadata"
+
+  stf_helper_integration:
+    database_categories:
+      - "query_optimization: SQL query performance improvements"
+      - "connection_pooling: Connection management patterns"
+      - "deadlock_resolution: Deadlock prevention strategies"
+      - "index_optimization: Index creation and tuning"
+      - "schema_validation: Schema integrity improvements"
+
+    example_usage: |
+      # Query database-specific STFs
+      if "connection timeout" in error_message:
+          stfs = await stf_helper.query_stfs(
+              problem_signature="connection timeout",
+              problem_category="connection_pooling",
+              min_quality=0.8
+          )
+
+      # Store database optimization STF
+      if optimization_successful:
+          stf_id = await stf_helper.store_stf(
+              stf_name="optimize_pool_connections",
+              stf_code=optimization_code,
+              stf_description="Increase connection pool size and timeout",
+              problem_category="connection_pooling",
+              problem_signature="connection timeout",
+              quality_score=0.9,
+              correlation_id=correlation_id
+          )
+
 # Quality Gates
 quality_gates:
   database_optimization_quality:

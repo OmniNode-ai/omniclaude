@@ -6,7 +6,7 @@ normalized STF code for deduplication.
 
 Contract: contracts/debug_loop/stf_hash_compute.yaml
 Node Type: COMPUTE
-Base Class: NodeComputeService
+Base Class: NodeCompute
 
 Pure function - deterministic, no side effects, thread-safe.
 """
@@ -14,16 +14,17 @@ Pure function - deterministic, no side effects, thread-safe.
 import hashlib
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List
 
-# omnibase_core imports
-from omnibase_core.core.infrastructure_service_bases import NodeComputeService
-from omnibase_core.errors.model_onex_error import ModelOnexError
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
+from omnibase_core.errors.model_onex_error import ModelOnexError
+
+# omnibase_core imports
+from omnibase_core.nodes import NodeCompute
 
 
-class NodeSTFHashCompute(NodeComputeService):
+class NodeSTFHashCompute(NodeCompute):
     """
     Compute node for STF hash generation with code normalization.
 
@@ -87,14 +88,14 @@ class NodeSTFHashCompute(NodeComputeService):
                 "normalized_code": normalized_code,
                 "normalization_applied": applied_normalizations,
                 "computation_time_ms": computation_time_ms,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         except ModelOnexError:
             raise
         except Exception as e:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.EXECUTION_ERROR,
+                error_code=EnumCoreErrorCode.OPERATION_FAILED,
                 message=f"Hash computation failed: {str(e)}",
             ) from e
 

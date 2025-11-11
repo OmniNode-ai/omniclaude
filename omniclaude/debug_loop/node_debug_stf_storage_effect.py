@@ -6,7 +6,7 @@ Functions (STFs) in PostgreSQL with quality metrics.
 
 Contract: contracts/debug_loop/debug_stf_storage_effect.yaml
 Node Type: EFFECT
-Base Class: NodeEffectService
+Base Class: NodeEffect
 
 Operations:
 - store: Store new STF with quality metrics
@@ -16,15 +16,14 @@ Operations:
 - update_quality: Update quality scores
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
+from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
+
 # omnibase_core imports
-from omnibase_core.core.infrastructure_service_bases import NodeEffectService
-from omnibase_core.errors.model_onex_error import ModelOnexError
-from omnibase_core.errors.error_codes import EnumCoreErrorCode
-from omnibase_core.models.common.model_error_context import ModelErrorContext
+from omnibase_core.nodes import NodeEffect
 
 # omnibase_spi imports (protocol for database access)
 try:
@@ -35,12 +34,19 @@ except ImportError:
 
     class IDatabaseProtocol(Protocol):
         """Mock protocol for database operations"""
-        async def execute_query(self, query: str, params: Optional[Dict] = None) -> Any: ...
-        async def fetch_one(self, query: str, params: Optional[Dict] = None) -> Optional[Dict]: ...
-        async def fetch_all(self, query: str, params: Optional[Dict] = None) -> List[Dict]: ...
+
+        async def execute_query(
+            self, query: str, params: Optional[Dict] = None
+        ) -> Any: ...
+        async def fetch_one(
+            self, query: str, params: Optional[Dict] = None
+        ) -> Optional[Dict]: ...
+        async def fetch_all(
+            self, query: str, params: Optional[Dict] = None
+        ) -> List[Dict]: ...
 
 
-class NodeDebugSTFStorageEffect(NodeEffectService):
+class NodeDebugSTFStorageEffect(NodeEffect):
     """
     Effect node for STF storage operations in PostgreSQL.
 
@@ -48,14 +54,15 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
     retry logic, and observability.
     """
 
-    def __init__(self, db_protocol: IDatabaseProtocol):
+    def __init__(self, db_protocol: IDatabaseProtocol, container=None):
         """
         Initialize with database protocol dependency.
 
         Args:
             db_protocol: Database connection protocol from omnibase_spi
+            container: Optional DI container (for v0.1.0 API compatibility)
         """
-        super().__init__()
+        super().__init__(container=container)
         self.db = db_protocol
         self._operation_handlers = {
             "store": self._handle_store,
@@ -83,24 +90,20 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
             operation = contract.get("operation")
             if not operation:
                 raise ModelOnexError(
-                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message="Missing required field: operation",
-                    context=ModelErrorContext(
-                        operation="execute_effect",
-                        input_data=contract,
-                    ),
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    operation="execute_effect",
+                    input_data=contract,
                 )
 
             # Dispatch to handler
             handler = self._operation_handlers.get(operation)
             if not handler:
                 raise ModelOnexError(
-                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                     message=f"Invalid operation: {operation}",
-                    context=ModelErrorContext(
-                        operation="execute_effect",
-                        input_data=contract,
-                    ),
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    operation="execute_effect",
+                    input_data=contract,
                 )
 
             # Execute handler
@@ -108,7 +111,7 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
             # Add metadata
             result["operation"] = operation
-            result["timestamp"] = datetime.utcnow().isoformat()
+            result["timestamp"] = datetime.now(UTC).isoformat()
 
             return result
 
@@ -116,13 +119,11 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
             raise
         except Exception as e:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.EXECUTION_ERROR,
                 message=f"STF storage operation failed: {str(e)}",
-                context=ModelErrorContext(
-                    operation="execute_effect",
-                    input_data=contract,
-                    error=str(e),
-                ),
+                error_code=EnumCoreErrorCode.OPERATION_FAILED,
+                operation="execute_effect",
+                input_data=contract,
+                error=str(e),
             ) from e
 
     async def _handle_store(self, contract: Dict[str, Any]) -> Dict[str, Any]:
@@ -134,8 +135,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
         missing = [f for f in required if not stf_data.get(f)]
         if missing:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Missing required fields: {', '.join(missing)}",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
             )
 
         # Generate UUID
@@ -189,12 +190,12 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
         except Exception as e:
             if "duplicate" in str(e).lower():
                 raise ModelOnexError(
-                    error_code=EnumCoreErrorCode.DUPLICATE_ERROR,
                     message="STF with same hash already exists",
+                    error_code=EnumCoreErrorCode.INVALID_OPERATION,
                 )
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.DB_ERROR,
                 message=f"Database error during store: {str(e)}",
+                error_code=EnumCoreErrorCode.DATABASE_OPERATION_ERROR,
             ) from e
 
     async def _handle_retrieve(self, contract: Dict[str, Any]) -> Dict[str, Any]:
@@ -202,8 +203,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
         stf_id = contract.get("stf_id")
         if not stf_id:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Missing required field: stf_id",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
             )
 
         query = """
@@ -219,8 +220,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
         if not result:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.NOT_FOUND,
                 message=f"STF not found: {stf_id}",
+                error_code=EnumCoreErrorCode.NOT_FOUND,
             )
 
         return {
@@ -288,8 +289,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
         stf_id = contract.get("stf_id")
         if not stf_id:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Missing required field: stf_id",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
             )
 
         query = """
@@ -304,8 +305,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
         if not result:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.NOT_FOUND,
                 message=f"STF not found: {stf_id}",
+                error_code=EnumCoreErrorCode.NOT_FOUND,
             )
 
         return {
@@ -320,8 +321,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
         if not stf_id:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Missing required field: stf_id",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
             )
 
         # Build UPDATE SET clause
@@ -346,8 +347,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
         if not set_parts:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="No quality scores provided",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
             )
 
         # Add STF ID as last param
@@ -364,8 +365,8 @@ class NodeDebugSTFStorageEffect(NodeEffectService):
 
         if not result:
             raise ModelOnexError(
-                error_code=EnumCoreErrorCode.NOT_FOUND,
                 message=f"STF not found: {stf_id}",
+                error_code=EnumCoreErrorCode.NOT_FOUND,
             )
 
         return {

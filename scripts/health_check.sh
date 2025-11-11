@@ -9,6 +9,7 @@
 # - PostgreSQL connectivity
 # - Recent manifest injection quality
 # - Intelligence collection status
+# - Debug loop infrastructure (STF registry, model catalog)
 #
 # Usage: ./scripts/health_check.sh
 # Output: Saves to /tmp/health_check_latest.txt and appends to /tmp/health_check_history.log
@@ -290,6 +291,66 @@ check_router() {
     fi
 }
 
+# Function to check debug loop infrastructure
+check_debug_loop() {
+    echo ""
+    echo "Debug Loop Infrastructure:"
+
+    # Check if psql is available
+    if ! command -v psql &> /dev/null; then
+        echo "  ⚠️  Cannot check debug loop (psql not installed)"
+        return
+    fi
+
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+
+    # Check if debug_transform_functions table exists
+    local dtf_table_exists=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'debug_transform_functions')" 2>/dev/null | tr -d ' ' || echo "f")
+
+    if [[ "$dtf_table_exists" == "t" ]]; then
+        echo "  ✅ debug_transform_functions table exists"
+
+        # Count STFs in registry
+        local stf_count=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT COUNT(*) FROM debug_transform_functions" 2>/dev/null | tr -d ' ' || echo "0")
+        echo "  📊 Registered STFs: $stf_count"
+
+        # Check recent STF activity (last 24h)
+        local recent_stf_activity=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT COUNT(*) FROM debug_transform_functions WHERE updated_at > NOW() - INTERVAL '24 hours'" 2>/dev/null | tr -d ' ' || echo "0")
+        echo "  📊 Active STFs (24h): $recent_stf_activity"
+
+        # Check if no STFs are registered
+        if [[ $stf_count -eq 0 ]]; then
+            echo "  ⚠️  No STFs registered in database"
+            add_issue "No debug transform functions registered"
+        fi
+    else
+        echo "  ❌ debug_transform_functions table not found"
+        add_issue "debug_transform_functions table missing"
+    fi
+
+    # Check if model_price_catalog table exists
+    local mpc_table_exists=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'model_price_catalog')" 2>/dev/null | tr -d ' ' || echo "f")
+
+    if [[ "$mpc_table_exists" == "t" ]]; then
+        echo "  ✅ model_price_catalog table exists"
+
+        # Count models in catalog
+        local model_count=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT COUNT(*) FROM model_price_catalog" 2>/dev/null | tr -d ' ' || echo "0")
+        echo "  📊 Registered Models: $model_count"
+
+        # Check if no models are registered
+        if [[ $model_count -eq 0 ]]; then
+            echo "  ⚠️  No models registered in catalog"
+            add_issue "No models registered in price catalog"
+        fi
+    else
+        echo "  ❌ model_price_catalog table not found"
+        add_issue "model_price_catalog table missing"
+    fi
+
+    unset PGPASSWORD
+}
+
 # Main execution
 {
     echo "=== System Health Check ==="
@@ -324,6 +385,7 @@ check_router() {
     check_postgres
     check_intelligence
     check_router
+    check_debug_loop
 
     echo ""
     echo "=== Summary ==="

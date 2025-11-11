@@ -9,9 +9,9 @@ packages = [{include = "parallel_execution", from = "agents"}]
 [tool.poetry.dependencies]
 python = "^3.12"
 
-# ONEX dependencies - Using public GitHub repos
-omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", branch = "main"}
-omnibase_spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", branch = "main"}
+# ONEX dependencies - Using public GitHub repos with stable tags
+omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", tag = "v0.1.0"}
+omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.1.0"}
 
 # Core dependencies
 pydantic = "^2.0.0"
@@ -28,7 +28,7 @@ watchdog = "^6.0.0"
 numpy = "^2.3.3"
 aiokafka = "^0.10.0"
 scikit-learn = "^1.7.2"
-fastapi = "^0.120.0"
+fastapi = "^0.115.0"
 uvicorn = "^0.32.0"
 psycopg2-binary = "^2.9.10"
 jinja2 = "^3.1.0"
