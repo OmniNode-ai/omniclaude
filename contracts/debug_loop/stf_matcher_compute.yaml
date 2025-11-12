@@ -5,6 +5,43 @@ node_type: "compute"
 node_name: "STFMatcherCompute"
 description: "Match current problem to existing STFs using similarity search with confidence scoring"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 2: STF Registry & Discovery"
+      relationship: "implementation_guide"
+      description: "STF matching and recommendation system (Days 9-10)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
+      relationship: "depends_on"
+      description: "Retrieves existing STFs for similarity matching"
+
+  algorithms:
+    - name: "TF-IDF Similarity"
+      method: "cosine_similarity"
+      relationship: "matching_algorithm"
+      description: "TF-IDF vectorization with cosine similarity for text matching"
+    - name: "Composite Scoring"
+      formula: "(similarity * 0.6) + (quality * 0.4) * usage_boost"
+      relationship: "scoring_algorithm"
+      description: "Weighted composite score combining similarity, quality, and usage"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "matching_config"
+      description: "Similarity thresholds, quality filters, caching TTL"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Intelligence Infrastructure"
+      relationship: "intelligence_guide"
+      description: "Pattern discovery and manifest injection with STF recommendations"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -31,11 +68,16 @@ input:
         stf_id:
           type: "string"
           format: "uuid"
-        stf_name: string
-        stf_description: string
-        problem_signature: string
-        quality_score: float
-        usage_count: integer
+        stf_name:
+          type: "string"
+        stf_description:
+          type: "string"
+        problem_signature:
+          type: "string"
+        quality_score:
+          type: "float"
+        usage_count:
+          type: "integer"
     required: true
     description: "Pool of existing STFs to match against"
 
@@ -69,17 +111,21 @@ output:
         stf_id:
           type: "string"
           format: "uuid"
-        stf_name: string
-        stf_description: string
+        stf_name:
+          type: "string"
+        stf_description:
+          type: "string"
         similarity_score:
           type: "float"
           min: 0.0
           max: 1.0
-        quality_score: float
+        quality_score:
+          type: "float"
         composite_score:
           type: "float"
           description: "Combined similarity + quality score"
-        rank: integer
+        rank:
+          type: "integer"
     required: true
 
   match_count:
@@ -91,8 +137,10 @@ output:
     required: false
     description: "Highest scoring match (if any)"
     properties:
-      stf_id: string
-      composite_score: float
+      stf_id:
+        type: "string"
+      composite_score:
+        type: "float"
 
   matching_algorithm_used:
     type: "string"

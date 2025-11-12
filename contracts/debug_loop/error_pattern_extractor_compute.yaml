@@ -5,6 +5,39 @@ node_type: "compute"
 node_name: "ErrorPatternExtractorCompute"
 description: "Extract and normalize error patterns from error messages for pattern matching"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 4: Error→Success Mapping & Golden States"
+      relationship: "implementation_guide"
+      description: "Error pattern extraction (Days 15-16)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/error_success_mapping_reducer.yaml"
+      relationship: "provides_to"
+      description: "Provides normalized error patterns for mapping creation"
+
+  algorithms:
+    - name: "Error Pattern Normalization"
+      rules: ["Normalize paths to <PATH>", "Normalize values to <VALUE>", "Extract exception class", "Generate SHA-256 signature"]
+      relationship: "normalization_algorithm"
+      description: "Error message normalization for pattern matching"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "extraction_config"
+      description: "Normalization options and error categorization"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Troubleshooting Guide"
+      relationship: "error_guide"
+      description: "Common error patterns and resolution strategies"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:

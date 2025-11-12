@@ -127,7 +127,35 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             ) from e
 
     async def _handle_store(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Store new STF with quality metrics."""
+        """Store new STF with quality metrics.
+
+        Creates a new Specific Transformation Function (STF) record in the database
+        with associated quality metrics and metadata. If an STF with the same hash
+        already exists, returns the existing record ID.
+
+        Args:
+            contract: Input contract containing:
+                - stf_data: Dictionary with STF details including:
+                    - stf_name (required): Name of the transformation function
+                    - stf_code (required): Source code of the function
+                    - stf_hash (required): SHA-256 hash for deduplication
+                    - stf_description (optional): Human-readable description
+                    - problem_category (optional): Category of problem solved
+                    - problem_signature (optional): Unique problem identifier
+                    - quality_score (optional): Overall quality score (0.0-1.0)
+                    - source_execution_id (optional): ID of source execution
+                    - source_correlation_id (optional): Correlation ID for tracing
+                    - contributor_agent_name (optional): Name of contributing agent
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - stf_id: UUID of the stored STF
+                - duplicate: Boolean indicating if this was a duplicate
+
+        Raises:
+            ModelOnexError: If required fields are missing or database operation fails
+        """
         stf_data = contract.get("stf_data", {})
 
         # Validate required fields
@@ -174,10 +202,14 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             result = await self.db.fetch_one(query, params)
 
             if not result:
-                # Duplicate hash - return existing STF
+                # Duplicate hash - query existing STF to get real ID
+                existing = await self.db.fetch_one(
+                    "SELECT stf_id FROM debug_transform_functions WHERE stf_hash = $1",
+                    {"1": stf_data["stf_hash"]},
+                )
                 return {
                     "success": True,
-                    "stf_id": stf_id,
+                    "stf_id": existing["stf_id"],
                     "duplicate": True,
                 }
 
@@ -199,7 +231,35 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             ) from e
 
     async def _handle_retrieve(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Retrieve STF by ID."""
+        """Retrieve STF by ID.
+
+        Fetches a complete STF record from the database by its unique identifier,
+        including all metadata, quality scores, and usage statistics.
+
+        Args:
+            contract: Input contract containing:
+                - stf_id: UUID of the STF to retrieve
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - stf_id: UUID of the retrieved STF
+                - stf_data: Complete STF record with fields:
+                    - stf_name: Name of the function
+                    - stf_code: Source code
+                    - stf_hash: Content hash
+                    - stf_description: Description
+                    - problem_category: Problem category
+                    - quality_score: Quality score
+                    - usage_count: Number of times used
+                    - success_count: Number of successful uses
+                    - approval_status: Current approval status
+                    - created_at: Creation timestamp
+                    - last_used_at: Last usage timestamp
+
+        Raises:
+            ModelOnexError: If stf_id is missing or STF not found
+        """
         stf_id = contract.get("stf_id")
         if not stf_id:
             raise ModelOnexError(
@@ -231,7 +291,37 @@ class NodeDebugSTFStorageEffect(NodeEffect):
         }
 
     async def _handle_search(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Search STFs by criteria."""
+        """Search STFs by criteria.
+
+        Searches the STF database using multiple filter criteria, returning
+        results ordered by quality score and usage count. Supports filtering
+        by problem signature, category, quality threshold, and approval status.
+
+        Args:
+            contract: Input contract containing:
+                - search_criteria: Dictionary with optional filters:
+                    - problem_signature: Exact match on problem signature
+                    - problem_category: Exact match on problem category
+                    - min_quality: Minimum quality score threshold (default: 0.7)
+                    - approval_status: Filter by status (default: "approved")
+                    - limit: Maximum number of results (default: 10)
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - search_results: List of matching STF records, each with:
+                    - stf_id: UUID of the STF
+                    - stf_name: Name of the function
+                    - stf_description: Description
+                    - problem_category: Problem category
+                    - quality_score: Quality score
+                    - usage_count: Number of times used
+                    - success_rate: Calculated success rate (success_count/usage_count)
+                - result_count: Number of results returned
+
+        Raises:
+            ModelOnexError: If database operation fails
+        """
         criteria = contract.get("search_criteria", {})
 
         # Build WHERE clause
@@ -285,7 +375,23 @@ class NodeDebugSTFStorageEffect(NodeEffect):
         }
 
     async def _handle_update_usage(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Increment usage counter."""
+        """Increment usage counter.
+
+        Increments the usage count for an STF and updates the last_used_at timestamp.
+        This is called each time an STF is retrieved and applied to a problem.
+
+        Args:
+            contract: Input contract containing:
+                - stf_id: UUID of the STF to update
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - stf_id: UUID of the updated STF
+
+        Raises:
+            ModelOnexError: If stf_id is missing or STF not found
+        """
         stf_id = contract.get("stf_id")
         if not stf_id:
             raise ModelOnexError(
@@ -315,7 +421,32 @@ class NodeDebugSTFStorageEffect(NodeEffect):
         }
 
     async def _handle_update_quality(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Update quality scores."""
+        """Update quality scores.
+
+        Updates one or more quality score fields for an STF. Supports updating
+        overall quality score as well as specific sub-scores for different
+        quality dimensions. The updated_at timestamp is automatically updated.
+
+        Args:
+            contract: Input contract containing:
+                - stf_id: UUID of the STF to update
+                - quality_scores: Dictionary with one or more of:
+                    - quality_score: Overall quality score (0.0-1.0)
+                    - completeness_score: Code completeness score (0.0-1.0)
+                    - documentation_score: Documentation quality score (0.0-1.0)
+                    - onex_compliance_score: ONEX compliance score (0.0-1.0)
+                    - metadata_score: Metadata completeness score (0.0-1.0)
+                    - complexity_score: Code complexity score (0.0-1.0)
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - stf_id: UUID of the updated STF
+
+        Raises:
+            ModelOnexError: If stf_id is missing, no quality scores provided,
+                or STF not found
+        """
         stf_id = contract.get("stf_id")
         quality_scores = contract.get("quality_scores", {})
 

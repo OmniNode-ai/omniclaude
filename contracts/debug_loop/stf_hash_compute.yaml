@@ -5,6 +5,46 @@ node_type: "compute"
 node_name: "STFHashCompute"
 description: "Generate SHA-256 hash of normalized STF code for deduplication"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 2: STF Registry & Discovery"
+      relationship: "implementation_guide"
+      description: "Hash generation for STF deduplication (Days 6-10)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow (critical step)"
+    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
+      relationship: "depends_on"
+      description: "Receives STF code for hash generation"
+    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
+      relationship: "provides_to"
+      description: "Provides unique hash for STF deduplication in storage"
+
+  algorithms:
+    - name: "Code Normalization"
+      steps: ["Strip whitespace", "Remove comments", "Normalize indentation", "Convert to UTF-8"]
+      relationship: "normalization_algorithm"
+      description: "Code normalization for deterministic hashing"
+    - name: "SHA-256 Hash Generation"
+      output_format: "64 hex characters"
+      relationship: "hash_algorithm"
+      description: "Cryptographic hash for deduplication"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "normalization_config"
+      description: "Normalization options (strip_whitespace, strip_comments, etc.)"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Polymorphic Agent Framework"
+      relationship: "onex_patterns"
+      description: "Pure compute node patterns and deterministic functions"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -54,7 +94,8 @@ output:
 
   normalization_applied:
     type: "array"
-    items: string
+    items:
+      type: "string"
     required: true
     description: "List of normalizations applied"
 

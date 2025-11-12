@@ -5,6 +5,42 @@ node_type: "compute"
 node_name: "DebugSTFExtractorCompute"
 description: "Extract Specific Transformation Functions (STFs) from successful agent executions using AST parsing"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 2: STF Registry & Discovery"
+      relationship: "implementation_guide"
+      description: "STF extraction from successful executions (Days 6-8)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/stf_quality_compute.yaml"
+      relationship: "provides_to"
+      description: "Provides STF code and metadata for quality scoring"
+    - path: "contracts/debug_loop/stf_hash_compute.yaml"
+      relationship: "provides_to"
+      description: "Provides STF code for hash generation"
+
+  algorithms:
+    - name: "AST Parsing for STF Extraction"
+      steps: ["Parse code with AST", "Find function/class definitions", "Extract metadata", "Calculate confidence"]
+      relationship: "extraction_algorithm"
+      description: "Python AST-based code extraction with confidence scoring"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "extraction_config"
+      description: "Extraction options (min_lines, max_lines, require_function)"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Agent Observability & Traceability"
+      relationship: "observability_guide"
+      description: "Integration with AgentExecutionLogger for auto-extraction"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -23,12 +59,14 @@ input:
         description: "Code that was written during execution"
       files_modified:
         type: "array"
-        items: string
+        items:
+          type: "string"
         required: false
         description: "List of file paths modified"
       tools_used:
         type: "array"
-        items: string
+        items:
+          type: "string"
         required: true
         description: "Tools used (Read, Edit, Write, Bash, etc)"
       execution_id:
@@ -106,9 +144,12 @@ output:
         items:
           type: "object"
           properties:
-            name: string
-            type: string
-            default: string
+            name:
+              type: "string"
+            type:
+              type: "string"
+            default:
+              type: "string"
       return_type:
         type: "string"
 
@@ -131,9 +172,12 @@ output:
     items:
       type: "object"
       properties:
-        stf_code: string
-        stf_name: string
-        confidence_score: float
+        stf_code:
+          type: "string"
+        stf_name:
+          type: "string"
+        confidence_score:
+          type: "float"
     required: false
 
   computation_time_ms:

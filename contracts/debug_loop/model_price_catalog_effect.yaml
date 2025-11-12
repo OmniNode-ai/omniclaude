@@ -5,6 +5,53 @@ node_type: "effect"
 node_name: "ModelPriceCatalogEffect"
 description: "Manage LLM model pricing catalog with CRUD operations for cost tracking and optimization"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 3: Model Catalog & Cost Tracking"
+      relationship: "implementation_guide"
+      description: "Model price catalog creation (Days 11-12)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/cost_tracker_compute.yaml"
+      relationship: "provides_to"
+      description: "Provides model pricing data for cost calculations"
+
+  external_systems:
+    - name: "PostgreSQL (omninode_bridge)"
+      host: "192.168.86.200:5436"
+      table: "model_price_catalog"
+      relationship: "data_persistence"
+      description: "Stores LLM model pricing with versioning"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "database_config"
+      description: "PostgreSQL connection settings"
+    - path: "claude-providers.json"
+      relationship: "provider_config"
+      description: "Multi-provider model definitions"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Provider Management"
+      relationship: "provider_guide"
+      description: "Multi-provider AI model support (Anthropic, OpenAI, Google, Z.ai)"
+    - path: "CLAUDE.md"
+      section: "Security"
+      relationship: "security_guide"
+      description: "API key management and security best practices"
+
+  seed_data:
+    - name: "Initial Model Prices"
+      providers: ["anthropic", "openai", "google", "zai", "together"]
+      relationship: "seed_data"
+      description: "Populate catalog with current provider pricing (Days 11-12)"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -115,14 +162,23 @@ output:
     type: "object"
     required_for: ["get_pricing"]
     properties:
-      provider: string
-      model_name: string
-      model_version: ModelSemVer
-      input_price_per_million: float
-      output_price_per_million: float
-      max_tokens: integer
-      context_window: integer
-      is_active: boolean
+      provider:
+        type: "string"
+      model_name:
+        type: "string"
+      model_version:
+        type: "string"
+        description: "ModelSemVer from omnibase_core.primitives.model_semver"
+      input_price_per_million:
+        type: "float"
+      output_price_per_million:
+        type: "float"
+      max_tokens:
+        type: "integer"
+      context_window:
+        type: "integer"
+      is_active:
+        type: "boolean"
 
   # For list_models
   models:
@@ -130,12 +186,18 @@ output:
     items:
       type: "object"
       properties:
-        catalog_id: string
-        provider: string
-        model_name: string
-        input_price_per_million: float
-        output_price_per_million: float
-        is_active: boolean
+        catalog_id:
+          type: "string"
+        provider:
+          type: "string"
+        model_name:
+          type: "string"
+        input_price_per_million:
+          type: "float"
+        output_price_per_million:
+          type: "float"
+        is_active:
+          type: "boolean"
     required_for: ["list_models"]
 
   result_count:

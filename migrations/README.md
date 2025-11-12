@@ -4,22 +4,38 @@ This directory contains database migration scripts for OmniClaude.
 
 ## Running Migrations
 
+### Security Note
+
+⚠️ **Always load credentials from `.env` before running database commands**:
+
+```bash
+source .env
+```
+
+Never hardcode database credentials in documentation or scripts. All connection details should use environment variables.
+
 ### Prerequisites
 
 1. **PostgreSQL Access**: Ensure you have access to the PostgreSQL database
-   - Host: `192.168.86.200`
-   - Port: `5436`
-   - Database: `omninode_bridge`
-   - User: `postgres`
+   - Host: `${POSTGRES_HOST}` (default: `192.168.86.200`)
+   - Port: `${POSTGRES_PORT}` (default: `5436`)
+   - Database: `${POSTGRES_DATABASE}` (default: `omninode_bridge`)
+   - User: `${POSTGRES_USER}` (default: `postgres`)
 
-2. **Environment Variables**: Set `PGPASSWORD` before running migrations
+2. **Environment Variables**: Load credentials from `.env` before running migrations
 
 ```bash
-# Load environment variables
-source .env  # Or set manually: export PGPASSWORD=your_password
+# Load environment variables (REQUIRED)
+source .env
 
-# Run migration
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -f migrations/001_debug_loop_core_schema.sql
+# Verify credentials are loaded
+echo "Host: ${POSTGRES_HOST}"
+echo "Port: ${POSTGRES_PORT}"
+echo "Database: ${POSTGRES_DATABASE}"
+echo "User: ${POSTGRES_USER}"
+
+# Run migration using environment variables
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} -f migrations/001_debug_loop_core_schema.sql
 ```
 
 ### Alternative: Using Python Config

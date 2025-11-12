@@ -109,15 +109,15 @@ CREATE TABLE debug_transform_functions (
 
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Indexes
-    INDEX idx_stf_hash (stf_hash),
-    INDEX idx_stf_category (problem_category),
-    INDEX idx_stf_quality (quality_score),
-    INDEX idx_stf_approval (approval_status),
-    INDEX idx_stf_usage (usage_count DESC)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create indexes separately
+CREATE INDEX idx_stf_hash ON debug_transform_functions(stf_hash);
+CREATE INDEX idx_stf_category ON debug_transform_functions(problem_category);
+CREATE INDEX idx_stf_quality ON debug_transform_functions(quality_score);
+CREATE INDEX idx_stf_approval ON debug_transform_functions(approval_status);
+CREATE INDEX idx_stf_usage ON debug_transform_functions(usage_count DESC);
 
 -- Trigger to update updated_at
 CREATE TRIGGER update_stf_updated_at
@@ -166,13 +166,13 @@ CREATE TABLE model_price_catalog (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- Composite unique constraint
-    UNIQUE (provider, model_name, model_version, effective_date),
-
-    -- Indexes
-    INDEX idx_model_provider (provider),
-    INDEX idx_model_active (is_active),
-    INDEX idx_model_price (input_price_per_million, output_price_per_million)
+    UNIQUE (provider, model_name, model_version, effective_date)
 );
+
+-- Create indexes separately
+CREATE INDEX idx_model_provider ON model_price_catalog(provider);
+CREATE INDEX idx_model_active ON model_price_catalog(is_active);
+CREATE INDEX idx_model_price ON model_price_catalog(input_price_per_million, output_price_per_million);
 ```
 
 #### 3. `debug_execution_attempts` (Enhanced Correlation Tracking)
@@ -228,17 +228,17 @@ CREATE TABLE debug_execution_attempts (
 
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Indexes
-    INDEX idx_attempt_correlation (correlation_id),
-    INDEX idx_attempt_execution (execution_id),
-    INDEX idx_attempt_status (status),
-    INDEX idx_attempt_golden (is_golden_state),
-    INDEX idx_attempt_request_hash (user_request_hash),
-    INDEX idx_attempt_agent (agent_name),
-    INDEX idx_attempt_timestamp (started_at DESC)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create indexes separately
+CREATE INDEX idx_attempt_correlation ON debug_execution_attempts(correlation_id);
+CREATE INDEX idx_attempt_execution ON debug_execution_attempts(execution_id);
+CREATE INDEX idx_attempt_status ON debug_execution_attempts(status);
+CREATE INDEX idx_attempt_golden ON debug_execution_attempts(is_golden_state);
+CREATE INDEX idx_attempt_request_hash ON debug_execution_attempts(user_request_hash);
+CREATE INDEX idx_attempt_agent ON debug_execution_attempts(agent_name);
+CREATE INDEX idx_attempt_timestamp ON debug_execution_attempts(started_at DESC);
 ```
 
 #### 4. `debug_error_success_mappings` (Confidence Metrics)
@@ -271,13 +271,13 @@ CREATE TABLE debug_error_success_mappings (
 
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Indexes
-    INDEX idx_mapping_error_type (error_type),
-    INDEX idx_mapping_confidence (confidence_score DESC),
-    INDEX idx_mapping_success_count (success_count DESC)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create indexes separately
+CREATE INDEX idx_mapping_error_type ON debug_error_success_mappings(error_type);
+CREATE INDEX idx_mapping_confidence ON debug_error_success_mappings(confidence_score DESC);
+CREATE INDEX idx_mapping_success_count ON debug_error_success_mappings(success_count DESC);
 
 -- Trigger to auto-calculate confidence score
 CREATE OR REPLACE FUNCTION calculate_error_mapping_confidence()
@@ -341,14 +341,14 @@ CREATE TABLE debug_golden_states (
 
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Indexes
-    INDEX idx_golden_category (problem_category),
-    INDEX idx_golden_quality (quality_score DESC),
-    INDEX idx_golden_reuse (reuse_count DESC),
-    INDEX idx_golden_problem_hash (problem_hash)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create indexes separately
+CREATE INDEX idx_golden_category ON debug_golden_states(problem_category);
+CREATE INDEX idx_golden_quality ON debug_golden_states(quality_score DESC);
+CREATE INDEX idx_golden_reuse ON debug_golden_states(reuse_count DESC);
+CREATE INDEX idx_golden_problem_hash ON debug_golden_states(problem_hash);
 ```
 
 ---

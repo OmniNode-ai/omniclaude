@@ -5,6 +5,59 @@ node_type: "reducer"
 node_name: "GoldenStateManagerReducer"
 description: "Manage golden state nominations and approvals using FSM with intent-based persistence"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 4: Error→Success Mapping & Golden States"
+      relationship: "implementation_guide"
+      description: "Golden state workflow and registry (Days 17-18)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/stf_quality_compute.yaml"
+      relationship: "depends_on"
+      description: "Uses quality scores for auto-approval threshold"
+
+  external_systems:
+    - name: "PostgreSQL (omninode_bridge)"
+      host: "192.168.86.200:5436"
+      table: "debug_golden_states"
+      relationship: "state_persistence"
+      description: "Stores golden state nominations and approvals"
+
+  algorithms:
+    - name: "FSM State Machine"
+      states: ["none", "nominated", "approved", "rejected"]
+      transitions: ["nominate", "approve", "reject", "record_reuse", "update_quality"]
+      relationship: "fsm_definition"
+      description: "Pure FSM with intent-based persistence for golden states"
+    - name: "Auto-Approval"
+      threshold: 0.9
+      relationship: "approval_algorithm"
+      description: "Automatic approval for quality scores >= 0.9"
+    - name: "Reward Calculation (Part 2)"
+      formula: "base_reward * quality_multiplier + reuse_bonus"
+      relationship: "reward_algorithm"
+      description: "Token reward calculation for Part 2 integration"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "database_config"
+      description: "PostgreSQL connection and approval thresholds"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Agent Observability & Traceability"
+      relationship: "observability_guide"
+      description: "Golden state tracking and reuse monitoring"
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Part 2: Token Economy Integration"
+      relationship: "future_integration"
+      description: "Token rewards for golden state contributions (Part 2)"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -73,7 +126,8 @@ input:
         max: 1.0
       stf_ids:
         type: "array"
-        items: string
+        items:
+          type: "string"
         required: false
       # For approve/reject actions
       approved_by:
@@ -132,7 +186,8 @@ output:
       type: "object"
       properties:
         intent_type:
-          type: "EnumIntentType"
+          type: "string"
+          description: "EnumIntentType from omnibase_core.models.model_intent"
         target:
           type: "string"
         payload:

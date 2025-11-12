@@ -5,6 +5,60 @@ node_type: "orchestrator"
 node_name: "DebugLoopOrchestrator"
 description: "Coordinate debug intelligence extraction and application workflow across all debug loop nodes"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Part 1: Debug Intelligence Core"
+      relationship: "implementation_guide"
+      description: "Orchestrator integrates all debug loop nodes in Week 4 (Days 15-20)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates STF extraction from successful executions"
+    - path: "contracts/debug_loop/stf_quality_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates quality scoring for extracted STFs"
+    - path: "contracts/debug_loop/stf_hash_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates hash generation for STF deduplication"
+    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates STF persistence to PostgreSQL"
+    - path: "contracts/debug_loop/stf_matcher_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates similarity matching for STF recommendations"
+    - path: "contracts/debug_loop/cost_tracker_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates LLM cost calculation and tracking"
+    - path: "contracts/debug_loop/error_pattern_extractor_compute.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates error pattern extraction and normalization"
+    - path: "contracts/debug_loop/error_success_mapping_reducer.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates error-to-success mapping aggregation"
+    - path: "contracts/debug_loop/golden_state_manager_reducer.yaml"
+      relationship: "orchestrates"
+      description: "Orchestrates golden state nomination and approval"
+
+  configuration:
+    - path: "agents/definitions/polymorphic-agent.yaml"
+      relationship: "agent_config"
+      description: "Agent configuration for debug loop orchestration"
+    - path: "config/settings.py"
+      relationship: "system_config"
+      description: "Type-safe configuration for database and feature flags"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Agent Observability & Traceability"
+      relationship: "architecture_overview"
+      description: "Debug loop architecture and observability patterns"
+    - path: "docs/observability/AGENT_TRACEABILITY.md"
+      relationship: "observability_guide"
+      description: "Three-layer traceability: routing → manifest → execution"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -42,7 +96,8 @@ input:
     properties:
       tools_used:
         type: "array"
-        items: string
+        items:
+          type: "string"
         description: "List of tools used (Read, Edit, Bash, etc)"
       code_written:
         type: "string"
@@ -50,7 +105,8 @@ input:
         description: "Code that was written during execution"
       files_modified:
         type: "array"
-        items: string
+        items:
+          type: "string"
         required: false
       model_used:
         type: "string"
@@ -113,11 +169,16 @@ output:
     items:
       type: "object"
       properties:
-        step_name: string
-        node_name: string
-        status: string  # success, error, skipped
-        duration_ms: integer
-        error_message: string
+        step_name:
+          type: "string"
+        node_name:
+          type: "string"
+        status:
+          type: "string"  # success, error, skipped
+        duration_ms:
+          type: "integer"
+        error_message:
+          type: "string"
 
   # STF Extraction Results
   stf_extracted:
@@ -144,10 +205,14 @@ output:
     items:
       type: "object"
       properties:
-        stf_id: string
-        stf_name: string
-        similarity_score: float
-        quality_score: float
+        stf_id:
+          type: "string"
+        stf_name:
+          type: "string"
+        similarity_score:
+          type: "float"
+        quality_score:
+          type: "float"
     required: false
 
   # Error Mapping Results
@@ -183,7 +248,8 @@ output:
         max: 1.0
       recommendations:
         type: "array"
-        items: string
+        items:
+          type: "string"
         description: "Actionable recommendations based on patterns"
       estimated_cost_usd:
         type: "float"
@@ -254,18 +320,26 @@ workflow_steps:
     condition: "execution_status == 'success' AND calculate_quality.quality_score >= options.min_quality_for_golden"
     on_error: "continue"
 
-# Dependencies (all debug loop nodes injected via container)
+# Dynamic dependency discovery using service registry pattern
+# Automatically discovers all debug_loop nodes without hardcoding
+# Supports adding/removing nodes without orchestrator changes
 dependencies:
+  # ✅ CORRECT (dynamic discovery via service registry)
   nodes:
-    - "NodeDebugSTFExtractorCompute"
-    - "NodeDebugSTFStorageEffect"
-    - "NodeSTFQualityCompute"
-    - "NodeSTFMatcherCompute"
-    - "NodeSTFHashCompute"
-    - "NodeErrorPatternExtractorCompute"
-    - "NodeCostTrackerCompute"
-    - "NodeErrorSuccessMappingReducer"
-    - "NodeGoldenStateManagerReducer"
+    type: "service_registry_lookup"
+    filters:
+      - pattern: "debug_loop_*"
+        node_types: ["effect", "compute", "reducer"]
+    discovery:
+      method: "registry_pattern"
+      registry_path: "~/.claude/agent-definitions/"
+      auto_discover: true
+
+  # Optional: Explicit critical dependencies (if needed)
+  critical_dependencies:
+    - node: "NodeModelPriceCatalogEffect"
+      required: true
+      reason: "Required for cost tracking initialization"
 
   protocols:
     - "IDatabaseProtocol"  # For direct DB access if needed

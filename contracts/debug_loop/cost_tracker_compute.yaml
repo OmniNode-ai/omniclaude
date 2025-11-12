@@ -5,6 +5,39 @@ node_type: "compute"
 node_name: "CostTrackerCompute"
 description: "Calculate LLM execution costs based on token usage and model pricing"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 3: Model Catalog & Cost Tracking"
+      relationship: "implementation_guide"
+      description: "Cost tracking integration (Days 11-14)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/model_price_catalog_effect.yaml"
+      relationship: "depends_on"
+      description: "Retrieves model pricing data for cost calculation"
+
+  algorithms:
+    - name: "Token Cost Calculation"
+      formula: "input_cost + output_cost = (tokens_input/1M * input_price) + (tokens_output/1M * output_price)"
+      relationship: "cost_algorithm"
+      description: "Per-token cost calculation with categorization"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "model_config"
+      description: "Model pricing defaults and cost thresholds"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Provider Management"
+      relationship: "provider_guide"
+      description: "Multi-provider AI model support and cost tracking"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:

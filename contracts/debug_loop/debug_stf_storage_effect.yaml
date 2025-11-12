@@ -5,6 +5,49 @@ node_type: "effect"
 node_name: "DebugSTFStorageEffect"
 description: "Store and retrieve Specific Transformation Functions (STFs) in PostgreSQL with quality metrics"
 
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 2: STF Registry & Discovery"
+      relationship: "implementation_guide"
+      description: "Storage node for STF registry (Days 6-10)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
+      relationship: "depends_on"
+      description: "Receives extracted STF code from extractor"
+    - path: "contracts/debug_loop/stf_quality_compute.yaml"
+      relationship: "depends_on"
+      description: "Receives quality scores for storage"
+    - path: "contracts/debug_loop/stf_hash_compute.yaml"
+      relationship: "depends_on"
+      description: "Receives STF hash for deduplication"
+
+  external_systems:
+    - name: "PostgreSQL (omninode_bridge)"
+      host: "192.168.86.200:5436"
+      table: "debug_transform_functions"
+      relationship: "data_persistence"
+      description: "Stores STFs with quality metrics and usage tracking"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "database_config"
+      description: "PostgreSQL connection settings (type-safe)"
+    - path: ".env"
+      relationship: "credentials"
+      description: "POSTGRES_HOST, POSTGRES_PORT, POSTGRES_PASSWORD"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Environment Configuration"
+      relationship: "infrastructure_guide"
+      description: "Database connection and credential management"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
@@ -144,17 +187,28 @@ output:
     type: "object"
     required_for: ["retrieve"]
     properties:
-      stf_name: string
-      stf_code: string
-      stf_hash: string
-      stf_description: string
-      problem_category: string
-      quality_score: float
-      usage_count: integer
-      success_count: integer
-      approval_status: string
-      created_at: datetime
-      last_used_at: datetime
+      stf_name:
+        type: "string"
+      stf_code:
+        type: "string"
+      stf_hash:
+        type: "string"
+      stf_description:
+        type: "string"
+      problem_category:
+        type: "string"
+      quality_score:
+        type: "float"
+      usage_count:
+        type: "integer"
+      success_count:
+        type: "integer"
+      approval_status:
+        type: "string"
+      created_at:
+        type: "datetime"
+      last_used_at:
+        type: "datetime"
 
   # For search operation
   search_results:
@@ -162,13 +216,20 @@ output:
     items:
       type: "object"
       properties:
-        stf_id: string
-        stf_name: string
-        stf_description: string
-        problem_category: string
-        quality_score: float
-        usage_count: integer
-        success_rate: float
+        stf_id:
+          type: "string"
+        stf_name:
+          type: "string"
+        stf_description:
+          type: "string"
+        problem_category:
+          type: "string"
+        quality_score:
+          type: "float"
+        usage_count:
+          type: "integer"
+        success_rate:
+          type: "float"
     required_for: ["search"]
 
   result_count:

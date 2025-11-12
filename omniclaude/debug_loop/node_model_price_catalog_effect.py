@@ -26,6 +26,9 @@ from omnibase_core.errors.model_onex_error import ModelOnexError
 # omnibase_core imports
 from omnibase_core.nodes import NodeEffect
 
+# omniclaude imports
+from omniclaude.debug_loop.enum_provider import EnumProvider
+
 # omnibase_spi imports (protocol for database access)
 try:
     from omnibase_spi.protocols import IDatabaseProtocol
@@ -121,7 +124,36 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             ) from e
 
     async def _handle_add_model(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Add new model to catalog."""
+        """Add new model to catalog.
+
+        Creates a new model pricing entry in the catalog with pricing information,
+        rate limits, and capability flags. Uses provider enum for validation.
+
+        Args:
+            contract: Input contract containing:
+                - model_data: Dictionary with model details including:
+                    - provider (required): Provider name (must be valid EnumProvider)
+                    - model_name (required): Name of the model
+                    - input_price_per_million (required): Input token price per 1M tokens
+                    - output_price_per_million (required): Output token price per 1M tokens
+                    - model_version (optional): Version string or ModelSemVer dict
+                    - max_tokens (optional): Maximum output tokens
+                    - context_window (optional): Context window size
+                    - supports_streaming (optional): Streaming support flag
+                    - supports_function_calling (optional): Function calling support flag
+                    - supports_vision (optional): Vision/image support flag
+                    - requests_per_minute (optional): Rate limit for requests
+                    - tokens_per_minute (optional): Rate limit for tokens
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - catalog_id: UUID of the created catalog entry
+
+        Raises:
+            ModelOnexError: If required fields are missing, provider is invalid,
+                or model already exists
+        """
         model_data = contract.get("model_data", {})
 
         # Validate required fields
@@ -139,9 +171,9 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             )
 
         # Validate provider enum
-        valid_providers = ["anthropic", "openai", "google", "zai", "together"]
         provider = model_data["provider"]
-        if provider not in valid_providers:
+        if not EnumProvider.is_valid(provider):
+            valid_providers = EnumProvider.get_valid_providers()
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Invalid provider: {provider}. Must be one of: {', '.join(valid_providers)}",
@@ -218,7 +250,32 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             ) from e
 
     async def _handle_update_pricing(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Update pricing for existing model."""
+        """Update pricing for existing model.
+
+        Updates pricing information and rate limits for an existing model in the
+        catalog. Allows partial updates - only provided fields are updated.
+
+        Args:
+            contract: Input contract containing:
+                - model_data: Dictionary with:
+                    - provider (required): Provider name
+                    - model_name (required): Name of the model
+                    - input_price_per_million (optional): New input token price
+                    - output_price_per_million (optional): New output token price
+                    - max_tokens (optional): New maximum output tokens
+                    - context_window (optional): New context window size
+                    - requests_per_minute (optional): New request rate limit
+                    - tokens_per_minute (optional): New token rate limit
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - catalog_id: UUID of the updated catalog entry
+
+        Raises:
+            ModelOnexError: If required fields are missing, no fields to update,
+                or model not found
+        """
         model_data = contract.get("model_data", {})
 
         # Validate required fields
@@ -286,7 +343,40 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         }
 
     async def _handle_get_pricing(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Retrieve pricing for specific model."""
+        """Retrieve pricing for specific model.
+
+        Fetches complete pricing information for a specific model by provider
+        and model name. Only returns active (non-deprecated) models.
+
+        Args:
+            contract: Input contract containing:
+                - provider: Provider name (e.g., "anthropic", "openai")
+                - model_name: Name of the model (e.g., "gpt-4", "claude-3-opus")
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - catalog_id: UUID of the catalog entry
+                - model_pricing: Complete pricing record with fields:
+                    - provider: Provider name
+                    - model_name: Model name
+                    - model_version: Model version
+                    - input_price_per_million: Input token price
+                    - output_price_per_million: Output token price
+                    - max_tokens: Maximum output tokens
+                    - context_window: Context window size
+                    - is_active: Active status
+                    - supports_streaming: Streaming support
+                    - supports_function_calling: Function calling support
+                    - supports_vision: Vision support
+                    - requests_per_minute: Request rate limit
+                    - tokens_per_minute: Token rate limit
+                    - created_at: Creation timestamp
+                    - updated_at: Last update timestamp
+
+        Raises:
+            ModelOnexError: If required fields are missing or model not found
+        """
         provider = contract.get("provider")
         model_name = contract.get("model_name")
 
@@ -325,7 +415,38 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         }
 
     async def _handle_list_models(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """List models with filters."""
+        """List models with filters.
+
+        Retrieves a list of models from the catalog with optional filtering
+        by provider, capabilities, and pricing. Results are ordered by provider
+        and model name.
+
+        Args:
+            contract: Input contract containing:
+                - filter: Dictionary with optional filter criteria:
+                    - is_active: Filter by active status (default: True)
+                    - provider: Filter by specific provider
+                    - supports_streaming: Filter by streaming support
+                    - max_price_per_million: Maximum output price per million tokens
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - models: List of model records, each with:
+                    - catalog_id: UUID of the catalog entry
+                    - provider: Provider name
+                    - model_name: Model name
+                    - input_price_per_million: Input token price
+                    - output_price_per_million: Output token price
+                    - is_active: Active status
+                    - supports_streaming: Streaming support
+                    - supports_function_calling: Function calling support
+                    - created_at: Creation timestamp
+                - result_count: Number of models returned
+
+        Raises:
+            ModelOnexError: If database operation fails
+        """
         filter_criteria = contract.get("filter", {})
 
         # Build WHERE clause
@@ -370,7 +491,24 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         }
 
     async def _handle_mark_deprecated(self, contract: Dict[str, Any]) -> Dict[str, Any]:
-        """Mark model as deprecated (set is_active = false)."""
+        """Mark model as deprecated (set is_active = false).
+
+        Marks a model as deprecated by setting its is_active flag to false.
+        Deprecated models are excluded from default queries and API responses.
+        The updated_at timestamp is automatically updated.
+
+        Args:
+            contract: Input contract containing:
+                - model_name: Name of the model to deprecate
+
+        Returns:
+            Dictionary containing:
+                - success: Boolean indicating success
+                - catalog_id: UUID of the deprecated catalog entry
+
+        Raises:
+            ModelOnexError: If model_name is missing or model not found
+        """
         model_name = contract.get("model_name")
         if not model_name:
             raise ModelOnexError(
