@@ -73,7 +73,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def clean_database(db_pool):
+async def __clean_database(db_pool):
     """Clean test data before/after each test."""
     async with db_pool.acquire() as conn:
         await conn.execute(
@@ -118,9 +118,8 @@ class TestEndToEndAgentLogging:
     """End-to-end tests for agent logging system."""
 
     @pytest.mark.asyncio
-    async def test_complete_workflow_simulation(
-        self, running_consumer, db_pool, clean_database
-    ):
+    @pytest.mark.usefixtures("_clean_database")
+    async def test_complete_workflow_simulation(self, running_consumer, db_pool):
         """
         Simulate complete agent workflow:
         1. Agent executes action
@@ -227,9 +226,8 @@ class TestEndToEndAgentLogging:
                     assert row["duration_ms"] == expected["duration_ms"]
 
     @pytest.mark.asyncio
-    async def test_multi_agent_scenario(
-        self, running_consumer, db_pool, clean_database
-    ):
+    @pytest.mark.usefixtures("_clean_database")
+    async def test_multi_agent_scenario(self, running_consumer, db_pool):
         """
         Test multiple agents logging concurrently.
         """
@@ -296,9 +294,8 @@ class TestEndToEndAgentLogging:
             assert logged_agents == set(agents)
 
     @pytest.mark.asyncio
-    async def test_data_integrity_verification(
-        self, running_consumer, db_pool, clean_database
-    ):
+    @pytest.mark.usefixtures("_clean_database")
+    async def test_data_integrity_verification(self, running_consumer, db_pool):
         """
         Verify data integrity across the pipeline:
         - No data loss
@@ -375,7 +372,8 @@ class TestEndToEndAgentLogging:
                 assert row["action_name"] == f"action_{i}"
 
     @pytest.mark.asyncio
-    async def test_latency_measurement(self, running_consumer, db_pool, clean_database):
+    @pytest.mark.usefixtures("_clean_database")
+    async def test_latency_measurement(self, running_consumer, db_pool):
         """
         Measure end-to-end latency from skill execution to database persistence.
         Target: <10ms for publish, <5s for end-to-end.
@@ -445,9 +443,8 @@ class TestEndToEndAgentLogging:
         pytest.fail(f"Event not persisted within {max_wait}s")
 
     @pytest.mark.asyncio
-    async def test_error_recovery(
-        self, kafka_brokers, postgres_dsn, db_pool, clean_database
-    ):
+    @pytest.mark.usefixtures("_clean_database")
+    async def test_error_recovery(self, kafka_brokers, postgres_dsn, db_pool):
         """
         Test error recovery scenarios:
         - Consumer restarts after crash

@@ -44,7 +44,7 @@ def test_polymorphic_agent_updates():
     print("✅ Test 4 passed: Validation checks present")
 
     # Test 5: Check for correct examples
-    assert (
+    assert (  # noqa: PT018
         "✅" in content and "Frontend Task" in content
     ), "❌ Missing: Correct transformation examples"
     assert (

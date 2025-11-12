@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+# ruff: noqa: S311
 """
 Training Data Generator for Mixin Compatibility Learning
 
 Generates realistic training data for mixin compatibility ML model by simulating
 known compatibility patterns and edge cases.
+
+Note: Uses Python's random module for training data generation (not cryptographic).
 
 Author: OmniClaude Autonomous Code Generation System
 Phase: 7 Stream 4

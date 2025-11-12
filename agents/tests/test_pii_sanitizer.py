@@ -731,7 +731,7 @@ class TestBoundaryConditions:
     def test_ip_octet_boundaries(self):
         """Test IP address octet boundaries"""
         # Minimum valid IP
-        assert sanitize_ip("0.0.0.0") == "0.*.*.*"
+        assert sanitize_ip("0.0.0.0") == "0.*.*.*"  # noqa: S104
 
         # Maximum valid IP
         assert sanitize_ip("255.255.255.255") == "255.*.*.*"

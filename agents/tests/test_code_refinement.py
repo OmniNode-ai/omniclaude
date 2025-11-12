@@ -630,7 +630,7 @@ class TestCodeRefinementEngine:
 
         except Exception as e:
             # Even if it fails, should not crash
-            assert False, f"Refinement should not raise exception: {e}"
+            pytest.fail(f"Refinement should not raise exception: {e}")
 
     @pytest.mark.asyncio
     async def test_refinement_without_quorum(self, sample_code_complete):
@@ -862,7 +862,7 @@ class TestErrorHandling:
                 assert True
             except Exception as e:
                 # Should not raise exception
-                assert False, f"Should handle AI failure gracefully: {e}"
+                pytest.fail(f"Should handle AI failure gracefully: {e}")
 
 
 # ============================================================================

@@ -114,7 +114,7 @@ class PerformanceTest:
             correlation_id = f"perf-session-start-{uuid.uuid4()}"
             correlation_ids.append(correlation_id)
 
-            def insert_session():
+            def insert_session(cid=correlation_id):
                 with self.conn.cursor() as cur:
                     cur.execute(
                         """
@@ -127,7 +127,7 @@ class PerformanceTest:
                             %s
                         )
                     """,
-                        (Json({"correlation_id": correlation_id, "test": True}),),
+                        (Json({"correlation_id": cid, "test": True}),),
                     )
                     self.conn.commit()
 
@@ -200,7 +200,7 @@ class PerformanceTest:
         # Measure update times
         for session_id in session_ids:
 
-            def update_session():
+            def update_session(sid=session_id):
                 with self.conn.cursor() as cur:
                     cur.execute(
                         """
@@ -210,7 +210,7 @@ class PerformanceTest:
                             updated_at = NOW()
                         WHERE id = %s::uuid
                     """,
-                        (session_id,),
+                        (sid,),
                     )
                     self.conn.commit()
 
@@ -256,7 +256,7 @@ class PerformanceTest:
             correlation_id = f"perf-stop-{uuid.uuid4()}"
             correlation_ids.append(correlation_id)
 
-            def insert_stop_event():
+            def insert_stop_event(cid=correlation_id):
                 with self.conn.cursor() as cur:
                     cur.execute(
                         """
@@ -273,7 +273,7 @@ class PerformanceTest:
                     """,
                         (
                             Json({"response_length": 1000}),
-                            Json({"correlation_id": correlation_id, "test": True}),
+                            Json({"correlation_id": cid, "test": True}),
                         ),
                     )
                     self.conn.commit()
@@ -322,7 +322,7 @@ class PerformanceTest:
             correlation_id = f"perf-basic-{uuid.uuid4()}"
             correlation_ids.append(correlation_id)
 
-            def insert_basic():
+            def insert_basic(cid=correlation_id):
                 with self.conn.cursor() as cur:
                     cur.execute(
                         """
@@ -337,7 +337,7 @@ class PerformanceTest:
                             %s
                         )
                     """,
-                        (Json({"correlation_id": correlation_id}),),
+                        (Json({"correlation_id": cid}),),
                     )
                     self.conn.commit()
 
@@ -349,7 +349,7 @@ class PerformanceTest:
             correlation_id = f"perf-enhanced-{uuid.uuid4()}"
             correlation_ids.append(correlation_id)
 
-            def insert_enhanced():
+            def insert_enhanced(cid=correlation_id):
                 with self.conn.cursor() as cur:
                     cur.execute(
                         """
@@ -367,7 +367,7 @@ class PerformanceTest:
                         (
                             Json(
                                 {
-                                    "correlation_id": correlation_id,
+                                    "correlation_id": cid,
                                     "hook_version": "2.0",
                                     "quality_check": {"enabled": True, "violations": 0},
                                     "timestamp": datetime.now(timezone.utc).isoformat(),

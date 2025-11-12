@@ -37,7 +37,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         """Suppress request logging"""
         pass
 
-    def do_GET(self):
+    def do_GET(self):  # noqa: N802
         """Handle GET requests"""
         if self.path == "/":
             self.send_response(200)
@@ -355,7 +355,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def run_server(port=8000):
     """Run the dashboard server"""
-    server = HTTPServer(("0.0.0.0", port), DashboardHandler)
+    server = HTTPServer(("0.0.0.0", port), DashboardHandler)  # noqa: S104
     print("🎯 OmniClaude Web Dashboard")
     print("=" * 50)
     print(f"Server running at http://localhost:{port}")

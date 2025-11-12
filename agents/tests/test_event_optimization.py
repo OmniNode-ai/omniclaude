@@ -127,7 +127,7 @@ async def test_batch_processor_error_handling():
 
     # Add events - should trigger flush when batch is full
     # The flush will raise an error
-    with pytest.raises(ValueError, match="Processing failed"):
+    with pytest.raises(ValueError, match="Processing failed"):  # noqa: PT012
         for i in range(3):
             await bp.add_event(f"event-{i}")
 
@@ -156,7 +156,7 @@ async def test_circuit_breaker_opens_on_failures():
 
     # Trigger failures
     for i in range(3):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Simulated failure"):
             await cb.call(failing_func)
 
     assert cb.state == CircuitState.OPEN
@@ -174,7 +174,7 @@ async def test_circuit_breaker_rejects_when_open():
 
     # Open circuit
     for i in range(2):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Simulated failure"):
             await cb.call(failing_func)
 
     assert cb.state == CircuitState.OPEN
@@ -200,7 +200,7 @@ async def test_circuit_breaker_half_open_recovery():
 
     # Open circuit
     for i in range(2):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Simulated failure"):
             await cb.call(failing_func)
 
     assert cb.state == CircuitState.OPEN
@@ -238,7 +238,7 @@ async def test_circuit_breaker_reopens_on_half_open_failure():
 
     # Open circuit
     for i in range(2):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Simulated failure"):
             await cb.call(failing_func)
 
     assert cb.state == CircuitState.OPEN
@@ -251,7 +251,7 @@ async def test_circuit_breaker_reopens_on_half_open_failure():
     assert cb.state == CircuitState.HALF_OPEN
 
     # Failure in half-open should reopen
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Simulated failure"):
         await cb.call(failing_func)
 
     assert cb.state == CircuitState.OPEN
@@ -384,7 +384,7 @@ async def test_event_optimizer_circuit_breaker_integration(monkeypatch):
     # Trigger failures to open circuit
     event = CodegenAnalysisRequest()
     for i in range(2):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Simulated failure"):
             await optimizer.publish_event(event)
 
     assert optimizer.circuit_breaker.state == CircuitState.OPEN

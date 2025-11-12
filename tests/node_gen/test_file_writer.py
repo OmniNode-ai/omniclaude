@@ -50,7 +50,7 @@ class TestFileWriteResult:
 
     def test_negative_bytes(self):
         """Test that negative total_bytes raises validation error."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=""):  # noqa: PT011
             FileWriteResult(
                 success=True,
                 output_path="/path",
@@ -300,7 +300,7 @@ class TestFileWriter:
                 )
         finally:
             # Restore permissions for cleanup
-            os.chmod(readonly_dir, 0o755)
+            os.chmod(readonly_dir, 0o755)  # noqa: S103
 
     def test_node_directory_naming(self, temp_dir):
         """Test ONEX-compliant node directory naming."""

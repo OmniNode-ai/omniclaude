@@ -149,6 +149,9 @@ ignore = [
     "PT023",     # Pytest mark parentheses (technical debt)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"agents/tests/test_parallel_generation.py" = ["B017", "PT011"]  # Intentionally broad exception for error handling tests
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

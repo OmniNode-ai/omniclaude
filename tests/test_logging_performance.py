@@ -66,7 +66,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def clean_database(db_pool):
+async def __clean_database(db_pool):
     """Clean test data."""
     async with db_pool.acquire() as conn:
         await conn.execute(
@@ -238,8 +238,9 @@ class TestConsumerPerformance:
 
     @pytest.mark.asyncio
     @pytest.mark.performance
+    @pytest.mark.usefixtures("_clean_database")
     async def test_consumer_throughput(
-        self, kafka_producer, kafka_brokers, postgres_dsn, db_pool, clean_database
+        self, kafka_producer, kafka_brokers, postgres_dsn, db_pool
     ):
         """
         Test consumer throughput.
@@ -481,8 +482,9 @@ class TestBatchSizeOptimization:
 
     @pytest.mark.asyncio
     @pytest.mark.performance
+    @pytest.mark.usefixtures("_clean_database")
     async def test_batch_size_comparison(
-        self, kafka_producer, kafka_brokers, postgres_dsn, db_pool, clean_database
+        self, kafka_producer, kafka_brokers, postgres_dsn, db_pool
     ):
         """
         Compare performance across different batch sizes.

@@ -10,9 +10,9 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from omnibase_core.errors import OnexError
 
 from agents.lib.business_logic_generator import BusinessLogicGenerator
-from omnibase_core.errors import OnexError
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_ANALYSIS_RESULT,
     EFFECT_ANALYSIS_RESULT,
@@ -45,7 +45,7 @@ def business_logic_generator():
 def temp_output_dir():
     """Create a temporary directory for output files"""
     temp_dir = tempfile.mkdtemp()
-    yield temp_dir
+    return temp_dir
     # Cleanup handled by tempdir
 
 
@@ -418,7 +418,7 @@ class TestOnexNamingCompliance:
     """Tests for ONEX naming convention compliance"""
 
     @pytest.mark.parametrize(
-        "node_type,suffix",
+        ("node_type", "suffix"),
         [
             ("EFFECT", "Effect"),
             ("COMPUTE", "Compute"),

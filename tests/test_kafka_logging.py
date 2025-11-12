@@ -35,7 +35,7 @@ class TestKafkaLoggingUnit:
     """Unit tests for Kafka logging functionality."""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def _setup(self):
         """Setup test environment."""
         # Import after path setup
         import execute_kafka
@@ -377,7 +377,7 @@ class TestKafkaProducerConfiguration:
     """Test Kafka producer configuration settings."""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def _setup(self):
         """Setup test environment."""
         import execute_kafka
 

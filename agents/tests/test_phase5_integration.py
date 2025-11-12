@@ -62,7 +62,7 @@ def pattern_library():
 def temp_output_dir():
     """Create temporary directory for outputs"""
     temp_dir = tempfile.mkdtemp()
-    yield temp_dir
+    return temp_dir
 
 
 # ============================================================================

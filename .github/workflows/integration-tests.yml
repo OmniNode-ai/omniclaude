@@ -225,7 +225,7 @@ jobs:
           - 9092:9092
           - 8081:8081
         options: >-
-          --command "redpanda start --smp 1 --memory 1G --overprovisioned --node-id 0 --kafka-addr PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr PLAINTEXT://localhost:9092"
+          --hostname redpanda
 
     steps:
       - name: Checkout code

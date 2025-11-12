@@ -370,10 +370,10 @@ def test_intelligence_context_validation():
     assert len(context.node_type_patterns) == 2
 
     # Test confidence score bounds
-    with pytest.raises(Exception):  # Pydantic validation error
+    with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic validation error
         IntelligenceContext(confidence_score=1.5)  # Too high
 
-    with pytest.raises(Exception):  # Pydantic validation error
+    with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic validation error
         IntelligenceContext(confidence_score=-0.1)  # Too low
 
 
