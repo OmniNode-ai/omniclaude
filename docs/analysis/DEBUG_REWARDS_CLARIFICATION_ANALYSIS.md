@@ -5,13 +5,23 @@
 **Proposal Version**: Draft v0.3
 **Current OmniClaude Architecture**: Phase 2 Complete (PR #22)
 
+**Debug Log Reference**: This analysis documents key architectural decisions made during the compute token model breakthrough. See debug log entry `[2025-11-09]` for detailed investigation steps:
+- **Analysis Phase**: Evaluation of reward system feasibility with fiat vs compute tokens
+- **Compute Token Breakthrough**: Recognition that internal credits eliminate 80% of legal/funding complexity
+- **Key Blockers Resolved**: Legal risk (Critical → Manageable), funding sustainability (External → Self-sustaining), timeline (8-12 weeks → 4-6 weeks)
+- **Open Questions**: Token economics ratios, free tier allocation, verification sandbox design, governance model
+
 ---
 
 ## Executive Summary
 
 This document analyzes the feasibility and alignment of the proposed "Debug Loop Extensions, Reward System, and Clarification Workflow" with OmniClaude's current architecture. The proposal introduces **three major initiatives** that would significantly expand the system's capabilities but require careful phasing and prioritization.
 
-**Key Finding**: OmniClaude already implements 40-50% of the proposed debug loop features through its existing observability infrastructure (PR #22). The remaining features split into three distinct initiatives with different risk profiles and implementation complexity.
+**Key Finding**: OmniClaude already implements 40-50% of the proposed debug loop features through its existing observability infrastructure (PR #22, migration 012). The remaining features split into three distinct initiatives with different risk profiles and implementation complexity.
+
+**Coverage Calculation**: 10 of 17 proposed debug loop features exist (59% coverage):
+- ✅ Existing (10): Correlation tracking, state snapshots, success tracking, error tracking, debug intelligence, pattern discovery, transformation tracking, performance metrics, file operations, intelligence usage
+- ❌ Missing (7): Code-level STF registry, model price catalog, confidence metrics, golden state tracking, reward system, clarification workflow, LLM call pricing
 
 **Recommendation**: **Phased implementation** with debug loop enhancements first (3-4 weeks), then reward system with compute tokens (4-6 weeks), with clarification workflow optional based on spec quality needs (2-3 weeks).
 
@@ -89,11 +99,35 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 - Incremental additions to existing schema
 - Clear success metrics
 
-**Timeline Estimate**: **3-4 weeks** (single developer)
-- Week 1: Schema design, migration scripts, STF registry
-- Week 2: Model price catalog, LLM call cost tracking
-- Week 3: Confidence metrics, error→success mapping
-- Week 4: Golden state workflow, testing, documentation
+**Timeline Estimate**: **3-4 weeks** (single developer) + **1 week stabilization** (5 weeks total with buffer)
+
+**Task Breakdown with Story Points** (velocity reference: PR #22 took 3 weeks, 8 migrations, ~200 hours):
+- **Week 1: Schema Foundation** (40 hours)
+  - Database schema design (8 SP, 12 hours) - `debug_transform_functions`, `model_price_catalog` tables
+  - Migration scripts with rollback (5 SP, 8 hours)
+  - Index design and optimization (3 SP, 6 hours)
+  - STF registry implementation (8 SP, 14 hours)
+- **Week 2: Cost Tracking** (40 hours)
+  - Model price catalog integration (5 SP, 10 hours)
+  - LLM call cost tracking logic (8 SP, 14 hours)
+  - Request fingerprint implementation (3 SP, 6 hours)
+  - Unit tests for cost tracking (5 SP, 10 hours)
+- **Week 3: Intelligence Layer** (40 hours)
+  - Confidence scoring algorithm (8 SP, 14 hours)
+  - Error→success mapping logic (8 SP, 14 hours)
+  - Pattern quality filter integration (3 SP, 6 hours)
+  - Integration tests (3 SP, 6 hours)
+- **Week 4: Golden State & Testing** (40 hours)
+  - Golden state approval workflow (8 SP, 14 hours)
+  - End-to-end testing (5 SP, 10 hours)
+  - Performance testing (5 SP, 10 hours)
+  - Documentation (3 SP, 6 hours)
+- **Week 5: Stabilization Buffer** (20 hours, 25% buffer)
+  - Bug fixes from production testing
+  - Performance tuning based on metrics
+  - Additional documentation/training
+
+**Total Effort**: 180 hours (4.5 weeks at 40 hrs/week) + 20% buffer = 5 weeks
 
 **Value Proposition**: **High**
 - Improves debugging and replay fidelity
@@ -132,10 +166,30 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 - Need to handle timeout/deadline logic
 - Safe default policy requires business rules
 
-**Timeline Estimate**: **2-3 weeks** (single developer)
-- Week 1: Schema design, clarification ticket generation logic
-- Week 2: Quorum voting mechanism, timeout handling
-- Week 3: Terminal UI, assumptions logging, testing
+**Timeline Estimate**: **2-3 weeks** (single developer) + **1 week stabilization** (4 weeks total with buffer)
+
+**Task Breakdown with Story Points**:
+- **Week 1: Schema & Generation** (40 hours)
+  - Database schema design (5 SP, 10 hours) - 4 new tables
+  - Migration scripts (3 SP, 6 hours)
+  - Clarification ticket generation logic (8 SP, 14 hours)
+  - Ambiguity detection algorithm (5 SP, 10 hours)
+- **Week 2: Quorum & Coordination** (40 hours)
+  - Quorum composition logic (5 SP, 10 hours)
+  - Voting mechanism (8 SP, 14 hours)
+  - Timeout/deadline handling (5 SP, 10 hours)
+  - Safe default policy engine (3 SP, 6 hours)
+- **Week 3: UX & Testing** (40 hours)
+  - Terminal UI for question presentation (8 SP, 14 hours)
+  - Assumptions logging (3 SP, 6 hours)
+  - Integration with agent router (5 SP, 10 hours)
+  - Testing and documentation (5 SP, 10 hours)
+- **Week 4: Stabilization Buffer** (20 hours, 25% buffer)
+  - UX refinement based on user feedback
+  - Performance tuning
+  - Additional test coverage
+
+**Total Effort**: 140 hours (3.5 weeks) + 25% buffer = 4 weeks
 
 **Value Proposition**: **Medium to High**
 - Reduces rework from ambiguous requirements
@@ -177,15 +231,57 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 
 **Implementation Risk**: **Medium** ⬇️ **SIGNIFICANTLY REDUCED WITH COMPUTE TOKENS**
 - Technical risks dominate (economic model tuning, abuse prevention)
-- **Legal risk minimal**: Compute tokens similar to loyalty points/game credits
-- **No KYC required**: Pseudonymous contributors acceptable
+- **Legal risk manageable**: Compute tokens similar to loyalty points/game credits, but still require:
+  - Basic legal review to confirm compliance with consumer protection laws
+  - Token economics validation to ensure fair value exchange
+  - Abuse monitoring to prevent fraud or gaming
+  - Clear terms of service for token earning/spending
+- **No KYC required**: Pseudonymous contributors acceptable for internal credit system
 - **No payment integrations**: Internal token ledger only
 - **Self-sustaining economy**: Users pay for compute → system rewards contributors → contributors spend on compute
 
-**Timeline Estimate**: **4-6 weeks** (single developer) ⬇️ **50% REDUCTION**
-- Week 1-2: Schema design, contributor profiles, token ledger, reward calculation
-- Week 3-4: Verification workflow, sandbox testing infrastructure, STF validation
-- Week 5-6: Token distribution engine, usage tracking, governance basics, testing
+**Timeline Estimate**: **4-6 weeks** (single developer) + **1-2 weeks stabilization** (7 weeks total with buffer) ⬇️ **50% REDUCTION from original 8-12 weeks**
+
+**Task Breakdown with Story Points**:
+- **Week 1: Schema & Profiles** (40 hours)
+  - Database schema design (5 SP, 10 hours) - `contributor_profiles`, `token_transactions`
+  - Migration scripts (3 SP, 6 hours)
+  - Contributor profile CRUD (5 SP, 10 hours)
+  - Token ledger implementation (8 SP, 14 hours)
+- **Week 2: Reward Calculation** (40 hours)
+  - Reward formula implementation (8 SP, 14 hours) - adoption × confidence × cost × safety
+  - Token economics configuration (3 SP, 6 hours)
+  - Reward distribution logic (8 SP, 14 hours)
+  - Unit tests (3 SP, 6 hours)
+- **Week 3: Verification Infrastructure** (40 hours)
+  - Sandbox environment setup (8 SP, 14 hours)
+  - STF validation logic (8 SP, 14 hours)
+  - Automated testing framework (5 SP, 10 hours)
+  - Integration tests (2 SP, 4 hours)
+- **Week 4: Distribution & Tracking** (40 hours)
+  - Token distribution engine (8 SP, 14 hours)
+  - Usage tracking integration (5 SP, 10 hours)
+  - Balance calculation (3 SP, 6 hours)
+  - Performance testing (5 SP, 10 hours)
+- **Week 5: Governance & UI** (40 hours)
+  - Basic governance framework (5 SP, 10 hours)
+  - Token balance/history UI (8 SP, 14 hours)
+  - Dispute resolution workflow (3 SP, 6 hours)
+  - Documentation (5 SP, 10 hours)
+- **Week 6: Pilot Testing** (40 hours)
+  - Internal pilot with 10-20 contributors (8 SP, 14 hours)
+  - Token economics tuning based on pilot (8 SP, 14 hours)
+  - Bug fixes and refinements (5 SP, 10 hours)
+  - End-to-end testing (2 SP, 4 hours)
+- **Week 7: Stabilization Buffer** (30 hours, 30% buffer for unknowns)
+  - Additional pilot feedback integration
+  - Token economics calibration
+  - Performance optimization
+  - Final documentation
+
+**Total Effort**: 240 hours (6 weeks) + 30% buffer = 7 weeks
+
+**Note**: 30% buffer accounts for token economics being experimental territory
 
 **Value Proposition**: **High** ⬆️ **MUCH CLEARER WITH COMPUTE TOKENS**
 - **Self-sustaining**: Contributors earn tokens by contributing, spend tokens on compute
@@ -195,11 +291,11 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 - **No funding crisis**: System economics naturally balance supply/demand
 
 **Compute Token Model Benefits**:
-1. ✅ **Legal simplicity**: Like frequent flyer miles - no securities, no money transmission
+1. ✅ **Legal simplicity**: Like frequent flyer miles - no securities, no money transmission (but basic legal review still recommended)
 2. ✅ **Self-sustaining**: Token velocity creates natural economy (earn → spend → earn)
 3. ✅ **Clear value prop**: Tokens = compute time (no abstract value, no cash conversion)
 4. ✅ **No external dependencies**: Internal ledger, no payment processors, no blockchain
-5. ✅ **Abuse prevention easier**: Rate limits, account freezes without financial liability
+5. ✅ **Abuse prevention easier**: Rate limits, account freezes without financial liability (but monitoring still required)
 6. ✅ **Pseudonymous OK**: No KYC needed for internal credit system
 7. ✅ **Built-in demand**: Every user needs compute, tokens always valuable
 
@@ -300,6 +396,50 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 - May need dedicated database performance tuning
 - Recommend architectural review at 50+ tables
 
+#### Schema Consolidation Opportunities
+
+To manage the growing schema complexity (42 tables), consider these consolidation strategies:
+
+**1. Profile Consolidation**:
+- **Current**: Separate `contributor_profiles` (Phase 3) and potential `peer_registry` (Phase 3b P2P)
+- **Proposed**: Single `user_profiles` table with `profile_type` enum (contributor, peer, hybrid)
+- **Benefits**: Reduces JOIN complexity, centralizes identity management
+- **JSONB column**: `profile_metadata` for type-specific data (STF stats for contributors, bandwidth stats for peers)
+
+**2. Token Transaction Ledger**:
+- **Current**: Separate `contributor_rewards` (Phase 3a) and `context_sharing_transactions` (Phase 3b)
+- **Proposed**: Single `token_transactions` table with `transaction_type` enum (stf_reward, context_share, llm_compute, etc.)
+- **Benefits**: Single source of truth for all token movements, easier balance calculation
+- **Schema**: `(user_id, transaction_type, amount, metadata JSONB, created_at)`
+- **JSONB column**: `metadata` for transaction-specific details (STF ID, context chunk ID, etc.)
+
+**3. Event-Driven State Tables**:
+- **Current**: Multiple tables tracking similar lifecycle events (clarification_tickets, verification_requests, etc.)
+- **Proposed**: Generic `workflow_tickets` table with `workflow_type` enum
+- **Benefits**: Reduces schema duplication, easier to add new workflow types
+- **Trade-off**: More generic queries (need WHERE clause filtering by type)
+
+**4. Query Performance Testing Plan**:
+Before implementing consolidation:
+1. **Baseline**: Measure current query performance on 34-table schema
+2. **Projection**: Test queries on 42-table schema (with test data)
+3. **Consolidation**: Test queries on consolidated schema (e.g., 38 tables with JSONB)
+4. **Comparison**: Compare p50/p95/p99 latencies, index sizes, JOIN costs
+5. **Decision**: Consolidate only if performance improves OR remains within targets (<10ms for correlation ID queries)
+
+**5. Event Bus Naming Convention (ADR)**:
+Formalize event bus topic naming in ADR-002:
+- **Pattern**: `{domain}.{entity}.{action}.v{version}`
+- **Examples**:
+  - `debug.stf.registered.v1`
+  - `reward.token.issued.v1`
+  - `clarification.ticket.answered.v1`
+  - `p2p.context.shared.v1`
+- **Rationale**: Consistent naming enables event discovery, versioning, and routing
+- **Enforcement**: CI validation for topic names in code
+
+**Recommendation**: Implement consolidation in Phase 3 (after Phases 1-2 stable) to avoid premature optimization. Monitor query performance at 42 tables first, consolidate only if needed.
+
 ### Event Bus Impact
 
 **Current State**: Kafka event-driven architecture with 15+ topics
@@ -390,13 +530,32 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 **Phase 3: Reward System with Compute Tokens** (4-6 weeks) ⭐ **HIGH PRIORITY** ⬆️ **UPGRADED FROM LOW TO HIGH**
 - **Why second?** With compute tokens, most high-risk concerns eliminated, clear value proposition
 - **Dependencies**: Phase 1 (STF registry must exist)
-- **Pre-requisites** (Minimal):
-  - ✅ Token economics model defined (tokens per STF, tokens per compute hour)
-  - ✅ Free tier strategy decided (starter token allocation)
-  - ✅ Verification sandbox ready (automated testing)
-  - ~~Legal review~~ (not needed - internal credits only)
-  - ~~Funding source~~ (self-sustaining economy)
-  - ~~Payment integration~~ (internal ledger only)
+
+**Pre-Phase-3 Validation Checklist** (Complete BEFORE starting Phase 3 implementation):
+- [ ] **Token Economics Model Tuned** - Completed 3-phase process (modeling, pilot with 10-20 contributors, calibration)
+  - [ ] Tokens/STF ratio validated via pilot (contributor satisfaction >4/5)
+  - [ ] Tokens/compute-hour ratio validated via pilot (supply/demand imbalance <20%)
+  - [ ] Token velocity measured (target: >1 cycle/week)
+  - [ ] Escape hatches documented (rate adjustment triggers if economics break)
+- [ ] **Abuse Prevention Strategy Documented** - Clear plan for:
+  - [ ] Rate limits on token earning (prevent gaming)
+  - [ ] Account reputation decay (discourage low-quality contributions)
+  - [ ] Verification sandbox operational (automated STF testing)
+  - [ ] Dispute resolution workflow defined (human review threshold)
+- [ ] **Token Expiration Policy Decided** - Options considered:
+  - [ ] No expiration (tokens never expire - encourages hoarding but simplest)
+  - [ ] Rolling expiration (e.g., 12 months - prevents hoarding, adds complexity)
+  - [ ] Activity-based extension (earn/spend resets expiration - balanced)
+- [ ] **Free Tier Allocation Determined** - Bootstrapping strategy:
+  - [ ] Starter token amount (enough for initial task exploration)
+  - [ ] Earning caps for free tier (prevent abuse)
+  - [ ] Upgrade path (when to require payment or contribution)
+- [ ] **Legal Review Completed** (Basic):
+  - [ ] Terms of service drafted (token earning/spending rules)
+  - [ ] Consumer protection law compliance confirmed (US/EU)
+  - [ ] Internal credits legal status validated (not securities/money transmission)
+  - ~~KYC requirements~~ (not needed - pseudonymous OK)
+  - ~~Payment processor integration~~ (not needed - internal ledger)
 - **Deliverables**:
   - `contributor_profiles`, `contributor_rewards`, `token_ledger` tables
   - Reward calculation engine (adoption × confidence × cost × safety)
@@ -452,7 +611,7 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| **Legal/regulatory violation** | ~~Medium~~ → **Low** | ~~Critical~~ → **Low** | ✅ Compute tokens = loyalty points (minimal legal risk) |
+| **Legal/regulatory violation** | ~~Medium~~ → **Low** | ~~Critical~~ → **Manageable** | ✅ Compute tokens = loyalty points, but still need basic legal review, token economics validation, abuse monitoring |
 | **Economic model failure** | Medium | Medium | Pilot program, token economics tuning, escape hatches |
 | **Gaming/abuse** | Medium | Medium | ⬇️ Verification sandboxing, rate limits, reputation decay, account freezes |
 | **Funding sustainability** | ~~High~~ → **Low** | ~~Critical~~ → **Low** | ✅ Self-sustaining economy (users pay → contributors earn → contributors spend) |
@@ -461,7 +620,7 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 | **Token economics imbalance** | Medium | Medium | **NEW** - Monitor supply/demand, adjust reward formulas dynamically |
 
 **Key Improvements with Compute Tokens**:
-- ✅ **Legal risk**: Critical → Low (internal credits, no securities/money transmission)
+- ✅ **Legal risk**: Critical → Manageable (internal credits reduce complexity, but still need basic legal review, token economics validation, abuse monitoring)
 - ✅ **Funding risk**: Critical → Low (self-sustaining, no external funding needed)
 - ✅ **Governance complexity**: Medium → Low (simple policies sufficient)
 - ⚠️ **New risk**: Token economics imbalance (must tune supply/demand)
@@ -506,8 +665,25 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 1. **Clarify Strategic Goals** - Which problem is most critical to solve?
 2. **Complete PR #22 Merge** - Ensure observability foundation is solid
 3. **Validate Performance Baselines** - Measure current metrics before adding complexity
-4. **Define Token Economics** - Decide tokens/STF ratio, tokens/compute-hour ratio, free tier allocation
-5. ~~Economic Model Workshop~~ → **Token Economics Workshop** (much simpler with compute tokens)
+4. **Define Token Economics** (expanded 3-phase approach):
+   - **Phase A: Modeling** (1 week) - Parameterize supply/demand model:
+     - Baseline: X tokens per STF contribution (based on complexity, quality)
+     - Baseline: Y tokens per compute hour (based on model cost, overhead)
+     - Free tier: Z starter tokens for new users (enough for initial exploration)
+     - Simulate scenarios: heavy contributor, heavy consumer, balanced user
+     - Model token velocity (target: 1 cycle/week → tokens circulate weekly)
+     - Identify escape hatches (emergency rate adjustments if imbalance detected)
+   - **Phase B: Pilot** (1-2 weeks) - Test with 10-20 internal contributors:
+     - Run pilot with initial token economics parameters
+     - Measure: token earn rate, spend rate, velocity, satisfaction
+     - Identify: gaming attempts, UX friction, confusion points
+     - Collect: qualitative feedback on perceived fairness
+   - **Phase C: Calibration** (1 week) - Adjust rates based on pilot data:
+     - Tune tokens/STF ratio if contributor satisfaction <4/5
+     - Tune tokens/compute-hour ratio if supply/demand imbalance >20%
+     - Refine free tier allocation if new user drop-off >30%
+     - Document final parameters and escape hatches for production
+5. ~~Economic Model Workshop~~ → **Token Economics 3-Phase Process** (3-4 weeks total)
 
 ### Short-Term Actions (Next 1-2 Months) ⭐ **UPDATED**
 
@@ -699,7 +875,7 @@ The proposal represents a **bold and comprehensive vision** for evolving OmniCla
 4. **Phase 3 (Reward System) is NOW FEASIBLE with compute tokens** ⬆️ - Legal/funding risks eliminated, 80% cost reduction
 
 **Compute Token Model Changes Everything**:
-- ✅ Legal risk: Critical → Low (internal credits, no securities/money transmission)
+- ✅ Legal risk: Critical → Manageable (internal credits simplify but basic review still needed)
 - ✅ Timeline: 8-12 weeks → 4-6 weeks (50% reduction)
 - ✅ Cost: $100-200K+ → $20-30K (80-85% reduction)
 - ✅ Funding: External sources needed → Self-sustaining economy
