@@ -11,8 +11,10 @@ from uuid import uuid4
 import pytest
 from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
-from .mock_database_protocol import MockDatabaseProtocol
-from .node_debug_stf_storage_effect import NodeDebugSTFStorageEffect
+from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
+from omniclaude.debug_loop.node_debug_stf_storage_effect import (
+    NodeDebugSTFStorageEffect,
+)
 
 
 class TestDebugSTFStorageEffect:

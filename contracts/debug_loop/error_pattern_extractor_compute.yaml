@@ -7,6 +7,14 @@ description: "Extract and normalize error patterns from error messages for patte
 
 # Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Error pattern recognition and categorization"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_error_pattern_extractor_compute.py"
+      purpose: "Compute node for error pattern extraction (to be implemented)"
+
   implementation_plans:
     - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
       section: "Week 4: Error→Success Mapping & Golden States"

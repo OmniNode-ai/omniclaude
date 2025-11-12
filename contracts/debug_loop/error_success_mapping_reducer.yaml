@@ -7,6 +7,16 @@ description: "Aggregate error→success patterns using FSM with intent-based sid
 
 # Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Error-success mapping for debug intelligence"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_error_success_mapping_reducer.py"
+      purpose: "Reducer node for error-success correlation (to be implemented)"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "debug_error_success_mappings table schema"
+
   implementation_plans:
     - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
       section: "Week 4: Error→Success Mapping & Golden States"
@@ -154,18 +164,26 @@ output:
   # Intents (side effects to execute)
   intents:
     type: "array"
+    required: true
     items:
       type: "object"
+      required: true
       properties:
         intent_type:
-          type: "string"
-          description: "EnumIntentType from omnibase_core.models.model_intent"
+          type: "enum"
+          enum_ref: "EnumIntentType"
+          description: "Intent type from omnibase_core.models.model_intent.EnumIntentType"
+          required: true
         target:
           type: "string"
           description: "Target node or resource"
+          required: true
         payload:
           type: "object"
-    required: true
+          description: "Intent-specific payload data"
+          required: false
+          properties: {}
+          additional_properties: true
 
   # FSM transition info
   transition:

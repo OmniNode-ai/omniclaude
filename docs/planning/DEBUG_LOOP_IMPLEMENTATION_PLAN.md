@@ -119,6 +119,15 @@ CREATE INDEX idx_stf_quality ON debug_transform_functions(quality_score);
 CREATE INDEX idx_stf_approval ON debug_transform_functions(approval_status);
 CREATE INDEX idx_stf_usage ON debug_transform_functions(usage_count DESC);
 
+-- Trigger function to update updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Trigger to update updated_at
 CREATE TRIGGER update_stf_updated_at
     BEFORE UPDATE ON debug_transform_functions

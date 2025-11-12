@@ -7,57 +7,72 @@ description: "Coordinate debug intelligence extraction and application workflow 
 
 # Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
-  implementation_plans:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "System design and component interactions for debug loop"
+      relationship: "architecture_design"
     - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      purpose: "Phase-by-phase implementation details"
       section: "Part 1: Debug Intelligence Core"
       relationship: "implementation_guide"
-      description: "Orchestrator integrates all debug loop nodes in Week 4 (Days 15-20)"
-
-  related_contracts:
-    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates STF extraction from successful executions"
-    - path: "contracts/debug_loop/stf_quality_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates quality scoring for extracted STFs"
-    - path: "contracts/debug_loop/stf_hash_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates hash generation for STF deduplication"
-    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates STF persistence to PostgreSQL"
-    - path: "contracts/debug_loop/stf_matcher_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates similarity matching for STF recommendations"
-    - path: "contracts/debug_loop/cost_tracker_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates LLM cost calculation and tracking"
-    - path: "contracts/debug_loop/error_pattern_extractor_compute.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates error pattern extraction and normalization"
-    - path: "contracts/debug_loop/error_success_mapping_reducer.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates error-to-success mapping aggregation"
-    - path: "contracts/debug_loop/golden_state_manager_reducer.yaml"
-      relationship: "orchestrates"
-      description: "Orchestrates golden state nomination and approval"
-
-  configuration:
-    - path: "agents/definitions/polymorphic-agent.yaml"
-      relationship: "agent_config"
-      description: "Agent configuration for debug loop orchestration"
-    - path: "config/settings.py"
-      relationship: "system_config"
-      description: "Type-safe configuration for database and feature flags"
-
-  documentation:
     - path: "CLAUDE.md"
       section: "Agent Observability & Traceability"
+      purpose: "Debug loop architecture and observability patterns"
       relationship: "architecture_overview"
-      description: "Debug loop architecture and observability patterns"
     - path: "docs/observability/AGENT_TRACEABILITY.md"
+      purpose: "Three-layer traceability: routing → manifest → execution"
       relationship: "observability_guide"
-      description: "Three-layer traceability: routing → manifest → execution"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_*.py"
+      purpose: "Debug loop node implementation files"
+      relationship: "node_implementations"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "Database schema for debug loop"
+      relationship: "database_schema"
+    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
+      purpose: "STF extraction from successful executions"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/stf_quality_compute.yaml"
+      purpose: "Quality scoring for extracted STFs"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/stf_hash_compute.yaml"
+      purpose: "Hash generation for STF deduplication"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
+      purpose: "STF persistence to PostgreSQL"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/stf_matcher_compute.yaml"
+      purpose: "Similarity matching for STF recommendations"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/cost_tracker_compute.yaml"
+      purpose: "LLM cost calculation and tracking"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/error_pattern_extractor_compute.yaml"
+      purpose: "Error pattern extraction and normalization"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/error_success_mapping_reducer.yaml"
+      purpose: "Error-to-success mapping aggregation"
+      relationship: "orchestrates"
+    - path: "contracts/debug_loop/golden_state_manager_reducer.yaml"
+      purpose: "Golden state nomination and approval"
+      relationship: "orchestrates"
+
+  configuration:
+    - path: "config/debug_loop.yaml"
+      purpose: "Runtime configuration (to be created)"
+      relationship: "runtime_config"
+    - path: "agents/definitions/polymorphic-agent.yaml"
+      purpose: "Agent configuration for debug loop orchestration"
+      relationship: "agent_config"
+    - path: "config/settings.py"
+      purpose: "Type-safe configuration for database and feature flags"
+      relationship: "system_config"
+
+  testing:
+    - path: "omniclaude/debug_loop/test_*.py"
+      purpose: "Unit and integration tests"
+      relationship: "test_suite"
 
 # omnibase_core Models Used
 models:
@@ -320,26 +335,83 @@ workflow_steps:
     condition: "execution_status == 'success' AND calculate_quality.quality_score >= options.min_quality_for_golden"
     on_error: "continue"
 
-# Dynamic dependency discovery using service registry pattern
-# Automatically discovers all debug_loop nodes without hardcoding
-# Supports adding/removing nodes without orchestrator changes
+# Service Registry Pattern - Capability-Based Dependencies
+# Orchestrator depends on service capabilities, not concrete node implementations
+# Enables runtime flexibility, easier testing, and loose coupling
+# Service resolution: At runtime, the orchestrator discovers nodes that provide
+# the required capabilities by querying the service registry. Nodes register
+# themselves with capabilities they provide. This allows swapping implementations
+# without changing the orchestrator contract.
 dependencies:
-  # ✅ CORRECT (dynamic discovery via service registry)
-  nodes:
-    type: "service_registry_lookup"
-    filters:
-      - pattern: "debug_loop_*"
-        node_types: ["effect", "compute", "reducer"]
-    discovery:
-      method: "registry_pattern"
-      registry_path: "~/.claude/agent-definitions/"
-      auto_discover: true
-
-  # Optional: Explicit critical dependencies (if needed)
-  critical_dependencies:
-    - node: "NodeModelPriceCatalogEffect"
+  services:
+    - capability: "stf_extraction"
+      contract_type: "compute"
+      description: "Extract structured transform functions from code"
       required: true
-      reason: "Required for cost tracking initialization"
+      timeout_ms: 2000
+
+    - capability: "stf_storage"
+      contract_type: "effect"
+      description: "Persist and retrieve STFs from database"
+      required: true
+      timeout_ms: 1000
+
+    - capability: "stf_quality_scoring"
+      contract_type: "compute"
+      description: "Calculate quality metrics for STFs"
+      required: false
+      timeout_ms: 1000
+
+    - capability: "stf_hashing"
+      contract_type: "compute"
+      description: "Generate content hash for deduplication"
+      required: true
+      timeout_ms: 500
+      critical: true  # Must succeed for deduplication
+
+    - capability: "error_pattern_extraction"
+      contract_type: "compute"
+      description: "Identify and categorize error patterns"
+      required: false
+      timeout_ms: 1000
+
+    - capability: "error_success_mapping"
+      contract_type: "reducer"
+      description: "Correlate errors with successful resolutions"
+      required: false
+      timeout_ms: 1500
+
+    - capability: "golden_state_management"
+      contract_type: "reducer"
+      description: "Manage workflow state machine transitions"
+      required: false
+      timeout_ms: 1000
+
+    - capability: "model_price_lookup"
+      contract_type: "effect"
+      description: "Query LLM provider pricing information"
+      required: true
+      timeout_ms: 500
+
+    - capability: "cost_calculation"
+      contract_type: "compute"
+      description: "Calculate execution costs based on model usage"
+      required: false
+      timeout_ms: 500
+
+  # Service Resolution Configuration
+  resolution:
+    method: "capability_matching"
+    registry_path: "~/.claude/agent-definitions/"
+    fallback_strategy: "graceful_degradation"
+    cache_ttl_seconds: 300
+
+  # Runtime Service Discovery
+  # 1. Orchestrator requests capability (e.g., "stf_extraction")
+  # 2. Service registry queries all registered nodes
+  # 3. Nodes with matching capability + contract_type are returned
+  # 4. Orchestrator selects first available or uses load balancing
+  # 5. If no match found: use fallback_strategy (fail or degrade gracefully)
 
   protocols:
     - "IDatabaseProtocol"  # For direct DB access if needed

@@ -676,115 +676,263 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 **Total Impact**: **+8 tables**, bringing total to **42 tables** (+24% increase)
 
 **Assessment**: ⚠️ **Schema complexity increasing significantly**
-- Consider consolidation opportunities
-- May need dedicated database performance tuning
-- Recommend architectural review at 50+ tables
+- Current trajectory: 34→42 tables (+24% complexity)
+- Risk: Performance degradation, maintenance overhead, complex migrations
+- Mitigation required: Consolidation strategy with performance validation
 
 #### Schema Consolidation Opportunities
 
-To manage the growing schema complexity (42 tables), consider these consolidation strategies:
+Current trajectory: 34→42 tables (+24% complexity)
 
-**Visual Overview: Schema Consolidation Strategy**
+**Consolidation Options**:
+
+#### Option 1: Merge User Tracking Tables
+
+**Merge**: `contributor_profiles` + `peer_registry` + potential future user tables
+
+**Rationale**: Both track user entities with significant overlap (identity, reputation, metadata). Distinction between contributors and peers may be artificial as users often play both roles.
+
+**Trade-off**:
+- **Simplicity**: Single user table easier to query and maintain
+- **Separation of concerns**: Contributors ≠ peers conceptually (different lifecycles, access patterns)
+- **Schema flexibility**: JSONB allows type-specific data without rigid columns
+
+**Estimated reduction**: -2 tables (40 total)
+
+**Performance impact**:
+- Positive: Fewer JOINs for user lookups (e.g., "get all user activity")
+- Negative: Need WHERE filtering by `profile_type` enum (minimal cost with index)
+
+**Recommendation**: ⚠️ **Keep separate initially** - Different lifecycles and access patterns justify separation. Consider consolidation in Phase 3b if overlap >70%.
+
+---
+
+#### Option 2: JSONB for Flexible Schemas
+
+**Consolidate**: `clarification_responses` into `clarification_requests` as JSONB column
+
+**Rationale**:
+- Responses tightly coupled to requests (1:1 or 1:few relationship)
+- Response schema varies by question type (multiple choice vs free text vs numeric)
+- JSONB provides schema flexibility without migrations for new question types
+
+**Trade-off**:
+- **Query flexibility**: Can query JSON fields with PostgreSQL operators
+- **Normalized design**: Traditional relational design easier to understand
+- **Performance**: JSONB indexed queries ~10-20% slower than native columns
+
+**Estimated reduction**: -1 table (41 total)
+
+**Performance impact**:
+- JSONB queries with GIN index: <20ms for typical response lookups
+- Trade-off acceptable given low query frequency (clarifications are infrequent)
+
+**Recommendation**: ✅ **Implement** - Responses rarely queried independently, tight coupling justifies denormalization. Add GIN index on JSONB column.
+
+```sql
+-- Example schema
+CREATE TABLE clarification_requests (
+  id UUID PRIMARY KEY,
+  correlation_id UUID NOT NULL,
+  questions JSONB NOT NULL, -- Array of question objects
+  responses JSONB, -- Array of response objects (nullable until answered)
+  status TEXT NOT NULL, -- pending, answered, timed_out
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  answered_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_clarification_responses_gin ON clarification_requests USING GIN (responses);
+```
+
+---
+
+#### Option 3: Unified Token Ledger
+
+**Merge**: Phase 3a STF reward transactions + Phase 3b context sharing transactions into single `token_transactions` table
+
+**Rationale**:
+- Both track token movements with same fields (user_id, amount, timestamp, transaction_type)
+- Single ledger simplifies accounting and balance calculation
+- Event sourcing pattern: All token events in one append-only log
+
+**Trade-off**:
+- **Combined ledger**: Simpler balance calculation, single source of truth
+- **Separate audit trails**: Easier to audit specific transaction types in isolation
+- **Query performance**: Need WHERE filtering by `transaction_type` enum
+
+**Estimated reduction**: -1 table (41 total)
+
+**Performance impact**:
+- Balance calculation query (SUM grouped by user): <100ms with proper index
+- Transaction history query (filtered by type): <50ms with composite index
+
+**Recommendation**: ✅ **Implement** - Single ledger with `transaction_type` enum (stf_reward, context_share, llm_compute, verification). Event sourcing best practice.
+
+```sql
+-- Example schema
+CREATE TABLE token_transactions (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES user_profiles(id),
+  transaction_type TEXT NOT NULL, -- stf_reward, context_share, llm_compute, verification
+  amount INTEGER NOT NULL, -- Positive = earned, negative = spent
+  metadata JSONB, -- Transaction-specific details (STF ID, context chunk ID, etc.)
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_token_transactions_user_created ON token_transactions(user_id, created_at DESC);
+CREATE INDEX idx_token_transactions_type ON token_transactions(transaction_type);
+```
+
+---
+
+#### Option 4: Materialized Views for Complex Queries
+
+**Create materialized views** for expensive aggregations instead of denormalized tables:
+
+**Rationale**:
+- STF usage stats require expensive JOINs (debug_transform_functions + agent_execution_logs)
+- Manifest injection queries join 4+ tables (patterns, infrastructure, models, schemas)
+- Materialized views provide precomputed results with periodic refresh
+
+**Trade-off**:
+- **Performance**: 10-100x faster queries (no JOINs at query time)
+- **Freshness**: Data stale between refreshes (acceptable for analytics)
+- **Maintenance**: Refresh overhead and complexity
+
+**Estimated reduction**: 0 tables (but improves query performance)
+
+**Performance impact**:
+- STF usage stats query: 500ms → <10ms (50x improvement)
+- Manifest injection patterns query: 2000ms → <200ms (10x improvement)
+- Refresh cost: <5 seconds per view (acceptable for hourly/daily refresh)
+
+**Recommendation**: ✅ **Implement** - Critical for manifest injection <2000ms target. Refresh hourly for STF stats, daily for usage analytics.
+
+```sql
+-- Example: STF usage stats materialized view
+CREATE MATERIALIZED VIEW mv_stf_usage_stats AS
+SELECT
+  stf_id,
+  COUNT(*) as usage_count,
+  AVG(quality_score) as avg_quality,
+  MAX(last_used_at) as last_used,
+  SUM(cost_usd) as total_cost_saved
+FROM debug_transform_functions
+JOIN agent_execution_logs USING (stf_id)
+GROUP BY stf_id;
+
+CREATE UNIQUE INDEX idx_mv_stf_usage_stats_stf_id ON mv_stf_usage_stats(stf_id);
+CREATE INDEX idx_mv_stf_usage_stats_quality ON mv_stf_usage_stats(avg_quality DESC);
+
+-- Refresh schedule (hourly)
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_stf_usage_stats;
+```
+
+---
+
+### Recommended Consolidation Plan
+
+**Phase 1 Implementation** (before merge):
+
+1. ✅ **Use JSONB for clarification_responses** (Option 2)
+   - Reduces tables: 42 → 41
+   - Flexible schema for response types
+   - GIN index for query performance
+
+2. ✅ **Unified token ledger** (Option 3)
+   - Reduces tables: 41 → 40
+   - Event sourcing best practice
+   - Simpler balance calculation
+
+3. ✅ **Add materialized views for aggregations** (Option 4)
+   - No table reduction (views, not tables)
+   - Critical for manifest injection <2000ms target
+   - Refresh hourly for real-time needs
+
+**Revised table count**: 34→40 tables (+18% vs +24% originally)
+
+**Performance target**: Manifest injection <2000ms maintained
+
+---
+
+### Performance Benchmarks Required
+
+Before Phase 1 merge:
+
+**1. Query Plan Analysis** for complex joins:
+- STF lookup with usage stats: <50ms (target)
+- Manifest injection with patterns: <2000ms (target)
+- Token balance calculation: <100ms (target)
+- Clarification response retrieval: <20ms (target)
+
+**2. Load Testing** at scale:
+- 1000 STFs in registry
+- 100 concurrent manifest injections
+- 10,000 token transactions
+- 500 clarification requests
+
+**3. Index Coverage Analysis**:
+```sql
+-- Verify all critical queries use indexes (not full table scans)
+EXPLAIN ANALYZE
+SELECT * FROM token_transactions
+WHERE user_id = 'xxx'
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- Expected: Index Scan using idx_token_transactions_user_created
+-- NOT: Seq Scan on token_transactions
+```
+
+**4. Rollback Criteria**:
+- If P95 latency >3000ms for manifest injection → rollback consolidation
+- If query plans show full table scans on critical paths → add missing indexes
+- If materialized view refresh >5min → reconsider refresh frequency
+- If JSONB query performance >50ms → consider denormalization
+
+---
+
+### Visual Summary: Schema Consolidation Impact
 
 ```
-BEFORE (42 tables):                      AFTER (35 tables):
-┌──────────────────┐                    ┌──────────────────────┐
-│ user_profiles    │                    │ unified_profiles     │
-├──────────────────┤    CONSOLIDATE →   │ ┌──────────────────┐ │
-│ contributor_...  │    ────────────    │ │ profile_type:    │ │
-├──────────────────┤                    │ │ - contributor    │ │
-│ peer_registry    │                    │ │ - peer           │ │
-├──────────────────┤                    │ │ - hybrid         │ │
-│ agent_profiles   │                    │ └──────────────────┘ │
-└──────────────────┘                    │ profile_metadata     │
-                                        │ (JSONB)              │
-                                        └──────────────────────┘
-                                                 │
-                                                 │ Reduce JOINs
-                                                 │ Centralize identity
-                                                 │
-┌──────────────────┐                    ┌──────────────────────┐
-│ reward_ledger    │                    │ token_transactions   │
-├──────────────────┤    CONSOLIDATE →   │ ┌──────────────────┐ │
-│ token_balance    │    ────────────    │ │ type:            │ │
-├──────────────────┤                    │ │ - stf_reward     │ │
-│ context_sharing  │                    │ │ - context_share  │ │
-│ _transactions    │                    │ │ - llm_compute    │ │
-└──────────────────┘                    │ │ - verification   │ │
-                                        │ └──────────────────┘ │
-                                        │ metadata (JSONB)     │
-                                        └──────────────────────┘
-                                                 │
-                                                 │ Single source of truth
-                                                 │ Event sourcing ready
-                                                 │
-┌──────────────────┐                    ┌──────────────────────┐
-│ clarification_   │                    │ workflow_tickets     │
-│ tickets          │    CONSOLIDATE →   │ ┌──────────────────┐ │
-├──────────────────┤    ────────────    │ │ workflow_type:   │ │
-│ verification_    │                    │ │ - clarification  │ │
-│ requests         │                    │ │ - verification   │ │
-├──────────────────┤                    │ │ - approval       │ │
-│ approval_        │                    │ └──────────────────┘ │
-│ workflows        │                    │ metadata (JSONB)     │
-└──────────────────┘                    └──────────────────────┘
-                                                 │
-                                                 │ Reduce schema duplication
-                                                 │ Easier to add new workflows
-                                                 │
-                                        ┌──────────────────────┐
-TOTAL: 42 tables                        TOTAL: 35 tables (-17%)
-HIGH JOIN complexity                    LOWER JOIN complexity
-RIGID schema (add table = migration)    FLEXIBLE (add type = config)
-                                        └──────────────────────┘
+BEFORE CONSOLIDATION (42 tables):        AFTER CONSOLIDATION (40 tables):
+┌──────────────────────────┐             ┌──────────────────────────┐
+│ clarification_requests   │             │ clarification_requests   │
+├──────────────────────────┤             │ - questions: JSONB       │
+│ clarification_responses  │ MERGE  →    │ - responses: JSONB ✅    │
+└──────────────────────────┘             └──────────────────────────┘
+
+┌──────────────────────────┐             ┌──────────────────────────┐
+│ stf_reward_transactions  │             │ token_transactions       │
+├──────────────────────────┤ MERGE  →    │ - type: stf_reward ✅    │
+│ context_share_trans...   │             │ - type: context_share ✅ │
+└──────────────────────────┘             │ - type: llm_compute      │
+                                         │ - metadata: JSONB        │
+                                         └──────────────────────────┘
+
+EXPENSIVE QUERIES:                       MATERIALIZED VIEWS:
+┌──────────────────────────┐             ┌──────────────────────────┐
+│ SELECT ... FROM          │             │ mv_stf_usage_stats ✅    │
+│ debug_transform_functions│             │ (refresh hourly)         │
+│ JOIN agent_execution_logs│ OPTIMIZE →  │ - precomputed stats      │
+│ GROUP BY ...             │             │ - 50x faster queries     │
+│ (500ms query time)       │             │ (<10ms query time)       │
+└──────────────────────────┘             └──────────────────────────┘
+
+RESULT: 42 → 40 tables (-2 tables, -5%)
+        +18% growth vs +24% originally
+        Performance targets maintained
+        Flexible schema for future growth
 ```
 
-**Consolidation Benefits**:
-- ✅ **-7 tables** (17% reduction): From 42 → 35 tables
-- ✅ **Fewer JOINs**: Centralized identity and transaction tables
-- ✅ **JSONB flexibility**: Type-specific data without schema changes
-- ✅ **Event sourcing**: Single token_transactions table natural for Kafka
-- ✅ **Easier to scale**: Add new types without migrations
+**Key Benefits**:
+- ✅ **-2 tables** (5% reduction from original 42)
+- ✅ **JSONB flexibility**: Add response types without migrations
+- ✅ **Event sourcing**: Single token ledger natural for Kafka
+- ✅ **Query performance**: Materialized views for 10-50x speedup
+- ✅ **Maintainability**: Fewer tables, simpler schema
 
-**1. Profile Consolidation**:
-- **Current**: Separate `contributor_profiles` (Phase 3) and potential `peer_registry` (Phase 3b P2P)
-- **Proposed**: Single `user_profiles` table with `profile_type` enum (contributor, peer, hybrid)
-- **Benefits**: Reduces JOIN complexity, centralizes identity management
-- **JSONB column**: `profile_metadata` for type-specific data (STF stats for contributors, bandwidth stats for peers)
-
-**2. Token Transaction Ledger**:
-- **Current**: Separate `contributor_rewards` (Phase 3a) and `context_sharing_transactions` (Phase 3b)
-- **Proposed**: Single `token_transactions` table with `transaction_type` enum (stf_reward, context_share, llm_compute, etc.)
-- **Benefits**: Single source of truth for all token movements, easier balance calculation
-- **Schema**: `(user_id, transaction_type, amount, metadata JSONB, created_at)`
-- **JSONB column**: `metadata` for transaction-specific details (STF ID, context chunk ID, etc.)
-
-**3. Event-Driven State Tables**:
-- **Current**: Multiple tables tracking similar lifecycle events (clarification_tickets, verification_requests, etc.)
-- **Proposed**: Generic `workflow_tickets` table with `workflow_type` enum
-- **Benefits**: Reduces schema duplication, easier to add new workflow types
-- **Trade-off**: More generic queries (need WHERE clause filtering by type)
-
-**4. Query Performance Testing Plan**:
-Before implementing consolidation:
-1. **Baseline**: Measure current query performance on 34-table schema
-2. **Projection**: Test queries on 42-table schema (with test data)
-3. **Consolidation**: Test queries on consolidated schema (e.g., 38 tables with JSONB)
-4. **Comparison**: Compare p50/p95/p99 latencies, index sizes, JOIN costs
-5. **Decision**: Consolidate only if performance improves OR remains within targets (<10ms for correlation ID queries)
-
-**5. Event Bus Naming Convention (ADR)**:
-Formalize event bus topic naming in ADR-002:
-- **Pattern**: `{domain}.{entity}.{action}.v{version}`
-- **Examples**:
-  - `debug.stf.registered.v1`
-  - `reward.token.issued.v1`
-  - `clarification.ticket.answered.v1`
-  - `p2p.context.shared.v1`
-- **Rationale**: Consistent naming enables event discovery, versioning, and routing
-- **Enforcement**: CI validation for topic names in code
-
-**Recommendation**: Implement consolidation in Phase 3 (after Phases 1-2 stable) to avoid premature optimization. Monitor query performance at 42 tables first, consolidate only if needed.
+**Recommendation**: Implement Options 2, 3, and 4 in Phase 1 before merge. Defer Option 1 (user table consolidation) until Phase 3b P2P when overlap is clearer.
 
 ### Event Bus Impact
 

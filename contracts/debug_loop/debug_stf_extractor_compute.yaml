@@ -5,41 +5,16 @@ node_type: "compute"
 node_name: "DebugSTFExtractorCompute"
 description: "Extract Specific Transformation Functions (STFs) from successful agent executions using AST parsing"
 
-# Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
-  implementation_plans:
-    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
-      section: "Week 2: STF Registry & Discovery"
-      relationship: "implementation_guide"
-      description: "STF extraction from successful executions (Days 6-8)"
-
-  related_contracts:
-    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
-      relationship: "orchestrated_by"
-      description: "Orchestrated by DebugLoopOrchestrator workflow"
-    - path: "contracts/debug_loop/stf_quality_compute.yaml"
-      relationship: "provides_to"
-      description: "Provides STF code and metadata for quality scoring"
-    - path: "contracts/debug_loop/stf_hash_compute.yaml"
-      relationship: "provides_to"
-      description: "Provides STF code for hash generation"
-
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "STF extraction methodology and patterns"
+  implementation:
+    - path: "omniclaude/debug_loop/node_debug_stf_extractor_compute.py"
+      purpose: "Compute node for STF extraction (to be implemented)"
   algorithms:
-    - name: "AST Parsing for STF Extraction"
-      steps: ["Parse code with AST", "Find function/class definitions", "Extract metadata", "Calculate confidence"]
-      relationship: "extraction_algorithm"
-      description: "Python AST-based code extraction with confidence scoring"
-
-  configuration:
-    - path: "config/settings.py"
-      relationship: "extraction_config"
-      description: "Extraction options (min_lines, max_lines, require_function)"
-
-  documentation:
-    - path: "CLAUDE.md"
-      section: "Agent Observability & Traceability"
-      relationship: "observability_guide"
-      description: "Integration with AgentExecutionLogger for auto-extraction"
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      purpose: "Extraction algorithm and pattern recognition"
 
 # omnibase_core Models Used
 models:
@@ -150,6 +125,8 @@ output:
               type: "string"
             default:
               type: "string"
+              nullable: true
+              description: "String representation of default value (can be 'None', literal value, etc.)"
       return_type:
         type: "string"
 

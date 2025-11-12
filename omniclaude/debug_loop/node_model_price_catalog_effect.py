@@ -170,14 +170,17 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 message=f"Missing required fields: {', '.join(missing)}",
             )
 
-        # Validate provider enum
-        provider = model_data["provider"]
-        if not EnumProvider.is_valid(provider):
+        # Validate and convert provider to enum
+        provider_str = model_data["provider"]
+        if not EnumProvider.is_valid(provider_str):
             valid_providers = EnumProvider.get_valid_providers()
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                message=f"Invalid provider: {provider}. Must be one of: {', '.join(valid_providers)}",
+                message=f"Invalid provider: {provider_str}. Must be one of: {', '.join(valid_providers)}",
             )
+
+        # Convert to enum for type safety (EnumProvider inherits from str, so it works in SQL)
+        provider = EnumProvider(provider_str)
 
         # Generate UUID
         catalog_id = str(uuid4())
@@ -521,13 +524,16 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 message="Missing required fields: provider and model_name",
             )
 
-        # Validate provider enum
+        # Validate and convert provider to enum
         if not EnumProvider.is_valid(provider):
             valid_providers = EnumProvider.get_valid_providers()
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Invalid provider: {provider}. Must be one of: {', '.join(valid_providers)}",
             )
+
+        # Convert to enum for type safety (EnumProvider inherits from str, so it works in SQL)
+        provider = EnumProvider(provider)
 
         query = """
         UPDATE model_price_catalog

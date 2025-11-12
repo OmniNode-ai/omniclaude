@@ -4,6 +4,13 @@
 **Integration**: P2P Context-Sharing Model (Phase 3b extension)
 **Existing Infrastructure**: Qdrant pattern storage + quality scoring
 
+> **📊 Data Update (2025-11-12)**: This document was updated to reflect actual Qdrant pattern counts. Initial draft referenced ~120 patterns from outdated documentation. Current verified counts:
+> - **archon_vectors**: 7,118 patterns (ONEX architectural templates and execution patterns)
+> - **code_generation_patterns**: 8,571 patterns (Real Python implementations and code examples)
+> - **Total**: 15,689+ patterns
+>
+> This 130x larger pattern base significantly strengthens the ROI case for pattern contribution rewards and demonstrates the value of the existing ecosystem.
+
 ---
 
 ## Executive Summary
@@ -12,9 +19,9 @@
 
 **Current State**: You already have:
 - ✅ Pattern quality scorer (5 dimensions: completeness, documentation, ONEX compliance, metadata, complexity)
-- ✅ Pattern storage in Qdrant (`execution_patterns`, `code_patterns`, `code_generation_patterns`)
+- ✅ Pattern storage in Qdrant (`archon_vectors`, `code_generation_patterns`)
 - ✅ Pattern reuse system with similarity search
-- ✅ 120+ patterns already stored
+- ✅ 15,689+ patterns already stored (7,118 in archon_vectors + 8,571 in code_generation_patterns)
 
 **New Component**: **Automatic pattern contribution rewards** that trigger when agents create novel, high-quality patterns.
 
@@ -38,13 +45,14 @@
 
 ### Qdrant Collections
 
-**Three pattern collections** (from CLAUDE.md):
+**Two active pattern collections** (from CLAUDE.md):
 
 | Collection | Purpose | Count | Quality Scored |
 |-----------|---------|-------|----------------|
-| `execution_patterns` | ONEX architectural templates | ~120 | ✅ Yes |
-| `code_patterns` | Real Python implementations | ~856 | ✅ Yes |
-| `code_generation_patterns` | Generated code patterns | Growing | ✅ Yes |
+| `archon_vectors` | ONEX architectural templates and execution patterns | 7,118 | ✅ Yes |
+| `code_generation_patterns` | Real Python implementations and code examples | 8,571 | ✅ Yes |
+
+**Note**: The collections were reorganized from the previous three-collection structure (`execution_patterns`, `code_patterns`, `code_generation_patterns`) into the current two-collection architecture with significantly expanded pattern coverage.
 
 ### Pattern Quality Scorer
 
@@ -653,23 +661,25 @@ reward = 150 * 0.96 * 1.0 * 1.05 = 151 tokens
 
 ### Manifest Injector Integration
 
-**Current**: Manifest includes 120+ patterns from Qdrant
+**Current**: Manifest includes 15,689+ patterns from Qdrant (7,118 from archon_vectors + 8,571 from code_generation_patterns)
 
 **Enhancement**: Include pattern author attribution and earning potential
 
 ```yaml
-AVAILABLE PATTERNS (120 patterns from 45 contributors):
+AVAILABLE PATTERNS (15,689 patterns from archon_vectors + code_generation_patterns):
 
-Top Patterns by Quality:
+Top Patterns by Quality (filtered for this context):
   1. ⭐⭐⭐⭐⭐ Node State Management (0.95) - By peer_abc123
      Used 127 times | Earned author 935 tokens
 
   2. ⭐⭐⭐⭐⭐ Async Event Bus (0.93) - By peer_def456
      Used 89 times | Earned author 695 tokens
 
-Recently Added Patterns:
+Recently Added Patterns (user-contributed):
   - Temperature Conversion (0.88) - By peer_xyz789
     Just added! 5 tokens to use, supports new contributor
+
+Note: Most patterns are system/seed patterns. User contributions tracked separately.
 ```
 
 ### Pattern Quality Backfill

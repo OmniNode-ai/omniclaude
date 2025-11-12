@@ -7,6 +7,16 @@ description: "Manage LLM model pricing catalog with CRUD operations for cost tra
 
 # Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Model pricing catalog requirements"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_model_price_catalog_effect.py"
+      purpose: "Effect node for model price management"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "model_price_catalog table schema with seed data"
+
   implementation_plans:
     - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
       section: "Week 3: Model Catalog & Cost Tracking"
@@ -161,6 +171,7 @@ output:
   model_pricing:
     type: "object"
     required_for: ["get_pricing"]
+    required: ["provider", "model_name", "input_price_per_million", "output_price_per_million"]
     properties:
       provider:
         type: "string"
@@ -185,6 +196,7 @@ output:
     type: "array"
     items:
       type: "object"
+      required: ["catalog_id", "provider", "model_name", "input_price_per_million", "output_price_per_million", "is_active"]
       properties:
         catalog_id:
           type: "string"

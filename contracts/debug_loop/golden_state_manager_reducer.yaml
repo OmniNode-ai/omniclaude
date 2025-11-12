@@ -13,6 +13,16 @@ associated_documents:
       relationship: "implementation_guide"
       description: "Golden state workflow and registry (Days 17-18)"
 
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Golden state FSM design and transitions"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_golden_state_manager_reducer.py"
+      purpose: "Reducer node for golden state management (to be implemented)"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "debug_golden_states table schema"
+
   related_contracts:
     - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
       relationship: "orchestrated_by"

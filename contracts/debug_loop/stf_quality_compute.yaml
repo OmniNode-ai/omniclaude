@@ -5,42 +5,16 @@ node_type: "compute"
 node_name: "STFQualityCompute"
 description: "Calculate 5-dimension STF quality score with caching for performance"
 
-# Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
-  implementation_plans:
-    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
-      section: "Week 2: STF Registry & Discovery"
-      relationship: "implementation_guide"
-      description: "Quality scoring for STF discovery (Days 6-10)"
-
-  related_contracts:
-    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
-      relationship: "orchestrated_by"
-      description: "Orchestrated by DebugLoopOrchestrator workflow"
-    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
-      relationship: "depends_on"
-      description: "Receives STF code and metadata for quality calculation"
-    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
-      relationship: "provides_to"
-      description: "Provides quality scores for STF storage"
-
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "STF quality scoring methodology"
+  implementation:
+    - path: "omniclaude/debug_loop/node_stf_quality_compute.py"
+      purpose: "Compute node for STF quality scoring (to be implemented)"
   algorithms:
-    - name: "5-Dimension Quality Scoring"
-      dimensions: ["completeness", "documentation", "onex_compliance", "metadata", "complexity"]
-      weights: [0.30, 0.25, 0.20, 0.15, 0.10]
-      relationship: "quality_algorithm"
-      description: "Composite quality score calculation with weighted dimensions"
-
-  configuration:
-    - path: "config/settings.py"
-      relationship: "cache_config"
-      description: "Cache TTL and quality thresholds"
-
-  documentation:
-    - path: "CLAUDE.md"
-      section: "Polymorphic Agent Framework"
-      relationship: "onex_patterns"
-      description: "ONEX compliance patterns and quality standards"
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      purpose: "Quality scoring algorithm specification"
 
 # omnibase_core Models Used
 models:

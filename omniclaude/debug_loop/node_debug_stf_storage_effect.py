@@ -150,8 +150,8 @@ class NodeDebugSTFStorageEffect(NodeEffect):
         Returns:
             Dictionary containing:
                 - success: Boolean indicating success
-                - stf_id: UUID of the stored STF
-                - duplicate: Boolean indicating if this was a duplicate
+                - stf_id: UUID of the stored STF (existing ID if duplicate)
+                - is_duplicate: Boolean indicating if this was a duplicate
 
         Raises:
             ModelOnexError: If required fields are missing or database operation fails
@@ -207,16 +207,24 @@ class NodeDebugSTFStorageEffect(NodeEffect):
                     "SELECT stf_id FROM debug_transform_functions WHERE stf_hash = $1",
                     {"1": stf_data["stf_hash"]},
                 )
+
+                # Defensive check - should always find existing record since conflict occurred
+                if not existing:
+                    raise ModelOnexError(
+                        message=f"ON CONFLICT triggered but existing STF not found for hash: {stf_data['stf_hash']}",
+                        error_code=EnumCoreErrorCode.DATABASE_OPERATION_ERROR,
+                    )
+
                 return {
                     "success": True,
                     "stf_id": existing["stf_id"],
-                    "duplicate": True,
+                    "is_duplicate": True,
                 }
 
             return {
                 "success": True,
                 "stf_id": stf_id,
-                "duplicate": False,
+                "is_duplicate": False,
             }
 
         except Exception as e:

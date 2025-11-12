@@ -108,10 +108,13 @@ Never hardcode database credentials in documentation or scripts. All connection 
 ### Prerequisites
 
 1. **PostgreSQL Access**: Ensure you have access to the PostgreSQL database
-   - Host: `${POSTGRES_HOST}` (default: `192.168.86.200`)
-   - Port: `${POSTGRES_PORT}` (default: `5436`)
-   - Database: `${POSTGRES_DATABASE}` (default: `omninode_bridge`)
-   - User: `${POSTGRES_USER}` (default: `postgres`)
+   - Host: `${POSTGRES_HOST}` (configured in `.env`)
+   - Port: `${POSTGRES_PORT}` (configured in `.env`)
+   - Database: `${POSTGRES_DATABASE}` (configured in `.env`)
+   - User: `${POSTGRES_USER}` (configured in `.env`)
+   - Password: `${POSTGRES_PASSWORD}` (configured in `.env` - **NEVER hardcode!**)
+
+   > **⚠️ SECURITY NOTE**: The values above are environment variables loaded from `.env`. Never hardcode actual IP addresses, ports, database names, or passwords in documentation or scripts. Your specific values are in your local `.env` file which is gitignored.
 
 2. **Environment Variables**: Load credentials from `.env` before running migrations
 
@@ -119,11 +122,12 @@ Never hardcode database credentials in documentation or scripts. All connection 
 # Load environment variables (REQUIRED)
 source .env
 
-# Verify credentials are loaded
+# Verify credentials are loaded (without exposing password)
 echo "Host: ${POSTGRES_HOST}"
 echo "Port: ${POSTGRES_PORT}"
 echo "Database: ${POSTGRES_DATABASE}"
 echo "User: ${POSTGRES_USER}"
+echo "Password: ${POSTGRES_PASSWORD:+SET}" # Shows "SET" if password is loaded
 ```
 
 ### Method 1: Using psql (Recommended)
@@ -535,25 +539,43 @@ WHERE proname IN ('update_updated_at_column', 'calculate_error_mapping_confidenc
 **When running all migrations from scratch**:
 
 ```bash
+# REQUIRED: Load credentials first
+source .env
+
 # Run in this order to satisfy dependencies
-psql -f migrations/001_debug_loop_core_schema.sql
-psql -f migrations/005_create_agent_actions_table.sql
-psql -f migrations/012_create_pattern_quality_metrics.sql
-psql -f migrations/013_remove_pattern_quality_fk.sql
-psql -f migrations/014_add_pattern_quality_unique_constraint.sql
-psql -f migrations/add_service_metrics.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/001_debug_loop_core_schema.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/005_create_agent_actions_table.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/012_create_pattern_quality_metrics.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/013_remove_pattern_quality_fk.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/014_add_pattern_quality_unique_constraint.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/add_service_metrics.sql
 ```
 
 **When running rollbacks**:
 
 ```bash
+# REQUIRED: Load credentials first
+source .env
+
 # Roll back in REVERSE order
-psql -f migrations/rollback_add_service_metrics.sql
-psql -f migrations/014_rollback_*.sql
-psql -f migrations/013_rollback_pattern_quality_fk.sql
-psql -f migrations/rollback_012_*.sql
-psql -f migrations/rollback_005_*.sql
-psql -f migrations/rollback_001_*.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/rollback_add_service_metrics.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/014_rollback_*.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/013_rollback_pattern_quality_fk.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/rollback_012_*.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/rollback_005_*.sql
+psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+  -f migrations/rollback_001_*.sql
 ```
 
 ---
@@ -830,16 +852,21 @@ COMMIT;
 
 3. **Test idempotency**:
    ```bash
+   # REQUIRED: Load credentials first
+   source .env
+
    # Run migration twice - should succeed both times
-   psql -f migrations/new_migration.sql
-   psql -f migrations/new_migration.sql
+   psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+     -f migrations/new_migration.sql
+   psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE} \
+     -f migrations/new_migration.sql
    ```
 
 ### Common Pitfalls to Avoid
 
 | Pitfall | Why It's Bad | Solution |
 |---------|--------------|----------|
-| **Hardcoded credentials** | Security risk | Use environment variables |
+| **Hardcoded credentials** | Security risk - exposes passwords, IPs, and infrastructure topology in version control | **ALWAYS** use environment variables (`${POSTGRES_HOST}`, etc.) and `source .env` before running commands |
 | **Missing rollback** | Can't undo changes | Include rollback SQL |
 | **No transaction** | Partial failures | Wrap in `BEGIN`/`COMMIT` |
 | **No verification** | Silent failures | Add verification queries |
@@ -847,6 +874,8 @@ COMMIT;
 | **Non-idempotent SQL** | Can't rerun safely | Use `IF NOT EXISTS`, `ON CONFLICT` |
 | **No comments** | Hard to understand | Document purpose and impact |
 | **Breaking changes** | Data loss risk | Test thoroughly first |
+
+**🔒 Security Best Practice**: Never hardcode database credentials (passwords, IP addresses, ports, database names) in documentation, scripts, or code. This exposes sensitive infrastructure details and creates security vulnerabilities. Always use environment variables from `.env` files which are gitignored and never committed to version control.
 
 ### Performance Considerations
 

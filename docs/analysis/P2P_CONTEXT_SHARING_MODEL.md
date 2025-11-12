@@ -886,6 +886,273 @@ reputation_decay_rate: 0.01/day (if offline)
 - If peers hoard tokens → add expiration (e.g., 10% decay/year)
 - If peers run out → increase free tier allocation
 
+### Token Economics Validation (Pre-Phase 3)
+
+> **🚨 CRITICAL DEPENDENCY**: Phase 3 viability ($35-50K investment) depends on unvalidated token equilibrium assumptions. This pilot study is **MANDATORY** before Phase 3 implementation.
+
+**Problem Statement**: Current token economics model assumes:
+- Average peer earns ~210 tokens/day
+- Average peer spends ~200 tokens/day
+- Context reduction achieves 70-90% savings
+- Token velocity >1 cycle/week is achievable
+
+**These assumptions are unvalidated**. If wrong, Phase 3 investment could fail.
+
+#### Pilot Study Requirements
+
+**Objective**: Validate token equilibrium assumptions in controlled environment before full Phase 3 rollout
+
+**Duration**: 2 weeks minimum (4 weeks recommended for statistical significance)
+
+**Participants**:
+- **Minimum**: 10 internal users (early adopters, high activity)
+- **Recommended**: 20 users (mix of usage patterns: heavy/medium/light)
+- **Ideal**: 30-50 users (sufficient for statistical analysis)
+
+**Budget**: $5-10K pilot cost **prevents** $35-50K waste if assumptions wrong
+
+**Infrastructure**:
+- Centralized tracker (Phase 1 deliverable)
+- Token ledger (Kafka + Valkey)
+- Context serving API with token transactions
+- Monitoring dashboard (real-time metrics)
+
+#### Key Metrics to Track
+
+**Primary Metrics** (Validate Core Assumptions):
+
+| Metric | Target | Red Flag | Measurement |
+|--------|--------|----------|-------------|
+| **Token Velocity** | >1.0 cycles/week | <0.5 cycles/week | earn→spend cycle time |
+| **Balance Distribution** | Gini <0.5 | Gini >0.7 | Wealth concentration |
+| **Context Reduction** | 70-90% savings | <50% savings | RAG effectiveness |
+| **Supply Growth Rate** | <20%/week | >40%/week | New tokens issued |
+| **Earning/Spending Ratio** | 0.9-1.1 | <0.5 or >2.0 | Equilibrium check |
+
+**Secondary Metrics** (User Experience):
+
+| Metric | Target | Red Flag | Measurement |
+|--------|--------|----------|-------------|
+| **User Satisfaction** | >80% positive | <60% positive | Weekly survey |
+| **Earning Perception** | Fair by 80%+ | Unfair by >30% | Survey + interviews |
+| **Spending Perception** | Valuable by 80%+ | Wasteful by >30% | Survey + interviews |
+| **Active Participation** | >70% engage daily | <50% engage daily | Activity logs |
+| **Hoarding Behavior** | <30% hold >50% | >50% hold >50% | Balance distribution |
+
+**Technical Metrics** (Infrastructure Readiness):
+
+| Metric | Target | Red Flag | Measurement |
+|--------|--------|----------|-------------|
+| **API Latency** | <200ms p95 | >500ms p95 | Context retrieval time |
+| **Transaction Throughput** | >100 tx/sec | <10 tx/sec | Kafka consumer lag |
+| **Balance Query Time** | <10ms p95 | >50ms p95 | Valkey cache performance |
+| **System Uptime** | >99.9% | <99% | Peer availability |
+
+#### Success Criteria
+
+**Pilot considered successful if ALL of the following are met**:
+
+✅ **Economics Viability**:
+1. 70%+ of users complete ≥1 earn→spend cycle per week (velocity validation)
+2. Context reduction achieves 70-90% (not just assumed 90%)
+3. Token equilibrium achieved (avg earn/spend ratio 0.9-1.1)
+4. Supply growth stable at <20%/week
+
+✅ **Fair Distribution**:
+1. Gini coefficient <0.5 (no wealth concentration)
+2. No single user holds >30% of circulating tokens
+3. Bottom 50% of users hold ≥20% of tokens (healthy distribution)
+
+✅ **User Satisfaction**:
+1. 80%+ perceive earning rates as fair
+2. 80%+ perceive spending as valuable (good ROI on tokens)
+3. 70%+ engage with system daily
+4. User churn <10%/week
+
+✅ **Technical Readiness**:
+1. API latency p95 <200ms
+2. Zero data loss (Kafka transactions working)
+3. Balance queries <10ms p95 (Valkey cache effective)
+4. No critical bugs or system downtime
+
+#### Escape Hatches (If Assumptions Don't Hold)
+
+> **Philosophy**: Every assumption has a mitigation strategy. No assumption is terminal.
+
+| Problem | Detection Signal | Response Strategy | Timeline | Cost Impact |
+|---------|-----------------|-------------------|----------|-------------|
+| **Hoarding** (>50% hold 80% tokens) | Gini >0.7 for >3 days | Implement 10% annual decay on balances >1000 | 48 hours | $0 (config change) |
+| **Low Velocity** (<0.5 cycles/week) | Velocity metric + user surveys | **Phase 1**: Increase earning rates by 100%<br>**Phase 2**: Add "use it or lose it" decay (5%/month) | 7 days | $0 (config change) |
+| **Low Context Reduction** (<50%) | RAG metrics per request | **Phase 1**: Re-evaluate P2P cost savings (may not justify Phase 3)<br>**Phase 2**: Improve RAG quality (better embeddings, reranking)<br>**Phase 3**: Pivot to pure peer discovery (no tokens) | 14 days | **High** ($10-20K to improve RAG or pivot) |
+| **Hyperinflation** (>40%/week growth) | Supply monitoring dashboard | **Phase 1**: Reduce new context bonuses by 50%<br>**Phase 2**: Cap earning rates (max 1000 tokens/day)<br>**Phase 3**: Emergency supply freeze (no new tokens for 7 days) | 24 hours | $0 (config change) |
+| **Earning Rates Too Low** | User complaints + churn >20%/week | **Phase 1**: Increase earning rates by 50%<br>**Phase 2**: Double free tier allocation (50→100 tokens/day)<br>**Phase 3**: Emergency airdrop (1000 tokens to all users) | 24 hours | **Medium** ($1-5K for airdrop) |
+| **Spending Costs Too High** | Token balances growing, velocity dropping | **Phase 1**: Decrease retrieval costs by 30%<br>**Phase 2**: Implement "bulk discount" (10% off for >10 KB/query)<br>**Phase 3**: Add subscription tier (unlimited for 500 tokens/month) | 48 hours | $0 (config change) |
+| **Free Rider Problem** (>30% never earn) | Activity analysis + balance distribution | **Phase 1**: Reduce free tier from 50→25 tokens/day<br>**Phase 2**: Require minimum 1 KB served/week to maintain balance<br>**Phase 3**: Implement "earn to unlock" (must earn 100 tokens before spending) | 7 days | $0 (config change) |
+| **Sybil Attack** (fake peers gaming system) | Sudden balance spikes, duplicate contexts | **Phase 1**: Implement proof-of-work (cost to announce context)<br>**Phase 2**: Reputation system (new peers earn 50% until verified)<br>**Phase 3**: Manual review of top earners | 24-48 hours | **Low** ($500-2K for detection tooling) |
+
+**Escalation Path** (If Multiple Escape Hatches Triggered):
+1. **2+ red flags**: Pause pilot for 3 days, conduct stakeholder review
+2. **3+ red flags**: Extend pilot by 2 weeks with adjusted parameters
+3. **4+ red flags**: Recommend Phase 3 postponement, revisit architecture
+
+#### Intervention Triggers
+
+**Automated Interventions** (Triggered by Monitoring Dashboard):
+
+| Trigger | Condition | Action | Auto/Manual | Notification |
+|---------|-----------|--------|-------------|--------------|
+| **Low Velocity Alert** | Velocity <0.5 for 3 consecutive days | Increase earning rates by 50% | Manual (requires approval) | Email + Slack |
+| **High Gini Alert** | Gini >0.7 for 2 consecutive days | Enable 10% annual decay | Manual (requires approval) | Email + Slack |
+| **Hyperinflation Alert** | Supply growth >40%/week | Reduce earning rates by 30% | Manual (requires approval) | Email + Slack + PagerDuty |
+| **Supply Crash Alert** | Supply growth <-10%/week (deflation) | Increase free tier by 2x | Manual (requires approval) | Email + Slack |
+| **User Churn Alert** | Churn >20%/week | Emergency airdrop (500 tokens/user) | Manual (requires approval) | Email + Slack + PagerDuty |
+| **Balance Query Latency** | p95 >50ms for 15 minutes | Scale Valkey instances | **Automatic** | Slack |
+| **API Error Rate** | Error rate >5% for 5 minutes | Circuit breaker (fallback to free tier) | **Automatic** | PagerDuty |
+
+**Manual Interventions** (Triggered by Weekly Review):
+
+| Review Metric | Yellow Zone (Review) | Red Zone (Intervene) | Intervention Strategy |
+|---------------|---------------------|---------------------|----------------------|
+| **Token Velocity** | 0.5-0.8 cycles/week | <0.5 cycles/week | Increase earning rates, reduce spending costs |
+| **Gini Coefficient** | 0.5-0.7 | >0.7 | Implement decay, cap max balance |
+| **Context Reduction** | 50-70% | <50% | Improve RAG, consider architecture pivot |
+| **User Satisfaction** | 60-80% positive | <60% positive | User interviews, UX improvements |
+| **Active Participation** | 50-70% daily | <50% daily | Gamification, notifications, incentives |
+
+#### Monitoring & Dashboards
+
+**Real-Time Dashboard** (Grafana + Prometheus):
+
+**Panel 1: Token Velocity**
+- Rolling 7-day average velocity (line chart)
+- Daily earn→spend cycle count (bar chart)
+- Velocity by user segment (heavy/medium/light usage)
+
+**Panel 2: Balance Distribution**
+- Gini coefficient over time (line chart)
+- Balance histogram (top 10%, 10-50%, bottom 50%)
+- Top 10 token holders (table with % of supply)
+
+**Panel 3: Context Reduction**
+- Average context reduction per request (line chart)
+- RAG hit rate (% queries using P2P vs. external LLM)
+- Cost savings per user (bar chart)
+
+**Panel 4: Supply Metrics**
+- Total circulating supply (line chart)
+- Daily token issuance (new tokens created)
+- Daily token destruction (expired/burned tokens)
+- Supply growth rate (rolling 7-day %)
+
+**Panel 5: User Engagement**
+- Daily active users (line chart)
+- Churn rate (rolling 7-day %)
+- Average earning/spending per user (table)
+- User satisfaction score (survey results)
+
+**Panel 6: Technical Performance**
+- API latency (p50/p95/p99 over time)
+- Kafka consumer lag (token ledger)
+- Valkey cache hit rate
+- System uptime (%)
+
+**Alerting Thresholds** (PagerDuty Integration):
+
+| Alert | Severity | Condition | Response Time |
+|-------|----------|-----------|---------------|
+| Hyperinflation | **Critical** | Supply growth >40%/week | 15 minutes |
+| API Down | **Critical** | Error rate >10% for 5 min | 5 minutes |
+| User Exodus | **High** | Churn >30%/week | 1 hour |
+| Low Velocity | **Medium** | Velocity <0.5 for 3 days | 4 hours |
+| High Gini | **Medium** | Gini >0.7 for 2 days | 4 hours |
+| Cache Miss | **Low** | Hit rate <50% for 1 hour | 8 hours |
+
+#### Weekly Review Process
+
+**Stakeholders**: Product owner, tech lead, 2-3 engineers
+
+**Agenda** (30-45 minutes):
+1. **Metrics Review** (10 min):
+   - Check all primary/secondary metrics vs. targets
+   - Identify trends (improving/degrading/stable)
+2. **User Feedback** (10 min):
+   - Review survey results and open-ended responses
+   - Discuss notable user complaints/praise
+3. **Technical Health** (5 min):
+   - Review system performance and incidents
+4. **Intervention Discussion** (10 min):
+   - Decide on parameter adjustments (if needed)
+   - Vote on escape hatch activation (if triggered)
+5. **Action Items** (5 min):
+   - Assign follow-up tasks (e.g., user interviews, parameter changes)
+
+**Deliverables**:
+- Weekly report (metrics summary + decisions)
+- Parameter change log (what changed, why, expected impact)
+- Risk register (active threats to pilot success)
+
+#### Post-Pilot Decision Framework
+
+**After 2-4 weeks, evaluate pilot results and decide**:
+
+**Option 1: Proceed to Phase 3** (Green Light)
+- **Conditions**: ≥80% of success criteria met, ≤1 red flag
+- **Action**: Full Phase 3 implementation ($35-50K investment approved)
+- **Timeline**: 12-16 weeks for Phase 3
+- **Risk**: Low (validated assumptions)
+
+**Option 2: Extend Pilot** (Yellow Light)
+- **Conditions**: 60-79% of success criteria met, 2-3 red flags
+- **Action**: Extend pilot by 2-4 weeks with adjusted parameters
+- **Timeline**: +2-4 weeks pilot, then re-evaluate
+- **Cost**: +$2-5K (extended infrastructure costs)
+- **Risk**: Medium (some assumptions need tuning)
+
+**Option 3: Pivot Architecture** (Red Light)
+- **Conditions**: <60% of success criteria met, ≥4 red flags
+- **Action**: Revisit token economics model or consider alternative architecture
+- **Timeline**: 2-4 weeks for architecture redesign
+- **Cost**: $10-20K (redesign + new pilot)
+- **Risk**: High (fundamental assumptions invalid)
+
+**Option 4: Postpone Phase 3** (Red Light)
+- **Conditions**: Critical red flags (e.g., context reduction <30%, user satisfaction <40%)
+- **Action**: Defer Phase 3 indefinitely, focus on improving RAG quality first
+- **Timeline**: Indefinite (wait for infrastructure improvements)
+- **Cost**: $0 (avoid $35-50K waste)
+- **Risk**: Opportunity cost (delayed feature launch)
+
+**Decision Matrix**:
+
+| Success Criteria Met | Red Flags | Decision | Confidence |
+|---------------------|-----------|----------|------------|
+| ≥80% | 0-1 | **Proceed to Phase 3** | High |
+| 60-79% | 2-3 | **Extend Pilot** | Medium |
+| 40-59% | 3-4 | **Pivot Architecture** | Low |
+| <40% | ≥4 | **Postpone Phase 3** | Very Low |
+
+#### Pilot Study Deliverables
+
+**End of Pilot Report** (Executive Summary):
+1. **Metrics Summary**: All primary/secondary metrics vs. targets
+2. **Key Findings**: What worked, what didn't, surprises
+3. **User Feedback**: Qualitative insights (quotes, themes)
+4. **Technical Learnings**: Performance bottlenecks, scaling insights
+5. **Recommendation**: Proceed/Extend/Pivot/Postpone (with rationale)
+6. **Parameter Adjustments**: Proposed changes for Phase 3 (if proceeding)
+7. **Risk Assessment**: Updated risk register for Phase 3
+8. **Budget Impact**: Actual pilot cost vs. projected Phase 3 ROI
+
+**Artifacts**:
+- Grafana dashboard exports (metrics screenshots)
+- Survey results (raw data + analysis)
+- User interview transcripts (anonymized)
+- Parameter change log (complete history)
+- Incident reports (any outages/bugs during pilot)
+- Code repository (pilot implementation, reusable for Phase 3)
+
+---
+
 ### Token Economics Tuning Strategy
 
 **Initial Tuning Approach**:
@@ -1930,13 +2197,94 @@ Savings: $97,500 - $31,500 = $66,000/month (68% reduction)
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| **Sybil attacks** (fake peers) | Medium | High | Reputation system, stake requirements |
+| **Sybil attacks** (fake peers) | Medium | High | Multi-layer defense: rate limiting, vouching, reputation, blocklisting, economic disincentives (see Enhanced Sybil Attack Prevention) |
 | **Freeloading** (consume without contributing) | High | Medium | Token economics (must earn to spend) |
 | **Bad context quality** | Medium | Medium | Verification protocol, reputation filtering |
 | **Network fragmentation** | Low | High | DHT ensures connectivity, tracker fallback |
 | **Token economics imbalance** | Medium | Medium | Dynamic parameter adjustment, monitoring |
 | **Privacy concerns** | Medium | Medium | Encryption, access controls, private contexts |
 | **Scalability bottlenecks** | Low | Medium | Sharding, CDN-like edge nodes |
+
+### Enhanced Sybil Attack Prevention
+
+**Multi-Layer Defense**:
+
+#### Layer 1: New Peer Rate Limiting
+- **Age-based limits**: Peers <30 days limited to 10 tokens/day earnings
+- **Established peers**: >30 days + reputation >0.8 = unlimited earnings
+- **Graduated unlocking**: Daily limit increases by 1 token per day of good behavior
+
+#### Layer 2: Vouching System
+**Requirements for new peers**:
+- Must receive 3+ vouches from high-reputation peers (reputation >0.8)
+- Vouchers stake 10% of vouchee's earned tokens (slashed if vouchee malicious)
+- Vouchers limited to 5 active vouches at a time (prevents vouching farms)
+
+**Vouch validation**:
+```sql
+-- Cannot vouch if:
+SELECT COUNT(*) FROM peer_vouches
+WHERE voucher_peer_id = $1
+  AND vouchee_reputation >= 0.5  -- Still active vouches
+  AND created_at > NOW() - INTERVAL '90 days';
+-- Result must be < 5
+```
+
+#### Layer 3: Reputation Scoring
+**Reputation calculation**:
+```python
+reputation = base_reputation (1.0)
+  + valid_verifications * 0.01      # Up to +0.5
+  - invalid_verifications * 0.05     # Down to -0.5
+  + peer_longevity_bonus * 0.02      # +0.01 per 30 days, up to +0.2
+  - failed_vouches * 0.1             # -0.1 per vouchee that failed
+
+# Bounds: [0.0, 1.5]
+```
+
+**Reputation decay**: If inactive >30 days, reputation decays 1%/day until active again
+
+#### Layer 4: Blocklist Thresholds
+| Reputation | Action | Duration |
+|------------|--------|----------|
+| <0.3 | Automatic suspension | 30 days |
+| <0.1 | Permanent ban | Indefinite |
+| 3 violations in 90 days | Permanent ban | Indefinite |
+
+**Violation types**:
+- Invalid context served (failed verification)
+- Repeated offline periods (>50% downtime)
+- Vouching for malicious peers
+- Manipulation attempts (hash collisions, fake metrics)
+
+#### Layer 5: Economic Disincentives
+**Sybil attack economics**:
+- Creating N fake peers costs: N × setup_time (30 min each)
+- Earning potential: 10 tokens/day × N (rate limited)
+- Risk: Lose all tokens + reputation if detected
+- Detection probability: High (vouching system + pattern analysis)
+
+**Expected value calculation**:
+```
+EV = (earnings × undetected_probability) - (setup_cost + reputation_loss × detected_probability)
+EV = (10 tokens/day × 30 days × 0.2) - (30 min × $50/hr × 1 + 1000 tokens × 0.8)
+EV = 60 tokens - ($25 + 800 tokens) = -765 tokens (negative expected value)
+```
+
+**Result**: Sybil attacks economically irrational for rational actors
+
+#### Monitoring & Detection
+**Automated alerts**:
+1. **Cluster detection**: Multiple peers from same IP/subnet (>3)
+2. **Behavioral similarity**: Peers with identical uptime patterns
+3. **Rapid peer creation**: >5 new peers in 24 hours
+4. **Vouching rings**: Circular vouching patterns (A→B→C→A)
+
+**Response actions**:
+- Immediate investigation (manual review within 24 hours)
+- Temporary suspension pending review
+- Slashing of staked vouches if confirmed Sybil
+- Permanent IP/subnet bans for repeated offenders
 
 ---
 

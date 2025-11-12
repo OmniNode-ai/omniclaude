@@ -7,6 +7,20 @@ description: "Store and retrieve Specific Transformation Functions (STFs) in Pos
 
 # Associated Documents (ONEX Linked Documents Pattern)
 associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "STF registry design and requirements"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_debug_stf_storage_effect.py"
+      purpose: "Effect node implementation for STF storage"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "debug_transform_functions table schema"
+
+  testing:
+    - path: "omniclaude/debug_loop/test_debug_stf_storage_effect.py"
+      purpose: "Unit tests for STF storage operations"
+
   implementation_plans:
     - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
       section: "Week 2: STF Registry & Discovery"

@@ -38,6 +38,16 @@ associated_documents:
       relationship: "provider_guide"
       description: "Multi-provider AI model support and cost tracking"
 
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Cost tracking and model pricing requirements"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_cost_tracker_compute.py"
+      purpose: "Compute node for cost calculation (to be implemented)"
+    - path: "migrations/001_debug_loop_core_schema.sql"
+      purpose: "model_price_catalog table schema"
+
 # omnibase_core Models Used
 models:
   from_omnibase_core:
