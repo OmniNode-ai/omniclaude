@@ -22,18 +22,13 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install additional dependencies
-RUN pip install --no-cache-dir \
-    aiokafka \
-    pydantic \
-    pydantic-settings
+# Copy proxy requirements
+COPY services/intelligent_context_proxy/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy project files
 COPY config/ /app/config/
+COPY agents/ /app/agents/
 COPY services/intelligent_context_proxy/ /app/services/intelligent_context_proxy/
 
 # Set Python path
@@ -41,7 +36,7 @@ ENV PYTHONPATH=/app
 
 # Health check (checks if process is running)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ps aux | grep "python.*run.py" | grep -v grep || exit 1
+    CMD ps aux | grep "python.*run_all_nodes.py" | grep -v grep || exit 1
 
-# Start Reducer & Orchestrator
-CMD ["python", "services/intelligent_context_proxy/run.py"]
+# Start all 5 ONEX nodes
+CMD ["python", "services/intelligent_context_proxy/run_all_nodes.py"]

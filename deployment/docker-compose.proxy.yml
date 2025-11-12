@@ -29,7 +29,26 @@ services:
       - "8080:8080"
     environment:
       # Kafka configuration
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-omninode-bridge-redpanda:9092}
+      - KAFKA_ENABLE_INTELLIGENCE=${KAFKA_ENABLE_INTELLIGENCE:-true}
+      - KAFKA_REQUEST_TIMEOUT_MS=${KAFKA_REQUEST_TIMEOUT_MS:-5000}
+
+      # PostgreSQL configuration (for ManifestInjector)
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Qdrant configuration
+      - QDRANT_HOST=${QDRANT_HOST:-localhost}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - QDRANT_URL=${QDRANT_URL:-http://localhost:6333}
+
+      # Intelligence services
+      - ARCHON_INTELLIGENCE_URL=${ARCHON_INTELLIGENCE_URL:-http://192.168.86.101:8053}
+      - ARCHON_SEARCH_URL=${ARCHON_SEARCH_URL:-http://192.168.86.101:8055}
+      - ARCHON_BRIDGE_URL=${ARCHON_BRIDGE_URL:-http://192.168.86.101:8054}
 
       # Anthropic API
       - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-https://api.anthropic.com}
@@ -64,7 +83,29 @@ services:
     container_name: omniclaude_proxy_nodes
     environment:
       # Kafka configuration
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-omninode-bridge-redpanda:9092}
+      - KAFKA_ENABLE_INTELLIGENCE=${KAFKA_ENABLE_INTELLIGENCE:-true}
+      - KAFKA_REQUEST_TIMEOUT_MS=${KAFKA_REQUEST_TIMEOUT_MS:-5000}
+
+      # PostgreSQL configuration (for ManifestInjector)
+      - POSTGRES_HOST=${POSTGRES_HOST:-192.168.86.200}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5436}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Qdrant configuration
+      - QDRANT_HOST=${QDRANT_HOST:-localhost}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - QDRANT_URL=${QDRANT_URL:-http://localhost:6333}
+
+      # Intelligence services
+      - ARCHON_INTELLIGENCE_URL=${ARCHON_INTELLIGENCE_URL:-http://192.168.86.101:8053}
+      - ARCHON_SEARCH_URL=${ARCHON_SEARCH_URL:-http://192.168.86.101:8055}
+      - ARCHON_BRIDGE_URL=${ARCHON_BRIDGE_URL:-http://192.168.86.101:8054}
+
+      # Anthropic API
+      - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-https://api.anthropic.com}
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -74,7 +115,7 @@ services:
       - omninode-bridge-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "python.*run.py", "|", "grep", "-v", "grep"]
+      test: ["CMD-SHELL", "ps aux | grep 'python.*run_all_nodes.py' | grep -v grep || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
