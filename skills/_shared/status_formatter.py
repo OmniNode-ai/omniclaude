@@ -1,0 +1,327 @@
+#!/usr/bin/env python3
+"""
+Status Formatter - Shared utilities for formatting status output
+
+Provides functions for:
+- JSON formatting
+- Table formatting (text-based)
+- Markdown generation
+- HTML generation
+- Status indicators (✓, ✗, ⚠)
+
+Usage:
+    from status_formatter import format_json, format_table, format_status_indicator
+
+Created: 2025-11-12
+"""
+
+import json
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+
+
+def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
+    """
+    Format data as JSON.
+
+    Args:
+        data: Data to format
+        pretty: Pretty print with indentation (default: True)
+
+    Returns:
+        JSON string
+    """
+    if pretty:
+        return json.dumps(data, indent=2, default=str)
+    else:
+        return json.dumps(data, default=str)
+
+
+def format_status_indicator(status: str) -> str:
+    """
+    Get status indicator symbol.
+
+    Args:
+        status: Status string (e.g., "healthy", "ok", "connected", "error", "failed")
+
+    Returns:
+        Status indicator (✓, ✗, ⚠, ℹ)
+    """
+    status_lower = status.lower()
+
+    # Success indicators
+    if status_lower in ["healthy", "ok", "connected", "success", "running", "true"]:
+        return "✓"
+
+    # Error indicators
+    if status_lower in ["error", "failed", "unhealthy", "unreachable", "critical", "false"]:
+        return "✗"
+
+    # Warning indicators
+    if status_lower in ["warning", "degraded", "timeout", "stopped"]:
+        return "⚠"
+
+    # Info indicators
+    return "ℹ"
+
+
+def format_table(headers: List[str], rows: List[List[Any]],
+                title: Optional[str] = None) -> str:
+    """
+    Format data as text-based table.
+
+    Args:
+        headers: Column headers
+        rows: Data rows
+        title: Optional table title
+
+    Returns:
+        Formatted table string
+    """
+    # Calculate column widths
+    col_widths = [len(h) for h in headers]
+
+    for row in rows:
+        for i, cell in enumerate(row):
+            cell_str = str(cell)
+            if i < len(col_widths):
+                col_widths[i] = max(col_widths[i], len(cell_str))
+
+    # Build table
+    output = []
+
+    # Add title if provided
+    if title:
+        total_width = sum(col_widths) + 3 * (len(headers) - 1)
+        output.append("=" * total_width)
+        output.append(title)
+        output.append("=" * total_width)
+
+    # Add header row
+    header_row = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
+    output.append(header_row)
+
+    # Add separator
+    separator = "-+-".join("-" * w for w in col_widths)
+    output.append(separator)
+
+    # Add data rows
+    for row in rows:
+        row_str = " | ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+        output.append(row_str)
+
+    return "\n".join(output)
+
+
+def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
+    """
+    Format data as Markdown table.
+
+    Args:
+        headers: Column headers
+        rows: Data rows
+
+    Returns:
+        Markdown table string
+    """
+    output = []
+
+    # Add header row
+    header_row = "| " + " | ".join(headers) + " |"
+    output.append(header_row)
+
+    # Add separator
+    separator = "| " + " | ".join("---" for _ in headers) + " |"
+    output.append(separator)
+
+    # Add data rows
+    for row in rows:
+        row_str = "| " + " | ".join(str(cell) for cell in row) + " |"
+        output.append(row_str)
+
+    return "\n".join(output)
+
+
+def format_status_summary(data: Dict[str, Any]) -> str:
+    """
+    Format a status summary with indicators.
+
+    Args:
+        data: Status data dictionary
+
+    Returns:
+        Formatted summary string
+    """
+    output = []
+
+    for key, value in data.items():
+        # Format key
+        key_formatted = key.replace("_", " ").title()
+
+        # Format value with indicator if boolean or status string
+        if isinstance(value, bool):
+            indicator = format_status_indicator("ok" if value else "error")
+            value_str = "Yes" if value else "No"
+            output.append(f"{indicator} {key_formatted}: {value_str}")
+        elif isinstance(value, str) and value.lower() in [
+            "healthy", "ok", "connected", "error", "failed", "warning", "degraded"
+        ]:
+            indicator = format_status_indicator(value)
+            output.append(f"{indicator} {key_formatted}: {value}")
+        else:
+            output.append(f"  {key_formatted}: {value}")
+
+    return "\n".join(output)
+
+
+def format_percentage(value: float, decimals: int = 1) -> str:
+    """
+    Format a value as percentage.
+
+    Args:
+        value: Value between 0 and 1 (or 0 and 100)
+        decimals: Number of decimal places
+
+    Returns:
+        Formatted percentage string
+    """
+    # Assume value is 0-1 if less than 1, otherwise 0-100
+    if value <= 1.0:
+        percentage = value * 100
+    else:
+        percentage = value
+
+    return f"{percentage:.{decimals}f}%"
+
+
+def format_duration(milliseconds: int) -> str:
+    """
+    Format duration in human-readable format.
+
+    Args:
+        milliseconds: Duration in milliseconds
+
+    Returns:
+        Formatted duration string (e.g., "1.5s", "250ms")
+    """
+    if milliseconds < 1000:
+        return f"{milliseconds}ms"
+    elif milliseconds < 60000:
+        seconds = milliseconds / 1000
+        return f"{seconds:.1f}s"
+    else:
+        minutes = milliseconds / 60000
+        return f"{minutes:.1f}m"
+
+
+def format_bytes(bytes_count: int) -> str:
+    """
+    Format bytes in human-readable format.
+
+    Args:
+        bytes_count: Number of bytes
+
+    Returns:
+        Formatted byte string (e.g., "1.5 GB", "250 MB")
+    """
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(bytes_count)
+    unit_index = 0
+
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+
+    return f"{size:.1f} {units[unit_index]}"
+
+
+def format_timestamp(timestamp: Optional[datetime] = None) -> str:
+    """
+    Format timestamp in ISO format.
+
+    Args:
+        timestamp: Datetime object (default: now)
+
+    Returns:
+        ISO formatted timestamp string
+    """
+    if timestamp is None:
+        timestamp = datetime.utcnow()
+
+    return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def generate_markdown_report(title: str, sections: List[Dict[str, Any]]) -> str:
+    """
+    Generate a complete Markdown report.
+
+    Args:
+        title: Report title
+        sections: List of sections, each with 'title', 'content', and optional 'table'
+
+    Returns:
+        Complete Markdown report string
+    """
+    output = []
+
+    # Add title
+    output.append(f"# {title}")
+    output.append("")
+    output.append(f"**Generated**: {format_timestamp()}")
+    output.append("")
+
+    # Add sections
+    for section in sections:
+        section_title = section.get("title", "Section")
+        content = section.get("content", "")
+        table = section.get("table")
+
+        # Add section title
+        output.append(f"## {section_title}")
+        output.append("")
+
+        # Add content
+        if content:
+            output.append(content)
+            output.append("")
+
+        # Add table if provided
+        if table:
+            headers = table.get("headers", [])
+            rows = table.get("rows", [])
+            if headers and rows:
+                output.append(format_markdown_table(headers, rows))
+                output.append("")
+
+    return "\n".join(output)
+
+
+if __name__ == "__main__":
+    # Test formatter functions
+    print("Testing Status Formatter...")
+
+    print("\n1. Status Indicators:")
+    statuses = ["healthy", "error", "warning", "unknown"]
+    for status in statuses:
+        indicator = format_status_indicator(status)
+        print(f"  {indicator} {status}")
+
+    print("\n2. Table Format:")
+    headers = ["Service", "Status", "Uptime"]
+    rows = [
+        ["archon-intelligence", "healthy", "5d 3h"],
+        ["archon-qdrant", "healthy", "5d 3h"],
+        ["archon-bridge", "healthy", "5d 3h"]
+    ]
+    table = format_table(headers, rows, title="Service Status")
+    print(table)
+
+    print("\n3. Duration Format:")
+    durations = [50, 500, 1500, 65000]
+    for ms in durations:
+        print(f"  {ms}ms = {format_duration(ms)}")
+
+    print("\n4. Bytes Format:")
+    sizes = [1024, 1048576, 1073741824]
+    for size in sizes:
+        print(f"  {size} bytes = {format_bytes(size)}")
