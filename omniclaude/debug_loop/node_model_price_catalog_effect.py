@@ -499,6 +499,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
 
         Args:
             contract: Input contract containing:
+                - provider: Provider identifier (e.g., 'anthropic', 'openai')
                 - model_name: Name of the model to deprecate
 
         Returns:
@@ -507,28 +508,40 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 - catalog_id: UUID of the deprecated catalog entry
 
         Raises:
-            ModelOnexError: If model_name is missing or model not found
+            ModelOnexError: If provider or model_name is missing, provider is invalid,
+                or model not found
         """
+        provider = contract.get("provider")
         model_name = contract.get("model_name")
-        if not model_name:
+
+        # Validate required fields
+        if not provider or not model_name:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                message="Missing required field: model_name",
+                message="Missing required fields: provider and model_name",
+            )
+
+        # Validate provider enum
+        if not EnumProvider.is_valid(provider):
+            valid_providers = EnumProvider.get_valid_providers()
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid provider: {provider}. Must be one of: {', '.join(valid_providers)}",
             )
 
         query = """
         UPDATE model_price_catalog
         SET is_active = false, updated_at = NOW()
-        WHERE model_name = $1
+        WHERE provider = $1 AND model_name = $2
         RETURNING catalog_id
         """
 
-        result = await self.db.fetch_one(query, {"1": model_name})
+        result = await self.db.fetch_one(query, {"1": provider, "2": model_name})
 
         if not result:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.NOT_FOUND,
-                message=f"Model not found: {model_name}",
+                message=f"Model not found: {provider}/{model_name}",
             )
 
         return {
