@@ -346,11 +346,21 @@ class CoderAgent(AgentExecutionMixin):
                 task_id=task.task_id,
             )
 
+            # Log progress: injecting manifest
+            await self.log_progress("injecting_manifest", 10)
+
+            # Inject manifest for comprehensive system context
+            # This provides 15,689+ patterns, debug intelligence, infrastructure status
+            manifest = await self.inject_manifest()
+
             # Log progress: gathering intelligence
             await self.log_progress("gathering_intelligence", 20)
 
             # Gather intelligence
             intelligence = await self._gather_intelligence(task, pre_gathered_context)
+
+            # Store manifest in intelligence for inclusion in prompt
+            intelligence["manifest"] = manifest
 
             # Log progress: intelligence gathered
             await self.log_progress("intelligence_gathered", 40)
@@ -365,8 +375,8 @@ class CoderAgent(AgentExecutionMixin):
                 intelligence=intelligence,
             )
 
-            # Build generation prompt
-            prompt = self._build_generation_prompt(task, node_name, node_type)
+            # Build generation prompt with manifest
+            prompt = self._build_generation_prompt(task, node_name, node_type, manifest)
 
             # Run Pydantic AI agent
             await self.trace_logger.log_event(
@@ -509,10 +519,13 @@ class CoderAgent(AgentExecutionMixin):
         return intelligence
 
     def _build_generation_prompt(
-        self, task: AgentTask, node_name: str, node_type: str
+        self, task: AgentTask, node_name: str, node_type: str, manifest: str = ""
     ) -> str:
-        """Build detailed generation prompt for LLM."""
-        return f"""Generate a complete ONEX {node_type} node with these specifications:
+        """Build detailed generation prompt for LLM with manifest context."""
+        # Prepend manifest for comprehensive system context
+        manifest_section = f"\n\n{manifest}\n\n" if manifest else ""
+
+        return f"""{manifest_section}Generate a complete ONEX {node_type} node with these specifications:
 
 **Node Name:** {node_name}
 **Node Type:** {node_type}

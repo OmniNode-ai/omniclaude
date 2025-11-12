@@ -54,14 +54,27 @@ class DatabaseConfig:
 
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
-        """Load configuration from environment variables."""
-        # Note: Uses DB_* env vars (not POSTGRES_*) for backwards compatibility
+        """
+        Load database configuration from environment variables.
+
+        Reads standard POSTGRES_* environment variables to construct a DatabaseConfig
+        instance with production defaults for missing values.
+
+        Returns:
+            DatabaseConfig: Configuration loaded from environment with defaults
+
+        Example:
+            >>> config = DatabaseConfig.from_env()
+            >>> print(config.host)
+            '192.168.86.200'
+        """
+        # Note: Uses standard POSTGRES_* environment variables
         return cls(
-            host=os.getenv("DB_HOST", "192.168.86.200"),  # Production default
-            port=int(os.getenv("DB_PORT", "5436")),
-            database=os.getenv("DB_NAME", "omninode_bridge"),
-            user=os.getenv("DB_USER", "postgres"),
-            password=os.getenv("DB_PASSWORD", ""),  # Must be set via environment
+            host=os.getenv("POSTGRES_HOST", "192.168.86.200"),  # Production default
+            port=int(os.getenv("POSTGRES_PORT", "5436")),
+            database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", ""),  # Must be set via environment
         )
 
     def get_dsn(self) -> str:

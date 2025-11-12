@@ -42,7 +42,45 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field, field_validator
 
-from config import reload_settings
+# Lazy import of settings to avoid circular dependency
+# Settings is loaded on first access, not at module import time
+_settings_cache = None
+
+
+def _get_settings():
+    """Lazy import settings from global config package (cached)."""
+    global _settings_cache
+    if _settings_cache is not None:
+        return _settings_cache
+
+    # Use importlib to load settings from absolute file path
+    # This bypasses sys.path resolution and avoids conflicts with local config package
+    import importlib.util
+    import sys
+    from pathlib import Path as _Path
+
+    _project_root = _Path(__file__).parent.parent.parent.parent
+    _settings_file = _project_root / "config" / "settings.py"
+
+    # Load settings module directly from file
+    spec = importlib.util.spec_from_file_location(
+        "_global_config_settings", _settings_file
+    )
+    settings_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(settings_module)
+
+    # Get settings singleton
+    _settings_cache = settings_module.get_settings()
+    return _settings_cache
+
+
+# Create a proxy object that delegates to the lazy-loaded settings
+class _SettingsProxy:
+    def __getattr__(self, name):
+        return getattr(_get_settings(), name)
+
+
+settings = _SettingsProxy()
 
 
 class IntelligenceConfig(BaseModel):
@@ -73,38 +111,38 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default_factory=lambda: reload_settings().kafka_bootstrap_servers,
+        default_factory=lambda: settings.kafka_bootstrap_servers,
         description="Kafka bootstrap servers (loaded from centralized settings)",
     )
 
     kafka_enable_intelligence: bool = Field(
-        default_factory=lambda: reload_settings().kafka_enable_intelligence,
+        default_factory=lambda: settings.kafka_enable_intelligence,
         description="Enable Kafka-based intelligence gathering (loaded from centralized settings)",
     )
 
     kafka_request_timeout_ms: int = Field(
-        default_factory=lambda: reload_settings().kafka_request_timeout_ms,
+        default_factory=lambda: settings.kafka_request_timeout_ms,
         description="Default request timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=60000,
     )
 
     kafka_pattern_discovery_timeout_ms: int = Field(
-        default_factory=lambda: reload_settings().kafka_pattern_discovery_timeout_ms,
+        default_factory=lambda: settings.kafka_pattern_discovery_timeout_ms,
         description="Pattern discovery timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=60000,
     )
 
     kafka_code_analysis_timeout_ms: int = Field(
-        default_factory=lambda: reload_settings().kafka_code_analysis_timeout_ms,
+        default_factory=lambda: settings.kafka_code_analysis_timeout_ms,
         description="Code analysis timeout in milliseconds (loaded from centralized settings)",
         ge=1000,
         le=120000,
     )
 
     kafka_consumer_group_prefix: str = Field(
-        default_factory=lambda: reload_settings().kafka_consumer_group_prefix,
+        default_factory=lambda: settings.kafka_consumer_group_prefix,
         description="Consumer group prefix for client isolation (loaded from centralized settings)",
     )
 
@@ -113,17 +151,17 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     enable_event_based_discovery: bool = Field(
-        default_factory=lambda: reload_settings().enable_event_based_discovery,
+        default_factory=lambda: settings.enable_event_based_discovery,
         description="Enable event-based pattern discovery (loaded from centralized settings)",
     )
 
     enable_filesystem_fallback: bool = Field(
-        default_factory=lambda: reload_settings().enable_filesystem_fallback,
+        default_factory=lambda: settings.enable_filesystem_fallback,
         description="Enable fallback to built-in patterns on failure (loaded from centralized settings)",
     )
 
     prefer_event_patterns: bool = Field(
-        default_factory=lambda: reload_settings().prefer_event_patterns,
+        default_factory=lambda: settings.prefer_event_patterns,
         description="Prefer event-based patterns with higher confidence scores (loaded from centralized settings)",
     )
 
@@ -132,17 +170,17 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     topic_code_analysis_requested: str = Field(
-        default_factory=lambda: reload_settings().topic_code_analysis_requested,
+        default_factory=lambda: settings.topic_code_analysis_requested,
         description="Topic for code analysis requests (loaded from centralized settings)",
     )
 
     topic_code_analysis_completed: str = Field(
-        default_factory=lambda: reload_settings().topic_code_analysis_completed,
+        default_factory=lambda: settings.topic_code_analysis_completed,
         description="Topic for successful analysis responses (loaded from centralized settings)",
     )
 
     topic_code_analysis_failed: str = Field(
-        default_factory=lambda: reload_settings().topic_code_analysis_failed,
+        default_factory=lambda: settings.topic_code_analysis_failed,
         description="Topic for failed analysis responses (loaded from centralized settings)",
     )
 
@@ -196,9 +234,8 @@ class IntelligenceConfig(BaseModel):
         Load configuration from centralized settings.
 
         This method creates an IntelligenceConfig instance using values from
-        the centralized Pydantic Settings framework. Settings are reloaded
-        from environment variables to ensure latest values are used (important
-        for testing with monkeypatch).
+        the centralized Pydantic Settings framework, accessing the singleton
+        settings instance directly.
 
         Configuration is loaded with the following precedence:
         1. System environment variables (highest priority)
@@ -214,23 +251,19 @@ class IntelligenceConfig(BaseModel):
             >>> print(config.kafka_bootstrap_servers)
             192.168.86.200:29092
         """
-        # Reload settings to pick up any environment variable changes
-        # (important for testing with monkeypatch)
-        current_settings = reload_settings()
-
         return cls(
-            kafka_bootstrap_servers=current_settings.kafka_bootstrap_servers,
-            kafka_enable_intelligence=current_settings.kafka_enable_intelligence,
-            kafka_request_timeout_ms=current_settings.kafka_request_timeout_ms,
-            kafka_pattern_discovery_timeout_ms=current_settings.kafka_pattern_discovery_timeout_ms,
-            kafka_code_analysis_timeout_ms=current_settings.kafka_code_analysis_timeout_ms,
-            kafka_consumer_group_prefix=current_settings.kafka_consumer_group_prefix,
-            enable_event_based_discovery=current_settings.enable_event_based_discovery,
-            enable_filesystem_fallback=current_settings.enable_filesystem_fallback,
-            prefer_event_patterns=current_settings.prefer_event_patterns,
-            topic_code_analysis_requested=current_settings.topic_code_analysis_requested,
-            topic_code_analysis_completed=current_settings.topic_code_analysis_completed,
-            topic_code_analysis_failed=current_settings.topic_code_analysis_failed,
+            kafka_bootstrap_servers=settings.kafka_bootstrap_servers,
+            kafka_enable_intelligence=settings.kafka_enable_intelligence,
+            kafka_request_timeout_ms=settings.kafka_request_timeout_ms,
+            kafka_pattern_discovery_timeout_ms=settings.kafka_pattern_discovery_timeout_ms,
+            kafka_code_analysis_timeout_ms=settings.kafka_code_analysis_timeout_ms,
+            kafka_consumer_group_prefix=settings.kafka_consumer_group_prefix,
+            enable_event_based_discovery=settings.enable_event_based_discovery,
+            enable_filesystem_fallback=settings.enable_filesystem_fallback,
+            prefer_event_patterns=settings.prefer_event_patterns,
+            topic_code_analysis_requested=settings.topic_code_analysis_requested,
+            topic_code_analysis_completed=settings.topic_code_analysis_completed,
+            topic_code_analysis_failed=settings.topic_code_analysis_failed,
         )
 
     # =========================================================================

@@ -34,8 +34,8 @@ export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29092}"
 
 # Database credentials for hook event logging (required from .env)
-# Use POSTGRES_PASSWORD from .env as DB_PASSWORD for hook_event_logger
-export DB_PASSWORD="${DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
+# Use POSTGRES_PASSWORD from .env for database connections
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 b64() { printf %s "$1" | base64; }

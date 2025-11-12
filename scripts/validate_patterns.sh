@@ -35,7 +35,7 @@ DB_HOST="${POSTGRES_HOST}"
 DB_PORT="${POSTGRES_PORT}"
 DB_USER="${POSTGRES_USER}"
 DB_NAME="${POSTGRES_DATABASE}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Verify required variables are set
 missing_vars=()
@@ -43,7 +43,7 @@ missing_vars=()
 [ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
 [ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
 [ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
-[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
 
 if [ ${#missing_vars[@]} -gt 0 ]; then
     echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
@@ -64,7 +64,7 @@ echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
 # Execute validation SQL
-PGPASSWORD="$DB_PASSWORD" psql \
+PGPASSWORD="$POSTGRES_PASSWORD" psql \
   -h "$DB_HOST" \
   -p "$DB_PORT" \
   -U "$DB_USER" \

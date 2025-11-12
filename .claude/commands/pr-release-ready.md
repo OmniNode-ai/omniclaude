@@ -98,17 +98,36 @@ Perform a thorough production-readiness assessment covering ALL feedback categor
 
    **AGENT WARNING**: Always use the pr-review skill to avoid missing comments!
 
-2. **Categorize comprehensively** all comments from the 4 arrays using keyword patterns:
-   - **Critical**: "critical", "security", "vulnerability", "bug", "breaks", "fails", "test failure", "⚠️ Potential issue.*🔴 Critical"
-   - **Major**: "major", "issue", "problem", "inconsistent", "inconsistency", "pattern", "should fix", "violates convention", "mixing", "🟠 Major"
-   - **Minor**: "minor", "missing", "should add", "edge case", "unclear", "consider adding", "🟡 Minor"
-   - **Nitpick**: "nitpick", "nit:", "style", "consider renaming", "could be", "optional", "refactor suggestion", "🧹 Nitpick"
+2. **Categorize comprehensively** with PRIORITY ORDER (most important first):
 
-   **Parse from**:
-   - `reviews[].body` - Formal review text
-   - `inline_comments[].body` - Code-specific feedback (include file:line context)
-   - `pr_comments[].body` - Discussion thread feedback
-   - `issue_comments[].body` - **Claude Code bot comprehensive reviews!**
+   **PRIORITY 1 - Structured Recommendations** (from Claude bot in issue comments):
+   - Look for sections like "Must Fix Before Merge", "Should Fix Before Production", "Recommendations"
+   - These are ALWAYS critical/major regardless of keywords
+   - Common patterns:
+     - `❗` or `### **Must Fix**` or `**Must Fix Before Merge**` → CRITICAL
+     - `⚠️` or `### **Should Fix**` or `**Should Fix Before Production**` → MAJOR
+     - `💡` or `### **Nice to Have**` → MINOR (unless security/architecture related)
+
+   **PRIORITY 2 - Emoji/Section Markers** (structured feedback):
+   - 🔴 or "### Critical" or "MUST FIX" → CRITICAL
+   - 🟠 or "### Major" or "SHOULD FIX" → MAJOR
+   - 🟡 or "### Minor" or "FIX NOW" → MINOR
+   - ⚪ or "### Nitpick" or "OPTIONAL" → NITPICK
+
+   **PRIORITY 3 - Keyword Patterns** (inline/unstructured feedback):
+   - **Critical**: "security", "vulnerability", "bug", "breaks", "fails", "test failure", "data corruption", "production blocker"
+   - **Major**: "architecture", "inconsistent", "pattern", "violates convention", "error handling", "performance issue", "authentication", "service discovery"
+   - **Minor**: "missing documentation", "missing test", "consider adding", "edge case", "type hint", "unclear"
+   - **Nitpick**: "nitpick", "nit:", "style", "consider renaming", "optional", "refactor suggestion"
+
+   **⚠️ CRITICAL PARSING RULE**:
+   Parse `issue_comments[]` FIRST (Claude bot) before other sources. Claude bot's structured recommendations in issue comments take precedence over all inline comments. Architectural and security concerns are ALWAYS major/critical even if phrased politely.
+
+   **Parse from** (in priority order):
+   1. `issue_comments[].body` - **Claude Code bot comprehensive reviews with structured recommendations!**
+   2. `reviews[].body` - Formal review text (CodeRabbit summaries)
+   3. `pr_comments[].body` - Discussion thread feedback
+   4. `inline_comments[].body` - Code-specific feedback (file:line context)
 
 3. **Track resolution status**: For EACH issue, determine:
    - ✅ **Fixed**: Code changed in recent commits addressing the issue
@@ -255,11 +274,14 @@ Conditions for merge (if caveats):
 ## Special Instructions
 
 - **Always use pr-review skill**: Call `~/.claude/skills/pr-review/fetch-pr-data <PR#>` to ensure no comments are missed
+- **⚠️ PRIORITY ORDER IS CRITICAL**: Parse issue_comments[] FIRST (Claude bot structured recommendations), then reviews[], then pr_comments[], then inline_comments[]
+- **Structured sections override keywords**: If Claude bot has "Must Fix Before Merge" section, those items are CRITICAL regardless of keywords used
+- **Architectural/security concerns are MAJOR/CRITICAL**: Even if phrased politely, concerns about authentication, service discovery, TLS, database migrations, rollback procedures, etc. are MAJOR or CRITICAL issues
+- **Don't downgrade based on tone**: "Consider adding authentication" is still MAJOR/CRITICAL if it's about security
 - **Be comprehensive**: Include EVERYTHING, even resolved items (show ✅ status)
 - **Be specific**: Every issue needs file:line and exact fix suggestion
 - **Be decisive**: Provide clear merge recommendation with rationale
 - **Consistency is CRITICAL**: Treat consistency issues as major blockers
-- **Include bot feedback**: CodeRabbit and Claude Code bot reviews are valuable
 - **Track status actively**: Don't assume - verify by checking commits
 - **Document deferrals**: If anything is deferred, it must be explicitly documented
 - **Parse all 4 arrays**: reviews, inline_comments, pr_comments, issue_comments (don't skip any!)

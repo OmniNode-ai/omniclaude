@@ -325,7 +325,24 @@ def query_session_statistics() -> Dict[str, Any]:
 
     try:
         # Use Pydantic Settings to generate connection string
-        connection_string = settings.get_postgres_dsn()
+        # Check if password is available first for graceful degradation
+        try:
+            connection_string = settings.get_postgres_dsn()
+        except Exception as e:
+            # If settings fails (e.g., missing password), return empty statistics
+            print(
+                f"⚠️  Database configuration error: {e}, returning empty statistics",
+                file=sys.stderr,
+            )
+            return {
+                "duration_seconds": 0,
+                "total_prompts": 0,
+                "total_tools": 0,
+                "agents_invoked": [],
+                "agent_usage": {},
+                "tool_breakdown": {},
+            }
+
         # Convert SQLAlchemy-style DSN to psycopg2 format
         connection_string = connection_string.replace("postgresql://", "")
 

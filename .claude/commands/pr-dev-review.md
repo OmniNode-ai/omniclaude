@@ -87,17 +87,36 @@ Analyze the provided PR and categorize all comments/reviews into actionable cate
 
    **AGENT WARNING**: Always use the pr-review skill to avoid missing comments!
 
-2. **Parse and categorize** all comments from the 4 arrays using these keyword patterns:
-   - **Critical**: "critical", "security", "vulnerability", "bug", "breaks", "fails", "test failure", "⚠️ Potential issue.*🔴 Critical"
-   - **Major**: "major", "issue", "problem", "inconsistent", "inconsistency", "pattern", "should fix", "violates convention", "mixing", "🔴 Critical", "🟠 Major"
-   - **Minor**: "minor", "missing", "should add", "consider adding", "edge case", "unclear", "🟡 Minor"
-   - **Nitpick**: "nitpick", "nit:", "style", "consider renaming", "could be", "optional", "🧹 Nitpick"
+2. **Parse and categorize** with PRIORITY ORDER (most important first):
 
-   **Parse from**:
-   - `reviews[].body` - Formal review text
-   - `inline_comments[].body` - Code-specific feedback (include file:line context)
-   - `pr_comments[].body` - Discussion thread feedback
-   - `issue_comments[].body` - **Claude Code bot comprehensive reviews!**
+   **PRIORITY 1 - Structured Recommendations** (from Claude bot in issue comments):
+   - Look for sections like "Must Fix Before Merge", "Should Fix Before Production", "Recommendations"
+   - These are ALWAYS critical/major regardless of keywords
+   - Common patterns:
+     - `❗` or `### **Must Fix**` → CRITICAL
+     - `⚠️` or `### **Should Fix**` → MAJOR
+     - `💡` or `### **Nice to Have**` → MINOR (unless security/architecture related)
+
+   **PRIORITY 2 - Emoji/Section Markers** (structured feedback):
+   - 🔴 or "### Critical" or "MUST FIX" → CRITICAL
+   - 🟠 or "### Major" or "SHOULD FIX" → MAJOR
+   - 🟡 or "### Minor" or "FIX NOW" → MINOR
+   - ⚪ or "### Nitpick" or "OPTIONAL" → NITPICK
+
+   **PRIORITY 3 - Keyword Patterns** (inline/unstructured feedback):
+   - **Critical**: "security", "vulnerability", "bug", "breaks", "fails", "test failure", "data corruption"
+   - **Major**: "architecture", "inconsistent", "pattern", "violates convention", "error handling", "performance issue"
+   - **Minor**: "missing documentation", "missing test", "consider adding", "edge case", "type hint"
+   - **Nitpick**: "nitpick", "nit:", "style", "consider renaming", "optional"
+
+   **⚠️ CRITICAL PARSING RULE**:
+   Parse `issue_comments[]` FIRST (Claude bot) before other sources. Claude bot's structured recommendations in issue comments take precedence over all inline comments.
+
+   **Parse from** (in priority order):
+   1. `issue_comments[].body` - **Claude Code bot comprehensive reviews with structured recommendations!**
+   2. `reviews[].body` - Formal review text (CodeRabbit summaries)
+   3. `pr_comments[].body` - Discussion thread feedback
+   4. `inline_comments[].body` - Code-specific feedback (file:line context)
 
 3. **Filter recent comments**: Focus on comments created after the last commit (if applicable)
 
@@ -166,11 +185,14 @@ PR DEV REVIEW - Development Priority Issues
 ## Special Instructions
 
 - **Always use pr-review skill**: Call `~/.claude/skills/pr-review/fetch-pr-data <PR#>` to ensure no comments are missed
+- **⚠️ PRIORITY ORDER IS CRITICAL**: Parse issue_comments[] FIRST (Claude bot structured recommendations), then reviews[], then pr_comments[], then inline_comments[]
+- **Structured sections override keywords**: If Claude bot has "Must Fix Before Merge" section, those items are CRITICAL regardless of keywords used
+- **Architectural/security concerns are MAJOR**: Even if phrased politely, concerns about authentication, service discovery, TLS, database migrations, etc. are MAJOR issues
+- **Don't downgrade based on tone**: "Consider adding authentication" is still MAJOR if it's about security
 - **Prioritize actionability**: Every item should have a clear fix suggestion
 - **Be specific**: Include file paths, line numbers, and exact changes needed
 - **Focus on dev priorities**: Skip pure cosmetic items (covered by /pr-release-ready)
 - **Consistency is MAJOR**: Treat all consistency issues as major tech debt
-- **Include bot reviews**: CodeRabbit and Claude Code bot reviews contain valuable feedback
 - **Parse all 4 arrays**: reviews, inline_comments, pr_comments, issue_comments (don't skip any!)
 "
 ```

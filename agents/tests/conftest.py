@@ -18,8 +18,11 @@ and is a common pytest pattern. This runs once during test collection and is iso
 to the test execution environment.
 """
 
+import asyncio
 import sys
 from pathlib import Path
+
+import pytest
 
 # Load environment variables from .env file before any tests run
 # This ensures database credentials and other config are available
@@ -44,3 +47,63 @@ else:
 MOCKS_DIR = Path(__file__).parent / "mocks"
 if str(MOCKS_DIR) not in sys.path:
     sys.path.insert(0, str(MOCKS_DIR))
+
+
+# ============================================================================
+# Kafka Producer Cleanup Fixtures
+# ============================================================================
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_kafka_producers():
+    """
+    Automatically cleanup global Kafka producers after all tests complete.
+
+    This fixture ensures that singleton Kafka producers in action_event_publisher
+    and transformation_event_publisher are properly closed, preventing
+    "Unclosed AIOKafkaProducer" resource warnings.
+
+    Scope: session (runs once after all tests)
+    Autouse: True (runs automatically without being requested)
+    """
+    # Yield to run all tests
+    yield
+
+    # Cleanup after all tests complete
+    async def cleanup():
+        try:
+            # Import here to avoid issues if modules aren't used
+            from agents.lib import (
+                action_event_publisher,
+                transformation_event_publisher,
+            )
+
+            # Close action event publisher
+            if action_event_publisher._kafka_producer is not None:
+                await action_event_publisher.close_producer()
+
+            # Close transformation event publisher
+            if transformation_event_publisher._kafka_producer is not None:
+                await transformation_event_publisher.close_producer()
+
+        except Exception as e:
+            # Log but don't fail - cleanup is best-effort
+            print(f"Warning: Error during Kafka producer cleanup: {e}")
+
+    # Run cleanup in event loop
+    try:
+        # Try to get existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, get or create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Always use run_until_complete to ensure cleanup completes before fixture exits
+        # This is safe in pytest fixtures which are not async contexts
+        loop.run_until_complete(cleanup())
+    except Exception as e:
+        # Fallback to asyncio.run if event loop management fails
+        print(f"Warning: Event loop error during cleanup, using asyncio.run: {e}")
+        asyncio.run(cleanup())

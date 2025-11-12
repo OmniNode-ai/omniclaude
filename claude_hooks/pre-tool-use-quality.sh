@@ -22,8 +22,8 @@ LOG_FILE="$HOOK_DIR/logs/quality_enforcer.log"
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
 
 # Database credentials for hook event logging (required from .env)
-# Set DB_PASSWORD in your .env file or environment
-export DB_PASSWORD="${DB_PASSWORD:-}"
+# Set POSTGRES_PASSWORD in your .env file or environment
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -157,6 +157,77 @@ log_pretooluse(
 )
 " 2>/dev/null
     ) &
+fi
+
+# ============================================================================
+# TOOL CALL START LOGGING TO agent_actions TABLE VIA KAFKA
+# ============================================================================
+
+# Extract correlation context for Kafka logging (same pattern as PostToolUse)
+if [[ -f "$HOOK_DIR/lib/correlation_manager.py" ]]; then
+    CORRELATION_DATA=$(python3 -c "
+import sys
+sys.path.insert(0, '$HOOK_DIR/lib')
+from correlation_manager import get_correlation_context
+import json
+
+corr_context = get_correlation_context()
+if corr_context:
+    print(json.dumps({
+        'correlation_id': corr_context.get('correlation_id', ''),
+        'agent_name': corr_context.get('agent_name', 'polymorphic-agent'),
+        'project_path': corr_context.get('project_path', ''),
+        'project_name': corr_context.get('project_name', '')
+    }))
+" 2>/dev/null)
+
+    if [[ -n "$CORRELATION_DATA" ]]; then
+        TOOL_CORRELATION_ID=$(echo "$CORRELATION_DATA" | jq -r '.correlation_id // empty')
+        TOOL_AGENT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.agent_name // "polymorphic-agent"')
+        TOOL_PROJECT_PATH=$(echo "$CORRELATION_DATA" | jq -r '.project_path // empty')
+        TOOL_PROJECT_NAME=$(echo "$CORRELATION_DATA" | jq -r '.project_name // empty')
+
+        # Use UserPromptSubmit correlation ID if available, otherwise use PreToolUse correlation ID
+        FINAL_CORRELATION_ID="${TOOL_CORRELATION_ID:-$CORRELATION_ID}"
+
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [CID:${FINAL_CORRELATION_ID:0:8}] Correlation context extracted: agent=$TOOL_AGENT_NAME" >> "$LOG_FILE"
+
+        # Log tool call START to agent_actions table via Kafka (non-blocking)
+        if [[ -n "$FINAL_CORRELATION_ID" ]]; then
+            (
+                # Build enhanced details JSON with tool input information
+                TOOL_DETAILS=$(echo "$TOOL_INFO" | jq -c '
+                    .tool_input as $input |
+                    {
+                        file_path: $input.file_path,
+                        pattern: $input.pattern,
+                        old_string: $input.old_string,
+                        new_string: $input.new_string,
+                        offset: $input.offset,
+                        limit: $input.limit,
+                        tool_input: $input,
+                        stage: "start"
+                    }
+                ' 2>/dev/null || echo '{"tool_input": {}, "stage": "start"}')
+
+                # Publish to Kafka via log-agent-action skill (using execute_kafka.py for async)
+                python3 "$HOME/.claude/skills/agent-tracking/log-agent-action/execute_kafka.py" \
+                    --agent "$TOOL_AGENT_NAME" \
+                    --action-type "tool_call" \
+                    --action-name "${TOOL_NAME}_start" \
+                    --details "$TOOL_DETAILS" \
+                    --correlation-id "$FINAL_CORRELATION_ID" \
+                    --debug-mode \
+                    ${TOOL_PROJECT_PATH:+--project-path "$TOOL_PROJECT_PATH"} \
+                    ${TOOL_PROJECT_NAME:+--project-name "$TOOL_PROJECT_NAME"} \
+                    2>>"$LOG_FILE"
+
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Published tool_call_start event to Kafka (action: ${TOOL_NAME}_start, correlation: $FINAL_CORRELATION_ID)" >> "$LOG_FILE"
+            ) &
+        else
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Skipping Kafka logging: no correlation_id available" >> "$LOG_FILE"
+        fi
+    fi
 fi
 
 # ============================================================================

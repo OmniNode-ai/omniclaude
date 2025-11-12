@@ -22,7 +22,7 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5436}"
 DB_NAME="${DB_NAME:-omninode_bridge}"
 DB_USER="${DB_USER:-postgres}"
-DB_PASSWORD="${DB_PASSWORD:-}"
+# Note: Using POSTGRES_PASSWORD directly (no alias)
 
 echo "Database Configuration:"
 echo "  Host: $DB_HOST"
@@ -40,7 +40,7 @@ fi
 
 # Test database connection
 echo "Testing database connection..."
-if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SELECT 1;" > /dev/null 2>&1; then
+if PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SELECT 1;" > /dev/null 2>&1; then
     echo -e "${GREEN}✓ Database connection successful${NC}"
 else
     echo -e "${RED}✗ Database connection failed${NC}"
@@ -54,13 +54,13 @@ echo "1. Checking pattern_lineage_nodes table..."
 echo "-----------------------------------------------------------------------"
 
 # Check if table exists
-if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+if PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_lineage_nodes');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_lineage_nodes table exists${NC}"
 
     # Get row count
-    ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+    ROW_COUNT=$(PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_lineage_nodes;")
 
     echo "  Total patterns: $ROW_COUNT"
@@ -68,7 +68,7 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample pattern data (last 5):"
-        PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+        PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
             -c "SELECT pattern_id, pattern_name, pattern_type, created_at FROM pattern_lineage_nodes ORDER BY created_at DESC LIMIT 5;" \
             2>/dev/null || echo "  (Unable to retrieve sample data)"
     else
@@ -84,13 +84,13 @@ echo "2. Checking pattern_analytics table..."
 echo "-----------------------------------------------------------------------"
 
 # Check if table exists
-if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+if PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_analytics');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_analytics table exists${NC}"
 
     # Get row count
-    ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+    ROW_COUNT=$(PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_analytics;")
 
     echo "  Total analytics records: $ROW_COUNT"
@@ -98,7 +98,7 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample analytics data (last 5):"
-        PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+        PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
             -c "SELECT pattern_id, execution_count, avg_quality_score, created_at FROM pattern_analytics ORDER BY created_at DESC LIMIT 5;" \
             2>/dev/null || echo "  (Unable to retrieve sample data)"
     else
@@ -114,13 +114,13 @@ echo "3. Checking pattern_feedback table..."
 echo "-----------------------------------------------------------------------"
 
 # Check if table exists
-if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+if PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
     -c "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'pattern_feedback');" \
     | grep -q "t"; then
     echo -e "${GREEN}✓ pattern_feedback table exists${NC}"
 
     # Get row count
-    ROW_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+    ROW_COUNT=$(PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
         -t -c "SELECT COUNT(*) FROM pattern_feedback;")
 
     echo "  Total feedback records: $ROW_COUNT"
@@ -128,7 +128,7 @@ if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME 
     if [ "$ROW_COUNT" -gt 0 ]; then
         echo ""
         echo "Sample feedback data (last 5):"
-        PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+        PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
             -c "SELECT pattern_id, feedback_type, created_at FROM pattern_feedback ORDER BY created_at DESC LIMIT 5;" \
             2>/dev/null || echo "  (Unable to retrieve sample data)"
     else
@@ -144,7 +144,7 @@ echo "4. Checking pattern lineage relationships..."
 echo "-----------------------------------------------------------------------"
 
 # Check for patterns with parents (derived patterns)
-DERIVED_COUNT=$(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
+DERIVED_COUNT=$(PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME \
     -t -c "SELECT COUNT(*) FROM pattern_lineage_nodes WHERE parent_ids IS NOT NULL AND array_length(parent_ids, 1) > 0;" \
     2>/dev/null || echo "0")
 
@@ -164,6 +164,6 @@ echo ""
 echo "Summary:"
 echo "  • Database connection: ✓"
 echo "  • Pattern storage: $([ "$ROW_COUNT" -gt 0 ] && echo '✓' || echo '⚠')"
-echo "  • Analytics data: $(PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -c 'SELECT CASE WHEN EXISTS (SELECT 1 FROM pattern_analytics LIMIT 1) THEN '\''✓'\'' ELSE '\''⚠'\'' END;' 2>/dev/null || echo '⚠')"
+echo "  • Analytics data: $(PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -c 'SELECT CASE WHEN EXISTS (SELECT 1 FROM pattern_analytics LIMIT 1) THEN '\''✓'\'' ELSE '\''⚠'\'' END;' 2>/dev/null || echo '⚠')"
 echo "  • Lineage tracking: $([ "$DERIVED_COUNT" -gt 0 ] && echo '✓' || echo '⚠')"
 echo ""

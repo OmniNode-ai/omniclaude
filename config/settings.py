@@ -1001,23 +1001,55 @@ class Settings(BaseSettings):
         """
         Get effective PostgreSQL password (handles legacy aliases).
 
+        This method provides backward compatibility with deprecated password
+        environment variable aliases while emitting warnings to guide migration.
+
+        Deprecated Aliases (will be removed in v2.0):
+            - DB_PASSWORD
+            - OMNINODE_BRIDGE_POSTGRES_PASSWORD
+
+        Standard Variable (use this):
+            - POSTGRES_PASSWORD
+
         Returns:
             PostgreSQL password from primary field or legacy aliases
 
         Raises:
             ValueError: If no password is set
+
+        Warnings:
+            Emits deprecation warnings if legacy aliases are used
+
+        Example:
+            >>> settings = Settings()
+            >>> password = settings.get_effective_postgres_password()
+            >>> # Returns value from POSTGRES_PASSWORD (or legacy alias with warning)
         """
-        password = (
-            self.postgres_password
-            or self.db_password
-            or self.omninode_bridge_postgres_password
-        )
-        if not password:
-            raise ValueError(
-                "PostgreSQL password not configured. "
-                "Set POSTGRES_PASSWORD in .env file"
+        # Check primary password field
+        if self.postgres_password:
+            return self.postgres_password
+
+        # Check legacy aliases with deprecation warnings
+        if self.db_password:
+            logger.warning(
+                "DEPRECATION WARNING: DB_PASSWORD is deprecated and will be "
+                "removed in v2.0. Please migrate to POSTGRES_PASSWORD in your .env file. "
+                "See PASSWORD_ALIAS_MIGRATION.md for migration guide."
             )
-        return password
+            return self.db_password
+
+        if self.omninode_bridge_postgres_password:
+            logger.warning(
+                "DEPRECATION WARNING: OMNINODE_BRIDGE_POSTGRES_PASSWORD is deprecated "
+                "and will be removed in v2.0. Please migrate to POSTGRES_PASSWORD in your "
+                ".env file. See PASSWORD_ALIAS_MIGRATION.md for migration guide."
+            )
+            return self.omninode_bridge_postgres_password
+
+        # No password configured
+        raise ValueError(
+            "PostgreSQL password not configured. " "Set POSTGRES_PASSWORD in .env file"
+        )
 
     def get_effective_kafka_bootstrap_servers(self) -> str:
         """

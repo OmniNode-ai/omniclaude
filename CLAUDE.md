@@ -81,10 +81,15 @@ OmniClaude features a sophisticated intelligence infrastructure that provides ag
 - Full traceability with correlation IDs
 
 **Pattern Discovery**:
-- **120+ patterns** from Qdrant (execution_patterns + code_patterns collections)
-- ONEX architectural templates
-- Real Python implementations
-- Debug intelligence (successful/failed workflows)
+- **15,689+ patterns** from Qdrant vector database
+  - `archon_vectors` (7,118 vectors) - ONEX architectural templates and execution patterns
+  - `code_generation_patterns` (8,571 vectors) - Real Python implementations and code examples
+- Real-time debug intelligence (successful/failed workflows)
+- Quality-filtered pattern matching (>0.7 confidence threshold)
+
+**Future Intelligence Sources** (planned):
+- `archon-intelligence` collection - Real-time agent decision history and routing metrics
+- `quality_vectors` collection - Code quality assessments and ONEX compliance scores
 
 **Database Schemas** (34 tables in `omninode_bridge`):
 - `agent_manifest_injections` - Complete manifest injection records
@@ -182,7 +187,7 @@ KAFKA_ENABLE_INTELLIGENCE=true
 KAFKA_REQUEST_TIMEOUT_MS=5000
 ```
 
-**Key Topics**: `intelligence.code-analysis-*`, `agent.routing.*`, `documentation-changed`
+**Key Topics**: `intelligence.code-analysis-*`, `agent.routing.*`, `documentation-changed` (optional - auto-created)
 **Admin UI**: `http://localhost:8080`
 
 #### Qdrant Configuration
@@ -193,9 +198,23 @@ QDRANT_URL=http://localhost:6333
 ```
 
 **Collections**:
-- `code_patterns` - Real Python implementations
-- `execution_patterns` - ONEX architectural templates
-- `workflow_events` - Debug intelligence data
+
+**Active Collections** (populated):
+- `archon_vectors` (7,118 vectors) - Core pattern storage combining execution patterns and code patterns
+- `code_generation_patterns` (8,571 vectors) - Real Python implementations and code examples
+
+**Planned Collections** (empty - reserved for future use):
+- `archon-intelligence` (0 vectors) - Planned for real-time intelligence updates and agent decision history
+  - Will contain: Agent routing decisions, manifest injection metrics, quality scores
+  - Use case: Dynamic intelligence context for future agent executions
+  - Status: Infrastructure created, population pending implementation
+
+- `quality_vectors` (0 vectors) - Planned for quality metrics and code health scoring
+  - Will contain: Code quality assessments, ONEX compliance scores, refactoring suggestions
+  - Use case: Quality-based pattern filtering and code health monitoring
+  - Status: Infrastructure created, population pending implementation
+
+**Note**: The empty collections do not affect functionality. Pattern discovery uses `archon_vectors` and `code_generation_patterns` which contain 15,689+ patterns combined.
 
 ### Environment File Locations
 
@@ -632,6 +651,137 @@ python3 agents/lib/agent_history_browser.py --correlation-id <id> --export manif
 - Query time: <2000ms excellent | 2000-5000ms acceptable | >5000ms issue
 - Agent name "unknown" → Check `AGENT_NAME` env var in `manifest_loader.py`
 
+### System Functional Test Suite
+
+**Location**: `scripts/test_system_functionality.sh`
+
+Comprehensive functional test suite that validates actual system functionality across all infrastructure components. Unlike the health check script which verifies service availability, this suite performs real functional tests with actual operations.
+
+**What it tests**:
+1. **Kafka Message Bus** (15 tests) - Connectivity, pub/sub operations, topics, consumer groups, message ordering, throughput
+2. **PostgreSQL Database** (9 tests) - Connectivity, CRUD operations, transactions, performance, connection pooling, query optimization
+3. **Intelligence Integration** (8 tests) - Qdrant connectivity, pattern retrieval, manifest injection, quality filtering, performance thresholds
+4. **Agent Routing** (12 tests) - Routing service, topics, performance metrics, manifest integration, correlation tracking
+
+**Total**: 44+ functional tests across all infrastructure components
+
+**Usage**:
+```bash
+./scripts/test_system_functionality.sh
+```
+
+**Expected Output**:
+```
+=== System Functional Test Suite ===
+Timestamp: 2025-11-10 14:30:00
+
+[1/4] Running Kafka Message Bus Tests...
+✅ Kafka Message Bus Tests: 15/15 passed
+
+[2/4] Running PostgreSQL Database Tests...
+✅ PostgreSQL Database Tests: 9/9 passed
+
+[3/4] Running Intelligence Integration Tests...
+✅ Intelligence Integration Tests: 8/8 passed
+
+[4/4] Running Agent Routing Tests...
+✅ Agent Routing Tests: 12/12 passed
+
+=== Test Summary ===
+Total Tests:   4
+Passed:        4
+Failed:        0
+System Health: 100%
+
+✅ All functional tests passed!
+```
+
+**When to run**:
+- **After deployment** - Verify all services are functioning correctly
+- **Before major commits** - Ensure changes haven't broken core functionality
+- **During troubleshooting** - Isolate which component is failing
+- **As part of CI/CD** - Automated validation in pipelines
+- **After infrastructure changes** - Confirm configuration updates work correctly
+
+**Individual test scripts** (can be run separately for targeted testing):
+```bash
+# Run individual test suites
+./scripts/tests/test_kafka_functionality.sh          # Kafka only (15 tests)
+./scripts/tests/test_postgres_functionality.sh       # PostgreSQL only (9 tests)
+./scripts/tests/test_intelligence_functionality.sh   # Intelligence only (8 tests)
+./scripts/tests/test_routing_functionality.sh        # Routing only (12 tests)
+```
+
+**Exit Codes**:
+- `0` - All tests passed
+- `1` - One or more tests failed (see output for details)
+
+**Test Coverage Details**:
+
+**Kafka Tests (15)**:
+- Broker connectivity and health
+- Topic creation and deletion
+- Producer message publishing
+- Consumer message consumption
+- Consumer group coordination
+- Message ordering guarantees
+- Throughput performance
+- Error handling and recovery
+
+**PostgreSQL Tests (9)**:
+- Database connectivity
+- Table existence and schema validation
+- INSERT/UPDATE/DELETE operations
+- Transaction rollback and commit
+- Query performance (JOIN, WHERE, ORDER BY)
+- Connection pool management
+- Foreign key constraints
+- Index utilization
+
+**Intelligence Tests (8)**:
+- Qdrant collection accessibility
+- Pattern retrieval from archon_vectors
+- Pattern retrieval from code_generation_patterns
+- Quality filtering (>0.7 threshold)
+- Manifest injection workflow
+- Performance thresholds (<5000ms)
+- Correlation ID tracking
+- Debug intelligence integration
+
+**Routing Tests (12)**:
+- Routing service connectivity
+- Routing request/response flow
+- Agent recommendation quality
+- Confidence scoring
+- Performance metrics (<100ms routing)
+- Kafka topic availability
+- Correlation tracking
+- Database logging
+- Error handling
+- Fallback mechanisms
+- Concurrent request handling
+- Load testing (100+ req/s)
+
+**Output Files**:
+- `/tmp/test_system_functionality_latest.txt` - Latest test results
+- `/tmp/test_system_functionality_history.log` - Appended test history
+- Individual test logs: `/tmp/test_*_functionality_latest.txt`
+
+**Troubleshooting Test Failures**:
+
+| Failed Test Component | Common Causes | Quick Fix |
+|----------------------|---------------|-----------|
+| Kafka tests | Broker unreachable, topics missing | `docker restart omninode-bridge-redpanda` |
+| PostgreSQL tests | Auth failure, connection pool exhausted | `source .env`, verify `POSTGRES_PASSWORD` |
+| Intelligence tests | Qdrant down, empty collections | `docker restart archon-qdrant`, verify collections |
+| Routing tests | Consumer not running, Kafka lag | `docker restart omniclaude_archon_router_consumer` |
+
+**Performance Baselines**:
+- Kafka pub/sub: <10ms per message
+- PostgreSQL queries: <50ms for simple, <500ms for complex
+- Intelligence pattern retrieval: <2000ms for 50 patterns
+- Agent routing: <100ms end-to-end
+
 ---
 
 ## Agent Observability & Traceability
@@ -973,7 +1123,7 @@ The `agents/` directory contains a comprehensive polymorphic agent framework bui
 1. Agent spawns with correlation ID
 2. ManifestInjector queries archon-intelligence via Kafka
 3. Parallel queries executed:
-   - patterns (execution_patterns + code_patterns)
+   - patterns (archon_vectors + code_generation_patterns collections)
    - infrastructure (PostgreSQL, Kafka, Qdrant, Docker)
    - models (AI providers, ONEX models, quorum config)
    - database_schemas (table definitions)
@@ -994,19 +1144,25 @@ Generated: 2025-10-27T14:30:00Z
 Source: archon-intelligence-adapter
 
 AVAILABLE PATTERNS:
-  Collections: execution_patterns (120), code_patterns (856)
+  Collections: archon_vectors (7,118), code_generation_patterns (8,571)
+  Total: 15,689 patterns available
 
   • Node State Management Pattern (95% confidence)
     File: node_state_manager_effect.py
     Node Types: EFFECT, REDUCER
+    Collection: archon_vectors
 
   • Async Event Bus Communication (92% confidence)
     File: node_event_publisher_effect.py
     Node Types: EFFECT
+    Collection: archon_vectors
 
-  ... and 118 more patterns
+  • FastAPI Route Handler Pattern (89% confidence)
+    File: api_endpoint_example.py
+    Node Types: EFFECT, COMPUTE
+    Collection: code_generation_patterns
 
-  Total: 120 patterns available
+  ... and 15,686 more patterns
 
 DEBUG INTELLIGENCE (Similar Workflows):
   Total Similar: 12 successes, 3 failures
@@ -1141,8 +1297,8 @@ Agent receives manifest
 - `agent.routing.completed.v1` - Successful routing with recommendations
 - `agent.routing.failed.v1` - Error responses with failure details
 
-**Documentation Topics**:
-- `documentation-changed`
+**Documentation Topics** (optional - auto-created on first publish):
+- `documentation-changed` - Documentation file change notifications
 
 **Agent Tracking Topics**:
 - `agent-routing-decisions`
@@ -1448,6 +1604,7 @@ source .env && psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} 
 
 # Health & monitoring
 ./scripts/health_check.sh
+./scripts/test_system_functionality.sh
 python3 agents/lib/agent_history_browser.py --agent <name>
 
 # Service management (docker-compose from deployment/)
@@ -1532,7 +1689,7 @@ python -c "from config import settings; print(settings.validate_required_service
 - All services communicate via Kafka event bus
 - Agent router uses pure event-based architecture (no HTTP endpoints)
 - Complete observability with manifest injection traceability
-- Pattern discovery yields 120+ patterns from Qdrant
+- Pattern discovery yields 15,689+ patterns from Qdrant (archon_vectors + code_generation_patterns)
 - Database contains 34 tables with complete agent execution history
 - Router performance: 7-8ms routing time, 100+ requests/second throughput
 - **Phase 2 Complete**: Type-safe configuration framework (Pydantic Settings) with 90+ validated variables
@@ -1543,13 +1700,14 @@ python -c "from config import settings; print(settings.validate_required_service
 
 ---
 
-**Last Updated**: 2025-11-05
-**Documentation Version**: 2.3.0
+**Last Updated**: 2025-11-10
+**Documentation Version**: 2.3.1
 **Intelligence Infrastructure**: Event-driven via Kafka
 **Router Architecture**: Event-based (Kafka consumer) - Phase 2 complete
 **Configuration Framework**: Pydantic Settings - Phase 2 (ADR-001)
 **Docker Compose**: Consolidated single file with profiles
-**Pattern Count**: 120+ (execution_patterns + code_patterns)
+**Pattern Count**: 15,689+ patterns (archon_vectors: 7,118 | code_generation_patterns: 8,571)
+**Qdrant Collections**: 2 active (populated) | 2 planned (empty, reserved for future use)
 **Database Tables**: 34 in omninode_bridge
 **Observability**: Complete traceability with correlation ID tracking
 **Router Performance**: 7-8ms routing time, <500ms total latency

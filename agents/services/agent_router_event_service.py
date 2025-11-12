@@ -849,13 +849,15 @@ class AgentRouterEventService:
             # Extract routing options
             max_recommendations = options.get("max_recommendations", 5)
 
-            # Log progress: starting routing analysis
+            # Log progress: starting routing analysis (non-blocking)
             if execution_logger:
                 try:
-                    await execution_logger.progress(
-                        stage="routing_analysis",
-                        percent=25,
-                        metadata={"max_recommendations": max_recommendations},
+                    asyncio.create_task(
+                        execution_logger.progress(
+                            stage="routing_analysis",
+                            percent=25,
+                            metadata={"max_recommendations": max_recommendations},
+                        )
                     )
                 except Exception as e:
                     self.logger.debug(f"Progress logging failed: {e}")
@@ -872,13 +874,15 @@ class AgentRouterEventService:
 
             routing_time_ms = (time.time() - start_time) * 1000
 
-            # Log progress: routing completed
+            # Log progress: routing completed (non-blocking)
             if execution_logger:
                 try:
-                    await execution_logger.progress(
-                        stage="routing_completed",
-                        percent=75,
-                        metadata={"routing_time_ms": routing_time_ms},
+                    asyncio.create_task(
+                        execution_logger.progress(
+                            stage="routing_completed",
+                            percent=75,
+                            metadata={"routing_time_ms": routing_time_ms},
+                        )
                     )
                 except Exception as e:
                     self.logger.debug(f"Progress logging failed: {e}")
@@ -929,61 +933,65 @@ class AgentRouterEventService:
                     self.TOPIC_COMPLETED, response_envelope
                 )
 
-            # Log to database
+            # Log to database (non-blocking - fire-and-forget)
             if self._postgres_logger:
-                await self._postgres_logger.log_routing_decision(
-                    user_request=user_request,
-                    selected_agent=primary.agent_name,
-                    confidence_score=primary.confidence.total,
-                    routing_strategy="enhanced_fuzzy_matching",  # TODO: Get from router
-                    routing_time_ms=routing_time_ms,
-                    correlation_id=correlation_id,
-                    alternatives=[
-                        {
-                            "agent_name": rec.agent_name,
-                            "confidence": rec.confidence.total,
-                        }
-                        for rec in recommendations[1:]
-                    ],
-                    reasoning=primary.reason,
+                asyncio.create_task(
+                    self._postgres_logger.log_routing_decision(
+                        user_request=user_request,
+                        selected_agent=primary.agent_name,
+                        confidence_score=primary.confidence.total,
+                        routing_strategy="enhanced_fuzzy_matching",  # TODO: Get from router
+                        routing_time_ms=routing_time_ms,
+                        correlation_id=correlation_id,
+                        alternatives=[
+                            {
+                                "agent_name": rec.agent_name,
+                                "confidence": rec.confidence.total,
+                            }
+                            for rec in recommendations[1:]
+                        ],
+                        reasoning=primary.reason,
+                    )
                 )
 
-                # Log performance metrics if timing data is available
+                # Log performance metrics if timing data is available (non-blocking)
                 if self._router and self._router.last_routing_timing:
                     timing = self._router.last_routing_timing
                     try:
-                        await self._postgres_logger.log_performance_metrics(
-                            metric_type="routing_decision",
-                            selected_agent=primary.agent_name,
-                            selection_strategy="enhanced_fuzzy_matching",
-                            confidence_score=primary.confidence.total,
-                            alternatives_count=len(recommendations) - 1,
-                            total_routing_time_us=timing.total_routing_time_us,
-                            cache_lookup_us=timing.cache_lookup_us,
-                            trigger_matching_us=timing.trigger_matching_us,
-                            confidence_scoring_us=timing.confidence_scoring_us,
-                            cache_hit=timing.cache_hit,
-                            trigger_confidence=primary.confidence.trigger_score,
-                            context_confidence=primary.confidence.context_score,
-                            capability_confidence=primary.confidence.capability_score,
-                            historical_confidence=primary.confidence.historical_score,
-                            correlation_id=correlation_id,
-                            alternative_agents=[
-                                {
-                                    "agent_name": rec.agent_name,
-                                    "confidence": rec.confidence.total,
-                                    "reason": rec.reason,
-                                }
-                                for rec in recommendations[1:]
-                            ],
+                        asyncio.create_task(
+                            self._postgres_logger.log_performance_metrics(
+                                metric_type="routing_decision",
+                                selected_agent=primary.agent_name,
+                                selection_strategy="enhanced_fuzzy_matching",
+                                confidence_score=primary.confidence.total,
+                                alternatives_count=len(recommendations) - 1,
+                                total_routing_time_us=timing.total_routing_time_us,
+                                cache_lookup_us=timing.cache_lookup_us,
+                                trigger_matching_us=timing.trigger_matching_us,
+                                confidence_scoring_us=timing.confidence_scoring_us,
+                                cache_hit=timing.cache_hit,
+                                trigger_confidence=primary.confidence.trigger_score,
+                                context_confidence=primary.confidence.context_score,
+                                capability_confidence=primary.confidence.capability_score,
+                                historical_confidence=primary.confidence.historical_score,
+                                correlation_id=correlation_id,
+                                alternative_agents=[
+                                    {
+                                        "agent_name": rec.agent_name,
+                                        "confidence": rec.confidence.total,
+                                        "reason": rec.reason,
+                                    }
+                                    for rec in recommendations[1:]
+                                ],
+                            )
                         )
                         self.logger.debug(
-                            f"Performance metrics logged (total_time_us: {timing.total_routing_time_us}, cache_hit: {timing.cache_hit})"
+                            f"Performance metrics queued for async logging (total_time_us: {timing.total_routing_time_us}, cache_hit: {timing.cache_hit})"
                         )
                     except Exception as e:
                         # Non-blocking - log error but don't fail routing
                         self.logger.warning(
-                            f"Failed to log performance metrics: {e}", exc_info=True
+                            f"Failed to queue performance metrics: {e}", exc_info=True
                         )
 
             self._requests_succeeded += 1
@@ -991,18 +999,20 @@ class AgentRouterEventService:
                 f"Routing completed (correlation_id: {correlation_id}, agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%}, time: {routing_time_ms:.1f}ms)"
             )
 
-            # Log execution completion: success
+            # Log execution completion: success (non-blocking)
             if execution_logger:
                 try:
-                    await execution_logger.complete(
-                        status=EnumOperationStatus.SUCCESS,
-                        quality_score=primary.confidence.total,
-                        metadata={
-                            "selected_agent": primary.agent_name,
-                            "confidence": primary.confidence.total,
-                            "routing_time_ms": routing_time_ms,
-                            "recommendation_count": len(recommendations),
-                        },
+                    asyncio.create_task(
+                        execution_logger.complete(
+                            status=EnumOperationStatus.SUCCESS,
+                            quality_score=primary.confidence.total,
+                            metadata={
+                                "selected_agent": primary.agent_name,
+                                "confidence": primary.confidence.total,
+                                "routing_time_ms": routing_time_ms,
+                                "recommendation_count": len(recommendations),
+                            },
+                        )
                     )
                 except Exception as e:
                     self.logger.warning(f"Execution completion logging failed: {e}")
@@ -1056,16 +1066,18 @@ class AgentRouterEventService:
                 except Exception as publish_error:
                     self.logger.error(f"Failed to publish error event: {publish_error}")
 
-            # Log execution completion: failure
+            # Log execution completion: failure (non-blocking)
             if execution_logger:
                 try:
-                    await execution_logger.complete(
-                        status=EnumOperationStatus.FAILED,
-                        error_message=str(e),
-                        error_type=type(e).__name__,
-                        metadata={
-                            "routing_time_ms": routing_time_ms,
-                        },
+                    asyncio.create_task(
+                        execution_logger.complete(
+                            status=EnumOperationStatus.FAILED,
+                            error_message=str(e),
+                            error_type=type(e).__name__,
+                            metadata={
+                                "routing_time_ms": routing_time_ms,
+                            },
+                        )
                     )
                 except Exception as log_error:
                     self.logger.warning(

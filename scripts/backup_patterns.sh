@@ -29,20 +29,14 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Configuration (no fallbacks - must be set in .env)
-DB_HOST="${POSTGRES_HOST}"
-DB_PORT="${POSTGRES_PORT}"
-DB_USER="${POSTGRES_USER}"
-DB_NAME="${POSTGRES_DATABASE}"
-DB_PASSWORD="${POSTGRES_PASSWORD}"
-
-# Verify required variables are set
+# Verify required environment variables are set
+# Note: Using POSTGRES_* variables directly (no aliases)
 missing_vars=()
-[ -z "$DB_HOST" ] && missing_vars+=("POSTGRES_HOST")
-[ -z "$DB_PORT" ] && missing_vars+=("POSTGRES_PORT")
-[ -z "$DB_USER" ] && missing_vars+=("POSTGRES_USER")
-[ -z "$DB_NAME" ] && missing_vars+=("POSTGRES_DATABASE")
-[ -z "$DB_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
+[ -z "$POSTGRES_HOST" ] && missing_vars+=("POSTGRES_HOST")
+[ -z "$POSTGRES_PORT" ] && missing_vars+=("POSTGRES_PORT")
+[ -z "$POSTGRES_USER" ] && missing_vars+=("POSTGRES_USER")
+[ -z "$POSTGRES_DATABASE" ] && missing_vars+=("POSTGRES_DATABASE")
+[ -z "$POSTGRES_PASSWORD" ] && missing_vars+=("POSTGRES_PASSWORD")
 
 if [ ${#missing_vars[@]} -gt 0 ]; then
     echo -e "${RED}❌ ERROR: Required environment variables not set in .env:${NC}"
@@ -72,7 +66,7 @@ fi
 
 # Pre-backup statistics
 echo -e "${YELLOW}Collecting pre-backup statistics...${NC}"
-PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -t -c "
 SELECT
   'pattern_lineage_nodes: ' || COUNT(*)
 FROM pattern_lineage_nodes
@@ -90,11 +84,11 @@ echo ""
 echo -e "${YELLOW}Creating backup: $BACKUP_FILE${NC}"
 
 # Create backup
-PGPASSWORD="$DB_PASSWORD" pg_dump \
-  -h "$DB_HOST" \
-  -p "$DB_PORT" \
-  -U "$DB_USER" \
-  -d "$DB_NAME" \
+PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
+  -h "$POSTGRES_HOST" \
+  -p "$POSTGRES_PORT" \
+  -U "$POSTGRES_USER" \
+  -d "$POSTGRES_DATABASE" \
   --table pattern_lineage_nodes \
   --table pattern_lineage_edges \
   --table pattern_relationships \
