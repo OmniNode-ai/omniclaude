@@ -84,6 +84,12 @@ CREATE INDEX IF NOT EXISTS idx_stf_approval ON debug_transform_functions(approva
 CREATE INDEX IF NOT EXISTS idx_stf_usage ON debug_transform_functions(usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_stf_source_correlation ON debug_transform_functions(source_correlation_id);
 
+-- Composite index for efficient category-based quality searches
+-- Covers queries: WHERE problem_category = X ORDER BY quality_score DESC
+-- Expected improvement: 2-5x speedup on large datasets (10K+ STFs)
+CREATE INDEX IF NOT EXISTS idx_stf_category_quality
+  ON debug_transform_functions(problem_category, quality_score DESC);
+
 -- Trigger to auto-update updated_at
 CREATE TRIGGER update_stf_updated_at
     BEFORE UPDATE ON debug_transform_functions
