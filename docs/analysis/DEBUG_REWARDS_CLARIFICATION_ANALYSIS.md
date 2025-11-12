@@ -11,6 +11,14 @@
 - **Key Blockers Resolved**: Legal risk (Critical → Manageable), funding sustainability (External → Self-sustaining), timeline (8-12 weeks → 4-6 weeks)
 - **Open Questions**: Token economics ratios, free tier allocation, verification sandbox design, governance model
 
+## Related Documents
+
+- **[P2P Context Sharing Model](./P2P_CONTEXT_SHARING_MODEL.md)** - Complete specification for Phase 3b P2P network architecture
+  - [Token Economics](./P2P_CONTEXT_SHARING_MODEL.md#economic-model-details) - Dual token earning paths (STF + bandwidth)
+  - [Monitoring & Observability](./P2P_CONTEXT_SHARING_MODEL.md#monitoring-and-observability) - Dashboard requirements and alerting thresholds
+  - [Phase Mapping](./P2P_CONTEXT_SHARING_MODEL.md#phase-mapping-diagram) - How P2P phases integrate with broader initiative
+  - [Cost-Benefit Analysis](./P2P_CONTEXT_SHARING_MODEL.md#cost-benefit-analysis) - 60-90% cost reduction validation
+
 ---
 
 ## Executive Summary
@@ -191,6 +199,250 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 
 **Total Effort**: 140 hours (3.5 weeks) + 25% buffer = 4 weeks
 
+#### Example: Phase 2 Timeline Breakdown (Detailed)
+
+**Scenario**: Single developer implementing clarification workflow over 4 weeks
+
+**Week 1: Foundation (Database Schema & Question Generation)**
+
+**Monday-Tuesday** (16 hours):
+```
+Day 1 (8 hours):
+- Design database schema for 4 tables:
+  - clarification_tickets (questions generated for user)
+  - clarification_responses (user/agent answers)
+  - quorum_votes (multi-agent voting)
+  - assumptions_log (safe defaults tracking)
+- Create ERD diagrams and review with team
+- Write migration scripts (001_add_clarification_tables.sql)
+
+Day 2 (8 hours):
+- Implement migration scripts with rollback logic
+- Add indexes for performance (by correlation_id, status, created_at)
+- Test migrations on dev database
+- Document schema changes in CHANGELOG.md
+```
+
+**Wednesday-Thursday** (16 hours):
+```
+Day 3 (8 hours):
+- Build ambiguity detection algorithm:
+  - Identify vague terms ("some", "maybe", "could")
+  - Detect missing parameters (unspecified ports, paths, models)
+  - Flag contradictory requirements
+- Unit tests for ambiguity detection (10+ test cases)
+
+Day 4 (8 hours):
+- Implement clarification ticket generation:
+  - Parse user prompt for ambiguities
+  - Generate question packs (max 10 questions)
+  - Categorize by priority (blocking vs. optional)
+  - Store in clarification_tickets table
+- Integration tests with sample prompts
+```
+
+**Friday** (8 hours):
+```
+Day 5 (8 hours):
+- Code review and refactoring
+- Performance testing (ticket generation <100ms)
+- Documentation for Week 1 deliverables
+- Demo to stakeholders (15 min)
+```
+
+**Week 1 Deliverables**:
+- ✅ 4 database tables created with migrations
+- ✅ Ambiguity detection algorithm (80%+ accuracy)
+- ✅ Question generation logic (max 10 questions per prompt)
+- ✅ Unit + integration tests passing
+
+---
+
+**Week 2: Coordination (Quorum Voting & Timeout Handling)**
+
+**Monday-Tuesday** (16 hours):
+```
+Day 6 (8 hours):
+- Build quorum composition logic:
+  - Query agent router for 3-5 suitable agents
+  - Filter by domain expertise (e.g., database agents for DB questions)
+  - Load balance across agent types
+- Unit tests for quorum selection
+
+Day 7 (8 hours):
+- Implement voting mechanism:
+  - Agents vote "agree", "disagree", or "neutral"
+  - Weighted voting by agent confidence scores
+  - Consensus threshold: 60% agreement required
+- Store votes in quorum_votes table
+```
+
+**Wednesday-Thursday** (16 hours):
+```
+Day 8 (8 hours):
+- Implement timeout/deadline handling:
+  - Clarification timeout: 5 minutes default (configurable)
+  - If timeout expires → Apply safe defaults
+  - Log timeout events for monitoring
+- Kafka event publishing for timeout notifications
+
+Day 9 (8 hours):
+- Build safe default policy engine:
+  - Define safe defaults per question type:
+    - Port not specified → Use standard port (e.g., 5432 for PostgreSQL)
+    - Model not specified → Use default model (e.g., Gemini Flash)
+    - Path not specified → Use standard path (e.g., /tmp)
+  - Store applied defaults in assumptions_log table
+- Unit tests for safe default selection
+```
+
+**Friday** (8 hours):
+```
+Day 10 (8 hours):
+- Integration testing:
+  - End-to-end test: Generate questions → Quorum votes → Timeout → Apply defaults
+  - Test with 10+ sample prompts
+  - Performance testing (voting <200ms)
+- Code review and documentation
+```
+
+**Week 2 Deliverables**:
+- ✅ Quorum composition logic (3-5 agents per question pack)
+- ✅ Voting mechanism with consensus threshold
+- ✅ Timeout handling with safe defaults
+- ✅ Assumptions logging for audit trail
+
+---
+
+**Week 3: UX & Integration (Terminal UI & Agent Router)**
+
+**Monday-Tuesday** (16 hours):
+```
+Day 11 (8 hours):
+- Design terminal UI mockups:
+  - Question presentation (numbered list)
+  - Input collection (multiple choice or free text)
+  - Progress indicator (X of Y questions answered)
+- Review mockups with UX team
+
+Day 12 (8 hours):
+- Implement terminal UI with rich library:
+  - Interactive question prompt
+  - Answer validation (reject empty answers for blocking questions)
+  - Summary screen (show all answers before submission)
+- Manual testing on dev environment
+```
+
+**Wednesday-Thursday** (16 hours):
+```
+Day 13 (8 hours):
+- Integrate clarification step with agent router:
+  - Trigger clarification after manifest injection
+  - If clarification triggered → Block agent execution
+  - After answers collected → Resume agent execution with updated context
+- Kafka event flow: manifest.injected → clarification.requested → clarification.answered → agent.execute
+
+Day 14 (8 hours):
+- Build assumptions logging UI:
+  - Display provisional assumptions made (from safe defaults)
+  - Highlight in yellow/orange (visual indicator)
+  - Provide option to override assumptions
+- Store assumption overrides in assumptions_log table
+```
+
+**Friday** (8 hours):
+```
+Day 15 (8 hours):
+- End-to-end integration testing:
+  - Test full workflow: User prompt → Ambiguity detection → Questions → Voting → Execution
+  - Test timeout scenario (no user response)
+  - Test override scenario (user changes assumption)
+- Write user documentation (how to use clarification feature)
+```
+
+**Week 3 Deliverables**:
+- ✅ Terminal UI for question presentation (rich library)
+- ✅ Integration with agent router (Kafka event flow)
+- ✅ Assumptions logging and override capability
+- ✅ End-to-end testing complete
+
+---
+
+**Week 4: Stabilization (Testing, Performance, Documentation)**
+
+**Monday-Tuesday** (16 hours):
+```
+Day 16 (8 hours):
+- User acceptance testing (UAT):
+  - Invite 3-5 internal users to test clarification feature
+  - Collect feedback on UX (question clarity, answer flow)
+  - Identify edge cases and bugs
+
+Day 17 (8 hours):
+- Bug fixes from UAT:
+  - Fix top 5 critical bugs
+  - Refine question wording based on feedback
+  - Improve error messages
+```
+
+**Wednesday** (8 hours):
+```
+Day 18 (8 hours):
+- Performance tuning:
+  - Optimize database queries (add missing indexes if needed)
+  - Reduce clarification latency (<10s total for question generation + voting)
+  - Load testing with 50+ concurrent clarification requests
+```
+
+**Thursday** (4 hours):
+```
+Day 19 (4 hours):
+- Final documentation:
+  - Update CLAUDE.md with clarification workflow details
+  - Write troubleshooting guide (common issues + solutions)
+  - Create demo video (5 min walkthrough)
+- Prepare release notes
+```
+
+**Friday** (4 hours):
+```
+Day 20 (4 hours):
+- Final review and deployment preparation:
+  - Code review with team
+  - Merge PR to main branch
+  - Deploy to staging environment
+  - Monitor for 24 hours before production deployment
+```
+
+**Week 4 Deliverables**:
+- ✅ UAT complete with 3-5 users
+- ✅ Top bugs fixed and UX refined
+- ✅ Performance tuning (clarification <10s)
+- ✅ Documentation and demo video complete
+- ✅ Ready for production deployment
+
+---
+
+**Total Timeline Summary**:
+
+| Week | Focus Area | Hours | Key Deliverable |
+|------|-----------|-------|----------------|
+| **Week 1** | Schema & Generation | 40 | Ambiguity detection + question generation |
+| **Week 2** | Quorum & Coordination | 40 | Voting mechanism + timeout handling |
+| **Week 3** | UX & Integration | 40 | Terminal UI + agent router integration |
+| **Week 4** | Stabilization | 20 | UAT + performance tuning + documentation |
+| **Total** | | **140 hours** | Production-ready clarification workflow |
+
+**Buffer**: 25% (35 hours) allocated for unknowns, testing delays, and scope changes
+
+**Risk Mitigation**:
+- Daily standups to identify blockers early
+- Code reviews every 2 days to catch issues
+- UAT in Week 4 to validate UX before launch
+- Performance benchmarks to ensure <10s latency target
+
+---
+
 **Value Proposition**: **Medium to High**
 - Reduces rework from ambiguous requirements
 - Improves specification quality
@@ -298,6 +550,32 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 5. ✅ **Abuse prevention easier**: Rate limits, account freezes without financial liability (but monitoring still required)
 6. ✅ **Pseudonymous OK**: No KYC needed for internal credit system
 7. ✅ **Built-in demand**: Every user needs compute, tokens always valuable
+### Decision Rationale: Compute Tokens vs. Fiat Currency
+
+**Decision**: Use compute tokens instead of fiat currency for contributor rewards.
+
+**Rationale**:
+1. **Legal Simplicity**: Compute tokens avoid money transmission regulations, securities law, and most financial compliance requirements. Similar to loyalty points or game credits, they represent internal platform value rather than legal tender. Basic legal review still recommended for consumer protection compliance.
+2. **Self-Contained Economy**: Tokens create a closed-loop value exchange where contributors earn by contributing and spend on compute. This eliminates dependency on external funding sources or revenue streams.
+3. **Technical Alignment**: Tokens directly represent computational resources (LLM inference time, embeddings, etc.), making the value proposition immediately clear and measurable.
+4. **Scalability**: No payment processing overhead, gateway fees, currency conversion, or international money transfer complexity. System scales horizontally without financial infrastructure bottlenecks.
+5. **Risk Mitigation**: Reduces legal liability (not handling real money), eliminates fraud risk (chargebacks, stolen credit cards), and simplifies compliance (no KYC, no tax reporting, no money laundering concerns).
+
+**Trade-offs Accepted**:
+- **Limited liquidity**: Tokens have no external market value and cannot be converted to fiat currency. Contributors are locked into platform ecosystem.
+- **Token economics complexity**: Requires careful balancing of supply/demand through earning rates, spending costs, and velocity monitoring. Imbalanced economics can collapse the system.
+- **User preference**: Some contributors may prefer direct monetary compensation over platform credits, potentially limiting contributor pool.
+- **Initial bootstrapping**: New users need starter tokens to participate, requiring system to issue tokens without corresponding value creation (free tier allocation).
+
+**Alternatives Considered**:
+- **Fiat currency rewards**: Rejected due to legal complexity (8-12 weeks legal review), payment processing overhead ($100K+ infrastructure), and regulatory burden.
+- **Cryptocurrency rewards**: Rejected due to volatility, blockchain infrastructure complexity, and regulatory uncertainty (SEC classification).
+- **Hybrid model** (tokens + fiat): Rejected as it combines worst aspects of both approaches (legal complexity + token economics complexity).
+
+**Status**: Decided and implemented in Phase 3 design. Token economics parameters (tokens per STF, tokens per compute hour) to be calibrated during pilot program (Weeks 5-7).
+
+---
+
 
 **Economic Model to Validate**:
 1. **Token supply/demand balance** - How many tokens per STF? Per compute hour?
@@ -324,6 +602,8 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 - **Solution**: P2P graph stores metadata → RAG retrieves 50KB → LLM query = $0.20-0.50 (90% savings)
 - **Incentive**: Peers earn 2 tokens/KB for serving context to others
 
+> **📖 Detailed Specification**: See [P2P_CONTEXT_SHARING_MODEL.md](./P2P_CONTEXT_SHARING_MODEL.md) for complete architecture, protocol specifications, and implementation phases.
+
 **Economic Model**:
 
 | Activity | Tokens | Model |
@@ -333,6 +613,8 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 | **Verify quality** | 5/verification | Ongoing active income |
 | **LLM compute** | Variable | Spend based on usage |
 | **Context retrieval** | 2/KB | Spend to access peer context |
+
+> **💡 Token Economics Details**: See [Token Economics](./P2P_CONTEXT_SHARING_MODEL.md#economic-model-details) and [Token Sustainability](./P2P_CONTEXT_SHARING_MODEL.md#token-sustainability-analysis) sections in P2P model for calibration formulas and validation criteria.
 
 **Architecture** (BitTorrent-like):
 ```
@@ -364,6 +646,8 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 - >60% cost reduction vs full-context LLM
 - Token velocity >1 cycle/week
 - <500ms avg query latency
+
+> **📊 Complete Metrics**: See [Success Metrics](./P2P_CONTEXT_SHARING_MODEL.md#success-metrics) and [Monitoring Dashboard](./P2P_CONTEXT_SHARING_MODEL.md#monitoring-and-observability) sections in P2P model for comprehensive monitoring framework.
 
 **See**: [P2P_CONTEXT_SHARING_MODEL.md](./P2P_CONTEXT_SHARING_MODEL.md) for complete specification (40+ pages)
 
@@ -399,6 +683,68 @@ Peer A (has ONEX docs) ←→ Tracker ←→ Peer B (needs ONEX docs)
 #### Schema Consolidation Opportunities
 
 To manage the growing schema complexity (42 tables), consider these consolidation strategies:
+
+**Visual Overview: Schema Consolidation Strategy**
+
+```
+BEFORE (42 tables):                      AFTER (35 tables):
+┌──────────────────┐                    ┌──────────────────────┐
+│ user_profiles    │                    │ unified_profiles     │
+├──────────────────┤    CONSOLIDATE →   │ ┌──────────────────┐ │
+│ contributor_...  │    ────────────    │ │ profile_type:    │ │
+├──────────────────┤                    │ │ - contributor    │ │
+│ peer_registry    │                    │ │ - peer           │ │
+├──────────────────┤                    │ │ - hybrid         │ │
+│ agent_profiles   │                    │ └──────────────────┘ │
+└──────────────────┘                    │ profile_metadata     │
+                                        │ (JSONB)              │
+                                        └──────────────────────┘
+                                                 │
+                                                 │ Reduce JOINs
+                                                 │ Centralize identity
+                                                 │
+┌──────────────────┐                    ┌──────────────────────┐
+│ reward_ledger    │                    │ token_transactions   │
+├──────────────────┤    CONSOLIDATE →   │ ┌──────────────────┐ │
+│ token_balance    │    ────────────    │ │ type:            │ │
+├──────────────────┤                    │ │ - stf_reward     │ │
+│ context_sharing  │                    │ │ - context_share  │ │
+│ _transactions    │                    │ │ - llm_compute    │ │
+└──────────────────┘                    │ │ - verification   │ │
+                                        │ └──────────────────┘ │
+                                        │ metadata (JSONB)     │
+                                        └──────────────────────┘
+                                                 │
+                                                 │ Single source of truth
+                                                 │ Event sourcing ready
+                                                 │
+┌──────────────────┐                    ┌──────────────────────┐
+│ clarification_   │                    │ workflow_tickets     │
+│ tickets          │    CONSOLIDATE →   │ ┌──────────────────┐ │
+├──────────────────┤    ────────────    │ │ workflow_type:   │ │
+│ verification_    │                    │ │ - clarification  │ │
+│ requests         │                    │ │ - verification   │ │
+├──────────────────┤                    │ │ - approval       │ │
+│ approval_        │                    │ └──────────────────┘ │
+│ workflows        │                    │ metadata (JSONB)     │
+└──────────────────┘                    └──────────────────────┘
+                                                 │
+                                                 │ Reduce schema duplication
+                                                 │ Easier to add new workflows
+                                                 │
+                                        ┌──────────────────────┐
+TOTAL: 42 tables                        TOTAL: 35 tables (-17%)
+HIGH JOIN complexity                    LOWER JOIN complexity
+RIGID schema (add table = migration)    FLEXIBLE (add type = config)
+                                        └──────────────────────┘
+```
+
+**Consolidation Benefits**:
+- ✅ **-7 tables** (17% reduction): From 42 → 35 tables
+- ✅ **Fewer JOINs**: Centralized identity and transaction tables
+- ✅ **JSONB flexibility**: Type-specific data without schema changes
+- ✅ **Event sourcing**: Single token_transactions table natural for Kafka
+- ✅ **Easier to scale**: Add new types without migrations
 
 **1. Profile Consolidation**:
 - **Current**: Separate `contributor_profiles` (Phase 3) and potential `peer_registry` (Phase 3b P2P)
@@ -490,6 +836,48 @@ Formalize event bus topic naming in ADR-002:
 
 ## Phased Implementation Recommendation
 
+### Phase Dependencies Visual
+
+The following diagram illustrates how the three phases relate and their dependencies:
+
+```
+┌─────────────────────┐
+│     Phase 1         │  Debug Loop Enhancement
+│   (3-4 weeks)       │  ✅ IMPLEMENTED
+│  STF Registry +     │  Foundation for Phase 3
+│  Cost Tracking      │
+└──────────┬──────────┘
+           │
+           │ CRITICAL: Phase 3a depends on Phase 1
+           │
+           ├──────────────────────────────────┐
+           │                                  │
+           ▼                                  ▼
+┌──────────────────────┐           ┌──────────────────────┐
+│      Phase 2         │           │     Phase 3a         │  Token Rewards
+│   (2-3 weeks)        │           │   (4-6 weeks)        │  (Can run parallel
+│  Clarification       │           │  Token System +      │   with Phase 2)
+│  Workflow            │           │  STF Contribution    │
+│  (OPTIONAL)          │           │  Rewards             │
+└──────────────────────┘           └──────────┬───────────┘
+                                              │
+                                              │ EXPANSION: P2P builds on tokens
+                                              │
+                                              ▼
+                                   ┌──────────────────────┐
+                                   │     Phase 3b         │  P2P Context Sharing
+                                   │   (6-8 weeks)        │  (Depends on 3a)
+                                   │  P2P Network +       │
+                                   │  Bandwidth Rewards   │
+                                   └──────────────────────┘
+```
+
+**Key Insights**:
+- **Phase 1 is the foundation** - Must complete before Phase 3a
+- **Phase 2 is independent** - Can run in parallel with Phase 3a if needed
+- **Phase 3b extends Phase 3a** - Creates two-sided marketplace (contribution + bandwidth)
+- **Total Timeline**: 7-10 weeks for core value (Phases 1 + 3a), +6-8 weeks for P2P (Phase 3b)
+
 ### Recommended Sequence
 
 **Phase 0: Prerequisites** (1 week)
@@ -499,6 +887,31 @@ Formalize event bus topic naming in ADR-002:
 - ✅ Set up monitoring for new tables
 
 **Phase 1: Debug Loop Enhancements** (3-4 weeks) ⭐ **HIGHEST PRIORITY**
+### Decision Rationale: Phase Sequencing
+
+**Decision**: Implement Debug Loop (Phase 1) before Clarification (Phase 2) or Rewards (Phase 3).
+
+**Rationale**:
+1. **Foundation Building**: Debug loop provides failure intelligence and STF registry needed by later phases. The STF registry is a hard dependency for Phase 3 rewards, and debug intelligence improves Phase 2 clarification quality.
+2. **Risk Mitigation**: Simpler phase reduces implementation risk first. Phase 1 has lowest technical risk (natural extension of existing observability infrastructure) and clearest value proposition.
+3. **User Value**: Immediate improvement to agent debugging experience. Developers get replay fidelity, cost tracking, and transformation reusability without waiting for full economic system.
+4. **Data Collection**: Generates STF data needed for Phase 2 parameter collection and Phase 3 reward calibration. Cannot tune token economics without real usage data from Phase 1.
+5. **Team Learning**: Establishes development patterns, testing strategies, and performance benchmarks for later phases. Lessons learned from Phase 1 migrations inform Phase 3 schema design.
+
+**Trade-offs Accepted**:
+- **Delayed reward system**: Users requested contributor incentives (Phase 3), but must wait 7-11 weeks (Phase 1 completion + Phase 3 development).
+- **Sequential dependency**: Phase 3 cannot start until Phase 1 STF registry is operational, preventing parallel development.
+- **Opportunity cost**: Time spent on Phase 1 could theoretically go directly to revenue-generating features (Phase 3), though this ignores foundational requirements.
+
+**Alternatives Considered**:
+- **Phase 3 first**: Rejected because reward system requires STF registry (Phase 1 dependency). Would need to build minimal registry anyway, duplicating effort.
+- **Phase 2 first**: Rejected because clarification workflow is optional (only needed if spec ambiguity is major pain point), while debug loop provides universal value.
+- **Parallel execution**: Rejected due to coordination overhead, schema design conflicts, and limited team size (1-2 developers assumed).
+
+**Status**: Decided, Phase 1 implemented in PR #26. Phase 3 next (4-6 weeks starting Week 5).
+
+---
+
 - **Why first?** Natural extension of existing infrastructure, clear value, low risk
 - **Deliverables**:
   - `debug_transform_functions` table with STF registry

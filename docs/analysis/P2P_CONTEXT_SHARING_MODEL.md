@@ -4,6 +4,14 @@
 **Related**: DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md (Phase 3 expansion)
 **Model**: BitTorrent-like tracker + compute token incentives
 
+## Related Documents
+
+- **[Debug Rewards Clarification Analysis](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md)** - Phase 3 reward system and broader initiative context
+  - [Phase 3a: STF Rewards](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#initiative-3-transformation-reward-system-section-3) - Contribution incentives and token ledger
+  - [Phase 3b Overview](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#phase-3b-p2p-context-sharing-network-6-8-weeks) - Integration with STF contribution rewards
+  - [Token Economics Validation](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#recommended-sequence-with-compute-tokens) - Pre-Phase-3 validation checklist
+  - [Phase Sequencing](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#phased-implementation-recommendation) - How P2P fits in broader timeline
+
 ---
 
 ## Executive Summary
@@ -16,6 +24,34 @@
 - **Self-sustaining**: Network participants fund each other through natural usage
 
 **Architecture**: BitTorrent-like tracker + distributed hash table (DHT) + compute token ledger
+---
+
+## Decision Rationale: P2P Architecture vs. Centralized Storage
+
+**Decision**: Use peer-to-peer context sharing instead of centralized storage.
+
+**Rationale**:
+1. **Scalability**: Distributed load across peers instead of central server. Network capacity grows organically with peer count (100 peers = 100x storage/bandwidth vs single server).
+2. **Cost Efficiency**: Leverage contributor resources, reduce infrastructure costs. Contributors donate bandwidth/storage in exchange for tokens, eliminating need for expensive centralized infrastructure (estimated $10K+/month for 1TB storage + 10TB bandwidth).
+3. **Privacy**: Context stays with contributors, not centralized. Sensitive proprietary knowledge never leaves contributor control, reducing data breach risk and compliance burden.
+4. **Incentive Alignment**: Contributors earn tokens for providing context to peers. Creates natural market where high-quality, frequently accessed content generates passive income for authors.
+5. **Resilience**: No single point of failure. Network remains functional even if central tracker fails (DHT fallback in Phase 2), and individual peer failures don't impact availability (content replicated across multiple peers).
+
+**Trade-offs Accepted**:
+- **Increased complexity**: P2P introduces peer discovery, reputation tracking, availability monitoring, and DHT coordination. Significantly more complex than S3 bucket + API.
+- **Network effects dependency**: Requires critical mass of peers for sufficient context density and low latency. Initial bootstrap challenging with <10 peers (cold start problem).
+- **Content availability**: Context only available when peer is online. Mitigation: Replication factor (3+ peers per context) and caching layer, but still risk of unavailability during network partitions.
+- **Token economy requirement**: Contributors must be incentivized to participate. Complex token economics (supply/demand balancing, anti-abuse, reputation) required to sustain network.
+
+**Alternatives Considered**:
+- **Centralized storage** (S3 + CloudFront): Rejected due to infrastructure costs ($10K+/month at scale), lack of contributor incentives, and single point of failure.
+- **Hybrid model** (centralized + P2P): Considered for Phase 1 (centralized tracker + P2P serving), deferred full decentralization to Phase 2. Balances complexity vs. resilience.
+- **IPFS integration**: Rejected due to complexity of IPFS pinning, lack of built-in incentives (Filecoin adds significant overhead), and unfamiliarity with IPFS ecosystem.
+
+**Status**: Decided, Phase 1 (centralized tracker) planned for Weeks 9-12. DHT decentralization (Phase 2) deferred to Weeks 13-16 pending Phase 1 validation.
+
+---
+
 
 ---
 
@@ -231,6 +267,93 @@ token.balances.v1:
    ```
 5. Valkey cache updated for fast reads
 
+#### Example: Token Transaction Flow
+
+**Scenario**: Alice requests ONEX documentation from Bob
+
+**Initial State**:
+- Alice's balance: 1000 tokens
+- Bob's balance: 750 tokens
+
+**Transaction Steps**:
+
+1. **Alice discovers Bob has ONEX docs** (via tracker query)
+   ```
+   GET /scrape?context_hash=sha256:onex_effect_node_docs
+   Response: Bob has context, cost = 50 tokens (25KB × 2 tokens/KB)
+   ```
+
+2. **Alice initiates retrieval**
+   ```http
+   GET /context/sha256:onex_effect_node_docs
+   Authorization: Bearer alice_token
+   X-Requester-Peer-ID: alice_peer_123
+   X-Max-Token-Cost: 50
+   ```
+
+3. **Bob validates and serves**
+   - Bob checks Alice's signature ✅ (valid)
+   - Bob checks Alice's balance ✅ (1000 tokens ≥ 50 tokens)
+   - Bob checks transaction_id not duplicate ✅ (new transaction)
+
+4. **Atomic token transaction** (Kafka)
+   ```json
+   // Debit Alice (published to token.transactions.v1)
+   {
+     "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+     "peer_id": "alice_peer_123",
+     "transaction_type": "spent",
+     "amount": -50,
+     "reason": "context_retrieved",
+     "context_hash": "sha256:onex_effect_node_docs",
+     "counterparty_peer_id": "bob_peer_456",
+     "timestamp": "2025-11-09T14:30:00Z"
+   }
+
+   // Credit Bob (published to token.transactions.v1)
+   {
+     "transaction_id": "550e8400-e29b-41d4-a716-446655440001",
+     "peer_id": "bob_peer_456",
+     "transaction_type": "earned",
+     "amount": 50,
+     "reason": "context_served",
+     "context_hash": "sha256:onex_effect_node_docs",
+     "counterparty_peer_id": "alice_peer_123",
+     "timestamp": "2025-11-09T14:30:00Z"
+   }
+   ```
+
+5. **Balance consumer updates** (token.balances.v1 compacted topic)
+   ```json
+   {"peer_id": "alice_peer_123", "balance": 950, "total_spent": 50, ...}
+   {"peer_id": "bob_peer_456", "balance": 800, "total_earned": 50, ...}
+   ```
+
+6. **Context delivered to Alice**
+   ```http
+   200 OK
+   X-Token-Cost: 50
+   X-Context-Size-Bytes: 25600
+   X-Transaction-ID: 550e8400-e29b-41d4-a716-446655440000
+
+   {
+     "hash": "sha256:onex_effect_node_docs",
+     "content": "ONEX Effect Node Implementation Guide...",
+     "metadata": {...}
+   }
+   ```
+
+**Final State**:
+- Alice's balance: 950 tokens (spent 50 on context)
+- Bob's balance: 800 tokens (earned 50 from serving)
+- Transaction recorded in ledger (complete audit trail)
+
+**Key Properties**:
+- ✅ **Atomic**: Both debit and credit succeed or neither (Kafka transaction)
+- ✅ **Idempotent**: Retries with same transaction_id return cached result
+- ✅ **Auditable**: Complete transaction history in Kafka (unlimited retention)
+- ✅ **Fast**: Balance queries from Valkey cache (<10ms)
+
 **Benefits of Kafka Ledger**:
 1. ✅ **Already deployed** - no new infrastructure
 2. ✅ **Distributed** - Redpanda handles replication
@@ -239,6 +362,40 @@ token.balances.v1:
 5. ✅ **Audit trail** - complete transaction history
 6. ✅ **Performance** - Kafka optimized for high-throughput
 7. ✅ **Event sourcing** - natural fit for token ledger
+
+
+### Decision Rationale: Kafka as Token Ledger vs. Blockchain
+
+**Decision**: Use Kafka/Redpanda event sourcing as the token transaction ledger instead of blockchain.
+
+**Rationale**:
+1. **Infrastructure Leverage**: Kafka/Redpanda already deployed in OmniClaude architecture (192.168.86.200:9092). No new infrastructure, no additional operational overhead, no blockchain node management.
+2. **Event Sourcing Native Fit**: Token transactions are naturally event-sourced (append-only, immutable, replayable). Kafka's log-based architecture is purpose-built for this pattern.
+3. **Performance**: Kafka achieves 1M+ transactions/second throughput with <10ms latency. Blockchain alternatives (Ethereum: ~15 tx/sec, Solana: ~50K tx/sec) significantly slower or more complex.
+4. **Operational Simplicity**: Team already familiar with Kafka operations. Blockchain requires specialized knowledge (consensus algorithms, node syncing, gas fees, wallet management).
+5. **Cost**: Kafka infrastructure costs near-zero (already deployed). Blockchain alternatives require transaction fees (Ethereum gas: $0.50-$5/tx) or infrastructure (running validators: $500+/month).
+6. **Auditability**: Kafka provides complete audit trail with unlimited retention (compacted topics for balances). Every transaction logged with full lineage, replay capability for dispute resolution.
+
+**Trade-offs Accepted**:
+- **Centralized trust model**: Kafka is not trustless - requires trust in Kafka cluster operators. Blockchain provides cryptographic trustlessness, but OmniClaude operates in trusted environment (private network, known operators).
+- **No smart contracts**: Cannot implement complex conditional logic on-chain. Mitigation: Application-level logic in token balance consumer (sufficient for Phase 1).
+- **Limited decentralization**: Kafka cluster is distributed but not decentralized (no Byzantine fault tolerance). Phase 2 DHT can add peer-to-peer consensus if needed.
+
+**Alternatives Considered**:
+- **Ethereum blockchain**: Rejected due to high transaction costs ($0.50-$5/tx), slow finality (12-15 seconds), and operational complexity (running geth node, gas price management, wallet security).
+- **Solana blockchain**: Rejected due to operational complexity (validator requirements, staking, network instability history), limited team expertise, and overkill for internal credits.
+- **PostgreSQL ledger table**: Rejected due to lack of event replay capability, no built-in partitioning/sharding, and risk of accidental data modification (DELETE/UPDATE possible).
+- **Custom blockchain**: Rejected as massive over-engineering (6+ months development, consensus protocol complexity, security audit requirements).
+
+**Future Evolution Path**:
+- **Phase 1**: Kafka ledger with centralized token balance consumer (sufficient for 100+ peers)
+- **Phase 2**: Add DHT peer consensus for decentralized balance verification (1000+ peers)
+- **Phase 3**: Optional blockchain integration if token transferability required (external marketplace)
+
+**Status**: Decided, Kafka topics (`token.transactions.v1`, `token.balances.v1`) to be created in P2P Phase 1 (Weeks 9-10).
+
+---
+
 
 **Architecture**:
 ```
@@ -297,6 +454,48 @@ Token Transaction (event) → Kafka topic → Balance Consumer → Compacted bal
   - `new_balance = old_balance * 0.99973` (per day)
   - Decay logged as transaction event for auditability
 - **Why 10%**: High enough to discourage hoarding, low enough to not penalize short-term savers (lose <1% per month)
+
+
+### Decision Rationale: Token Expiration Policy (10% Annual Decay)
+
+**Decision**: Implement 10% annual token decay (~0.027% per day) to encourage token circulation.
+
+**Rationale**:
+1. **Circulation Incentive**: Modest decay encourages users to spend tokens rather than hoard indefinitely. Without expiration, early adopters could accumulate massive balances and stop participating (network stagnation).
+2. **Inflation Control**: Prevents unlimited token supply growth from overwhelming demand. Decay acts as deflationary pressure balancing new token issuance from earning activities.
+3. **Fairness to New Participants**: Reduces advantage of early adopters who accumulated tokens when earning rates were higher. New peers not disadvantaged by legacy wealth concentration.
+4. **Activity-Based System**: Rewards active participants over passive savers. Users who continuously earn and spend are minimally impacted by decay (tokens cycle quickly), while hoarders bear the cost.
+5. **Economic Stability**: Stabilizes token velocity (target: >1 cycle/week). Decay prevents hoarding-induced velocity collapse that could break supply/demand balance.
+
+**Trade-offs Accepted**:
+- **Complexity**: Requires daily background job to calculate and apply decay. Adds computational overhead and audit trail complexity.
+- **User friction**: Some users may dislike "losing" tokens over time, even at modest rate. Education required to communicate rationale.
+- **Implementation cost**: Decay calculation must be audited (logged as transaction event), tested for correctness, and monitored for unintended consequences.
+- **Fairness perception**: Users who earn tokens but cannot immediately spend (e.g., saving for large purchase) penalized by decay. Mitigation: Decay rate low enough (<1% per month) to allow short-term saving.
+
+**Rate Justification (10% Annual)**:
+- **Too high** (>20%/year): Discourages any saving, forces immediate spending, creates stress/anxiety
+- **Too low** (<5%/year): Insufficient to prevent hoarding, minimal impact on velocity
+- **Sweet spot** (10%/year = 0.83%/month): Mild nudge to spend without severe penalty
+  - Save 1000 tokens for 1 month → Lose 8 tokens (0.8% loss, acceptable)
+  - Hoard 1000 tokens for 1 year → Lose 100 tokens (10% loss, significant incentive to spend)
+
+**Alternatives Considered**:
+- **No expiration**: Rejected due to hoarding risk, early adopter advantage, and velocity concerns. Simple but economically unstable.
+- **Rolling expiration** (tokens expire after 12 months): Rejected due to UX complexity (users must track token age) and implementation overhead (per-token expiration timestamps).
+- **Activity-based extension** (earn/spend resets expiration): Considered for Phase 2 if 10% decay proves insufficient. More complex but better aligns with activity goals.
+- **Variable decay** (rate increases with balance): Rejected as overly complex (tax brackets for tokens) and difficult to communicate transparently.
+
+**Monitoring Plan**:
+- **Token velocity**: Target >1.0 cycles/week. If velocity drops <0.5 cycles/week, increase decay to 15%/year.
+- **Hoarding ratio**: Track % peers with balance >1000 tokens and <10 transactions/month. If >50%, increase decay.
+- **User satisfaction**: Survey users on decay perception. If satisfaction <3/5, reduce decay to 5%/year.
+- **Supply/demand balance**: If decay causes supply to shrink <80% of demand, reduce decay rate.
+
+**Status**: Decided, decay policy to be implemented in token balance consumer (P2P Phase 1, Week 10). Decay logged as transaction event for auditability.
+
+---
+
 
 **Token Sustainability Formula**:
 ```
@@ -464,6 +663,58 @@ p2p_context_retrieval_latency_seconds_count 1000
 
 #### 4. Context Serving Protocol
 
+**Token Transaction Flow Visualization**
+
+The following diagram shows a complete token transaction from request to crediting:
+
+```
+Contributor A          Ledger (Kafka)       Contributor B
+     │                      │                      │
+     │ 1. Request Context   │                      │
+     ├─────────────────────>│                      │
+     │    (50KB needed)     │                      │
+     │                      │                      │
+     │                      │ 2. Check Balance     │
+     │                      │ (A: 1000 tokens)     │
+     │                      │ Balance OK ✓         │
+     │                      │                      │
+     │                      │ 3. Notify B          │
+     │                      │ "Serve context to A" │
+     │                      ├─────────────────────>│
+     │                      │                      │
+     │                      │ 4. B Delivers Context│
+     │                      │<─────────────────────┤
+     │                      │    (50KB + sig)      │
+     │                      │                      │
+     │                      │ 5. Atomic Transaction│
+     │                      │ BEGIN TRANSACTION    │
+     │                      │  - Debit A: -100     │
+     │                      │  - Credit B: +100    │
+     │                      │ COMMIT ✓             │
+     │                      │                      │
+     │ 6. Receive Context   │                      │
+     │<─────────────────────┤                      │
+     │    + receipt         │                      │
+     │    (tx_id: uuid)     │                      │
+     │                      │                      │
+     │                      │ 7. Update Balances   │
+     │                      │ A: 1000 → 900        │
+     │                      │ B: 1050 → 1150       │
+     │                      │                      │
+     │                      │ 8. Publish Events    │
+     │                      │ → token.transactions │
+     │                      │ → token.balances     │
+     │                      │ → Valkey cache       │
+     │                      │                      │
+```
+
+**Key Properties**:
+- **Atomic**: Both debit and credit succeed or neither does (Kafka transactions)
+- **Idempotent**: Duplicate requests return same result (transaction_id tracking)
+- **Auditable**: Complete trail in Kafka topic (unlimited retention)
+- **Fast**: Balance queries from Valkey cache (<10ms), not Kafka
+- **Secure**: All transactions signed with peer private key
+
 **HTTP API** (or gRPC for efficiency):
 
 ```http
@@ -564,6 +815,8 @@ X-Context-Size-Bytes: 5120
 
 ## Economic Model Details
 
+> **💰 Reward System Integration**: This economic model extends the [Phase 3 Transformation Reward System](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#initiative-3-transformation-reward-system-section-3) with P2P bandwidth incentives. See [Token Economics Calibration](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#token-economics-tuning-strategy) for broader economic validation strategy.
+
 ### Token Earning (Supply Side)
 
 **How peers earn tokens**:
@@ -601,6 +854,8 @@ X-Context-Size-Bytes: 5120
 **Equilibrium**: Average peer earns ~210 tokens/day, spends ~200 tokens/day → slight surplus encourages participation
 
 ### Token Economics Calibration
+
+> **⚖️ Economics Validation**: See [Token Economics Validation Checklist](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#recommended-sequence-with-compute-tokens) in Phase 3 analysis for complete validation process before implementation.
 
 **Initial parameters** (adjustable dynamically):
 ```yaml
@@ -1113,6 +1368,134 @@ Response:
 - Verifier earns 5 tokens per verification
 - Multiple verifications required for consensus (e.g., 3+ verifiers)
 
+#### Example: Reputation Score Evolution
+
+**Scenario**: New peer "Charlie" joins the network and builds reputation over time
+
+**Week 1: Initial Registration**
+```
+Charlie joins network
+- Initial reputation: 1.0 (neutral starting point)
+- Status: Can earn tokens, but rate-limited for first 30 days
+- Earning limit: 50 tokens/day (25% of normal rate)
+```
+
+**Week 2: First Context Contributions**
+```
+Charlie contributes 5 new context chunks (ONEX patterns)
+- 3 contexts verified VALID by high-rep peers
+  - Verification 1: +0.01 reputation
+  - Verification 2: +0.01 reputation
+  - Verification 3: +0.01 reputation
+- 2 contexts not yet verified (pending)
+
+Charlie's reputation: 1.0 + 0.03 = 1.03
+Status: Building trust, still rate-limited
+```
+
+**Week 4: Serving Context to Peers**
+```
+Charlie serves 50 context retrievals (total 100KB)
+- All 50 successfully delivered (no complaints)
+- No reputation change (serving doesn't directly affect reputation)
+- Earned tokens: 200 tokens (50KB/day × 2 tokens/KB × 2 days online)
+
+Charlie's reputation: 1.03 (stable)
+Earning limit: Now 100 tokens/day (50% of normal, Day 15)
+```
+
+**Week 6: Quality Issue Detected**
+```
+Charlie contributes 1 outdated context (old ONEX docs)
+- 2 verifiers flag as OUTDATED
+  - Impact: -0.02 × sqrt(2) = -0.028 reputation
+
+Charlie's reputation: 1.03 - 0.028 = 1.002
+Status: Minor penalty, still in good standing
+```
+
+**Week 12: Established Contributor**
+```
+Charlie's activity over 12 weeks:
+- Total contexts contributed: 25
+- Valid verifications: 20 contexts (20 × 0.01 = +0.20 reputation)
+- Outdated flagged: 1 context (-0.028 reputation)
+- Invalid flagged: 0 contexts
+- Uptime: 95% (online most days)
+
+Charlie's reputation: 1.0 + 0.20 - 0.028 = 1.172
+Status: Trusted peer, full earning rate (200 tokens/day)
+Can now: Verify other peers' content (requires reputation ≥ 0.7)
+```
+
+**Month 6: High-Reputation Peer**
+```
+Charlie continues contributing high-quality contexts
+- Additional 50 contexts contributed (all verified valid)
+- Reputation gain: +0.50 (50 × 0.01, diminishing returns applied)
+- Total reputation: 1.172 + 0.50 = 1.672
+
+Charlie's status:
+- ✅ Can earn full rate (200+ tokens/day)
+- ✅ Can verify content (reputation ≥ 0.7)
+- ✅ Eligible to vouch for new peers (if reputation reaches 0.9)
+- ✅ Earning bonus: 1.5x tokens (high-rep multiplier at 1.6+)
+```
+
+**Reputation Threshold Summary**:
+
+| Charlie's Reputation | Capabilities | Week Achieved |
+|---------------------|--------------|---------------|
+| 1.0 (start) | Can earn tokens (rate-limited) | Week 1 |
+| 0.7+ | Can verify other peers' content | Week 8 |
+| 0.9+ | Can vouch for new peers, run tracker node | Month 4 |
+| 1.5+ | Earn 1.5x token multiplier | Month 6 |
+
+**Alternative Scenario: Bad Actor "Eve"**
+
+**Week 1: Eve joins and contributes fake content**
+```
+Eve contributes 10 contexts (all low-quality spam)
+- 3 high-rep peers verify all as INVALID
+  - Impact: -0.05 × sqrt(3) × 10 = -0.866 reputation
+
+Eve's reputation: 1.0 - 0.866 = 0.134
+Status: Below earning threshold (0.5), soft banned
+Cannot: Earn tokens, verify content
+Can: Still retrieve context using existing balance
+```
+
+**Week 2: Eve attempts recovery**
+```
+Eve contributes 5 high-quality contexts to recover
+- All 5 verified VALID
+  - Reputation gain: +0.05
+
+Eve's reputation: 0.134 + 0.05 = 0.184
+Status: Still below earning threshold, hard ban imminent
+```
+
+**Week 3: Eve hard banned**
+```
+Eve continues spamming (detected by rate limiting)
+- Spam detection: >10 announcements/minute
+- Automatic hard ban triggered
+
+Eve's reputation: 0.184 → -0.5 (penalty)
+Status: HARD BANNED
+- peer_id blacklisted
+- Cannot register new contexts
+- Cannot retrieve contexts
+- Must create new peer_id to rejoin (loses all tokens)
+```
+
+**Key Insights**:
+1. **New peers start neutral** (1.0) to encourage participation
+2. **Quality contributions** slowly build reputation (+0.01 per verification)
+3. **Bad content** rapidly destroys reputation (-0.05 to -0.20 per invalid content)
+4. **Recovery is possible** for minor infractions (outdated content)
+5. **Serious abuse** leads to permanent ban (reputation < 0.0)
+
 ### Reputation Scoring Mechanism (Complete Specification)
 
 **Reputation Initialization**:
@@ -1592,11 +1975,14 @@ Savings: $97,500 - $31,500 = $66,000/month (68% reduction)
 
 The P2P context-sharing model **enhances** the STF contribution reward system:
 
+> **🔗 Phase 3 Context**: See [Initiative 3: Transformation Reward System](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#initiative-3-transformation-reward-system-section-3) for complete reward system architecture and token ledger implementation.
+
 ### Dual Token Earning Paths
 
 1. **Contribute STFs** (transformation functions)
    - One-time reward: 100-1000 tokens
    - Ongoing: Earn when others use your STF
+   - **Details**: See [Phase 3a STF Rewards](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#phase-3-reward-system-with-compute-tokens-4-6-weeks)
 
 2. **Share context** (P2P bandwidth)
    - Ongoing: Earn 2 tokens/KB served
@@ -1621,6 +2007,8 @@ The P2P context-sharing model **enhances** the STF contribution reward system:
 ### Phase Mapping Diagram
 
 **Cross-Reference: How P2P Phases Map to Broader Initiative Phases**
+
+> **📅 Broader Timeline**: This section maps P2P implementation phases to the broader initiative phases described in [Phased Implementation Recommendation](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#phased-implementation-recommendation). See also [Recommended Sequence](./DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md#recommended-sequence-with-compute-tokens) for complete phase dependencies.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
