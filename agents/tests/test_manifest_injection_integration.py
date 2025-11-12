@@ -17,10 +17,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-# Add agents/lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-
-from agent_execution_mixin import AgentExecutionMixin
+from agents.lib.agent_execution_mixin import AgentExecutionMixin
 
 # Setup logging
 logging.basicConfig(

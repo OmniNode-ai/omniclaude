@@ -591,7 +591,7 @@ class TestPydanticV2:
     """Test Pydantic v2 compliance"""
 
     @pytest.mark.parametrize(
-        ("node_type", "contract_type"),
+        ("v1_pattern", "v2_replacement"),
         [
             (".dict()", ".model_dump("),
             (".json()", ".model_dump_json("),

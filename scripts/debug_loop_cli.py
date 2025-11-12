@@ -66,31 +66,69 @@ except ImportError:
 
 console = Console()
 
+# Import environment validation
+from env_validation import validate_required_env_vars
+
+# Validate environment configuration in production
+validate_required_env_vars(
+    console,
+    {
+        "POSTGRES_HOST": "PostgreSQL database host",
+        "POSTGRES_PORT": "PostgreSQL database port",
+        "POSTGRES_USER": "PostgreSQL database user",
+        "POSTGRES_PASSWORD": "PostgreSQL database password",
+        "POSTGRES_DATABASE": "PostgreSQL database name",
+    },
+)
+
+
+class DatabasePool:
+    """Async context manager for database connection pool lifecycle."""
+
+    def __init__(self):
+        self.pool = None
+
+    async def __aenter__(self):
+        """Create and return database connection pool."""
+        if not POSTGRES_PASSWORD:
+            console.print("[red]Error: POSTGRES_PASSWORD not set in environment[/red]")
+            console.print("Run: source .env")
+            sys.exit(1)
+
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=POSTGRES_HOST,
+                port=POSTGRES_PORT,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                database=POSTGRES_DATABASE,
+                min_size=2,
+                max_size=5,
+            )
+            return self.pool
+        except Exception as e:
+            console.print(f"[red]Database connection failed: {e}[/red]")
+            console.print(
+                f"Connection: {POSTGRES_USER}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DATABASE}"
+            )
+            sys.exit(1)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Close database connection pool."""
+        if self.pool is not None:
+            await self.pool.close()
+
 
 async def get_db_pool():
-    """Create database connection pool."""
-    if not POSTGRES_PASSWORD:
-        console.print("[red]Error: POSTGRES_PASSWORD not set in environment[/red]")
-        console.print("Run: source .env")
-        sys.exit(1)
+    """
+    Create database connection pool context manager.
 
-    try:
-        pool = await asyncpg.create_pool(
-            host=POSTGRES_HOST,
-            port=POSTGRES_PORT,
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD,
-            database=POSTGRES_DATABASE,
-            min_size=2,
-            max_size=5,
-        )
-        return pool
-    except Exception as e:
-        console.print(f"[red]Database connection failed: {e}[/red]")
-        console.print(
-            f"Connection: {POSTGRES_USER}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DATABASE}"
-        )
-        sys.exit(1)
+    Usage:
+        async with get_db_pool() as pool:
+            async with pool.acquire() as conn:
+                # perform database operations
+    """
+    return DatabasePool()
 
 
 def compute_stf_hash(code: str) -> str:
@@ -130,8 +168,7 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
         ) as progress:
             progress.add_task("Querying database...", total=None)
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     # Build query
                     where_parts = [f"quality_score >= {min_quality}"]
@@ -155,8 +192,6 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
                     """
 
                     results = await conn.fetch(query)
-            finally:
-                await pool.close()
 
         if not results:
             console.print("[yellow]No STFs found matching criteria[/yellow]")
@@ -247,8 +282,7 @@ def show_stf(stf_id: str):
         ) as progress:
             progress.add_task("Fetching STF...", total=None)
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     query = """
                     SELECT
@@ -260,8 +294,6 @@ def show_stf(stf_id: str):
                     """
 
                     result = await conn.fetchrow(query, stf_id)
-            finally:
-                await pool.close()
 
         if not result:
             console.print(f"[red]STF not found: {stf_id}[/red]")
@@ -340,8 +372,7 @@ def search(category: Optional[str], min_quality: float, limit: int):
         ) as progress:
             progress.add_task("Searching...", total=None)
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     # Build WHERE clause
                     where_parts = [
@@ -368,8 +399,6 @@ def search(category: Optional[str], min_quality: float, limit: int):
                     """
 
                     results = await conn.fetch(query)
-            finally:
-                await pool.close()
 
         if not results:
             console.print("[yellow]No STFs found matching criteria[/yellow]")
@@ -443,8 +472,7 @@ def store(
 
             progress.update(0, description="Storing STF...")
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     query = """
                     INSERT INTO debug_transform_functions (
@@ -468,8 +496,6 @@ def store(
                         category,
                         quality,
                     )
-            finally:
-                await pool.close()
 
         if result:
             console.print(
@@ -517,8 +543,7 @@ def list_models(provider: Optional[str], active_only: bool):
         ) as progress:
             progress.add_task("Querying models...", total=None)
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     # Build WHERE clause
                     where_parts = []
@@ -541,8 +566,6 @@ def list_models(provider: Optional[str], active_only: bool):
                     """
 
                     results = await conn.fetch(query)
-            finally:
-                await pool.close()
 
         if not results:
             console.print("[yellow]No models found[/yellow]")
@@ -623,8 +646,7 @@ def show_model(provider: str, model_name: str):
         ) as progress:
             progress.add_task("Fetching model...", total=None)
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     query = """
                     SELECT
@@ -641,8 +663,6 @@ def show_model(provider: str, model_name: str):
                     """
 
                     result = await conn.fetchrow(query, provider, model_name)
-            finally:
-                await pool.close()
 
         if not result:
             console.print(f"[red]Model not found: {provider}/{model_name}[/red]")
@@ -770,8 +790,7 @@ def add():
 
             catalog_id = str(uuid4())
 
-            pool = await get_db_pool()
-            try:
+            async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
                     query = """
                     INSERT INTO model_price_catalog (
@@ -804,8 +823,6 @@ def add():
                         requests_per_minute if requests_per_minute > 0 else None,
                         tokens_per_minute if tokens_per_minute > 0 else None,
                     )
-            finally:
-                await pool.close()
 
         if result:
             console.print(

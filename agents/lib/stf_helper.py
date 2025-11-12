@@ -52,7 +52,15 @@ try:
     NODES_AVAILABLE = True
 except ImportError as e:
     # omnibase_core not installed - provide mock implementations for testing
-    logger.warning(f"ONEX nodes not available: {e}. Using mock implementations.")
+    logger.warning(
+        f"ONEX nodes not available: {e}\n"
+        "STFHelper requires omnibase_core for full functionality.\n"
+        "Install with: pip install omnibase_core\n"
+        "Note: omnibase_core provides ONEX node implementations for:\n"
+        "  - NodeDebugSTFStorageEffect: STF storage and retrieval from database\n"
+        "  - NodeSTFHashCompute: Code normalization and deduplication\n"
+        "Using mock implementations for testing only."
+    )
     NODES_AVAILABLE = False
 
     # Import mock protocol only
@@ -64,7 +72,9 @@ except ImportError as e:
 
         def __init__(self, *args, **kwargs):
             raise ImportError(
-                "omnibase_core not installed. Install with: pip install omnibase_core"
+                "NodeDebugSTFStorageEffect requires omnibase_core.\n"
+                "Install with: pip install omnibase_core\n"
+                "This node provides STF storage and retrieval functionality."
             )
 
     class NodeSTFHashCompute:
@@ -72,7 +82,9 @@ except ImportError as e:
 
         def __init__(self, *args, **kwargs):
             raise ImportError(
-                "omnibase_core not installed. Install with: pip install omnibase_core"
+                "NodeSTFHashCompute requires omnibase_core.\n"
+                "Install with: pip install omnibase_core\n"
+                "This node provides code normalization and deduplication."
             )
 
 
