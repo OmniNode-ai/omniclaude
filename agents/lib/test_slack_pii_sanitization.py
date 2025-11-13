@@ -207,7 +207,7 @@ class TestSlackPIISanitization(unittest.TestCase):
         # Create error with file path in stack trace
         try:
             # Generate a stack trace
-            raise RuntimeError('Test error from /home/john/project/file.py')
+            raise RuntimeError("Test error from /home/john/project/file.py")
         except RuntimeError as e:
             error = e
 

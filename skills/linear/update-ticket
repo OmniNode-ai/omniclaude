@@ -1,0 +1,163 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Linear Ticket Updater
+# ============================================================================
+# Updates Linear tickets with status, requirements, or DoD changes
+# ============================================================================
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") ISSUE_ID [OPTIONS]
+
+Update a Linear ticket.
+
+Arguments:
+  ISSUE_ID              Issue identifier (e.g., TEAM-123)
+
+Options:
+  --state STATE         State name or type (e.g., "In Progress", "Done")
+  --title TITLE         New title
+  --description TEXT    New description
+  --assignee USER       New assignee (name, email, or "me")
+  --priority LEVEL      Priority: 0=none, 1=urgent, 2=high, 3=normal, 4=low
+  --add-requirement REQ Add a requirement to the description
+  --add-dod ITEM        Add a DoD item to the description
+  --labels LABELS       Comma-separated labels to set
+
+Examples:
+  # Update status
+  $(basename "$0") TEAM-123 --state "In Progress"
+
+  # Add requirement
+  $(basename "$0") TEAM-123 --add-requirement "Must handle edge case X"
+
+  # Mark DoD item complete (you'll need to update the description manually)
+  $(basename "$0") TEAM-123 --description "...updated description..."
+
+  # Reassign
+  $(basename "$0") TEAM-123 --assignee "me"
+
+Exit codes:
+  0 - Success
+  1 - Invalid arguments
+  2 - Linear API error
+EOF
+    exit 1
+}
+
+# Default values
+ISSUE_ID=""
+STATE=""
+TITLE=""
+DESCRIPTION=""
+ASSIGNEE=""
+PRIORITY=""
+ADD_REQUIREMENT=""
+ADD_DOD=""
+LABELS=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --state)
+            STATE="$2"
+            shift 2
+            ;;
+        --title)
+            TITLE="$2"
+            shift 2
+            ;;
+        --description)
+            DESCRIPTION="$2"
+            shift 2
+            ;;
+        --assignee)
+            ASSIGNEE="$2"
+            shift 2
+            ;;
+        --priority)
+            PRIORITY="$2"
+            shift 2
+            ;;
+        --add-requirement)
+            ADD_REQUIREMENT="$2"
+            shift 2
+            ;;
+        --add-dod)
+            ADD_DOD="$2"
+            shift 2
+            ;;
+        --labels)
+            LABELS="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            if [[ -z "$ISSUE_ID" ]]; then
+                ISSUE_ID="$1"
+            else
+                echo "Error: Unknown argument: $1"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$ISSUE_ID" ]]; then
+    echo "Error: ISSUE_ID is required"
+    usage
+fi
+
+echo "Updating Linear ticket: $ISSUE_ID"
+
+# Build command arguments
+CMD_ARGS=("--id" "$ISSUE_ID")
+
+if [[ -n "$STATE" ]]; then
+    CMD_ARGS+=("--state" "$STATE")
+    echo "  State: $STATE"
+fi
+
+if [[ -n "$TITLE" ]]; then
+    CMD_ARGS+=("--title" "$TITLE")
+    echo "  Title: $TITLE"
+fi
+
+if [[ -n "$DESCRIPTION" ]]; then
+    CMD_ARGS+=("--description" "$DESCRIPTION")
+fi
+
+if [[ -n "$ASSIGNEE" ]]; then
+    CMD_ARGS+=("--assignee" "$ASSIGNEE")
+    echo "  Assignee: $ASSIGNEE"
+fi
+
+if [[ -n "$PRIORITY" ]]; then
+    CMD_ARGS+=("--priority" "$PRIORITY")
+    echo "  Priority: $PRIORITY"
+fi
+
+if [[ -n "$LABELS" ]]; then
+    CMD_ARGS+=("--labels" "$LABELS")
+    echo "  Labels: $LABELS"
+fi
+
+# Note: For adding requirements/DoD, we need to fetch the current description first
+if [[ -n "$ADD_REQUIREMENT" ]] || [[ -n "$ADD_DOD" ]]; then
+    echo ""
+    echo "Note: To add requirements or DoD items, fetch current ticket first:"
+    echo "  1. mcp__linear-server__get_issue --id $ISSUE_ID"
+    echo "  2. Append to description"
+    echo "  3. Update with new description"
+fi
+
+# Output the command that Claude should execute
+echo ""
+echo "Execute this via Linear MCP:"
+echo "mcp__linear-server__update_issue ${CMD_ARGS[@]}"

@@ -34,6 +34,14 @@ try:
 except ImportError:
     ML_AVAILABLE = False
 
+# Quality gate event publisher (optional import)
+try:
+    from .quality_gate_publisher import publish_quality_gate_failed
+
+    QUALITY_GATE_EVENTS_AVAILABLE = True
+except ImportError:
+    QUALITY_GATE_EVENTS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -258,6 +266,15 @@ class QualityValidator:
                 f"valid={is_valid}, score={overall_score:.2f}, "
                 f"violations={len(all_violations)}"
             )
+
+            # Publish quality gate failed event if validation failed
+            if not is_valid and QUALITY_GATE_EVENTS_AVAILABLE:
+                await self._publish_quality_gate_failures(
+                    check_results=check_results,
+                    correlation_id=correlation_id or validation_id,
+                    all_violations=all_violations,
+                    all_suggestions=all_suggestions,
+                )
 
             return result
 
@@ -987,6 +1004,74 @@ class QualityValidator:
             total_score += score * weight
 
         return min(max(total_score, 0.0), 1.0)
+
+    async def _publish_quality_gate_failures(
+        self,
+        check_results: Dict[str, Any],
+        correlation_id: UUID,
+        all_violations: List[str],
+        all_suggestions: List[str],
+    ) -> None:
+        """
+        Publish quality gate failed events for each failed quality gate.
+
+        Publishes separate events for each quality gate that failed its threshold.
+
+        Args:
+            check_results: Dictionary of check results with scores and thresholds
+            correlation_id: Correlation ID for event tracking
+            all_violations: All violations from validation
+            all_suggestions: All suggestions from validation
+        """
+        if not QUALITY_GATE_EVENTS_AVAILABLE:
+            return
+
+        try:
+            # Define thresholds for each quality gate
+            gate_thresholds = {
+                "syntax": 1.0,  # Must be 100% valid
+                "onex_compliance": self.config.onex_compliance_threshold,
+                "contract_conformance": 0.80,  # 80% conformance required
+                "code_quality": 0.70,  # 70% quality required
+            }
+
+            # Publish event for each failed gate
+            for check_name, result in check_results.items():
+                # Get score for this check
+                if check_name == "syntax":
+                    score = 1.0 if result.get("valid", False) else 0.0
+                else:
+                    score = result.get("score", 0.0)
+
+                # Get threshold for this gate
+                threshold = gate_thresholds.get(check_name, 0.80)
+
+                # If gate failed threshold, publish event
+                if score < threshold:
+                    gate_violations = result.get("violations", [])
+                    gate_suggestions = result.get("suggestions", [])
+
+                    await publish_quality_gate_failed(
+                        gate_name=check_name,
+                        correlation_id=str(correlation_id),
+                        score=score,
+                        threshold=threshold,
+                        failure_reasons=(
+                            gate_violations if gate_violations else all_violations
+                        ),
+                        recommendations=(
+                            gate_suggestions if gate_suggestions else all_suggestions
+                        ),
+                    )
+
+                    self.logger.debug(
+                        f"Published quality gate failed event: {check_name} "
+                        f"(score={score:.2f}, threshold={threshold:.2f})"
+                    )
+
+        except Exception as e:
+            # Log error but don't fail validation - event publishing is optional
+            self.logger.warning(f"Failed to publish quality gate failed events: {e}")
 
     # Event-driven integration methods (future phase)
 

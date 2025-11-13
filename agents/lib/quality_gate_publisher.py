@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """
-Transformation Event Publisher - Kafka Integration
+Quality Gate Event Publisher - Kafka Integration
 
-Publishes agent transformation events to Kafka for async logging to PostgreSQL.
+Publishes quality gate validation events to Kafka for async logging to PostgreSQL.
 Follows EVENT_BUS_INTEGRATION_PATTERNS standards with OnexEnvelopeV1 wrapping.
 
 Usage:
-    from agents.lib.transformation_event_publisher import publish_transformation_event
+    from agents.lib.quality_gate_publisher import publish_quality_gate_passed, publish_quality_gate_failed
 
-    await publish_transformation_event(
-        source_agent="polymorphic-agent",
-        target_agent="agent-api-architect",
-        transformation_reason="API design task detected",
+    # Publish quality gate passed event
+    await publish_quality_gate_passed(
+        gate_name="input_validation",
         correlation_id=correlation_id,
-        routing_confidence=0.92,
-        transformation_duration_ms=45
+        score=0.95,
+        threshold=0.80,
+        metrics={"validation_checks": 12, "passed_checks": 12}
+    )
+
+    # Publish quality gate failed event
+    await publish_quality_gate_failed(
+        gate_name="onex_compliance",
+        correlation_id=correlation_id,
+        score=0.65,
+        threshold=0.80,
+        failure_reasons=["Missing type hints", "Bare Any types detected"],
+        recommendations=["Add type hints to all methods", "Replace Any with specific types"]
     )
 
 Features:
@@ -22,9 +32,9 @@ Features:
 - Graceful degradation (logs error but doesn't fail execution)
 - Automatic producer connection management
 - OnexEnvelopeV1 standard event envelope
-- Separate topics per event type (started/completed/failed)
+- Separate topic for failed events
 - Correlation ID tracking for distributed tracing
-- Idempotency support via correlation_id + event_type
+- Partition key policy: correlation_id for workflow coherence
 """
 
 import asyncio
@@ -32,28 +42,26 @@ import atexit
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
 
 
 # Event type enumeration following EVENT_BUS_INTEGRATION_PATTERNS
-class TransformationEventType(str, Enum):
-    """Agent transformation event types with standardized topic routing."""
+class QualityGateEventType(str, Enum):
+    """Quality gate event types with standardized topic routing."""
 
-    STARTED = "omninode.agent.transformation.started.v1"
-    COMPLETED = "omninode.agent.transformation.completed.v1"
-    FAILED = "omninode.agent.transformation.failed.v1"
+    PASSED = "omninode.agent.quality.gate.passed.v1"
+    FAILED = "omninode.agent.quality.gate.failed.v1"
 
     def get_topic_name(self) -> str:
         """
         Get Kafka topic name for this event type.
 
-        Returns topic in format: omninode.agent.transformation.{action}.v1
+        Returns topic in format: omninode.agent.quality.gate.{action}.v1
         Following EVENT_BUS_INTEGRATION_PATTERNS standard.
         """
         return self.value
@@ -75,7 +83,7 @@ def _get_kafka_bootstrap_servers() -> str:
 
 
 def _create_event_envelope(
-    event_type: TransformationEventType,
+    event_type: QualityGateEventType,
     payload: Dict[str, Any],
     correlation_id: str,
     source: str = "omniclaude",
@@ -89,8 +97,8 @@ def _create_event_envelope(
     Following EVENT_BUS_INTEGRATION_PATTERNS standards for consistent event structure.
 
     Args:
-        event_type: Transformation event type enum
-        payload: Event payload containing transformation data
+        event_type: Quality gate event type enum
+        payload: Event payload containing quality gate data
         correlation_id: Correlation ID for distributed tracing
         source: Source service name (default: omniclaude)
         tenant_id: Tenant identifier (default: default)
@@ -109,7 +117,7 @@ def _create_event_envelope(
         "source": source,
         "correlation_id": correlation_id,
         "causation_id": causation_id,
-        "schema_ref": f"registry://{namespace}/agent/transformation_{event_type.name.lower()}/v1",
+        "schema_ref": f"registry://{namespace}/agent/quality_gate_{event_type.name.lower()}/v1",
         "payload": payload,
     }
 
@@ -176,60 +184,28 @@ async def _get_kafka_producer():
             return None
 
 
-async def publish_transformation_event(
-    source_agent: str,
-    target_agent: str,
-    transformation_reason: str,
+async def publish_quality_gate_passed(
+    gate_name: str,
     correlation_id: Optional[str | UUID] = None,
-    session_id: Optional[str | UUID] = None,
-    user_request: Optional[str] = None,
-    routing_confidence: Optional[float] = None,
-    routing_strategy: Optional[str] = None,
-    transformation_duration_ms: Optional[int] = None,
-    initialization_duration_ms: Optional[int] = None,
-    total_execution_duration_ms: Optional[int] = None,
-    success: bool = True,
-    error_message: Optional[str] = None,
-    error_type: Optional[str] = None,
-    quality_score: Optional[float] = None,
-    context_snapshot: Optional[Dict[str, Any]] = None,
-    context_keys: Optional[list[str]] = None,
-    context_size_bytes: Optional[int] = None,
-    agent_definition_id: Optional[str | UUID] = None,
-    parent_event_id: Optional[str | UUID] = None,
-    event_type: TransformationEventType = TransformationEventType.COMPLETED,
+    score: Optional[float] = None,
+    threshold: Optional[float] = None,
+    metrics: Optional[Dict[str, Any]] = None,
     tenant_id: str = "default",
     namespace: str = "omninode",
     causation_id: Optional[str] = None,
 ) -> bool:
     """
-    Publish agent transformation event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
+    Publish quality gate passed event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
 
-    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to separate topics
-    based on event type (started/completed/failed).
+    Events are wrapped in OnexEnvelopeV1 standard envelope and published to:
+    omninode.agent.quality.gate.passed.v1
 
     Args:
-        source_agent: Original agent identity (e.g., "polymorphic-agent")
-        target_agent: Transformed agent identity (e.g., "agent-api-architect")
-        transformation_reason: Why this transformation occurred
+        gate_name: Name of the quality gate that passed (e.g., "input_validation", "type_safety")
         correlation_id: Request correlation ID for distributed tracing
-        session_id: Session ID for grouping related executions
-        user_request: Original user request triggering transformation
-        routing_confidence: Router confidence score (0.0-1.0)
-        routing_strategy: Routing strategy used (e.g., "explicit", "fuzzy_match")
-        transformation_duration_ms: Time to complete transformation
-        initialization_duration_ms: Time to initialize target agent
-        total_execution_duration_ms: Total execution time of target agent
-        success: Whether transformation succeeded
-        error_message: Error details if failed
-        error_type: Error classification
-        quality_score: Output quality score (0.0-1.0)
-        context_snapshot: Full context at transformation time
-        context_keys: Keys of context items passed to target agent
-        context_size_bytes: Size of context for performance tracking
-        agent_definition_id: Link to agent definition used
-        parent_event_id: For nested transformations
-        event_type: Event type enum (STARTED/COMPLETED/FAILED)
+        score: Quality score achieved (0.0-1.0)
+        threshold: Minimum required threshold (0.0-1.0)
+        metrics: Additional metrics dictionary
         tenant_id: Tenant identifier for multi-tenancy
         namespace: Event namespace for routing
         causation_id: Causation ID for event chains
@@ -239,7 +215,7 @@ async def publish_transformation_event(
 
     Note:
         - Uses correlation_id as partition key for workflow coherence
-        - Events are idempotent using correlation_id + event_type
+        - Events are idempotent using correlation_id + gate_name + timestamp
         - Gracefully degrades when Kafka unavailable
     """
     try:
@@ -249,33 +225,14 @@ async def publish_transformation_event(
         else:
             correlation_id = str(correlation_id)
 
-        if session_id is not None:
-            session_id = str(session_id)
-
         # Build event payload (everything except envelope metadata)
         payload = {
-            "source_agent": source_agent,
-            "target_agent": target_agent,
-            "transformation_reason": transformation_reason,
-            "session_id": session_id,
-            "user_request": user_request,
-            "routing_confidence": routing_confidence,
-            "routing_strategy": routing_strategy,
-            "transformation_duration_ms": transformation_duration_ms,
-            "initialization_duration_ms": initialization_duration_ms,
-            "total_execution_duration_ms": total_execution_duration_ms,
-            "success": success,
-            "error_message": error_message,
-            "error_type": error_type,
-            "quality_score": quality_score,
-            "context_snapshot": context_snapshot,
-            "context_keys": context_keys,
-            "context_size_bytes": context_size_bytes,
-            "agent_definition_id": (
-                str(agent_definition_id) if agent_definition_id else None
-            ),
-            "parent_event_id": str(parent_event_id) if parent_event_id else None,
-            "started_at": datetime.now(timezone.utc).isoformat(),
+            "gate_name": gate_name,
+            "correlation_id": correlation_id,
+            "score": score,
+            "threshold": threshold,
+            "passed_at": datetime.now(timezone.utc).isoformat(),  # RFC3339
+            "metrics": metrics or {},
         }
 
         # Remove None values to keep payload compact
@@ -283,7 +240,7 @@ async def publish_transformation_event(
 
         # Wrap payload in OnexEnvelopeV1 standard envelope
         envelope = _create_event_envelope(
-            event_type=event_type,
+            event_type=QualityGateEventType.PASSED,
             payload=payload,
             correlation_id=correlation_id,
             source="omniclaude",
@@ -296,12 +253,12 @@ async def publish_transformation_event(
         producer = await _get_kafka_producer()
         if producer is None:
             logger.warning(
-                "Kafka producer unavailable, transformation event not published"
+                "Kafka producer unavailable, quality gate passed event not published"
             )
             return False
 
-        # Get topic name from event type enum (separate topics per event type)
-        topic = event_type.get_topic_name()
+        # Get topic name from event type enum
+        topic = QualityGateEventType.PASSED.get_topic_name()
 
         # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id.encode("utf-8")
@@ -310,97 +267,120 @@ async def publish_transformation_event(
         await producer.send_and_wait(topic, value=envelope, key=partition_key)
 
         logger.debug(
-            f"Published transformation event (OnexEnvelopeV1): {event_type.value} | "
-            f"{source_agent} → {target_agent} | "
-            f"correlation_id={correlation_id} | "
-            f"topic={topic}"
+            f"Published quality gate passed event (OnexEnvelopeV1): "
+            f"gate={gate_name} | score={score} | threshold={threshold} | "
+            f"correlation_id={correlation_id} | topic={topic}"
         )
         return True
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution
         logger.error(
-            f"Failed to publish transformation event: {event_type.value if isinstance(event_type, TransformationEventType) else event_type}",
+            f"Failed to publish quality gate passed event: {gate_name}",
             exc_info=True,
         )
         return False
 
 
-async def publish_transformation_start(
-    source_agent: str,
-    target_agent: str,
-    transformation_reason: str,
-    correlation_id: Optional[str | UUID] = None,
-    **kwargs,
+async def publish_quality_gate_failed(
+    gate_name: str,
+    correlation_id: Optional[str | UUID],
+    score: float,
+    threshold: float,
+    failure_reasons: List[str],
+    recommendations: Optional[List[str]] = None,
+    tenant_id: str = "default",
+    namespace: str = "omninode",
+    causation_id: Optional[str] = None,
 ) -> bool:
     """
-    Publish transformation start event.
+    Publish quality gate failed event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
 
-    Convenience method for publishing at the start of transformation.
-    Publishes to topic: omninode.agent.transformation.started.v1
+    Events are wrapped in OnexEnvelopeV1 standard envelope and published to:
+    omninode.agent.quality.gate.failed.v1
+
+    Args:
+        gate_name: Name of the quality gate that failed (e.g., "onex_compliance", "type_safety")
+        correlation_id: Request correlation ID for distributed tracing
+        score: Quality score achieved (0.0-1.0)
+        threshold: Minimum required threshold (0.0-1.0)
+        failure_reasons: List of reasons why the gate failed
+        recommendations: List of recommendations to fix failures
+        tenant_id: Tenant identifier for multi-tenancy
+        namespace: Event namespace for routing
+        causation_id: Causation ID for event chains
+
+    Returns:
+        bool: True if published successfully, False otherwise
+
+    Note:
+        - Uses correlation_id as partition key for workflow coherence
+        - Events are idempotent using correlation_id + gate_name + timestamp
+        - Gracefully degrades when Kafka unavailable
     """
-    return await publish_transformation_event(
-        source_agent=source_agent,
-        target_agent=target_agent,
-        transformation_reason=transformation_reason,
-        correlation_id=correlation_id,
-        event_type=TransformationEventType.STARTED,
-        **kwargs,
-    )
+    try:
+        # Generate correlation_id if not provided
+        if correlation_id is None:
+            correlation_id = str(uuid4())
+        else:
+            correlation_id = str(correlation_id)
 
+        # Build event payload (everything except envelope metadata)
+        payload = {
+            "gate_name": gate_name,
+            "correlation_id": correlation_id,
+            "score": score,
+            "threshold": threshold,
+            "failed_at": datetime.now(timezone.utc).isoformat(),  # RFC3339
+            "failure_reasons": failure_reasons,
+            "recommendations": recommendations or [],
+        }
 
-async def publish_transformation_complete(
-    source_agent: str,
-    target_agent: str,
-    transformation_reason: str,
-    correlation_id: Optional[str | UUID] = None,
-    transformation_duration_ms: Optional[int] = None,
-    **kwargs,
-) -> bool:
-    """
-    Publish transformation complete event.
+        # Remove None values to keep payload compact
+        payload = {k: v for k, v in payload.items() if v is not None}
 
-    Convenience method for publishing after successful transformation.
-    Publishes to topic: omninode.agent.transformation.completed.v1
-    """
-    return await publish_transformation_event(
-        source_agent=source_agent,
-        target_agent=target_agent,
-        transformation_reason=transformation_reason,
-        correlation_id=correlation_id,
-        transformation_duration_ms=transformation_duration_ms,
-        success=True,
-        event_type=TransformationEventType.COMPLETED,
-        **kwargs,
-    )
+        # Wrap payload in OnexEnvelopeV1 standard envelope
+        envelope = _create_event_envelope(
+            event_type=QualityGateEventType.FAILED,
+            payload=payload,
+            correlation_id=correlation_id,
+            source="omniclaude",
+            tenant_id=tenant_id,
+            namespace=namespace,
+            causation_id=causation_id,
+        )
 
+        # Get producer
+        producer = await _get_kafka_producer()
+        if producer is None:
+            logger.warning(
+                "Kafka producer unavailable, quality gate failed event not published"
+            )
+            return False
 
-async def publish_transformation_failed(
-    source_agent: str,
-    target_agent: str,
-    transformation_reason: str,
-    error_message: str,
-    correlation_id: Optional[str | UUID] = None,
-    error_type: Optional[str] = None,
-    **kwargs,
-) -> bool:
-    """
-    Publish transformation failed event.
+        # Get topic name from event type enum
+        topic = QualityGateEventType.FAILED.get_topic_name()
 
-    Convenience method for publishing after transformation failure.
-    Publishes to topic: omninode.agent.transformation.failed.v1
-    """
-    return await publish_transformation_event(
-        source_agent=source_agent,
-        target_agent=target_agent,
-        transformation_reason=transformation_reason,
-        correlation_id=correlation_id,
-        error_message=error_message,
-        error_type=error_type,
-        success=False,
-        event_type=TransformationEventType.FAILED,
-        **kwargs,
-    )
+        # Use correlation_id as partition key for workflow coherence
+        partition_key = correlation_id.encode("utf-8")
+
+        # Publish to Kafka
+        await producer.send_and_wait(topic, value=envelope, key=partition_key)
+
+        logger.debug(
+            f"Published quality gate failed event (OnexEnvelopeV1): "
+            f"gate={gate_name} | score={score:.2f} | threshold={threshold:.2f} | "
+            f"correlation_id={correlation_id} | topic={topic}"
+        )
+        return True
+
+    except Exception as e:
+        # Log error but don't fail - observability shouldn't break execution
+        logger.error(
+            f"Failed to publish quality gate failed event: {gate_name}",
+            exc_info=True,
+        )
+        return False
 
 
 async def close_producer():
@@ -484,12 +464,13 @@ def _cleanup_producer_sync():
 atexit.register(_cleanup_producer_sync)
 
 
-# Synchronous wrapper for backward compatibility
-def publish_transformation_event_sync(
-    source_agent: str, target_agent: str, transformation_reason: str, **kwargs
+# Synchronous wrappers for backward compatibility
+def publish_quality_gate_passed_sync(
+    gate_name: str,
+    **kwargs,
 ) -> bool:
     """
-    Synchronous wrapper for publish_transformation_event.
+    Synchronous wrapper for publish_quality_gate_passed.
 
     Creates new event loop if needed. Use async version when possible.
     """
@@ -500,17 +481,43 @@ def publish_transformation_event_sync(
         asyncio.set_event_loop(loop)
 
     return loop.run_until_complete(
-        publish_transformation_event(
-            source_agent=source_agent,
-            target_agent=target_agent,
-            transformation_reason=transformation_reason,
+        publish_quality_gate_passed(gate_name=gate_name, **kwargs)
+    )
+
+
+def publish_quality_gate_failed_sync(
+    gate_name: str,
+    correlation_id: Optional[str | UUID],
+    score: float,
+    threshold: float,
+    failure_reasons: List[str],
+    **kwargs,
+) -> bool:
+    """
+    Synchronous wrapper for publish_quality_gate_failed.
+
+    Creates new event loop if needed. Use async version when possible.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(
+        publish_quality_gate_failed(
+            gate_name=gate_name,
+            correlation_id=correlation_id,
+            score=score,
+            threshold=threshold,
+            failure_reasons=failure_reasons,
             **kwargs,
         )
     )
 
 
 if __name__ == "__main__":
-    # Test transformation event publishing
+    # Test quality gate event publishing
     async def test():
         logger.setLevel(logging.DEBUG)
         handler = logging.StreamHandler()
@@ -519,45 +526,60 @@ if __name__ == "__main__":
 
         correlation_id = str(uuid4())
 
-        # Test transformation start
-        print("Testing transformation start event...")
-        success_start = await publish_transformation_start(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
+        # Test quality gate passed event
+        print("Testing quality gate passed event...")
+        success_passed = await publish_quality_gate_passed(
+            gate_name="input_validation",
             correlation_id=correlation_id,
-            routing_confidence=0.92,
-            routing_strategy="fuzzy_match",
-            user_request="Design a REST API for user management",
+            score=0.95,
+            threshold=0.80,
+            metrics={
+                "validation_checks": 12,
+                "passed_checks": 12,
+                "execution_time_ms": 45,
+            },
         )
-        print(f"Start event published: {success_start}")
+        print(f"Quality gate passed event published: {success_passed}")
 
-        # Test transformation complete
-        print("\nTesting transformation complete event...")
-        success_complete = await publish_transformation_complete(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
-            correlation_id=correlation_id,
-            routing_confidence=0.92,
-            routing_strategy="fuzzy_match",
-            transformation_duration_ms=45,
-            user_request="Design a REST API for user management",
+        # Test quality gate failed event
+        print("\nTesting quality gate failed event...")
+        correlation_id_2 = str(uuid4())
+        success_failed = await publish_quality_gate_failed(
+            gate_name="onex_compliance",
+            correlation_id=correlation_id_2,
+            score=0.65,
+            threshold=0.80,
+            failure_reasons=[
+                "Missing type hints on 3 methods",
+                "Found 2 instances of bare 'Any' type",
+                "Invalid node class name 'NodeTestEffect'",
+            ],
+            recommendations=[
+                "Add type hints to all method signatures",
+                "Replace bare 'Any' with Dict[str, Any] or specific types",
+                "Ensure node class follows pattern: Node<Domain><Service><Type>",
+            ],
         )
-        print(f"Complete event published: {success_complete}")
+        print(f"Quality gate failed event published: {success_failed}")
 
-        # Test transformation failed
-        print("\nTesting transformation failed event...")
-        correlation_id_failed = str(uuid4())
-        success_failed = await publish_transformation_failed(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
-            error_message="Agent initialization failed",
-            error_type="InitializationError",
-            correlation_id=correlation_id_failed,
+        # Test another quality gate failure
+        print("\nTesting type safety gate failure...")
+        correlation_id_3 = str(uuid4())
+        success_failed_2 = await publish_quality_gate_failed(
+            gate_name="type_safety",
+            correlation_id=correlation_id_3,
+            score=0.45,
+            threshold=0.70,
+            failure_reasons=[
+                "Methods missing return type annotations",
+                "Incomplete generic types detected (Dict, List without type parameters)",
+            ],
+            recommendations=[
+                "Add return type annotations to all methods",
+                "Specify type parameters for all generic types",
+            ],
         )
-        print(f"Failed event published: {success_failed}")
+        print(f"Type safety gate failed event published: {success_failed_2}")
 
         # Close producer
         print("\nClosing producer...")
@@ -565,9 +587,9 @@ if __name__ == "__main__":
 
         print("\n" + "=" * 60)
         print("Test Summary:")
-        print(f"  Start Event:    {'✅' if success_start else '❌'}")
-        print(f"  Complete Event: {'✅' if success_complete else '❌'}")
-        print(f"  Failed Event:   {'✅' if success_failed else '❌'}")
+        print(f"  Passed Event:                {'✅' if success_passed else '❌'}")
+        print(f"  ONEX Compliance Failed Event: {'✅' if success_failed else '❌'}")
+        print(f"  Type Safety Failed Event:     {'✅' if success_failed_2 else '❌'}")
         print("=" * 60)
 
     asyncio.run(test())

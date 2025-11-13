@@ -84,7 +84,9 @@ async def example_agent_with_action_logging():
     start_time = time.time()
 
     # Simulate file writing with secure temp file
-    temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', prefix='test_output_')
+    temp_file = tempfile.NamedTemporaryFile(
+        mode="w", delete=False, suffix=".txt", prefix="test_output_"
+    )
     temp_file_path = temp_file.name
     temp_file.close()
 
@@ -139,9 +141,13 @@ async def example_agent_with_action_logging():
     # Example 4: Log bash command execution
     logger.info("Example 4: Bash command execution")
     # Use secure temp directory for bash command examples
-    temp_dir = tempfile.mkdtemp(prefix='bash_test_')
+    temp_dir = tempfile.mkdtemp(prefix="bash_test_")
     async with action_logger.tool_call(
-        "Bash", tool_parameters={"command": f"ls -la {temp_dir}", "working_directory": temp_dir}
+        "Bash",
+        tool_parameters={
+            "command": f"ls -la {temp_dir}",
+            "working_directory": temp_dir,
+        },
     ) as action:
         # Simulate bash execution
         await asyncio.sleep(0.05)  # 50ms
@@ -191,7 +197,7 @@ async def example_agent_with_action_logging():
     # Example 7: Log multiple tool calls in sequence
     logger.info("Example 7: Multiple tool calls in sequence")
     # Use secure temp directory for glob pattern examples
-    glob_temp_dir = tempfile.mkdtemp(prefix='glob_test_')
+    glob_temp_dir = tempfile.mkdtemp(prefix="glob_test_")
     for i in range(3):
         async with action_logger.tool_call(
             "Glob", tool_parameters={"pattern": f"**/*.py", "path": glob_temp_dir}

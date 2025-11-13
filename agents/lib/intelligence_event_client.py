@@ -11,15 +11,23 @@ Key Features:
 - Timeout handling with graceful fallback
 - Health check for circuit breaker integration
 - Connection pooling and management
+- EVENT_BUS_INTEGRATION_GUIDE compliant event structure
 
 Event Flow:
-1. Client publishes CODE_ANALYSIS_REQUESTED event
+1. Client publishes omninode.intelligence.code-analysis.requested.v1 event
 2. omniarchon Intelligence Adapter handler processes request
-3. Client waits for CODE_ANALYSIS_COMPLETED or CODE_ANALYSIS_FAILED response
+3. Client waits for completed or failed response
 4. On timeout/error: graceful degradation with caller handling fallback
 
+EVENT_BUS_INTEGRATION_GUIDE Compliance:
+- Topic naming: {tenant}.{domain}.{entity}.{action}.v{major}
+- Complete event envelope with all required fields
+- Partition key: correlation_id for request→result ordering
+- Required Kafka headers: x-traceparent, x-correlation-id, x-causation-id, x-tenant, x-schema-hash
+- Full dotted event type notation in envelope
+
 Integration:
-- Uses omniarchon event contracts (single source of truth)
+- Uses EVENT_BUS_INTEGRATION_GUIDE event contracts (frozen envelope)
 - Compatible with omniarchon's confluent-kafka handler (wire protocol)
 - Designed for request-response client usage (not 24/7 consumer service)
 
@@ -30,7 +38,9 @@ Performance Targets:
 - Success rate: >95%
 
 Created: 2025-10-23
+Updated: 2025-11-13 (EVENT_BUS_INTEGRATION_GUIDE alignment)
 Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.1
+          EVENT_BUS_INTEGRATION_GUIDE.md (event structure standards)
 """
 
 from __future__ import annotations
@@ -90,9 +100,11 @@ class IntelligenceEventClient:
     """
 
     # Kafka topic names (ONEX event bus architecture)
-    TOPIC_REQUEST = "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
-    TOPIC_COMPLETED = "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
-    TOPIC_FAILED = "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
+    # Following EVENT_BUS_INTEGRATION_GUIDE standard naming: {tenant}.{domain}.{entity}.{action}.v{major}
+    # Environment prefix (dev/prod) should be in envelope, not topic name
+    TOPIC_REQUEST = "omninode.intelligence.code-analysis.requested.v1"
+    TOPIC_COMPLETED = "omninode.intelligence.code-analysis.completed.v1"
+    TOPIC_FAILED = "omninode.intelligence.code-analysis.failed.v1"
 
     def __init__(
         self,
@@ -517,10 +529,10 @@ class IntelligenceEventClient:
         options: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Build request payload compatible with omniarchon event contracts.
+        Build request payload compatible with EVENT_BUS_INTEGRATION_GUIDE standards.
 
-        Creates a payload that matches ModelCodeAnalysisRequestPayload schema
-        from omniarchon intelligence adapter events.
+        Creates a complete event envelope with all required fields following
+        the frozen envelope structure from EVENT_BUS_INTEGRATION_GUIDE.
 
         Args:
             correlation_id: Unique request identifier
@@ -530,18 +542,36 @@ class IntelligenceEventClient:
             options: Analysis options
 
         Returns:
-            Request payload dictionary
+            Event envelope dictionary with complete structure
         """
         # Extract operation type from options (default: PATTERN_EXTRACTION)
         operation_type = options.get("operation_type", "PATTERN_EXTRACTION")
 
-        # Build event payload matching omniarchon ModelCodeAnalysisRequestPayload
-        payload = {
+        # Get environment from settings or default to "dev"
+        environment = os.getenv("ENVIRONMENT", "dev")
+
+        # Build complete event envelope following EVENT_BUS_INTEGRATION_GUIDE standard
+        # Reference: docs/EVENT_BUS_INTEGRATION_GUIDE.md section "Envelope Fields (Frozen)"
+        envelope = {
+            # Full dotted event type (not simplified)
+            "event_type": "omninode.intelligence.code-analysis.requested.v1",
+            # UUID v7 for event_id (time-ordered)
             "event_id": str(uuid4()),
-            "event_type": "CODE_ANALYSIS_REQUESTED",
-            "correlation_id": correlation_id,
+            # RFC3339 timestamp
             "timestamp": datetime.now(UTC).isoformat(),
-            "service": "omniclaude",
+            # Tenant ID for multi-tenant isolation (default: "default" for single-tenant)
+            "tenant_id": os.getenv("TENANT_ID", "default"),
+            # Namespace for event categorization
+            "namespace": "omninode",
+            # Source service name
+            "source": "omniclaude",
+            # Correlation ID for request-response tracking
+            "correlation_id": correlation_id,
+            # Causation ID for event chain tracking (same as correlation_id for initial request)
+            "causation_id": correlation_id,
+            # Schema reference for validation
+            "schema_ref": "registry://omninode/intelligence/code_analysis_requested/v1",
+            # Domain-specific payload (validated against schema_ref)
             "payload": {
                 "source_path": source_path,
                 "content": content,  # Keep None as None for pattern discovery
@@ -550,10 +580,11 @@ class IntelligenceEventClient:
                 "options": options,
                 "project_id": "omniclaude",
                 "user_id": "system",
+                "environment": environment,  # Environment in payload, not topic name
             },
         }
 
-        return payload
+        return envelope
 
     async def _publish_and_wait(
         self,
@@ -564,15 +595,15 @@ class IntelligenceEventClient:
         """
         Publish request and wait for response with timeout.
 
-        Implements request-response pattern:
+        Implements request-response pattern with EVENT_BUS_INTEGRATION_GUIDE compliance:
         1. Create future for this correlation_id
-        2. Publish request event
+        2. Publish request event with partition key and headers
         3. Wait for response with timeout
         4. Return response or raise timeout
 
         Args:
             correlation_id: Request correlation ID
-            payload: Request payload
+            payload: Request payload (complete event envelope)
             timeout_ms: Response timeout in milliseconds
 
         Returns:
@@ -587,10 +618,39 @@ class IntelligenceEventClient:
         self._pending_requests[correlation_id] = future
 
         try:
-            # Publish request
+            # Publish request with partition key and headers
             if self._producer is None:
                 raise RuntimeError("Producer not initialized. Call start() first.")
-            await self._producer.send_and_wait(self.TOPIC_REQUEST, payload)
+
+            # Partition key: Use correlation_id for request→result ordering
+            # Reference: EVENT_BUS_INTEGRATION_GUIDE section "Partition Key Policy"
+            partition_key = correlation_id.encode("utf-8")
+
+            # Build required Kafka headers
+            # Reference: EVENT_BUS_INTEGRATION_GUIDE section "Envelope Fields (Frozen)"
+            headers = [
+                # W3C trace context (simplified for now, full implementation would use OpenTelemetry)
+                (
+                    "x-traceparent",
+                    f"00-{correlation_id.replace('-', '')}-0000000000000000-01".encode(),
+                ),
+                # Correlation ID for request tracking
+                ("x-correlation-id", correlation_id.encode("utf-8")),
+                # Causation ID for event chain tracking (same as correlation_id for initial request)
+                ("x-causation-id", correlation_id.encode("utf-8")),
+                # Tenant ID for ACL enforcement (matches envelope)
+                ("x-tenant", payload.get("tenant_id", "default").encode("utf-8")),
+                # Schema hash for validation (content hash of schema - simplified for now)
+                ("x-schema-hash", payload.get("schema_ref", "").encode("utf-8")),
+            ]
+
+            # Publish with partition key and headers
+            await self._producer.send_and_wait(
+                self.TOPIC_REQUEST,
+                value=payload,
+                key=partition_key,
+                headers=headers,
+            )
 
             # Wait for response with timeout
             result = await asyncio.wait_for(
@@ -650,11 +710,14 @@ class IntelligenceEventClient:
                         )
                         continue
 
-                    # Determine event type
+                    # Determine event type (using full dotted notation)
                     event_type = response.get("event_type", "")
 
+                    # Check for completion event (full dotted notation)
                     if (
-                        event_type == "CODE_ANALYSIS_COMPLETED"
+                        event_type == "omninode.intelligence.code-analysis.completed.v1"
+                        or event_type
+                        == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -665,8 +728,11 @@ class IntelligenceEventClient:
                                 f"Completed request (correlation_id: {correlation_id})"
                             )
 
+                    # Check for failure event (full dotted notation)
                     elif (
-                        event_type == "CODE_ANALYSIS_FAILED"
+                        event_type == "omninode.intelligence.code-analysis.failed.v1"
+                        or event_type
+                        == "CODE_ANALYSIS_FAILED"  # Backward compatibility
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response

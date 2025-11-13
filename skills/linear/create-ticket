@@ -1,0 +1,236 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Linear Ticket Creator with Requirements and Definition of Done
+# ============================================================================
+# Creates Linear tickets with structured requirements and DoD criteria
+# ============================================================================
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") TITLE [OPTIONS]
+
+Create a Linear ticket with requirements and definition of done.
+
+Arguments:
+  TITLE                 Ticket title (required)
+
+Options:
+  --team TEAM           Team name or ID (required)
+  --description TEXT    Ticket description
+  --priority LEVEL      Priority: critical, major, minor, nit (default: minor)
+  --requirements LIST   Pipe-separated requirements (e.g., "Req1|Req2|Req3")
+  --dod LIST            Pipe-separated DoD items (e.g., "Test1|Test2|Test3")
+  --assignee USER       Assignee (name, email, or "me")
+  --labels LABELS       Comma-separated labels
+  --project PROJECT     Project name or ID
+  --parent ISSUE_ID     Parent issue ID (for sub-tasks)
+
+Examples:
+  # Simple ticket
+  $(basename "$0") "Implement DLQ for agent events" --team "Engineering"
+
+  # Full ticket with requirements and DoD
+  $(basename "$0") "Implement DLQ for agent events" \\
+    --team "Engineering" \\
+    --priority "high" \\
+    --requirements "Must handle retry logic|Must sanitize secrets|Must log to DB" \\
+    --dod "Unit tests passing|Integration tests passing|Docs updated" \\
+    --assignee "me"
+
+  # Sub-task
+  $(basename "$0") "Write unit tests for DLQ" \\
+    --team "Engineering" \\
+    --parent "TEAM-123" \\
+    --priority "major"
+
+Exit codes:
+  0 - Success
+  1 - Invalid arguments
+  2 - Linear API error
+EOF
+    exit 1
+}
+
+# Default values
+TEAM=""
+DESCRIPTION=""
+PRIORITY="minor"
+REQUIREMENTS=""
+DOD=""
+ASSIGNEE=""
+LABELS=""
+PROJECT=""
+PARENT=""
+
+# Parse arguments
+TITLE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --team)
+            TEAM="$2"
+            shift 2
+            ;;
+        --description)
+            DESCRIPTION="$2"
+            shift 2
+            ;;
+        --priority)
+            PRIORITY="$2"
+            shift 2
+            ;;
+        --requirements)
+            REQUIREMENTS="$2"
+            shift 2
+            ;;
+        --dod)
+            DOD="$2"
+            shift 2
+            ;;
+        --assignee)
+            ASSIGNEE="$2"
+            shift 2
+            ;;
+        --labels)
+            LABELS="$2"
+            shift 2
+            ;;
+        --project)
+            PROJECT="$2"
+            shift 2
+            ;;
+        --parent)
+            PARENT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            if [[ -z "$TITLE" ]]; then
+                TITLE="$1"
+            else
+                echo "Error: Unknown argument: $1"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$TITLE" ]]; then
+    echo "Error: TITLE is required"
+    usage
+fi
+
+if [[ -z "$TEAM" ]]; then
+    echo "Error: --team is required"
+    usage
+fi
+
+# Build description with requirements and DoD
+build_description() {
+    local desc="$DESCRIPTION"
+
+    # Add requirements section
+    if [[ -n "$REQUIREMENTS" ]]; then
+        desc="${desc}\n\n## Requirements\n\n"
+        IFS='|' read -ra REQ_ARRAY <<< "$REQUIREMENTS"
+        for req in "${REQ_ARRAY[@]}"; do
+            desc="${desc}- $req\n"
+        done
+    fi
+
+    # Add definition of done section
+    if [[ -n "$DOD" ]]; then
+        desc="${desc}\n\n## Definition of Done\n\n"
+        IFS='|' read -ra DOD_ARRAY <<< "$DOD"
+        for dod_item in "${DOD_ARRAY[@]}"; do
+            desc="${desc}- [ ] $dod_item\n"
+        done
+    fi
+
+    echo -e "$desc"
+}
+
+# Build labels
+build_labels() {
+    local label_array=()
+
+    # Add custom labels
+    if [[ -n "$LABELS" ]]; then
+        IFS=',' read -ra CUSTOM_LABELS <<< "$LABELS"
+        label_array+=("${CUSTOM_LABELS[@]}")
+    fi
+
+    # Add standard labels
+    if [[ -n "$REQUIREMENTS" ]]; then
+        label_array+=("has-requirements")
+    fi
+
+    if [[ -n "$DOD" ]]; then
+        label_array+=("has-dod")
+    fi
+
+    label_array+=("priority:$PRIORITY")
+
+    # Join with commas
+    local IFS=','
+    echo "${label_array[*]}"
+}
+
+# Create ticket
+FULL_DESCRIPTION=$(build_description)
+ALL_LABELS=$(build_labels)
+
+echo "Creating Linear ticket..."
+echo "Title: $TITLE"
+echo "Team: $TEAM"
+echo "Priority: $PRIORITY"
+
+# Build command arguments
+CMD_ARGS=(
+    "--title" "$TITLE"
+    "--team" "$TEAM"
+    "--description" "$FULL_DESCRIPTION"
+)
+
+if [[ -n "$ASSIGNEE" ]]; then
+    CMD_ARGS+=("--assignee" "$ASSIGNEE")
+fi
+
+if [[ -n "$ALL_LABELS" ]]; then
+    CMD_ARGS+=("--labels" "$ALL_LABELS")
+fi
+
+if [[ -n "$PROJECT" ]]; then
+    CMD_ARGS+=("--project" "$PROJECT")
+fi
+
+if [[ -n "$PARENT" ]]; then
+    CMD_ARGS+=("--parent" "$PARENT")
+fi
+
+# Map priority to Linear priority number
+case "$PRIORITY" in
+    critical)
+        CMD_ARGS+=("--priority" "1")
+        ;;
+    major)
+        CMD_ARGS+=("--priority" "2")
+        ;;
+    minor)
+        CMD_ARGS+=("--priority" "3")
+        ;;
+    nit)
+        CMD_ARGS+=("--priority" "4")
+        ;;
+esac
+
+# Note: This script should be called from Claude Code which will use the MCP tool
+# Output the command that Claude should execute
+echo ""
+echo "Execute this via Linear MCP:"
+echo "mcp__linear-server__create_issue ${CMD_ARGS[@]}"

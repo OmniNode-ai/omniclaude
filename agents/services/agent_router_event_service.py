@@ -84,6 +84,7 @@ sys.path.insert(0, str(lib_path))
 try:
     from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
+    from confidence_scoring_publisher import publish_confidence_scored
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
@@ -897,10 +898,10 @@ class AgentRouterEventService:
             # Primary recommendation
             primary = recommendations[0]
 
-            # Build response envelope
+            # Build response envelope (using EVENT_BUS_INTEGRATION_GUIDE standard format)
             response_envelope = {
                 "correlation_id": correlation_id,
-                "event_type": "AGENT_ROUTING_COMPLETED",
+                "event_type": "omninode.agent.routing.completed.v1",
                 "payload": {
                     "recommendations": [
                         {
@@ -931,6 +932,31 @@ class AgentRouterEventService:
             if self._producer:
                 await self._producer.send_and_wait(
                     self.TOPIC_COMPLETED, response_envelope
+                )
+
+            # Publish confidence scoring event (non-blocking)
+            try:
+                asyncio.create_task(
+                    publish_confidence_scored(
+                        agent_name=primary.agent_name,
+                        confidence_score=primary.confidence.total,
+                        routing_strategy="enhanced_fuzzy_matching",  # TODO: Get from router
+                        correlation_id=correlation_id,
+                        factors={
+                            "trigger_score": primary.confidence.trigger_score,
+                            "context_score": primary.confidence.context_score,
+                            "capability_score": primary.confidence.capability_score,
+                            "historical_score": primary.confidence.historical_score,
+                        },
+                    )
+                )
+                self.logger.debug(
+                    f"Confidence scoring event queued for async publishing (agent: {primary.agent_name}, score: {primary.confidence.total:.2%})"
+                )
+            except Exception as e:
+                # Non-blocking - log error but don't fail routing
+                self.logger.warning(
+                    f"Failed to queue confidence scoring event: {e}", exc_info=True
                 )
 
             # Log to database (non-blocking - fire-and-forget)
@@ -1047,11 +1073,11 @@ class AgentRouterEventService:
                         f"Failed to send Slack notification: {notify_error}"
                     )
 
-            # Publish failed event
+            # Publish failed event (using EVENT_BUS_INTEGRATION_GUIDE standard format)
             if self._producer:
                 error_envelope = {
                     "correlation_id": correlation_id,
-                    "event_type": "AGENT_ROUTING_FAILED",
+                    "event_type": "omninode.agent.routing.failed.v1",
                     "payload": {
                         "error_code": "ROUTING_ERROR",
                         "error_message": str(e),

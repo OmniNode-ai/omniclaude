@@ -450,7 +450,9 @@ if __name__ == "__main__":
     print("Testing Tool Selection Intelligence\n" + "=" * 60)
 
     # Create secure temp file for testing
-    temp_test_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py', prefix='test_new_file_')
+    temp_test_file = tempfile.NamedTemporaryFile(
+        mode="w", delete=False, suffix=".py", prefix="test_new_file_"
+    )
     temp_test_path = temp_test_file.name
     temp_test_file.close()
 

@@ -3,21 +3,27 @@
 Kafka Topics for Agent Routing Events
 
 Defines Kafka topic names for agent routing event flow.
+Follows EVENT_BUS_INTEGRATION_GUIDE standard format.
 
-Topic Naming Convention:
-    Format: agent.routing.<event>.<version>
+Topic Naming Convention (per EVENT_BUS_INTEGRATION_GUIDE):
+    Format: omninode.{domain}.{entity}.{action}.v{major}
     Examples:
-        - agent.routing.requested.v1
-        - agent.routing.completed.v1
-        - agent.routing.failed.v1
+        - omninode.agent.routing.requested.v1
+        - omninode.agent.routing.completed.v1
+        - omninode.agent.routing.failed.v1
 
 Event Flow:
-    1. Agent publishes: agent.routing.requested.v1
+    1. Agent publishes: omninode.agent.routing.requested.v1
     2. agent-router-service consumes request
     3. agent-router-service publishes one of:
-        - agent.routing.completed.v1 (success)
-        - agent.routing.failed.v1 (failure)
+        - omninode.agent.routing.completed.v1 (success)
+        - omninode.agent.routing.failed.v1 (failure)
     4. Agent consumes response
+
+Partition Key Policy (per EVENT_BUS_INTEGRATION_GUIDE):
+    - Uses correlation_id as partition key
+    - Cardinality: Medium (per request)
+    - Ensures request→response ordering per workflow
 
 Topic Configuration:
     - Partitions: 3 (for parallel processing)
@@ -50,6 +56,7 @@ from typing import Final
 class RoutingTopics:
     """
     Kafka topic names for agent routing events.
+    Follows EVENT_BUS_INTEGRATION_GUIDE standard format.
 
     Attributes:
         REQUEST: Agent routing request topic
@@ -58,11 +65,12 @@ class RoutingTopics:
     """
 
     # Request topic (published by agents)
-    REQUEST: Final[str] = "agent.routing.requested.v1"
+    # Format: omninode.{domain}.{entity}.{action}.v{major}
+    REQUEST: Final[str] = "omninode.agent.routing.requested.v1"
 
     # Response topics (published by agent-router-service)
-    COMPLETED: Final[str] = "agent.routing.completed.v1"
-    FAILED: Final[str] = "agent.routing.failed.v1"
+    COMPLETED: Final[str] = "omninode.agent.routing.completed.v1"
+    FAILED: Final[str] = "omninode.agent.routing.failed.v1"
 
     @classmethod
     def all_topics(cls) -> list[str]:
@@ -75,7 +83,7 @@ class RoutingTopics:
         Example:
             ```python
             topics = RoutingTopics.all_topics()
-            # ['agent.routing.requested.v1', 'agent.routing.completed.v1', 'agent.routing.failed.v1']
+            # ['omninode.agent.routing.requested.v1', 'omninode.agent.routing.completed.v1', 'omninode.agent.routing.failed.v1']
             ```
         """
         return [cls.REQUEST, cls.COMPLETED, cls.FAILED]
@@ -105,16 +113,18 @@ TOPICS = RoutingTopics()
 
 
 # Event type constants (for ModelRoutingEventEnvelope)
+# Uses lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE
 class EventTypes:
     """
     Event type constants for routing events.
 
     These match the event_type field in ModelRoutingEventEnvelope.
+    Format: lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE
     """
 
-    REQUESTED: Final[str] = "AGENT_ROUTING_REQUESTED"
-    COMPLETED: Final[str] = "AGENT_ROUTING_COMPLETED"
-    FAILED: Final[str] = "AGENT_ROUTING_FAILED"
+    REQUESTED: Final[str] = "omninode.agent.routing.requested.v1"
+    COMPLETED: Final[str] = "omninode.agent.routing.completed.v1"
+    FAILED: Final[str] = "omninode.agent.routing.failed.v1"
 
 
 # Topic configuration for creation/management

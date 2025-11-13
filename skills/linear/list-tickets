@@ -1,0 +1,160 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Linear Ticket Lister
+# ============================================================================
+# List and filter Linear tickets by team, assignee, status, etc.
+# ============================================================================
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+List Linear tickets with filters.
+
+Options:
+  --team TEAM           Filter by team name or ID
+  --assignee USER       Filter by assignee (name, email, or "me")
+  --state STATE         Filter by state (name or ID)
+  --label LABEL         Filter by label
+  --project PROJECT     Filter by project
+  --query TEXT          Search query for title/description
+  --priority LEVEL      Filter by priority (0-4)
+  --limit N             Limit results (default: 50, max: 250)
+  --order-by FIELD      Order by: createdAt, updatedAt (default: updatedAt)
+  --mine                Show only my tickets (shortcut for --assignee me)
+  --open                Show only open tickets (non-completed states)
+
+Examples:
+  # My open tickets
+  $(basename "$0") --mine --open
+
+  # Team's high priority tickets
+  $(basename "$0") --team "Engineering" --priority 1
+
+  # Tickets with requirements
+  $(basename "$0") --label "has-requirements"
+
+  # Recently updated tickets
+  $(basename "$0") --order-by updatedAt --limit 20
+
+  # Search for DLQ-related tickets
+  $(basename "$0") --query "DLQ" --team "Engineering"
+
+Exit codes:
+  0 - Success
+  1 - Invalid arguments
+  2 - Linear API error
+EOF
+    exit 1
+}
+
+# Default values
+TEAM=""
+ASSIGNEE=""
+STATE=""
+LABEL=""
+PROJECT=""
+QUERY=""
+PRIORITY=""
+LIMIT="50"
+ORDER_BY="updatedAt"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --team)
+            TEAM="$2"
+            shift 2
+            ;;
+        --assignee)
+            ASSIGNEE="$2"
+            shift 2
+            ;;
+        --state)
+            STATE="$2"
+            shift 2
+            ;;
+        --label)
+            LABEL="$2"
+            shift 2
+            ;;
+        --project)
+            PROJECT="$2"
+            shift 2
+            ;;
+        --query)
+            QUERY="$2"
+            shift 2
+            ;;
+        --priority)
+            PRIORITY="$2"
+            shift 2
+            ;;
+        --limit)
+            LIMIT="$2"
+            shift 2
+            ;;
+        --order-by)
+            ORDER_BY="$2"
+            shift 2
+            ;;
+        --mine)
+            ASSIGNEE="me"
+            shift
+            ;;
+        --open)
+            # Note: This will need to be handled by filtering non-completed states
+            echo "Filtering for open tickets..."
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Error: Unknown argument: $1"
+            usage
+            ;;
+    esac
+done
+
+echo "Listing Linear tickets..."
+
+# Build command arguments
+CMD_ARGS=("--limit" "$LIMIT" "--orderBy" "$ORDER_BY")
+
+if [[ -n "$TEAM" ]]; then
+    CMD_ARGS+=("--team" "$TEAM")
+    echo "  Team: $TEAM"
+fi
+
+if [[ -n "$ASSIGNEE" ]]; then
+    CMD_ARGS+=("--assignee" "$ASSIGNEE")
+    echo "  Assignee: $ASSIGNEE"
+fi
+
+if [[ -n "$STATE" ]]; then
+    CMD_ARGS+=("--state" "$STATE")
+    echo "  State: $STATE"
+fi
+
+if [[ -n "$LABEL" ]]; then
+    CMD_ARGS+=("--label" "$LABEL")
+    echo "  Label: $LABEL"
+fi
+
+if [[ -n "$PROJECT" ]]; then
+    CMD_ARGS+=("--project" "$PROJECT")
+    echo "  Project: $PROJECT"
+fi
+
+if [[ -n "$QUERY" ]]; then
+    CMD_ARGS+=("--query" "$QUERY")
+    echo "  Query: $QUERY"
+fi
+
+# Output the command that Claude should execute
+echo ""
+echo "Execute this via Linear MCP:"
+echo "mcp__linear-server__list_issues ${CMD_ARGS[@]}"

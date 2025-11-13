@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 # Import transformation event publisher
 try:
-    from agents.lib.transformation_event_publisher import publish_transformation_event
+    from agents.lib.transformation_event_publisher import (
+        TransformationEventType,
+        publish_transformation_event,
+    )
 
     KAFKA_AVAILABLE = True
 except ImportError:
@@ -266,7 +269,7 @@ class AgentTransformer:
                     routing_strategy=routing_strategy,
                     transformation_duration_ms=transformation_duration_ms,
                     success=True,
-                    event_type="transformation_complete",
+                    event_type=TransformationEventType.COMPLETED,
                 )
                 logger.debug(
                     f"Logged transformation: {source_agent} → {identity.name} "
@@ -297,7 +300,7 @@ class AgentTransformer:
                     success=False,
                     error_message=str(e),
                     error_type=type(e).__name__,
-                    event_type="transformation_failed",
+                    event_type=TransformationEventType.FAILED,
                 )
                 logger.error(
                     f"Logged failed transformation: {source_agent} → {agent_name} "
