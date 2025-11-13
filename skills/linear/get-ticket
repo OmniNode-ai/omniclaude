@@ -65,7 +65,11 @@ fi
 
 echo "Fetching Linear ticket: $ISSUE_ID"
 
-# Output the command that Claude should execute
+# Output the command that Claude should execute (properly quoted for copy-paste)
 echo ""
-echo "Execute this via Linear MCP:"
-echo "mcp__linear-server__get_issue --id \"$ISSUE_ID\""
+echo "Execute this via Linear MCP (copy-pasteable):"
+
+# Build properly quoted command string
+QUOTED_CMD="mcp__linear-server__get_issue --id $(printf %q "$ISSUE_ID")"
+
+echo "$QUOTED_CMD"

@@ -227,10 +227,23 @@ case "$PRIORITY" in
     nit)
         CMD_ARGS+=("--priority" "4")
         ;;
+    *)
+        echo "Error: Invalid priority '$PRIORITY'" >&2
+        echo "Valid values: critical, major, minor, nit" >&2
+        exit 1
+        ;;
 esac
 
 # Note: This script should be called from Claude Code which will use the MCP tool
-# Output the command that Claude should execute
+# Output the command that Claude should execute (properly quoted for copy-paste)
 echo ""
-echo "Execute this via Linear MCP:"
-echo "mcp__linear-server__create_issue ${CMD_ARGS[@]}"
+echo "Execute this via Linear MCP (copy-pasteable):"
+
+# Build properly quoted command string
+QUOTED_CMD="mcp__linear-server__create_issue"
+for arg in "${CMD_ARGS[@]}"; do
+    # Use printf %q for shell-safe quoting
+    QUOTED_CMD="$QUOTED_CMD $(printf %q "$arg")"
+done
+
+echo "$QUOTED_CMD"

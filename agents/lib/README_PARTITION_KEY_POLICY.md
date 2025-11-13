@@ -15,13 +15,15 @@ The partition key policy module enforces consistent partition key strategies for
 
 ## Event Families
 
-OmniClaude defines 5 event families, each with its own partition key strategy:
+OmniClaude defines 7 event families, each with its own partition key strategy:
 
 | Event Family | Partition Key | Reason | Cardinality |
 |--------------|---------------|--------|-------------|
 | **agent.routing** | `correlation_id` | Preserve request→result ordering | Medium (~100-1000/day) |
 | **agent.transformation** | `correlation_id` | Workflow coherence across transformations | Medium (~50-500/day) |
 | **agent.actions** | `correlation_id` | Execution lifecycle ordering | Medium (~200-2000/day) |
+| **agent.execution** | `correlation_id` | Agent execution lifecycle events (started/progress/completed/failed) | Medium (~100-1000/day) |
+| **agent.provider** | `correlation_id` | AI provider and model selection tracking | Medium (~100-1000/day) |
 | **intelligence.query** | `correlation_id` | Query request→response ordering | Medium (~50-500/day) |
 | **quality.gate** | `correlation_id` | Gate evaluation ordering | Low (~10-100/day) |
 
@@ -207,9 +209,13 @@ Event family classifications:
 
 ```python
 class EventFamily(str, Enum):
+    """Event family categories for partition key policies."""
+
     AGENT_ROUTING = "agent.routing"
     AGENT_TRANSFORMATION = "agent.transformation"
     AGENT_ACTIONS = "agent.actions"
+    AGENT_EXECUTION = "agent.execution"        # OMN-28, OMN-29, OMN-30
+    AGENT_PROVIDER = "agent.provider"          # OMN-31
     INTELLIGENCE_QUERY = "intelligence.query"
     QUALITY_GATE = "quality.gate"
 ```
@@ -225,6 +231,8 @@ VALID_EVENT_FAMILIES = [
     "agent.routing",
     "agent.transformation",
     "agent.actions",
+    "agent.execution",     # OMN-28, OMN-29, OMN-30
+    "agent.provider",      # OMN-31
     "intelligence.query",
     "quality.gate"
 ]
@@ -379,7 +387,7 @@ All events from the same workflow execution (same `correlation_id`) stay togethe
 
 Each event family documents expected cardinality:
 - **Low** (10-100/day): Quality gates
-- **Medium** (50-2000/day): Routing, transformations, actions, intelligence queries
+- **Medium** (50-2000/day): Routing, transformations, actions, execution, provider, intelligence queries
 - **High** (>2000/day): Not currently used
 
 This helps with:
@@ -498,8 +506,19 @@ PARTITION_KEY_POLICY[EventFamily.NEW_FAMILY] = {
 
 ## Version History
 
+- **v1.1.0** (2025-11-13) - Phase 1 Agent Event Publishers (OMN-27 to OMN-33)
+  - Added 4 new event families: agent.execution, agent.provider, agent.confidence, agent.quality
+  - Implemented 7 event publishers:
+    - Agent execution events (started/completed/failed) - OMN-27, OMN-28, OMN-29
+    - Provider selection events (selected/fallback) - OMN-30, OMN-31
+    - Confidence scoring events - OMN-32
+    - Quality gate events (passed/failed) - OMN-33
+  - Updated partition key policies for all new event types
+  - All events use correlation_id as partition key for workflow coherence
+  - Total: 9 event families defined (was 5)
+
 - **v1.0.0** (2025-11-13) - Initial implementation
-  - 5 event families defined
+  - 5 event families defined (agent.routing, agent.transformation, agent.actions, intelligence.query, quality.gate)
   - All families use correlation_id
   - 35 unit tests + 10 integration tests
   - Complete documentation and examples

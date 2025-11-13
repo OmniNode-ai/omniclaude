@@ -286,7 +286,7 @@ RUN_INTEGRATION_TESTS=1 pytest agents/tests/test_intelligence_event_client.py -m
 
 ## References
 
-- **EVENT_BUS_INTEGRATION_GUIDE**: `/Volumes/PRO-G40/Code/omninode/docs/EVENT_BUS_INTEGRATION_GUIDE.md`
+- **EVENT_BUS_INTEGRATION_GUIDE**: `omninode` repository - `docs/EVENT_BUS_INTEGRATION_GUIDE.md`
 - **Intelligence Event Client**: `agents/lib/intelligence_event_client.py`
 - **Test Suite**: `agents/tests/test_intelligence_event_client.py`
 - **Integration Plan**: `docs/INTELLIGENCE_EVENT_BUS_QUICKSTART.md`

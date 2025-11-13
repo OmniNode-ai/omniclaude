@@ -46,6 +46,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
+from weakref import WeakKeyDictionary
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class QualityGateEventType(str, Enum):
 
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
-_producer_lock = None
+_producer_locks: WeakKeyDictionary = WeakKeyDictionary()
 
 
 def _get_kafka_bootstrap_servers() -> str:
@@ -122,20 +123,30 @@ def _create_event_envelope(
     }
 
 
-async def get_producer_lock():
+async def get_producer_lock() -> asyncio.Lock:
     """
-    Get or create the producer lock lazily under a running event loop.
+    Get or create the producer lock for the current event loop.
 
-    This ensures asyncio.Lock() is never created at module level, which
-    would cause RuntimeError in Python 3.12+ when no event loop exists.
+    Uses WeakKeyDictionary to store per-event-loop locks, preventing
+    "RuntimeError: Lock is bound to a different event loop" when
+    switching between async and sync publishing contexts.
+
+    Locks are automatically cleaned up when event loops are garbage collected.
 
     Returns:
-        asyncio.Lock: The producer lock instance
+        asyncio.Lock: Lock instance for the current event loop
+
+    Raises:
+        RuntimeError: If no event loop is running
     """
-    global _producer_lock
-    if _producer_lock is None:
-        _producer_lock = asyncio.Lock()
-    return _producer_lock
+    # Get the current running event loop
+    loop = asyncio.get_running_loop()
+
+    # Get or create lock for this event loop
+    if loop not in _producer_locks:
+        _producer_locks[loop] = asyncio.Lock()
+
+    return _producer_locks[loop]
 
 
 async def _get_kafka_producer():

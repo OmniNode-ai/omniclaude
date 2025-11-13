@@ -257,10 +257,10 @@ main() {
         review_output=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --strict --output-file "$output_file" 2>&1) || true
     fi
 
-    # Parse review results
-    local review_file="/tmp/pr-review-${pr_number}.md"
-    if [[ ! -f "$review_file" ]]; then
-        echo -e "${RED}✗${NC} Review file not found"
+    # Verify review file was created
+    if [[ ! -f "$output_file" ]]; then
+        echo -e "${RED}✗${NC} Review file not created at $output_file"
+        echo -e "${RED}✗${NC} Review may have failed - check output above"
         exit 3
     fi
 

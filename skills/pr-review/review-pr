@@ -41,7 +41,6 @@ Arguments:
 Options:
   --output-file FILE   Save organized review to file (default: /tmp/pr-review-{PR}.md)
   --strict             Exit with error if any critical/major/minor issues found
-  --show-resolved      Include resolved issues in output
   --json               Output in JSON format instead of markdown
 
 Priority Levels (in order of severity):
@@ -311,8 +310,10 @@ main() {
     local pr_number=""
     local output_file=""
     local strict_mode=false
-    local show_resolved=false
     local json_output=false
+    # TODO: Add --show-resolved flag support
+    # Requires filtering resolved comments from GitHub API data
+    # in categorize_comments function
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -323,10 +324,6 @@ main() {
                 ;;
             --strict)
                 strict_mode=true
-                shift
-                ;;
-            --show-resolved)
-                show_resolved=true
                 shift
                 ;;
             --json)

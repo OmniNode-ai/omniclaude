@@ -167,7 +167,7 @@ async def _get_kafka_producer():
             _kafka_producer = producer
 
             # Register cleanup handler
-            atexit.register(lambda: asyncio.create_task(_cleanup_producer()))
+            atexit.register(_sync_cleanup_on_exit)
 
             logger.info(
                 f"Kafka producer started for provider selection events (servers: {bootstrap_servers})"
@@ -193,6 +193,25 @@ async def _cleanup_producer():
             logger.error(f"Error stopping provider selection Kafka producer: {e}")
         finally:
             _kafka_producer = None
+
+
+def _sync_cleanup_on_exit():
+    """Synchronous cleanup for atexit - handles event loop closure."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Event loop still running - schedule cleanup
+            loop.create_task(_cleanup_producer())
+        else:
+            # Event loop stopped - run cleanup synchronously
+            loop.run_until_complete(_cleanup_producer())
+    except RuntimeError:
+        # Event loop already closed - call producer.close() directly
+        if _kafka_producer and hasattr(_kafka_producer, "close"):
+            try:
+                _kafka_producer.close()
+            except Exception:
+                pass  # Best effort cleanup
 
 
 async def publish_provider_selection(

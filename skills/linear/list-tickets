@@ -24,11 +24,10 @@ Options:
   --limit N             Limit results (default: 50, max: 250)
   --order-by FIELD      Order by: createdAt, updatedAt (default: updatedAt)
   --mine                Show only my tickets (shortcut for --assignee me)
-  --open                Show only open tickets (non-completed states)
 
 Examples:
-  # My open tickets
-  $(basename "$0") --mine --open
+  # My tickets
+  $(basename "$0") --mine
 
   # Team's high priority tickets
   $(basename "$0") --team "Engineering" --priority 1
@@ -104,11 +103,12 @@ while [[ $# -gt 0 ]]; do
             ASSIGNEE="me"
             shift
             ;;
-        --open)
-            # Note: This will need to be handled by filtering non-completed states
-            echo "Filtering for open tickets..."
-            shift
-            ;;
+        # TODO: Implement --open flag for filtering to non-completed states
+        # Requires either:
+        #   1. Multiple state filtering support in Linear MCP, or
+        #   2. State type filtering (e.g., "started", "unstarted"), or
+        #   3. Post-query filtering (inefficient)
+        # For now, use --state with specific state name/ID
         -h|--help)
             usage
             ;;
@@ -154,7 +154,15 @@ if [[ -n "$QUERY" ]]; then
     echo "  Query: $QUERY"
 fi
 
-# Output the command that Claude should execute
+# Output the command that Claude should execute (properly quoted for copy-paste)
 echo ""
-echo "Execute this via Linear MCP:"
-echo "mcp__linear-server__list_issues ${CMD_ARGS[@]}"
+echo "Execute this via Linear MCP (copy-pasteable):"
+
+# Build properly quoted command string
+QUOTED_CMD="mcp__linear-server__list_issues"
+for arg in "${CMD_ARGS[@]}"; do
+    # Use printf %q for shell-safe quoting
+    QUOTED_CMD="$QUOTED_CMD $(printf %q "$arg")"
+done
+
+echo "$QUOTED_CMD"

@@ -9,7 +9,7 @@
 **File**: `agents/lib/partition_key_policy.py` (439 lines)
 
 **Features**:
-- ✅ 5 event family definitions (agent.routing, agent.transformation, agent.actions, intelligence.query, quality.gate)
+- ✅ 7 event family definitions (agent.routing, agent.transformation, agent.actions, agent.execution, agent.provider, intelligence.query, quality.gate)
 - ✅ Comprehensive partition key policy table with reason, cardinality, and examples
 - ✅ Event family extraction from event types and topic names
 - ✅ Partition key extraction from dict and object envelopes
@@ -300,7 +300,7 @@ agents/tests/lib/
 ## Validation Checklist
 
 - [x] Module created with complete implementation
-- [x] All 5 event families defined
+- [x] All 7 event families defined (agent.routing, agent.transformation, agent.actions, agent.execution, agent.provider, intelligence.query, quality.gate)
 - [x] Partition key policy table complete
 - [x] Functions for extraction and validation
 - [x] Type hints and docstrings

@@ -306,6 +306,11 @@ class BaseQualityGate(ABC):
             correlation_id: Optional correlation ID for distributed tracing
         """
         try:
+            # Normalize metadata upfront to prevent None access errors
+            # This is a common case where metadata hasn't been initialized yet
+            if result.metadata is None:
+                result.metadata = {}
+
             # Extract score/threshold from metadata if available
             score = result.metadata.get("score")
             threshold = result.metadata.get("threshold")
