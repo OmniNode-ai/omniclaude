@@ -1,190 +1,335 @@
 ---
-name: fetch-pr-data
-description: Fetch all PR review data from GitHub (4 endpoints) - reviews, inline comments, PR comments, and issue comments where Claude Code bot posts
+name: pr-review-comprehensive
+description: Comprehensive PR review with strict priority-based organization and merge readiness assessment
 ---
 
-# Fetch PR Review Data
+# Comprehensive PR Review
 
-Comprehensive PR review data fetcher that queries **all 4 GitHub API endpoints** where PR feedback can appear.
+Production-ready PR review system that fetches all feedback from GitHub, organizes by priority, and enforces strict merge requirements.
 
-## Why 4 Endpoints?
+## Skills Available
 
-GitHub distributes PR feedback across multiple endpoints:
+1. **fetch-pr-data** - Fetch all PR data from 4 GitHub endpoints
+2. **review-pr** - Comprehensive review with priority organization
+3. **pr-review-production** - Production-grade review wrapper with strict standards (NEW)
 
-1. **Reviews API** (`/pulls/{pr}/reviews`) - Formal PR reviews (Approve/Request Changes/Comment)
-2. **Pull Comments API** (`/pulls/{pr}/comments`) - Inline code comments (file:line specific)
-3. **PR Comments API** (`/pulls/{pr}` via gh pr view) - PR conversation thread
-4. **Issue Comments API** (`/issues/{pr}/comments`) - **WHERE CLAUDE CODE BOT POSTS!**
+## Priority System
 
-**Critical**: Many bots (including Claude Code bot, CodeRabbit, etc.) post comprehensive reviews as **issue comments**, not PR comments. If you skip this endpoint, you'll miss these reviews!
+### 🔴 CRITICAL (Must Address)
+**Blocking issues** that MUST be resolved before merge:
+- Security vulnerabilities
+- Data loss risks
+- System crashes or breaking changes
+- Critical bugs that affect core functionality
 
-## When to Use
+**Merge Status**: ❌ Cannot merge until resolved
 
-- Before analyzing PR feedback
-- Before creating PR review summaries
-- When checking PR merge readiness
-- When you need complete PR feedback context
-- Anytime you need to ensure no comments are missed
+### 🟠 MAJOR (Should Address)
+**Important issues** that SHOULD be resolved before merge:
+- Performance problems
+- Incorrect behavior
+- Missing or failing tests
+- Significant code quality issues
+- Breaking API changes
+
+**Merge Status**: ⚠️  Should resolve before merge
+
+### 🟡 MINOR (Should Address)
+**Quality issues** that should be addressed:
+- Code quality improvements
+- Missing documentation
+- Edge case handling
+- Non-critical refactoring
+- Minor performance optimizations
+
+**Merge Status**: ⚠️  Should resolve (not blocking)
+
+### ⚪ NIT / Nice to Have (Optional)
+**Optional improvements** that can be deferred:
+- Formatting preferences
+- Variable naming suggestions
+- Minor refactoring ideas
+- Stylistic improvements
+- Non-blocking suggestions
+
+**Merge Status**: ✅ Can merge even if nits remain
+
+## Merge Requirements
+
+**✅ Can Merge When:**
+- ALL Critical issues resolved
+- ALL Major issues resolved
+- ALL Minor issues resolved
+- Nits are OPTIONAL (nice to have)
+
+**❌ Cannot Merge When:**
+- ANY Critical issues remain
+- ANY Major issues remain
+- ANY Minor issues remain
 
 ## Usage
 
-Use the Bash tool to execute:
+### Basic Review
 
 ```bash
-~/.claude/skills/pr-review/fetch-pr-data <PR_NUMBER>
+# Review PR with priority organization
+~/.claude/skills/pr-review/review-pr 22
+
+# Output:
+# - Priority breakdown (Critical/Major/Minor/Nit)
+# - Merge readiness assessment
+# - Organized issues by priority
+# - Saved to /tmp/pr-review-22.md
 ```
 
-### Arguments
-
-- `PR_NUMBER` - PR number (e.g., `20`) or full GitHub URL (e.g., `https://github.com/OmniNode-ai/omniclaude/pull/20`)
-
-### Examples
+### Strict Mode (CI/CD)
 
 ```bash
-# By PR number
-~/.claude/skills/pr-review/fetch-pr-data 20
+# Fail if any Critical/Major/Minor issues found
+~/.claude/skills/pr-review/review-pr 22 --strict
 
-# By GitHub URL
-~/.claude/skills/pr-review/fetch-pr-data https://github.com/OmniNode-ai/omniclaude/pull/20
+# Exit codes:
+#   0 - Ready to merge (only nits or no issues)
+#   2 - Not ready (Critical/Major/Minor issues found)
+```
+
+### Custom Output
+
+```bash
+# Save to specific file
+~/.claude/skills/pr-review/review-pr 22 --output-file ./pr22-review.md
+
+# JSON output for programmatic processing
+~/.claude/skills/pr-review/review-pr 22 --json > pr22.json
+```
+
+### Production Review (NEW)
+
+**Production-grade review with stricter standards and Linear integration:**
+
+```bash
+# Production review (all Critical/Major/Minor MUST be resolved)
+~/.claude/skills/pr-review/pr-review-production 22
+
+# Create Linear tickets for Critical and Major issues
+~/.claude/skills/pr-review/pr-review-production 22 \
+  --create-linear-tickets \
+  --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
+
+# JSON output for CI/CD pipelines
+~/.claude/skills/pr-review/pr-review-production 22 --json
+
+# Exit codes:
+#   0 - Ready for production (all Critical/Major/Minor resolved)
+#   1 - Invalid arguments
+#   2 - Not ready (unresolved Critical/Major/Minor issues)
+#   3 - GitHub API error
+```
+
+**Production Requirements:**
+- ✅ ALL Critical issues MUST be resolved (BLOCKING)
+- ✅ ALL Major issues MUST be resolved (BLOCKING)
+- ✅ ALL Minor issues MUST be resolved (BLOCKING)
+- ⚪ Nits are optional (nice to have, NOT blocking)
+
+## Integration with CI/CD
+
+### GitHub Actions Example
+
+```yaml
+- name: PR Review
+  run: |
+    ~/.claude/skills/pr-review/review-pr ${{ github.event.pull_request.number }} --strict
+
+    # Upload review artifact
+    if [ -f /tmp/pr-review-*.md ]; then
+      gh pr comment ${{ github.event.pull_request.number }} \
+        --body-file /tmp/pr-review-*.md
+    fi
 ```
 
 ## Output Format
 
-Returns a JSON object with all PR feedback:
+### Markdown Example
+
+```markdown
+# PR #22 - Review Summary
+
+**Generated**: 2025-11-13 10:30:00
+
+## Priority Breakdown
+
+| Priority | Count | Status |
+|----------|-------|--------|
+| 🔴 CRITICAL | 2 | Must resolve before merge |
+| 🟠 MAJOR | 5 | Should resolve before merge |
+| 🟡 MINOR | 8 | Should resolve |
+| ⚪ NIT | 12 | Optional (nice to have) |
+
+**Total Issues**: 27
+
+## Merge Readiness
+
+❌ **NOT READY TO MERGE**
+
+- ❌ 2 Critical issue(s) must be resolved
+- ❌ 5 Major issue(s) should be resolved
+- ⚠️  8 Minor issue(s) should be resolved
+
+---
+
+## 🔴 CRITICAL Issues (2)
+
+### CRITICAL-1: coderabbitai[bot]
+**File**: `agents/lib/security.py`
+
+SQL injection vulnerability in user input handling...
+
+---
+
+### CRITICAL-2: claude[bot]
+**File**: `services/api.py`
+
+Unauthenticated endpoint exposes sensitive data...
+
+---
+
+## 🟠 MAJOR Issues (5)
+
+...
+```
+
+### JSON Example
 
 ```json
 {
-  "pr_number": 20,
-  "repository": "OmniNode-ai/omniclaude",
-  "fetched_at": "2025-11-04T12:00:00Z",
-  "reviews": [
+  "critical": [
     {
       "author": "coderabbitai[bot]",
-      "state": "COMMENTED",
-      "body": "Review body...",
-      "submitted_at": "2025-11-01T16:30:54Z",
+      "path": "agents/lib/security.py",
+      "body": "SQL injection vulnerability...",
       "id": 123456
     }
   ],
-  "inline_comments": [
-    {
-      "author": "coderabbitai[bot]",
-      "path": "agents/lib/agent_router.py",
-      "line": 77,
-      "body": "Hardcoded path warning...",
-      "created_at": "2025-11-01T16:31:00Z",
-      "id": 123457
-    }
-  ],
-  "pr_comments": [
-    {
-      "author": "jonah",
-      "body": "Good catch!",
-      "created_at": "2025-11-01T17:00:00Z",
-      "id": 123458
-    }
-  ],
-  "issue_comments": [
-    {
-      "author": "claude[bot]",
-      "body": "# Pull Request Review: Phase 2...\n\n## Critical Issues\n...",
-      "created_at": "2025-11-04T12:14:36Z",
-      "id": 123459
-    }
-  ],
+  "major": [...],
+  "minor": [...],
+  "nit": [...],
   "summary": {
-    "total_reviews": 1,
-    "total_inline_comments": 6,
-    "total_pr_comments": 3,
-    "total_issue_comments": 8,
-    "total_all_comments": 18
+    "critical_count": 2,
+    "major_count": 5,
+    "minor_count": 8,
+    "nit_count": 12,
+    "total": 27
   }
 }
 ```
 
-## Integration with Slash Commands
+## Priority Classification Logic
 
-This skill is designed to be used by:
-- `/pr-dev-review` - Development-focused PR review
-- `/pr-release-ready` - Comprehensive pre-merge review
+Issues are automatically classified based on keywords:
 
-Instead of manually calling 4 separate GitHub API endpoints, slash commands can simply call this skill and parse the returned JSON.
+**CRITICAL Keywords**:
+- `critical`, `security`, `vulnerability`, `data loss`, `crash`, `breaking change`
 
-## Example Workflow
+**MAJOR Keywords**:
+- `major`, `bug`, `error`, `incorrect`, `performance`, `test`, `missing`, `should`, `important`
 
-```bash
-# Step 1: Fetch all PR data using this skill
-PR_DATA=$(~/.claude/skills/pr-review/fetch-pr-data 20)
+**NIT Keywords**:
+- `nit`, `nitpick`, `minor`, `consider`, `suggestion`, `optional`, `nice to have`, `style`, `formatting`
 
-# Step 2: Parse specific comment types
-ISSUE_COMMENTS=$(echo "$PR_DATA" | jq '.issue_comments')
-CLAUDE_BOT_REVIEWS=$(echo "$PR_DATA" | jq '.issue_comments[] | select(.author == "claude[bot]")')
+**Default**: If no keywords match → classified as MINOR
 
-# Step 3: Analyze and categorize feedback
-# ... (PR review logic) ...
-```
+## Benefits
 
-## Performance
+### For Developers
+- ✅ Clear priority guidance on what must be fixed
+- ✅ Focus on blocking issues first
+- ✅ Optional nits don't block progress
+- ✅ Automated merge readiness assessment
 
-- **Parallel Fetching**: All 4 endpoints queried concurrently
-- **Typical Runtime**: 1-2 seconds for complete fetch
-- **Caching**: None (always fetches latest data)
-- **Rate Limits**: Respects GitHub API limits
+### For Reviewers
+- ✅ Standardized priority system
+- ✅ All feedback organized in one place
+- ✅ No missed comments (4 GitHub endpoints)
+- ✅ Clear merge criteria
 
-## Dependencies
+### For Teams
+- ✅ Consistent review standards
+- ✅ Reduced review friction (nits are optional)
+- ✅ CI/CD integration support
+- ✅ Audit trail of all feedback
 
-Required tools (install with `brew install gh jq`):
-- `gh` - GitHub CLI (for API access)
-- `jq` - JSON processor (for parsing responses)
+## Comparison: Review Modes
 
-## Error Handling
+### Standard Review (`review-pr`)
+**Best for**: Development, feature branches, regular PRs
 
-- **Missing dependencies**: Script checks and reports missing tools
-- **Invalid PR number**: Validates input and provides helpful error
-- **API failures**: Gracefully handles endpoint failures (returns empty arrays)
-- **Repository detection**: Auto-detects current repository
+- ✅ All comments fetched and organized
+- ✅ Automatic priority classification
+- ✅ Clear merge requirements (Critical/Major/Minor)
+- ✅ Nits marked as optional
+- ✅ Ready-to-share markdown report
+- ⚪ Flexible standards for development velocity
 
-## Common Pitfalls Avoided
+### Production Review (`pr-review-production`)
+**Best for**: Production deployments, release branches, critical PRs
 
-❌ **Skipping issue comments** - Misses Claude Code bot and other bot reviews
-❌ **Only checking PR comments** - Misses inline code comments
-❌ **Only checking reviews API** - Misses discussion thread feedback
-❌ **Sequential fetching** - Slow (this skill fetches in parallel)
+- ✅ Same features as standard review
+- ✅ **Strict production-grade standards**
+- ✅ **All Critical/Major/Minor MUST be resolved**
+- ✅ **Optional Linear ticket creation** for tracking
+- ✅ **Production readiness certification**
+- 🔴 Zero tolerance for unresolved issues (except nits)
 
-✅ **This skill fetches ALL 4 endpoints** - Nothing is missed
-✅ **Parallel execution** - Fast results
-✅ **Structured output** - Easy to parse and analyze
+### When to Use Which
+
+| Scenario | Use | Reason |
+|----------|-----|--------|
+| Feature branch → dev | `review-pr` | Development velocity matters |
+| Dev → staging | `review-pr --strict` | Catch issues before production |
+| Staging → production | `pr-review-production` | Zero tolerance, full tracking |
+| Hotfix → production | `pr-review-production` | Critical path, must be perfect |
+| Experimental PR | `review-pr` | Allow flexibility for exploration |
 
 ## Skills Location
 
 **Claude Code Access**: `~/.claude/skills/pr-review/`
-**Executable**: `~/.claude/skills/pr-review/fetch-pr-data`
+**Executables**:
+- `~/.claude/skills/pr-review/fetch-pr-data` - Fetch all PR data
+- `~/.claude/skills/pr-review/review-pr` - Comprehensive review with priority organization
+- `~/.claude/skills/pr-review/pr-review-production` - Production-grade wrapper (NEW)
 
-## Notes
+## Dependencies
 
-- **Always use this skill** when analyzing PR feedback to avoid missing comments
-- **Claude Code bot** posts comprehensive reviews as issue comments (endpoint #4)
-- **CodeRabbit** posts both inline comments (endpoint #2) and summary reviews (endpoint #4)
-- **Parallel fetching** ensures fast results even for PRs with many comments
-- **JSON output** makes it easy to filter and categorize comments programmatically
+Required tools (install with `brew install gh jq`):
+- `gh` - GitHub CLI
+- `jq` - JSON processor
 
-## Debugging
+## Architecture Notes
 
-If you're not seeing expected comments:
+### Why Not Event-Based?
 
-```bash
-# Run with verbose output
-~/.claude/skills/pr-review/fetch-pr-data 20 | jq '.'
+PR review uses direct GitHub API calls (via `gh` CLI) rather than event-based architecture because:
+- **External Service**: GitHub is a third-party service outside OmniNode infrastructure
+- **Real-Time Data**: PR feedback must be fetched in real-time from GitHub's 4 endpoints
+- **Simplicity**: Direct API calls are simpler for external read-only operations
+- **No State**: Review analysis is stateless - no persistence or coordination needed
 
-# Check each endpoint separately
-~/.claude/skills/pr-review/fetch-pr-data 20 | jq '.issue_comments | length'  # Claude bot reviews
-~/.claude/skills/pr-review/fetch-pr-data 20 | jq '.inline_comments | length' # Inline comments
-~/.claude/skills/pr-review/fetch-pr-data 20 | jq '.reviews | length'         # Formal reviews
-~/.claude/skills/pr-review/fetch-pr-data 20 | jq '.pr_comments | length'     # PR thread
-```
+### When to Use Events
+
+Use event-based architecture for:
+- ✅ Internal OmniNode services (intelligence, routing, observability)
+- ✅ Services requiring persistence or state management
+- ✅ Multi-service coordination and orchestration
+- ✅ Async operations with retries and DLQ
+
+Use direct API/MCP for:
+- ✅ External third-party services (GitHub, Linear, etc.)
+- ✅ Real-time read-only operations
+- ✅ Simple request-response patterns without state
 
 ## See Also
 
-- `/pr-dev-review` - Development-focused PR review command
-- `/pr-release-ready` - Comprehensive pre-merge review command
 - GitHub API Docs: https://docs.github.com/en/rest/pulls
+- Linear skills: `~/.claude/skills/linear/`
+- Event alignment plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`

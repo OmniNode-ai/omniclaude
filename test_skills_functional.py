@@ -116,9 +116,9 @@ def test_execute_kafka_client_init():
             client.bootstrap_servers == settings.get_effective_kafka_bootstrap_servers()
         )
         assert client.request_timeout_ms == 5000
-        assert client.TOPIC_REQUEST == "agent.routing.requested.v1"
-        assert client.TOPIC_COMPLETED == "agent.routing.completed.v1"
-        assert client.TOPIC_FAILED == "agent.routing.failed.v1"
+        assert client.TOPIC_REQUEST == "omninode.agent.routing.requested.v1"
+        assert client.TOPIC_COMPLETED == "omninode.agent.routing.completed.v1"
+        assert client.TOPIC_FAILED == "omninode.agent.routing.failed.v1"
 
         print(
             f"✅ Client initialized with bootstrap servers: {client.bootstrap_servers}"

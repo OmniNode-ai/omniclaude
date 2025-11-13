@@ -8,13 +8,21 @@ ONEX v2.0 Compliance:
 - Abstract base class pattern
 - Type-safe validation interface
 - Dependency management with execution ordering
+- Event publishing for quality gate results
 """
 
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
 
 from ..models.model_quality_gate import EnumQualityGate, ModelQualityGateResult
+from ..quality_gate_publisher import (
+    publish_quality_gate_failed,
+    publish_quality_gate_passed,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BaseQualityGate(ABC):
@@ -159,15 +167,16 @@ class BaseQualityGate(ABC):
         self, context: dict[str, Any]
     ) -> ModelQualityGateResult:
         """
-        Execute validation with automatic timing and error handling.
+        Execute validation with automatic timing, error handling, and event publishing.
 
         Wraps the validate() method to:
         - Measure execution time
         - Handle exceptions gracefully
         - Ensure result is properly formed
+        - Publish quality gate event to Kafka
 
         Args:
-            context: Validation context
+            context: Validation context (should include correlation_id)
 
         Returns:
             ModelQualityGateResult with timing information
@@ -177,6 +186,7 @@ class BaseQualityGate(ABC):
             print(f"Gate {gate.gate.name} took {result.execution_time_ms}ms")
         """
         start_time = datetime.now(timezone.utc)
+        correlation_id = context.get("correlation_id")
 
         try:
             # Execute validation
@@ -190,6 +200,9 @@ class BaseQualityGate(ABC):
             result.execution_time_ms = execution_time_ms
             result.timestamp = end_time
 
+            # Publish quality gate event (non-blocking)
+            await self._publish_quality_gate_event(result, correlation_id)
+
             return result
 
         except Exception as e:
@@ -197,7 +210,7 @@ class BaseQualityGate(ABC):
             end_time = datetime.now(timezone.utc)
             execution_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-            return ModelQualityGateResult(
+            result = ModelQualityGateResult(
                 gate=self.gate,
                 status="failed",
                 execution_time_ms=execution_time_ms,
@@ -208,6 +221,11 @@ class BaseQualityGate(ABC):
                 },
                 timestamp=end_time,
             )
+
+            # Publish quality gate event (non-blocking)
+            await self._publish_quality_gate_event(result, correlation_id)
+
+            return result
 
     def create_skipped_result(
         self, reason: str, execution_time_ms: int = 0
@@ -271,6 +289,77 @@ class BaseQualityGate(ABC):
             "is_mandatory": self.gate.is_mandatory,
             "dependencies": self.gate.dependencies,
         }
+
+    async def _publish_quality_gate_event(
+        self,
+        result: ModelQualityGateResult,
+        correlation_id: str | None = None,
+    ) -> None:
+        """
+        Publish quality gate result event to Kafka.
+
+        Publishes passed or failed events based on validation result.
+        Non-blocking - errors are logged but don't fail validation.
+
+        Args:
+            result: Quality gate validation result
+            correlation_id: Optional correlation ID for distributed tracing
+        """
+        try:
+            # Normalize metadata upfront to prevent None access errors
+            # This is a common case where metadata hasn't been initialized yet
+            if result.metadata is None:
+                result.metadata = {}
+
+            # Extract score/threshold from metadata if available
+            score = result.metadata.get("score")
+            threshold = result.metadata.get("threshold")
+
+            # Extract metrics from metadata
+            metrics = {
+                "execution_time_ms": result.execution_time_ms,
+                "validation_type": result.gate.validation_type,
+                "category": result.gate.category,
+            }
+
+            # Add any additional metadata
+            if "metrics" in result.metadata:
+                metrics.update(result.metadata["metrics"])
+
+            if result.status == "passed":
+                # Publish passed event
+                await publish_quality_gate_passed(
+                    gate_name=result.gate.value,
+                    correlation_id=correlation_id,
+                    score=score,
+                    threshold=threshold,
+                    metrics=metrics,
+                )
+            elif result.status == "failed":
+                # Publish failed event
+                failure_reasons = result.metadata.get(
+                    "failure_reasons", [result.message]
+                )
+                recommendations = result.metadata.get("recommendations", [])
+
+                # Ensure failure_reasons is a list
+                if not isinstance(failure_reasons, list):
+                    failure_reasons = [str(failure_reasons)]
+
+                await publish_quality_gate_failed(
+                    gate_name=result.gate.value,
+                    correlation_id=correlation_id,
+                    score=score or 0.0,
+                    threshold=threshold or 1.0,
+                    failure_reasons=failure_reasons,
+                    recommendations=recommendations,
+                )
+
+        except Exception as e:
+            # Log error but don't fail validation - observability shouldn't break execution
+            logger.warning(
+                f"Failed to publish quality gate event for {self.gate.value}: {e}"
+            )
 
     def __repr__(self) -> str:
         """String representation of the validator."""

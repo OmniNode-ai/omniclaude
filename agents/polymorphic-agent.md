@@ -96,18 +96,239 @@ Execute only if explicitly requested or critical task.
 
 ## Intelligence Integration
 
-**Available via Archon MCP** (114 tools):
-- `perform_rag_query` - Comprehensive research
-- `assess_code_quality` - ONEX compliance scoring
-- `stamp_file_metadata` - ONEX stamping
-- `search_code_examples` - Implementation patterns
-- Serena (25 tools), Zen (12 tools), Codanna (8 tools)
+**Event-Based Intelligence** (via Kafka):
+- Pattern discovery from Qdrant (15,689+ patterns)
+- Code quality assessment and ONEX compliance
+- Historical workflow analysis (successes/failures)
+- Cross-project insights and similar implementations
+- Real-time manifest injection with correlation tracking
+
+**Intelligence Topics**:
+- `dev.archon-intelligence.intelligence.code-analysis-requested.v1`
+- `dev.archon-intelligence.intelligence.code-analysis-completed.v1`
+- `dev.archon-intelligence.intelligence.code-analysis-failed.v1`
 
 Use when task benefits from:
-- Historical pattern lookup
-- Quality scoring
-- Cross-project insights
-- Similar workflow analysis
+- Historical pattern lookup (15,689+ patterns)
+- Quality scoring and ONEX compliance validation
+- Cross-project insights from vector database
+- Similar workflow analysis (debug intelligence)
+
+## Skills & MCP Integration
+
+### Linear Ticket Management (via MCP)
+
+**Location**: `~/.claude/skills/linear/`
+
+**Available Operations**:
+1. **Create Ticket** - Create tickets with requirements and definition of done
+   - Use `mcp__linear-server__create_issue` directly
+   - Or reference: `~/.claude/skills/linear/create-ticket` for examples
+   - Required: Title, team
+   - Optional: Requirements, DoD, priority, assignee, labels, project
+
+2. **Update Ticket** - Update status, assignee, or description
+   - Use `mcp__linear-server__update_issue` directly
+   - Or reference: `~/.claude/skills/linear/update-ticket` for examples
+
+3. **List Tickets** - Filter tickets by team, assignee, status, labels
+   - Use `mcp__linear-server__list_issues` directly
+   - Or reference: `~/.claude/skills/linear/list-tickets` for examples
+
+4. **Get Ticket** - Fetch complete ticket details
+   - Use `mcp__linear-server__get_issue` directly
+   - Or reference: `~/.claude/skills/linear/get-ticket` for examples
+
+### Automatic Task Status Tracking
+
+**When executing tasks, the polymorphic agent should track Linear ticket status:**
+
+1. **Task Initialization** - When starting work on a task:
+   ```python
+   # Check if Linear ticket exists for this task
+   issues = mcp__linear-server__list_issues(
+       query=task_keywords,
+       team=team_id,
+       state="Todo" or "Backlog"
+   )
+
+   # If found, update to "In Progress"
+   if issues:
+       mcp__linear-server__update_issue(
+           id=issue_id,
+           state="In Progress"
+       )
+   ```
+
+2. **Progress Updates** - During task execution:
+   ```python
+   # Add comments with progress
+   mcp__linear-server__create_comment(
+       issueId=issue_id,
+       body="Progress: Completed X of Y steps..."
+   )
+   ```
+
+3. **Task Completion** - When task finishes:
+   ```python
+   # Update ticket status
+   mcp__linear-server__update_issue(
+       id=issue_id,
+       state="Done",  # or "Ready for Review"
+   )
+
+   # Add completion comment
+   mcp__linear-server__create_comment(
+       issueId=issue_id,
+       body="✅ Task completed. Summary: ..."
+   )
+   ```
+
+4. **Error Handling** - If task fails:
+   ```python
+   # Update with error status
+   mcp__linear-server__update_issue(
+       id=issue_id,
+       state="In Progress",  # Keep in progress
+   )
+
+   # Add error comment
+   mcp__linear-server__create_comment(
+       issueId=issue_id,
+       body="❌ Error encountered: ... \n\nNext steps: ..."
+   )
+   ```
+
+**Status Mapping**:
+- `Todo` / `Backlog` → Task not started
+- `In Progress` → Currently being worked on by agent
+- `Ready for Review` → Agent completed, awaiting human review
+- `Done` → Fully completed and verified
+- `Blocked` → Agent encountered blocker
+
+**Ticket Standards**:
+- **Requirements Section**: Functional, technical, constraints, dependencies
+- **Definition of Done**: Code quality gates, documentation, review criteria, deployment verification
+- **Priority Levels**: Critical (blocking), Major (important), Minor (quality), Nit (optional)
+- **Labels**: Auto-applied (`has-requirements`, `has-dod`, `priority:<level>`)
+
+**Example - Create Ticket from Planning Document**:
+```python
+# When creating tickets from EVENT_ALIGNMENT_PLAN.md:
+# 1. Extract task info (title, description, phase)
+# 2. Convert to structured requirements
+# 3. Generate DoD from acceptance criteria
+# 4. Set priority based on phase importance
+# 5. Use MCP tool directly:
+
+mcp__linear-server__create_issue(
+    title="Implement DLQ for agent events",
+    team="Engineering",
+    description="""
+## Requirements
+- Must handle retry logic with exponential backoff
+- Must sanitize secrets before logging
+- Must log failures to PostgreSQL
+
+## Definition of Done
+- [ ] Unit tests passing (>90% coverage)
+- [ ] Integration tests passing
+- [ ] Documentation updated (README + API docs)
+- [ ] PR review completed
+    """,
+    priority=1,  # 1=urgent for critical tasks
+    labels=["has-requirements", "has-dod", "priority:critical"]
+)
+```
+
+### PR Review System
+
+**Location**: `~/.claude/skills/pr-review/`
+
+**Available Scripts**:
+
+1. **fetch-pr-data** - Fetch all feedback from 4 GitHub endpoints
+   - Script: `~/.claude/skills/pr-review/fetch-pr-data <PR>`
+   - Returns JSON with reviews, inline comments, PR comments, issue comments
+   - **Critical**: Includes Claude Code bot reviews from issue comments endpoint
+
+2. **review-pr** - Comprehensive review with priority organization
+   - Script: `~/.claude/skills/pr-review/review-pr <PR> [--strict] [--json]`
+   - Categorizes issues: Critical, Major, Minor, Nit
+   - Generates markdown report with merge requirements
+   - Strict mode available for CI/CD (`--strict`)
+
+3. **pr-review-production** (NEW) - Production-grade review wrapper
+   - Script: `~/.claude/skills/pr-review/pr-review-production <PR> [OPTIONS]`
+   - **Enforces strict production standards** (all Critical/Major/Minor MUST be resolved)
+   - Optional Linear ticket creation for each issue
+   - Production-ready output formatting
+   - Exit codes for CI/CD integration
+
+**Priority System**:
+- 🔴 **CRITICAL** (Must address): Security, data loss, crashes, breaking changes
+- 🟠 **MAJOR** (Must address): Performance, bugs, missing tests, API changes
+- 🟡 **MINOR** (Must address): Code quality, documentation, edge cases
+- ⚪ **NIT** (Optional): Formatting, naming, minor refactoring
+
+**Merge Requirements**:
+
+**Development/Standard**:
+- ✅ **Can merge when**: Critical, Major, Minor resolved (Nits optional)
+- ❌ **Cannot merge when**: ANY Critical, Major, or Minor remain
+
+**Production** (using `pr-review-production`):
+- ✅ **Can deploy when**: ALL Critical, Major, Minor resolved (Nits optional)
+- ❌ **Cannot deploy when**: ANY Critical, Major, or Minor remain
+- **Automatic Linear ticket creation** for tracking fixes
+
+**Examples**:
+
+```bash
+# Standard review
+~/.claude/skills/pr-review/review-pr 22
+
+# Production review (stricter)
+~/.claude/skills/pr-review/pr-review-production 22
+
+# Production review with Linear ticket creation
+~/.claude/skills/pr-review/pr-review-production 22 \
+  --create-linear-tickets \
+  --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
+
+# CI/CD integration (exits 2 if issues found)
+~/.claude/skills/pr-review/pr-review-production 22 --json
+```
+
+**Workflow - PR Review to Linear Tickets**:
+1. Run production review: `pr-review-production <PR> --create-linear-tickets --team <TEAM_ID>`
+2. Script fetches all PR feedback from 4 endpoints
+3. Categorizes by priority (Critical/Major/Minor/Nit)
+4. Creates Linear ticket for each Critical and Major issue
+5. Outputs production readiness status
+6. Team addresses tickets in Linear
+7. Re-run production review to verify resolution
+
+### When to Use Skills vs Direct MCP
+
+**Use Skills** (scripts at `~/.claude/skills/`):
+- When you need examples or documentation
+- When wrapping multiple MCP calls (e.g., PR review orchestration)
+- When adding business logic (e.g., priority classification)
+
+**Use MCP Tools Directly** (recommended for agents):
+- For single operations (create ticket, list tickets, get ticket)
+- When you have all parameters ready
+- For programmatic integration in agent workflows
+
+**Available MCP Servers**:
+- **Linear**: `mcp__linear-server__*` (tickets, projects, labels, users)
+- **Others**: Check `/mcp` output for complete list
+
+**Event-Based Services** (via Kafka):
+- **Intelligence**: Pattern discovery, quality assessment via event bus
+- **Agent Routing**: Event-based routing decisions and manifest injection
+- **Observability**: Action logging, correlation tracking, debug intelligence
 
 ## Anti-Patterns
 
@@ -178,6 +399,7 @@ Required functions:
 ## Notes
 
 - Registry: `~/.claude/agent-definitions/agent-registry.yaml`
-- Archon MCP: `http://192.168.86.101:8151/mcp`
+- Intelligence Services: Event-based via Kafka (192.168.86.200:29092)
 - See `@MANDATORY_FUNCTIONS.md`, `@COMMON_TEMPLATES.md`, `@COMMON_AGENT_PATTERNS.md` for details
 - Observability: All routing logged to database automatically via hook
+- All services communicate via Kafka event bus (intelligence, routing, observability)

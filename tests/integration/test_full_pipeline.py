@@ -45,6 +45,8 @@ node_type: EFFECT
 input_model: ModelInput
 output_model: ModelOutput
 error_model: ModelOnexError
+io_operations:
+  - operation_type: "write"
 """
 
     result = validator.validate_contract(sample_contract, "EFFECT")
@@ -68,6 +70,12 @@ node_type: COMPUTE
 input_model: ModelInput
 output_model: ModelOutput
 error_model: ModelOnexError
+algorithm:
+  algorithm_type: "transformation"
+  factors:
+    main:
+      weight: 1.0
+      calculation_method: "transform"
 computation_type: transformation
 is_pure: true
 """

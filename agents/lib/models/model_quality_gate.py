@@ -304,8 +304,8 @@ class ModelQualityGateResult(BaseModel):
         ..., ge=0, description="Actual execution time in milliseconds"
     )
     message: str = Field(..., min_length=1, description="Human-readable result message")
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional context"
+    metadata: dict[str, Any] | None = Field(
+        default_factory=dict, description="Additional context (None normalized to {})"
     )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
