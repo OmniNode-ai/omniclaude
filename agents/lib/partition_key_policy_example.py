@@ -9,14 +9,24 @@ Created: 2025-11-13
 
 from uuid import uuid4
 
-from partition_key_policy import (
-    EventFamily,
-    get_event_family,
-    get_partition_key_for_event,
-    get_partition_policy,
-    get_policy_summary,
-    validate_partition_key,
-)
+try:
+    from partition_key_policy import (
+        EventFamily,
+        get_event_family,
+        get_partition_key_for_event,
+        get_partition_policy,
+        get_policy_summary,
+        validate_partition_key,
+    )
+except ImportError:
+    from agents.lib.partition_key_policy import (
+        EventFamily,
+        get_event_family,
+        get_partition_key_for_event,
+        get_partition_policy,
+        get_policy_summary,
+        validate_partition_key,
+    )
 
 
 def example_routing_event():

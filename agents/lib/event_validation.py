@@ -67,7 +67,8 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
     - event_type: Event type identifier (string)
     - correlation_id: Request correlation ID for tracing (UUID string)
     - timestamp: Event timestamp (ISO 8601 format)
-    - service: Source service name (min_length=1)
+    - source: Source service name (min_length=1)
+      Note: "service" also accepted for backward compatibility
     - payload: Event payload (dict or object)
 
     Optional but recommended:
@@ -86,7 +87,7 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
         ...     "event_type": "AGENT_ROUTING_REQUESTED",
         ...     "correlation_id": "abc-123",
         ...     "timestamp": "2025-10-30T14:30:00Z",
-        ...     "service": "polymorphic-agent",
+        ...     "source": "polymorphic-agent",
         ...     "payload": {...},
         ...     "version": "v1"
         ... }
@@ -101,7 +102,6 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
         "event_type",
         "correlation_id",
         "timestamp",
-        "service",
         "payload",
     ]
 
@@ -112,6 +112,23 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
             result.add_error(f"Required field cannot be None: {field}")
         elif isinstance(envelope[field], str) and not envelope[field].strip():
             result.add_error(f"Required field cannot be empty: {field}")
+
+    # Validate source/service field (accept either for backward compatibility)
+    source_field = (
+        "source"
+        if "source" in envelope
+        else "service" if "service" in envelope else None
+    )
+    if source_field is None:
+        result.add_error("Missing required field: source")
+    else:
+        source_value = envelope[source_field]
+        if not isinstance(source_value, str):
+            result.add_error(
+                f"{source_field} must be string, got {type(source_value).__name__}"
+            )
+        elif not source_value.strip():
+            result.add_error(f"{source_field} cannot be empty string")
 
     # Optional but recommended fields
     if "version" not in envelope:
@@ -144,14 +161,6 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
         result.add_error(
             f"timestamp must be string, got {type(envelope['timestamp']).__name__}"
         )
-
-    if "service" in envelope:
-        if not isinstance(envelope["service"], str):
-            result.add_error(
-                f"service must be string, got {type(envelope['service']).__name__}"
-            )
-        elif not envelope["service"].strip():
-            result.add_error("service cannot be empty string")
 
     if "payload" in envelope and envelope["payload"] is None:
         result.add_error("payload cannot be None (use empty dict if no data)")
@@ -436,7 +445,7 @@ def validate_full_event(
         ...     "event_type": "AGENT_ROUTING_REQUESTED",
         ...     "correlation_id": "abc-123-def-456",
         ...     "timestamp": "2025-10-30T14:30:00Z",
-        ...     "service": "polymorphic-agent",
+        ...     "source": "polymorphic-agent",
         ...     "payload": {"user_request": "test"},
         ...     "version": "v1"
         ... }

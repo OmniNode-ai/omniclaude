@@ -14,8 +14,8 @@ The `AgentExecutionPublisher` provides a Kafka-based event publisher for trackin
 |------------|-------|---------|
 | `omninode.agent.execution.started.v1` | `omninode.agent.execution.started.v1` | Agent execution begins |
 | `omninode.agent.execution.progress.v1` | `omninode.agent.execution.progress.v1` | Agent execution progress update (future) |
-| `omninode.agent.execution.completed.v1` | `omninode.agent.execution.completed.v1` | Agent execution finishes successfully (future) |
-| `omninode.agent.execution.failed.v1` | `omninode.agent.execution.failed.v1` | Agent execution fails with error (future) |
+| `omninode.agent.execution.completed.v1` | `omninode.agent.execution.completed.v1` | Agent execution finishes successfully |
+| `omninode.agent.execution.failed.v1` | `omninode.agent.execution.failed.v1` | Agent execution fails with error |
 
 ## Event Schema
 
@@ -324,7 +324,7 @@ await publisher.publish_execution_progress(
 )
 ```
 
-### Execution Completed Event (Planned)
+### Execution Completed Event
 
 ```python
 await publisher.publish_execution_completed(
@@ -336,7 +336,7 @@ await publisher.publish_execution_completed(
 )
 ```
 
-### Execution Failed Event (Planned)
+### Execution Failed Event
 
 ```python
 await publisher.publish_execution_failed(

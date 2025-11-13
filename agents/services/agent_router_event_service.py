@@ -506,9 +506,9 @@ class AgentRouterEventService:
     """
 
     # Kafka topic names
-    TOPIC_REQUEST = "agent.routing.requested.v1"
-    TOPIC_COMPLETED = "agent.routing.completed.v1"
-    TOPIC_FAILED = "agent.routing.failed.v1"
+    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
+    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
+    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
 
     def __init__(
         self,
