@@ -80,6 +80,7 @@ input:
   # For add_model and update_pricing
   model_data:
     type: "object"
+    required: false
     required_for: ["add_model", "update_pricing"]
     properties:
       provider:
@@ -127,15 +128,18 @@ input:
   # For get_pricing
   provider:
     type: "string"
+    required: false
     required_for: ["get_pricing"]
 
   model_name:
     type: "string"
+    required: false
     required_for: ["get_pricing", "mark_deprecated"]
 
   # For list_models
   filter:
     type: "object"
+    required: false
     required_for: ["list_models"]
     properties:
       provider:
@@ -166,54 +170,70 @@ output:
   catalog_id:
     type: "string"
     format: "uuid"
+    required: false
     required_for: ["add_model", "update_pricing", "get_pricing"]
 
   model_pricing:
     type: "object"
+    required: false
     required_for: ["get_pricing"]
-    required: ["provider", "model_name", "input_price_per_million", "output_price_per_million"]
     properties:
       provider:
         type: "string"
+        required: true
       model_name:
         type: "string"
+        required: true
       model_version:
         type: "string"
+        required: false
         description: "ModelSemVer from omnibase_core.primitives.model_semver"
       input_price_per_million:
         type: "float"
+        required: true
       output_price_per_million:
         type: "float"
+        required: true
       max_tokens:
         type: "integer"
+        required: false
       context_window:
         type: "integer"
+        required: false
       is_active:
         type: "boolean"
+        required: true
 
   # For list_models
   models:
     type: "array"
+    required: false
+    required_for: ["list_models"]
     items:
       type: "object"
-      required: ["catalog_id", "provider", "model_name", "input_price_per_million", "output_price_per_million", "is_active"]
       properties:
         catalog_id:
           type: "string"
+          required: true
         provider:
           type: "string"
+          required: true
         model_name:
           type: "string"
+          required: true
         input_price_per_million:
           type: "float"
+          required: true
         output_price_per_million:
           type: "float"
+          required: true
         is_active:
           type: "boolean"
-    required_for: ["list_models"]
+          required: true
 
   result_count:
     type: "integer"
+    required: false
     required_for: ["list_models"]
 
   error:

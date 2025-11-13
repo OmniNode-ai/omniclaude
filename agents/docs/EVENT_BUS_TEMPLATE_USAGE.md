@@ -34,7 +34,11 @@ agents/templates/
 ```python
 from jinja2 import Environment, FileSystemLoader
 
-env = Environment(loader=FileSystemLoader('agents/templates'))
+# Enable autoescape for security (prevents XSS vulnerabilities)
+env = Environment(
+    loader=FileSystemLoader('agents/templates'),
+    autoescape=True
+)
 template = env.get_template('introspection_event.py.jinja2')
 
 context = {
@@ -140,7 +144,11 @@ print(method_code)
 ```python
 from jinja2 import Environment, FileSystemLoader
 
-env = Environment(loader=FileSystemLoader('agents/templates'))
+# Enable autoescape for security (prevents XSS vulnerabilities)
+env = Environment(
+    loader=FileSystemLoader('agents/templates'),
+    autoescape=True
+)
 template = env.get_template('startup_script.py.jinja2')
 
 context = {

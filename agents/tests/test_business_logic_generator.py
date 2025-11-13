@@ -6,7 +6,6 @@ Tests stub generation for all node types, method signatures from contracts,
 mixin integration, error handling patterns, and ONEX compliance.
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -42,11 +41,12 @@ def business_logic_generator():
 
 
 @pytest.fixture
-def temp_output_dir():
+def temp_output_dir(tmp_path):
     """Create a temporary directory for output files"""
-    temp_dir = tempfile.mkdtemp()
-    return temp_dir
-    # Cleanup handled by tempdir
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    return str(output_dir)
+    # Cleanup handled automatically by pytest tmp_path
 
 
 # ============================================================================

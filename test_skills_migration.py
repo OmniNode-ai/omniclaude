@@ -13,9 +13,10 @@ Tests:
 import sys
 from pathlib import Path
 
-# Add omniclaude to path
-OMNICLAUDE_PATH = Path("/Volumes/PRO-G40/Code/omniclaude")
-sys.path.insert(0, str(OMNICLAUDE_PATH))
+# Add omniclaude to path dynamically
+# Determine repository root (this file is at repo root)
+REPO_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_ROOT))
 
 # Import Pydantic Settings first
 from config import settings

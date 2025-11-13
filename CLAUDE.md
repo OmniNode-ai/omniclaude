@@ -65,7 +65,7 @@ OmniClaude features a sophisticated intelligence infrastructure that provides ag
 | Service | Purpose | Port | Health Check |
 |---------|---------|------|--------------|
 | **archon-intelligence** | Intelligence coordinator and event processor | 8053 | `curl http://localhost:8053/health` |
-| **archon-qdrant** | Vector database for pattern storage (120+ patterns) | 6333 | `curl http://localhost:6333/collections` |
+| **archon-qdrant** | Vector database for pattern storage (15,689+ patterns) | 6333 | `curl http://localhost:6333/collections` |
 | **archon-bridge** | PostgreSQL connector (34 tables in omninode_bridge) | 5436 | `psql -h localhost -p 5436 -U postgres` |
 | **archon-search** | Full-text and semantic search | 8054 | `curl http://localhost:8054/health` |
 | **archon-memgraph** | Graph database for relationships | 7687 | Bolt protocol check |

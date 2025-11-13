@@ -34,19 +34,33 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Determine project root (skills are in ~/.claude/skills, not in project)
-OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
-)
-if not OMNICLAUDE_PATH.exists():
-    # Fallback to common locations
-    for fallback in [
+# Determine project root dynamically (skills are in ~/.claude/skills, not in project)
+# First check environment variable, then try to find via repository structure
+if os.environ.get("OMNICLAUDE_PATH"):
+    OMNICLAUDE_PATH = Path(os.environ.get("OMNICLAUDE_PATH"))
+else:
+    # Try to find omniclaude by looking for common markers
+    # Skills are typically in ~/.claude/skills, so omniclaude should be findable
+    for search_path in [
         Path.home() / "Code" / "omniclaude",
-        Path("/Volumes/PRO-G40/Code/omniclaude"),
+        Path("/Users") / os.environ.get("USER", "unknown") / "Code" / "omniclaude",
     ]:
-        if fallback.exists():
-            OMNICLAUDE_PATH = fallback
+        if search_path.exists():
+            OMNICLAUDE_PATH = search_path
             break
+    else:
+        # Last resort: print error with helpful message
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "error": "Cannot find omniclaude repository",
+                    "hint": "Set OMNICLAUDE_PATH environment variable to the repository root",
+                }
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings

@@ -5,10 +5,17 @@ Tests the STF storage Effect node using MockDatabaseProtocol.
 Demonstrates ONEX compliance with type-safe contracts and error handling.
 """
 
+import sys
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
+# Add repository root to path for module imports
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol

@@ -109,14 +109,31 @@ output:
     properties:
       weights:
         type: "object"
+        required: true
         properties:
-          completeness: 0.30
-          documentation: 0.25
-          onex_compliance: 0.20
-          metadata: 0.15
-          complexity: 0.10
+          completeness:
+            type: "float"
+            required: true
+            value: 0.30
+          documentation:
+            type: "float"
+            required: true
+            value: 0.25
+          onex_compliance:
+            type: "float"
+            required: true
+            value: 0.20
+          metadata:
+            type: "float"
+            required: true
+            value: 0.15
+          complexity:
+            type: "float"
+            required: true
+            value: 0.10
       formula:
         type: "string"
+        required: true
         value: "sum(dimension * weight for each dimension)"
 
   cache_hit:

@@ -6,7 +6,6 @@ Tests the complete Phase 5 pipeline: PRD → Contract → Business Logic → Val
 """
 
 import asyncio
-import tempfile
 import time
 
 import pytest
@@ -59,10 +58,12 @@ def pattern_library():
 
 
 @pytest.fixture
-def temp_output_dir():
+def temp_output_dir(tmp_path):
     """Create temporary directory for outputs"""
-    temp_dir = tempfile.mkdtemp()
-    return temp_dir
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    return str(output_dir)
+    # Cleanup handled automatically by pytest tmp_path
 
 
 # ============================================================================

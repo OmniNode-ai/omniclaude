@@ -35,13 +35,36 @@ except ImportError as e:
     print("Install with: pip install psycopg2-binary rich", file=sys.stderr)
     sys.exit(1)
 
-# Import config module from omniclaude
+# Import config module from omniclaude - dynamic path resolution
+# This skill is typically in ~/.claude/skills/debug-loop/debug-loop-price-check/
+# We need to find the omniclaude repository root
+import os
+from pathlib import Path
+
+if os.environ.get("OMNICLAUDE_PATH"):
+    REPO_ROOT = Path(os.environ.get("OMNICLAUDE_PATH"))
+    sys.path.insert(0, str(REPO_ROOT))
+else:
+    # Try common locations
+    for candidate in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Users") / os.environ.get("USER", "unknown") / "Code" / "omniclaude",
+    ]:
+        if candidate.exists():
+            sys.path.insert(0, str(candidate))
+            break
+    else:
+        print(
+            "Error: Cannot find omniclaude repository. Set OMNICLAUDE_PATH environment variable.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
 try:
-    sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
     from config import settings
 except ImportError:
     print("Error: Cannot import config module from omniclaude", file=sys.stderr)
-    print("Ensure you're running from omniclaude repository", file=sys.stderr)
+    print("Ensure config module is available in omniclaude repository", file=sys.stderr)
     sys.exit(1)
 
 

@@ -104,31 +104,42 @@ output:
     properties:
       has_docstring:
         type: "boolean"
+        required: true
       has_type_hints:
         type: "boolean"
+        required: true
       has_error_handling:
         type: "boolean"
+        required: true
       has_tests:
         type: "boolean"
+        required: false
       lines_of_code:
         type: "integer"
+        required: false
       cyclomatic_complexity:
         type: "integer"
+        required: false
       parameters:
         type: "array"
+        required: false
         items:
           type: "object"
           properties:
             name:
               type: "string"
+              required: true
             type:
               type: "string"
+              required: false
             default:
               type: "string"
               nullable: true
+              required: false
               description: "String representation of default value (can be 'None', literal value, etc.)"
       return_type:
         type: "string"
+        required: false
 
   extraction_method:
     type: "string"

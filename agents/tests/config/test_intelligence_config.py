@@ -27,6 +27,7 @@ from agents.lib.config.intelligence_config import IntelligenceConfig
 @pytest.fixture
 def clean_env(monkeypatch):
     """Clean environment with no intelligence config variables set."""
+    # Clear environment variables
     env_vars = [
         "KAFKA_BOOTSTRAP_SERVERS",
         "KAFKA_ENABLE_INTELLIGENCE",
@@ -43,6 +44,36 @@ def clean_env(monkeypatch):
     ]
     for var in env_vars:
         monkeypatch.delenv(var, raising=False)
+
+    # Clear settings cache to force reload from environment
+    # This ensures test environment variables are used instead of cached .env values
+    import agents.lib.config.intelligence_config as intel_config_module
+
+    # Clear the lazy-loaded settings cache in intelligence_config
+    intel_config_module._settings_cache = None
+
+    # Clear the lru_cache on get_settings() in the centralized settings module
+    try:
+        # Import and clear the centralized settings cache
+        import sys
+        from pathlib import Path
+
+        project_root = Path(__file__).parent.parent.parent.parent
+        settings_file = project_root / "config" / "settings.py"
+
+        # Load settings module to get access to get_settings function
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("_config_settings", settings_file)
+        settings_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(settings_module)
+
+        # Clear the lru_cache
+        settings_module.get_settings.cache_clear()
+    except Exception:
+        # If cache clearing fails, continue - test may still work
+        pass
+
     return monkeypatch
 
 

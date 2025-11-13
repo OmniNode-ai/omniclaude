@@ -30,8 +30,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Add project root to path for imports
-sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
+# Add project root to path for imports - dynamic path resolution
+# This skill is typically in ~/.claude/skills/debug-loop/debug-loop-health/
+# We need to find the omniclaude repository root
+if os.environ.get("OMNICLAUDE_PATH"):
+    REPO_ROOT = Path(os.environ.get("OMNICLAUDE_PATH"))
+    sys.path.insert(0, str(REPO_ROOT))
+else:
+    # Try common locations
+    for candidate in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Users") / os.environ.get("USER", "unknown") / "Code" / "omniclaude",
+    ]:
+        if candidate.exists():
+            sys.path.insert(0, str(candidate))
+            break
+    else:
+        print(
+            "❌ Cannot find omniclaude repository. Set OMNICLAUDE_PATH environment variable."
+        )
+        sys.exit(2)
 
 try:
     import asyncpg
@@ -39,11 +57,16 @@ try:
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
-
-    from config import settings
 except ImportError as e:
     print(f"❌ Missing required dependency: {e}")
     print("\nInstall with: pip install asyncpg rich")
+    sys.exit(2)
+
+# Import config after dependencies check
+try:
+    from config import settings
+except ImportError as e:
+    print(f"❌ Cannot import config module: {e}")
     print("Ensure config module is available in omniclaude")
     sys.exit(2)
 

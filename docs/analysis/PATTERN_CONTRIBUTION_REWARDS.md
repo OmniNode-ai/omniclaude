@@ -13,6 +13,31 @@
 
 ---
 
+## Data Sources
+
+**Pattern inventory verified as of 2025-11-12**:
+
+| Collection | Pattern Count | Data Type | Source |
+|-----------|---------------|-----------|--------|
+| `archon_vectors` | 7,118 patterns | ONEX architectural templates and execution patterns | Qdrant collection via archon-intelligence |
+| `code_generation_patterns` | 8,571 patterns | Real Python implementations and code examples | Qdrant collection via archon-intelligence |
+| **Total** | **15,689+ patterns** | Combined pattern library | Qdrant health checks + CLAUDE.md |
+
+**Data Collection Methods**:
+- Qdrant health checks: `curl http://localhost:6333/collections`
+- Pattern quality scoring: `agents/lib/pattern_quality_scorer.py` (5 dimensions)
+- Intelligence queries: Kafka event bus via archon-intelligence adapter
+- Database metrics: 34 tables in `omninode_bridge` PostgreSQL database
+
+**Documentation References**:
+- `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` - OmniClaude architecture and intelligence infrastructure
+- `docs/PATTERN_DATA_INVESTIGATION_REPORT.md` - Detailed pattern inventory analysis
+- `scripts/health_check.sh` - System health validation script
+
+**Note on Historical Data**: Initial draft of this document (pre-2025-11-12) referenced ~120 patterns from outdated documentation. Current verified counts are 130x larger, significantly strengthening the ROI case for pattern contribution rewards.
+
+---
+
 ## Executive Summary
 
 **Vision**: Automatically reward users for contributing new patterns to the shared library. Whenever an agent creates a working solution, extract the pattern, score it for quality, and issue token rewards if it's novel and high-quality.
@@ -500,21 +525,31 @@ CREATE INDEX idx_pattern_contributions_reward ON pattern_contributions(total_rew
 
 ### Economic Balance
 
-**Scenario**: Active developer
+> **⚠️ ASPIRATIONAL SCENARIO**: The following is an illustrative example with **unvalidated assumptions**. Actual usage patterns will be measured during pilot program (Phase 3, Weeks 5-7) to calibrate token economics.
 
-**Earns**:
+**Scenario**: Active developer (aspirational - not based on current usage data)
+
+**Earns** (estimated):
 - Solve 3 problems/day → extract 3 patterns → 450 tokens (avg 150/pattern)
+  - *Assumption: 3 problems/day is unvalidated - actual rate to be measured*
 - Share 100KB context → 200 tokens
+  - *Assumption: 100KB/day is illustrative - actual sharing volume varies by user*
 - 10 past patterns used by others → 50 tokens (5 each)
-- **Total earned**: 700 tokens/day
+  - *Assumption: Pattern reuse rate to be validated during pilot*
+- **Total earned**: 700 tokens/day *(illustrative - pending pilot validation)*
 
-**Spends**:
+**Spends** (estimated):
 - 50 LLM queries → 500 tokens
+  - *Assumption: 50 queries/day is illustrative - actual usage varies widely*
 - Retrieve 50KB context from peers → 100 tokens
+  - *Assumption: Context retrieval patterns to be measured*
 - Use 5 patterns from others → 25 tokens (optional)
-- **Total spent**: 625 tokens/day
+  - *Assumption: Pattern usage rate to be validated*
+- **Total spent**: 625 tokens/day *(illustrative - pending pilot validation)*
 
 **Net**: +75 tokens/day = **surplus** (encourages participation)
+  - *Note: Actual balance depends on token economics calibration (see Phase 3, Weeks 5-7)*
+  - *Success criteria: >70% of contributors achieve net surplus (not yet validated)*
 
 ---
 

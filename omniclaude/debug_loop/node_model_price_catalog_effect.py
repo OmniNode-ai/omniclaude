@@ -17,7 +17,7 @@ Operations:
 """
 
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
@@ -40,14 +40,14 @@ except ImportError:
         """Mock protocol for database operations"""
 
         async def execute_query(
-            self, query: str, params: Optional[Dict] = None
+            self, query: str, params: dict | None = None
         ) -> Any: ...
         async def fetch_one(
-            self, query: str, params: Optional[Dict] = None
-        ) -> Optional[Dict]: ...
+            self, query: str, params: dict | None = None
+        ) -> dict | None: ...
         async def fetch_all(
-            self, query: str, params: Optional[Dict] = None
-        ) -> List[Dict]: ...
+            self, query: str, params: dict | None = None
+        ) -> list[dict]: ...
 
 
 class NodeModelPriceCatalogEffect(NodeEffect):
@@ -76,7 +76,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             "mark_deprecated": self._handle_mark_deprecated,
         }
 
-    async def execute_effect(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_effect(self, contract: dict[str, Any]) -> dict[str, Any]:
         """
         Execute model pricing catalog operation based on contract.
 
@@ -120,10 +120,10 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         except Exception as e:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.OPERATION_FAILED,
-                message=f"Model pricing catalog operation failed: {str(e)}",
+                message=f"Model pricing catalog operation failed: {e!s}",
             ) from e
 
-    async def _handle_add_model(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_add_model(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Add new model to catalog.
 
         Creates a new model pricing entry in the catalog with pricing information,
@@ -249,10 +249,10 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         except Exception as e:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.DATABASE_OPERATION_ERROR,
-                message=f"Database error during add_model: {str(e)}",
+                message=f"Database error during add_model: {e!s}",
             ) from e
 
-    async def _handle_update_pricing(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_update_pricing(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Update pricing for existing model.
 
         Updates pricing information and rate limits for an existing model in the
@@ -261,7 +261,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         Args:
             contract: Input contract containing:
                 - model_data: Dictionary with:
-                    - provider (required): Provider name
+                    - provider (required): Provider name (must be valid EnumProvider)
                     - model_name (required): Name of the model
                     - input_price_per_million (optional): New input token price
                     - output_price_per_million (optional): New output token price
@@ -276,8 +276,8 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 - catalog_id: UUID of the updated catalog entry
 
         Raises:
-            ModelOnexError: If required fields are missing, no fields to update,
-                or model not found
+            ModelOnexError: If required fields are missing, provider is invalid,
+                no fields to update, or model not found
         """
         model_data = contract.get("model_data", {})
 
@@ -289,6 +289,18 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Missing required fields: {', '.join(missing)}",
             )
+
+        # Validate and convert provider to enum
+        provider_str = model_data["provider"]
+        if not EnumProvider.is_valid(provider_str):
+            valid_providers = EnumProvider.get_valid_providers()
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid provider: {provider_str}. Must be one of: {', '.join(valid_providers)}",
+            )
+
+        # Convert to enum for type safety (EnumProvider inherits from str, so it works in SQL)
+        provider = EnumProvider(provider_str)
 
         # Build UPDATE SET clause
         set_parts = []
@@ -318,7 +330,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
 
         # Add WHERE clause params
         provider_param = str(param_count)
-        params[provider_param] = model_data["provider"]
+        params[provider_param] = provider
         param_count += 1
 
         model_name_param = str(param_count)
@@ -337,7 +349,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         if not result:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.NOT_FOUND,
-                message=f"Model not found: {model_data['provider']}/{model_data['model_name']}",
+                message=f"Model not found: {provider}/{model_data['model_name']}",
             )
 
         return {
@@ -345,7 +357,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             "catalog_id": result["catalog_id"],
         }
 
-    async def _handle_get_pricing(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_get_pricing(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Retrieve pricing for specific model.
 
         Fetches complete pricing information for a specific model by provider
@@ -353,7 +365,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
 
         Args:
             contract: Input contract containing:
-                - provider: Provider name (e.g., "anthropic", "openai")
+                - provider: Provider name (must be valid EnumProvider, e.g., "anthropic", "openai")
                 - model_name: Name of the model (e.g., "gpt-4", "claude-3-opus")
 
         Returns:
@@ -378,16 +390,28 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                     - updated_at: Last update timestamp
 
         Raises:
-            ModelOnexError: If required fields are missing or model not found
+            ModelOnexError: If required fields are missing, provider is invalid,
+                or model not found
         """
-        provider = contract.get("provider")
+        provider_str = contract.get("provider")
         model_name = contract.get("model_name")
 
-        if not provider or not model_name:
+        if not provider_str or not model_name:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Missing required fields: provider and model_name",
             )
+
+        # Validate and convert provider to enum
+        if not EnumProvider.is_valid(provider_str):
+            valid_providers = EnumProvider.get_valid_providers()
+            raise ModelOnexError(
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid provider: {provider_str}. Must be one of: {', '.join(valid_providers)}",
+            )
+
+        # Convert to enum for type safety (EnumProvider inherits from str, so it works in SQL)
+        provider = EnumProvider(provider_str)
 
         query = """
         SELECT
@@ -417,7 +441,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             "model_pricing": dict(result),
         }
 
-    async def _handle_list_models(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_list_models(self, contract: dict[str, Any]) -> dict[str, Any]:
         """List models with filters.
 
         Retrieves a list of models from the catalog with optional filtering
@@ -428,7 +452,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             contract: Input contract containing:
                 - filter: Dictionary with optional filter criteria:
                     - is_active: Filter by active status (default: True)
-                    - provider: Filter by specific provider
+                    - provider: Filter by specific provider (must be valid EnumProvider if provided)
                     - supports_streaming: Filter by streaming support
                     - max_price_per_million: Maximum output price per million tokens
 
@@ -448,7 +472,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
                 - result_count: Number of models returned
 
         Raises:
-            ModelOnexError: If database operation fails
+            ModelOnexError: If provider is invalid or database operation fails
         """
         filter_criteria = contract.get("filter", {})
 
@@ -458,8 +482,21 @@ class NodeModelPriceCatalogEffect(NodeEffect):
         param_count = 2
 
         if filter_criteria.get("provider"):
+            provider_str = filter_criteria["provider"]
+
+            # Validate and convert provider to enum
+            if not EnumProvider.is_valid(provider_str):
+                valid_providers = EnumProvider.get_valid_providers()
+                raise ModelOnexError(
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message=f"Invalid provider: {provider_str}. Must be one of: {', '.join(valid_providers)}",
+                )
+
+            # Convert to enum for type safety
+            provider = EnumProvider(provider_str)
+
             where_parts.append(f"provider = ${param_count}")
-            params[str(param_count)] = filter_criteria["provider"]
+            params[str(param_count)] = provider
             param_count += 1
 
         if filter_criteria.get("supports_streaming") is not None:
@@ -493,7 +530,7 @@ class NodeModelPriceCatalogEffect(NodeEffect):
             "result_count": len(results),
         }
 
-    async def _handle_mark_deprecated(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_mark_deprecated(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Mark model as deprecated (set is_active = false).
 
         Marks a model as deprecated by setting its is_active flag to false.

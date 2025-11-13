@@ -170,12 +170,19 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
 
             async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
-                    # Build query
-                    where_parts = [f"quality_score >= {min_quality}"]
+                    # Build query with parameterized placeholders
+                    where_parts = ["quality_score >= $1"]
+                    params = [min_quality]
+
                     if category:
-                        where_parts.append(f"problem_category = '{category}'")
+                        params.append(category)
+                        where_parts.append(f"problem_category = ${len(params)}")
 
                     where_clause = " AND ".join(where_parts)
+
+                    # Add limit parameter
+                    params.append(limit)
+                    limit_placeholder = f"${len(params)}"
 
                     query = f"""
                     SELECT
@@ -188,10 +195,10 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
                     FROM debug_transform_functions
                     WHERE {where_clause}
                     ORDER BY quality_score DESC, usage_count DESC
-                    LIMIT {limit}
+                    LIMIT {limit_placeholder}
                     """
 
-                    results = await conn.fetch(query)
+                    results = await conn.fetch(query, *params)
 
         if not results:
             console.print("[yellow]No STFs found matching criteria[/yellow]")
@@ -374,15 +381,22 @@ def search(category: Optional[str], min_quality: float, limit: int):
 
             async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
-                    # Build WHERE clause
+                    # Build WHERE clause with parameterized placeholders
                     where_parts = [
-                        f"quality_score >= {min_quality}",
+                        "quality_score >= $1",
                         "approval_status = 'approved'",
                     ]
+                    params = [min_quality]
+
                     if category:
-                        where_parts.append(f"problem_category = '{category}'")
+                        params.append(category)
+                        where_parts.append(f"problem_category = ${len(params)}")
 
                     where_clause = " AND ".join(where_parts)
+
+                    # Add limit parameter
+                    params.append(limit)
+                    limit_placeholder = f"${len(params)}"
 
                     query = f"""
                     SELECT
@@ -395,10 +409,10 @@ def search(category: Optional[str], min_quality: float, limit: int):
                     FROM debug_transform_functions
                     WHERE {where_clause}
                     ORDER BY quality_score DESC, usage_count DESC
-                    LIMIT {limit}
+                    LIMIT {limit_placeholder}
                     """
 
-                    results = await conn.fetch(query)
+                    results = await conn.fetch(query, *params)
 
         if not results:
             console.print("[yellow]No STFs found matching criteria[/yellow]")
@@ -545,12 +559,15 @@ def list_models(provider: Optional[str], active_only: bool):
 
             async with await get_db_pool() as pool:
                 async with pool.acquire() as conn:
-                    # Build WHERE clause
+                    # Build WHERE clause with parameterized placeholders
                     where_parts = []
+                    params = []
+
                     if active_only:
                         where_parts.append("is_active = true")
                     if provider:
-                        where_parts.append(f"provider = '{provider}'")
+                        params.append(provider)
+                        where_parts.append(f"provider = ${len(params)}")
 
                     where_clause = " AND ".join(where_parts) if where_parts else "1=1"
 
@@ -565,7 +582,7 @@ def list_models(provider: Optional[str], active_only: bool):
                     ORDER BY provider, model_name
                     """
 
-                    results = await conn.fetch(query)
+                    results = await conn.fetch(query, *params)
 
         if not results:
             console.print("[yellow]No models found[/yellow]")

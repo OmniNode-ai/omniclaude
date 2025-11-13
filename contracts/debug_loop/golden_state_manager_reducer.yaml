@@ -192,17 +192,20 @@ output:
   # Intents
   intents:
     type: "array"
+    required: true
     items:
       type: "object"
       properties:
         intent_type:
           type: "string"
+          required: true
           description: "EnumIntentType from omnibase_core.models.model_intent"
         target:
           type: "string"
+          required: true
         payload:
           type: "object"
-    required: true
+          required: false
 
   # FSM transition info
   transition:

@@ -167,21 +167,20 @@ output:
     required: true
     items:
       type: "object"
-      required: true
       properties:
         intent_type:
           type: "enum"
           enum_ref: "EnumIntentType"
-          description: "Intent type from omnibase_core.models.model_intent.EnumIntentType"
           required: true
+          description: "Intent type from omnibase_core.models.model_intent.EnumIntentType"
         target:
           type: "string"
-          description: "Target node or resource"
           required: true
+          description: "Target node or resource"
         payload:
           type: "object"
-          description: "Intent-specific payload data"
           required: false
+          description: "Intent-specific payload data"
           properties: {}
           additional_properties: true
 

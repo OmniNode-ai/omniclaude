@@ -17,8 +17,8 @@ Operations:
 """
 
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
-from uuid import UUID, uuid4
+from typing import Any
+from uuid import uuid4
 
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
@@ -36,14 +36,14 @@ except ImportError:
         """Mock protocol for database operations"""
 
         async def execute_query(
-            self, query: str, params: Optional[Dict] = None
+            self, query: str, params: dict | None = None
         ) -> Any: ...
         async def fetch_one(
-            self, query: str, params: Optional[Dict] = None
-        ) -> Optional[Dict]: ...
+            self, query: str, params: dict | None = None
+        ) -> dict | None: ...
         async def fetch_all(
-            self, query: str, params: Optional[Dict] = None
-        ) -> List[Dict]: ...
+            self, query: str, params: dict | None = None
+        ) -> list[dict]: ...
 
 
 class NodeDebugSTFStorageEffect(NodeEffect):
@@ -72,7 +72,7 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             "update_quality": self._handle_update_quality,
         }
 
-    async def execute_effect(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_effect(self, contract: dict[str, Any]) -> dict[str, Any]:
         """
         Execute STF storage operation based on contract.
 
@@ -119,14 +119,14 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             raise
         except Exception as e:
             raise ModelOnexError(
-                message=f"STF storage operation failed: {str(e)}",
+                message=f"STF storage operation failed: {e!s}",
                 error_code=EnumCoreErrorCode.OPERATION_FAILED,
                 operation="execute_effect",
                 input_data=contract,
                 error=str(e),
             ) from e
 
-    async def _handle_store(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_store(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Store new STF with quality metrics.
 
         Creates a new Specific Transformation Function (STF) record in the database
@@ -234,11 +234,11 @@ class NodeDebugSTFStorageEffect(NodeEffect):
                     error_code=EnumCoreErrorCode.INVALID_OPERATION,
                 )
             raise ModelOnexError(
-                message=f"Database error during store: {str(e)}",
+                message=f"Database error during store: {e!s}",
                 error_code=EnumCoreErrorCode.DATABASE_OPERATION_ERROR,
             ) from e
 
-    async def _handle_retrieve(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_retrieve(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Retrieve STF by ID.
 
         Fetches a complete STF record from the database by its unique identifier,
@@ -298,7 +298,7 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             "stf_data": dict(result),
         }
 
-    async def _handle_search(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_search(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Search STFs by criteria.
 
         Searches the STF database using multiple filter criteria, returning
@@ -382,7 +382,7 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             "result_count": len(results),
         }
 
-    async def _handle_update_usage(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_update_usage(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Increment usage counter.
 
         Increments the usage count for an STF and updates the last_used_at timestamp.
@@ -428,7 +428,7 @@ class NodeDebugSTFStorageEffect(NodeEffect):
             "stf_id": stf_id,
         }
 
-    async def _handle_update_quality(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_update_quality(self, contract: dict[str, Any]) -> dict[str, Any]:
         """Update quality scores.
 
         Updates one or more quality score fields for an STF. Supports updating

@@ -11,6 +11,37 @@
 - **Key Blockers Resolved**: Legal risk (Critical → Manageable), funding sustainability (External → Self-sustaining), timeline (8-12 weeks → 4-6 weeks)
 - **Open Questions**: Token economics ratios, free tier allocation, verification sandbox design, governance model
 
+## Data Sources
+
+**Pattern inventory verified as of 2025-11-12**:
+
+| Collection | Pattern Count | Data Type | Source |
+|-----------|---------------|-----------|--------|
+| `archon_vectors` | 7,118 patterns | ONEX architectural templates and execution patterns | Qdrant collection via archon-intelligence |
+| `code_generation_patterns` | 8,571 patterns | Real Python implementations and code examples | Qdrant collection via archon-intelligence |
+| **Total** | **15,689+ patterns** | Combined pattern library | Qdrant health checks + CLAUDE.md |
+
+**Infrastructure Metrics** (from existing OmniClaude observability):
+- **Database**: 34 tables in `omninode_bridge` PostgreSQL database (192.168.86.200:5436)
+- **Event Bus**: 15+ Kafka topics for event-driven architecture
+- **Intelligence Services**: archon-intelligence, archon-qdrant, archon-bridge, archon-search, archon-memgraph
+- **Observability**: Complete correlation tracking via PR #22 (migration 012)
+
+**Data Collection Methods**:
+- Qdrant health checks: `curl http://localhost:6333/collections`
+- Database queries: `psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge`
+- Pattern quality scoring: `agents/lib/pattern_quality_scorer.py`
+- System health: `scripts/health_check.sh`
+
+**Documentation References**:
+- `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` - Complete OmniClaude architecture and infrastructure topology
+- `docs/PATTERN_DATA_INVESTIGATION_REPORT.md` - Detailed pattern inventory analysis (verified counts)
+- `docs/observability/AGENT_TRACEABILITY.md` - Observability infrastructure (PR #22)
+
+**Note on Coverage Calculation**: This analysis calculates 59% coverage (10 of 17 features exist) based on verified infrastructure audit. Initial references to "120+ patterns" were from outdated documentation and have been corrected to reflect actual counts (15,689+ patterns = 130x larger).
+
+---
+
 ## Related Documents
 
 - **[P2P Context Sharing Model](./P2P_CONTEXT_SHARING_MODEL.md)** - Complete specification for Phase 3b P2P network architecture
@@ -52,7 +83,7 @@ OmniClaude's observability infrastructure (PR #22, migration 012) provides:
 | **Success State Tracking** | ✅ Via `agent_execution_logs` with `quality_score` | Matches proposal's success_events |
 | **Error Tracking** | ✅ Via `agent_execution_logs.error_message/error_type` | Similar to proposed error_events |
 | **Debug Intelligence** | ✅ Via `agent_manifest_injections.debug_intelligence_successes/failures` | Matches proposal's debug intelligence |
-| **Pattern Discovery** | ✅ 120+ patterns in Qdrant (execution_patterns + code_patterns) | Matches proposal's pattern library |
+| **Pattern Discovery** | ✅ 15,689+ patterns in Qdrant (7,118 in archon_vectors + 8,571 in code_generation_patterns) | Matches proposal's pattern library |
 | **Transformation Tracking** | ✅ Via `agent_transformation_events` table | Similar to proposed STF tracking |
 | **Performance Metrics** | ✅ Via `query_times`, `routing_time_ms`, `duration_ms` | Similar to proposed metrics |
 | **File Operations** | ✅ Via `agent_file_operations` with content hashes | Similar to proposed file tracking |

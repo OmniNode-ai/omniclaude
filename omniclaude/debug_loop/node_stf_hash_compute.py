@@ -11,8 +11,8 @@ Base Class: NodeCompute
 Pure function - deterministic, no side effects, thread-safe.
 """
 
+import ast
 import hashlib
-import re
 import time
 from datetime import UTC, datetime
 from typing import Any, Dict, List
@@ -108,14 +108,20 @@ class NodeSTFHashCompute(NodeCompute):
         remove_docstrings: bool = False,
     ) -> tuple[str, List[str]]:
         """
-        Normalize code according to options.
+        Normalize code according to options using AST.
+
+        Uses AST (Abstract Syntax Tree) for robust code normalization that:
+        - Automatically handles comments (AST ignores them)
+        - Correctly identifies and removes docstrings (not all triple-quoted strings)
+        - Preserves code structure and semantics
+        - Handles edge cases that regex cannot
 
         Args:
             code: Original code
             strip_whitespace: Remove leading/trailing whitespace
-            strip_comments: Remove comments
+            strip_comments: Remove comments (via AST parsing)
             normalize_indentation: Normalize to 4 spaces
-            remove_docstrings: Remove docstrings
+            remove_docstrings: Remove docstrings (first string in function/class/module)
 
         Returns:
             Tuple of (normalized_code, list of applied normalizations)
@@ -128,38 +134,33 @@ class NodeSTFHashCompute(NodeCompute):
             normalized = normalized.strip()
             applied.append("strip_whitespace")
 
-        # 2. Remove comments
-        if strip_comments:
-            lines = []
-            for line in normalized.split("\n"):
-                # Remove inline comments (but preserve strings with #)
-                # Simple heuristic: if # is not in a string, remove from # onwards
-                if "#" in line:
-                    # Check if # is in a string
-                    in_string = False
-                    quote_char = None
-                    for i, char in enumerate(line):
-                        if char in ('"', "'") and (i == 0 or line[i - 1] != "\\"):
-                            if not in_string:
-                                in_string = True
-                                quote_char = char
-                            elif char == quote_char:
-                                in_string = False
-                                quote_char = None
-                        elif char == "#" and not in_string:
-                            line = line[:i].rstrip()
-                            break
-                if line:  # Only keep non-empty lines
-                    lines.append(line)
-            normalized = "\n".join(lines)
-            applied.append("strip_comments")
+        # 2. & 3. Use AST for comment and docstring removal
+        if strip_comments or remove_docstrings:
+            try:
+                # Parse to AST (automatically strips comments)
+                tree = ast.parse(normalized)
 
-        # 3. Remove docstrings
-        if remove_docstrings:
-            # Remove triple-quoted strings (simple regex approach)
-            normalized = re.sub(r'"""[\s\S]*?"""', "", normalized)
-            normalized = re.sub(r"'''[\s\S]*?'''", "", normalized)
-            applied.append("remove_docstrings")
+                # Remove docstrings if requested
+                if remove_docstrings:
+                    self._remove_docstrings_from_ast(tree)
+                    applied.append("remove_docstrings")
+
+                # Generate normalized code from AST
+                # Note: ast.unparse is available in Python 3.9+
+                if hasattr(ast, "unparse"):
+                    normalized = ast.unparse(tree)
+                else:
+                    # Fallback for Python 3.8 and earlier
+                    # Keep original code if unparse is not available
+                    pass
+
+                if strip_comments:
+                    applied.append("strip_comments")
+
+            except SyntaxError:
+                # Fallback for invalid syntax - keep original code
+                # This ensures we don't break on malformed code
+                pass
 
         # 4. Normalize indentation to 4 spaces
         if normalize_indentation:
@@ -169,22 +170,55 @@ class NodeSTFHashCompute(NodeCompute):
                     continue  # Skip empty lines
 
                 # Count leading whitespace
-                leading_spaces = len(line) - len(line.lstrip())
+                stripped = line.lstrip()
+                leading_whitespace = line[: len(line) - len(stripped)]
 
-                # Convert tabs to 4 spaces
-                if "\t" in line[:leading_spaces]:
-                    tabs = line[:leading_spaces].count("\t")
-                    leading_spaces = tabs * 4
+                # Convert tabs to spaces (1 tab = 4 spaces)
+                leading_whitespace = leading_whitespace.replace("\t", "    ")
+
+                # Count spaces
+                leading_spaces = len(leading_whitespace)
 
                 # Normalize to multiple of 4
                 indent_level = leading_spaces // 4
-                normalized_line = "    " * indent_level + line.lstrip()
+                normalized_line = "    " * indent_level + stripped
                 lines.append(normalized_line)
 
             normalized = "\n".join(lines)
             applied.append("normalize_indentation")
 
         return normalized, applied
+
+    def _remove_docstrings_from_ast(self, tree: ast.AST) -> None:
+        """
+        Remove docstrings from AST in-place.
+
+        Docstrings are identified as:
+        - First statement in a Module that is an Expr containing a Constant/Str
+        - First statement in a FunctionDef that is an Expr containing a Constant/Str
+        - First statement in a ClassDef that is an Expr containing a Constant/Str
+
+        Args:
+            tree: AST tree to modify in-place
+        """
+        for node in ast.walk(tree):
+            # Check Module, FunctionDef, ClassDef, AsyncFunctionDef
+            if isinstance(
+                node, (ast.Module, ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)
+            ):
+                if node.body and isinstance(node.body[0], ast.Expr):
+                    # Check if it's a string constant (docstring)
+                    value = node.body[0].value
+                    # Handle both ast.Constant (Python 3.8+) and ast.Str (Python 3.7)
+                    is_string = False
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        is_string = True
+                    elif hasattr(ast, "Str") and isinstance(value, ast.Str):
+                        is_string = True
+
+                    if is_string:
+                        # Remove docstring
+                        node.body.pop(0)
 
     def _generate_hash(self, code: str) -> str:
         """

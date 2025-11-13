@@ -111,53 +111,58 @@ class MockDatabaseProtocol:
 
         query_lower = query.lower().strip()
 
-        # Handle INSERT with RETURNING (execute the insert first)
-        if (
-            "insert into debug_transform_functions" in query_lower
-            and "returning" in query_lower
-        ):
+        # Handle INSERT queries (with or without RETURNING)
+        if "insert into debug_transform_functions" in query_lower:
             result = await self._insert_stf(params)
-            # ON CONFLICT DO NOTHING returns None when duplicate
-            if result.get("duplicate"):
-                return None
-            # Return stf_id on success
-            return {"stf_id": result.get("stf_id")} if result.get("success") else None
+            # If query has RETURNING, return the result
+            if "returning" in query_lower:
+                # ON CONFLICT DO NOTHING returns None when duplicate
+                if result.get("duplicate"):
+                    return None
+                # Return stf_id on success
+                return (
+                    {"stf_id": result.get("stf_id")} if result.get("success") else None
+                )
+            # Otherwise, just return success status (side effects already applied)
+            return None
 
-        # Handle INSERT with RETURNING for models
-        elif (
-            "insert into model_price_catalog" in query_lower
-            and "returning" in query_lower
-        ):
+        # Handle INSERT for models (with or without RETURNING)
+        elif "insert into model_price_catalog" in query_lower:
             result = await self._insert_model(params)
-            return (
-                {"catalog_id": result.get("catalog_id")}
-                if result.get("success")
-                else None
-            )
+            if "returning" in query_lower:
+                return (
+                    {"catalog_id": result.get("catalog_id")}
+                    if result.get("success")
+                    else None
+                )
+            return None
 
-        # Handle UPDATE with RETURNING for STFs
-        elif (
-            "update debug_transform_functions" in query_lower
-            and "returning" in query_lower
-        ):
+        # Handle UPDATE for STFs (with or without RETURNING)
+        elif "update debug_transform_functions" in query_lower:
             if "usage_count" in query_lower:
                 result = await self._update_stf_usage(params)
             else:
                 result = await self._update_stf_quality(query, params)
-            return {"stf_id": result.get("stf_id")} if result.get("success") else None
+            if "returning" in query_lower:
+                return (
+                    {"stf_id": result.get("stf_id")} if result.get("success") else None
+                )
+            return None
 
-        # Handle UPDATE with RETURNING for models
-        elif "update model_price_catalog" in query_lower and "returning" in query_lower:
+        # Handle UPDATE for models (with or without RETURNING)
+        elif "update model_price_catalog" in query_lower:
             # Check if it's a deprecation (is_active = false) or pricing update
             if "is_active = false" in query_lower or "is_active=false" in query_lower:
                 result = await self._mark_model_deprecated(params)
             else:
                 result = await self._update_model_pricing(query, params)
-            return (
-                {"catalog_id": result.get("catalog_id")}
-                if result.get("success")
-                else None
-            )
+            if "returning" in query_lower:
+                return (
+                    {"catalog_id": result.get("catalog_id")}
+                    if result.get("success")
+                    else None
+                )
+            return None
 
         # Handle SELECT from STFs
         elif "from debug_transform_functions" in query_lower:

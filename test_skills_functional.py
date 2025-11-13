@@ -14,9 +14,10 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-# Add omniclaude to path
-OMNICLAUDE_PATH = Path("/Volumes/PRO-G40/Code/omniclaude")
-sys.path.insert(0, str(OMNICLAUDE_PATH))
+# Add omniclaude to path dynamically
+# Determine repository root (3 levels up from this file)
+REPO_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_ROOT))
 
 # Import Pydantic Settings
 from config import settings

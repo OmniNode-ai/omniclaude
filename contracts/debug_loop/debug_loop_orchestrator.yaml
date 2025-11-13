@@ -181,6 +181,7 @@ output:
 
   steps_completed:
     type: "array"
+    required: true
     items:
       type: "object"
       properties:
