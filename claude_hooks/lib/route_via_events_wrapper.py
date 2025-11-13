@@ -60,13 +60,14 @@ except ImportError as e:
     )
     sys.exit(1)
 
-# Suppress verbose logging unless DEBUG env var set
-import os
+# Import settings for type-safe configuration
+from config import settings
 
-if os.getenv("DEBUG") != "1":
-    logging.basicConfig(level=logging.WARNING)
-else:
+# Suppress verbose logging unless DEBUG env var set
+if settings.debug:
     logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.WARNING)
 
 logger = logging.getLogger(__name__)
 

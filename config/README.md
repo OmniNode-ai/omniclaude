@@ -244,7 +244,7 @@ db_password = settings.get_effective_postgres_password()  # Handles aliases, rai
 - [x] Create `config/README.md` for documentation
 - [x] All configuration variables from `.env.example` included
 
-**Phase 2: Gradual Migration** (NEXT)
+**Phase 2: Gradual Migration** (IN PROGRESS)
 1. Start with high-frequency files (most `os.getenv()` calls)
 2. Update one module at a time
 3. Add imports: `from config import settings`
@@ -256,6 +256,52 @@ db_password = settings.get_effective_postgres_password()  # Handles aliases, rai
 1. Remove backward compatibility aliases
 2. Update documentation
 3. Add pre-commit hook to prevent new `os.getenv()` usage
+
+### Migration Resources
+
+**📚 Comprehensive Guides** (in `docs/configuration/`):
+- **[STANDARDIZATION_GUIDE.md](../docs/configuration/STANDARDIZATION_GUIDE.md)** - Complete migration guide with detailed examples
+- **[QUICK_REFERENCE.md](../docs/configuration/QUICK_REFERENCE.md)** - Quick reference card for active migrations
+- **[MIGRATION_TEMPLATE.py](../docs/configuration/MIGRATION_TEMPLATE.py)** - Template file with before/after patterns
+
+**What Each Guide Covers**:
+
+1. **STANDARDIZATION_GUIDE.md** (20KB, comprehensive):
+   - Why Pydantic Settings is the standard
+   - Benefits and performance characteristics
+   - Complete migration pattern with context-specific examples
+   - Common pitfalls and how to avoid them
+   - Migration checklist
+   - Testing strategies
+   - Examples for every use case (DB, API keys, Kafka, URLs, feature flags)
+
+2. **QUICK_REFERENCE.md** (5KB, quick lookup):
+   - Keep open while migrating
+   - Setup patterns by location (hooks/skills/services)
+   - Common replacements table
+   - Helper methods cheat sheet
+   - Checklist and pitfalls
+   - Path depth guide
+   - Testing snippet
+
+3. **MIGRATION_TEMPLATE.py** (10KB, code template):
+   - Working Python file with before/after patterns
+   - Copy-paste examples for common scenarios
+   - Complete examples (DB, Kafka, API calls)
+   - Validation and logging examples
+   - Inline migration checklist
+
+**Quick Start**:
+```bash
+# 1. Read the quick reference
+cat docs/configuration/QUICK_REFERENCE.md
+
+# 2. Copy the template
+cp docs/configuration/MIGRATION_TEMPLATE.py my_file_migration.py
+
+# 3. Follow the comprehensive guide for details
+cat docs/configuration/STANDARDIZATION_GUIDE.md
+```
 
 ### Identifying Migration Candidates
 

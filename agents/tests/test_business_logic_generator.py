@@ -6,13 +6,12 @@ Tests stub generation for all node types, method signatures from contracts,
 mixin integration, error handling patterns, and ONEX compliance.
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
+from omnibase_core.errors import OnexError
 
 from agents.lib.business_logic_generator import BusinessLogicGenerator
-from omnibase_core.errors import OnexError
 from agents.tests.fixtures.phase4_fixtures import (
     COMPUTE_ANALYSIS_RESULT,
     EFFECT_ANALYSIS_RESULT,
@@ -42,11 +41,12 @@ def business_logic_generator():
 
 
 @pytest.fixture
-def temp_output_dir():
+def temp_output_dir(tmp_path):
     """Create a temporary directory for output files"""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    # Cleanup handled by tempdir
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    return str(output_dir)
+    # Cleanup handled automatically by pytest tmp_path
 
 
 # ============================================================================
@@ -418,7 +418,7 @@ class TestOnexNamingCompliance:
     """Tests for ONEX naming convention compliance"""
 
     @pytest.mark.parametrize(
-        "node_type,suffix",
+        ("node_type", "suffix"),
         [
             ("EFFECT", "Effect"),
             ("COMPUTE", "Compute"),

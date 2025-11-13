@@ -63,7 +63,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def clean_database(db_pool):
+async def __clean_database(db_pool):
     """Clean test data from database before each test."""
     async with db_pool.acquire() as conn:
         # Delete test data (correlation_id starts with 'test-')
@@ -122,14 +122,13 @@ class TestKafkaConsumerIntegration:
         assert consumer.db_pool is None
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_consume_single_event(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pool,
-        clean_database,
-        test_topic,
+        db_pooltest_topic,
     ):
         """Test consuming and persisting a single event."""
         # Publish test event
@@ -181,14 +180,13 @@ class TestKafkaConsumerIntegration:
             assert result["duration_ms"] == 100
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_batch_insert_performance(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pool,
-        clean_database,
-        test_topic,
+        db_pooltest_topic,
     ):
         """Test batch insertion of multiple events."""
         # Publish 50 test events
@@ -240,14 +238,13 @@ class TestKafkaConsumerIntegration:
             assert count == 50
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_idempotency_duplicate_handling(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pool,
-        clean_database,
-        test_topic,
+        db_pooltest_topic,
     ):
         """Test consumer handles duplicate events correctly (idempotency)."""
         correlation_id = f"test-duplicate-{uuid.uuid4()}"
@@ -300,8 +297,9 @@ class TestKafkaConsumerIntegration:
             assert count == 1  # Only one record, duplicate was skipped
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_error_handling_invalid_json(
-        self, kafka_brokers, postgres_dsn, db_pool, clean_database, test_topic
+        self, kafka_brokers, postgres_dsn, db_pooltest_topic
     ):
         """Test consumer handles invalid JSON gracefully."""
         # Publish invalid JSON directly (bypass producer serializer)
@@ -338,14 +336,13 @@ class TestKafkaConsumerIntegration:
             await consumer.stop()
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_consumer_offset_commit(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pool,
-        clean_database,
-        test_topic,
+        db_pooltest_topic,
     ):
         """Test consumer commits offsets after successful processing."""
         correlation_id = f"test-offset-{uuid.uuid4()}"
@@ -417,14 +414,13 @@ class TestKafkaConsumerIntegration:
             assert count2 == 1  # Still 1, not duplicated
 
     @pytest.mark.asyncio
+    @pytest.mark.usefixtures("_clean_database")
     async def test_different_action_types(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pool,
-        clean_database,
-        test_topic,
+        db_pooltest_topic,
     ):
         """Test consuming events with different action types."""
         action_types = ["tool_call", "decision", "error", "success"]
@@ -486,13 +482,13 @@ class TestConsumerPerformance:
 
     @pytest.mark.asyncio
     @pytest.mark.slow
+    @pytest.mark.usefixtures("_clean_database")
     async def test_high_throughput_processing(
         self,
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
         db_pool,
-        clean_database,
         test_topic,
     ):
         """Test consumer can handle high throughput (1000+ events)."""

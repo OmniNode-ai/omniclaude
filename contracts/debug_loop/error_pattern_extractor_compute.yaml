@@ -1,0 +1,224 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "ErrorPatternExtractorCompute"
+description: "Extract and normalize error patterns from error messages for pattern matching"
+
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "Error pattern recognition and categorization"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_error_pattern_extractor_compute.py"
+      purpose: "Compute node for error pattern extraction (to be implemented)"
+
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 4: Error→Success Mapping & Golden States"
+      relationship: "implementation_guide"
+      description: "Error pattern extraction (Days 15-16)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow"
+    - path: "contracts/debug_loop/error_success_mapping_reducer.yaml"
+      relationship: "provides_to"
+      description: "Provides normalized error patterns for mapping creation"
+
+  algorithms:
+    - name: "Error Pattern Normalization"
+      rules: ["Normalize paths to <PATH>", "Normalize values to <VALUE>", "Extract exception class", "Generate SHA-256 signature"]
+      relationship: "normalization_algorithm"
+      description: "Error message normalization for pattern matching"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "extraction_config"
+      description: "Normalization options and error categorization"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Troubleshooting Guide"
+      relationship: "error_guide"
+      description: "Common error patterns and resolution strategies"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
+# Input Contract
+input:
+  error_message:
+    type: "string"
+    required: true
+    description: "Raw error message from execution"
+
+  error_stacktrace:
+    type: "string"
+    required: false
+    description: "Full stacktrace (if available)"
+
+  error_context:
+    type: "object"
+    required: false
+    properties:
+      tool_used:
+        type: "string"
+        description: "Tool that caused error (Read, Edit, Bash, etc)"
+      file_path:
+        type: "string"
+      line_number:
+        type: "integer"
+
+  extraction_options:
+    type: "object"
+    required: false
+    properties:
+      normalize_paths:
+        type: "boolean"
+        default: true
+        description: "Replace specific paths with <PATH>"
+      normalize_values:
+        type: "boolean"
+        default: true
+        description: "Replace specific values with <VALUE>"
+      extract_error_class:
+        type: "boolean"
+        default: true
+        description: "Extract exception class name"
+
+# Output Contract
+output:
+  error_type:
+    type: "string"
+    required: true
+    description: "Exception class (e.g., ValueError, FileNotFoundError)"
+
+  error_pattern:
+    type: "string"
+    required: true
+    description: "Normalized error pattern for matching"
+
+  error_signature:
+    type: "string"
+    required: true
+    description: "SHA-256 hash of error_pattern"
+
+  original_message:
+    type: "string"
+    required: true
+
+  normalized_message:
+    type: "string"
+    required: true
+    description: "Message with paths/values normalized"
+
+  error_category:
+    type: "string"
+    required: true
+    enum: ["file_error", "import_error", "syntax_error", "runtime_error", "permission_error", "network_error", "unknown"]
+
+  confidence_score:
+    type: "float"
+    required: true
+    min: 0.0
+    max: 1.0
+    description: "Confidence in pattern extraction"
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: true
+cache_key: "error_message"
+cache_ttl_seconds: 3600  # 1 hour
+
+# Performance Targets
+performance:
+  target_latency_ms: 50
+  max_latency_ms: 100
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true
+
+# Algorithm
+algorithm:
+  steps:
+    - "Extract exception class from message"
+    - "Normalize file paths (replace with <PATH>)"
+    - "Normalize variable names/values (replace with <VALUE>)"
+    - "Categorize error type"
+    - "Generate error signature (hash)"
+    - "Calculate confidence score"
+
+  normalization_rules:
+    - "File paths: /home/user/file.py → <PATH>"
+    - "Line numbers: line 42 → line <LINE>"
+    - "Variable names: variable 'x' → variable '<VAR>'"
+    - "Values: value '123' → value '<VALUE>'"
+
+  categorization:
+    file_error:
+      - "FileNotFoundError"
+      - "PermissionError"
+      - "IsADirectoryError"
+    import_error:
+      - "ImportError"
+      - "ModuleNotFoundError"
+    syntax_error:
+      - "SyntaxError"
+      - "IndentationError"
+    runtime_error:
+      - "ValueError"
+      - "TypeError"
+      - "AttributeError"
+      - "KeyError"
+
+  confidence_calculation:
+    formula: |
+      confidence = 0.5  # Base
+      if error_type_identified: confidence += 0.3
+      if stacktrace_available: confidence += 0.1
+      if context_provided: confidence += 0.1
+      return min(1.0, confidence)
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test FileNotFoundError normalization"
+    - "Test ImportError normalization"
+    - "Test ValueError normalization"
+    - "Test path normalization"
+    - "Test value normalization"
+    - "Test error categorization"
+    - "Test confidence calculation"
+    - "Test same error → same signature"
+
+  fixtures:
+    - name: "file_not_found"
+      error: "FileNotFoundError: [Errno 2] No such file or directory: '/home/user/test.py'"
+      expected_pattern: "FileNotFoundError: [Errno 2] No such file or directory: '<PATH>'"
+      expected_category: "file_error"
+
+    - name: "import_error"
+      error: "ModuleNotFoundError: No module named 'foo'"
+      expected_pattern: "ModuleNotFoundError: No module named '<VALUE>'"
+      expected_category: "import_error"

@@ -201,6 +201,70 @@ workflow_templates:
     - "Previous Debug Logs: Historical investigations"
     - "Work Tickets: Development tasks and requirements"
 
+# Debug Loop Integration (STF System)
+debug_loop_integration:
+  stf_query_triggers:
+    - "Known error pattern detected in logs requiring investigation"
+    - "Recurring system issue matching STF problem signatures"
+    - "Build or deployment failure with documented patterns"
+    - "Configuration error matching known transformation patterns"
+    - "Service outage with established recovery procedures"
+
+  stf_storage_criteria:
+    - "Investigation completed with documented resolution"
+    - "Solution validated and proven effective"
+    - "Pattern is reusable for similar incidents"
+    - "Quality documentation meets standards (≥0.7)"
+    - "Clear problem signature and category defined"
+
+  workflows:
+    investigation_with_stf:
+      phases:
+        - "Query relevant STFs matching incident signature"
+        - "Review historical solutions and patterns"
+        - "Retrieve detailed transformation procedures"
+        - "Apply pattern with incident-specific context"
+        - "Validate solution and document outcomes"
+        - "Update STF metrics based on effectiveness"
+
+    debug_log_with_stf_contribution:
+      phases:
+        - "Complete systematic investigation and resolution"
+        - "Extract reusable pattern from investigation"
+        - "Document transformation steps and procedures"
+        - "Assess quality of solution and documentation"
+        - "Store debug STF for future incident response"
+        - "Tag with incident category and problem signature"
+
+  stf_helper_integration:
+    debug_categories:
+      - "build_failure: Build and compilation issues"
+      - "deployment_error: Deployment and release problems"
+      - "configuration_issue: Configuration and environment errors"
+      - "service_outage: Service availability and uptime issues"
+      - "integration_failure: Service communication problems"
+
+    example_usage: |
+      # Query STFs for incident response
+      if "build failed" in incident_description:
+          stfs = await stf_helper.query_stfs(
+              problem_signature="build failed",
+              problem_category="build_failure",
+              min_quality=0.75
+          )
+
+      # Store investigation as STF
+      if incident_resolved:
+          stf_id = await stf_helper.store_stf(
+              stf_name="resolve_build_failure",
+              stf_code=resolution_steps,
+              stf_description="Fix build failure due to missing dependency",
+              problem_category="build_failure",
+              problem_signature="build failed",
+              quality_score=0.85,
+              correlation_id=correlation_id
+          )
+
 transformation_context:
   collaboration_routing:
     code_analysis: "agent-research"

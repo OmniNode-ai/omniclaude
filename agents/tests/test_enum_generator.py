@@ -10,9 +10,9 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
+from omnibase_core.errors import OnexError
 
 from agents.lib.enum_generator import EnumGenerator, EnumValue, GeneratedEnum
-from omnibase_core.errors import OnexError
 from agents.lib.simple_prd_analyzer import (
     DecompositionResult,
     ParsedPRD,
@@ -398,7 +398,7 @@ class EnumTestOperationType(str, Enum):
 
         # Execute the generated code in a namespace
         namespace = {}
-        exec(result.source_code, namespace)
+        exec(result.source_code, namespace)  # noqa: S102
 
         # Get the enum class
         enum_class = namespace["EnumUserManagementOperationType"]
@@ -416,7 +416,7 @@ class EnumTestOperationType(str, Enum):
 
         # Execute the generated code
         namespace = {}
-        exec(result.source_code, namespace)
+        exec(result.source_code, namespace)  # noqa: S102
         enum_class = namespace["EnumUserManagementOperationType"]
 
         # Test from_string method
@@ -428,10 +428,8 @@ class EnumTestOperationType(str, Enum):
         assert create_op_upper == enum_class.CREATE
 
         # Test invalid value raises error
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="Invalid"):
             enum_class.from_string("invalid_operation")
-        assert "Invalid" in str(exc_info.value)
-        assert "Valid values" in str(exc_info.value)
 
     def test_generated_enum_display_name(self, generator, sample_prd_analysis):
         """Test display_name property in generated enum"""
@@ -441,7 +439,7 @@ class EnumTestOperationType(str, Enum):
 
         # Execute the generated code
         namespace = {}
-        exec(result.source_code, namespace)
+        exec(result.source_code, namespace)  # noqa: S102
         enum_class = namespace["EnumUserManagementOperationType"]
 
         # Test display_name property

@@ -58,7 +58,8 @@ class DatabaseConfig:
         Load database configuration from environment variables.
 
         Reads standard POSTGRES_* environment variables to construct a DatabaseConfig
-        instance with production defaults for missing values.
+        instance with production defaults for missing values. Prefers Pydantic Settings
+        defaults when available for type safety.
 
         Returns:
             DatabaseConfig: Configuration loaded from environment with defaults
@@ -68,12 +69,25 @@ class DatabaseConfig:
             >>> print(config.host)
             '192.168.86.200'
         """
+        # Prefer Pydantic Settings defaults if available (type-safe)
+        if settings:
+            default_host = settings.postgres_host
+            default_port = settings.postgres_port
+            default_database = settings.postgres_database
+            default_user = settings.postgres_user
+        else:
+            # Fallback to hardcoded defaults for backward compatibility
+            default_host = "192.168.86.200"
+            default_port = 5436
+            default_database = "omninode_bridge"
+            default_user = "postgres"
+
         # Note: Uses standard POSTGRES_* environment variables
         return cls(
-            host=os.getenv("POSTGRES_HOST", "192.168.86.200"),  # Production default
-            port=int(os.getenv("POSTGRES_PORT", "5436")),
-            database=os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
-            user=os.getenv("POSTGRES_USER", "postgres"),
+            host=os.getenv("POSTGRES_HOST", default_host),
+            port=int(os.getenv("POSTGRES_PORT", str(default_port))),
+            database=os.getenv("POSTGRES_DATABASE", default_database),
+            user=os.getenv("POSTGRES_USER", default_user),
             password=os.getenv("POSTGRES_PASSWORD", ""),  # Must be set via environment
         )
 

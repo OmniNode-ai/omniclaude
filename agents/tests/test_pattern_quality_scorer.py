@@ -851,8 +851,8 @@ async def test_store_quality_metrics_json_serialization(scorer):
     mock_conn.cursor.return_value = mock_cursor
 
     with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
-        mock_Json = MagicMock()
-        mock_psycopg2.extras.Json = mock_Json
+        mock_json = MagicMock()
+        mock_psycopg2.extras.Json = mock_json
         mock_psycopg2.connect.return_value = mock_conn
 
         await scorer.store_quality_metrics(score, "postgresql://test")
@@ -887,7 +887,7 @@ async def test_store_quality_metrics_connection_error(scorer):
         mock_psycopg2.connect.side_effect = Exception("Connection failed")
 
         # Should raise exception
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception) as exc_info:  # noqa: PT011
             await scorer.store_quality_metrics(score, "postgresql://invalid")
 
         assert "Failed to store quality metrics" in str(exc_info.value)
@@ -921,7 +921,7 @@ async def test_store_quality_metrics_query_error_rollback(scorer):
         mock_psycopg2.errors = mock_errors
         mock_psycopg2.connect.return_value = mock_conn
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception) as exc_info:  # noqa: PT011
             await scorer.store_quality_metrics(score, "postgresql://test")
 
         # Verify rollback was called

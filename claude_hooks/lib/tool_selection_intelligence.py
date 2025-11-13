@@ -445,8 +445,14 @@ def create_enhanced_metadata(
 # Performance testing
 if __name__ == "__main__":
     import json
+    import tempfile
 
     print("Testing Tool Selection Intelligence\n" + "=" * 60)
+
+    # Create secure temp file for testing
+    temp_test_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py', prefix='test_new_file_')
+    temp_test_path = temp_test_file.name
+    temp_test_file.close()
 
     # Test cases
     test_cases = [
@@ -454,7 +460,7 @@ if __name__ == "__main__":
             "name": "Write (new file)",
             "tool_name": "Write",
             "tool_input": {
-                "file_path": "/tmp/test_new_file.py",
+                "file_path": temp_test_path,
                 "content": "# Test content",
             },
         },
@@ -501,6 +507,12 @@ if __name__ == "__main__":
 
         print(json.dumps(metadata, indent=2))
         print(f"Performance: {metadata['performance']['analysis_time_ms']:.2f}ms")
+
+    # Cleanup temp file
+    try:
+        os.unlink(temp_test_path)
+    except Exception:
+        pass
 
     print("\n" + "=" * 60)
     print("✅ All tests completed!")

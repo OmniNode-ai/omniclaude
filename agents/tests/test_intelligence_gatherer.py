@@ -565,8 +565,8 @@ class TestIntelligenceContext:
         assert context.confidence_score == 0.5
 
         # Invalid confidence score should raise validation error
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
             IntelligenceContext(confidence_score=1.5)
 
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
             IntelligenceContext(confidence_score=-0.1)

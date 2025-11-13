@@ -105,6 +105,19 @@ jobs:
 
           bash scripts/init-db.sh
 
+          # Apply database migrations
+          echo "Applying database migrations..."
+          for migration in migrations/*.sql; do
+            if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
+              echo "Running migration: $migration"
+              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+                echo "❌ Migration failed: $migration"
+                exit 1
+              }
+            fi
+          done
+          echo "✅ All migrations applied successfully"
+
           echo "::endgroup::"
 
       - name: Verify database schema
@@ -225,7 +238,7 @@ jobs:
           - 9092:9092
           - 8081:8081
         options: >-
-          --command "redpanda start --smp 1 --memory 1G --overprovisioned --node-id 0 --kafka-addr PLAINTEXT://0.0.0.0:9092 --advertise-kafka-addr PLAINTEXT://localhost:9092"
+          --hostname redpanda
 
     steps:
       - name: Checkout code
@@ -298,6 +311,13 @@ jobs:
       - name: Test Kafka event publishing
         env:
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          # PostgreSQL environment variables for module imports
+          # (db_helper.py requires these at import time for Pydantic Settings validation)
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
         run: |
           echo "::group::Kafka Event Publishing Tests"
 
@@ -309,6 +329,13 @@ jobs:
       - name: Test routing event flow
         env:
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          # PostgreSQL environment variables for module imports
+          # (db_helper.py requires these at import time for Pydantic Settings validation)
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DATABASE: test_omninode_bridge
         run: |
           echo "::group::Routing Event Flow Tests"
 
@@ -400,6 +427,19 @@ jobs:
             sleep 2
           done
           bash scripts/init-db.sh
+
+          # Apply database migrations
+          echo "Applying database migrations..."
+          for migration in migrations/*.sql; do
+            if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
+              echo "Running migration: $migration"
+              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+                echo "❌ Migration failed: $migration"
+                exit 1
+              }
+            fi
+          done
+          echo "✅ All migrations applied successfully"
 
       - name: Test agent execution logging
         env:
@@ -557,6 +597,19 @@ jobs:
             sleep 2
           done
           bash scripts/init-db.sh
+
+          # Apply database migrations
+          echo "Applying database migrations..."
+          for migration in migrations/*.sql; do
+            if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
+              echo "Running migration: $migration"
+              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+                echo "❌ Migration failed: $migration"
+                exit 1
+              }
+            fi
+          done
+          echo "✅ All migrations applied successfully"
 
       - name: Run full pipeline integration tests
         env:

@@ -215,9 +215,7 @@ class AgentRegistry:
             spec.loader.exec_module(module)
 
             # Check for required execute() function or agent attribute
-            has_execute = hasattr(module, "execute") and callable(
-                getattr(module, "execute")
-            )
+            has_execute = hasattr(module, "execute") and callable(module.execute)
             has_agent = hasattr(
                 module, "agent"
             )  # Pydantic AI agents have 'agent' attribute
@@ -227,7 +225,7 @@ class AgentRegistry:
         except Exception:
             return False
 
-    @lru_cache(maxsize=1)
+    @lru_cache(maxsize=1)  # noqa: B019
     def get_available_agents(self) -> Dict[str, str]:
         """
         Get all available agents with caching.

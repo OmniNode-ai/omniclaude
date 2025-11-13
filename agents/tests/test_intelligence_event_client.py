@@ -297,10 +297,10 @@ class TestIntelligenceEventClientLifecycle:
         with (
             patch(
                 "agents.lib.intelligence_event_client.AIOKafkaProducer"
-            ) as MockProducer,
+            ) as mock_producer,
             patch(
                 "agents.lib.intelligence_event_client.AIOKafkaConsumer"
-            ) as MockConsumer,
+            ) as mock_consumer,
         ):
             client = IntelligenceEventClient(
                 bootstrap_servers="localhost:29092",
@@ -309,8 +309,8 @@ class TestIntelligenceEventClientLifecycle:
             await client.start()
 
             # Should not create producer/consumer
-            MockProducer.assert_not_called()
-            MockConsumer.assert_not_called()
+            mock_producer.assert_not_called()
+            mock_consumer.assert_not_called()
             assert client._started is False
 
     @pytest.mark.asyncio
@@ -505,10 +505,10 @@ class TestTimeoutAndErrorHandling:
         """Test start() raises KafkaError on connection failure."""
         with patch(
             "agents.lib.intelligence_event_client.AIOKafkaProducer"
-        ) as MockProducer:
+        ) as mock_producer_class:
             mock_producer = AsyncMock()
             mock_producer.start.side_effect = Exception("Connection refused")
-            MockProducer.return_value = mock_producer
+            mock_producer_class.return_value = mock_producer
 
             client = IntelligenceEventClient(bootstrap_servers="localhost:29092")
 

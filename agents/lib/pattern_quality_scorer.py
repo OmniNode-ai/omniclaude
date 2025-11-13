@@ -352,15 +352,29 @@ class PatternQualityScorer:
         """
         Build PostgreSQL connection string from environment variables.
 
-        Uses production defaults that match Pydantic settings.
+        Uses production defaults that match Pydantic settings when available,
+        or fallback to hardcoded defaults for backward compatibility.
 
         Returns:
             PostgreSQL connection string
         """
-        host = os.getenv("POSTGRES_HOST", "192.168.86.200")
-        port = os.getenv("POSTGRES_PORT", "5436")
-        database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
-        user = os.getenv("POSTGRES_USER", "postgres")
+        # Prefer defaults from settings if available (type-safe)
+        if settings:
+            default_host = settings.postgres_host
+            default_port = str(settings.postgres_port)
+            default_database = settings.postgres_database
+            default_user = settings.postgres_user
+        else:
+            # Fallback to hardcoded defaults for backward compatibility
+            default_host = "192.168.86.200"
+            default_port = "5436"
+            default_database = "omninode_bridge"
+            default_user = "postgres"
+
+        host = os.getenv("POSTGRES_HOST", default_host)
+        port = os.getenv("POSTGRES_PORT", default_port)
+        database = os.getenv("POSTGRES_DATABASE", default_database)
+        user = os.getenv("POSTGRES_USER", default_user)
         password = os.getenv("POSTGRES_PASSWORD", "")
 
         return f"postgresql://{user}:{password}@{host}:{port}/{database}"

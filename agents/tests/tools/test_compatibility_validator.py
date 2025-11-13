@@ -356,7 +356,7 @@ class TestClassNaming:
     """Test ONEX class naming conventions"""
 
     @pytest.mark.parametrize(
-        "class_name,expected_pass",
+        ("class_name", "expected_pass"),
         [
             ("NodeUserServiceEffect", True),
             ("NodeDataProcessorCompute", True),
@@ -446,7 +446,7 @@ class TestBaseClassValidation:
     """Test base class inheritance validation"""
 
     @pytest.mark.parametrize(
-        "node_type,base_class",
+        ("node_type", "base_class"),
         [
             ("Effect", "NodeEffect"),
             ("Compute", "NodeCompute"),
@@ -591,7 +591,7 @@ class TestPydanticV2:
     """Test Pydantic v2 compliance"""
 
     @pytest.mark.parametrize(
-        "v1_pattern,v2_replacement",
+        ("v1_pattern", "v2_replacement"),
         [
             (".dict()", ".model_dump("),
             (".json()", ".model_dump_json("),

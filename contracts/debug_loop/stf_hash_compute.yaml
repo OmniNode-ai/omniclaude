@@ -1,0 +1,174 @@
+---
+# ONEX Contract v2.0
+contract_version: "2.0"
+node_type: "compute"
+node_name: "STFHashCompute"
+description: "Generate SHA-256 hash of normalized STF code for deduplication"
+
+# Associated Documents (ONEX Linked Documents Pattern)
+associated_documents:
+  architecture:
+    - path: "docs/analysis/DEBUG_REWARDS_CLARIFICATION_ANALYSIS.md"
+      purpose: "STF deduplication and hash collision handling"
+
+  implementation:
+    - path: "omniclaude/debug_loop/node_stf_hash_compute.py"
+      purpose: "Compute node for STF content hashing (to be implemented)"
+
+  implementation_plans:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      section: "Week 2: STF Registry & Discovery"
+      relationship: "implementation_guide"
+      description: "Hash generation for STF deduplication (Days 6-10)"
+
+  related_contracts:
+    - path: "contracts/debug_loop/debug_loop_orchestrator.yaml"
+      relationship: "orchestrated_by"
+      description: "Orchestrated by DebugLoopOrchestrator workflow (critical step)"
+    - path: "contracts/debug_loop/debug_stf_extractor_compute.yaml"
+      relationship: "depends_on"
+      description: "Receives STF code for hash generation"
+    - path: "contracts/debug_loop/debug_stf_storage_effect.yaml"
+      relationship: "provides_to"
+      description: "Provides unique hash for STF deduplication in storage"
+
+  algorithms:
+    - path: "docs/planning/DEBUG_LOOP_IMPLEMENTATION_PLAN.md"
+      purpose: "Hash algorithm specification (SHA-256)"
+    - name: "Code Normalization"
+      steps: ["Strip whitespace", "Remove comments", "Normalize indentation", "Convert to UTF-8"]
+      relationship: "normalization_algorithm"
+      description: "Code normalization for deterministic hashing"
+    - name: "SHA-256 Hash Generation"
+      output_format: "64 hex characters"
+      relationship: "hash_algorithm"
+      description: "Cryptographic hash for deduplication"
+
+  configuration:
+    - path: "config/settings.py"
+      relationship: "normalization_config"
+      description: "Normalization options (strip_whitespace, strip_comments, etc.)"
+
+  documentation:
+    - path: "CLAUDE.md"
+      section: "Polymorphic Agent Framework"
+      relationship: "onex_patterns"
+      description: "Pure compute node patterns and deterministic functions"
+
+# omnibase_core Models Used
+models:
+  from_omnibase_core:
+    - "omnibase_core.errors.model_onex_error.ModelOnexError"
+    - "omnibase_core.errors.error_codes.EnumCoreErrorCode"
+
+# Input Contract
+input:
+  stf_code:
+    type: "string"
+    required: true
+    description: "STF code to hash"
+
+  normalization_options:
+    type: "object"
+    required: false
+    properties:
+      strip_whitespace:
+        type: "boolean"
+        default: true
+        description: "Remove leading/trailing whitespace"
+      strip_comments:
+        type: "boolean"
+        default: true
+        description: "Remove comments before hashing"
+      normalize_indentation:
+        type: "boolean"
+        default: true
+        description: "Normalize indentation to 4 spaces"
+      remove_docstrings:
+        type: "boolean"
+        default: false
+        description: "Remove docstrings (keep functional code only)"
+
+# Output Contract
+output:
+  stf_hash:
+    type: "string"
+    required: true
+    description: "SHA-256 hash (64 characters)"
+    pattern: "^[a-f0-9]{64}$"
+
+  normalized_code:
+    type: "string"
+    required: true
+    description: "Code after normalization (for debugging)"
+
+  normalization_applied:
+    type: "array"
+    items:
+      type: "string"
+    required: true
+    description: "List of normalizations applied"
+
+  computation_time_ms:
+    type: "float"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    required: true
+
+# Pure Function Properties
+pure_function: true
+deterministic: true
+cacheable: false  # Hashing is fast, caching not needed
+cache_key: null
+
+# Performance Targets
+performance:
+  target_latency_ms: 10
+  max_latency_ms: 50
+
+# ONEX Compliance
+onex_compliance:
+  base_class: "omnibase_core.core.infrastructure_service_bases.NodeComputeService"
+  method_signature: "async def execute_compute(self, contract: ModelContractCompute) -> ModelComputeOutput"
+  side_effects: false
+  idempotent: true
+  thread_safe: true
+
+# Algorithm
+algorithm:
+  steps:
+    - "Apply normalization options to code"
+    - "Generate SHA-256 hash of normalized code"
+    - "Return hash + normalized code"
+
+  normalization_order:
+    - "Strip leading/trailing whitespace"
+    - "Remove comments (if enabled)"
+    - "Remove docstrings (if enabled)"
+    - "Normalize indentation (if enabled)"
+    - "Convert to UTF-8 bytes"
+    - "Generate SHA-256 hash"
+
+# Testing Requirements
+testing:
+  unit_tests:
+    - "Test same code → same hash (deterministic)"
+    - "Test different whitespace → same hash (normalized)"
+    - "Test with/without comments"
+    - "Test with/without docstrings"
+    - "Test empty code"
+    - "Test hash format (64 hex chars)"
+
+  fixtures:
+    - name: "simple_function"
+      code: |
+        def add(a, b):
+            return a + b
+      expected_hash_length: 64
+
+    - name: "same_code_different_whitespace"
+      code1: "def add(a, b):\n    return a + b"
+      code2: "def add(a,b):\n  return a+b"
+      expected: "same_hash_after_normalization"

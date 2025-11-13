@@ -136,7 +136,7 @@ class TestParallelGeneratorUnit:
             )
 
             # Should raise OnexError when all jobs fail
-            with pytest.raises(Exception):  # Expecting error for all failed jobs
+            with pytest.raises(Exception):
                 await generator.generate_nodes_parallel(jobs=[job], session_id=uuid4())
 
         await generator.cleanup()

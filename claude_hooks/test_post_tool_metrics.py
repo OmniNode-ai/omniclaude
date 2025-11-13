@@ -223,7 +223,7 @@ def test_performance_metrics():
 
     # Validate
     passed = True
-    if perf.bytes_written != len("def test():\n    pass\n".encode("utf-8")):
+    if perf.bytes_written != len(b"def test():\n    pass\n"):
         print("  ✗ Bytes written calculation incorrect")
         passed = False
     if perf.lines_changed != 2:

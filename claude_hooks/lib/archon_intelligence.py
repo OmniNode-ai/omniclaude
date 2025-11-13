@@ -6,11 +6,19 @@ Executes RAG queries and intelligence gathering via Archon MCP.
 
 import asyncio
 import json
-import os
 import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
+
+# Add project root to path for config import
+project_root = (
+    Path(__file__).resolve().parents[2]
+)  # lib → claude_hooks → omniclaude root
+sys.path.insert(0, str(project_root))
+
+from config import settings
 
 
 class ArchonIntelligence:
@@ -21,12 +29,10 @@ class ArchonIntelligence:
         Initialize Archon Intelligence client.
 
         Args:
-            archon_url: Archon MCP server URL (defaults to env or localhost:8051)
+            archon_url: Archon MCP server URL (defaults to settings)
             timeout: Request timeout in seconds
         """
-        self.archon_url = archon_url or os.getenv(
-            "ARCHON_MCP_URL", "http://localhost:8051"
-        )
+        self.archon_url = archon_url or settings.archon_mcp_url
         self.timeout = timeout
 
     async def gather_debug_intelligence(
