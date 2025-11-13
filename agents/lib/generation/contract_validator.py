@@ -154,6 +154,9 @@ class ContractValidator:
                 result.schema_compliance = False
                 return result
 
+            # Convert string types to proper objects BEFORE Pydantic validation
+            contract_dict = self._convert_yaml_types(contract_dict)
+
             # Get appropriate contract model
             contract_model = self._get_contract_model(node_type)
 
@@ -322,6 +325,74 @@ class ContractValidator:
         )
 
         return f"model_{name}.py"
+
+    def _convert_yaml_types(self, contract_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert YAML string types to proper Python objects for Pydantic validation.
+
+        This method handles the conversion of string values from YAML contracts
+        into the typed objects expected by omnibase_core contract models:
+        - String node_type → EnumNodeType enum
+        - String version → ModelSemVer object
+
+        Args:
+            contract_dict: Raw contract dictionary from YAML parsing
+
+        Returns:
+            Dictionary with converted types ready for Pydantic validation
+        """
+        # Import here to avoid circular dependencies and handle missing omnibase_core gracefully
+        try:
+            from omnibase_core.enums import EnumNodeType
+            from omnibase_core.primitives.model_semver import ModelSemVer
+        except ImportError:
+            # If omnibase_core is not available, log warning and return unchanged
+            # This allows tests to run in environments without full omnibase_core installation
+            self.logger.warning(
+                "omnibase_core not available, skipping type conversion. "
+                "Contract validation may fail with type errors."
+            )
+            return contract_dict
+
+        # Create a copy to avoid modifying the original
+        converted = contract_dict.copy()
+
+        # Convert string node_type to EnumNodeType enum
+        if "node_type" in converted and isinstance(converted["node_type"], str):
+            try:
+                # Convert string to lowercase and create enum
+                # e.g., "EFFECT" → EnumNodeType.EFFECT
+                node_type_str = converted["node_type"].upper()
+                converted["node_type"] = EnumNodeType[node_type_str]
+                self.logger.debug(
+                    f"Converted node_type from string '{contract_dict['node_type']}' "
+                    f"to EnumNodeType.{node_type_str}"
+                )
+            except KeyError:
+                # Invalid node_type value - let Pydantic validation catch it
+                self.logger.warning(
+                    f"Invalid node_type value: {converted['node_type']}. "
+                    "Pydantic validation will report this error."
+                )
+
+        # Convert string version to ModelSemVer object
+        if "version" in converted and isinstance(converted["version"], str):
+            try:
+                # Parse version string into ModelSemVer object
+                # e.g., "1.0.0" → ModelSemVer(major=1, minor=0, patch=0)
+                version_str = converted["version"]
+                converted["version"] = ModelSemVer.parse(version_str)
+                self.logger.debug(
+                    f"Converted version from string '{version_str}' to ModelSemVer object"
+                )
+            except Exception as e:
+                # Invalid version format - let Pydantic validation catch it
+                self.logger.warning(
+                    f"Failed to parse version '{converted['version']}': {e}. "
+                    "Pydantic validation will report this error."
+                )
+
+        return converted
 
     def validate_batch(
         self, contracts: List[Dict[str, Any]]

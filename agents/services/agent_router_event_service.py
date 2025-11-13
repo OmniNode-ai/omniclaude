@@ -690,8 +690,8 @@ class AgentRouterEventService:
             await self._health_runner.setup()
 
             # Start site (bind to all interfaces for Docker container accessibility)
-            site = web.TCPSite(
-                self._health_runner, "0.0.0.0", self.health_check_port  # noqa: S104
+            site = web.TCPSite(  # noqa: S104 # nosec B104
+                self._health_runner, "0.0.0.0", self.health_check_port
             )
             await site.start()
 

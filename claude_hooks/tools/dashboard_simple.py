@@ -355,7 +355,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def run_server(port=8000):
     """Run the dashboard server"""
-    server = HTTPServer(("0.0.0.0", port), DashboardHandler)  # noqa: S104
+    server = HTTPServer(("0.0.0.0", port), DashboardHandler)  # noqa: S104 # nosec B104
     print("🎯 OmniClaude Web Dashboard")
     print("=" * 50)
     print(f"Server running at http://localhost:{port}")
