@@ -41,6 +41,8 @@ import asyncio
 import json
 import logging
 import os
+import secrets
+import time
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, Optional, Union
@@ -48,10 +50,41 @@ from uuid import uuid4
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaError
+from prometheus_client import Counter, Gauge, Histogram
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# Prometheus Metrics
+# ------------------
+# Metrics for production observability and monitoring
+
+# Counter: Total events published
+logging_events_published = Counter(
+    "logging_events_published_total",
+    "Total logging events published",
+    ["event_type", "status"],
+)
+
+# Histogram: Publish latency
+logging_publish_latency = Histogram(
+    "logging_publish_latency_seconds",
+    "Logging event publish latency",
+    ["event_type"],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
+)
+
+# Gauge: Publisher state
+logging_publisher_started = Gauge(
+    "logging_publisher_started", "Logging publisher started state", ["service_name"]
+)
+
+# Counter: Kafka errors
+logging_kafka_errors = Counter(
+    "logging_kafka_errors_total", "Total Kafka errors", ["event_type", "error_type"]
+)
 
 
 class LogLevel(str, Enum):
@@ -150,11 +183,9 @@ class LoggingEventPublisher:
                 f"Current value: {getattr(settings, 'kafka_bootstrap_servers', 'not set')}"
             )
 
-        # Read from environment variable if not explicitly provided
+        # Read from Pydantic Settings if not explicitly provided
         if enable_events is None:
-            enable_events = (
-                os.getenv("KAFKA_ENABLE_LOGGING_EVENTS", "true").lower() == "true"
-            )
+            enable_events = settings.kafka_enable_logging_events
         self.enable_events = enable_events
 
         self._producer: Optional[AIOKafkaProducer] = None
@@ -198,6 +229,10 @@ class LoggingEventPublisher:
             await self._producer.start()
 
             self._started = True
+
+            # Set Prometheus gauge to indicate publisher is started
+            logging_publisher_started.labels(service_name="omniclaude").set(1)
+
             self.logger.info("Logging event publisher started successfully")
 
         except Exception as e:
@@ -230,10 +265,75 @@ class LoggingEventPublisher:
                 self._producer = None
 
             self._started = False
+
+            # Clear Prometheus gauge to indicate publisher is stopped
+            logging_publisher_started.labels(service_name="omniclaude").set(0)
+
             self.logger.info("Logging event publisher stopped successfully")
 
         except Exception as e:
             self.logger.error(f"Error stopping logging event publisher: {e}")
+
+    def _validate_string_field(
+        self,
+        field_name: str,
+        field_value: Optional[str],
+        max_length: int,
+        check_null_bytes: bool = True,
+    ) -> None:
+        """
+        Validate string field for security and DoS protection.
+
+        Args:
+            field_name: Name of the field being validated
+            field_value: Value to validate
+            max_length: Maximum allowed length
+            check_null_bytes: Whether to check for null bytes
+
+        Raises:
+            ValueError: If validation fails
+        """
+        if field_value is None:
+            return
+
+        # Check length
+        if len(field_value) > max_length:
+            raise ValueError(
+                f"{field_name} must be <= {max_length} characters (got {len(field_value)})"
+            )
+
+        # Check for null bytes
+        if check_null_bytes and "\x00" in field_value:
+            raise ValueError(f"{field_name} cannot contain null bytes")
+
+    def _validate_context_size(self, context: Optional[Dict[str, Any]]) -> None:
+        """
+        Validate context dictionary size to prevent DoS attacks.
+
+        Args:
+            context: Context dictionary to validate
+
+        Raises:
+            ValueError: If context exceeds 64KB when serialized
+        """
+        if context is None:
+            return
+
+        # Serialize and check size
+        try:
+            serialized = json.dumps(context)
+            size_bytes = len(serialized.encode("utf-8"))
+            max_size = 64 * 1024  # 64KB
+
+            if size_bytes > max_size:
+                raise ValueError(
+                    f"context serialized size must be <= {max_size} bytes (got {size_bytes})"
+                )
+        except (TypeError, ValueError) as e:
+            # Re-raise with clearer message if JSON serialization fails
+            if "serialized size" in str(e):
+                raise
+            raise ValueError(f"context must be JSON-serializable: {e}") from e
 
     async def publish_application_log(
         self,
@@ -280,13 +380,24 @@ class LoggingEventPublisher:
                 tenant_id="tenant-123",
             )
         """
+        # Validate input fields BEFORE any Kafka operations
+        self._validate_string_field("service_name", service_name, max_length=256)
+        self._validate_string_field("tenant_id", tenant_id, max_length=128)
+        self._validate_context_size(context)
+
         if not self._started or not self.enable_events:
             self.logger.debug(
                 "Publisher not started or events disabled, skipping event"
             )
             return False
 
+        # Start latency timer
+        start_time = time.time()
+
         try:
+            # Generate timestamp once for consistent timing
+            timestamp = datetime.now(UTC).isoformat()
+
             # Create event envelope
             envelope = self._create_application_log_envelope(
                 service_name=service_name,
@@ -298,6 +409,7 @@ class LoggingEventPublisher:
                 context=context or {},
                 correlation_id=correlation_id,
                 tenant_id=tenant_id,
+                timestamp=timestamp,
             )
 
             # Publish event with partition key (service_name for application logs)
@@ -311,13 +423,17 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
-                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
+                # trace_id: 32 hex chars (128 bits) derived from correlation_id
+                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
+                # flags: 01 (sampled)
                 trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
+                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{trace_id}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-{span_id}-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -328,23 +444,60 @@ class LoggingEventPublisher:
             if self._producer is None:
                 raise RuntimeError("Producer not initialized. Call start() first.")
 
-            await self._producer.send_and_wait(
-                self.TOPIC_APPLICATION_LOG,
-                value=envelope,
-                key=partition_key,
-                headers=headers,
+            await asyncio.wait_for(
+                self._producer.send_and_wait(
+                    self.TOPIC_APPLICATION_LOG,
+                    value=envelope,
+                    key=partition_key,
+                    headers=headers,
+                ),
+                timeout=5.0,
             )
+
+            # Record success metrics
+            logging_events_published.labels(
+                event_type="application", status="success"
+            ).inc()
 
             self.logger.debug(
                 f"Published application log event (service: {service_name}, level: {level}, code: {code})"
             )
             return True
 
-        except Exception as e:
+        except KafkaError as e:
+            # Record Kafka error metrics with error type
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(
+                event_type="application", error_type=error_type
+            ).inc()
+            logging_events_published.labels(
+                event_type="application", status="error"
+            ).inc()
+
             self.logger.error(
                 f"Failed to publish application log event (service: {service_name}, code: {code}): {e}"
             )
             return False
+
+        except Exception as e:
+            # Record general error metrics
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(
+                event_type="application", error_type=error_type
+            ).inc()
+            logging_events_published.labels(
+                event_type="application", status="error"
+            ).inc()
+
+            self.logger.error(
+                f"Failed to publish application log event (service: {service_name}, code: {code}): {e}"
+            )
+            return False
+
+        finally:
+            # Always record latency
+            duration = time.time() - start_time
+            logging_publish_latency.labels(event_type="application").observe(duration)
 
     async def publish_audit_log(
         self,
@@ -369,28 +522,37 @@ class LoggingEventPublisher:
             resource: Resource that was accessed (e.g., agent name, API endpoint)
             outcome: Outcome of the action (Outcome enum or string: "success" or "failure")
             correlation_id: Optional correlation ID for request tracing
-            tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
             context: Optional context dictionary (additional metadata)
 
         Returns:
             True if event published successfully, False otherwise
 
         Example:
-            success = await publisher.publish_audit_log(
-                tenant_id="tenant-123",
-                action="agent.execution",
-                actor="user-456",
-                resource="agent-api-architect",
-                outcome=Outcome.SUCCESS,  # or "success" for backward compatibility
-                correlation_id="abc-123-def-456",
-                context={"duration_ms": 1234, "quality_score": 0.95},
-            )
+            async with LoggingEventPublisherContext() as publisher:
+                success = await publisher.publish_audit_log(
+                    tenant_id="tenant-123",
+                    action="agent.execution",
+                    actor="user-456",
+                    resource="agent-api-architect",
+                    outcome=Outcome.SUCCESS,  # or "success" for backward compatibility
+                    correlation_id="abc-123-def-456",
+                    context={"duration_ms": 1234, "quality_score": 0.95},
+                )
         """
+        # Validate input fields BEFORE any Kafka operations
+        self._validate_string_field("tenant_id", tenant_id, max_length=128)
+        self._validate_string_field("action", action, max_length=256)
+        self._validate_string_field("resource", resource, max_length=256)
+        self._validate_context_size(context)
+
         if not self._started or not self.enable_events:
             self.logger.debug(
                 "Publisher not started or events disabled, skipping event"
             )
             return False
+
+        # Start latency timer
+        start_time = time.time()
 
         try:
             # Create event envelope
@@ -415,13 +577,17 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
-                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
+                # trace_id: 32 hex chars (128 bits) derived from correlation_id
+                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
+                # flags: 01 (sampled)
                 trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
+                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{trace_id}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-{span_id}-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -432,23 +598,50 @@ class LoggingEventPublisher:
             if self._producer is None:
                 raise RuntimeError("Producer not initialized. Call start() first.")
 
-            await self._producer.send_and_wait(
-                self.TOPIC_AUDIT_LOG,
-                value=envelope,
-                key=partition_key,
-                headers=headers,
+            await asyncio.wait_for(
+                self._producer.send_and_wait(
+                    self.TOPIC_AUDIT_LOG,
+                    value=envelope,
+                    key=partition_key,
+                    headers=headers,
+                ),
+                timeout=5.0,
             )
+
+            # Record success metrics
+            logging_events_published.labels(event_type="audit", status="success").inc()
 
             self.logger.debug(
                 f"Published audit log event (tenant: {tenant_id}, action: {action}, outcome: {outcome})"
             )
             return True
 
-        except Exception as e:
+        except KafkaError as e:
+            # Record Kafka error metrics with error type
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(event_type="audit", error_type=error_type).inc()
+            logging_events_published.labels(event_type="audit", status="error").inc()
+
             self.logger.error(
                 f"Failed to publish audit log event (tenant: {tenant_id}, action: {action}): {e}"
             )
             return False
+
+        except Exception as e:
+            # Record general error metrics
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(event_type="audit", error_type=error_type).inc()
+            logging_events_published.labels(event_type="audit", status="error").inc()
+
+            self.logger.error(
+                f"Failed to publish audit log event (tenant: {tenant_id}, action: {action}): {e}"
+            )
+            return False
+
+        finally:
+            # Always record latency
+            duration = time.time() - start_time
+            logging_publish_latency.labels(event_type="audit").observe(duration)
 
     async def publish_security_log(
         self,
@@ -473,28 +666,37 @@ class LoggingEventPublisher:
             resource: Resource being accessed
             decision: Security decision (Decision enum or string: "allow" or "deny")
             correlation_id: Optional correlation ID for request tracing
-            tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
             context: Optional context dictionary (additional metadata)
 
         Returns:
             True if event published successfully, False otherwise
 
         Example:
-            success = await publisher.publish_security_log(
-                tenant_id="tenant-123",
-                event_type="api_key_used",
-                user_id="user-456",
-                resource="gemini-api",
-                decision=Decision.ALLOW,  # or "allow" for backward compatibility
-                correlation_id="abc-123-def-456",
-                context={"api_key_hash": "sha256:abc123", "ip_address": "192.168.1.1"},
-            )
+            async with LoggingEventPublisherContext() as publisher:
+                success = await publisher.publish_security_log(
+                    tenant_id="tenant-123",
+                    event_type="api_key_used",
+                    user_id="user-456",
+                    resource="gemini-api",
+                    decision=Decision.ALLOW,  # or "allow" for backward compatibility
+                    correlation_id="abc-123-def-456",
+                    context={"api_key_hash": "sha256:abc123", "ip_address": "192.168.1.1"},
+                )
         """
+        # Validate input fields BEFORE any Kafka operations
+        self._validate_string_field("tenant_id", tenant_id, max_length=128)
+        self._validate_string_field("event_type", event_type, max_length=128)
+        self._validate_string_field("resource", resource, max_length=256)
+        self._validate_context_size(context)
+
         if not self._started or not self.enable_events:
             self.logger.debug(
                 "Publisher not started or events disabled, skipping event"
             )
             return False
+
+        # Start latency timer
+        start_time = time.time()
 
         try:
             # Create event envelope
@@ -519,13 +721,17 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
-                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
+                # trace_id: 32 hex chars (128 bits) derived from correlation_id
+                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
+                # flags: 01 (sampled)
                 trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
+                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{trace_id}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-{span_id}-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -536,23 +742,56 @@ class LoggingEventPublisher:
             if self._producer is None:
                 raise RuntimeError("Producer not initialized. Call start() first.")
 
-            await self._producer.send_and_wait(
-                self.TOPIC_SECURITY_LOG,
-                value=envelope,
-                key=partition_key,
-                headers=headers,
+            await asyncio.wait_for(
+                self._producer.send_and_wait(
+                    self.TOPIC_SECURITY_LOG,
+                    value=envelope,
+                    key=partition_key,
+                    headers=headers,
+                ),
+                timeout=5.0,
             )
+
+            # Record success metrics
+            logging_events_published.labels(
+                event_type="security", status="success"
+            ).inc()
 
             self.logger.debug(
                 f"Published security log event (tenant: {tenant_id}, event_type: {event_type}, decision: {decision})"
             )
             return True
 
-        except Exception as e:
+        except KafkaError as e:
+            # Record Kafka error metrics with error type
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(
+                event_type="security", error_type=error_type
+            ).inc()
+            logging_events_published.labels(event_type="security", status="error").inc()
+
             self.logger.error(
                 f"Failed to publish security log event (tenant: {tenant_id}, event_type: {event_type}): {e}"
             )
             return False
+
+        except Exception as e:
+            # Record general error metrics
+            error_type = type(e).__name__
+            logging_kafka_errors.labels(
+                event_type="security", error_type=error_type
+            ).inc()
+            logging_events_published.labels(event_type="security", status="error").inc()
+
+            self.logger.error(
+                f"Failed to publish security log event (tenant: {tenant_id}, event_type: {event_type}): {e}"
+            )
+            return False
+
+        finally:
+            # Always record latency
+            duration = time.time() - start_time
+            logging_publish_latency.labels(event_type="security").observe(duration)
 
     def _create_base_envelope(
         self,
@@ -590,6 +829,7 @@ class LoggingEventPublisher:
         context: Dict[str, Any],
         correlation_id: Optional[str],
         tenant_id: Optional[str],
+        timestamp: str,
     ) -> Dict[str, Any]:
         """
         Build application log event envelope following OnexEnvelopeV1 structure.
@@ -603,6 +843,8 @@ class LoggingEventPublisher:
             code: Log code
             context: Context dictionary
             correlation_id: Optional correlation ID
+            tenant_id: Optional tenant ID
+            timestamp: ISO-8601 timestamp for the event
 
         Returns:
             Event envelope dictionary with complete structure
@@ -612,7 +854,7 @@ class LoggingEventPublisher:
         envelope = {
             "event_type": "omninode.logging.application.v1",
             "event_id": str(uuid4()),
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": timestamp,
             "tenant_id": tenant_id or os.getenv("TENANT_ID", "default"),
             "namespace": "omninode",
             "source": "omniclaude",
@@ -652,7 +894,6 @@ class LoggingEventPublisher:
             resource: Resource accessed
             outcome: Outcome of action
             correlation_id: Optional correlation ID
-        tenant_id: Optional tenant ID
             context: Context dictionary
 
         Returns:
@@ -702,7 +943,6 @@ class LoggingEventPublisher:
             resource: Resource accessed
             decision: Security decision
             correlation_id: Optional correlation ID
-        tenant_id: Optional tenant ID
             context: Context dictionary
 
         Returns:
@@ -837,7 +1077,6 @@ async def publish_audit_log(
         resource: Resource accessed
         outcome: Outcome of action
         correlation_id: Optional correlation ID
-        tenant_id: Optional tenant ID
         context: Optional context dictionary
 
     Returns:
@@ -883,7 +1122,6 @@ async def publish_security_log(
         resource: Resource accessed
         decision: Security decision
         correlation_id: Optional correlation ID
-        tenant_id: Optional tenant ID
         context: Optional context dictionary
 
     Returns:

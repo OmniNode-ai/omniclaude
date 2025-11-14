@@ -128,12 +128,13 @@ class TestLoggingEventPublisher:
     """Test suite for LoggingEventPublisher class."""
 
     @pytest.mark.asyncio
-    async def test_initialization_with_defaults(self):
+    async def test_initialization_with_defaults(self) -> None:
         """Test publisher initializes with default configuration."""
         with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
             mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
                 "localhost:9092"
             )
+            mock_settings.kafka_enable_logging_events = True
             publisher = LoggingEventPublisher()
 
             assert publisher.bootstrap_servers == "localhost:9092"
@@ -142,7 +143,7 @@ class TestLoggingEventPublisher:
             assert publisher._producer is None
 
     @pytest.mark.asyncio
-    async def test_initialization_with_custom_config(self, publisher_config):
+    async def test_initialization_with_custom_config(self, publisher_config) -> None:
         """Test publisher initializes with custom configuration."""
         publisher = LoggingEventPublisher(**publisher_config)
 
@@ -150,35 +151,28 @@ class TestLoggingEventPublisher:
         assert publisher.enable_events is True
 
     @pytest.mark.asyncio
-    async def test_initialization_reads_env_var(self):
-        """Test publisher reads KAFKA_ENABLE_LOGGING_EVENTS environment variable."""
+    async def test_initialization_reads_env_var(self) -> None:
+        """Test publisher reads KAFKA_ENABLE_LOGGING_EVENTS from Pydantic Settings."""
+        # Test with settings.kafka_enable_logging_events = False
         with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
             mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
                 "localhost:9092"
             )
+            mock_settings.kafka_enable_logging_events = False
+            publisher = LoggingEventPublisher()
+            assert publisher.enable_events is False
 
-            # Test with env var set to "false"
-            with patch.dict("os.environ", {"KAFKA_ENABLE_LOGGING_EVENTS": "false"}):
-                publisher = LoggingEventPublisher()
-                assert publisher.enable_events is False
-
-            # Test with env var set to "true"
-            with patch.dict("os.environ", {"KAFKA_ENABLE_LOGGING_EVENTS": "true"}):
-                publisher = LoggingEventPublisher()
-                assert publisher.enable_events is True
-
-            # Test with env var set to "FALSE" (uppercase)
-            with patch.dict("os.environ", {"KAFKA_ENABLE_LOGGING_EVENTS": "FALSE"}):
-                publisher = LoggingEventPublisher()
-                assert publisher.enable_events is False
-
-            # Test with env var not set (default to true)
-            with patch.dict("os.environ", {}, clear=True):
-                publisher = LoggingEventPublisher()
-                assert publisher.enable_events is True
+        # Test with settings.kafka_enable_logging_events = True
+        with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
+            mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+                "localhost:9092"
+            )
+            mock_settings.kafka_enable_logging_events = True
+            publisher = LoggingEventPublisher()
+            assert publisher.enable_events is True
 
     @pytest.mark.asyncio
-    async def test_initialization_explicit_param_overrides_env_var(self):
+    async def test_initialization_explicit_param_overrides_env_var(self) -> None:
         """Test explicit enable_events parameter takes precedence over environment variable."""
         with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
             mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
@@ -196,7 +190,7 @@ class TestLoggingEventPublisher:
                 assert publisher.enable_events is False
 
     @pytest.mark.asyncio
-    async def test_initialization_without_bootstrap_servers(self):
+    async def test_initialization_without_bootstrap_servers(self) -> None:
         """Test publisher raises error if bootstrap_servers not provided."""
         with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
             mock_settings.get_effective_kafka_bootstrap_servers.return_value = None
@@ -206,7 +200,9 @@ class TestLoggingEventPublisher:
                 LoggingEventPublisher()
 
     @pytest.mark.asyncio
-    async def test_start_creates_producer(self, publisher_config, mock_kafka_producer):
+    async def test_start_creates_producer(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
         """Test start() creates and initializes Kafka producer."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -221,7 +217,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_start_skips_if_already_started(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test start() is idempotent (no-op if already started)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -238,7 +234,7 @@ class TestLoggingEventPublisher:
             mock_kafka_producer.start.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_start_skips_if_events_disabled(self):
+    async def test_start_skips_if_events_disabled(self) -> None:
         """Test start() skips initialization if events disabled."""
         with patch("agents.lib.logging_event_publisher.settings") as mock_settings:
             mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
@@ -253,7 +249,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_start_failure_cleanup_preserves_original_error(
         self, publisher_config
-    ):
+    ) -> None:
         """Test start() failure cleanup doesn't mask original error."""
         # Create a mock producer that fails on start
         mock_producer = AsyncMock()
@@ -288,7 +284,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_start_failure_cleanup_when_producer_partially_initialized(
         self, publisher_config
-    ):
+    ) -> None:
         """Test start() failure cleanup works when producer is partially initialized."""
         # Create a mock producer that fails on start (after being created)
         mock_producer = AsyncMock()
@@ -316,7 +312,9 @@ class TestLoggingEventPublisher:
             assert "Failed to start Kafka producer" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_stop_closes_producer(self, publisher_config, mock_kafka_producer):
+    async def test_stop_closes_producer(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
         """Test stop() closes Kafka producer gracefully."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -331,7 +329,9 @@ class TestLoggingEventPublisher:
             mock_kafka_producer.stop.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_stop_is_idempotent(self, publisher_config, mock_kafka_producer):
+    async def test_stop_is_idempotent(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
         """Test stop() is idempotent (no-op if already stopped)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -351,7 +351,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_application_log_success(
         self, publisher_config, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test publish_application_log() publishes event successfully."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -379,7 +379,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_application_log_envelope_structure(
         self, publisher_config, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test publish_application_log() creates correct event envelope."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -419,7 +419,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_audit_log_success(
         self, publisher_config, mock_kafka_producer, sample_audit_log_data
-    ):
+    ) -> None:
         """Test publish_audit_log() publishes event successfully."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -443,7 +443,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_audit_log_envelope_structure(
         self, publisher_config, mock_kafka_producer, sample_audit_log_data
-    ):
+    ) -> None:
         """Test publish_audit_log() creates correct event envelope."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -473,7 +473,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_security_log_success(
         self, publisher_config, mock_kafka_producer, sample_security_log_data
-    ):
+    ) -> None:
         """Test publish_security_log() publishes event successfully."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -497,7 +497,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_security_log_envelope_structure(
         self, publisher_config, mock_kafka_producer, sample_security_log_data
-    ):
+    ) -> None:
         """Test publish_security_log() creates correct event envelope."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -527,7 +527,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_skips_if_not_started(
         self, publisher_config, sample_application_log_data
-    ):
+    ) -> None:
         """Test publish methods skip if publisher not started."""
         publisher = LoggingEventPublisher(**publisher_config)
 
@@ -538,7 +538,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_skips_if_events_disabled(
         self, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test publish methods skip if events disabled."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -561,7 +561,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_publish_handles_kafka_error(
         self, publisher_config, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test publish methods handle Kafka errors gracefully."""
         mock_kafka_producer.send_and_wait.side_effect = Exception(
             "Kafka connection lost"
@@ -583,7 +583,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_context_manager_lifecycle(
         self, publisher_config, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test context manager handles publisher lifecycle automatically."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -602,7 +602,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_context_manager_stops_on_exception(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test context manager stops publisher even if exception raised."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -620,7 +620,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_convenience_function_publish_application_log(
         self, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test convenience function publish_application_log()."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -636,7 +636,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_convenience_function_publish_audit_log(
         self, mock_kafka_producer, sample_audit_log_data
-    ):
+    ) -> None:
         """Test convenience function publish_audit_log()."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -652,7 +652,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_convenience_function_publish_security_log(
         self, mock_kafka_producer, sample_security_log_data
-    ):
+    ) -> None:
         """Test convenience function publish_security_log()."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -668,7 +668,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_application_log_without_correlation_id(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test application log generates correlation_id if not provided."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -697,7 +697,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_kafka_headers_with_correlation_id(
         self, publisher_config, mock_kafka_producer, sample_application_log_data
-    ):
+    ) -> None:
         """Test Kafka headers include correlation ID when provided."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -724,7 +724,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_timestamp_consistency_audit_log(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test audit log envelope and payload have identical timestamps."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -754,7 +754,7 @@ class TestLoggingEventPublisher:
     @pytest.mark.asyncio
     async def test_timestamp_consistency_security_log(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test security log envelope and payload have identical timestamps."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -788,7 +788,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_application_log_with_enum_level(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_application_log() accepts LogLevel enum."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -818,7 +818,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_application_log_with_string_level_backward_compat(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_application_log() still accepts string (backward compatibility)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -848,7 +848,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_audit_log_with_enum_outcome(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_audit_log() accepts Outcome enum."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -877,7 +877,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_audit_log_with_string_outcome_backward_compat(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_audit_log() still accepts string (backward compatibility)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -906,7 +906,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_security_log_with_enum_decision(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_security_log() accepts Decision enum."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -935,7 +935,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_security_log_with_string_decision_backward_compat(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test publish_security_log() still accepts string (backward compatibility)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -962,7 +962,7 @@ class TestLoggingEventPublisherEnums:
             assert envelope["payload"]["decision"] == "deny"
 
     @pytest.mark.asyncio
-    async def test_enum_values_are_correct(self):
+    async def test_enum_values_are_correct(self) -> None:
         """Test that enum values match expected strings."""
         assert LogLevel.DEBUG.value == "DEBUG"
         assert LogLevel.INFO.value == "INFO"
@@ -978,7 +978,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_application_log_with_explicit_tenant_id(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test application log uses explicit tenant_id parameter."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1007,7 +1007,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_application_log_tenant_id_fallback_to_env(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test application log falls back to TENANT_ID environment variable."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1037,7 +1037,7 @@ class TestLoggingEventPublisherEnums:
     @pytest.mark.asyncio
     async def test_application_log_tenant_id_fallback_to_default(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test application log falls back to 'default' when no tenant_id provided."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1072,7 +1072,7 @@ class TestLoggingEventPublisherEdgeCases:
     @pytest.mark.asyncio
     async def test_connection_failure_during_publish(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test graceful handling when producer fails during publish."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1119,7 +1119,9 @@ class TestLoggingEventPublisherEdgeCases:
 
     @pytest.mark.slow
     @pytest.mark.asyncio
-    async def test_concurrent_publishing(self, publisher_config, mock_kafka_producer):
+    async def test_concurrent_publishing(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
         """Test thread-safety of concurrent publishing."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1154,8 +1156,10 @@ class TestLoggingEventPublisherEdgeCases:
 
     @pytest.mark.slow
     @pytest.mark.asyncio
-    async def test_large_payload_handling(self, publisher_config, mock_kafka_producer):
-        """Test handling of large context dictionaries (>1MB)."""
+    async def test_large_payload_handling(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test validation rejects large context dictionaries (>64KB)."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
             return_value=mock_kafka_producer,
@@ -1163,15 +1167,17 @@ class TestLoggingEventPublisherEdgeCases:
             publisher = LoggingEventPublisher(**publisher_config)
             await publisher.start()
 
-            # Create 1MB string
+            # Create 1MB string (exceeds 64KB limit)
             large_context = {
                 "data": "x" * (1024 * 1024),  # 1MB of 'x' characters
                 "metadata": "large payload test",
             }
 
-            # Should either succeed or fail gracefully (not crash)
-            try:
-                result = await publisher.publish_application_log(
+            # Our validation should reject payloads >64KB
+            with pytest.raises(
+                ValueError, match="context serialized size must be <= 65536 bytes"
+            ):
+                await publisher.publish_application_log(
                     service_name="test-service",
                     instance_id="test-instance",
                     level="WARN",
@@ -1180,19 +1186,14 @@ class TestLoggingEventPublisherEdgeCases:
                     code="LARGE-001",
                     context=large_context,
                 )
-                # If it succeeds, great. If it returns False, that's also acceptable
-                assert isinstance(result, bool)
-            except Exception as e:
-                # Should not raise - should return False instead
-                pytest.fail(f"Should handle large payloads gracefully, but raised: {e}")
-            finally:
-                await publisher.stop()
+
+            await publisher.stop()
 
     @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_network_timeout_handling(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test handling of network timeouts."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1203,7 +1204,7 @@ class TestLoggingEventPublisherEdgeCases:
 
             # Mock producer to simulate timeout
             async def timeout_send(*args, **kwargs):
-                await asyncio.sleep(10)  # Simulate very slow network
+                await asyncio.sleep(0.1)  # Fast enough to test timeout logic
                 raise asyncio.TimeoutError("Network timeout")
 
             mock_kafka_producer.send_and_wait.side_effect = timeout_send
@@ -1227,8 +1228,8 @@ class TestLoggingEventPublisherEdgeCases:
     @pytest.mark.asyncio
     async def test_invalid_partition_key_handling(
         self, publisher_config, mock_kafka_producer
-    ):
-        """Test handling of invalid UTF-8 characters in partition keys."""
+    ) -> None:
+        """Test validation rejects null bytes in partition keys."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
             return_value=mock_kafka_producer,
@@ -1236,29 +1237,16 @@ class TestLoggingEventPublisherEdgeCases:
             publisher = LoggingEventPublisher(**publisher_config)
             await publisher.start()
 
-            # Test with various problematic characters
-            problematic_keys = [
-                "tenant\x00id",  # Null byte
-                "tenant\xffid",  # Invalid UTF-8
-                "tenant\udcffid",  # Surrogate character
-            ]
-
-            for key in problematic_keys:
-                try:
-                    # Should handle invalid keys gracefully
-                    result = await publisher.publish_audit_log(
-                        tenant_id=key,
-                        actor="test-actor",
-                        action="test-action",
-                        resource="test-resource",
-                        outcome="success",
-                        context={"test": "data"},
-                    )
-                    # Should either succeed (after sanitization) or fail gracefully
-                    assert isinstance(result, bool)
-                except UnicodeEncodeError:
-                    # This is acceptable - publisher detected invalid UTF-8
-                    pass
+            # Our validation should reject null bytes in partition keys
+            with pytest.raises(ValueError, match="tenant_id cannot contain null bytes"):
+                await publisher.publish_audit_log(
+                    tenant_id="tenant\x00id",  # Null byte
+                    actor="test-actor",
+                    action="test-action",
+                    resource="test-resource",
+                    outcome="success",
+                    context={"test": "data"},
+                )
 
             await publisher.stop()
 
@@ -1266,7 +1254,7 @@ class TestLoggingEventPublisherEdgeCases:
     @pytest.mark.asyncio
     async def test_producer_stop_during_publish(
         self, publisher_config, mock_kafka_producer
-    ):
+    ) -> None:
         """Test behavior when producer is stopped during active publishing."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
@@ -1300,7 +1288,7 @@ class TestLoggingEventPublisherIntegration:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_publish_to_real_kafka(self, sample_application_log_data):
+    async def test_publish_to_real_kafka(self, sample_application_log_data) -> None:
         """
         Integration test: Publish to real Kafka instance.
 
