@@ -56,6 +56,7 @@ jsonschema = "^4.23.0"
 pyyaml = "^6.0.3"
 neo4j = "^6.0.2"
 asyncpg = "^0.29.0"
+pytest-benchmark = "^4.0.0"
 pytest-cov = "^7.0.0"
 psutil = "^6.1.0"
 isort = "^7.0.0"
@@ -157,6 +158,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["agents/tests"]
 markers = [
+    "benchmark: mark benchmark tests using pytest-benchmark",
     "integration: integration tests that may hit external services",
     "database: marks tests that require database connectivity",
     "slow: marks tests that take a long time to run",

@@ -125,6 +125,35 @@ def sample_security_log_data():
     }
 
 
+@pytest.fixture(autouse=True)
+async def _reset_global_publisher():
+    """
+    Reset global publisher singleton before each test for isolation.
+
+    The convenience functions use a singleton pattern for performance optimization.
+    This fixture ensures test isolation by resetting the singleton before each test.
+    """
+    import agents.lib.logging_event_publisher as lep
+
+    # Store original state
+    original_publisher = lep._global_publisher
+
+    # Reset to None for test isolation
+    lep._global_publisher = None
+
+    yield
+
+    # Cleanup after test
+    if lep._global_publisher is not None and hasattr(lep._global_publisher, "stop"):
+        try:
+            await lep._global_publisher.stop()
+        except Exception:
+            pass  # Ignore cleanup errors in tests
+
+    # Restore original
+    lep._global_publisher = original_publisher
+
+
 class TestLoggingEventPublisher:
     """Test suite for LoggingEventPublisher class."""
 
@@ -622,7 +651,7 @@ class TestLoggingEventPublisher:
     async def test_convenience_function_publish_application_log(
         self, mock_kafka_producer, sample_application_log_data
     ) -> None:
-        """Test convenience function publish_application_log()."""
+        """Test convenience function publish_application_log() with singleton pattern."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
             return_value=mock_kafka_producer,
@@ -630,15 +659,15 @@ class TestLoggingEventPublisher:
             success = await publish_application_log(**sample_application_log_data)
 
             assert success is True
-            mock_kafka_producer.start.assert_called_once()
+            mock_kafka_producer.start.assert_called_once()  # Called on first use
             mock_kafka_producer.send_and_wait.assert_called_once()
-            mock_kafka_producer.stop.assert_called_once()
+            mock_kafka_producer.stop.assert_not_called()  # Singleton: stop() only on app exit
 
     @pytest.mark.asyncio
     async def test_convenience_function_publish_audit_log(
         self, mock_kafka_producer, sample_audit_log_data
     ) -> None:
-        """Test convenience function publish_audit_log()."""
+        """Test convenience function publish_audit_log() with singleton pattern."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
             return_value=mock_kafka_producer,
@@ -646,15 +675,15 @@ class TestLoggingEventPublisher:
             success = await publish_audit_log(**sample_audit_log_data)
 
             assert success is True
-            mock_kafka_producer.start.assert_called_once()
+            mock_kafka_producer.start.assert_called_once()  # Called on first use
             mock_kafka_producer.send_and_wait.assert_called_once()
-            mock_kafka_producer.stop.assert_called_once()
+            mock_kafka_producer.stop.assert_not_called()  # Singleton: stop() only on app exit
 
     @pytest.mark.asyncio
     async def test_convenience_function_publish_security_log(
         self, mock_kafka_producer, sample_security_log_data
     ) -> None:
-        """Test convenience function publish_security_log()."""
+        """Test convenience function publish_security_log() with singleton pattern."""
         with patch(
             "agents.lib.logging_event_publisher.AIOKafkaProducer",
             return_value=mock_kafka_producer,
@@ -662,9 +691,9 @@ class TestLoggingEventPublisher:
             success = await publish_security_log(**sample_security_log_data)
 
             assert success is True
-            mock_kafka_producer.start.assert_called_once()
+            mock_kafka_producer.start.assert_called_once()  # Called on first use
             mock_kafka_producer.send_and_wait.assert_called_once()
-            mock_kafka_producer.stop.assert_called_once()
+            mock_kafka_producer.stop.assert_not_called()  # Singleton: stop() only on app exit
 
     @pytest.mark.asyncio
     async def test_application_log_without_correlation_id(
@@ -2156,8 +2185,6 @@ class TestLoggingEventPublisherEdgeCases:
                 decision="allow",
             )
             assert result_security is False
-
-            await publisher.stop()
 
             await publisher.stop()
 
