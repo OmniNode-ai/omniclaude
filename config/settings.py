@@ -243,6 +243,10 @@ class Settings(BaseSettings):
         default=True, description="Enable Kafka event logging"
     )
 
+    kafka_enable_logging_events: bool = Field(
+        default=True, description="Enable logging event publishing to Kafka"
+    )
+
     enable_event_based_discovery: bool = Field(
         default=True, description="Enable event-first pattern discovery"
     )

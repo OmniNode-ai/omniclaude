@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""
+Diagnose Issues - Identify and diagnose common system problems
+
+Usage:
+    python3 execute.py [--severity critical,warning] [--format json|text]
+
+Exit Codes:
+    0 - No issues found
+    1 - Warnings found
+    2 - Critical issues found
+    3 - Execution error
+
+Created: 2025-11-12
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+
+try:
+    from docker_helper import list_containers, get_container_status
+    from kafka_helper import check_kafka_connection
+    from qdrant_helper import check_qdrant_connection
+    from db_helper import execute_query
+    from status_formatter import format_json, format_status_indicator
+except ImportError as e:
+    print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
+    sys.exit(3)
+
+
+def check_service_issues():
+    """Check for Docker service issues."""
+    issues = []
+
+    try:
+        containers = list_containers()
+        if not containers["success"]:
+            issues.append({
+                "severity": "critical",
+                "component": "docker",
+                "issue": "Failed to list containers",
+                "details": containers.get("error"),
+                "recommendation": "Verify Docker daemon is running",
+                "auto_fix_available": False
+            })
+            return issues
+
+        for container in containers["containers"]:
+            name = container["name"]
+            state = container["state"].lower()
+            status = container["status"].lower()
+
+            # Check if stopped
+            if state != "running":
+                issues.append({
+                    "severity": "critical",
+                    "component": name,
+                    "issue": "Container not running",
+                    "details": f"Current state: {state}",
+                    "recommendation": f"Start container: docker start {name}",
+                    "auto_fix_available": False
+                })
+
+            # Check if unhealthy
+            elif "unhealthy" in status:
+                issues.append({
+                    "severity": "warning",
+                    "component": name,
+                    "issue": "Container unhealthy",
+                    "details": "Health check failing",
+                    "recommendation": f"Check logs: docker logs {name}",
+                    "auto_fix_available": False
+                })
+
+            # Check restart count
+            container_status = get_container_status(name)
+            if container_status.get("success") and container_status.get("restart_count", 0) > 5:
+                issues.append({
+                    "severity": "warning",
+                    "component": name,
+                    "issue": "High restart count",
+                    "details": f"Restarted {container_status['restart_count']} times",
+                    "recommendation": f"Investigate crashes: docker logs {name}",
+                    "auto_fix_available": False
+                })
+
+    except Exception as e:
+        issues.append({
+            "severity": "critical",
+            "component": "docker",
+            "issue": "Service check failed",
+            "details": str(e),
+            "recommendation": "Verify Docker is accessible",
+            "auto_fix_available": False
+        })
+
+    return issues
+
+
+def check_infrastructure_issues():
+    """Check for infrastructure connectivity issues."""
+    issues = []
+
+    # Check Kafka
+    try:
+        kafka = check_kafka_connection()
+        if not kafka.get("reachable"):
+            issues.append({
+                "severity": "critical",
+                "component": "kafka",
+                "issue": "Kafka broker unreachable",
+                "details": kafka.get("error", "Connection failed"),
+                "recommendation": "Check Kafka broker: docker logs omninode-bridge-redpanda",
+                "auto_fix_available": False
+            })
+    except Exception as e:
+        issues.append({
+            "severity": "critical",
+            "component": "kafka",
+            "issue": "Kafka check failed",
+            "details": str(e),
+            "recommendation": "Verify Kafka configuration in .env",
+            "auto_fix_available": False
+        })
+
+    # Check PostgreSQL
+    try:
+        result = execute_query("SELECT 1")
+        if not result.get("success"):
+            issues.append({
+                "severity": "critical",
+                "component": "postgres",
+                "issue": "PostgreSQL unreachable",
+                "details": result.get("error", "Connection failed"),
+                "recommendation": "Verify PostgreSQL credentials in .env file",
+                "auto_fix_available": False
+            })
+        else:
+            # Check connection pool
+            conn_result = execute_query("""
+                SELECT count(*) as active
+                FROM pg_stat_activity
+                WHERE state = 'active'
+            """)
+            if conn_result.get("success") and conn_result.get("rows"):
+                active = conn_result["rows"][0]["active"]
+                if active > 80:
+                    issues.append({
+                        "severity": "warning",
+                        "component": "postgres",
+                        "issue": "Connection pool near capacity",
+                        "details": f"Active connections: {active}/100",
+                        "recommendation": "Consider increasing max_connections or optimizing queries",
+                        "auto_fix_available": False
+                    })
+    except Exception as e:
+        issues.append({
+            "severity": "critical",
+            "component": "postgres",
+            "issue": "PostgreSQL check failed",
+            "details": str(e),
+            "recommendation": "Verify database is running and accessible",
+            "auto_fix_available": False
+        })
+
+    # Check Qdrant
+    try:
+        qdrant = check_qdrant_connection()
+        if not qdrant.get("reachable"):
+            issues.append({
+                "severity": "critical",
+                "component": "qdrant",
+                "issue": "Qdrant unreachable",
+                "details": qdrant.get("error", "Connection failed"),
+                "recommendation": "Check Qdrant service: docker logs archon-qdrant",
+                "auto_fix_available": False
+            })
+    except Exception as e:
+        issues.append({
+            "severity": "critical",
+            "component": "qdrant",
+            "issue": "Qdrant check failed",
+            "details": str(e),
+            "recommendation": "Verify Qdrant configuration",
+            "auto_fix_available": False
+        })
+
+    return issues
+
+
+def check_performance_issues():
+    """Check for performance degradation."""
+    issues = []
+
+    try:
+        # Check manifest injection performance
+        manifest_query = """
+            SELECT AVG(total_query_time_ms) as avg_time
+            FROM agent_manifest_injections
+            WHERE created_at > NOW() - INTERVAL '1 hour'
+        """
+        result = execute_query(manifest_query)
+
+        if result.get("success") and result.get("rows"):
+            avg_time = result["rows"][0].get("avg_time")
+            if avg_time and float(avg_time) > 5000:
+                issues.append({
+                    "severity": "warning",
+                    "component": "manifest-injection",
+                    "issue": "High manifest injection latency",
+                    "details": f"Avg query time: {int(avg_time)}ms (target: <2000ms)",
+                    "recommendation": "Check Qdrant performance and collection sizes",
+                    "auto_fix_available": False
+                })
+
+        # Check routing performance
+        routing_query = """
+            SELECT AVG(routing_time_ms) as avg_time
+            FROM agent_routing_decisions
+            WHERE created_at > NOW() - INTERVAL '1 hour'
+        """
+        result = execute_query(routing_query)
+
+        if result.get("success") and result.get("rows"):
+            avg_time = result["rows"][0].get("avg_time")
+            if avg_time and float(avg_time) > 100:
+                issues.append({
+                    "severity": "warning",
+                    "component": "routing",
+                    "issue": "High routing latency",
+                    "details": f"Avg routing time: {int(avg_time)}ms (target: <100ms)",
+                    "recommendation": "Review routing algorithm efficiency",
+                    "auto_fix_available": False
+                })
+    except Exception:
+        # Silently skip performance checks if tables don't exist
+        pass
+
+    return issues
+
+
+def format_text_output(data: dict) -> str:
+    """Format output as text."""
+    lines = [
+        "=" * 70,
+        "SYSTEM DIAGNOSTICS",
+        "=" * 70,
+        f"System Health: {data['system_health'].upper()}",
+        f"Issues Found: {data['issues_found']} (Critical: {data['critical']}, Warnings: {data['warnings']})",
+        ""
+    ]
+
+    if data.get("issues"):
+        lines.append("ISSUES:")
+        for issue in data["issues"]:
+            severity_symbol = "✗" if issue["severity"] == "critical" else "⚠"
+            lines.append(f"\n{severity_symbol} {issue['component'].upper()} - {issue['issue']}")
+            lines.append(f"  Details: {issue['details']}")
+            lines.append(f"  Recommendation: {issue['recommendation']}")
+
+    if data.get("recommendations"):
+        lines.append("\nRECOMMENDATIONS:")
+        for i, rec in enumerate(data["recommendations"], 1):
+            lines.append(f"  {i}. {rec}")
+
+    return "\n".join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Diagnose system issues")
+    parser.add_argument("--severity", help="Filter by severity (critical,warning,info)")
+    parser.add_argument("--format", choices=["json", "text"], default="json", help="Output format")
+    args = parser.parse_args()
+
+    try:
+        # Collect issues from all checks
+        all_issues = []
+        all_issues.extend(check_service_issues())
+        all_issues.extend(check_infrastructure_issues())
+        all_issues.extend(check_performance_issues())
+
+        # Filter by severity if requested
+        if args.severity:
+            severities = [s.strip() for s in args.severity.split(",")]
+            all_issues = [i for i in all_issues if i["severity"] in severities]
+
+        # Count issues by severity
+        critical_count = sum(1 for i in all_issues if i["severity"] == "critical")
+        warning_count = sum(1 for i in all_issues if i["severity"] == "warning")
+
+        # Determine system health
+        if critical_count > 0:
+            system_health = "critical"
+            exit_code = 2
+        elif warning_count > 0:
+            system_health = "degraded"
+            exit_code = 1
+        else:
+            system_health = "healthy"
+            exit_code = 0
+
+        # Build result
+        result = {
+            "system_health": system_health,
+            "issues_found": len(all_issues),
+            "critical": critical_count,
+            "warnings": warning_count,
+            "issues": all_issues,
+            "recommendations": list(set(i["recommendation"] for i in all_issues))
+        }
+
+        # Output result
+        if args.format == "text":
+            print(format_text_output(result))
+        else:
+            print(format_json(result))
+
+        return exit_code
+
+    except Exception as e:
+        error_result = {
+            "success": False,
+            "error": str(e)
+        }
+        print(format_json(error_result))
+        return 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())
