@@ -42,7 +42,8 @@ import json
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional
+from enum import Enum
+from typing import Any, Dict, Optional, Union
 from uuid import uuid4
 
 from aiokafka import AIOKafkaProducer
@@ -51,6 +52,29 @@ from aiokafka.errors import KafkaError
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class LogLevel(str, Enum):
+    """Valid log levels for application logging."""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARN = "WARN"
+    ERROR = "ERROR"
+
+
+class Outcome(str, Enum):
+    """Valid outcomes for audit logging."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class Decision(str, Enum):
+    """Valid authorization decisions for security logging."""
+
+    ALLOW = "allow"
+    DENY = "deny"
 
 
 class LoggingEventPublisher:
@@ -99,7 +123,7 @@ class LoggingEventPublisher:
     def __init__(
         self,
         bootstrap_servers: Optional[str] = None,
-        enable_events: bool = True,
+        enable_events: Optional[bool] = None,
     ):
         """
         Initialize logging event publisher.
@@ -109,6 +133,9 @@ class LoggingEventPublisher:
                 - External host: "localhost:9092" or "192.168.86.200:9092"
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
+                - If None, reads from KAFKA_ENABLE_LOGGING_EVENTS environment variable
+                - Defaults to True if neither provided
+                - Explicit parameter takes precedence over environment variable
         """
         # Bootstrap servers - use centralized configuration if not provided
         self.bootstrap_servers = (
@@ -121,6 +148,12 @@ class LoggingEventPublisher:
                 "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
                 f"Current value: {getattr(settings, 'kafka_bootstrap_servers', 'not set')}"
+            )
+
+        # Read from environment variable if not explicitly provided
+        if enable_events is None:
+            enable_events = (
+                os.getenv("KAFKA_ENABLE_LOGGING_EVENTS", "true").lower() == "true"
             )
         self.enable_events = enable_events
 
@@ -169,7 +202,13 @@ class LoggingEventPublisher:
 
         except Exception as e:
             self.logger.error(f"Failed to start logging event publisher: {e}")
-            await self.stop()
+            # Clean up producer if it was created
+            if self._producer is not None:
+                try:
+                    await self._producer.stop()
+                except Exception:
+                    pass  # Ignore cleanup errors to preserve original exception
+                self._producer = None
             raise KafkaError(f"Failed to start Kafka producer: {e}") from e
 
     async def stop(self) -> None:
@@ -206,6 +245,7 @@ class LoggingEventPublisher:
         code: str,
         context: Optional[Dict[str, Any]] = None,
         correlation_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> bool:
         """
         Publish application log event.
@@ -222,6 +262,7 @@ class LoggingEventPublisher:
             code: Log code for categorization (e.g., "AGENT_EXECUTION_COMPLETED")
             context: Optional context dictionary (agent_name, duration_ms, etc.)
             correlation_id: Optional correlation ID for request tracing
+            tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
 
         Returns:
             True if event published successfully, False otherwise
@@ -236,6 +277,7 @@ class LoggingEventPublisher:
                 code="AGENT_EXECUTION_COMPLETED",
                 context={"agent_name": "agent-api-architect", "duration_ms": 1234},
                 correlation_id="abc-123-def-456",
+                tenant_id="tenant-123",
             )
         """
         if not self._started or not self.enable_events:
@@ -255,6 +297,7 @@ class LoggingEventPublisher:
                 code=code,
                 context=context or {},
                 correlation_id=correlation_id,
+                tenant_id=tenant_id,
             )
 
             # Publish event with partition key (service_name for application logs)
@@ -268,11 +311,13 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
+                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{correlation_id.replace('-', '')}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-0000000000000000-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -307,7 +352,7 @@ class LoggingEventPublisher:
         action: str,
         actor: str,
         resource: str,
-        outcome: str,
+        outcome: Union[Outcome, str],
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -322,8 +367,9 @@ class LoggingEventPublisher:
             action: Action performed (e.g., "agent.execution", "api.call")
             actor: User or service that performed the action
             resource: Resource that was accessed (e.g., agent name, API endpoint)
-            outcome: Outcome of the action ("success" or "failure")
+            outcome: Outcome of the action (Outcome enum or string: "success" or "failure")
             correlation_id: Optional correlation ID for request tracing
+            tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
             context: Optional context dictionary (additional metadata)
 
         Returns:
@@ -335,7 +381,7 @@ class LoggingEventPublisher:
                 action="agent.execution",
                 actor="user-456",
                 resource="agent-api-architect",
-                outcome="success",
+                outcome=Outcome.SUCCESS,  # or "success" for backward compatibility
                 correlation_id="abc-123-def-456",
                 context={"duration_ms": 1234, "quality_score": 0.95},
             )
@@ -369,11 +415,13 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
+                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{correlation_id.replace('-', '')}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-0000000000000000-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -408,7 +456,7 @@ class LoggingEventPublisher:
         event_type: str,
         user_id: str,
         resource: str,
-        decision: str,
+        decision: Union[Decision, str],
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -423,8 +471,9 @@ class LoggingEventPublisher:
             event_type: Type of security event (e.g., "api_key_used", "permission_check")
             user_id: User identifier
             resource: Resource being accessed
-            decision: Security decision ("allow" or "deny")
+            decision: Security decision (Decision enum or string: "allow" or "deny")
             correlation_id: Optional correlation ID for request tracing
+            tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
             context: Optional context dictionary (additional metadata)
 
         Returns:
@@ -436,7 +485,7 @@ class LoggingEventPublisher:
                 event_type="api_key_used",
                 user_id="user-456",
                 resource="gemini-api",
-                decision="allow",
+                decision=Decision.ALLOW,  # or "allow" for backward compatibility
                 correlation_id="abc-123-def-456",
                 context={"api_key_hash": "sha256:abc123", "ip_address": "192.168.1.1"},
             )
@@ -470,11 +519,13 @@ class LoggingEventPublisher:
 
             # Add correlation ID to headers if provided
             if correlation_id:
+                # Generate W3C traceparent: ensure trace_id is 32 hex chars
+                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
                 headers.extend(
                     [
                         (
                             "x-traceparent",
-                            f"00-{correlation_id.replace('-', '')}-0000000000000000-01".encode(),
+                            f"00-{trace_id}-0000000000000000-01".encode(),
                         ),
                         ("x-correlation-id", correlation_id.encode("utf-8")),
                         ("x-causation-id", correlation_id.encode("utf-8")),
@@ -503,16 +554,42 @@ class LoggingEventPublisher:
             )
             return False
 
+    def _create_base_envelope(
+        self,
+        event_type: str,
+        tenant_id: str,
+        correlation_id: Optional[str],
+        payload: Dict[str, Any],
+        timestamp: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create base envelope structure with single timestamp generation."""
+        timestamp = timestamp or datetime.now(UTC).isoformat()
+        correlation_id = correlation_id or str(uuid4())
+
+        return {
+            "event_type": event_type,
+            "event_id": str(uuid4()),
+            "timestamp": timestamp,
+            "tenant_id": tenant_id,
+            "namespace": "omninode",
+            "source": "omniclaude",
+            "correlation_id": correlation_id,
+            "causation_id": correlation_id,
+            "schema_ref": f"registry://{event_type.replace('.', '/')}",
+            "payload": payload,
+        }
+
     def _create_application_log_envelope(
         self,
         service_name: str,
         instance_id: str,
-        level: str,
+        level: Union[LogLevel, str],
         logger_name: str,
         message: str,
         code: str,
         context: Dict[str, Any],
         correlation_id: Optional[str],
+        tenant_id: Optional[str],
     ) -> Dict[str, Any]:
         """
         Build application log event envelope following OnexEnvelopeV1 structure.
@@ -530,11 +607,13 @@ class LoggingEventPublisher:
         Returns:
             Event envelope dictionary with complete structure
         """
+        # Convert enum to string if needed
+        level_str = str(level.value) if isinstance(level, LogLevel) else level
         envelope = {
             "event_type": "omninode.logging.application.v1",
             "event_id": str(uuid4()),
             "timestamp": datetime.now(UTC).isoformat(),
-            "tenant_id": os.getenv("TENANT_ID", "default"),
+            "tenant_id": tenant_id or os.getenv("TENANT_ID", "default"),
             "namespace": "omninode",
             "source": "omniclaude",
             "correlation_id": correlation_id or str(uuid4()),
@@ -543,7 +622,7 @@ class LoggingEventPublisher:
             "payload": {
                 "service_name": service_name,
                 "instance_id": instance_id,
-                "level": level,
+                "level": level_str,
                 "logger": logger_name,
                 "message": message,
                 "code": code,
@@ -559,7 +638,7 @@ class LoggingEventPublisher:
         action: str,
         actor: str,
         resource: str,
-        outcome: str,
+        outcome: Union[Outcome, str],
         correlation_id: Optional[str],
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
@@ -573,33 +652,35 @@ class LoggingEventPublisher:
             resource: Resource accessed
             outcome: Outcome of action
             correlation_id: Optional correlation ID
+        tenant_id: Optional tenant ID
             context: Context dictionary
 
         Returns:
             Event envelope dictionary with complete structure
         """
-        envelope = {
-            "event_type": "omninode.logging.audit.v1",
-            "event_id": str(uuid4()),
-            "timestamp": datetime.now(UTC).isoformat(),
+        # Convert enum to string if needed
+        outcome_str = str(outcome.value) if isinstance(outcome, Outcome) else outcome
+
+        # Generate timestamp once for both envelope and payload
+        timestamp = datetime.now(UTC).isoformat()
+
+        payload = {
             "tenant_id": tenant_id,
-            "namespace": "omninode",
-            "source": "omniclaude",
-            "correlation_id": correlation_id or str(uuid4()),
-            "causation_id": correlation_id or str(uuid4()),
-            "schema_ref": "registry://omninode/logging/audit/v1",
-            "payload": {
-                "tenant_id": tenant_id,
-                "action": action,
-                "actor": actor,
-                "resource": resource,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "outcome": outcome,
-                "context": context,
-            },
+            "action": action,
+            "actor": actor,
+            "resource": resource,
+            "timestamp": timestamp,
+            "outcome": outcome_str,
+            "context": context,
         }
 
-        return envelope
+        return self._create_base_envelope(
+            event_type="omninode.logging.audit.v1",
+            tenant_id=tenant_id,
+            correlation_id=correlation_id,
+            payload=payload,
+            timestamp=timestamp,
+        )
 
     def _create_security_log_envelope(
         self,
@@ -607,7 +688,7 @@ class LoggingEventPublisher:
         event_type: str,
         user_id: str,
         resource: str,
-        decision: str,
+        decision: Union[Decision, str],
         correlation_id: Optional[str],
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
@@ -621,33 +702,37 @@ class LoggingEventPublisher:
             resource: Resource accessed
             decision: Security decision
             correlation_id: Optional correlation ID
+        tenant_id: Optional tenant ID
             context: Context dictionary
 
         Returns:
             Event envelope dictionary with complete structure
         """
-        envelope = {
-            "event_type": "omninode.logging.security.v1",
-            "event_id": str(uuid4()),
-            "timestamp": datetime.now(UTC).isoformat(),
+        # Convert enum to string if needed
+        decision_str = (
+            str(decision.value) if isinstance(decision, Decision) else decision
+        )
+
+        # Generate timestamp once for both envelope and payload
+        timestamp = datetime.now(UTC).isoformat()
+
+        payload = {
             "tenant_id": tenant_id,
-            "namespace": "omninode",
-            "source": "omniclaude",
-            "correlation_id": correlation_id or str(uuid4()),
-            "causation_id": correlation_id or str(uuid4()),
-            "schema_ref": "registry://omninode/logging/security/v1",
-            "payload": {
-                "tenant_id": tenant_id,
-                "event_type": event_type,
-                "user_id": user_id,
-                "resource": resource,
-                "decision": decision,
-                "timestamp": datetime.now(UTC).isoformat(),
-                "context": context,
-            },
+            "event_type": event_type,
+            "user_id": user_id,
+            "resource": resource,
+            "decision": decision_str,
+            "timestamp": timestamp,
+            "context": context,
         }
 
-        return envelope
+        return self._create_base_envelope(
+            event_type="omninode.logging.security.v1",
+            tenant_id=tenant_id,
+            correlation_id=correlation_id,
+            payload=payload,
+            timestamp=timestamp,
+        )
 
 
 # Convenience context manager for automatic start/stop
@@ -663,7 +748,7 @@ class LoggingEventPublisherContext:
     def __init__(
         self,
         bootstrap_servers: Optional[str] = None,
-        enable_events: bool = True,
+        enable_events: Optional[bool] = None,
     ):
         self.publisher = LoggingEventPublisher(
             bootstrap_servers=bootstrap_servers,
@@ -683,12 +768,13 @@ class LoggingEventPublisherContext:
 async def publish_application_log(
     service_name: str,
     instance_id: str,
-    level: str,
+    level: Union[LogLevel, str],
     logger_name: str,
     message: str,
     code: str,
     context: Optional[Dict[str, Any]] = None,
     correlation_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
 ) -> bool:
     """
     Convenience function for one-off application log event publishing.
@@ -702,6 +788,7 @@ async def publish_application_log(
         code: Log code
         context: Optional context dictionary
         correlation_id: Optional correlation ID
+        tenant_id: Optional tenant ID
 
     Returns:
         True if event published successfully, False otherwise
@@ -714,6 +801,7 @@ async def publish_application_log(
             logger_name="router.pipeline",
             message="Agent execution completed",
             code="AGENT_EXECUTION_COMPLETED",
+            tenant_id="tenant-123",
         )
     """
     async with LoggingEventPublisherContext() as publisher:
@@ -726,6 +814,7 @@ async def publish_application_log(
             code=code,
             context=context,
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
         )
 
 
@@ -734,7 +823,7 @@ async def publish_audit_log(
     action: str,
     actor: str,
     resource: str,
-    outcome: str,
+    outcome: Union[Outcome, str],
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
@@ -748,6 +837,7 @@ async def publish_audit_log(
         resource: Resource accessed
         outcome: Outcome of action
         correlation_id: Optional correlation ID
+        tenant_id: Optional tenant ID
         context: Optional context dictionary
 
     Returns:
@@ -779,7 +869,7 @@ async def publish_security_log(
     event_type: str,
     user_id: str,
     resource: str,
-    decision: str,
+    decision: Union[Decision, str],
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
@@ -793,6 +883,7 @@ async def publish_security_log(
         resource: Resource accessed
         decision: Security decision
         correlation_id: Optional correlation ID
+        tenant_id: Optional tenant ID
         context: Optional context dictionary
 
     Returns:
