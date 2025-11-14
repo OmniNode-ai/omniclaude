@@ -41,6 +41,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 from uuid import uuid4
@@ -49,6 +50,15 @@ from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
 from config import settings
+
+# Import ActionLogger for enhanced observability
+try:
+    from agents.lib.action_logger import ActionLogger
+
+    ACTION_LOGGER_AVAILABLE = True
+except ImportError:
+    ACTION_LOGGER_AVAILABLE = False
+    logging.warning("ActionLogger not available - execution lifecycle logging disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +137,39 @@ class AgentExecutionPublisher:
         self._started = False
 
         self.logger = logging.getLogger(__name__)
+
+        # ActionLogger for execution lifecycle logging (created on-demand)
+        self._action_logger: Optional[ActionLogger] = None
+
+    def _get_action_logger(
+        self, correlation_id: str, agent_name: str
+    ) -> Optional[ActionLogger]:
+        """
+        Get or create ActionLogger for execution lifecycle logging.
+
+        Args:
+            correlation_id: Correlation ID for tracing
+            agent_name: Agent name for logging
+
+        Returns:
+            ActionLogger instance or None if unavailable
+        """
+        if not ACTION_LOGGER_AVAILABLE:
+            return None
+
+        # Create new logger for this execution (one logger per execution)
+        try:
+            return ActionLogger(
+                agent_name=agent_name,
+                correlation_id=correlation_id,
+                project_name="omniclaude",
+                project_path=os.getcwd(),
+                working_directory=os.getcwd(),
+                debug_mode=True,
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to create ActionLogger: {e}")
+            return None
 
     async def start(self) -> None:
         """
@@ -234,6 +277,10 @@ class AgentExecutionPublisher:
             )
             return False
 
+        # Track timing for ActionLogger
+        start_time = time.time()
+        publish_success = False
+
         try:
             # Create event envelope
             envelope = self._create_execution_started_envelope(
@@ -275,17 +322,42 @@ class AgentExecutionPublisher:
                 headers=headers,
             )
 
+            publish_success = True
             self.logger.info(
                 f"Published execution started event (agent: {agent_name}, correlation_id: {correlation_id})"
             )
-            return True
 
         except Exception as e:
             self.logger.error(
                 f"Failed to publish execution started event (agent: {agent_name}, correlation_id: {correlation_id}): {e}"
             )
             # Don't raise - graceful degradation (agent execution continues even if event fails)
-            return False
+
+        finally:
+            # Log execution start with ActionLogger (non-blocking)
+            duration_ms = int((time.time() - start_time) * 1000)
+            action_logger = self._get_action_logger(correlation_id, agent_name)
+            if action_logger:
+                try:
+                    await action_logger.log_decision(
+                        decision_name="agent_execution_started",
+                        decision_context={
+                            "user_request": user_request,
+                            "session_id": session_id,
+                            "context": context or {},
+                        },
+                        decision_result={
+                            "agent_name": agent_name,
+                            "correlation_id": correlation_id,
+                            "publish_success": publish_success,
+                        },
+                        duration_ms=duration_ms,
+                    )
+                except Exception as log_error:
+                    # Never fail due to logging errors
+                    self.logger.debug(f"ActionLogger failed: {log_error}")
+
+        return publish_success
 
     def _create_execution_started_envelope(
         self,
@@ -390,6 +462,10 @@ class AgentExecutionPublisher:
             )
             return False
 
+        # Track timing for ActionLogger
+        start_time = time.time()
+        publish_success = False
+
         try:
             # Create event envelope
             envelope = self._create_execution_completed_envelope(
@@ -427,16 +503,45 @@ class AgentExecutionPublisher:
                 headers=headers,
             )
 
+            publish_success = True
             self.logger.info(
                 f"Published execution completed event (agent: {agent_name}, correlation_id: {correlation_id}, duration: {duration_ms}ms)"
             )
-            return True
 
         except Exception as e:
             self.logger.error(
                 f"Failed to publish execution completed event (agent: {agent_name}, correlation_id: {correlation_id}): {e}"
             )
-            return False
+
+        finally:
+            # Log execution completion with ActionLogger (non-blocking)
+            publish_duration_ms = int((time.time() - start_time) * 1000)
+            action_logger = self._get_action_logger(correlation_id, agent_name)
+            if action_logger:
+                try:
+                    # Build success details with performance metrics
+                    success_details = {
+                        "execution_duration_ms": duration_ms,
+                        "publish_duration_ms": publish_duration_ms,
+                        "publish_success": publish_success,
+                    }
+                    if quality_score is not None:
+                        success_details["quality_score"] = quality_score
+                    if output_summary is not None:
+                        success_details["output_summary"] = output_summary
+                    if metrics:
+                        success_details["metrics"] = metrics
+
+                    await action_logger.log_success(
+                        success_name="agent_execution_completed",
+                        success_details=success_details,
+                        duration_ms=publish_duration_ms,
+                    )
+                except Exception as log_error:
+                    # Never fail due to logging errors
+                    self.logger.debug(f"ActionLogger failed: {log_error}")
+
+        return publish_success
 
     async def publish_execution_failed(
         self,
@@ -487,6 +592,10 @@ class AgentExecutionPublisher:
             )
             return False
 
+        # Track timing for ActionLogger
+        start_time = time.time()
+        publish_success = False
+
         try:
             # Create event envelope
             envelope = self._create_execution_failed_envelope(
@@ -524,16 +633,44 @@ class AgentExecutionPublisher:
                 headers=headers,
             )
 
+            publish_success = True
             self.logger.info(
                 f"Published execution failed event (agent: {agent_name}, correlation_id: {correlation_id}, error: {error_type or 'Unknown'})"
             )
-            return True
 
         except Exception as e:
             self.logger.error(
                 f"Failed to publish execution failed event (agent: {agent_name}, correlation_id: {correlation_id}): {e}"
             )
-            return False
+
+        finally:
+            # Log execution failure with ActionLogger (non-blocking)
+            publish_duration_ms = int((time.time() - start_time) * 1000)
+            action_logger = self._get_action_logger(correlation_id, agent_name)
+            if action_logger:
+                try:
+                    # Build error context with all details
+                    error_context = {
+                        "publish_duration_ms": publish_duration_ms,
+                        "publish_success": publish_success,
+                    }
+                    if error_stack_trace:
+                        error_context["error_stack_trace"] = error_stack_trace
+                    if partial_results:
+                        error_context["partial_results"] = partial_results
+
+                    await action_logger.log_error(
+                        error_type=error_type or "UnknownError",
+                        error_message=error_message,
+                        error_context=error_context,
+                        severity="error",
+                        send_slack_notification=False,  # Don't spam Slack for execution failures
+                    )
+                except Exception as log_error:
+                    # Never fail due to logging errors
+                    self.logger.debug(f"ActionLogger failed: {log_error}")
+
+        return publish_success
 
     def _create_execution_completed_envelope(
         self,

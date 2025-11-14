@@ -144,6 +144,19 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from intelligence_usage_tracker import IntelligenceUsageTracker
 
+# Import ActionLogger for tracking intelligence gathering performance
+try:
+    from agents.lib.action_logger import ActionLogger
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    from action_logger import ActionLogger
+
 logger = logging.getLogger(__name__)
 
 
@@ -1054,6 +1067,13 @@ class ManifestInjector:
         self._current_query_failures = {}
         self._current_warnings = []
 
+        # Initialize ActionLogger for performance tracking
+        action_logger = ActionLogger(
+            agent_name=self.agent_name or "manifest-injector",
+            correlation_id=str(correlation_id_uuid),
+            project_path=os.getcwd(),
+        )
+
         # Check cache first
         if not force_refresh and self._is_cache_valid():
             self.logger.debug(
@@ -1061,11 +1081,35 @@ class ManifestInjector:
             )
             # Still log cache hit
             self._store_manifest_if_enabled(from_cache=True)
+
+            # Log cache hit for performance tracking
+            await action_logger.log_success(
+                success_name="manifest_generation_complete",
+                success_details={
+                    "total_time_ms": 0,  # Cache hit is instant
+                    "cache_used": True,
+                    "sections_included": (
+                        list(self._manifest_data.keys()) if self._manifest_data else []
+                    ),
+                },
+                duration_ms=0,
+            )
+
             return self._manifest_data
 
         start_time = time.time()
         self.logger.info(
             f"[{correlation_id}] Generating dynamic manifest for agent '{self.agent_name or 'unknown'}'"
+        )
+
+        # Log intelligence query start
+        await action_logger.log_decision(
+            decision_name="manifest_generation_start",
+            decision_context={
+                "agent_name": self.agent_name or "unknown",
+                "enable_intelligence": self.enable_intelligence,
+                "query_timeout_ms": self.query_timeout_ms,
+            },
         )
 
         # Task classification for section selection
@@ -1190,15 +1234,51 @@ class ManifestInjector:
             # Calculate total generation time
             total_time_ms = int((time.time() - start_time) * 1000)
 
+            # Extract pattern metrics
+            pattern_count = len(manifest.get("patterns", {}).get("available", []))
+            debug_successes = manifest.get("debug_intelligence", {}).get(
+                "total_successes", 0
+            )
+            debug_failures = manifest.get("debug_intelligence", {}).get(
+                "total_failures", 0
+            )
+
+            # Log pattern discovery performance
+            await action_logger.log_decision(
+                decision_name="pattern_discovery",
+                decision_context={
+                    "collections_queried": list(query_tasks.keys()),
+                    "sections_selected": sections_to_query,
+                },
+                decision_result={
+                    "pattern_count": pattern_count,
+                    "debug_successes": debug_successes,
+                    "debug_failures": debug_failures,
+                    "query_times_ms": self._current_query_times,
+                },
+                duration_ms=total_time_ms,
+            )
+
             self.logger.info(
                 f"[{correlation_id}] Dynamic manifest generated successfully "
-                f"(total_time: {total_time_ms}ms, patterns: {len(manifest.get('patterns', {}).get('available', []))}, "
-                f"debug_intel: {manifest.get('debug_intelligence', {}).get('total_successes', 0)} successes/"
-                f"{manifest.get('debug_intelligence', {}).get('total_failures', 0)} failures)"
+                f"(total_time: {total_time_ms}ms, patterns: {pattern_count}, "
+                f"debug_intel: {debug_successes} successes/{debug_failures} failures)"
             )
 
             # Store manifest injection record
             self._store_manifest_if_enabled(from_cache=False)
+
+            # Log successful manifest generation
+            await action_logger.log_success(
+                success_name="manifest_generation_complete",
+                success_details={
+                    "total_time_ms": total_time_ms,
+                    "pattern_count": pattern_count,
+                    "sections_included": list(manifest.keys()),
+                    "cache_used": False,
+                },
+                duration_ms=total_time_ms,
+            )
 
             return manifest
 
@@ -1208,6 +1288,20 @@ class ManifestInjector:
                 exc_info=True,
             )
             self._current_warnings.append(f"Intelligence query failed: {str(e)}")
+
+            # Log intelligence query failure
+            await action_logger.log_error(
+                error_type="IntelligenceQueryError",
+                error_message=str(e),
+                error_context={
+                    "agent_name": self.agent_name or "unknown",
+                    "correlation_id": str(correlation_id),
+                    "query_timeout_ms": self.query_timeout_ms,
+                    "warnings": self._current_warnings,
+                },
+                severity="error",
+            )
+
             # Fall back to minimal manifest
             return self._get_minimal_manifest()
 

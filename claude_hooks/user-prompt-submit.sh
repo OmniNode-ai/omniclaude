@@ -58,6 +58,22 @@ fi
 log "Prompt: ${PROMPT:0:100}..."
 PROMPT_B64="$(b64 "$PROMPT")"
 
+# Generate correlation ID early (before agent detection)
+if command -v uuidgen >/dev/null 2>&1; then
+    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+else
+    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
+
+# Log hook invocation (non-blocking)
+(
+  python3 "${HOOKS_LIB}/log_hook_event.py" invocation \
+    --hook-name "UserPromptSubmit" \
+    --prompt "$PROMPT" \
+    --correlation-id "$CORRELATION_ID" \
+    2>>"$LOG_FILE" || true
+) &
+
 # -----------------------------
 # Workflow detection
 # -----------------------------
@@ -81,16 +97,6 @@ if [[ "$WORKFLOW_TRIGGER" == "AUTOMATED_WORKFLOW_DETECTED" ]]; then
 fi
 
 # -----------------------------
-# Correlation ID (generated before agent detection)
-# -----------------------------
-# Use uuidgen if available, fallback to Python
-if command -v uuidgen >/dev/null 2>&1; then
-    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-else
-    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
-fi
-
-# -----------------------------
 # Agent detection via Event-Based Routing
 # -----------------------------
 log "Calling event-based routing service via Kafka..."
@@ -102,6 +108,18 @@ ROUTING_RESULT="$(python3 "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "
 ROUTING_EXIT_CODE=$?
 if [ $ROUTING_EXIT_CODE -ne 0 ] || [ -z "$ROUTING_RESULT" ]; then
   log "Event-based routing unavailable (exit code: $ROUTING_EXIT_CODE), using fallback"
+
+  # Log routing error (non-blocking)
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+      --hook-name "UserPromptSubmit" \
+      --error-message "Event-based routing service unavailable (exit code: $ROUTING_EXIT_CODE)" \
+      --error-type "ServiceUnavailable" \
+      --correlation-id "$CORRELATION_ID" \
+      --context "{\"service\":\"event-based-routing\",\"exit_code\":$ROUTING_EXIT_CODE}" \
+      2>>"$LOG_FILE" || true
+  ) &
+
   ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"Event-based routing unavailable - using fallback","method":"fallback","latency_ms":0,"domain":"workflow_coordination","purpose":"Intelligent coordinator for development workflows"}'
   SERVICE_USED="false"
 else
@@ -127,6 +145,22 @@ IMPL_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.implementation_query // ""')"
 log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATENCY_MS}ms (service=${SERVICE_USED})"
 log "Domain: $AGENT_DOMAIN"
 log "Reasoning: ${SELECTION_REASONING:0:120}..."
+
+# Log routing decision (non-blocking)
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" routing \
+      --agent "$AGENT_NAME" \
+      --confidence "$CONFIDENCE" \
+      --method "$SELECTION_METHOD" \
+      --correlation-id "$CORRELATION_ID" \
+      --latency-ms "${LATENCY_MS%.*}" \
+      --reasoning "${SELECTION_REASONING:0:200}" \
+      --domain "$AGENT_DOMAIN" \
+      --context "{\"service_used\":\"$SERVICE_USED\"}" \
+      2>>"$LOG_FILE" || true
+  ) &
+fi
 
 # -----------------------------
 # Agent Invocation (NEW - Migration 015)
@@ -168,6 +202,17 @@ fi
 # Handle no agent detected
 if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
   log "No agent detected, logging failure..."
+
+  # Log no agent detected error (non-blocking)
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+      --hook-name "UserPromptSubmit" \
+      --error-message "No agent detected by router service" \
+      --error-type "NoAgentDetected" \
+      --correlation-id "$CORRELATION_ID" \
+      --context "{\"service_used\":\"$SERVICE_USED\",\"method\":\"$SELECTION_METHOD\"}" \
+      2>>"$LOG_FILE" || true
+  ) &
 
   # Log detection failure
   FAILURE_CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
