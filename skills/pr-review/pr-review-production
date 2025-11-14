@@ -34,7 +34,7 @@ Arguments:
   PR_NUMBER    PR number or GitHub URL
 
 Options:
-  --output-file FILE       Save review to file (default: /tmp/pr-review-{PR}-production.md)
+  --output-file FILE       Save review to file (default: {REPO}/tmp/pr-review-{PR}-production.md)
   --json                   Output in JSON format
   --create-linear-tickets  Create Linear tickets for each Critical/Major issue
   --team TEAM_ID          Linear team ID (required with --create-linear-tickets)
@@ -244,9 +244,13 @@ main() {
     echo -e "${BLUE}[PRODUCTION]${NC} Running strict production review for PR #${pr_number}..."
     echo ""
 
-    # Determine output file
+    # Determine output file (use repo tmp directory)
     if [[ -z "$output_file" ]]; then
-        output_file="/tmp/pr-review-${pr_number}-production.md"
+        # Get repo root (traverse up from script location)
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        local repo_root="$(cd "$script_dir/../.." && pwd)"
+        mkdir -p "$repo_root/tmp"
+        output_file="$repo_root/tmp/pr-review-${pr_number}-production.md"
     fi
 
     # Run underlying review-pr script in strict mode

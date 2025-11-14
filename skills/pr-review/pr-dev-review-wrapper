@@ -1,0 +1,234 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# PR Dev Review Wrapper
+# ============================================================================
+# Simplified wrapper for development-focused PR reviews.
+# Automatically fetches PR data and categorizes issues by dev priorities.
+#
+# Usage:
+#   pr-dev-review-wrapper 22              # Review PR #22
+#   pr-dev-review-wrapper 22 --json       # JSON output
+#   pr-dev-review-wrapper 22 --save FILE  # Save to file
+# ============================================================================
+
+# Get repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <PR_NUMBER> [OPTIONS]
+
+Development-focused PR review (CRITICAL/MAJOR/MINOR only, skips nits).
+
+Arguments:
+  PR_NUMBER    PR number or GitHub URL
+
+Options:
+  --json       Output JSON only
+  --save FILE  Save output to specific file
+  --help, -h   Show this help
+
+Priority Focus (Development):
+  🔴 CRITICAL - MUST FIX (security, bugs, test failures)
+  🟠 MAJOR    - SHOULD FIX (consistency, architecture, error handling)
+  🟡 MINOR    - FIX NOW (docs, tests, unused code)
+  ⚪ NITPICKS - SKIP (defer to release review)
+
+Examples:
+  # Quick dev review
+  $(basename "$0") 22
+
+  # Save to file
+  $(basename "$0") 22 --save ./dev-review.md
+
+  # JSON output
+  $(basename "$0") 22 --json > pr22-dev.json
+EOF
+    exit 0
+}
+
+# Parse arguments
+PR_NUMBER=""
+JSON_MODE=false
+SAVE_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_MODE=true
+            shift
+            ;;
+        --save)
+            SAVE_FILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            if [[ -z "$PR_NUMBER" ]]; then
+                PR_NUMBER="$1"
+            else
+                echo "Error: Unknown argument: $1"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$PR_NUMBER" ]]; then
+    usage
+fi
+
+# Extract PR number from URL if needed
+if [[ "$PR_NUMBER" =~ pull/([0-9]+) ]]; then
+    PR_NUMBER="${BASH_REMATCH[1]}"
+fi
+
+# Determine output file
+if [[ -z "$SAVE_FILE" ]]; then
+    SAVE_FILE="$REPO_ROOT/tmp/pr-dev-review-${PR_NUMBER}.md"
+fi
+
+echo -e "${BLUE}[DEV-REVIEW]${NC} Fetching PR #${PR_NUMBER}..." >&2
+
+# Fetch PR data
+PR_DATA=$("$SCRIPT_DIR/fetch-pr-data" "$PR_NUMBER" 2>&1) || {
+    echo -e "${RED}✗${NC} Failed to fetch PR data" >&2
+    exit 1
+}
+
+echo -e "${GREEN}✓${NC} PR data fetched" >&2
+echo -e "${BLUE}[DEV-REVIEW]${NC} Categorizing by dev priorities..." >&2
+
+# Categorize comments (dev-focused: skip nits)
+categorize_dev_comments() {
+    local pr_data="$1"
+    local critical=()
+    local major=()
+    local minor=()
+
+    # Process all comment types
+    for comment_type in "reviews" "inline_comments" "pr_comments" "issue_comments"; do
+        local comments=$(echo "$pr_data" | jq -c ".${comment_type}[]" 2>/dev/null || echo "")
+
+        while IFS= read -r comment; do
+            [[ -z "$comment" ]] && continue
+
+            local body=$(echo "$comment" | jq -r '.body' | tr '[:upper:]' '[:lower:]')
+
+            # CRITICAL: Security, bugs, tests
+            if echo "$body" | grep -qE "(critical|security|vulnerability|bug|test failure|breaks|data corruption)"; then
+                critical+=("$comment")
+            # MAJOR: Consistency, architecture, error handling
+            elif echo "$body" | grep -qE "(major|inconsistent|architecture|error handling|pattern|performance|missing)"; then
+                major+=("$comment")
+            # MINOR: Docs, tests, unused code (skip nits)
+            elif echo "$body" | grep -qE "(documentation|test|unused|edge case|type hint)" && \
+                ! echo "$body" | grep -qE "(nit|nitpick|consider|optional|style)"; then
+                minor+=("$comment")
+            fi
+            # Skip everything else (nits)
+        done <<< "$comments"
+    done
+
+    # Output JSON
+    jq -n \
+        --argjson critical "$(printf '%s\n' "${critical[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson major "$(printf '%s\n' "${major[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson minor "$(printf '%s\n' "${minor[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        '{
+            critical: $critical,
+            major: $major,
+            minor: $minor,
+            summary: {
+                critical_count: ($critical | length),
+                major_count: ($major | length),
+                minor_count: ($minor | length),
+                total: (($critical | length) + ($major | length) + ($minor | length))
+            }
+        }'
+}
+
+# Format as markdown
+format_dev_markdown() {
+    local categorized="$1"
+    local pr_number="$2"
+
+    cat << EOF
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PR DEV REVIEW - Development Priority Issues
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PR #${pr_number}
+Generated: $(date '+%Y-%m-%d %H:%M:%S')
+
+📊 SUMMARY:
+- 🔴 Critical: $(echo "$categorized" | jq '.summary.critical_count')
+- 🟠 Major: $(echo "$categorized" | jq '.summary.major_count')
+- 🟡 Minor: $(echo "$categorized" | jq '.summary.minor_count')
+- Total actionable: $(echo "$categorized" | jq '.summary.total')
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EOF
+
+    # Output each priority
+    for priority in "critical" "major" "minor"; do
+        local count=$(echo "$categorized" | jq ".summary.${priority}_count")
+        [[ $count -eq 0 ]] && continue
+
+        case "$priority" in
+            critical) echo "🔴 CRITICAL ISSUES ($count) - Must fix before merge:" ;;
+            major) echo "🟠 MAJOR ISSUES ($count) - Fix to prevent tech debt:" ;;
+            minor) echo "🟡 MINOR ISSUES ($count) - Fix now to maintain quality:" ;;
+        esac
+        echo ""
+
+        local issues=$(echo "$categorized" | jq -c ".${priority}[]")
+        local num=1
+
+        while IFS= read -r issue; do
+            [[ -z "$issue" ]] && continue
+
+            local author=$(echo "$issue" | jq -r '.author')
+            local body=$(echo "$issue" | jq -r '.body' | head -c 150)
+            local path=$(echo "$issue" | jq -r '.path // "N/A"')
+
+            echo "$num. [$path] $author"
+            echo "   $body..."
+            echo ""
+
+            ((num++))
+        done <<< "$issues"
+
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+    done
+}
+
+# Categorize
+CATEGORIZED=$(categorize_dev_comments "$PR_DATA")
+
+echo -e "${GREEN}✓${NC} Issues categorized" >&2
+
+# Generate output
+if [[ "$JSON_MODE" == true ]]; then
+    echo "$CATEGORIZED" | tee "$SAVE_FILE"
+else
+    format_dev_markdown "$CATEGORIZED" "$PR_NUMBER" | tee "$SAVE_FILE"
+fi
+
+echo "" >&2
+echo -e "${GREEN}✓${NC} Dev review saved to: $SAVE_FILE" >&2

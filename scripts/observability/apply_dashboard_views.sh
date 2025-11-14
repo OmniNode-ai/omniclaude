@@ -134,16 +134,22 @@ echo ""
 # Apply Views
 # =====================================================================
 
+# Get repo root and create tmp directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+TMP_LOG="$REPO_ROOT/tmp/apply_views.log"
+
 echo "Applying dashboard views from: $VIEWS_FILE"
 echo ""
 
-if psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$VIEWS_FILE" > /tmp/apply_views.log 2>&1; then
+if psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$VIEWS_FILE" > "$TMP_LOG" 2>&1; then
     echo "✅ Dashboard views applied successfully"
 else
     echo "❌ ERROR: Failed to apply views"
     echo ""
     echo "Error log:"
-    cat /tmp/apply_views.log
+    cat "$TMP_LOG"
     exit 1
 fi
 

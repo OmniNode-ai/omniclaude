@@ -12,15 +12,20 @@
 # - Debug loop infrastructure (STF registry, model catalog)
 #
 # Usage: ./scripts/health_check.sh
-# Output: Saves to /tmp/health_check_latest.txt and appends to /tmp/health_check_history.log
+# Output: Saves to {REPO}/tmp/health_check_latest.txt and appends to {REPO}/tmp/health_check_history.log
 #
 
 set -euo pipefail
 
+# Get repo root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+
 # Configuration
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-OUTPUT_FILE="/tmp/health_check_latest.txt"
-HISTORY_FILE="/tmp/health_check_history.log"
+OUTPUT_FILE="$REPO_ROOT/tmp/health_check_latest.txt"
+HISTORY_FILE="$REPO_ROOT/tmp/health_check_history.log"
 
 # Colors for terminal output (disabled in file output)
 RED='\033[0;31m'

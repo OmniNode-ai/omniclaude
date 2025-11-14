@@ -39,7 +39,7 @@ Arguments:
   PR_NUMBER    PR number or GitHub URL
 
 Options:
-  --output-file FILE   Save organized review to file (default: /tmp/pr-review-{PR}.md)
+  --output-file FILE   Save organized review to file (default: {REPO}/tmp/pr-review-{PR}.md)
   --strict             Exit with error if any critical/major/minor issues found
   --json               Output in JSON format instead of markdown
 
@@ -68,7 +68,7 @@ Examples:
   $(basename "$0") 22 --strict
 
   # Save to file
-  $(basename "$0") 22 --output-file /tmp/pr22-review.md
+  $(basename "$0") 22 --output-file ./tmp/pr22-review.md
 
   # JSON output for programmatic processing
   $(basename "$0") 22 --json
@@ -371,9 +371,13 @@ main() {
 
     echo -e "${GREEN}✓${NC} Issues categorized"
 
-    # Determine output file
+    # Determine output file (use repo tmp directory)
     if [[ -z "$output_file" ]]; then
-        output_file="/tmp/pr-review-${pr_number}.md"
+        # Get repo root (traverse up from script location)
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        local repo_root="$(cd "$script_dir/../.." && pwd)"
+        mkdir -p "$repo_root/tmp"
+        output_file="$repo_root/tmp/pr-review-${pr_number}.md"
     fi
 
     # Generate output

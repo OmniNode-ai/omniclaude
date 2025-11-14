@@ -1,0 +1,142 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# PR Quick Review - One-Command PR Review
+# ============================================================================
+# Simplified wrapper for quick PR reviews during development.
+# Combines fetch + review + display in a single command with smart defaults.
+#
+# Usage:
+#   pr-quick-review 22              # Review PR #22 (auto-displays)
+#   pr-quick-review 22 --json       # JSON output only
+#   pr-quick-review 22 --save FILE  # Save and display
+# ============================================================================
+
+# Get repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <PR_NUMBER> [OPTIONS]
+
+Quick PR review with smart defaults (auto-fetch, categorize, display).
+
+Arguments:
+  PR_NUMBER    PR number or GitHub URL
+
+Options:
+  --json           Output JSON only (no markdown display)
+  --save FILE      Save output to specific file
+  --strict         Exit with error code if issues found
+  --help, -h       Show this help
+
+Examples:
+  # Quick review (fetches, categorizes, displays)
+  $(basename "$0") 22
+
+  # Save to file and display
+  $(basename "$0") 22 --save ./my-review.md
+
+  # JSON output for scripting
+  $(basename "$0") 22 --json > pr22.json
+
+  # CI/CD mode (fails if issues)
+  $(basename "$0") 22 --strict
+EOF
+    exit 0
+}
+
+# Parse arguments
+PR_NUMBER=""
+JSON_MODE=false
+SAVE_FILE=""
+STRICT_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_MODE=true
+            shift
+            ;;
+        --save)
+            SAVE_FILE="$2"
+            shift 2
+            ;;
+        --strict)
+            STRICT_MODE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            if [[ -z "$PR_NUMBER" ]]; then
+                PR_NUMBER="$1"
+            else
+                echo "Error: Unknown argument: $1"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$PR_NUMBER" ]]; then
+    usage
+fi
+
+# Extract PR number from URL if needed
+if [[ "$PR_NUMBER" =~ pull/([0-9]+) ]]; then
+    PR_NUMBER="${BASH_REMATCH[1]}"
+fi
+
+# Determine output file
+if [[ -z "$SAVE_FILE" ]]; then
+    SAVE_FILE="$REPO_ROOT/tmp/pr-review-${PR_NUMBER}.md"
+fi
+
+# Build review command
+REVIEW_CMD="$SCRIPT_DIR/review-pr $PR_NUMBER --output-file $SAVE_FILE"
+if [[ "$JSON_MODE" == true ]]; then
+    REVIEW_CMD="$REVIEW_CMD --json"
+fi
+if [[ "$STRICT_MODE" == true ]]; then
+    REVIEW_CMD="$REVIEW_CMD --strict"
+fi
+
+# Run review
+echo -e "${BLUE}[QUICK-REVIEW]${NC} Reviewing PR #${PR_NUMBER}..." >&2
+
+if $REVIEW_CMD; then
+    # Display output (unless JSON mode to stdout)
+    if [[ "$JSON_MODE" == true ]]; then
+        # Output JSON to stdout
+        cat "$SAVE_FILE"
+    else
+        # Display markdown review
+        echo ""
+        cat "$SAVE_FILE"
+    fi
+
+    EXIT_CODE=0
+else
+    EXIT_CODE=$?
+fi
+
+# Show summary
+if [[ "$JSON_MODE" != true ]]; then
+    echo "" >&2
+    echo -e "${GREEN}✓${NC} Review saved to: $SAVE_FILE" >&2
+fi
+
+exit $EXIT_CODE

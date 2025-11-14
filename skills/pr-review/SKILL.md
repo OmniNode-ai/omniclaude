@@ -9,9 +9,10 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 ## Skills Available
 
-1. **fetch-pr-data** - Fetch all PR data from 4 GitHub endpoints
-2. **review-pr** - Comprehensive review with priority organization
-3. **pr-review-production** - Production-grade review wrapper with strict standards (NEW)
+1. **pr-quick-review** - One-command quick review (NEW - RECOMMENDED)
+2. **fetch-pr-data** - Fetch all PR data from 4 GitHub endpoints
+3. **review-pr** - Comprehensive review with priority organization
+4. **pr-review-production** - Production-grade review wrapper with strict standards
 
 ## Priority System
 
@@ -69,7 +70,31 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 ## Usage
 
-### Basic Review
+### Quick Review (RECOMMENDED)
+
+**Single command for most use cases** - fetches, categorizes, and displays automatically:
+
+```bash
+# Quick review with smart defaults (saves to {REPO}/tmp/pr-review-22.md)
+~/.claude/skills/pr-review/pr-quick-review 22
+
+# Save to specific file
+~/.claude/skills/pr-review/pr-quick-review 22 --save ./my-review.md
+
+# JSON output for scripting
+~/.claude/skills/pr-review/pr-quick-review 22 --json > pr22.json
+
+# CI/CD mode (fails if issues found)
+~/.claude/skills/pr-review/pr-quick-review 22 --strict
+```
+
+**Benefits**:
+- ✅ Single command (no need to chain fetch + review)
+- ✅ Smart defaults (auto-saves to tmp/)
+- ✅ Auto-displays output in terminal
+- ✅ Fewer agent actions needed
+
+### Basic Review (Advanced)
 
 ```bash
 # Review PR with priority organization
@@ -79,7 +104,7 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 # - Priority breakdown (Critical/Major/Minor/Nit)
 # - Merge readiness assessment
 # - Organized issues by priority
-# - Saved to /tmp/pr-review-22.md
+# - Saved to {REPO}/tmp/pr-review-22.md
 ```
 
 ### Strict Mode (CI/CD)
@@ -97,7 +122,7 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 ```bash
 # Save to specific file
-~/.claude/skills/pr-review/review-pr 22 --output-file ./pr22-review.md
+~/.claude/skills/pr-review/review-pr 22 --output-file ./tmp/pr22-review.md
 
 # JSON output for programmatic processing
 ~/.claude/skills/pr-review/review-pr 22 --json > pr22.json
@@ -142,9 +167,9 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
     ~/.claude/skills/pr-review/review-pr ${{ github.event.pull_request.number }} --strict
 
     # Upload review artifact
-    if [ -f /tmp/pr-review-*.md ]; then
+    if [ -f ./tmp/pr-review-*.md ]; then
       gh pr comment ${{ github.event.pull_request.number }} \
-        --body-file /tmp/pr-review-*.md
+        --body-file ./tmp/pr-review-*.md
     fi
 ```
 
@@ -295,6 +320,7 @@ Issues are automatically classified based on keywords:
 
 **Claude Code Access**: `~/.claude/skills/pr-review/`
 **Executables**:
+- `~/.claude/skills/pr-review/pr-quick-review` - One-command quick review (RECOMMENDED)
 - `~/.claude/skills/pr-review/fetch-pr-data` - Fetch all PR data
 - `~/.claude/skills/pr-review/review-pr` - Comprehensive review with priority organization
 - `~/.claude/skills/pr-review/pr-review-production` - Production-grade wrapper (NEW)

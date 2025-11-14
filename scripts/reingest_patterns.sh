@@ -78,8 +78,9 @@ else
     )
 fi
 
-# Output files
-EXTRACTED_PATTERNS="/tmp/extracted_patterns.json"
+# Output files (use repo tmp directory)
+mkdir -p "$PROJECT_ROOT/tmp"
+EXTRACTED_PATTERNS="$PROJECT_ROOT/tmp/extracted_patterns.json"
 BACKUP_DIR="./backups"
 LOG_FILE="${BACKUP_DIR}/reingest_$(date +%Y%m%d_%H%M%S).log"
 

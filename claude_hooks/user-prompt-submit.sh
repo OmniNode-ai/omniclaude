@@ -14,6 +14,9 @@ export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Create tmp directory for this session
+mkdir -p "$PROJECT_ROOT/tmp"
+
 # Load environment variables from .env if available
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a  # automatically export all variables
@@ -372,7 +375,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
       --correlation-id "$CORRELATION_ID" \
       --agent-name "${AGENT_NAME:-unknown}" \
       --agent-domain "${AGENT_DOMAIN:-general}" \
-      --output-file "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
+      --output-file "$PROJECT_ROOT/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
       --match-count 5 \
       --timeout-ms 500 \
       2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
@@ -388,7 +391,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
       --correlation-id "$CORRELATION_ID" \
       --agent-name "${AGENT_NAME:-unknown}" \
       --agent-domain "${AGENT_DOMAIN:-general}" \
-      --output-file "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
+      --output-file "$PROJECT_ROOT/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
       --match-count 3 \
       --timeout-ms 500 \
       2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
@@ -474,8 +477,8 @@ Intelligence Context Available:
 │ Detection Reasoning: ${SELECTION_REASONING:0:150}                   │
 │                                                                      │
 │ RAG Intelligence:                                                   │
-│   - Domain: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json   │
-│   - Implementation: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
+│   - Domain: {REPO}/tmp/agent_intelligence_domain_${CORRELATION_ID}.json   │
+│   - Implementation: {REPO}/tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
 │                                                                      │
 │ Correlation ID: ${CORRELATION_ID}                                   │
 │                                                                      │
@@ -509,7 +512,7 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
     '{user_prompt: $prompt, workspace_path: $workspace, correlation_id: $corr_id}')"
 
   # Launch dispatch_runner.py and capture output to log only
-  OUTPUT_FILE="/tmp/workflow_${CORRELATION_ID}.log"
+  OUTPUT_FILE="$PROJECT_ROOT/tmp/workflow_${CORRELATION_ID}.log"
 
   (
     cd "$REPO_ROOT/agents/parallel_execution" 2>/dev/null || cd "${WORKSPACE_PATH:-$PWD}/agents/parallel_execution"

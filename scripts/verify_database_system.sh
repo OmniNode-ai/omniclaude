@@ -21,8 +21,13 @@ PASSED_CHECKS=0
 FAILED_CHECKS=0
 WARNING_CHECKS=0
 
+# Get repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+
 # Load environment
-if [ ! -f .env ]; then
+if [ ! -f "$REPO_ROOT/.env" ]; then
     echo -e "${RED}❌ Error: .env file not found${NC}"
     echo "Please run from project root with .env file present"
     exit 2
@@ -616,8 +621,8 @@ echo "  ✓ Performance metrics: 2 (latency, connections)"
 echo "  ✓ Edge cases: 3 (NULL, timestamps, large text)"
 echo ""
 
-# Save results
-REPORT_FILE="/tmp/database_verification_latest.txt"
+# Save results (use repo tmp directory)
+REPORT_FILE="$REPO_ROOT/tmp/database_verification_latest.txt"
 {
     echo "Database System Verification Report"
     echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
