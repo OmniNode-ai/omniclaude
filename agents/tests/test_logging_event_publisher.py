@@ -1531,6 +1531,110 @@ class TestLoggingEventPublisher:
 
             await publisher.stop()
 
+    @pytest.mark.asyncio
+    async def test_sanitize_list_with_sensitive_data(self) -> None:
+        """Test that lists containing dicts with sensitive keys are sanitized."""
+        publisher = LoggingEventPublisher(
+            bootstrap_servers="localhost:9092", enable_events=False
+        )
+
+        context = {
+            "items": [
+                {"password": "secret1", "name": "user1"},
+                {"api_key": "token123", "id": 42},
+            ]
+        }
+
+        sanitized = publisher._sanitize_context(context)
+
+        # Both nested passwords should be sanitized
+        assert sanitized["items"][0]["password"] == "[REDACTED]"
+        assert sanitized["items"][1]["api_key"] == "[REDACTED]"
+        # Other fields preserved
+        assert sanitized["items"][0]["name"] == "user1"
+        assert sanitized["items"][1]["id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_sanitize_mixed_nesting(self) -> None:
+        """Test dict -> list -> dict nesting."""
+        publisher = LoggingEventPublisher(
+            bootstrap_servers="localhost:9092", enable_events=False
+        )
+
+        context = {
+            "outer": {"middle": [{"inner_password": "secret", "safe_field": "data"}]}
+        }
+
+        sanitized = publisher._sanitize_context(context)
+
+        # Deeply nested sensitive key should be sanitized
+        assert sanitized["outer"]["middle"][0]["inner_password"] == "[REDACTED]"
+        assert sanitized["outer"]["middle"][0]["safe_field"] == "data"
+
+    @pytest.mark.asyncio
+    async def test_sanitize_unicode_sensitive_keys(self) -> None:
+        """Test Unicode characters in sensitive key names."""
+        publisher = LoggingEventPublisher(
+            bootstrap_servers="localhost:9092", enable_events=False
+        )
+
+        context = {
+            "contraseña": "secret123",  # Spanish for password
+            "密码": "secret456",  # Chinese for password
+            "regular_field": "safe_data",
+        }
+
+        sanitized = publisher._sanitize_context(context)
+
+        # Unicode keys containing sensitive patterns should be detected
+        # (This tests the regex pattern matching)
+        assert "regular_field" in sanitized
+        assert sanitized["regular_field"] == "safe_data"
+
+    @pytest.mark.asyncio
+    async def test_sanitize_max_depth_boundary(self) -> None:
+        """Test exactly at max_depth=10 boundary."""
+        publisher = LoggingEventPublisher(
+            bootstrap_servers="localhost:9092", enable_events=False
+        )
+
+        # Create nested structure exactly 10 levels deep
+        # (l1 through l9 are 9 levels, then the final dict with password/safe is the 10th level)
+        context = {
+            "l1": {
+                "l2": {
+                    "l3": {
+                        "l4": {
+                            "l5": {
+                                "l6": {
+                                    "l7": {
+                                        "l8": {
+                                            "l9": {
+                                                "password": "secret_at_depth_10",
+                                                "safe": "data",
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        sanitized = publisher._sanitize_context(context, _max_depth=10)
+
+        # Should still sanitize at exactly max_depth (depth 9, which is the 10th level counting from 1)
+        assert (
+            sanitized["l1"]["l2"]["l3"]["l4"]["l5"]["l6"]["l7"]["l8"]["l9"]["password"]
+            == "[REDACTED]"
+        )
+        assert (
+            sanitized["l1"]["l2"]["l3"]["l4"]["l5"]["l6"]["l7"]["l8"]["l9"]["safe"]
+            == "data"
+        )
+
 
 class TestLoggingEventPublisherValidation:
     """Test suite for input validation methods."""

@@ -526,6 +526,17 @@ class LoggingEventPublisher:
             # Recursively sanitize nested dictionaries
             elif isinstance(value, dict):
                 sanitized[key] = self._sanitize_context(value, _depth + 1, _max_depth)
+            # Recursively sanitize lists (may contain dictionaries with sensitive data)
+            elif isinstance(value, list):
+                sanitized_list = []
+                for item in value:
+                    if isinstance(item, dict):
+                        sanitized_list.append(
+                            self._sanitize_context(item, _depth + 1, _max_depth)
+                        )
+                    else:
+                        sanitized_list.append(item)
+                sanitized[key] = sanitized_list
             else:
                 # Preserve non-sensitive values
                 sanitized[key] = value
@@ -1393,12 +1404,51 @@ async def _get_global_publisher(
             import atexit
 
             def cleanup():
+                """
+                Robust cleanup that handles all event loop states.
+
+                - Running loop: Schedule as task (non-blocking)
+                - Stopped loop: Complete the stop coroutine
+                - Closed loop: Create new loop with asyncio.run
+
+                This prevents deadlocks in async applications like FastAPI
+                where the event loop is already running at shutdown.
+                """
                 try:
-                    asyncio.run(_global_publisher.stop())
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Schedule as task if loop is running (non-blocking)
+                        loop.create_task(_global_publisher.stop())
+                    else:
+                        # Run in existing loop if stopped
+                        try:
+                            loop.run_until_complete(_global_publisher.stop())
+                        except RuntimeError:
+                            # Loop is closed, create new one
+                            asyncio.run(_global_publisher.stop())
                 except Exception as e:
                     logger.warning(f"Error cleaning up global publisher: {e}")
 
             atexit.register(cleanup)
+        else:
+            # Warn if different parameters provided to subsequent calls
+            # This prevents silent failures when users expect parameter changes to take effect
+            if (
+                bootstrap_servers
+                and bootstrap_servers != _global_publisher.bootstrap_servers
+            ):
+                logger.warning(
+                    f"Ignoring bootstrap_servers={bootstrap_servers}, "
+                    f"singleton already initialized with {_global_publisher.bootstrap_servers}"
+                )
+            if (
+                enable_events is not None
+                and enable_events != _global_publisher.enable_events
+            ):
+                logger.warning(
+                    f"Ignoring enable_events={enable_events}, "
+                    f"singleton already initialized with {_global_publisher.enable_events}"
+                )
 
         return _global_publisher
 

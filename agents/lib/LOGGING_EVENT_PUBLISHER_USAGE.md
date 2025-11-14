@@ -888,24 +888,191 @@ For each service adopting event-based logging:
 
 ## Production Deployment Checklist
 
-### Pre-Deployment
+### Kafka Topic Configuration
+
+**Topic Creation Strategy**:
+- **Recommendation**: Manual topic creation for production (avoid auto-create)
+- **Reason**: Control partition count, replication, and retention policies
+- **Alternative**: Auto-create acceptable for development/testing
+
+**Create topics**:
+```bash
+# Application logs topic
+kafka-topics --create \
+  --topic omninode.logging.application.v1 \
+  --partitions 6 \
+  --replication-factor 3 \
+  --config retention.ms=604800000  # 7 days
+
+# Audit logs topic (longer retention for compliance)
+kafka-topics --create \
+  --topic omninode.logging.audit.v1 \
+  --partitions 3 \
+  --replication-factor 3 \
+  --config retention.ms=2592000000  # 30 days
+
+# Security logs topic (longest retention for security analysis)
+kafka-topics --create \
+  --topic omninode.logging.security.v1 \
+  --partitions 3 \
+  --replication-factor 3 \
+  --config retention.ms=7776000000  # 90 days
+```
+
+**Partition Count Guidelines**:
+| Throughput | Partition Count | Reasoning |
+|------------|----------------|-----------|
+| < 1,000 events/sec | 3-6 partitions | Sufficient parallelism, low overhead |
+| 1,000 - 10,000 events/sec | 10-20 partitions | Balanced throughput and complexity |
+| > 10,000 events/sec | 20+ partitions | High parallelism, consider batching |
+
+**Replication Factor**:
+- **Production**: 3 replicas (tolerates 2 broker failures)
+- **Staging**: 2 replicas (cost-effective)
+- **Development**: 1 replica (acceptable for local testing)
+
+**Retention Policies**:
+- **Application logs**: 7 days (604800000 ms) - sufficient for debugging recent issues
+- **Audit logs**: 30 days (2592000000 ms) - longer window for pattern analysis
+- **Security logs**: 90 days (7776000000 ms) - compliance and long-term analysis
+- **Custom**: Adjust based on storage costs and compliance requirements
+
+---
+
+### Consumer Group Setup
+
+**For omnidash Integration**:
+```python
+# omnidash consumer configuration
+consumer_config = {
+    'group.id': 'omnidash-log-consumer',
+    'auto.offset.reset': 'latest',  # Only consume new logs
+    'enable.auto.commit': True,
+    'auto.commit.interval.ms': 5000
+}
+```
+
+**Consumer Group Strategy**:
+- **One consumer group per application** (omnidash, monitoring service, etc.)
+- **Multiple consumers per group** for parallel processing
+- **Monitor lag** to ensure consumers keep up with producers
+
+---
+
+### Monitoring & Observability
+
+**Prometheus Metrics** (exposed by LoggingEventPublisher):
+```
+logging_events_published_total{topic, log_level, outcome} - Counter
+logging_publish_latency_seconds{topic} - Histogram
+logging_publish_errors_total{topic, error_type} - Counter
+logging_sanitization_time_seconds - Histogram
+```
+
+**Grafana Dashboard Queries**:
+
+1. **Event Publish Rate**:
+   ```promql
+   rate(logging_events_published_total[5m])
+   ```
+
+2. **Publish Latency (p95)**:
+   ```promql
+   histogram_quantile(0.95, logging_publish_latency_seconds_bucket)
+   ```
+
+3. **Error Rate**:
+   ```promql
+   rate(logging_publish_errors_total[5m])
+   ```
+
+4. **Alert: High Error Rate** (>5% of events failing):
+   ```promql
+   (rate(logging_publish_errors_total[5m]) / rate(logging_events_published_total[5m])) > 0.05
+   ```
+
+**Recommended Alerts**:
+- Error rate > 5% for 5 minutes
+- Publish latency p95 > 2 seconds
+- Consumer lag > 10,000 messages
+- Kafka broker down
+
+---
+
+### Cost Analysis & Capacity Planning
+
+**Storage Estimates**:
+- **Average event size**: ~1KB per log event (varies by payload)
+- **Daily volume**: Calculate based on your event rate
+  - 1M events/day = 1GB/day
+  - 10M events/day = 10GB/day
+
+**Retention Cost** (7-day retention):
+- 1M events/day → 7GB storage
+- 10M events/day → 70GB storage
+
+**Bandwidth Estimates**:
+- **Inbound**: Event publishing throughput
+- **Outbound**: Number of consumer groups × event rate
+- **Example**: 1M events/day with 3 consumer groups = 3M events/day outbound
+
+**Cost Optimization**:
+1. **Compress events**: Enable Kafka compression (snappy, lz4)
+2. **Reduce retention**: Balance debugging needs vs storage costs
+3. **Filter low-value logs**: Skip verbose DEBUG logs in production
+4. **Batch events**: Use batching for high-throughput scenarios
+
+**Example Cost Calculation** (AWS MSK pricing):
+- Storage: $0.10/GB-month
+- 1M events/day, 7-day retention = 7GB
+- Monthly storage cost: 7GB × $0.10 = **$0.70/month**
+- Bandwidth: $0.01/GB
+- 1M events/day = 1GB/day = 30GB/month
+- Monthly bandwidth cost: 30GB × $0.01 = **$0.30/month**
+- **Total: ~$1.00/month** for 1M events/day
+
+---
+
+### Security & Compliance
+
+**PII Sanitization**:
+- Automatically enabled via `_sanitize_context()`
+- Redacts: password, api_key, token, secret, etc.
+- Configurable via regex patterns in implementation
+
+**Access Control**:
+- Kafka ACLs for topic access
+- Consumer groups require READ permission
+- Producers require WRITE permission
+
+**Data Retention Compliance**:
+- Configure retention based on regulatory requirements (GDPR, HIPAA, etc.)
+- Audit logs: Typically 90+ days for compliance
+- Application logs: 7-30 days sufficient
+
+---
+
+### Pre-Deployment Checklist
 
 Infrastructure:
 - [ ] Kafka cluster configured with appropriate retention (7 days recommended)
-- [ ] Kafka topics created with correct partition count
+- [ ] Kafka topics created manually with correct partition count (see guidelines above)
+- [ ] Replication factor set to 3 for production
 - [ ] Kafka authentication configured (SASL/SCRAM if required)
 - [ ] Network connectivity verified from all services
 
 Monitoring:
 - [ ] Prometheus metrics exported and scraped
-- [ ] Grafana dashboards created for logging metrics
+- [ ] Grafana dashboards created with recommended queries
 - [ ] Alert rules configured:
-  - High error rate (>10 events/min with `status=error`)
-  - Publish latency > 100ms (p95)
-  - Kafka connection failures
+  - High error rate (>5% of events failing)
+  - Publish latency p95 > 2 seconds
+  - Consumer lag > 10,000 messages
+  - Kafka broker down
 
 Integration:
 - [ ] Omnidash configured to consume logging topics
+- [ ] Consumer groups created with appropriate settings
 - [ ] Log retention policies aligned with compliance requirements
 - [ ] PII scrubbing verified for sensitive services
 
@@ -913,32 +1080,42 @@ Testing:
 - [ ] Load testing completed (>1000 events/sec for 10 minutes)
 - [ ] Failover tested (Kafka down, publisher degradation verified)
 - [ ] Large payload handling tested (1MB limit enforcement)
+- [ ] Consumer lag monitoring verified
+
+---
 
 ### Deployment
 
 - [ ] Deploy to staging first
 - [ ] Verify events in Omnidash staging instance
 - [ ] Monitor Kafka lag and consumer group health
+- [ ] Check Grafana dashboards for latency and error rates
 - [ ] Gradual rollout (10% → 50% → 100%)
+
+---
 
 ### Post-Deployment Monitoring
 
 **Metrics to Track**:
 - `logging_events_published_total` (by event_type, status)
 - `logging_publish_latency_seconds` (p50, p95, p99)
-- `logging_kafka_errors_total` (by error_type)
-- `logging_publisher_started` (gauge - should be 1)
+- `logging_publish_errors_total` (by error_type)
+- `logging_sanitization_time_seconds` (histogram)
 
 **Kafka Metrics**:
 - Broker lag
 - Producer connection count
 - Topic size and retention
+- Consumer group lag
 
 **Alerts**:
-- Error rate > 10/min for 5 minutes
-- p95 latency > 100ms for 5 minutes
+- Error rate > 5% for 5 minutes
+- p95 latency > 2 seconds for 5 minutes
 - Kafka connection failures
 - Publisher stopped unexpectedly
+- Consumer lag > 10,000 messages
+
+---
 
 ### Rollback Plan
 
@@ -947,12 +1124,17 @@ Testing:
 - [ ] Rollback procedure documented
 - [ ] Zero-downtime rollback tested
 
+---
+
 ### Production Readiness Criteria
 
 All must be met before production deployment:
 - ✅ All pre-deployment checks passed
+- ✅ Kafka topics created with correct configuration
+- ✅ Monitoring dashboards and alerts configured
+- ✅ Consumer groups tested and lag monitoring in place
+- ✅ Cost analysis completed and budget approved
 - ✅ Staging tested for 24 hours without issues
-- ✅ Monitoring and alerts configured
 - ✅ Runbook created for common issues
 - ✅ On-call team trained on troubleshooting
 
