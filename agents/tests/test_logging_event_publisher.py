@@ -817,9 +817,9 @@ class TestLoggingEventPublisher:
             context = envelope["payload"]["context"]
 
             # Verify sensitive keys are redacted
-            assert context["password"] == "<redacted>"
-            assert context["api_key"] == "<redacted>"
-            assert context["token"] == "<redacted>"
+            assert context["password"] == "[REDACTED]"
+            assert context["api_key"] == "[REDACTED]"
+            assert context["token"] == "[REDACTED]"
 
             # Verify non-sensitive keys are preserved
             assert context["user"] == "john_doe"
@@ -890,9 +890,9 @@ class TestLoggingEventPublisher:
             context = envelope["payload"]["context"]
 
             # All sensitive keys should be redacted regardless of case
-            assert context["PASSWORD"] == "<redacted>"
-            assert context["Api_Key"] == "<redacted>"
-            assert context["TOKEN"] == "<redacted>"
+            assert context["PASSWORD"] == "[REDACTED]"
+            assert context["Api_Key"] == "[REDACTED]"
+            assert context["TOKEN"] == "[REDACTED]"
 
             # Non-sensitive key preserved
             assert context["normal_field"] == "value"
@@ -928,8 +928,8 @@ class TestLoggingEventPublisher:
             context = envelope["payload"]["context"]
 
             # Sensitive keys redacted
-            assert context["session"] == "<redacted>"
-            assert context["email"] == "<redacted>"
+            assert context["session"] == "[REDACTED]"
+            assert context["email"] == "[REDACTED]"
 
             # Non-sensitive preserved
             assert context["ip_address"] == "192.168.1.1"
@@ -965,8 +965,8 @@ class TestLoggingEventPublisher:
             context = envelope["payload"]["context"]
 
             # Sensitive keys redacted
-            assert context["api_key"] == "<redacted>"
-            assert context["authorization"] == "<redacted>"
+            assert context["api_key"] == "[REDACTED]"
+            assert context["authorization"] == "[REDACTED]"
 
             # Non-sensitive preserved
             assert context["request_id"] == "req-789"
@@ -1250,6 +1250,611 @@ class TestLoggingEventPublisher:
                 # Should use "default"
                 assert envelope["tenant_id"] == "default"
 
+    @pytest.mark.asyncio
+    async def test_context_sanitization_nested_dictionaries(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that nested sensitive keys are redacted recursively."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Publish with nested context containing sensitive data
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test nested sanitization",
+                code="TEST_NESTED",
+                context={
+                    "user": "john",
+                    "password": "top_level_secret",  # Top-level sensitive
+                    "metadata": {
+                        "api_key": "nested_api_key",  # Level 1 sensitive
+                        "description": "normal value",  # Level 1 non-sensitive
+                        "credentials": {
+                            "username": "admin",  # Level 2 non-sensitive
+                            "token": "nested_token",  # Level 2 sensitive
+                            "settings": {
+                                "refresh_token": "deep_refresh",  # Level 3 sensitive
+                                "timeout": 30,  # Level 3 non-sensitive
+                            },
+                        },
+                    },
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Verify top-level sanitization
+            assert context["user"] == "john"
+            assert context["password"] == "[REDACTED]"
+
+            # Verify level 1 nested sanitization
+            assert context["metadata"]["api_key"] == "[REDACTED]"
+            assert context["metadata"]["description"] == "normal value"
+
+            # Verify level 2 nested sanitization (credentials is sensitive key)
+            assert context["metadata"]["credentials"] == "[REDACTED]"
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_context_sanitization_deep_nesting(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test sanitization with deep nesting (5+ levels)."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Create deeply nested context
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test deep nesting",
+                code="TEST_DEEP",
+                context={
+                    "level1": {
+                        "level2": {
+                            "level3": {
+                                "level4": {
+                                    "level5": {
+                                        "api_key": "deep_secret",
+                                        "normal_field": "value",
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Navigate to level 5 and verify sanitization
+            level5 = context["level1"]["level2"]["level3"]["level4"]["level5"]
+            assert level5["api_key"] == "[REDACTED]"
+            assert level5["normal_field"] == "value"
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_context_sanitization_near_max_depth(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that sanitization works correctly near max depth (8-9 levels)."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Create context with 9 levels (within limit)
+            deep_context = {"level1": {}}
+            current = deep_context["level1"]
+            for i in range(2, 10):
+                current[f"level{i}"] = {}
+                current = current[f"level{i}"]
+            # Add sensitive key at deepest level
+            current["api_key"] = "very_deep_secret"
+            current["normal_field"] = "normal_value"
+
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test near max depth",
+                code="TEST_NEAR_MAX_DEPTH",
+                context=deep_context,
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Navigate to level 9 (deepest level)
+            level9 = context["level1"]["level2"]["level3"]["level4"]["level5"][
+                "level6"
+            ]["level7"]["level8"]["level9"]
+
+            # Verify sanitization worked at deepest level
+            assert level9["api_key"] == "[REDACTED]"
+            assert level9["normal_field"] == "normal_value"
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_context_sanitization_mixed_types(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test sanitization with mixed types (lists, primitives, nested dicts)."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Context with mixed types
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test mixed types",
+                code="TEST_MIXED",
+                context={
+                    "string_field": "value",
+                    "number_field": 42,
+                    "bool_field": True,
+                    "list_field": [1, 2, 3],  # Lists are preserved as-is
+                    "password": "secret",  # Top-level sensitive
+                    "nested": {
+                        "api_key": "nested_secret",  # Nested sensitive
+                        "data": [4, 5, 6],  # Nested list
+                    },
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Verify types are preserved
+            assert context["string_field"] == "value"
+            assert context["number_field"] == 42
+            assert context["bool_field"] is True
+            assert context["list_field"] == [1, 2, 3]
+
+            # Verify sanitization still works
+            assert context["password"] == "[REDACTED]"
+            assert context["nested"]["api_key"] == "[REDACTED]"
+            assert context["nested"]["data"] == [4, 5, 6]
+
+            await publisher.stop()
+
+
+class TestLoggingEventPublisherValidation:
+    """Test suite for input validation methods."""
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_valid_string(
+        self, publisher_config
+    ) -> None:
+        """Test that valid strings pass partition key validation."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # Should not raise
+        publisher._validate_partition_key_field("tenant_id", "tenant-123")
+        publisher._validate_partition_key_field("service_name", "omniclaude")
+        publisher._validate_partition_key_field("action", "agent.execution")
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_null_byte_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that null bytes in partition keys are rejected."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        with pytest.raises(ValueError, match="cannot contain null bytes"):
+            publisher._validate_partition_key_field("tenant_id", "tenant\x00id")
+
+        with pytest.raises(ValueError, match="cannot contain null bytes"):
+            publisher._validate_partition_key_field("service_name", "service\x00name")
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_length_limit(
+        self, publisher_config
+    ) -> None:
+        """Test that length limits are enforced for partition keys."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # 256 chars should pass
+        valid_string = "x" * 256
+        publisher._validate_partition_key_field(
+            "tenant_id", valid_string, max_length=256
+        )
+
+        # 257 chars should fail
+        invalid_string = "x" * 257
+        with pytest.raises(ValueError, match="must be <= 256 characters"):
+            publisher._validate_partition_key_field(
+                "tenant_id", invalid_string, max_length=256
+            )
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_empty_string_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that empty strings are rejected for partition keys."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        with pytest.raises(ValueError, match="cannot be empty or whitespace only"):
+            publisher._validate_partition_key_field("tenant_id", "")
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_whitespace_only_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that whitespace-only strings are rejected for partition keys."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        with pytest.raises(ValueError, match="cannot be empty or whitespace only"):
+            publisher._validate_partition_key_field("tenant_id", "   ")
+
+        with pytest.raises(ValueError, match="cannot be empty or whitespace only"):
+            publisher._validate_partition_key_field("tenant_id", "\t\n")
+
+    @pytest.mark.asyncio
+    async def test_validate_partition_key_field_non_string_type_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that non-string types are rejected for partition keys."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        with pytest.raises(TypeError, match="must be a string, got int"):
+            publisher._validate_partition_key_field("tenant_id", 123)  # type: ignore
+
+        with pytest.raises(TypeError, match="must be a string, got NoneType"):
+            publisher._validate_partition_key_field("tenant_id", None)  # type: ignore
+
+        with pytest.raises(TypeError, match="must be a string, got list"):
+            publisher._validate_partition_key_field("tenant_id", ["tenant"])  # type: ignore
+
+    @pytest.mark.asyncio
+    async def test_validate_context_size_deep_nesting_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that excessively deep nesting (>10 levels) is rejected."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # Create deeply nested structure (11 levels of nested dicts)
+        deeply_nested = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "level4": {
+                            "level5": {
+                                "level6": {
+                                    "level7": {
+                                        "level8": {
+                                            "level9": {
+                                                "level10": {
+                                                    "level11": {"data": "too deep"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        with pytest.raises(ValueError, match="nesting depth exceeds 10 levels"):
+            publisher._validate_context_size(deeply_nested)
+
+    @pytest.mark.asyncio
+    async def test_validate_context_size_deep_nesting_with_lists(
+        self, publisher_config
+    ) -> None:
+        """Test that deep nesting with lists is also rejected."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # Create deeply nested structure with lists (11 levels)
+        deeply_nested = {
+            "level1": [
+                {
+                    "level2": [
+                        {
+                            "level3": [
+                                {
+                                    "level4": [
+                                        {
+                                            "level5": [
+                                                {
+                                                    "level6": [
+                                                        {
+                                                            "level7": [
+                                                                {
+                                                                    "level8": [
+                                                                        {
+                                                                            "level9": [
+                                                                                {
+                                                                                    "level10": [
+                                                                                        {
+                                                                                            "level11": "too deep"
+                                                                                        }
+                                                                                    ]
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+
+        with pytest.raises(ValueError, match="nesting depth exceeds 10 levels"):
+            publisher._validate_context_size(deeply_nested)
+
+    @pytest.mark.asyncio
+    async def test_validate_context_size_circular_reference_rejection(
+        self, publisher_config
+    ) -> None:
+        """Test that circular references are rejected (caught by depth check)."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # Create circular reference
+        circular_dict: Dict[str, Any] = {"key": "value"}
+        circular_dict["self"] = circular_dict
+
+        # Circular references are caught by the depth check (exceeds 10 levels)
+        # before json.dumps() would raise. Both error messages are acceptable.
+        with pytest.raises(
+            ValueError, match="(circular references|nesting depth exceeds 10 levels)"
+        ):
+            publisher._validate_context_size(circular_dict)
+
+    @pytest.mark.asyncio
+    async def test_validate_context_size_acceptable_depth(
+        self, publisher_config
+    ) -> None:
+        """Test that acceptable nesting depth (<=10 levels) passes."""
+        publisher = LoggingEventPublisher(**publisher_config)
+
+        # Create structure with exactly 10 levels (should pass)
+        acceptable_depth = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "level4": {
+                            "level5": {
+                                "level6": {
+                                    "level7": {"level8": {"level9": {"level10": "ok"}}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        # Should not raise
+        publisher._validate_context_size(acceptable_depth)
+
+    @pytest.mark.asyncio
+    async def test_publish_application_log_validates_service_name(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that publish_application_log validates service_name as partition key."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Null byte in service_name should be rejected
+            with pytest.raises(
+                ValueError, match="service_name cannot contain null bytes"
+            ):
+                await publisher.publish_application_log(
+                    service_name="service\x00name",
+                    instance_id="instance-1",
+                    level="INFO",
+                    logger_name="test.logger",
+                    message="Test",
+                    code="TEST",
+                )
+
+            # Empty service_name should be rejected
+            with pytest.raises(ValueError, match="service_name cannot be empty"):
+                await publisher.publish_application_log(
+                    service_name="",
+                    instance_id="instance-1",
+                    level="INFO",
+                    logger_name="test.logger",
+                    message="Test",
+                    code="TEST",
+                )
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_publish_audit_log_validates_tenant_id(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that publish_audit_log validates tenant_id as partition key."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Null byte in explicitly provided tenant_id should be rejected
+            with pytest.raises(ValueError, match="tenant_id cannot contain null bytes"):
+                await publisher.publish_audit_log(
+                    tenant_id="tenant\x00id",
+                    action="test.action",
+                    actor="test-actor",
+                    resource="test-resource",
+                    outcome="success",
+                )
+
+            # Excessively long tenant_id should be rejected
+            with pytest.raises(ValueError, match="tenant_id must be <= 128 characters"):
+                await publisher.publish_audit_log(
+                    tenant_id="x" * 129,  # 129 characters exceeds 128 limit
+                    action="test.action",
+                    actor="test-actor",
+                    resource="test-resource",
+                    outcome="success",
+                )
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_publish_security_log_validates_tenant_id(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that publish_security_log validates tenant_id as partition key."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Null byte in explicitly provided tenant_id should be rejected
+            with pytest.raises(ValueError, match="tenant_id cannot contain null bytes"):
+                await publisher.publish_security_log(
+                    tenant_id="tenant\x00id",
+                    event_type="test.event",
+                    user_id="test-user",
+                    resource="test-resource",
+                    decision="allow",
+                )
+
+            # Excessively long tenant_id should be rejected
+            with pytest.raises(ValueError, match="tenant_id must be <= 128 characters"):
+                await publisher.publish_security_log(
+                    tenant_id="x" * 129,  # 129 characters exceeds 128 limit
+                    event_type="test.event",
+                    user_id="test-user",
+                    resource="test-resource",
+                    decision="allow",
+                )
+
+            await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_publish_with_deeply_nested_context_rejection(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that all publish methods reject deeply nested context."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Create deeply nested context (11 levels of nested dicts)
+            deeply_nested = {
+                "level1": {
+                    "level2": {
+                        "level3": {
+                            "level4": {
+                                "level5": {
+                                    "level6": {
+                                        "level7": {
+                                            "level8": {
+                                                "level9": {
+                                                    "level10": {
+                                                        "level11": {"data": "too deep"}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            # Application log should reject
+            with pytest.raises(ValueError, match="nesting depth exceeds 10 levels"):
+                await publisher.publish_application_log(
+                    service_name="test-service",
+                    instance_id="test-instance",
+                    level="INFO",
+                    logger_name="test.logger",
+                    message="Test",
+                    code="TEST",
+                    context=deeply_nested,
+                )
+
+            # Audit log should reject
+            with pytest.raises(ValueError, match="nesting depth exceeds 10 levels"):
+                await publisher.publish_audit_log(
+                    tenant_id="test-tenant",
+                    action="test.action",
+                    actor="test-actor",
+                    resource="test-resource",
+                    outcome="success",
+                    context=deeply_nested,
+                )
+
+            # Security log should reject
+            with pytest.raises(ValueError, match="nesting depth exceeds 10 levels"):
+                await publisher.publish_security_log(
+                    tenant_id="test-tenant",
+                    event_type="test.event",
+                    user_id="test-user",
+                    resource="test-resource",
+                    decision="allow",
+                    context=deeply_nested,
+                )
+
+            await publisher.stop()
+
 
 class TestLoggingEventPublisherEdgeCases:
     """Edge case tests for production scenarios (marked as slow tests)."""
@@ -1464,8 +2069,95 @@ class TestLoggingEventPublisherEdgeCases:
                 code="TIMEOUT-001",
             )
 
-            # Should return False on timeout, not raise
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_explicit_timeout_wrapper(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that asyncio.wait_for timeout wrapper enforces 5-second timeout."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Mock producer to hang indefinitely (simulates unresponsive broker)
+            async def hang_forever(*args, **kwargs):
+                await asyncio.sleep(10)  # Longer than KAFKA_PUBLISH_TIMEOUT_SECONDS
+                return None
+
+            mock_kafka_producer.send_and_wait.side_effect = hang_forever
+
+            # Should timeout after KAFKA_PUBLISH_TIMEOUT_SECONDS (5 seconds)
+            result = await publisher.publish_application_log(
+                service_name="test-service",
+                instance_id="test-instance",
+                level="ERROR",
+                logger_name="test-logger",
+                message="Timeout wrapper test",
+                code="TIMEOUT-WRAPPER-001",
+            )
+
+            # Should return False when timeout occurs
             assert result is False
+
+            # Verify timeout constant is used
+            assert publisher.KAFKA_PUBLISH_TIMEOUT_SECONDS == 5.0
+
+            await publisher.stop()
+
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_timeout_handling_all_event_types(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that all three event types handle timeouts correctly."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Mock producer to raise TimeoutError
+            async def timeout_send(*args, **kwargs):
+                raise asyncio.TimeoutError("Kafka publish timeout")
+
+            mock_kafka_producer.send_and_wait.side_effect = timeout_send
+
+            # Test application log
+            result_app = await publisher.publish_application_log(
+                service_name="test-service",
+                instance_id="test-instance",
+                level="INFO",
+                logger_name="test-logger",
+                message="Test",
+                code="TEST-001",
+            )
+            assert result_app is False
+
+            # Test audit log
+            result_audit = await publisher.publish_audit_log(
+                tenant_id="tenant-123",
+                action="test.action",
+                actor="test-actor",
+                resource="test-resource",
+                outcome="success",
+            )
+            assert result_audit is False
+
+            # Test security log
+            result_security = await publisher.publish_security_log(
+                tenant_id="tenant-123",
+                event_type="test.event",
+                user_id="test-user",
+                resource="test-resource",
+                decision="allow",
+            )
+            assert result_security is False
+
+            await publisher.stop()
 
             await publisher.stop()
 

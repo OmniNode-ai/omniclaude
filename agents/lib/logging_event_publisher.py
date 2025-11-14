@@ -157,6 +157,10 @@ class LoggingEventPublisher:
     TOPIC_AUDIT_LOG = "omninode.logging.audit.v1"
     TOPIC_SECURITY_LOG = "omninode.logging.security.v1"
 
+    # Kafka publish timeout (5 seconds)
+    # Prevents indefinite blocking if broker is slow/unresponsive
+    KAFKA_PUBLISH_TIMEOUT_SECONDS = 5.0
+
     def __init__(
         self,
         bootstrap_servers: Optional[str] = None,
@@ -278,6 +282,56 @@ class LoggingEventPublisher:
         except Exception as e:
             self.logger.error(f"Error stopping logging event publisher: {e}")
 
+    def _validate_partition_key_field(
+        self,
+        field_name: str,
+        field_value: str,
+        max_length: int = 256,
+    ) -> None:
+        """
+        Validate field used in partition key with strict security checks.
+
+        Partition keys require stricter validation because they:
+        1. Control Kafka message routing and partitioning
+        2. Are used in Kafka headers (limited character set)
+        3. Can cause DoS if excessively long
+        4. Break encoding if they contain null bytes
+
+        Args:
+            field_name: Name of the field being validated
+            field_value: Value to validate (must be string, cannot be None)
+            max_length: Maximum allowed length (default: 256 chars)
+
+        Raises:
+            TypeError: If field_value is not a string
+            ValueError: If validation fails (length, null bytes, empty/whitespace)
+
+        Example:
+            >>> publisher._validate_partition_key_field("tenant_id", "tenant-123")
+            >>> publisher._validate_partition_key_field("tenant_id", None)  # Raises TypeError
+            >>> publisher._validate_partition_key_field("tenant_id", "x" * 257)  # Raises ValueError
+            >>> publisher._validate_partition_key_field("tenant_id", "tenant\\x00id")  # Raises ValueError
+        """
+        # Type check - partition keys must be strings
+        if not isinstance(field_value, str):
+            raise TypeError(
+                f"{field_name} must be a string, got {type(field_value).__name__}"
+            )
+
+        # Empty/whitespace check - partition keys must have content
+        if not field_value.strip():
+            raise ValueError(f"{field_name} cannot be empty or whitespace only")
+
+        # Length check - prevent DoS via memory exhaustion
+        if len(field_value) > max_length:
+            raise ValueError(
+                f"{field_name} must be <= {max_length} characters (got {len(field_value)})"
+            )
+
+        # Null byte check - breaks UTF-8 encoding in Kafka partition keys
+        if "\x00" in field_value:
+            raise ValueError(f"{field_name} cannot contain null bytes")
+
     def _validate_string_field(
         self,
         field_name: str,
@@ -312,19 +366,50 @@ class LoggingEventPublisher:
 
     def _validate_context_size(self, context: Optional[Dict[str, Any]]) -> None:
         """
-        Validate context dictionary size to prevent DoS attacks.
+        Validate context dictionary size and structure to prevent DoS attacks.
+
+        Checks:
+        1. JSON serializability (no circular references)
+        2. Serialized size < 64KB
+        3. Nesting depth <= 10 levels
 
         Args:
             context: Context dictionary to validate
 
         Raises:
-            ValueError: If context exceeds 64KB when serialized
+            ValueError: If context exceeds size/depth limits or has circular references
         """
         if context is None:
             return
 
-        # Serialize and check size
+        # Check for circular references and validate structure
         try:
+            # Check nesting depth (max 10 levels) to prevent stack overflow
+            def check_depth(
+                obj: Any, current_depth: int = 0, max_depth: int = 10
+            ) -> None:
+                """Recursively check nesting depth of containers (dicts/lists)."""
+                if current_depth > max_depth:
+                    raise ValueError(
+                        f"context nesting depth exceeds {max_depth} levels (DoS protection)"
+                    )
+
+                if isinstance(obj, dict):
+                    # Only increment depth for nested containers, not scalar values
+                    for value in obj.values():
+                        if isinstance(value, (dict, list, tuple)):
+                            check_depth(value, current_depth + 1, max_depth)
+                        # Scalar values don't add nesting depth
+                elif isinstance(obj, (list, tuple)):
+                    # Only increment depth for nested containers, not scalar values
+                    for item in obj:
+                        if isinstance(item, (dict, list, tuple)):
+                            check_depth(item, current_depth + 1, max_depth)
+                        # Scalar values don't add nesting depth
+
+            check_depth(context)
+
+            # Serialize and check size (will also catch circular references)
             serialized = json.dumps(context)
             size_bytes = len(serialized.encode("utf-8"))
             max_size = 64 * 1024  # 64KB
@@ -333,61 +418,107 @@ class LoggingEventPublisher:
                 raise ValueError(
                     f"context serialized size must be <= {max_size} bytes (got {size_bytes})"
                 )
+
+        except RecursionError as e:
+            # Circular reference detected during depth check or serialization
+            raise ValueError(
+                "context contains circular references (not serializable)"
+            ) from e
         except (TypeError, ValueError) as e:
             # Re-raise with clearer message if JSON serialization fails
-            if "serialized size" in str(e):
+            if (
+                "serialized size" in str(e)
+                or "nesting depth" in str(e)
+                or "circular" in str(e)
+            ):
                 raise
             raise ValueError(f"context must be JSON-serializable: {e}") from e
 
-    def _sanitize_context(self, context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _sanitize_context(
+        self, context: Optional[Dict[str, Any]], _depth: int = 0, _max_depth: int = 10
+    ) -> Dict[str, Any]:
         """
-        Remove potential PII and sensitive data from context.
+        Recursively remove potential PII and sensitive data from context.
 
         This method redacts values for known sensitive keys to prevent
         accidental logging of passwords, API keys, tokens, and other
-        sensitive information to Kafka.
+        sensitive information to Kafka. Handles nested dictionaries up to
+        10 levels deep.
 
         Args:
             context: Context dictionary to sanitize
+            _depth: Internal recursion depth tracker (do not pass manually)
+            _max_depth: Maximum recursion depth to prevent stack overflow
 
         Returns:
             Sanitized context with sensitive values redacted
 
         Example:
-            >>> context = {"user": "john", "password": "secret123", "api_key": "abc"}
+            >>> context = {
+            ...     "user": "john",
+            ...     "password": "secret123",
+            ...     "nested": {
+            ...         "api_key": "abc",
+            ...         "normal": "value"
+            ...     }
+            ... }
             >>> sanitized = publisher._sanitize_context(context)
             >>> sanitized
-            {'user': 'john', 'password': '<redacted>', 'api_key': '<redacted>'}
+            {
+                'user': 'john',
+                'password': '[REDACTED]',
+                'nested': {
+                    'api_key': '[REDACTED]',
+                    'normal': 'value'
+                }
+            }
         """
         if not context:
             return {}
 
+        # Prevent infinite recursion
+        if _depth >= _max_depth:
+            return {"_error": "Max recursion depth reached during sanitization"}
+
         # Known sensitive keys to redact (case-insensitive)
         sensitive_keys = {
             "password",
-            "api_key",
-            "token",
+            "passwd",
+            "pwd",
             "secret",
-            "ssn",
-            "email",
-            "credit_card",
+            "api_key",
             "apikey",
             "api-key",
-            "auth",
-            "authorization",
-            "private_key",
+            "token",
+            "auth_token",
             "access_token",
             "refresh_token",
+            "private_key",
+            "credentials",
+            "ssn",
+            "credit_card",
+            "email",
+            "auth",
+            "authorization",
             "bearer",
             "jwt",
             "session",
             "cookie",
         }
 
-        return {
-            k: "<redacted>" if k.lower() in sensitive_keys else v
-            for k, v in context.items()
-        }
+        sanitized = {}
+        for key, value in context.items():
+            # Check if key is sensitive (case-insensitive)
+            if key.lower() in sensitive_keys:
+                sanitized[key] = "[REDACTED]"
+            # Recursively sanitize nested dictionaries
+            elif isinstance(value, dict):
+                sanitized[key] = self._sanitize_context(value, _depth + 1, _max_depth)
+            else:
+                # Preserve non-sensitive values
+                sanitized[key] = value
+
+        return sanitized
 
     async def publish_application_log(
         self,
@@ -441,8 +572,12 @@ class LoggingEventPublisher:
             )
         """
         # Validate input fields BEFORE any Kafka operations
-        self._validate_string_field("service_name", service_name, max_length=256)
-        self._validate_string_field("tenant_id", tenant_id, max_length=128)
+        # service_name is used as partition key - requires strict validation
+        self._validate_partition_key_field("service_name", service_name, max_length=256)
+        # tenant_id goes into Kafka headers - also requires strict validation if provided
+        if tenant_id is not None:
+            self._validate_partition_key_field("tenant_id", tenant_id, max_length=128)
+        # Validate context size and structure
         self._validate_context_size(context)
 
         if not self._started or not self.enable_events:
@@ -525,7 +660,7 @@ class LoggingEventPublisher:
                     key=partition_key,
                     headers=headers,
                 ),
-                timeout=5.0,
+                timeout=self.KAFKA_PUBLISH_TIMEOUT_SECONDS,
             )
 
             # Record success metrics
@@ -553,6 +688,24 @@ class LoggingEventPublisher:
             )
             return False
 
+        except asyncio.TimeoutError:
+            # Handle timeout specifically for better observability
+            error_type = "TimeoutError"
+            logging_kafka_errors.labels(
+                event_type="application", error_type=error_type
+            ).inc()
+            logging_events_published.labels(
+                event_type="application", status="error"
+            ).inc()
+
+            self.logger.error(
+                f"Timeout publishing application log event to Kafka "
+                f"(service: {service_name}, code: {code}, "
+                f"timeout: {self.KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+                extra={"correlation_id": correlation_id},
+            )
+            return False
+
         except Exception as e:
             # Record general error metrics
             error_type = type(e).__name__
@@ -575,11 +728,11 @@ class LoggingEventPublisher:
 
     async def publish_audit_log(
         self,
-        tenant_id: str,
-        action: str,
-        actor: str,
-        resource: str,
-        outcome: Union[Outcome, str],
+        tenant_id: Optional[str] = None,
+        action: str = None,
+        actor: str = None,
+        resource: str = None,
+        outcome: Union[Outcome, str] = None,
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -590,7 +743,9 @@ class LoggingEventPublisher:
         regulatory requirements.
 
         Args:
-            tenant_id: Tenant identifier (UUID or string)
+            tenant_id: Optional tenant identifier (UUID or string).
+                       Falls back to TENANT_ID environment variable if not provided.
+                       Uses "default" if neither is available.
             action: Action performed (e.g., "agent.execution", "api.call")
             actor: User or service that performed the action
             resource: Resource that was accessed (e.g., agent name, API endpoint)
@@ -619,10 +774,26 @@ class LoggingEventPublisher:
                     context={"duration_ms": 1234, "quality_score": 0.95},
                 )
         """
+        # Resolve tenant_id with fallback chain
+        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+
+        # Warn when using fallback
+        if tenant_id is None and os.getenv("TENANT_ID") is None:
+            self.logger.warning(
+                "tenant_id not provided and TENANT_ID env var not set, using 'default'",
+                extra={"event_type": "audit_log", "action": action},
+            )
+
         # Validate input fields BEFORE any Kafka operations
-        self._validate_string_field("tenant_id", tenant_id, max_length=128)
-        self._validate_string_field("action", action, max_length=256)
+        # tenant_id is used as partition key - requires strict validation
+        self._validate_partition_key_field(
+            "tenant_id", effective_tenant_id, max_length=128
+        )
+        # action is critical metadata - validate for security
+        self._validate_partition_key_field("action", action, max_length=256)
+        # resource is critical metadata - validate for security
         self._validate_string_field("resource", resource, max_length=256)
+        # Validate context size and structure
         self._validate_context_size(context)
 
         if not self._started or not self.enable_events:
@@ -640,7 +811,7 @@ class LoggingEventPublisher:
 
             # Create event envelope
             envelope = self._create_audit_log_envelope(
-                tenant_id=tenant_id,
+                tenant_id=effective_tenant_id,
                 action=action,
                 actor=actor,
                 resource=resource,
@@ -661,11 +832,11 @@ class LoggingEventPublisher:
                 return False
 
             # Publish event with partition key (tenant_id for audit logs)
-            partition_key = tenant_id.encode("utf-8")
+            partition_key = effective_tenant_id.encode("utf-8")
 
             # Build required Kafka headers
             headers = [
-                ("x-tenant", tenant_id.encode("utf-8")),
+                ("x-tenant", effective_tenant_id.encode("utf-8")),
                 ("x-schema-hash", envelope.get("schema_ref", "").encode("utf-8")),
             ]
 
@@ -699,7 +870,7 @@ class LoggingEventPublisher:
                     key=partition_key,
                     headers=headers,
                 ),
-                timeout=5.0,
+                timeout=self.KAFKA_PUBLISH_TIMEOUT_SECONDS,
             )
 
             # Record success metrics
@@ -721,6 +892,20 @@ class LoggingEventPublisher:
             )
             return False
 
+        except asyncio.TimeoutError:
+            # Handle timeout specifically for better observability
+            error_type = "TimeoutError"
+            logging_kafka_errors.labels(event_type="audit", error_type=error_type).inc()
+            logging_events_published.labels(event_type="audit", status="error").inc()
+
+            self.logger.error(
+                f"Timeout publishing audit log event to Kafka "
+                f"(tenant: {tenant_id}, action: {action}, "
+                f"timeout: {self.KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+                extra={"correlation_id": correlation_id},
+            )
+            return False
+
         except Exception as e:
             # Record general error metrics
             error_type = type(e).__name__
@@ -739,11 +924,11 @@ class LoggingEventPublisher:
 
     async def publish_security_log(
         self,
-        tenant_id: str,
-        event_type: str,
-        user_id: str,
-        resource: str,
-        decision: Union[Decision, str],
+        tenant_id: Optional[str] = None,
+        event_type: str = None,
+        user_id: str = None,
+        resource: str = None,
+        decision: Union[Decision, str] = None,
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -754,7 +939,9 @@ class LoggingEventPublisher:
         security monitoring purposes.
 
         Args:
-            tenant_id: Tenant identifier (UUID or string)
+            tenant_id: Optional tenant identifier (UUID or string).
+                       Falls back to TENANT_ID environment variable if not provided.
+                       Uses "default" if neither is available.
             event_type: Type of security event (e.g., "api_key_used", "permission_check")
             user_id: User identifier
             resource: Resource being accessed
@@ -783,10 +970,26 @@ class LoggingEventPublisher:
                     context={"api_key_hash": "sha256:abc123", "ip_address": "192.168.1.1"},
                 )
         """
+        # Resolve tenant_id with fallback chain
+        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+
+        # Warn when using fallback
+        if tenant_id is None and os.getenv("TENANT_ID") is None:
+            self.logger.warning(
+                "tenant_id not provided and TENANT_ID env var not set, using 'default'",
+                extra={"event_type": "security_log", "security_event_type": event_type},
+            )
+
         # Validate input fields BEFORE any Kafka operations
-        self._validate_string_field("tenant_id", tenant_id, max_length=128)
-        self._validate_string_field("event_type", event_type, max_length=128)
+        # tenant_id is used as partition key - requires strict validation
+        self._validate_partition_key_field(
+            "tenant_id", effective_tenant_id, max_length=128
+        )
+        # event_type is critical security metadata - validate strictly
+        self._validate_partition_key_field("event_type", event_type, max_length=128)
+        # resource is critical security metadata - validate for security
         self._validate_string_field("resource", resource, max_length=256)
+        # Validate context size and structure
         self._validate_context_size(context)
 
         if not self._started or not self.enable_events:
@@ -804,7 +1007,7 @@ class LoggingEventPublisher:
 
             # Create event envelope
             envelope = self._create_security_log_envelope(
-                tenant_id=tenant_id,
+                tenant_id=effective_tenant_id,
                 event_type=event_type,
                 user_id=user_id,
                 resource=resource,
@@ -825,11 +1028,11 @@ class LoggingEventPublisher:
                 return False
 
             # Publish event with partition key (tenant_id for security logs)
-            partition_key = tenant_id.encode("utf-8")
+            partition_key = effective_tenant_id.encode("utf-8")
 
             # Build required Kafka headers
             headers = [
-                ("x-tenant", tenant_id.encode("utf-8")),
+                ("x-tenant", effective_tenant_id.encode("utf-8")),
                 ("x-schema-hash", envelope.get("schema_ref", "").encode("utf-8")),
             ]
 
@@ -863,7 +1066,7 @@ class LoggingEventPublisher:
                     key=partition_key,
                     headers=headers,
                 ),
-                timeout=5.0,
+                timeout=self.KAFKA_PUBLISH_TIMEOUT_SECONDS,
             )
 
             # Record success metrics
@@ -886,6 +1089,22 @@ class LoggingEventPublisher:
 
             self.logger.error(
                 f"Failed to publish security log event (tenant: {tenant_id}, event_type: {event_type}): {e}"
+            )
+            return False
+
+        except asyncio.TimeoutError:
+            # Handle timeout specifically for better observability
+            error_type = "TimeoutError"
+            logging_kafka_errors.labels(
+                event_type="security", error_type=error_type
+            ).inc()
+            logging_events_published.labels(event_type="security", status="error").inc()
+
+            self.logger.error(
+                f"Timeout publishing security log event to Kafka "
+                f"(tenant: {tenant_id}, event_type: {event_type}, "
+                f"timeout: {self.KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+                extra={"correlation_id": correlation_id},
             )
             return False
 
@@ -1173,11 +1392,11 @@ async def publish_application_log(
 
 
 async def publish_audit_log(
-    tenant_id: str,
     action: str,
     actor: str,
     resource: str,
     outcome: Union[Outcome, str],
+    tenant_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
@@ -1185,11 +1404,13 @@ async def publish_audit_log(
     Convenience function for one-off audit log event publishing.
 
     Args:
-        tenant_id: Tenant ID
         action: Action performed
         actor: Actor identifier
         resource: Resource accessed
         outcome: Outcome of action
+        tenant_id: Optional tenant identifier (UUID or string).
+                   Falls back to TENANT_ID environment variable if not provided.
+                   Uses "default" if neither is available.
         correlation_id: Optional correlation ID
         context: Optional context dictionary
 
@@ -1198,11 +1419,11 @@ async def publish_audit_log(
 
     Example:
         success = await publish_audit_log(
-            tenant_id="tenant-123",
             action="agent.execution",
             actor="user-456",
             resource="agent-api-architect",
             outcome="success",
+            tenant_id="tenant-123",  # Optional, falls back to env var
         )
     """
     async with LoggingEventPublisherContext() as publisher:
@@ -1218,11 +1439,11 @@ async def publish_audit_log(
 
 
 async def publish_security_log(
-    tenant_id: str,
     event_type: str,
     user_id: str,
     resource: str,
     decision: Union[Decision, str],
+    tenant_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
 ) -> bool:
@@ -1230,11 +1451,13 @@ async def publish_security_log(
     Convenience function for one-off security log event publishing.
 
     Args:
-        tenant_id: Tenant ID
         event_type: Security event type
         user_id: User identifier
         resource: Resource accessed
         decision: Security decision
+        tenant_id: Optional tenant identifier (UUID or string).
+                   Falls back to TENANT_ID environment variable if not provided.
+                   Uses "default" if neither is available.
         correlation_id: Optional correlation ID
         context: Optional context dictionary
 
@@ -1243,11 +1466,11 @@ async def publish_security_log(
 
     Example:
         success = await publish_security_log(
-            tenant_id="tenant-123",
             event_type="api_key_used",
             user_id="user-456",
             resource="gemini-api",
             decision="allow",
+            tenant_id="tenant-123",  # Optional, falls back to env var
         )
     """
     async with LoggingEventPublisherContext() as publisher:
