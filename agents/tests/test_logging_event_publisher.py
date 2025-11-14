@@ -20,6 +20,7 @@ Edge Case Coverage (marked with @pytest.mark.slow):
 - Connection failure recovery (Kafka down mid-publish)
 - Concurrent publishing (50 parallel tasks, thread safety verification)
 - Large payload handling (1MB+ context dictionaries)
+- Oversized payload rejection (>1MB envelope size, DoS protection)
 - Network timeout scenarios (graceful degradation)
 - Invalid partition keys (non-UTF8 characters)
 - Producer stop during active publishing
@@ -781,9 +782,194 @@ class TestLoggingEventPublisher:
             assert "timestamp" in envelope["payload"]
             assert envelope["timestamp"] == envelope["payload"]["timestamp"]
 
+    @pytest.mark.asyncio
+    async def test_context_sanitization_redacts_sensitive_keys(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that sensitive keys in context are redacted."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
 
-class TestLoggingEventPublisherEnums:
-    """Test suite for enum type safety features."""
+            # Publish with sensitive context
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test with sensitive data",
+                code="TEST_SENSITIVE",
+                context={
+                    "user": "john_doe",
+                    "password": "secret123",
+                    "api_key": "sk-abc123xyz",
+                    "token": "bearer_token_value",
+                    "duration_ms": 1234,  # Non-sensitive - should NOT be redacted
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Verify sensitive keys are redacted
+            assert context["password"] == "<redacted>"
+            assert context["api_key"] == "<redacted>"
+            assert context["token"] == "<redacted>"
+
+            # Verify non-sensitive keys are preserved
+            assert context["user"] == "john_doe"
+            assert context["duration_ms"] == 1234
+
+    @pytest.mark.asyncio
+    async def test_context_sanitization_handles_empty_context(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that sanitization handles None and empty context gracefully."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Test with None context
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test with no context",
+                code="TEST_NO_CONTEXT",
+                context=None,
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Should have empty context, not None
+            assert context == {}
+
+    @pytest.mark.asyncio
+    async def test_context_sanitization_case_insensitive(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that sanitization is case-insensitive for key matching."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Publish with mixed-case sensitive keys
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test case sensitivity",
+                code="TEST_CASE",
+                context={
+                    "PASSWORD": "secret123",  # Uppercase
+                    "Api_Key": "sk-abc123",  # Mixed case
+                    "TOKEN": "bearer_value",  # Uppercase
+                    "normal_field": "value",  # Non-sensitive
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # All sensitive keys should be redacted regardless of case
+            assert context["PASSWORD"] == "<redacted>"
+            assert context["Api_Key"] == "<redacted>"
+            assert context["TOKEN"] == "<redacted>"
+
+            # Non-sensitive key preserved
+            assert context["normal_field"] == "value"
+
+    @pytest.mark.asyncio
+    async def test_audit_log_sanitization(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that audit logs also sanitize context."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            await publisher.publish_audit_log(
+                tenant_id="tenant-123",
+                action="user.login",
+                actor="user-456",
+                resource="/api/login",
+                outcome="success",
+                context={
+                    "session": "session_12345",
+                    "email": "user@example.com",
+                    "ip_address": "192.168.1.1",  # Non-sensitive
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Sensitive keys redacted
+            assert context["session"] == "<redacted>"
+            assert context["email"] == "<redacted>"
+
+            # Non-sensitive preserved
+            assert context["ip_address"] == "192.168.1.1"
+
+    @pytest.mark.asyncio
+    async def test_security_log_sanitization(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that security logs also sanitize context."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            await publisher.publish_security_log(
+                tenant_id="tenant-123",
+                event_type="api_key_usage",
+                user_id="user-456",
+                resource="gemini-api",
+                decision="allow",
+                context={
+                    "api_key": "sk-abc123",
+                    "authorization": "Bearer token123",
+                    "request_id": "req-789",  # Non-sensitive
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Sensitive keys redacted
+            assert context["api_key"] == "<redacted>"
+            assert context["authorization"] == "<redacted>"
+
+            # Non-sensitive preserved
+            assert context["request_id"] == "req-789"
 
     @pytest.mark.asyncio
     async def test_application_log_with_enum_level(
@@ -1186,6 +1372,65 @@ class TestLoggingEventPublisherEdgeCases:
                     code="LARGE-001",
                     context=large_context,
                 )
+
+            await publisher.stop()
+
+    @pytest.mark.slow
+    @pytest.mark.asyncio
+    async def test_oversized_payload_rejection(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that oversized payloads (>1MB) are rejected."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Create context that will make the envelope exceed 1MB
+            # We need to bypass the 64KB context size validation to test the 1MB envelope validation
+            # This simulates a scenario where somehow a large payload makes it through
+            large_context = {
+                "data": "x" * (2 * 1024 * 1024),  # 2MB of data
+            }
+
+            # Patch _validate_context_size to bypass the 64KB check
+            # This allows us to test the 1MB envelope size validation
+            with patch.object(publisher, "_validate_context_size"):
+                # Test application log - should be rejected by envelope size check
+                result = await publisher.publish_application_log(
+                    service_name="test-service",
+                    instance_id="test-instance",
+                    level="INFO",
+                    logger_name="test-logger",
+                    message="Oversized payload test",
+                    code="OVERSIZED-001",
+                    context=large_context,
+                )
+                assert result is False  # Should be rejected
+
+                # Test audit log - should be rejected by envelope size check
+                result = await publisher.publish_audit_log(
+                    tenant_id="test-tenant",
+                    action="test.action",
+                    actor="test-actor",
+                    resource="test-resource",
+                    outcome="success",
+                    context=large_context,
+                )
+                assert result is False  # Should be rejected
+
+                # Test security log - should be rejected by envelope size check
+                result = await publisher.publish_security_log(
+                    tenant_id="test-tenant",
+                    event_type="test.event",
+                    user_id="test-user",
+                    resource="test-resource",
+                    decision="allow",
+                    context=large_context,
+                )
+                assert result is False  # Should be rejected
 
             await publisher.stop()
 

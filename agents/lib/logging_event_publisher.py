@@ -24,11 +24,12 @@ Integration:
 - Integrates with omnidash for real-time log visualization
 - Replaces/augments file-based logging throughout codebase
 
-Performance Targets:
+Performance Characteristics:
 - Publish time: <10ms p95
 - Memory overhead: <10MB
 - Success rate: >99%
 - Non-blocking: Never blocks application execution
+- Maximum payload size: 1MB (oversized payloads rejected)
 
 Created: 2025-11-13
 Reference: EVENT_ALIGNMENT_PLAN.md Phase 2 (Tasks 2.1, 2.2, 2.3)
@@ -55,6 +56,9 @@ from prometheus_client import Counter, Gauge, Histogram
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Maximum payload size (1MB)
+MAX_PAYLOAD_SIZE = 1024 * 1024
 
 
 # Prometheus Metrics
@@ -335,6 +339,56 @@ class LoggingEventPublisher:
                 raise
             raise ValueError(f"context must be JSON-serializable: {e}") from e
 
+    def _sanitize_context(self, context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Remove potential PII and sensitive data from context.
+
+        This method redacts values for known sensitive keys to prevent
+        accidental logging of passwords, API keys, tokens, and other
+        sensitive information to Kafka.
+
+        Args:
+            context: Context dictionary to sanitize
+
+        Returns:
+            Sanitized context with sensitive values redacted
+
+        Example:
+            >>> context = {"user": "john", "password": "secret123", "api_key": "abc"}
+            >>> sanitized = publisher._sanitize_context(context)
+            >>> sanitized
+            {'user': 'john', 'password': '<redacted>', 'api_key': '<redacted>'}
+        """
+        if not context:
+            return {}
+
+        # Known sensitive keys to redact (case-insensitive)
+        sensitive_keys = {
+            "password",
+            "api_key",
+            "token",
+            "secret",
+            "ssn",
+            "email",
+            "credit_card",
+            "apikey",
+            "api-key",
+            "auth",
+            "authorization",
+            "private_key",
+            "access_token",
+            "refresh_token",
+            "bearer",
+            "jwt",
+            "session",
+            "cookie",
+        }
+
+        return {
+            k: "<redacted>" if k.lower() in sensitive_keys else v
+            for k, v in context.items()
+        }
+
     async def publish_application_log(
         self,
         service_name: str,
@@ -365,7 +419,13 @@ class LoggingEventPublisher:
             tenant_id: Optional tenant identifier (defaults to TENANT_ID env var or "default")
 
         Returns:
-            True if event published successfully, False otherwise
+            bool: True if published successfully, False if failed or
+                  payload exceeds 1MB size limit.
+
+        Note:
+            The context dictionary is automatically sanitized to remove
+            potential PII and sensitive data. Keys matching known sensitive
+            patterns (password, api_key, token, etc.) will be redacted.
 
         Example:
             success = await publisher.publish_application_log(
@@ -398,6 +458,9 @@ class LoggingEventPublisher:
             # Generate timestamp once for consistent timing
             timestamp = datetime.now(UTC).isoformat()
 
+            # Sanitize context to remove PII and sensitive data
+            sanitized_context = self._sanitize_context(context)
+
             # Create event envelope
             envelope = self._create_application_log_envelope(
                 service_name=service_name,
@@ -406,11 +469,22 @@ class LoggingEventPublisher:
                 logger_name=logger_name,
                 message=message,
                 code=code,
-                context=context or {},
+                context=sanitized_context,
                 correlation_id=correlation_id,
                 tenant_id=tenant_id,
                 timestamp=timestamp,
             )
+
+            # Validate payload size
+            payload_bytes = json.dumps(envelope).encode("utf-8")
+            payload_size = len(payload_bytes)
+
+            if payload_size > MAX_PAYLOAD_SIZE:
+                self.logger.warning(
+                    f"Payload size {payload_size} bytes exceeds limit "
+                    f"{MAX_PAYLOAD_SIZE} bytes, rejecting event"
+                )
+                return False
 
             # Publish event with partition key (service_name for application logs)
             partition_key = service_name.encode("utf-8")
@@ -525,7 +599,13 @@ class LoggingEventPublisher:
             context: Optional context dictionary (additional metadata)
 
         Returns:
-            True if event published successfully, False otherwise
+            bool: True if published successfully, False if failed or
+                  payload exceeds 1MB size limit.
+
+        Note:
+            The context dictionary is automatically sanitized to remove
+            potential PII and sensitive data. Keys matching known sensitive
+            patterns (password, api_key, token, etc.) will be redacted.
 
         Example:
             async with LoggingEventPublisherContext() as publisher:
@@ -555,6 +635,9 @@ class LoggingEventPublisher:
         start_time = time.time()
 
         try:
+            # Sanitize context to remove PII and sensitive data
+            sanitized_context = self._sanitize_context(context)
+
             # Create event envelope
             envelope = self._create_audit_log_envelope(
                 tenant_id=tenant_id,
@@ -563,8 +646,19 @@ class LoggingEventPublisher:
                 resource=resource,
                 outcome=outcome,
                 correlation_id=correlation_id,
-                context=context or {},
+                context=sanitized_context,
             )
+
+            # Validate payload size
+            payload_bytes = json.dumps(envelope).encode("utf-8")
+            payload_size = len(payload_bytes)
+
+            if payload_size > MAX_PAYLOAD_SIZE:
+                self.logger.warning(
+                    f"Payload size {payload_size} bytes exceeds limit "
+                    f"{MAX_PAYLOAD_SIZE} bytes, rejecting event"
+                )
+                return False
 
             # Publish event with partition key (tenant_id for audit logs)
             partition_key = tenant_id.encode("utf-8")
@@ -669,7 +763,13 @@ class LoggingEventPublisher:
             context: Optional context dictionary (additional metadata)
 
         Returns:
-            True if event published successfully, False otherwise
+            bool: True if published successfully, False if failed or
+                  payload exceeds 1MB size limit.
+
+        Note:
+            The context dictionary is automatically sanitized to remove
+            potential PII and sensitive data. Keys matching known sensitive
+            patterns (password, api_key, token, etc.) will be redacted.
 
         Example:
             async with LoggingEventPublisherContext() as publisher:
@@ -699,6 +799,9 @@ class LoggingEventPublisher:
         start_time = time.time()
 
         try:
+            # Sanitize context to remove PII and sensitive data
+            sanitized_context = self._sanitize_context(context)
+
             # Create event envelope
             envelope = self._create_security_log_envelope(
                 tenant_id=tenant_id,
@@ -707,8 +810,19 @@ class LoggingEventPublisher:
                 resource=resource,
                 decision=decision,
                 correlation_id=correlation_id,
-                context=context or {},
+                context=sanitized_context,
             )
+
+            # Validate payload size
+            payload_bytes = json.dumps(envelope).encode("utf-8")
+            payload_size = len(payload_bytes)
+
+            if payload_size > MAX_PAYLOAD_SIZE:
+                self.logger.warning(
+                    f"Payload size {payload_size} bytes exceeds limit "
+                    f"{MAX_PAYLOAD_SIZE} bytes, rejecting event"
+                )
+                return False
 
             # Publish event with partition key (tenant_id for security logs)
             partition_key = tenant_id.encode("utf-8")

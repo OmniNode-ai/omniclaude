@@ -107,6 +107,86 @@ async with LoggingEventPublisherContext() as publisher:
     # Publisher automatically started and stopped
 ```
 
+## Adoption Strategy
+
+### Recommended Rollout
+
+**Phase 1 (Week 1)**: Critical Services
+- Agent routing service
+- Agent execution coordinator
+- Intelligence collector
+
+**Phase 2 (Week 2-3)**: High-Value Logging
+- Quality gate validation
+- Provider selection
+- Performance metrics
+
+**Phase 3 (Week 4+)**: General Adoption
+- Remaining services gradually adopt dual logging
+- File logging remains available (no forced migration)
+
+### Best Practices
+
+- **New services** should use dual logging from day 1
+- **Dual logging** is the recommended pattern (not a temporary migration step)
+- **File logging** will NOT be deprecated
+- **Migration is optional** - use event logging where it adds value
+
+### Prioritization Guide
+
+Use event logging for:
+- ✅ Audit trails (compliance requirements)
+- ✅ Security events (incident response)
+- ✅ Performance metrics (analytics)
+- ✅ Cross-service correlation (distributed tracing)
+
+Consider skipping for:
+- ⚠️ High-volume debug logs (>1000/sec per service)
+- ⚠️ Temporary development logging
+- ⚠️ Legacy services with complex refactoring
+
+## Architecture
+
+### Event Flow
+
+```mermaid
+sequenceDiagram
+    participant Service
+    participant Publisher as LoggingEventPublisher
+    participant Kafka as Redpanda
+    participant Omnidash
+
+    Service->>Publisher: publish_application_log()
+    Publisher->>Publisher: Create OnexEnvelopeV1
+    Publisher->>Publisher: Validate & Sanitize
+    Publisher->>Kafka: send_and_wait(topic, envelope)
+    Kafka-->>Publisher: ack
+    Publisher-->>Service: True (success)
+
+    Kafka->>Omnidash: Stream events
+    Omnidash->>Omnidash: Display logs in UI
+```
+
+### Components
+
+**LoggingEventPublisher**
+- Async Kafka producer (aiokafka)
+- OnexEnvelopeV1 format generation
+- PII sanitization
+- Graceful degradation
+
+**Redpanda (Kafka)**
+- Event bus
+- Topic: `logging.{type}.v1`
+- Retention: 7 days (default)
+- Compression: gzip
+
+**Omnidash**
+- Log aggregation UI
+- Real-time streaming
+- Search and filtering
+- Event correlation
+
 ## Event Types
 
 ### 1. Application Logs (`omninode.logging.application.v1`)
@@ -742,6 +822,76 @@ For each service adopting event-based logging:
 - [ ] Set up monitoring/alerts for logging failures
 - [ ] Document service-specific logging conventions
 - [ ] Update runbooks with event-based troubleshooting steps
+
+## Production Deployment Checklist
+
+### Pre-Deployment
+
+Infrastructure:
+- [ ] Kafka cluster configured with appropriate retention (7 days recommended)
+- [ ] Kafka topics created with correct partition count
+- [ ] Kafka authentication configured (SASL/SCRAM if required)
+- [ ] Network connectivity verified from all services
+
+Monitoring:
+- [ ] Prometheus metrics exported and scraped
+- [ ] Grafana dashboards created for logging metrics
+- [ ] Alert rules configured:
+  - High error rate (>10 events/min with `status=error`)
+  - Publish latency > 100ms (p95)
+  - Kafka connection failures
+
+Integration:
+- [ ] Omnidash configured to consume logging topics
+- [ ] Log retention policies aligned with compliance requirements
+- [ ] PII scrubbing verified for sensitive services
+
+Testing:
+- [ ] Load testing completed (>1000 events/sec for 10 minutes)
+- [ ] Failover tested (Kafka down, publisher degradation verified)
+- [ ] Large payload handling tested (1MB limit enforcement)
+
+### Deployment
+
+- [ ] Deploy to staging first
+- [ ] Verify events in Omnidash staging instance
+- [ ] Monitor Kafka lag and consumer group health
+- [ ] Gradual rollout (10% → 50% → 100%)
+
+### Post-Deployment Monitoring
+
+**Metrics to Track**:
+- `logging_events_published_total` (by event_type, status)
+- `logging_publish_latency_seconds` (p50, p95, p99)
+- `logging_kafka_errors_total` (by error_type)
+- `logging_publisher_started` (gauge - should be 1)
+
+**Kafka Metrics**:
+- Broker lag
+- Producer connection count
+- Topic size and retention
+
+**Alerts**:
+- Error rate > 10/min for 5 minutes
+- p95 latency > 100ms for 5 minutes
+- Kafka connection failures
+- Publisher stopped unexpectedly
+
+### Rollback Plan
+
+- [ ] Feature flag `KAFKA_ENABLE_LOGGING_EVENTS=false` tested
+- [ ] File logging confirmed as fallback
+- [ ] Rollback procedure documented
+- [ ] Zero-downtime rollback tested
+
+### Production Readiness Criteria
+
+All must be met before production deployment:
+- ✅ All pre-deployment checks passed
+- ✅ Staging tested for 24 hours without issues
+- ✅ Monitoring and alerts configured
+- ✅ Runbook created for common issues
+- ✅ On-call team trained on troubleshooting
 
 ## Troubleshooting
 
