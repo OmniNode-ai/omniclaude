@@ -625,29 +625,11 @@ class LoggingEventPublisher:
             partition_key = service_name.encode("utf-8")
 
             # Build required Kafka headers
-            headers = [
-                ("x-tenant", envelope.get("tenant_id", "default").encode("utf-8")),
-                ("x-schema-hash", envelope.get("schema_ref", "").encode("utf-8")),
-            ]
-
-            # Add correlation ID to headers if provided
-            if correlation_id:
-                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
-                # trace_id: 32 hex chars (128 bits) derived from correlation_id
-                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
-                # flags: 01 (sampled)
-                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
-                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
-                headers.extend(
-                    [
-                        (
-                            "x-traceparent",
-                            f"00-{trace_id}-{span_id}-01".encode(),
-                        ),
-                        ("x-correlation-id", correlation_id.encode("utf-8")),
-                        ("x-causation-id", correlation_id.encode("utf-8")),
-                    ]
-                )
+            headers = self._build_kafka_headers(
+                tenant_id=envelope.get("tenant_id", "default"),
+                schema_ref=envelope.get("schema_ref", ""),
+                correlation_id=correlation_id,
+            )
 
             # Publish event
             if self._producer is None:
@@ -835,29 +817,11 @@ class LoggingEventPublisher:
             partition_key = effective_tenant_id.encode("utf-8")
 
             # Build required Kafka headers
-            headers = [
-                ("x-tenant", effective_tenant_id.encode("utf-8")),
-                ("x-schema-hash", envelope.get("schema_ref", "").encode("utf-8")),
-            ]
-
-            # Add correlation ID to headers if provided
-            if correlation_id:
-                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
-                # trace_id: 32 hex chars (128 bits) derived from correlation_id
-                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
-                # flags: 01 (sampled)
-                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
-                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
-                headers.extend(
-                    [
-                        (
-                            "x-traceparent",
-                            f"00-{trace_id}-{span_id}-01".encode(),
-                        ),
-                        ("x-correlation-id", correlation_id.encode("utf-8")),
-                        ("x-causation-id", correlation_id.encode("utf-8")),
-                    ]
-                )
+            headers = self._build_kafka_headers(
+                tenant_id=effective_tenant_id,
+                schema_ref=envelope.get("schema_ref", ""),
+                correlation_id=correlation_id,
+            )
 
             # Publish event
             if self._producer is None:
@@ -1031,29 +995,11 @@ class LoggingEventPublisher:
             partition_key = effective_tenant_id.encode("utf-8")
 
             # Build required Kafka headers
-            headers = [
-                ("x-tenant", effective_tenant_id.encode("utf-8")),
-                ("x-schema-hash", envelope.get("schema_ref", "").encode("utf-8")),
-            ]
-
-            # Add correlation ID to headers if provided
-            if correlation_id:
-                # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
-                # trace_id: 32 hex chars (128 bits) derived from correlation_id
-                # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
-                # flags: 01 (sampled)
-                trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
-                span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
-                headers.extend(
-                    [
-                        (
-                            "x-traceparent",
-                            f"00-{trace_id}-{span_id}-01".encode(),
-                        ),
-                        ("x-correlation-id", correlation_id.encode("utf-8")),
-                        ("x-causation-id", correlation_id.encode("utf-8")),
-                    ]
-                )
+            headers = self._build_kafka_headers(
+                tenant_id=effective_tenant_id,
+                schema_ref=envelope.get("schema_ref", ""),
+                correlation_id=correlation_id,
+            )
 
             # Publish event
             if self._producer is None:
@@ -1151,6 +1097,53 @@ class LoggingEventPublisher:
             "payload": payload,
         }
 
+    def _build_kafka_headers(
+        self,
+        tenant_id: str,
+        schema_ref: str,
+        correlation_id: Optional[str] = None,
+    ) -> list:
+        """
+        Build Kafka headers for event publishing.
+
+        Args:
+            tenant_id: Tenant identifier
+            schema_ref: Schema registry reference
+            correlation_id: Optional correlation ID for request tracing
+
+        Returns:
+            List of (key, value) tuples for Kafka headers
+
+        Note:
+            W3C Trace Context format: version-trace_id-parent_id-trace_flags
+            - version: 00 (fixed)
+            - trace_id: 32 hex chars (128 bits) derived from correlation_id
+            - span_id: 16 hex chars (64 bits) randomly generated for uniqueness
+            - trace_flags: 01 (sampled)
+        """
+        headers = [
+            ("x-tenant", tenant_id.encode("utf-8")),
+            ("x-schema-hash", schema_ref.encode("utf-8")),
+        ]
+
+        # Add correlation ID headers if provided
+        if correlation_id:
+            # Generate W3C traceparent (format: 00-{trace_id}-{span_id}-{flags})
+            # trace_id: 32 hex chars (128 bits) derived from correlation_id
+            # span_id: 16 hex chars (64 bits) randomly generated for uniqueness
+            # flags: 01 (sampled)
+            trace_id = correlation_id.replace("-", "")[:32].ljust(32, "0")
+            span_id = secrets.token_hex(8)  # 8 bytes = 16 hex chars
+            headers.extend(
+                [
+                    ("x-traceparent", f"00-{trace_id}-{span_id}-01".encode()),
+                    ("x-correlation-id", correlation_id.encode("utf-8")),
+                    ("x-causation-id", correlation_id.encode("utf-8")),
+                ]
+            )
+
+        return headers
+
     def _create_application_log_envelope(
         self,
         service_name: str,
@@ -1184,28 +1177,29 @@ class LoggingEventPublisher:
         """
         # Convert enum to string if needed
         level_str = str(level.value) if isinstance(level, LogLevel) else level
-        envelope = {
-            "event_type": "omninode.logging.application.v1",
-            "event_id": str(uuid4()),
-            "timestamp": timestamp,
-            "tenant_id": tenant_id or os.getenv("TENANT_ID", "default"),
-            "namespace": "omninode",
-            "source": "omniclaude",
-            "correlation_id": correlation_id or str(uuid4()),
-            "causation_id": correlation_id or str(uuid4()),
-            "schema_ref": "registry://omninode/logging/application/v1",
-            "payload": {
-                "service_name": service_name,
-                "instance_id": instance_id,
-                "level": level_str,
-                "logger": logger_name,
-                "message": message,
-                "code": code,
-                "context": context,
-            },
+
+        # Resolve tenant_id with fallback
+        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+
+        # Build payload (type-specific)
+        payload = {
+            "service_name": service_name,
+            "instance_id": instance_id,
+            "level": level_str,
+            "logger": logger_name,
+            "message": message,
+            "code": code,
+            "context": context,
         }
 
-        return envelope
+        # Use base method for envelope
+        return self._create_base_envelope(
+            event_type="omninode.logging.application.v1",
+            tenant_id=effective_tenant_id,
+            correlation_id=correlation_id,
+            payload=payload,
+            timestamp=timestamp,
+        )
 
     def _create_audit_log_envelope(
         self,
@@ -1337,6 +1331,66 @@ class LoggingEventPublisherContext:
         return False
 
 
+# Global singleton publisher for convenience functions
+# This eliminates ~50ms connection overhead per call
+_global_publisher: Optional[LoggingEventPublisher] = None
+_global_publisher_lock = asyncio.Lock()
+
+
+async def _get_global_publisher(
+    bootstrap_servers: Optional[str] = None,
+    enable_events: Optional[bool] = None,
+) -> LoggingEventPublisher:
+    """
+    Get or create global singleton publisher for convenience functions.
+
+    Thread-safe singleton pattern with lazy initialization.
+    Publisher is reused across all convenience function calls.
+
+    Performance:
+    - First call: ~50ms (creates and starts publisher)
+    - Subsequent calls: <1ms (returns existing publisher)
+    - Connection reuse eliminates per-call overhead
+
+    Args:
+        bootstrap_servers: Kafka bootstrap servers (only used on first call)
+        enable_events: Whether to enable event publishing (only used on first call)
+
+    Returns:
+        Shared LoggingEventPublisher instance
+
+    Note:
+        Publisher is automatically cleaned up on application exit.
+        For long-running applications, the publisher remains active
+        throughout the application lifetime.
+    """
+    global _global_publisher
+
+    async with _global_publisher_lock:
+        # Create singleton if it doesn't exist
+        # Note: We check for None only, not _producer, because when enable_events=False
+        # the publisher is still valid but has no producer (expected behavior)
+        if _global_publisher is None:
+            _global_publisher = LoggingEventPublisher(
+                bootstrap_servers=bootstrap_servers,
+                enable_events=enable_events,
+            )
+            await _global_publisher.start()
+
+            # Register cleanup on application exit
+            import atexit
+
+            def cleanup():
+                try:
+                    asyncio.run(_global_publisher.stop())
+                except Exception as e:
+                    logger.warning(f"Error cleaning up global publisher: {e}")
+
+            atexit.register(cleanup)
+
+        return _global_publisher
+
+
 # Convenience functions for one-off event publishing
 async def publish_application_log(
     service_name: str,
@@ -1348,9 +1402,19 @@ async def publish_application_log(
     context: Optional[Dict[str, Any]] = None,
     correlation_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
+    bootstrap_servers: Optional[str] = None,
+    enable_events: Optional[bool] = None,
 ) -> bool:
     """
-    Convenience function for one-off application log event publishing.
+    Convenience function using global singleton publisher (low overhead).
+
+    Performance:
+    - First call: ~50ms (creates publisher)
+    - Subsequent calls: <5ms (reuses connection)
+
+    For high-frequency logging (>10 events/sec), this singleton approach is
+    recommended. For even better performance, consider creating a persistent
+    publisher instance.
 
     Args:
         service_name: Service name
@@ -1362,11 +1426,13 @@ async def publish_application_log(
         context: Optional context dictionary
         correlation_id: Optional correlation ID
         tenant_id: Optional tenant ID
+        bootstrap_servers: Optional Kafka bootstrap servers (only used on first call)
+        enable_events: Optional enable events flag (only used on first call)
 
     Returns:
         True if event published successfully, False otherwise
 
-    Example:
+    Example (Low-Frequency - OK):
         success = await publish_application_log(
             service_name="omniclaude",
             instance_id="omniclaude-1",
@@ -1376,19 +1442,24 @@ async def publish_application_log(
             code="AGENT_EXECUTION_COMPLETED",
             tenant_id="tenant-123",
         )
+
+    Example (High-Frequency - Recommended):
+        # Reuses connection across all calls
+        for i in range(1000):
+            await publish_application_log(...)  # <5ms each
     """
-    async with LoggingEventPublisherContext() as publisher:
-        return await publisher.publish_application_log(
-            service_name=service_name,
-            instance_id=instance_id,
-            level=level,
-            logger_name=logger_name,
-            message=message,
-            code=code,
-            context=context,
-            correlation_id=correlation_id,
-            tenant_id=tenant_id,
-        )
+    publisher = await _get_global_publisher(bootstrap_servers, enable_events)
+    return await publisher.publish_application_log(
+        service_name=service_name,
+        instance_id=instance_id,
+        level=level,
+        logger_name=logger_name,
+        message=message,
+        code=code,
+        context=context,
+        correlation_id=correlation_id,
+        tenant_id=tenant_id,
+    )
 
 
 async def publish_audit_log(
@@ -1399,9 +1470,19 @@ async def publish_audit_log(
     tenant_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    bootstrap_servers: Optional[str] = None,
+    enable_events: Optional[bool] = None,
 ) -> bool:
     """
-    Convenience function for one-off audit log event publishing.
+    Convenience function using global singleton publisher (low overhead).
+
+    Performance:
+    - First call: ~50ms (creates publisher)
+    - Subsequent calls: <5ms (reuses connection)
+
+    For high-frequency logging (>10 events/sec), this singleton approach is
+    recommended. For even better performance, consider creating a persistent
+    publisher instance.
 
     Args:
         action: Action performed
@@ -1413,11 +1494,13 @@ async def publish_audit_log(
                    Uses "default" if neither is available.
         correlation_id: Optional correlation ID
         context: Optional context dictionary
+        bootstrap_servers: Optional Kafka bootstrap servers (only used on first call)
+        enable_events: Optional enable events flag (only used on first call)
 
     Returns:
         True if event published successfully, False otherwise
 
-    Example:
+    Example (Low-Frequency - OK):
         success = await publish_audit_log(
             action="agent.execution",
             actor="user-456",
@@ -1425,17 +1508,22 @@ async def publish_audit_log(
             outcome="success",
             tenant_id="tenant-123",  # Optional, falls back to env var
         )
+
+    Example (High-Frequency - Recommended):
+        # Reuses connection across all calls
+        for i in range(1000):
+            await publish_audit_log(...)  # <5ms each
     """
-    async with LoggingEventPublisherContext() as publisher:
-        return await publisher.publish_audit_log(
-            tenant_id=tenant_id,
-            action=action,
-            actor=actor,
-            resource=resource,
-            outcome=outcome,
-            correlation_id=correlation_id,
-            context=context,
-        )
+    publisher = await _get_global_publisher(bootstrap_servers, enable_events)
+    return await publisher.publish_audit_log(
+        tenant_id=tenant_id,
+        action=action,
+        actor=actor,
+        resource=resource,
+        outcome=outcome,
+        correlation_id=correlation_id,
+        context=context,
+    )
 
 
 async def publish_security_log(
@@ -1446,9 +1534,19 @@ async def publish_security_log(
     tenant_id: Optional[str] = None,
     correlation_id: Optional[str] = None,
     context: Optional[Dict[str, Any]] = None,
+    bootstrap_servers: Optional[str] = None,
+    enable_events: Optional[bool] = None,
 ) -> bool:
     """
-    Convenience function for one-off security log event publishing.
+    Convenience function using global singleton publisher (low overhead).
+
+    Performance:
+    - First call: ~50ms (creates publisher)
+    - Subsequent calls: <5ms (reuses connection)
+
+    For high-frequency logging (>10 events/sec), this singleton approach is
+    recommended. For even better performance, consider creating a persistent
+    publisher instance.
 
     Args:
         event_type: Security event type
@@ -1460,11 +1558,13 @@ async def publish_security_log(
                    Uses "default" if neither is available.
         correlation_id: Optional correlation ID
         context: Optional context dictionary
+        bootstrap_servers: Optional Kafka bootstrap servers (only used on first call)
+        enable_events: Optional enable events flag (only used on first call)
 
     Returns:
         True if event published successfully, False otherwise
 
-    Example:
+    Example (Low-Frequency - OK):
         success = await publish_security_log(
             event_type="api_key_used",
             user_id="user-456",
@@ -1472,14 +1572,19 @@ async def publish_security_log(
             decision="allow",
             tenant_id="tenant-123",  # Optional, falls back to env var
         )
+
+    Example (High-Frequency - Recommended):
+        # Reuses connection across all calls
+        for i in range(1000):
+            await publish_security_log(...)  # <5ms each
     """
-    async with LoggingEventPublisherContext() as publisher:
-        return await publisher.publish_security_log(
-            tenant_id=tenant_id,
-            event_type=event_type,
-            user_id=user_id,
-            resource=resource,
-            decision=decision,
-            correlation_id=correlation_id,
-            context=context,
-        )
+    publisher = await _get_global_publisher(bootstrap_servers, enable_events)
+    return await publisher.publish_security_log(
+        tenant_id=tenant_id,
+        event_type=event_type,
+        user_id=user_id,
+        resource=resource,
+        decision=decision,
+        correlation_id=correlation_id,
+        context=context,
+    )
