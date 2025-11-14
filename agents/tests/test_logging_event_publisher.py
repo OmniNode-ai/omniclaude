@@ -927,6 +927,55 @@ class TestLoggingEventPublisher:
             assert context["normal_field"] == "value"
 
     @pytest.mark.asyncio
+    async def test_context_sanitization_regex_patterns(
+        self, publisher_config, mock_kafka_producer
+    ) -> None:
+        """Test that regex patterns detect sensitive keys (e.g., keys ending with _key, _token, _secret, password)."""
+        with patch(
+            "agents.lib.logging_event_publisher.AIOKafkaProducer",
+            return_value=mock_kafka_producer,
+        ):
+            publisher = LoggingEventPublisher(**publisher_config)
+            await publisher.start()
+
+            # Publish with keys matching regex pattern
+            await publisher.publish_application_log(
+                service_name="omniclaude",
+                instance_id="omniclaude-1",
+                level="INFO",
+                logger_name="test.logger",
+                message="Test regex pattern matching",
+                code="TEST_REGEX",
+                context={
+                    "database_password": "db_secret_123",  # Ends with "password"
+                    "jwt_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",  # Ends with "_token"
+                    "oauth_secret": "oauth_value_456",  # Ends with "_secret"
+                    "stripe_key": "sk_live_abc123",  # Ends with "_key"
+                    "github_api_key": "ghp_xyz789",  # Ends with "_key"
+                    "service_name": "omniclaude",  # Non-sensitive - does NOT match pattern
+                    "request_id": "req-12345",  # Non-sensitive - does NOT match pattern
+                    "duration_ms": 567,  # Non-sensitive - does NOT match pattern
+                },
+            )
+
+            # Extract envelope
+            call_args = mock_kafka_producer.send_and_wait.call_args
+            envelope = call_args.kwargs["value"]
+            context = envelope["payload"]["context"]
+
+            # Verify regex pattern matches are redacted
+            assert context["database_password"] == "[REDACTED]"
+            assert context["jwt_token"] == "[REDACTED]"
+            assert context["oauth_secret"] == "[REDACTED]"
+            assert context["stripe_key"] == "[REDACTED]"
+            assert context["github_api_key"] == "[REDACTED]"
+
+            # Verify non-sensitive keys are preserved (do NOT match regex pattern)
+            assert context["service_name"] == "omniclaude"
+            assert context["request_id"] == "req-12345"
+            assert context["duration_ms"] == 567
+
+    @pytest.mark.asyncio
     async def test_audit_log_sanitization(
         self, publisher_config, mock_kafka_producer
     ) -> None:

@@ -612,6 +612,69 @@ The following should NEVER appear in `context` or event fields:
 - Raw credit card numbers, SSNs
 - Unencrypted PII (email, phone, address)
 
+### 🛡️ Automatic PII Sanitization
+
+The publisher **automatically redacts** sensitive data from context dictionaries using **two detection methods**:
+
+**1. Hardcoded Sensitive Keys** (exact match, case-insensitive):
+- `password`, `passwd`, `pwd`
+- `secret`, `api_key`, `apikey`, `api-key`
+- `token`, `auth_token`, `access_token`, `refresh_token`
+- `private_key`, `credentials`
+- `ssn`, `credit_card`, `email`
+- `auth`, `authorization`, `bearer`, `jwt`
+- `session`, `cookie`
+
+**2. Regex Pattern Matching** (flexible pattern matching):
+- Any key ending with `_key` (e.g., `stripe_key`, `github_api_key`)
+- Any key ending with `_token` (e.g., `jwt_token`, `oauth_token`)
+- Any key ending with `_secret` (e.g., `oauth_secret`, `client_secret`)
+- Any key ending with `password` (e.g., `database_password`, `admin_password`)
+
+**Example - Automatic Redaction**:
+```python
+await publisher.publish_application_log(
+    service_name="omniclaude",
+    instance_id="omniclaude-1",
+    level="INFO",
+    logger_name="database.connection",
+    message="Database connection established",
+    code="DB_CONNECTED",
+    context={
+        "database_host": "db.example.com",  # Preserved
+        "database_password": "secret123",   # REDACTED (matches regex pattern)
+        "connection_pool_size": 10,         # Preserved
+        "api_key": "sk-abc123",             # REDACTED (matches hardcoded key)
+        "stripe_key": "sk_live_xyz",        # REDACTED (matches regex pattern)
+    },
+)
+
+# Published context will be:
+# {
+#     "database_host": "db.example.com",
+#     "database_password": "[REDACTED]",
+#     "connection_pool_size": 10,
+#     "api_key": "[REDACTED]",
+#     "stripe_key": "[REDACTED]",
+# }
+```
+
+**Nested dictionaries** are recursively sanitized up to 10 levels deep:
+```python
+context = {
+    "user": "john_doe",  # Preserved
+    "auth": {            # Nested sanitization
+        "password": "secret123",      # REDACTED
+        "credentials": {
+            "api_key": "sk-abc",      # REDACTED
+            "normal_field": "value",  # Preserved
+        },
+    },
+}
+```
+
+**Note**: While automatic sanitization provides defense-in-depth protection, **best practice** is to never pass sensitive data to the publisher in the first place.
+
 ### ✅ Safe Practices
 
 1. **Hash sensitive identifiers**:

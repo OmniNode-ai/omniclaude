@@ -42,6 +42,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import secrets
 import time
 from datetime import UTC, datetime
@@ -160,6 +161,12 @@ class LoggingEventPublisher:
     # Kafka publish timeout (5 seconds)
     # Prevents indefinite blocking if broker is slow/unresponsive
     KAFKA_PUBLISH_TIMEOUT_SECONDS = 5.0
+
+    # Sensitive key regex pattern (future enhancement)
+    # Matches any key ending with "_key", "_token", "_secret", or "password"
+    # Case-insensitive matching for flexible PII detection
+    # Example matches: "api_key", "JWT_TOKEN", "db_password", "oauth_secret"
+    SENSITIVE_KEY_PATTERN = re.compile(r".*(key|token|secret|password)$", re.IGNORECASE)
 
     def __init__(
         self,
@@ -508,8 +515,13 @@ class LoggingEventPublisher:
 
         sanitized = {}
         for key, value in context.items():
-            # Check if key is sensitive (case-insensitive)
-            if key.lower() in sensitive_keys:
+            # Check if key is sensitive via:
+            # 1. Hardcoded set (exact case-insensitive match)
+            # 2. Regex pattern (flexible pattern matching for keys ending with common sensitive suffixes)
+            is_sensitive_exact = key.lower() in sensitive_keys
+            is_sensitive_pattern = self.SENSITIVE_KEY_PATTERN.match(key) is not None
+
+            if is_sensitive_exact or is_sensitive_pattern:
                 sanitized[key] = "[REDACTED]"
             # Recursively sanitize nested dictionaries
             elif isinstance(value, dict):
