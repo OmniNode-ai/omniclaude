@@ -38,12 +38,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from services.event_handlers import EventHandlerRegistry, HandlerResult
 
-# Configure logging
+# Configure logging to use secure user-space directory
+log_dir = Path.home() / ".claude" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "hook_event_processor.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler("/tmp/hook_event_processor.log"),
+        logging.FileHandler(log_file),
         logging.StreamHandler(sys.stdout),
     ],
 )

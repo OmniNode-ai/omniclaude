@@ -3,23 +3,39 @@
 Model: Routing Event Envelope
 
 Pydantic model for wrapping routing event payloads with metadata.
-Follows the ModelEventEnvelope pattern from database events.
+Follows the EVENT_BUS_INTEGRATION_GUIDE standard envelope format.
 
 Event Flow:
     All routing events are wrapped in this envelope:
-    - agent.routing.requested.v1 (wraps ModelRoutingRequest)
-    - agent.routing.completed.v1 (wraps ModelRoutingResponse)
-    - agent.routing.failed.v1 (wraps ModelRoutingError)
+    - omninode.agent.routing.requested.v1 (wraps ModelRoutingRequest)
+    - omninode.agent.routing.completed.v1 (wraps ModelRoutingResponse)
+    - omninode.agent.routing.failed.v1 (wraps ModelRoutingError)
+
+Event Naming Convention (per EVENT_BUS_INTEGRATION_GUIDE):
+    Format: {tenant}.{domain}.{entity}.{action}.v{major}
+    Examples:
+    - omninode.agent.routing.requested.v1
+    - omninode.agent.routing.completed.v1
+    - omninode.agent.routing.failed.v1
+
+Partition Key Policy:
+    - Uses correlation_id as partition key
+    - Cardinality: Medium (per request)
+    - Ensures request→response ordering per workflow
 
 Examples:
     Routing request envelope:
     ```python
     envelope = ModelRoutingEventEnvelope(
         event_id="def-456",
-        event_type="AGENT_ROUTING_REQUESTED",
+        event_type="omninode.agent.routing.requested.v1",
         correlation_id="abc-123",
         timestamp="2025-10-30T14:30:00Z",
+        tenant_id="default",
+        namespace="omninode",
         service="polymorphic-agent",
+        causation_id=None,
+        schema_ref="registry://omninode/agent/routing_requested/v1",
         payload=ModelRoutingRequest(
             user_request="optimize my database queries",
             correlation_id="abc-123"
@@ -31,10 +47,14 @@ Examples:
     ```python
     envelope = ModelRoutingEventEnvelope(
         event_id="ghi-789",
-        event_type="AGENT_ROUTING_COMPLETED",
+        event_type="omninode.agent.routing.completed.v1",
         correlation_id="abc-123",
         timestamp="2025-10-30T14:30:00.045Z",
+        tenant_id="default",
+        namespace="omninode",
         service="agent-router-service",
+        causation_id="def-456",
+        schema_ref="registry://omninode/agent/routing_completed/v1",
         payload=ModelRoutingResponse(
             correlation_id="abc-123",
             recommendations=[...]
@@ -43,11 +63,12 @@ Examples:
     ```
 
 Created: 2025-10-30
-Reference: database_event_client.py (ModelEventEnvelope pattern)
+Updated: 2025-11-13 (aligned with EVENT_BUS_INTEGRATION_GUIDE)
+Reference: EVENT_BUS_INTEGRATION_GUIDE.md (Event Schema Standard)
 """
 
 from datetime import UTC, datetime
-from typing import Any, Dict, Generic, TypeVar, Union
+from typing import Any, Dict, Generic, Optional, TypeVar, Union
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -71,42 +92,59 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
     Event envelope for routing events.
 
     Wraps routing payloads with metadata for Kafka event bus.
-    Follows the same pattern as database events for consistency.
+    Follows the EVENT_BUS_INTEGRATION_GUIDE standard envelope format.
 
-    Envelope Structure:
+    Envelope Structure (per EVENT_BUS_INTEGRATION_GUIDE):
         ```
         {
-          "event_id": "unique-event-id",
-          "event_type": "AGENT_ROUTING_REQUESTED|COMPLETED|FAILED",
-          "correlation_id": "unique-request-id",
-          "timestamp": "2025-10-30T14:30:00Z",
+          "event_id": "uuid-v7",
+          "event_type": "omninode.agent.routing.requested|completed|failed.v1",
+          "correlation_id": "uuid-v7",
+          "timestamp": "RFC3339",
+          "tenant_id": "uuid",
+          "namespace": "omninode",
           "service": "polymorphic-agent|agent-router-service",
-          "payload": { ... routing request/response/error ... }
+          "causation_id": "uuid-v7",
+          "schema_ref": "registry://omninode/agent/routing_*/v1",
+          "payload": { ... routing request/response/error ... },
+          "version": "v1"
         }
         ```
 
     Attributes:
         event_id: Unique event identifier (UUID string, auto-generated)
-        event_type: Event type (AGENT_ROUTING_REQUESTED|COMPLETED|FAILED)
-        correlation_id: Request correlation ID for tracing
+        event_type: Event type (omninode.agent.routing.requested|completed|failed.v1)
+        correlation_id: Request correlation ID for tracing (UUID string)
         timestamp: Event timestamp (ISO 8601, auto-generated)
+        tenant_id: Tenant identifier for multi-tenancy (default: "default")
+        namespace: Event namespace (default: "omninode")
         service: Source service name
+        causation_id: Causation event ID for event chains (optional)
+        schema_ref: Schema registry reference
         payload: Event payload (request/response/error)
-        version: Optional event schema version (default: "v1")
+        version: Event schema version (default: "v1")
 
     Validation:
         - event_id: Must be valid UUID string
         - correlation_id: Must be valid UUID string
-        - event_type: Must be valid routing event type
+        - event_type: Must be valid routing event type (lowercase dot notation)
         - timestamp: Must be valid ISO 8601 timestamp
+
+    Partition Key Policy (per EVENT_BUS_INTEGRATION_GUIDE):
+        - Uses correlation_id as partition key
+        - Cardinality: Medium (per request)
+        - Ensures request→response ordering per workflow
 
     Examples:
         ```python
         # Request envelope (auto-generates event_id and timestamp)
         envelope = ModelRoutingEventEnvelope(
-            event_type="AGENT_ROUTING_REQUESTED",
+            event_type="omninode.agent.routing.requested.v1",
             correlation_id="abc-123",
+            tenant_id="default",
+            namespace="omninode",
             service="polymorphic-agent",
+            schema_ref="registry://omninode/agent/routing_requested/v1",
             payload=ModelRoutingRequest(
                 user_request="optimize my database queries",
                 correlation_id="abc-123"
@@ -115,9 +153,13 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
 
         # Response envelope
         envelope = ModelRoutingEventEnvelope(
-            event_type="AGENT_ROUTING_COMPLETED",
+            event_type="omninode.agent.routing.completed.v1",
             correlation_id="abc-123",
+            tenant_id="default",
+            namespace="omninode",
             service="agent-router-service",
+            causation_id="def-456",
+            schema_ref="registry://omninode/agent/routing_completed/v1",
             payload=ModelRoutingResponse(
                 correlation_id="abc-123",
                 recommendations=[...]
@@ -126,9 +168,13 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
 
         # Error envelope
         envelope = ModelRoutingEventEnvelope(
-            event_type="AGENT_ROUTING_FAILED",
+            event_type="omninode.agent.routing.failed.v1",
             correlation_id="abc-123",
+            tenant_id="default",
+            namespace="omninode",
             service="agent-router-service",
+            causation_id="def-456",
+            schema_ref="registry://omninode/agent/routing_failed/v1",
             payload=ModelRoutingError(
                 correlation_id="abc-123",
                 error_code="ROUTING_TIMEOUT",
@@ -147,7 +193,7 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
     )
     event_type: str = Field(
         ...,
-        description="Event type (AGENT_ROUTING_REQUESTED|COMPLETED|FAILED)",
+        description="Event type (omninode.agent.routing.requested|completed|failed.v1)",
     )
     correlation_id: str = Field(
         ...,
@@ -157,10 +203,26 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
         default_factory=lambda: datetime.now(UTC).isoformat(),
         description="Event timestamp (ISO 8601, auto-generated)",
     )
+    tenant_id: str = Field(
+        default="default",
+        description="Tenant identifier for multi-tenancy",
+    )
+    namespace: str = Field(
+        default="omninode",
+        description="Event namespace",
+    )
     service: str = Field(
         ...,
         min_length=1,
         description="Source service name",
+    )
+    causation_id: Optional[str] = Field(
+        None,
+        description="Causation event ID (optional)",
+    )
+    schema_ref: str = Field(
+        ...,
+        description="Schema registry reference",
     )
     payload: Union[
         ModelRoutingRequest, ModelRoutingResponse, ModelRoutingError, Dict[str, Any]
@@ -186,11 +248,11 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
     @field_validator("event_type")
     @classmethod
     def validate_event_type(cls, v: str) -> str:
-        """Validate event_type is a valid routing event type."""
+        """Validate event_type is a valid routing event type (lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE)."""
         valid_types = {
-            "AGENT_ROUTING_REQUESTED",
-            "AGENT_ROUTING_COMPLETED",
-            "AGENT_ROUTING_FAILED",
+            "omninode.agent.routing.requested.v1",
+            "omninode.agent.routing.completed.v1",
+            "omninode.agent.routing.failed.v1",
         }
         if v not in valid_types:
             raise ValueError(f"event_type must be one of {valid_types}, got: {v}")
@@ -212,6 +274,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
         user_request: str,
         correlation_id: str,
         service: str = "polymorphic-agent",
+        tenant_id: str = "default",
+        namespace: str = "omninode",
+        causation_id: Optional[str] = None,
         **kwargs,
     ) -> "ModelRoutingEventEnvelope[ModelRoutingRequest]":
         """
@@ -221,6 +286,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             user_request: User's input text
             correlation_id: Request correlation ID
             service: Source service name (default: "polymorphic-agent")
+            tenant_id: Tenant identifier (default: "default")
+            namespace: Event namespace (default: "omninode")
+            causation_id: Causation event ID (optional)
             **kwargs: Additional fields for ModelRoutingRequest
 
         Returns:
@@ -239,9 +307,13 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             user_request=user_request, correlation_id=correlation_id, **kwargs
         )
         return cls(
-            event_type="AGENT_ROUTING_REQUESTED",
+            event_type="omninode.agent.routing.requested.v1",
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
+            namespace=namespace,
             service=service,
+            causation_id=causation_id,
+            schema_ref="registry://omninode/agent/routing_requested/v1",
             payload=payload,
         )
 
@@ -252,6 +324,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
         recommendations: list,
         routing_metadata: dict,
         service: str = "agent-router-service",
+        tenant_id: str = "default",
+        namespace: str = "omninode",
+        causation_id: Optional[str] = None,
         **kwargs,
     ) -> "ModelRoutingEventEnvelope[ModelRoutingResponse]":
         """
@@ -262,6 +337,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             recommendations: List of agent recommendations
             routing_metadata: Routing metadata dictionary
             service: Source service name (default: "agent-router-service")
+            tenant_id: Tenant identifier (default: "default")
+            namespace: Event namespace (default: "omninode")
+            causation_id: Causation event ID (optional)
             **kwargs: Additional fields for ModelRoutingResponse
 
         Returns:
@@ -295,9 +373,13 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             **kwargs,
         )
         return cls(
-            event_type="AGENT_ROUTING_COMPLETED",
+            event_type="omninode.agent.routing.completed.v1",
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
+            namespace=namespace,
             service=service,
+            causation_id=causation_id,
+            schema_ref="registry://omninode/agent/routing_completed/v1",
             payload=payload,
         )
 
@@ -308,6 +390,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
         error_code: str,
         error_message: str,
         service: str = "agent-router-service",
+        tenant_id: str = "default",
+        namespace: str = "omninode",
+        causation_id: Optional[str] = None,
         **kwargs,
     ) -> "ModelRoutingEventEnvelope[ModelRoutingError]":
         """
@@ -318,6 +403,9 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             error_code: Standard error code
             error_message: Human-readable error message
             service: Source service name (default: "agent-router-service")
+            tenant_id: Tenant identifier (default: "default")
+            namespace: Event namespace (default: "omninode")
+            causation_id: Causation event ID (optional)
             **kwargs: Additional fields for ModelRoutingError
 
         Returns:
@@ -340,9 +428,13 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
             **kwargs,
         )
         return cls(
-            event_type="AGENT_ROUTING_FAILED",
+            event_type="omninode.agent.routing.failed.v1",
             correlation_id=correlation_id,
+            tenant_id=tenant_id,
+            namespace=namespace,
             service=service,
+            causation_id=causation_id,
+            schema_ref="registry://omninode/agent/routing_failed/v1",
             payload=payload,
         )
 
@@ -350,10 +442,14 @@ class ModelRoutingEventEnvelope(BaseModel, Generic[TPayload]):
         json_schema_extra={
             "example": {
                 "event_id": "def-456",
-                "event_type": "AGENT_ROUTING_REQUESTED",
+                "event_type": "omninode.agent.routing.requested.v1",
                 "correlation_id": "abc-123",
                 "timestamp": "2025-10-30T14:30:00Z",
+                "tenant_id": "default",
+                "namespace": "omninode",
                 "service": "polymorphic-agent",
+                "causation_id": None,
+                "schema_ref": "registry://omninode/agent/routing_requested/v1",
                 "payload": {
                     "user_request": "optimize my database queries",
                     "correlation_id": "abc-123",

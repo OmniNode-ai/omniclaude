@@ -243,6 +243,10 @@ class Settings(BaseSettings):
         default=True, description="Enable Kafka event logging"
     )
 
+    kafka_enable_logging_events: bool = Field(
+        default=True, description="Enable logging event publishing to Kafka"
+    )
+
     enable_event_based_discovery: bool = Field(
         default=True, description="Enable event-first pattern discovery"
     )
@@ -606,6 +610,52 @@ class Settings(BaseSettings):
     )
 
     # =========================================================================
+    # QUALITY ENFORCER CONFIGURATION
+    # =========================================================================
+    # Phased rollout control for quality enforcement hook
+
+    enable_phase_1_validation: bool = Field(
+        default=True,
+        description="Enable Phase 1: Fast validation (<100ms)",
+    )
+
+    enable_phase_2_rag: bool = Field(
+        default=False,
+        description="Enable Phase 2: RAG intelligence (<500ms)",
+    )
+
+    enable_phase_3_correction: bool = Field(
+        default=False,
+        description="Enable Phase 3: Correction generation",
+    )
+
+    enable_phase_4_ai_quorum: bool = Field(
+        default=False,
+        description="Enable Phase 4: AI quorum scoring (<1000ms)",
+    )
+
+    performance_budget_seconds: float = Field(
+        default=2.0,
+        ge=0.1,
+        le=10.0,
+        description="Performance budget for quality enforcement in seconds (0.1-10.0)",
+    )
+
+    enforcement_mode: str = Field(
+        default="warn",
+        description="Enforcement mode: 'warn' (allow with warning), 'block' (prevent write), or 'off' (disabled)",
+    )
+
+    @field_validator("enforcement_mode")
+    @classmethod
+    def validate_enforcement_mode(cls, v: str) -> str:
+        """Validate enforcement mode is one of the allowed values."""
+        allowed = ["warn", "block", "off"]
+        if v.lower() not in allowed:
+            raise ValueError(f"Enforcement mode must be one of {allowed}, got '{v}'")
+        return v.lower()
+
+    # =========================================================================
     # OPTIONAL CONFIGURATION
     # =========================================================================
 
@@ -701,6 +751,16 @@ class Settings(BaseSettings):
         description="Runtime environment (development, test, production)",
     )
 
+    debug: bool = Field(
+        default=False,
+        description="Enable debug logging and verbose output",
+    )
+
+    omniclaude_agents_path: Optional[str] = Field(
+        default=None,
+        description="Path to OmniClaude agents directory (defaults to <project_root>/agents)",
+    )
+
     # =========================================================================
     # VALIDATORS
     # =========================================================================
@@ -791,6 +851,23 @@ class Settings(BaseSettings):
             return v
         home_dir = Path.home()
         return str(home_dir / ".claude" / "agent-definitions")
+
+    @field_validator("omniclaude_agents_path", mode="before")
+    @classmethod
+    def resolve_omniclaude_agents_path(cls, v: Optional[str]) -> str:
+        """
+        Resolve OmniClaude agents directory with default.
+
+        Priority:
+        1. OMNICLAUDE_AGENTS_PATH environment variable (explicit override)
+        2. Default: <project_root>/agents/parallel_execution (agent framework location)
+        """
+        if v:
+            return v
+
+        # Get project root (parent of config directory)
+        project_root = Path(__file__).resolve().parent.parent
+        return str(project_root / "agents" / "parallel_execution")
 
     @field_validator("routing_adapter_host", mode="before")
     @classmethod

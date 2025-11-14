@@ -27,38 +27,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+# Determine project root (skills are in ~/.claude/skills, not in project)
+OMNICLAUDE_PATH = Path(
+    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
+)
+if not OMNICLAUDE_PATH.exists():
+    # Fallback to common locations
+    for fallback in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Volumes/PRO-G40/Code/omniclaude"),
+    ]:
+        if fallback.exists():
+            OMNICLAUDE_PATH = fallback
+            break
+
+sys.path.insert(0, str(OMNICLAUDE_PATH))
+from config import settings
+
 # Add _shared to path for utilities
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
-
-# Add lib to path for kafka_config
-sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
-from kafka_config import get_kafka_bootstrap_servers
-
-
-def load_env_file():
-    """Load environment variables from project .env file."""
-    # Calculate project root from this file's location (skills/routing/request-agent-routing/)
-    project_root = Path(__file__).parent.parent.parent.parent.resolve()
-    env_paths = [
-        project_root / ".env",
-        Path.home() / "Code" / "omniclaude" / ".env",
-    ]
-
-    for env_path in env_paths:
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        if key not in os.environ:
-                            os.environ[key] = value.strip('"').strip("'")
-            return
-
-
-# Load .env on import
-load_env_file()
 
 
 class RoutingEventClient:
@@ -70,9 +58,9 @@ class RoutingEventClient:
     """
 
     # Kafka topic names
-    TOPIC_REQUEST = "agent.routing.requested.v1"
-    TOPIC_COMPLETED = "agent.routing.completed.v1"
-    TOPIC_FAILED = "agent.routing.failed.v1"
+    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
+    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
+    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
 
     def __init__(self, bootstrap_servers=None, request_timeout_ms=5000):
         """
@@ -82,7 +70,9 @@ class RoutingEventClient:
             bootstrap_servers: Kafka bootstrap servers
             request_timeout_ms: Default timeout for requests in milliseconds
         """
-        self.bootstrap_servers = bootstrap_servers or get_kafka_bootstrap_servers()
+        self.bootstrap_servers = (
+            bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
+        )
         if not self.bootstrap_servers:
             raise ValueError(
                 "bootstrap_servers must be provided or set via environment variables.\n"

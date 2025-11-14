@@ -37,7 +37,7 @@ Usage:
     )
 
     # Publish to Kafka
-    await producer.send("agent.routing.requested.v1", envelope.model_dump())
+    await producer.send("omninode.agent.routing.requested.v1", envelope.model_dump())
     ```
 
     Or use convenience factory:

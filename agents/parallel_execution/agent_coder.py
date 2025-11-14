@@ -16,9 +16,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
-# Add agents/lib to path for execution logger
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-from agent_execution_mixin import AgentExecutionMixin
+from agents.lib.agent_execution_mixin import AgentExecutionMixin
 
 # Load environment variables from .env file
 try:

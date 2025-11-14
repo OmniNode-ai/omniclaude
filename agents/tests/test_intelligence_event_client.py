@@ -112,13 +112,17 @@ def sample_correlation_id():
 
 @pytest.fixture
 def sample_completed_response(sample_correlation_id):
-    """Sample completed response event."""
+    """Sample completed response event (new EVENT_BUS_INTEGRATION_GUIDE format)."""
     return {
         "event_id": str(uuid4()),
-        "event_type": "CODE_ANALYSIS_COMPLETED",
+        "event_type": "omninode.intelligence.code-analysis.completed.v1",
         "correlation_id": sample_correlation_id,
+        "causation_id": sample_correlation_id,
         "timestamp": datetime.now(UTC).isoformat(),
-        "service": "omniarchon-intelligence",
+        "tenant_id": "default",
+        "namespace": "omninode",
+        "source": "omniarchon-intelligence",
+        "schema_ref": "registry://omninode/intelligence/code_analysis_completed/v1",
         "payload": {
             "source_path": "node_*_effect.py",
             "patterns": [
@@ -145,13 +149,17 @@ def sample_completed_response(sample_correlation_id):
 
 @pytest.fixture
 def sample_failed_response(sample_correlation_id):
-    """Sample failed response event."""
+    """Sample failed response event (new EVENT_BUS_INTEGRATION_GUIDE format)."""
     return {
         "event_id": str(uuid4()),
-        "event_type": "CODE_ANALYSIS_FAILED",
+        "event_type": "omninode.intelligence.code-analysis.failed.v1",
         "correlation_id": sample_correlation_id,
+        "causation_id": sample_correlation_id,
         "timestamp": datetime.now(UTC).isoformat(),
-        "service": "omniarchon-intelligence",
+        "tenant_id": "default",
+        "namespace": "omninode",
+        "source": "omniarchon-intelligence",
+        "schema_ref": "registry://omninode/intelligence/code_analysis_failed/v1",
         "payload": {
             "error_code": "PATTERN_NOT_FOUND",
             "error_message": "No patterns found matching criteria",
@@ -297,10 +305,10 @@ class TestIntelligenceEventClientLifecycle:
         with (
             patch(
                 "agents.lib.intelligence_event_client.AIOKafkaProducer"
-            ) as MockProducer,
+            ) as mock_producer,
             patch(
                 "agents.lib.intelligence_event_client.AIOKafkaConsumer"
-            ) as MockConsumer,
+            ) as mock_consumer,
         ):
             client = IntelligenceEventClient(
                 bootstrap_servers="localhost:29092",
@@ -309,8 +317,8 @@ class TestIntelligenceEventClientLifecycle:
             await client.start()
 
             # Should not create producer/consumer
-            MockProducer.assert_not_called()
-            MockConsumer.assert_not_called()
+            mock_producer.assert_not_called()
+            mock_consumer.assert_not_called()
             assert client._started is False
 
     @pytest.mark.asyncio
@@ -505,10 +513,10 @@ class TestTimeoutAndErrorHandling:
         """Test start() raises KafkaError on connection failure."""
         with patch(
             "agents.lib.intelligence_event_client.AIOKafkaProducer"
-        ) as MockProducer:
+        ) as mock_producer_class:
             mock_producer = AsyncMock()
             mock_producer.start.side_effect = Exception("Connection refused")
-            MockProducer.return_value = mock_producer
+            mock_producer_class.return_value = mock_producer
 
             client = IntelligenceEventClient(bootstrap_servers="localhost:29092")
 
@@ -769,7 +777,7 @@ class TestPayloadCreation:
     """Test request payload creation."""
 
     def test_create_request_payload_structure(self, sample_correlation_id):
-        """Test request payload has correct structure."""
+        """Test request payload has correct structure following EVENT_BUS_INTEGRATION_GUIDE."""
         client = IntelligenceEventClient(bootstrap_servers="localhost:29092")
 
         payload = client._create_request_payload(
@@ -780,11 +788,20 @@ class TestPayloadCreation:
             options={"include_metrics": True},
         )
 
+        # Check complete envelope structure
         assert payload["correlation_id"] == sample_correlation_id
-        assert payload["event_type"] == "CODE_ANALYSIS_REQUESTED"
+        assert (
+            payload["causation_id"] == sample_correlation_id
+        )  # Same for initial request
+        assert (
+            payload["event_type"] == "omninode.intelligence.code-analysis.requested.v1"
+        )
         assert "event_id" in payload
         assert "timestamp" in payload
-        assert payload["service"] == "omniclaude"
+        assert payload["source"] == "omniclaude"
+        assert payload["namespace"] == "omninode"
+        assert "tenant_id" in payload
+        assert "schema_ref" in payload
 
         # Check nested payload
         nested = payload["payload"]
@@ -888,15 +905,20 @@ class TestEdgeCases:
             assert len(results) == 5
 
     def test_topic_names_are_onex_compliant(self):
-        """Test topic names follow ONEX event bus naming convention."""
-        assert IntelligenceEventClient.TOPIC_REQUEST.startswith(
-            "dev.archon-intelligence"
+        """Test topic names follow EVENT_BUS_INTEGRATION_GUIDE naming convention."""
+        # Following standard: {tenant}.{domain}.{entity}.{action}.v{major}
+        # Environment prefix (dev/prod) should be in envelope, not topic name
+        assert (
+            IntelligenceEventClient.TOPIC_REQUEST
+            == "omninode.intelligence.code-analysis.requested.v1"
         )
-        assert IntelligenceEventClient.TOPIC_COMPLETED.startswith(
-            "dev.archon-intelligence"
+        assert (
+            IntelligenceEventClient.TOPIC_COMPLETED
+            == "omninode.intelligence.code-analysis.completed.v1"
         )
-        assert IntelligenceEventClient.TOPIC_FAILED.startswith(
-            "dev.archon-intelligence"
+        assert (
+            IntelligenceEventClient.TOPIC_FAILED
+            == "omninode.intelligence.code-analysis.failed.v1"
         )
 
         # Check versioning

@@ -456,7 +456,7 @@ class TestResultValidation:
         """Test invalid node type raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
             PromptParseResult(
                 node_name="Test",
                 node_type="INVALID",  # Not a valid node type
@@ -471,7 +471,7 @@ class TestResultValidation:
         """Test confidence out of range raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
             PromptParseResult(
                 node_name="Test",
                 node_type="EFFECT",
@@ -486,7 +486,7 @@ class TestResultValidation:
         """Test description too short raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
             PromptParseResult(
                 node_name="Test",
                 node_type="EFFECT",

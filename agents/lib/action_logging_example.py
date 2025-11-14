@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -82,18 +83,31 @@ async def example_agent_with_action_logging():
     logger.info("Example 2: File write with manual timing")
     start_time = time.time()
 
-    # Simulate file writing
+    # Simulate file writing with secure temp file
+    temp_file = tempfile.NamedTemporaryFile(
+        mode="w", delete=False, suffix=".txt", prefix="test_output_"
+    )
+    temp_file_path = temp_file.name
+    temp_file.close()
+
     await asyncio.sleep(0.03)  # 30ms
 
     duration_ms = int((time.time() - start_time) * 1000)
 
     await action_logger.log_tool_call(
         tool_name="Write",
-        tool_parameters={"file_path": "/tmp/test_output.txt", "content_length": 2048},
+        tool_parameters={"file_path": temp_file_path, "content_length": 2048},
         tool_result={"success": True, "bytes_written": 2048},
         duration_ms=duration_ms,
         success=True,
     )
+
+    # Cleanup temp file
+    try:
+        os.unlink(temp_file_path)
+    except Exception:
+        pass
+
     logger.info("✓ Write action logged manually")
 
     # Example 3: Log agent decision
@@ -126,8 +140,14 @@ async def example_agent_with_action_logging():
 
     # Example 4: Log bash command execution
     logger.info("Example 4: Bash command execution")
+    # Use secure temp directory for bash command examples
+    temp_dir = tempfile.mkdtemp(prefix="bash_test_")
     async with action_logger.tool_call(
-        "Bash", tool_parameters={"command": "ls -la /tmp", "working_directory": "/tmp"}
+        "Bash",
+        tool_parameters={
+            "command": f"ls -la {temp_dir}",
+            "working_directory": temp_dir,
+        },
     ) as action:
         # Simulate bash execution
         await asyncio.sleep(0.05)  # 50ms
@@ -135,6 +155,13 @@ async def example_agent_with_action_logging():
         action.set_result(
             {"exit_code": 0, "stdout_length": 1024, "stderr_length": 0, "success": True}
         )
+
+        # Cleanup temp directory
+        try:
+            os.rmdir(temp_dir)
+        except Exception:
+            pass
+
         logger.info("✓ Bash action logged")
 
     # Example 5: Log error
@@ -169,13 +196,21 @@ async def example_agent_with_action_logging():
 
     # Example 7: Log multiple tool calls in sequence
     logger.info("Example 7: Multiple tool calls in sequence")
+    # Use secure temp directory for glob pattern examples
+    glob_temp_dir = tempfile.mkdtemp(prefix="glob_test_")
     for i in range(3):
         async with action_logger.tool_call(
-            "Glob", tool_parameters={"pattern": f"**/*.py", "path": "/tmp"}
+            "Glob", tool_parameters={"pattern": f"**/*.py", "path": glob_temp_dir}
         ) as action:
             await asyncio.sleep(0.01)
             action.set_result({"matches": 10 + i, "success": True})
         logger.info(f"✓ Glob action {i+1} logged")
+
+    # Cleanup temp directory
+    try:
+        os.rmdir(glob_temp_dir)
+    except Exception:
+        pass
 
     logger.info(f"Agent completed (correlation_id: {action_logger.correlation_id})")
     logger.info("All actions logged successfully!")

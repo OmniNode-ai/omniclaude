@@ -12,7 +12,6 @@ Version: 1.0.0
 """
 
 import json
-import os
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -20,9 +19,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Add project root to path for config import
+project_root = (
+    Path(__file__).resolve().parents[2]
+)  # lib → claude_hooks → omniclaude root
+sys.path.insert(0, str(project_root))
+
 # Import existing detection systems
 from agent_detector import AgentDetector
 from ai_agent_selector import AIAgentSelector
+
+from config import settings
 
 
 class SelectionMethod(Enum):
@@ -138,18 +145,17 @@ class HybridAgentSelector:
         }
 
     def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from environment and config file."""
+        """Load configuration from settings and config file."""
+        # Use Pydantic Settings for base configuration
+        # Note: These settings use environment variables automatically
         config = {
-            "enable_ai": os.getenv("ENABLE_AI_AGENT_SELECTION", "true").lower()
-            == "true",
-            "confidence_threshold": float(
-                os.getenv("AI_AGENT_CONFIDENCE_THRESHOLD", "0.8")
-            ),
-            "model_preference": os.getenv("AI_MODEL_PREFERENCE", "auto"),
-            "timeout_ms": int(os.getenv("AI_SELECTION_TIMEOUT_MS", "500")),
+            "enable_ai": settings.enable_ai_agent_selection,
+            "confidence_threshold": settings.ai_agent_confidence_threshold,
+            "model_preference": settings.ai_model_preference,
+            "timeout_ms": settings.ai_selection_timeout_ms,
         }
 
-        # Try to load from config file
+        # Try to load from config file for additional overrides
         config_path = Path.home() / ".claude" / "hooks" / "agent-selector-config.yaml"
         if config_path.exists():
             try:

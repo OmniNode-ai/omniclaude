@@ -9,7 +9,7 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 def test_introspection_template_renders():
     """Test introspection event template renders correctly."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("introspection_event.py.jinja2")
 
     context = {
@@ -41,7 +41,7 @@ def test_introspection_template_renders():
 
 def test_startup_script_template_renders():
     """Test startup script template renders correctly."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("startup_script.py.jinja2")
 
     context = {
@@ -72,7 +72,7 @@ def test_startup_script_template_renders():
 
 def test_introspection_template_all_variables():
     """Test introspection template with comprehensive variable set."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("introspection_event.py.jinja2")
 
     # Test with various node types
@@ -115,7 +115,7 @@ def test_introspection_template_all_variables():
 
 def test_startup_script_template_all_variables():
     """Test startup script template with comprehensive variable set."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("startup_script.py.jinja2")
 
     test_cases = [
@@ -143,7 +143,7 @@ def test_startup_script_template_all_variables():
 
 def test_template_indentation():
     """Test that introspection template maintains proper indentation."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("introspection_event.py.jinja2")
 
     context = {
@@ -171,7 +171,7 @@ def test_template_indentation():
 
 def test_startup_script_executable():
     """Test that startup script has proper shebang."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("startup_script.py.jinja2")
 
     context = {
@@ -192,7 +192,7 @@ def test_startup_script_executable():
 
 def test_orchestrator_workflow_events_template_renders():
     """Test orchestrator workflow events template renders correctly (Day 4)."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("orchestrator_workflow_events.py.jinja2")
 
     context = {
@@ -246,7 +246,7 @@ def test_orchestrator_workflow_events_template_renders():
 
 def test_orchestrator_template_all_node_types():
     """Test that orchestrator template works with various orchestrator types."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("orchestrator_workflow_events.py.jinja2")
 
     test_cases = [
@@ -279,7 +279,7 @@ def test_orchestrator_template_all_node_types():
 
 def test_orchestrator_template_indentation():
     """Test that orchestrator workflow events maintain proper indentation."""
-    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=True)
     template = env.get_template("orchestrator_workflow_events.py.jinja2")
 
     context = {

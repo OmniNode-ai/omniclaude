@@ -3,7 +3,7 @@
 Transformation Event Publisher - Kafka Integration
 
 Publishes agent transformation events to Kafka for async logging to PostgreSQL.
-Lightweight, non-blocking, with graceful degradation if Kafka is unavailable.
+Follows EVENT_BUS_INTEGRATION_PATTERNS standards with OnexEnvelopeV1 wrapping.
 
 Usage:
     from agents.lib.transformation_event_publisher import publish_transformation_event
@@ -21,8 +21,10 @@ Features:
 - Non-blocking async publishing
 - Graceful degradation (logs error but doesn't fail execution)
 - Automatic producer connection management
-- JSON serialization with datetime handling
+- OnexEnvelopeV1 standard event envelope
+- Separate topics per event type (started/completed/failed)
 - Correlation ID tracking for distributed tracing
+- Idempotency support via correlation_id + event_type
 """
 
 import asyncio
@@ -32,10 +34,30 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
+
+
+# Event type enumeration following EVENT_BUS_INTEGRATION_PATTERNS
+class TransformationEventType(str, Enum):
+    """Agent transformation event types with standardized topic routing."""
+
+    STARTED = "omninode.agent.transformation.started.v1"
+    COMPLETED = "omninode.agent.transformation.completed.v1"
+    FAILED = "omninode.agent.transformation.failed.v1"
+
+    def get_topic_name(self) -> str:
+        """
+        Get Kafka topic name for this event type.
+
+        Returns topic in format: omninode.agent.transformation.{action}.v1
+        Following EVENT_BUS_INTEGRATION_PATTERNS standard.
+        """
+        return self.value
+
 
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
@@ -50,6 +72,46 @@ def _get_kafka_bootstrap_servers() -> str:
         servers = "localhost:29092"
         logger.warning(f"KAFKA_BOOTSTRAP_SERVERS not set, using default: {servers}")
     return servers
+
+
+def _create_event_envelope(
+    event_type: TransformationEventType,
+    payload: Dict[str, Any],
+    correlation_id: str,
+    source: str = "omniclaude",
+    tenant_id: str = "default",
+    namespace: str = "omninode",
+    causation_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Create OnexEnvelopeV1 standard event envelope.
+
+    Following EVENT_BUS_INTEGRATION_PATTERNS standards for consistent event structure.
+
+    Args:
+        event_type: Transformation event type enum
+        payload: Event payload containing transformation data
+        correlation_id: Correlation ID for distributed tracing
+        source: Source service name (default: omniclaude)
+        tenant_id: Tenant identifier (default: default)
+        namespace: Event namespace (default: omninode)
+        causation_id: Optional causation ID for event chains
+
+    Returns:
+        Dict containing OnexEnvelopeV1 wrapped event
+    """
+    return {
+        "event_type": event_type.value,
+        "event_id": str(uuid4()),  # Unique event ID for idempotency
+        "timestamp": datetime.now(timezone.utc).isoformat(),  # RFC3339 format
+        "tenant_id": tenant_id,
+        "namespace": namespace,
+        "source": source,
+        "correlation_id": correlation_id,
+        "causation_id": causation_id,
+        "schema_ref": f"registry://{namespace}/agent/transformation_{event_type.name.lower()}/v1",
+        "payload": payload,
+    }
 
 
 async def get_producer_lock():
@@ -135,10 +197,16 @@ async def publish_transformation_event(
     context_size_bytes: Optional[int] = None,
     agent_definition_id: Optional[str | UUID] = None,
     parent_event_id: Optional[str | UUID] = None,
-    event_type: str = "transformation_complete",
+    event_type: TransformationEventType = TransformationEventType.COMPLETED,
+    tenant_id: str = "default",
+    namespace: str = "omninode",
+    causation_id: Optional[str] = None,
 ) -> bool:
     """
-    Publish agent transformation event to Kafka.
+    Publish agent transformation event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
+
+    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to separate topics
+    based on event type (started/completed/failed).
 
     Args:
         source_agent: Original agent identity (e.g., "polymorphic-agent")
@@ -161,13 +229,21 @@ async def publish_transformation_event(
         context_size_bytes: Size of context for performance tracking
         agent_definition_id: Link to agent definition used
         parent_event_id: For nested transformations
-        event_type: Event type (transformation_start, transformation_complete, transformation_failed)
+        event_type: Event type enum (STARTED/COMPLETED/FAILED)
+        tenant_id: Tenant identifier for multi-tenancy
+        namespace: Event namespace for routing
+        causation_id: Causation ID for event chains
 
     Returns:
         bool: True if published successfully, False otherwise
+
+    Note:
+        - Uses correlation_id as partition key for workflow coherence
+        - Events are idempotent using correlation_id + event_type
+        - Gracefully degrades when Kafka unavailable
     """
     try:
-        # Generate IDs if not provided
+        # Generate correlation_id if not provided
         if correlation_id is None:
             correlation_id = str(uuid4())
         else:
@@ -176,14 +252,12 @@ async def publish_transformation_event(
         if session_id is not None:
             session_id = str(session_id)
 
-        # Build event payload
-        event = {
-            "event_type": event_type,
-            "correlation_id": correlation_id,
-            "session_id": session_id,
+        # Build event payload (everything except envelope metadata)
+        payload = {
             "source_agent": source_agent,
             "target_agent": target_agent,
             "transformation_reason": transformation_reason,
+            "session_id": session_id,
             "user_request": user_request,
             "routing_confidence": routing_confidence,
             "routing_strategy": routing_strategy,
@@ -201,12 +275,22 @@ async def publish_transformation_event(
                 str(agent_definition_id) if agent_definition_id else None
             ),
             "parent_event_id": str(parent_event_id) if parent_event_id else None,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
             "started_at": datetime.now(timezone.utc).isoformat(),
         }
 
         # Remove None values to keep payload compact
-        event = {k: v for k, v in event.items() if v is not None}
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        # Wrap payload in OnexEnvelopeV1 standard envelope
+        envelope = _create_event_envelope(
+            event_type=event_type,
+            payload=payload,
+            correlation_id=correlation_id,
+            source="omniclaude",
+            tenant_id=tenant_id,
+            namespace=namespace,
+            causation_id=causation_id,
+        )
 
         # Get producer
         producer = await _get_kafka_producer()
@@ -216,21 +300,29 @@ async def publish_transformation_event(
             )
             return False
 
-        # Publish to Kafka
-        topic = "agent-transformation-events"
+        # Get topic name from event type enum (separate topics per event type)
+        topic = event_type.get_topic_name()
+
+        # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id.encode("utf-8")
 
-        await producer.send_and_wait(topic, value=event, key=partition_key)
+        # Publish to Kafka
+        await producer.send_and_wait(topic, value=envelope, key=partition_key)
 
         logger.debug(
-            f"Published transformation event: {source_agent} → {target_agent} "
-            f"(correlation_id={correlation_id})"
+            f"Published transformation event (OnexEnvelopeV1): {event_type.value} | "
+            f"{source_agent} → {target_agent} | "
+            f"correlation_id={correlation_id} | "
+            f"topic={topic}"
         )
         return True
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution
-        logger.error(f"Failed to publish transformation event: {e}", exc_info=True)
+        logger.error(
+            f"Failed to publish transformation event: {event_type.value if isinstance(event_type, TransformationEventType) else event_type}",
+            exc_info=True,
+        )
         return False
 
 
@@ -245,13 +337,14 @@ async def publish_transformation_start(
     Publish transformation start event.
 
     Convenience method for publishing at the start of transformation.
+    Publishes to topic: omninode.agent.transformation.started.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,
         target_agent=target_agent,
         transformation_reason=transformation_reason,
         correlation_id=correlation_id,
-        event_type="transformation_start",
+        event_type=TransformationEventType.STARTED,
         **kwargs,
     )
 
@@ -268,6 +361,7 @@ async def publish_transformation_complete(
     Publish transformation complete event.
 
     Convenience method for publishing after successful transformation.
+    Publishes to topic: omninode.agent.transformation.completed.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -276,7 +370,7 @@ async def publish_transformation_complete(
         correlation_id=correlation_id,
         transformation_duration_ms=transformation_duration_ms,
         success=True,
-        event_type="transformation_complete",
+        event_type=TransformationEventType.COMPLETED,
         **kwargs,
     )
 
@@ -294,6 +388,7 @@ async def publish_transformation_failed(
     Publish transformation failed event.
 
     Convenience method for publishing after transformation failure.
+    Publishes to topic: omninode.agent.transformation.failed.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -303,7 +398,7 @@ async def publish_transformation_failed(
         error_message=error_message,
         error_type=error_type,
         success=False,
-        event_type="transformation_failed",
+        event_type=TransformationEventType.FAILED,
         **kwargs,
     )
 
@@ -418,22 +513,61 @@ if __name__ == "__main__":
     # Test transformation event publishing
     async def test():
         logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
 
-        # Test transformation complete
-        success = await publish_transformation_complete(
+        correlation_id = str(uuid4())
+
+        # Test transformation start
+        print("Testing transformation start event...")
+        success_start = await publish_transformation_start(
             source_agent="polymorphic-agent",
             target_agent="agent-api-architect",
             transformation_reason="API design task detected",
-            correlation_id=str(uuid4()),
+            correlation_id=correlation_id,
+            routing_confidence=0.92,
+            routing_strategy="fuzzy_match",
+            user_request="Design a REST API for user management",
+        )
+        print(f"Start event published: {success_start}")
+
+        # Test transformation complete
+        print("\nTesting transformation complete event...")
+        success_complete = await publish_transformation_complete(
+            source_agent="polymorphic-agent",
+            target_agent="agent-api-architect",
+            transformation_reason="API design task detected",
+            correlation_id=correlation_id,
             routing_confidence=0.92,
             routing_strategy="fuzzy_match",
             transformation_duration_ms=45,
             user_request="Design a REST API for user management",
         )
+        print(f"Complete event published: {success_complete}")
 
-        print(f"Transformation event published: {success}")
+        # Test transformation failed
+        print("\nTesting transformation failed event...")
+        correlation_id_failed = str(uuid4())
+        success_failed = await publish_transformation_failed(
+            source_agent="polymorphic-agent",
+            target_agent="agent-api-architect",
+            transformation_reason="API design task detected",
+            error_message="Agent initialization failed",
+            error_type="InitializationError",
+            correlation_id=correlation_id_failed,
+        )
+        print(f"Failed event published: {success_failed}")
 
         # Close producer
+        print("\nClosing producer...")
         await close_producer()
+
+        print("\n" + "=" * 60)
+        print("Test Summary:")
+        print(f"  Start Event:    {'✅' if success_start else '❌'}")
+        print(f"  Complete Event: {'✅' if success_complete else '❌'}")
+        print(f"  Failed Event:   {'✅' if success_failed else '❌'}")
+        print("=" * 60)
 
     asyncio.run(test())

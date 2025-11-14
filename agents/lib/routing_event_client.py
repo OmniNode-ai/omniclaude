@@ -136,10 +136,11 @@ class RoutingEventClient:
             )
     """
 
-    # Kafka topic names (following routing_adapter event architecture)
-    TOPIC_REQUEST = "agent.routing.requested.v1"
-    TOPIC_COMPLETED = "agent.routing.completed.v1"
-    TOPIC_FAILED = "agent.routing.failed.v1"
+    # Kafka topic names (following EVENT_BUS_INTEGRATION_GUIDE standard)
+    # Format: omninode.{domain}.{entity}.{action}.v{major}
+    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
+    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
+    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
 
     def __init__(
         self,
@@ -661,11 +662,11 @@ class RoutingEventClient:
                         )
                         continue
 
-                    # Determine event type
+                    # Determine event type (lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE)
                     event_type = response.get("event_type", "")
 
                     if (
-                        event_type == "AGENT_ROUTING_COMPLETED"
+                        event_type == "omninode.agent.routing.completed.v1"
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -699,7 +700,7 @@ class RoutingEventClient:
                             )
 
                     elif (
-                        event_type == "AGENT_ROUTING_FAILED"
+                        event_type == "omninode.agent.routing.failed.v1"
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response

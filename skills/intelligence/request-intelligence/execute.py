@@ -34,10 +34,38 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+# Determine project root dynamically (skills are in ~/.claude/skills, not in project)
+# First check environment variable, then try to find via repository structure
+if os.environ.get("OMNICLAUDE_PATH"):
+    OMNICLAUDE_PATH = Path(os.environ.get("OMNICLAUDE_PATH"))
+else:
+    # Try to find omniclaude by looking for common markers
+    # Skills are typically in ~/.claude/skills, so omniclaude should be findable
+    for search_path in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Users") / os.environ.get("USER", "unknown") / "Code" / "omniclaude",
+    ]:
+        if search_path.exists():
+            OMNICLAUDE_PATH = search_path
+            break
+    else:
+        # Last resort: print error with helpful message
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "error": "Cannot find omniclaude repository",
+                    "hint": "Set OMNICLAUDE_PATH environment variable to the repository root",
+                }
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+sys.path.insert(0, str(OMNICLAUDE_PATH))
+from config import settings
+
 # Add omniclaude agents/lib to path for IntelligenceEventClient
-OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", str(Path(__file__).parent.parent.parent.parent))
-)
 sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
 
 try:
@@ -59,10 +87,6 @@ except ImportError as e:
 # Add _shared to path for helper functions
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id  # noqa: E402
-
-# Add lib to path for kafka_config
-sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
-from kafka_config import get_kafka_bootstrap_servers  # noqa: E402
 
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",
@@ -283,7 +307,7 @@ async def main():
     # Intelligence adapter configuration
     parser.add_argument(
         "--kafka-brokers",
-        default=get_kafka_bootstrap_servers(),
+        default=settings.get_effective_kafka_bootstrap_servers(),
         help="Kafka bootstrap servers (default: from centralized config)",
     )
 

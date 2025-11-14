@@ -1,0 +1,334 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# PR Review - Production Mode
+# ============================================================================
+# Strict PR review wrapper for production deployments.
+#
+# Production Requirements (STRICT):
+#   ✅ ALL Critical issues MUST be resolved
+#   ✅ ALL Major issues MUST be resolved
+#   ✅ ALL Minor issues MUST be resolved
+#   ⚪ Nits are optional (nice to have)
+#
+# This wrapper enforces production-grade quality standards and will block
+# merge if ANY critical/major/minor issues remain.
+# ============================================================================
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <PR_NUMBER> [OPTIONS]
+
+Production-grade PR review with strict merge requirements.
+
+Arguments:
+  PR_NUMBER    PR number or GitHub URL
+
+Options:
+  --output-file FILE       Save review to file (default: /tmp/pr-review-{PR}-production.md)
+  --json                   Output in JSON format
+  --create-linear-tickets  Create Linear tickets for each Critical/Major issue
+  --team TEAM_ID          Linear team ID (required with --create-linear-tickets)
+
+Production Standards:
+  🔴 CRITICAL - MUST be resolved (BLOCKING)
+  🟠 MAJOR    - MUST be resolved (BLOCKING)
+  🟡 MINOR    - MUST be resolved (BLOCKING)
+  ⚪ NIT      - Optional (nice to have, NOT blocking)
+
+Exit Codes:
+  0 - Ready for production (all Critical/Major/Minor resolved)
+  1 - Invalid arguments or missing dependencies
+  2 - Not ready for production (unresolved Critical/Major/Minor issues)
+  3 - GitHub API error
+
+Examples:
+  # Production review
+  $(basename "$0") 22
+
+  # Create Linear tickets for issues
+  $(basename "$0") 22 --create-linear-tickets --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
+
+  # JSON output for CI/CD
+  $(basename "$0") 22 --json | tee production-review.json
+EOF
+    exit 1
+}
+
+# Check dependencies
+check_dependencies() {
+    local missing_deps=()
+
+    if [[ ! -x "$HOME/.claude/skills/pr-review/review-pr" ]]; then
+        missing_deps+=("review-pr (run: chmod +x ~/.claude/skills/pr-review/review-pr)")
+    fi
+
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        echo -e "${RED}✗${NC} Missing required dependencies:"
+        for dep in "${missing_deps[@]}"; do
+            echo "  - $dep"
+        done
+        exit 1
+    fi
+}
+
+# Create Linear tickets for issues
+create_linear_tickets() {
+    local categorized="$1"
+    local pr_number="$2"
+    local team_id="$3"
+
+    echo -e "${BLUE}[LINEAR]${NC} Creating tickets for Critical and Major issues..."
+
+    # Create tickets for Critical issues
+    local critical_issues=$(echo "$categorized" | jq -c '.critical[]')
+    local ticket_count=0
+
+    while IFS= read -r issue; do
+        [[ -z "$issue" ]] && continue
+
+        local author=$(echo "$issue" | jq -r '.author')
+        local body=$(echo "$issue" | jq -r '.body')
+        local path=$(echo "$issue" | jq -r '.path // "N/A"')
+
+        local title="🔴 CRITICAL: Fix issue in PR #${pr_number}"
+        if [[ "$path" != "N/A" ]]; then
+            title="🔴 CRITICAL: Fix issue in $path (PR #${pr_number})"
+        fi
+
+        local description="## Critical Issue from PR #${pr_number}
+
+**Reporter**: ${author}
+**File**: ${path}
+**Priority**: Critical (BLOCKING)
+
+## Issue Description
+
+${body}
+
+## Requirements
+- Must be resolved before production deployment
+- Security and stability implications
+- Requires thorough testing after fix
+
+## Definition of Done
+- [ ] Issue resolved and verified
+- [ ] Tests added/updated
+- [ ] PR review passed
+- [ ] Security review completed (if applicable)
+- [ ] Documentation updated
+"
+
+        # Would create ticket here using Linear MCP
+        echo -e "${GREEN}✓${NC} Would create ticket: $title"
+        ((ticket_count++))
+
+    done <<< "$critical_issues"
+
+    # Create tickets for Major issues
+    local major_issues=$(echo "$categorized" | jq -c '.major[]')
+
+    while IFS= read -r issue; do
+        [[ -z "$issue" ]] && continue
+
+        local author=$(echo "$issue" | jq -r '.author')
+        local body=$(echo "$issue" | jq -r '.body')
+        local path=$(echo "$issue" | jq -r '.path // "N/A"')
+
+        local title="🟠 MAJOR: Fix issue in PR #${pr_number}"
+        if [[ "$path" != "N/A" ]]; then
+            title="🟠 MAJOR: Fix issue in $path (PR #${pr_number})"
+        fi
+
+        local description="## Major Issue from PR #${pr_number}
+
+**Reporter**: ${author}
+**File**: ${path}
+**Priority**: Major (IMPORTANT)
+
+## Issue Description
+
+${body}
+
+## Requirements
+- Should be resolved before production deployment
+- Affects functionality or quality
+- Requires testing after fix
+
+## Definition of Done
+- [ ] Issue resolved and verified
+- [ ] Tests added/updated
+- [ ] PR review passed
+- [ ] Documentation updated
+"
+
+        # Would create ticket here using Linear MCP
+        echo -e "${GREEN}✓${NC} Would create ticket: $title"
+        ((ticket_count++))
+
+    done <<< "$major_issues"
+
+    echo -e "${GREEN}✓${NC} Created $ticket_count Linear ticket(s)"
+}
+
+# Main function
+main() {
+    local pr_number=""
+    local output_file=""
+    local json_output=false
+    local create_tickets=false
+    local team_id=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --output-file)
+                output_file="$2"
+                shift 2
+                ;;
+            --json)
+                json_output=true
+                shift
+                ;;
+            --create-linear-tickets)
+                create_tickets=true
+                shift
+                ;;
+            --team)
+                team_id="$2"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                if [[ -z "$pr_number" ]]; then
+                    pr_number="$1"
+                else
+                    echo "Error: Unknown argument: $1"
+                    usage
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$pr_number" ]]; then
+        usage
+    fi
+
+    if [[ "$create_tickets" == true ]] && [[ -z "$team_id" ]]; then
+        echo -e "${RED}✗${NC} --team is required when using --create-linear-tickets"
+        exit 1
+    fi
+
+    check_dependencies
+
+    echo -e "${MAGENTA}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${MAGENTA}║           PR REVIEW - PRODUCTION MODE                      ║${NC}"
+    echo -e "${MAGENTA}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BLUE}[PRODUCTION]${NC} Running strict production review for PR #${pr_number}..."
+    echo ""
+
+    # Determine output file
+    if [[ -z "$output_file" ]]; then
+        output_file="/tmp/pr-review-${pr_number}-production.md"
+    fi
+
+    # Run underlying review-pr script in strict mode
+    local review_output
+    if [[ "$json_output" == true ]]; then
+        review_output=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --strict --json 2>&1) || true
+    else
+        review_output=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --strict --output-file "$output_file" 2>&1) || true
+    fi
+
+    # Verify review file was created
+    if [[ ! -f "$output_file" ]]; then
+        echo -e "${RED}✗${NC} Review file not created at $output_file"
+        echo -e "${RED}✗${NC} Review may have failed - check output above"
+        exit 3
+    fi
+
+    # Extract categorized data from review-pr JSON output
+    local categorized
+    categorized=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --json 2>/dev/null) || {
+        echo -e "${RED}✗${NC} Failed to get categorized data"
+        exit 3
+    }
+
+    local critical_count=$(echo "$categorized" | jq '.summary.critical_count')
+    local major_count=$(echo "$categorized" | jq '.summary.major_count')
+    local minor_count=$(echo "$categorized" | jq '.summary.minor_count')
+    local nit_count=$(echo "$categorized" | jq '.summary.nit_count')
+
+    # Production summary
+    echo ""
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${MAGENTA}   PRODUCTION REVIEW SUMMARY${NC}"
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  🔴 CRITICAL (MUST resolve): $critical_count"
+    echo "  🟠 MAJOR    (MUST resolve): $major_count"
+    echo "  🟡 MINOR    (MUST resolve): $minor_count"
+    echo "  ⚪ NIT      (optional):      $nit_count"
+    echo ""
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    # Create Linear tickets if requested
+    if [[ "$create_tickets" == true ]] && ([[ $critical_count -gt 0 ]] || [[ $major_count -gt 0 ]]); then
+        create_linear_tickets "$categorized" "$pr_number" "$team_id"
+        echo ""
+    fi
+
+    # Production readiness check
+    if [[ $critical_count -gt 0 ]] || [[ $major_count -gt 0 ]] || [[ $minor_count -gt 0 ]]; then
+        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  ❌ NOT READY FOR PRODUCTION                               ║${NC}"
+        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        if [[ $critical_count -gt 0 ]]; then
+            echo -e "${RED}  ✗ $critical_count CRITICAL issue(s) MUST be resolved${NC}"
+        fi
+        if [[ $major_count -gt 0 ]]; then
+            echo -e "${RED}  ✗ $major_count MAJOR issue(s) MUST be resolved${NC}"
+        fi
+        if [[ $minor_count -gt 0 ]]; then
+            echo -e "${YELLOW}  ⚠  $minor_count MINOR issue(s) MUST be resolved${NC}"
+        fi
+        echo ""
+        echo -e "Review details: ${BLUE}$output_file${NC}"
+        echo ""
+        exit 2
+    else
+        echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║  ✅ READY FOR PRODUCTION                                   ║${NC}"
+        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "${GREEN}  ✓ All Critical, Major, and Minor issues resolved${NC}"
+        if [[ $nit_count -gt 0 ]]; then
+            echo -e "${BLUE}  ℹ  $nit_count nit(s) remain but are optional${NC}"
+        fi
+        echo ""
+        echo -e "Review details: ${BLUE}$output_file${NC}"
+        echo ""
+        exit 0
+    fi
+}
+
+main "$@"

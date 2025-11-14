@@ -40,6 +40,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Configure logging FIRST (before any logging calls)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 # Import type-safe configuration
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import settings
@@ -78,6 +84,7 @@ sys.path.insert(0, str(lib_path))
 try:
     from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
+    from confidence_scoring_publisher import publish_confidence_scored
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
@@ -93,11 +100,7 @@ except ImportError:
     SLACK_NOTIFIER_AVAILABLE = False
     logging.warning("SlackNotifier not available - error notifications disabled")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# Get logger instance (basicConfig already called at module top)
 logger = logging.getLogger(__name__)
 
 
@@ -136,7 +139,7 @@ class PostgresLogger:
         self._error_count = 0
 
     async def initialize(self) -> None:
-        """Initialize database connection pool."""
+        """Initialize database connection pool with retry logic for Docker network timing issues."""
         if self._initialized:
             logger.warning("PostgresLogger already initialized")
             return
@@ -145,54 +148,106 @@ class PostgresLogger:
             logger.error("asyncpg not available - database logging disabled")
             return
 
-        logger.info(
-            f"Initializing PostgreSQL connection pool (host: {self.host}:{self.port}, db: {self.database})"
-        )
+        max_retries = 3
+        base_delay = 2.0
 
-        try:
-            self._pool = await asyncpg.create_pool(
-                host=self.host,
-                port=self.port,
-                database=self.database,
-                user=self.user,
-                password=self.password,
-                min_size=self.pool_min_size,
-                max_size=self.pool_max_size,
-                command_timeout=10.0,
-                timeout=5.0,
-            )
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    f"Initializing PostgreSQL connection pool (attempt {attempt}/{max_retries}, "
+                    f"host: {self.host}:{self.port}, db: {self.database})"
+                )
 
-            # Test connection
-            async with self._pool.acquire() as conn:
-                await conn.fetchval("SELECT 1")
+                self._pool = await asyncpg.create_pool(
+                    host=self.host,
+                    port=self.port,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password,
+                    min_size=self.pool_min_size,
+                    max_size=self.pool_max_size,
+                    command_timeout=10.0,
+                    timeout=5.0,
+                )
 
-            self._initialized = True
-            logger.info("PostgreSQL connection pool initialized successfully")
+                # Test connection
+                async with self._pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
 
-        except Exception as e:
-            logger.error(f"Failed to initialize PostgreSQL pool: {e}", exc_info=True)
-            self._initialized = False
+                self._initialized = True
+                logger.info("PostgreSQL connection pool initialized successfully")
+                return
 
-            # Send Slack notification for database connection failure
-            if SLACK_NOTIFIER_AVAILABLE:
-                try:
-                    notifier = get_slack_notifier()
-                    import asyncio
-
-                    asyncio.create_task(
-                        notifier.send_error_notification(
-                            error=e,
-                            context={
-                                "service": "agent_router_event_service",
-                                "operation": "postgres_initialization",
-                                "db_host": self.host,
-                                "db_port": self.port,
-                                "db_name": self.database,
-                            },
-                        )
+            except (ConnectionRefusedError, asyncio.TimeoutError, OSError) as e:
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"PostgreSQL pool initialization failed (attempt {attempt}/{max_retries}): {e}. "
+                        f"Retrying in {delay}s... (Docker network may still be initializing)"
                     )
-                except Exception as notify_error:
-                    logger.debug(f"Failed to send Slack notification: {notify_error}")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        f"Failed to initialize PostgreSQL pool after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+                    self._initialized = False
+
+                    # Send Slack notification for database connection failure
+                    if SLACK_NOTIFIER_AVAILABLE:
+                        try:
+                            notifier = get_slack_notifier()
+
+                            asyncio.create_task(
+                                notifier.send_error_notification(
+                                    error=e,
+                                    context={
+                                        "service": "agent_router_event_service",
+                                        "operation": "postgres_initialization",
+                                        "db_host": self.host,
+                                        "db_port": self.port,
+                                        "db_name": self.database,
+                                        "attempts": max_retries,
+                                    },
+                                )
+                            )
+                        except Exception as notify_error:
+                            logger.debug(
+                                f"Failed to send Slack notification: {notify_error}"
+                            )
+
+            except Exception as e:
+                # Non-connection errors (auth, config, etc.) - fail immediately
+                logger.error(
+                    f"Failed to initialize PostgreSQL pool (non-retryable error): {e}",
+                    exc_info=True,
+                )
+                self._initialized = False
+
+                # Send Slack notification for database connection failure
+                if SLACK_NOTIFIER_AVAILABLE:
+                    try:
+                        notifier = get_slack_notifier()
+
+                        asyncio.create_task(
+                            notifier.send_error_notification(
+                                error=e,
+                                context={
+                                    "service": "agent_router_event_service",
+                                    "operation": "postgres_initialization",
+                                    "db_host": self.host,
+                                    "db_port": self.port,
+                                    "db_name": self.database,
+                                    "error_type": "non_retryable",
+                                },
+                            )
+                        )
+                    except Exception as notify_error:
+                        logger.debug(
+                            f"Failed to send Slack notification: {notify_error}"
+                        )
+
+                return  # Exit retry loop on non-retryable errors
 
     async def close(self) -> None:
         """Close database connection pool."""
@@ -451,9 +506,9 @@ class AgentRouterEventService:
     """
 
     # Kafka topic names
-    TOPIC_REQUEST = "agent.routing.requested.v1"
-    TOPIC_COMPLETED = "agent.routing.completed.v1"
-    TOPIC_FAILED = "agent.routing.failed.v1"
+    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
+    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
+    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
 
     def __init__(
         self,
@@ -636,8 +691,8 @@ class AgentRouterEventService:
             await self._health_runner.setup()
 
             # Start site (bind to all interfaces for Docker container accessibility)
-            site = web.TCPSite(
-                self._health_runner, "0.0.0.0", self.health_check_port  # noqa: S104
+            site = web.TCPSite(  # noqa: S104 # nosec B104
+                self._health_runner, "0.0.0.0", self.health_check_port
             )
             await site.start()
 
@@ -843,10 +898,10 @@ class AgentRouterEventService:
             # Primary recommendation
             primary = recommendations[0]
 
-            # Build response envelope
+            # Build response envelope (using EVENT_BUS_INTEGRATION_GUIDE standard format)
             response_envelope = {
                 "correlation_id": correlation_id,
-                "event_type": "AGENT_ROUTING_COMPLETED",
+                "event_type": "omninode.agent.routing.completed.v1",
                 "payload": {
                     "recommendations": [
                         {
@@ -877,6 +932,31 @@ class AgentRouterEventService:
             if self._producer:
                 await self._producer.send_and_wait(
                     self.TOPIC_COMPLETED, response_envelope
+                )
+
+            # Publish confidence scoring event (non-blocking)
+            try:
+                asyncio.create_task(
+                    publish_confidence_scored(
+                        agent_name=primary.agent_name,
+                        confidence_score=primary.confidence.total,
+                        routing_strategy="enhanced_fuzzy_matching",  # TODO: Get from router
+                        correlation_id=correlation_id,
+                        factors={
+                            "trigger_score": primary.confidence.trigger_score,
+                            "context_score": primary.confidence.context_score,
+                            "capability_score": primary.confidence.capability_score,
+                            "historical_score": primary.confidence.historical_score,
+                        },
+                    )
+                )
+                self.logger.debug(
+                    f"Confidence scoring event queued for async publishing (agent: {primary.agent_name}, score: {primary.confidence.total:.2%})"
+                )
+            except Exception as e:
+                # Non-blocking - log error but don't fail routing
+                self.logger.warning(
+                    f"Failed to queue confidence scoring event: {e}", exc_info=True
                 )
 
             # Log to database (non-blocking - fire-and-forget)
@@ -993,11 +1073,11 @@ class AgentRouterEventService:
                         f"Failed to send Slack notification: {notify_error}"
                     )
 
-            # Publish failed event
+            # Publish failed event (using EVENT_BUS_INTEGRATION_GUIDE standard format)
             if self._producer:
                 error_envelope = {
                     "correlation_id": correlation_id,
-                    "event_type": "AGENT_ROUTING_FAILED",
+                    "event_type": "omninode.agent.routing.failed.v1",
                     "payload": {
                         "error_code": "ROUTING_ERROR",
                         "error_message": str(e),

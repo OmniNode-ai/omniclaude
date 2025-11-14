@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""
+Debug Loop Price Check - AI Model Pricing Tool
+
+Query model_price_catalog table for pricing information with cost calculations
+and rich formatted comparison tables.
+
+Usage:
+    check-pricing [OPTIONS]
+
+Examples:
+    check-pricing
+    check-pricing --provider anthropic
+    check-pricing --model claude-3
+    check-pricing --input-tokens 10000 --output-tokens 5000
+    check-pricing --provider google --json
+"""
+
+import argparse
+import json
+import sys
+from datetime import datetime
+from decimal import Decimal
+from typing import Dict, List, Optional
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+except ImportError as e:
+    print(f"Error: Missing required package: {e}", file=sys.stderr)
+    print("Install with: pip install psycopg2-binary rich", file=sys.stderr)
+    sys.exit(1)
+
+# Import config module from omniclaude - dynamic path resolution
+# This skill is typically in ~/.claude/skills/debug-loop/debug-loop-price-check/
+# We need to find the omniclaude repository root
+import os
+from pathlib import Path
+
+if os.environ.get("OMNICLAUDE_PATH"):
+    REPO_ROOT = Path(os.environ.get("OMNICLAUDE_PATH"))
+    sys.path.insert(0, str(REPO_ROOT))
+else:
+    # Try common locations
+    for candidate in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Users") / os.environ.get("USER", "unknown") / "Code" / "omniclaude",
+    ]:
+        if candidate.exists():
+            sys.path.insert(0, str(candidate))
+            break
+    else:
+        print(
+            "Error: Cannot find omniclaude repository. Set OMNICLAUDE_PATH environment variable.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+try:
+    from config import settings
+except ImportError:
+    print("Error: Cannot import config module from omniclaude", file=sys.stderr)
+    print("Ensure config module is available in omniclaude repository", file=sys.stderr)
+    sys.exit(1)
+
+
+console = Console()
+
+
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Query AI model pricing from model_price_catalog table",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                    # List all active models
+  %(prog)s --provider anthropic               # Filter by provider
+  %(prog)s --model claude-3                   # Filter by model name
+  %(prog)s --input-tokens 10000 --output-tokens 5000  # Calculate cost
+  %(prog)s --provider google --json           # JSON output
+        """,
+    )
+
+    parser.add_argument(
+        "--provider",
+        type=str,
+        help="Filter by provider name (e.g., anthropic, openai, google, together)",
+    )
+
+    parser.add_argument(
+        "--model",
+        type=str,
+        help="Filter by model name (partial match, e.g., claude-3, gpt-4, gemini)",
+    )
+
+    parser.add_argument(
+        "--input-tokens", type=int, help="Calculate cost for N input tokens"
+    )
+
+    parser.add_argument(
+        "--output-tokens", type=int, help="Calculate cost for N output tokens"
+    )
+
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Show all models (including inactive/deprecated)",
+    )
+
+    parser.add_argument(
+        "--json", action="store_true", help="Output as JSON instead of table"
+    )
+
+    return parser.parse_args()
+
+
+def query_models(
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    include_inactive: bool = False,
+) -> List[Dict]:
+    """
+    Query model_price_catalog table.
+
+    Args:
+        provider: Filter by provider name (exact match, case-insensitive)
+        model: Filter by model name (partial match, case-insensitive)
+        include_inactive: Include inactive/deprecated models
+
+    Returns:
+        List of model dictionaries
+    """
+    try:
+        conn = psycopg2.connect(settings.get_postgres_dsn())
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Build query
+        query = """
+            SELECT
+                provider,
+                model_name,
+                model_version,
+                input_price_per_million,
+                output_price_per_million,
+                currency,
+                avg_latency_ms,
+                max_tokens,
+                context_window,
+                supports_streaming,
+                supports_function_calling,
+                supports_vision,
+                requests_per_minute,
+                tokens_per_minute,
+                is_active,
+                deprecated_at,
+                effective_date
+            FROM model_price_catalog
+            WHERE 1=1
+        """
+
+        params = []
+
+        # Add filters
+        if not include_inactive:
+            query += " AND is_active = true"
+
+        if provider:
+            query += " AND LOWER(provider) = LOWER(%s)"
+            params.append(provider)
+
+        if model:
+            query += " AND LOWER(model_name) LIKE LOWER(%s)"
+            params.append(f"%{model}%")
+
+        query += " ORDER BY provider, model_name"
+
+        # Execute query
+        cur.execute(query, params)
+        results = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        # Convert to list of dicts
+        return [dict(row) for row in results]
+
+    except Exception as e:
+        console.print(f"[red]Error querying database: {e}[/red]")
+        sys.exit(1)
+
+
+def calculate_cost(
+    models: List[Dict],
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
+) -> List[Dict]:
+    """
+    Calculate estimated costs for given token counts.
+
+    Args:
+        models: List of model dictionaries
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+
+    Returns:
+        List of models with added 'estimated_cost' field
+    """
+    if not input_tokens and not output_tokens:
+        return models
+
+    input_tokens = input_tokens or 0
+    output_tokens = output_tokens or 0
+
+    for model in models:
+        input_price = float(model["input_price_per_million"] or 0)
+        output_price = float(model["output_price_per_million"] or 0)
+
+        # Calculate costs (price is per 1M tokens)
+        input_cost = (input_tokens / 1_000_000) * input_price
+        output_cost = (output_tokens / 1_000_000) * output_price
+        total_cost = input_cost + output_cost
+
+        model["estimated_cost"] = {
+            "input_cost": round(input_cost, 6),
+            "output_cost": round(output_cost, 6),
+            "total_cost": round(total_cost, 6),
+        }
+
+    return models
+
+
+def format_table(
+    models: List[Dict],
+    input_tokens: Optional[int] = None,
+    output_tokens: Optional[int] = None,
+) -> None:
+    """
+    Display models in a rich formatted table.
+
+    Args:
+        models: List of model dictionaries
+        input_tokens: Number of input tokens (for cost calculation)
+        output_tokens: Number of output tokens (for cost calculation)
+    """
+    if not models:
+        console.print("[yellow]No models found matching criteria[/yellow]")
+        return
+
+    # Determine if we're showing cost estimates
+    show_costs = input_tokens or output_tokens
+
+    # Create table
+    if show_costs:
+        title = f"Cost Estimate ({input_tokens or 0:,} input + {output_tokens or 0:,} output tokens)"
+        table = Table(
+            title=title, box=box.ROUNDED, show_header=True, header_style="bold magenta"
+        )
+
+        table.add_column("Provider", style="cyan", width=12)
+        table.add_column("Model", style="white", width=30)
+        table.add_column("Input Cost", justify="right", style="green")
+        table.add_column("Output Cost", justify="right", style="green")
+        table.add_column("Total", justify="right", style="bold green")
+    else:
+        table = Table(
+            title="AI Model Pricing Comparison",
+            box=box.ROUNDED,
+            show_header=True,
+            header_style="bold magenta",
+        )
+
+        table.add_column("Provider", style="cyan", width=12)
+        table.add_column("Model", style="white", width=30)
+        table.add_column("Input/1M", justify="right", style="green")
+        table.add_column("Output/1M", justify="right", style="green")
+        table.add_column("Total", justify="right", style="bold yellow")
+
+    # Add rows
+    for model in models:
+        provider = model["provider"]
+        model_name = model["model_name"]
+
+        if show_costs:
+            cost = model.get("estimated_cost", {})
+            input_cost = cost.get("input_cost", 0)
+            output_cost = cost.get("output_cost", 0)
+            total_cost = cost.get("total_cost", 0)
+
+            table.add_row(
+                provider,
+                model_name,
+                f"${input_cost:.6f}",
+                f"${output_cost:.6f}",
+                f"${total_cost:.6f}",
+            )
+        else:
+            input_price = float(model["input_price_per_million"] or 0)
+            output_price = float(model["output_price_per_million"] or 0)
+            total_price = input_price + output_price
+
+            table.add_row(
+                provider,
+                model_name,
+                f"${input_price:.4f}",
+                f"${output_price:.4f}",
+                f"${total_price:.2f}",
+            )
+
+    console.print(table)
+
+    # Show summary statistics
+    if show_costs:
+        costs = [m.get("estimated_cost", {}).get("total_cost", 0) for m in models]
+        if costs:
+            min_cost = min(costs)
+            max_cost = max(costs)
+            min_model = models[costs.index(min_cost)]
+            max_model = models[costs.index(max_cost)]
+            savings = max_cost - min_cost
+            savings_pct = (savings / max_cost * 100) if max_cost > 0 else 0
+
+            console.print()
+            console.print(
+                f"[bold green]Cheapest Option:[/bold green] {min_model['model_name']} (${min_cost:.6f})"
+            )
+            console.print(
+                f"[bold red]Most Expensive:[/bold red] {max_model['model_name']} (${max_cost:.6f})"
+            )
+            console.print(
+                f"[bold yellow]Savings:[/bold yellow] ${savings:.6f} ({savings_pct:.1f}%)"
+            )
+    else:
+        # Show most cost-effective models
+        totals = [
+            (
+                m,
+                float(m["input_price_per_million"] or 0)
+                + float(m["output_price_per_million"] or 0),
+            )
+            for m in models
+        ]
+        totals.sort(key=lambda x: x[1])
+
+        if len(totals) >= 3:
+            console.print()
+            console.print("[bold]Most Cost-Effective Models:[/bold]")
+            medals = ["🥇", "🥈", "🥉"]
+            for i, (model, total) in enumerate(totals[:3]):
+                console.print(
+                    f"  {medals[i]} {model['model_name']}: ${total:.2f} per 1M tokens"
+                )
+
+
+def format_json(models: List[Dict]) -> None:
+    """
+    Display models as JSON.
+
+    Args:
+        models: List of model dictionaries
+    """
+
+    # Convert Decimal and datetime to JSON-serializable types
+    def json_default(obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+    print(json.dumps(models, indent=2, default=json_default))
+
+
+def main():
+    """Main entry point."""
+    args = parse_args()
+
+    # Validate token arguments
+    if args.input_tokens and args.input_tokens < 0:
+        console.print("[red]Error: --input-tokens must be positive[/red]")
+        sys.exit(1)
+
+    if args.output_tokens and args.output_tokens < 0:
+        console.print("[red]Error: --output-tokens must be positive[/red]")
+        sys.exit(1)
+
+    # Query models
+    try:
+        models = query_models(
+            provider=args.provider, model=args.model, include_inactive=args.all
+        )
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        sys.exit(1)
+
+    if not models:
+        console.print("[yellow]No models found matching criteria[/yellow]")
+        sys.exit(0)
+
+    # Calculate costs if requested
+    if args.input_tokens or args.output_tokens:
+        models = calculate_cost(
+            models, input_tokens=args.input_tokens, output_tokens=args.output_tokens
+        )
+
+    # Format output
+    if args.json:
+        format_json(models)
+    else:
+        format_table(
+            models, input_tokens=args.input_tokens, output_tokens=args.output_tokens
+        )
+
+
+if __name__ == "__main__":
+    main()

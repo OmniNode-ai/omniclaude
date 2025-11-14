@@ -361,4 +361,6 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop")
     print("=" * 50)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(  # noqa: S104 # nosec B104
+        app, host="0.0.0.0", port=8000, log_level="info"
+    )

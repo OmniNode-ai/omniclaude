@@ -25,37 +25,29 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+# Determine project root (skills are in ~/.claude/skills, not in project)
+OMNICLAUDE_PATH = Path(
+    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
+)
+if not OMNICLAUDE_PATH.exists():
+    # Fallback to common locations
+    for fallback in [
+        Path.home() / "Code" / "omniclaude",
+        Path("/Volumes/PRO-G40/Code/omniclaude"),
+    ]:
+        if fallback.exists():
+            OMNICLAUDE_PATH = fallback
+            break
+
+sys.path.insert(0, str(OMNICLAUDE_PATH))
+from config import settings
+
 # Add _shared to path for utilities
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
 
 # Add agents/lib to path for AgentRouter
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agents" / "lib"))
-
-
-def load_env_file():
-    """Load environment variables from project .env file."""
-    # Calculate project root from this file's location (skills/routing/request-agent-routing/)
-    project_root = Path(__file__).parent.parent.parent.parent.resolve()
-    env_paths = [
-        project_root / ".env",
-        Path.home() / "Code" / "omniclaude" / ".env",
-    ]
-
-    for env_path in env_paths:
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        if key not in os.environ:
-                            os.environ[key] = value.strip('"').strip("'")
-            return
-
-
-# Load .env on import
-load_env_file()
+sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
 
 
 def request_routing_direct(
