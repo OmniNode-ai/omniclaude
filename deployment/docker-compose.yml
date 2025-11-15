@@ -144,8 +144,14 @@ services:
       # Health check and logging
       - HEALTH_CHECK_PORT=${CONSUMER_HEALTH_PORT:-8080}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    extra_hosts:
+      # DNS resolution for remote shared infrastructure
+      - "omninode-bridge-redpanda:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
+      - "omninode-bridge-postgres:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
+      - "omninode-bridge-consul:${REMOTE_INFRASTRUCTURE_IP:-192.168.86.200}"
     networks:
       - app_network
+      - omninode-bridge-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${CONSUMER_HEALTH_PORT:-8080}/health"]
       interval: 30s
@@ -635,10 +641,8 @@ services:
 # ============================================================================
 networks:
   app_network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: ${APP_NETWORK_SUBNET:-172.30.0.0/16}
+    external: true
+    name: deployment_app_network
   monitoring_network:
     driver: bridge
     ipam:

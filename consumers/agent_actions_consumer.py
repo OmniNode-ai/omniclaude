@@ -674,10 +674,10 @@ class AgentActionsConsumer:
         """Insert agent_routing_decisions events."""
         insert_sql = """
             INSERT INTO agent_routing_decisions (
-                id, project_name, user_request, selected_agent, confidence_score, alternatives,
+                id, correlation_id, project_name, user_request, selected_agent, confidence_score, alternatives,
                 reasoning, routing_strategy, context, routing_time_ms, created_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -687,9 +687,32 @@ class AgentActionsConsumer:
             event_id = str(uuid.uuid4())
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
+            # Extract correlation_id from event (try top-level first, then metadata)
+            # This handles events where correlation_id may be in metadata field
+            correlation_id = event.get("correlation_id")
+            if not correlation_id and "metadata" in event:
+                correlation_id = event.get("metadata", {}).get("correlation_id")
+
+            # Convert to UUID if it's a string, generate new UUID if missing
+            if correlation_id and not isinstance(correlation_id, uuid.UUID):
+                try:
+                    correlation_id = uuid.UUID(correlation_id)
+                except ValueError:
+                    logger.warning(
+                        "Invalid correlation_id format: %s, generating new UUID",
+                        correlation_id,
+                    )
+                    correlation_id = uuid.uuid4()
+            elif not correlation_id:
+                logger.warning(
+                    "Missing correlation_id in routing decision event, generating new UUID"
+                )
+                correlation_id = uuid.uuid4()
+
             batch_data.append(
                 (
                     event_id,
+                    str(correlation_id),  # Convert UUID to string for psycopg2
                     event.get("project_name"),  # Extract project_name from event
                     event.get("user_request", ""),
                     event.get("selected_agent"),
