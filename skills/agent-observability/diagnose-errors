@@ -50,7 +50,8 @@ def get_error_metrics(time_range="24h", agent_name=None):
         LIMIT 10
     """
 
-    error_types = execute_query(error_types_sql, tuple(params), fetch=True)
+    error_types_result = execute_query(error_types_sql, tuple(params), fetch=True)
+    error_types = error_types_result["rows"] if error_types_result["success"] else []
 
     # Failed agents
     failed_agents_sql = """
@@ -75,7 +76,10 @@ def get_error_metrics(time_range="24h", agent_name=None):
         LIMIT 10
     """
 
-    failed_agents = execute_query(failed_agents_sql, tuple(params), fetch=True)
+    failed_agents_result = execute_query(failed_agents_sql, tuple(params), fetch=True)
+    failed_agents = (
+        failed_agents_result["rows"] if failed_agents_result["success"] else []
+    )
 
     # Recent error examples with messages
     error_examples_sql = """
@@ -100,7 +104,10 @@ def get_error_metrics(time_range="24h", agent_name=None):
         LIMIT 5
     """
 
-    error_examples = execute_query(error_examples_sql, tuple(params), fetch=True)
+    error_examples_result = execute_query(error_examples_sql, tuple(params), fetch=True)
+    error_examples = (
+        error_examples_result["rows"] if error_examples_result["success"] else []
+    )
 
     # Error rate over time (hourly buckets)
     error_timeline_sql = """
@@ -124,13 +131,16 @@ def get_error_metrics(time_range="24h", agent_name=None):
         LIMIT 24
     """
 
-    error_timeline = execute_query(error_timeline_sql, tuple(params), fetch=True)
+    error_timeline_result = execute_query(error_timeline_sql, tuple(params), fetch=True)
+    error_timeline = (
+        error_timeline_result["rows"] if error_timeline_result["success"] else []
+    )
 
     return {
-        "error_types": error_types or [],
-        "failed_agents": failed_agents or [],
-        "error_examples": error_examples or [],
-        "error_timeline": error_timeline or [],
+        "error_types": error_types,
+        "failed_agents": failed_agents,
+        "error_examples": error_examples,
+        "error_timeline": error_timeline,
     }
 
 

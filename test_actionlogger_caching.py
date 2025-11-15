@@ -11,6 +11,7 @@ Validates that:
 import asyncio
 import sys
 import time
+import uuid
 from pathlib import Path
 
 # Add project root to path
@@ -103,13 +104,17 @@ async def test_actionlogger_caching():
     # Test 5: Integration test - actual manifest generation
     print("\n[Test 5] Integration test - manifest generation uses cache")
 
+    # Generate a valid UUID for the integration test
+    integration_correlation_id = str(uuid.uuid4())
+    print(f"  Using correlation_id: {integration_correlation_id}")
+
     # Use context manager
     async with injector:
         try:
             # First generation
             start_time = time.time()
             manifest1 = await injector.generate_dynamic_manifest_async(
-                correlation_id="test-integration-001", user_prompt="test request 1"
+                correlation_id=integration_correlation_id, user_prompt="test request 1"
             )
             first_gen_time = (time.time() - start_time) * 1000
 
@@ -119,7 +124,7 @@ async def test_actionlogger_caching():
             # Second generation with same correlation_id
             start_time = time.time()
             manifest2 = await injector.generate_dynamic_manifest_async(
-                correlation_id="test-integration-001", user_prompt="test request 2"
+                correlation_id=integration_correlation_id, user_prompt="test request 2"
             )
             second_gen_time = (time.time() - start_time) * 1000
 
@@ -130,7 +135,7 @@ async def test_actionlogger_caching():
 
             # Verify cache was used
             assert (
-                "test-integration-001" in injector._action_logger_cache
+                integration_correlation_id in injector._action_logger_cache
             ), "Integration didn't use cache!"
             print("✅ Integration test passed - cache used in manifest generation")
 

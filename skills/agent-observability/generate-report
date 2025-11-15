@@ -134,12 +134,20 @@ def get_comprehensive_metrics(time_range="7d"):
     )
 
     return {
-        "summary": exec_summary[0] if exec_summary else None,
-        "agent_usage": agent_usage or [],
-        "routing": routing_intel or [],
-        "hooks": hook_status or [],
-        "trends": daily_trends or [],
-        "correlation": correlation_stats[0] if correlation_stats else None,
+        "summary": (
+            exec_summary["rows"][0]
+            if exec_summary["success"] and exec_summary["rows"]
+            else None
+        ),
+        "agent_usage": agent_usage["rows"] if agent_usage["success"] else [],
+        "routing": routing_intel["rows"] if routing_intel["success"] else [],
+        "hooks": hook_status["rows"] if hook_status["success"] else [],
+        "trends": daily_trends["rows"] if daily_trends["success"] else [],
+        "correlation": (
+            correlation_stats["rows"][0]
+            if correlation_stats["success"] and correlation_stats["rows"]
+            else None
+        ),
     }
 
 

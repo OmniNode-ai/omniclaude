@@ -100,8 +100,8 @@ def log_start(args):
 
     try:
         result = execute_query(sql, params, fetch=True)
-        if result and len(result) > 0:
-            row = result[0]
+        if result["success"] and result["rows"]:
+            row = result["rows"][0]
             print(
                 json.dumps(
                     {
@@ -116,8 +116,11 @@ def log_start(args):
             )
             return 0
         else:
+            error_msg = (
+                result.get("error", "No result returned") if result else "Query failed"
+            )
             print(
-                json.dumps({"success": False, "error": "No result returned"}),
+                json.dumps({"success": False, "error": error_msg}),
                 file=sys.stderr,
             )
             return 1
@@ -158,8 +161,8 @@ def log_progress(args):
 
     try:
         result = execute_query(sql, params, fetch=True)
-        if result and len(result) > 0:
-            row = result[0]
+        if result["success"] and result["rows"]:
+            row = result["rows"][0]
             print(
                 json.dumps(
                     {
@@ -174,11 +177,13 @@ def log_progress(args):
             )
             return 0
         else:
+            error_msg = result.get("error") if result else "Query failed"
             print(
                 json.dumps(
                     {
                         "success": False,
-                        "error": f"Execution ID {args.execution_id} not found",
+                        "error": error_msg
+                        or f"Execution ID {args.execution_id} not found",
                     }
                 ),
                 file=sys.stderr,
@@ -235,8 +240,8 @@ def log_complete(args):
 
     try:
         result = execute_query(sql, params, fetch=True)
-        if result and len(result) > 0:
-            row = result[0]
+        if result["success"] and result["rows"]:
+            row = result["rows"][0]
             print(
                 json.dumps(
                     {
@@ -253,11 +258,13 @@ def log_complete(args):
             )
             return 0
         else:
+            error_msg = result.get("error") if result else "Query failed"
             print(
                 json.dumps(
                     {
                         "success": False,
-                        "error": f"Execution ID {args.execution_id} not found",
+                        "error": error_msg
+                        or f"Execution ID {args.execution_id} not found",
                     }
                 ),
                 file=sys.stderr,

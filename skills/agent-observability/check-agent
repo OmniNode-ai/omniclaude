@@ -121,11 +121,15 @@ def get_agent_metrics(agent_name, time_range="24h"):
     )
 
     return {
-        "summary": summary[0] if summary else None,
-        "baseline": baseline[0] if baseline else None,
-        "errors": errors or [],
-        "hourly_trend": hourly_trend or [],
-        "recent": recent or [],
+        "summary": (
+            summary["rows"][0] if summary["success"] and summary["rows"] else None
+        ),
+        "baseline": (
+            baseline["rows"][0] if baseline["success"] and baseline["rows"] else None
+        ),
+        "errors": errors["rows"] if errors["success"] else [],
+        "hourly_trend": hourly_trend["rows"] if hourly_trend["success"] else [],
+        "recent": recent["rows"] if recent["success"] else [],
     }
 
 

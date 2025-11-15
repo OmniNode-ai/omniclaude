@@ -84,6 +84,28 @@ def execute_query(
             "port": int,
             "database": str
         }
+
+    Examples:
+        >>> # Correct usage - always check success and extract rows
+        >>> result = execute_query("SELECT * FROM users WHERE id = %s", (123,))
+        >>> if result["success"] and result["rows"]:
+        >>>     user = result["rows"][0]
+        >>>     print(user["name"])
+        >>> else:
+        >>>     print(f"Error: {result['error']}")
+        >>>
+        >>> # For INSERT/UPDATE with RETURNING
+        >>> result = execute_query(
+        >>>     "INSERT INTO logs (message) VALUES (%s) RETURNING id",
+        >>>     ("test message",)
+        >>> )
+        >>> if result["success"] and result["rows"]:
+        >>>     new_id = result["rows"][0]["id"]
+        >>>
+        >>> # For non-fetch operations
+        >>> result = execute_query("UPDATE users SET active = TRUE", fetch=False)
+        >>> if result["success"]:
+        >>>     print("Update successful")
     """
     conn = None
     try:

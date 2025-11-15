@@ -83,10 +83,18 @@ def get_health_metrics():
     )
 
     return {
-        "execution": execution_stats[0] if execution_stats else None,
-        "hooks": hook_stats[0] if hook_stats else None,
-        "recent_errors": recent_errors or [],
-        "routing": routing_stats or [],
+        "execution": (
+            execution_stats["rows"][0]
+            if execution_stats["success"] and execution_stats["rows"]
+            else None
+        ),
+        "hooks": (
+            hook_stats["rows"][0]
+            if hook_stats["success"] and hook_stats["rows"]
+            else None
+        ),
+        "recent_errors": recent_errors["rows"] if recent_errors["success"] else [],
+        "routing": routing_stats["rows"] if routing_stats["success"] else [],
     }
 
 
@@ -152,7 +160,12 @@ def format_output(metrics):
         output.append(f"| Successful | {exec_m['successful']} |")
         output.append(f"| Failed | {exec_m['failed']} |")
         output.append(f"| In Progress | {exec_m['in_progress']} |")
-        output.append(f"| Avg Duration | {exec_m['avg_duration_ms']:.0f}ms |")
+        avg_dur = exec_m["avg_duration_ms"]
+        output.append(
+            f"| Avg Duration | {avg_dur:.0f}ms |"
+            if avg_dur is not None
+            else "| Avg Duration | N/A |"
+        )
         output.append("")
 
     if metrics["hooks"]:
@@ -191,7 +204,7 @@ def format_output(metrics):
             output.append(
                 "- 🚨 **URGENT**: Run `/agent-observability/diagnose-errors` immediately"
             )
-        if metrics["hooks"]["unprocessed_count"] > 50:
+        if metrics["hooks"] and metrics["hooks"]["unprocessed_count"] > 50:
             output.append("- Check hook processing system for failures")
         if metrics["recent_errors"]:
             output.append("- Investigate top error types listed above")

@@ -82,20 +82,28 @@ except ImportError:
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
+# Import required modules (must succeed for service to function)
 try:
-    from action_logger import ActionLogger
     from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
     from confidence_scoring_publisher import publish_confidence_scored
     from data_sanitizer import sanitize_dict, sanitize_string
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
-
-    ACTION_LOGGER_AVAILABLE = True
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
-    ACTION_LOGGER_AVAILABLE = False
     raise
+
+# Import ActionLogger separately (optional - graceful degradation if unavailable)
+try:
+    from action_logger import ActionLogger
+
+    ACTION_LOGGER_AVAILABLE = True
+except ImportError:
+    ACTION_LOGGER_AVAILABLE = False
+    logging.warning(
+        "ActionLogger not available - enhanced action logging disabled (routing will continue normally)"
+    )
 
 # Import Slack notifier for error notifications
 try:
