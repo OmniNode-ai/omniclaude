@@ -15,19 +15,45 @@ Created: 2025-11-12
 """
 
 import json
-import os
 import subprocess
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
+# Import type-safe configuration (Phase 2 - Pydantic Settings migration)
+from config import settings
 
 
 def get_kafka_bootstrap_servers() -> str:
     """
-    Get Kafka bootstrap servers from environment.
+    Get Kafka bootstrap servers from type-safe configuration.
+
+    Uses Pydantic Settings framework for validated configuration.
+    Raises ValueError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
 
     Returns:
-        Bootstrap server address (e.g., "192.168.86.200:29092")
+        Bootstrap server address (e.g., "192.168.86.200:29092" for host scripts
+        or "omninode-bridge-redpanda:9092" for Docker services)
+
+    Raises:
+        ValueError: If KAFKA_BOOTSTRAP_SERVERS is not set in environment
+
+    Note:
+        Configuration context matters:
+        - Docker services: Use "omninode-bridge-redpanda:9092"
+        - Host scripts: Use "192.168.86.200:29092"
+        Set via KAFKA_BOOTSTRAP_SERVERS in .env file
     """
-    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+    bootstrap = settings.get_effective_kafka_bootstrap_servers()
+
+    if not bootstrap:
+        raise ValueError(
+            "KAFKA_BOOTSTRAP_SERVERS not configured. "
+            "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
+            "Use 'omninode-bridge-redpanda:9092' for Docker services "
+            "or '192.168.86.200:29092' for host scripts. "
+            "See CLAUDE.md for deployment context details."
+        )
+
+    return bootstrap
 
 
 def check_kafka_connection() -> Dict[str, Any]:
@@ -45,7 +71,7 @@ def check_kafka_connection() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         if result.returncode == 0:
@@ -53,35 +79,35 @@ def check_kafka_connection() -> Dict[str, Any]:
                 "status": "connected",
                 "broker": bootstrap_servers,
                 "reachable": True,
-                "error": None
+                "error": None,
             }
         else:
             return {
                 "status": "error",
                 "broker": bootstrap_servers,
                 "reachable": False,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
     except subprocess.TimeoutExpired:
         return {
             "status": "timeout",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": "Connection timeout after 5s"
+            "error": "Connection timeout after 5s",
         }
     except FileNotFoundError:
         return {
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": "kcat command not found. Install with: brew install kcat"
+            "error": "kcat command not found. Install with: brew install kcat",
         }
     except Exception as e:
         return {
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -99,7 +125,7 @@ def list_topics() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         if result.returncode != 0:
@@ -107,7 +133,7 @@ def list_topics() -> Dict[str, Any]:
                 "success": False,
                 "topics": [],
                 "count": 0,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
 
         # Parse topic names from output
@@ -120,19 +146,9 @@ def list_topics() -> Dict[str, Any]:
                 if end > start:
                     topics.append(line[start:end])
 
-        return {
-            "success": True,
-            "topics": topics,
-            "count": len(topics),
-            "error": None
-        }
+        return {"success": True, "topics": topics, "count": len(topics), "error": None}
     except Exception as e:
-        return {
-            "success": False,
-            "topics": [],
-            "count": 0,
-            "error": str(e)
-        }
+        return {"success": False, "topics": [], "count": 0, "error": str(e)}
 
 
 def get_topic_stats(topic_name: str) -> Dict[str, Any]:
@@ -152,14 +168,14 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers, "-t", topic_name],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         if result.returncode != 0:
             return {
                 "success": False,
                 "topic": topic_name,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
 
         # Parse partition count from output
@@ -172,14 +188,10 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             "success": True,
             "topic": topic_name,
             "partitions": partitions,
-            "error": None
+            "error": None,
         }
     except Exception as e:
-        return {
-            "success": False,
-            "topic": topic_name,
-            "error": str(e)
-        }
+        return {"success": False, "topic": topic_name, "error": str(e)}
 
 
 def get_consumer_groups() -> Dict[str, Any]:
@@ -196,7 +208,7 @@ def get_consumer_groups() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         if result.returncode != 0:
@@ -204,7 +216,7 @@ def get_consumer_groups() -> Dict[str, Any]:
                 "success": False,
                 "groups": [],
                 "count": 0,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
 
         # Note: kcat -L doesn't show consumer groups
@@ -214,15 +226,10 @@ def get_consumer_groups() -> Dict[str, Any]:
             "success": True,
             "groups": [],
             "count": 0,
-            "error": "Consumer group listing requires kafka-consumer-groups command"
+            "error": "Consumer group listing requires kafka-consumer-groups command",
         }
     except Exception as e:
-        return {
-            "success": False,
-            "groups": [],
-            "count": 0,
-            "error": str(e)
-        }
+        return {"success": False, "groups": [], "count": 0, "error": str(e)}
 
 
 def check_topic_exists(topic_name: str) -> bool:
@@ -242,7 +249,9 @@ def check_topic_exists(topic_name: str) -> bool:
     return topic_name in topics_result["topics"]
 
 
-def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> Dict[str, Any]:
+def get_recent_message_count(
+    topic_name: str, timeout_seconds: int = 2
+) -> Dict[str, Any]:
     """
     Get count of recent messages in a topic (sample).
 
@@ -258,28 +267,41 @@ def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> Dict[
     try:
         # Consume from end for a short time to estimate throughput
         result = subprocess.run(
-            ["timeout", str(timeout_seconds), "kcat", "-C", "-b", bootstrap_servers,
-             "-t", topic_name, "-o", "end", "-e"],
+            [
+                "timeout",
+                str(timeout_seconds),
+                "kcat",
+                "-C",
+                "-b",
+                bootstrap_servers,
+                "-t",
+                topic_name,
+                "-o",
+                "end",
+                "-e",
+            ],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # Count lines (each line is a message)
-        message_count = len([line for line in result.stdout.split("\n") if line.strip()])
+        message_count = len(
+            [line for line in result.stdout.split("\n") if line.strip()]
+        )
 
         return {
             "success": True,
             "topic": topic_name,
             "messages_sampled": message_count,
             "sample_duration_s": timeout_seconds,
-            "error": None
+            "error": None,
         }
     except Exception as e:
         return {
             "success": False,
             "topic": topic_name,
             "messages_sampled": 0,
-            "error": str(e)
+            "error": str(e),
         }
 
 

@@ -54,6 +54,7 @@ from config import settings
 # Import ActionLogger for enhanced observability
 try:
     from agents.lib.action_logger import ActionLogger
+    from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
 
     ACTION_LOGGER_AVAILABLE = True
 except ImportError:
@@ -341,16 +342,22 @@ class AgentExecutionPublisher:
                 try:
                     await action_logger.log_decision(
                         decision_name="agent_execution_started",
-                        decision_context={
-                            "user_request": user_request,
-                            "session_id": session_id,
-                            "context": context or {},
-                        },
-                        decision_result={
-                            "agent_name": agent_name,
-                            "correlation_id": correlation_id,
-                            "publish_success": publish_success,
-                        },
+                        decision_context=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),
+                                "session_id": session_id,
+                                "context": context or {},
+                            }
+                        ),
+                        decision_result=sanitize_dict(
+                            {
+                                "agent_name": agent_name,
+                                "correlation_id": correlation_id,
+                                "publish_success": publish_success,
+                            }
+                        ),
                         duration_ms=duration_ms,
                     )
                 except Exception as log_error:
@@ -528,13 +535,15 @@ class AgentExecutionPublisher:
                     if quality_score is not None:
                         success_details["quality_score"] = quality_score
                     if output_summary is not None:
-                        success_details["output_summary"] = output_summary
+                        success_details["output_summary"] = sanitize_string(
+                            output_summary, max_length=500
+                        )
                     if metrics:
                         success_details["metrics"] = metrics
 
                     await action_logger.log_success(
                         success_name="agent_execution_completed",
-                        success_details=success_details,
+                        success_details=sanitize_dict(success_details),
                         duration_ms=publish_duration_ms,
                     )
                 except Exception as log_error:
@@ -649,20 +658,25 @@ class AgentExecutionPublisher:
             action_logger = self._get_action_logger(correlation_id, agent_name)
             if action_logger:
                 try:
-                    # Build error context with all details
+                    # Build error context with all details (sanitized)
                     error_context = {
                         "publish_duration_ms": publish_duration_ms,
                         "publish_success": publish_success,
                     }
                     if error_stack_trace:
-                        error_context["error_stack_trace"] = error_stack_trace
+                        # Import sanitize_stack_trace here to avoid circular import
+                        from agents.lib.data_sanitizer import sanitize_stack_trace
+
+                        error_context["error_stack_trace"] = sanitize_stack_trace(
+                            error_stack_trace
+                        )
                     if partial_results:
                         error_context["partial_results"] = partial_results
 
                     await action_logger.log_error(
                         error_type=error_type or "UnknownError",
-                        error_message=error_message,
-                        error_context=error_context,
+                        error_message=str(error_message),
+                        error_context=sanitize_dict(error_context),
                         severity="error",
                         send_slack_notification=False,  # Don't spam Slack for execution failures
                     )

@@ -84,7 +84,7 @@ declare -a ISSUES=()
 # Function to add issue
 add_issue() {
     ISSUES+=("$1")
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND++)) || true  # Always return 0 to prevent set -e exit
 }
 
 # Function to check service health
@@ -357,58 +357,66 @@ check_debug_loop() {
 }
 
 # Main execution
-{
-    echo "=== System Health Check ==="
-    echo "Timestamp: $TIMESTAMP"
+# Save original stdout to fd 3, then redirect stdout to output file
+exec 3>&1
+exec > "$OUTPUT_FILE"
+
+echo "=== System Health Check ==="
+echo "Timestamp: $TIMESTAMP"
+echo ""
+echo "Services:"
+
+# Check Archon services
+check_service "archon-intelligence"
+check_service "archon-qdrant"
+check_service "archon-bridge"
+check_service "archon-search"
+check_service "archon-memgraph"
+
+# Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
+# Those services are managed by omniarchon repository, not checked here
+# Similarly, archon-server and archon-router services do not exist
+
+# Check Omninode services (if they exist)
+if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then
     echo ""
-    echo "Services:"
+    echo "Omninode Services:"
+    for service in $(docker ps --filter "name=omninode-" --format "{{.Names}}"); do
+        check_service "$service"
+    done
+fi
 
-    # Check Archon services
-    check_service "archon-intelligence"
-    check_service "archon-qdrant"
-    check_service "archon-bridge"
-    check_service "archon-search"
-    check_service "archon-memgraph"
+echo ""
+echo "Infrastructure:"
 
-    # Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
-    # Those services are managed by omniarchon repository, not checked here
-    # Similarly, archon-server and archon-router services do not exist
+check_kafka
+check_qdrant
+check_postgres
+check_intelligence
+check_router
+check_debug_loop
 
-    # Check Omninode services (if they exist)
-    if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then
-        echo ""
-        echo "Omninode Services:"
-        for service in $(docker ps --filter "name=omninode-" --format "{{.Names}}"); do
-            check_service "$service"
-        done
-    fi
+echo ""
+echo "=== Summary ==="
 
+if [[ $ISSUES_FOUND -eq 0 ]]; then
+    echo "✅ All systems healthy"
+else
+    echo "❌ Issues Found: $ISSUES_FOUND"
     echo ""
-    echo "Infrastructure:"
+    for issue in "${ISSUES[@]}"; do
+        echo "  - $issue"
+    done
+fi
 
-    check_kafka
-    check_qdrant
-    check_postgres
-    check_intelligence
-    check_router
-    check_debug_loop
+echo ""
+echo "=== End Health Check ==="
 
-    echo ""
-    echo "=== Summary ==="
+# Restore stdout and output to terminal
+exec 1>&3 3>&-
 
-    if [[ $ISSUES_FOUND -eq 0 ]]; then
-        echo "✅ All systems healthy"
-    else
-        echo "❌ Issues Found: $ISSUES_FOUND"
-        echo ""
-        for issue in "${ISSUES[@]}"; do
-            echo "  - $issue"
-        done
-    fi
-
-    echo ""
-    echo "=== End Health Check ==="
-} | tee "$OUTPUT_FILE"
+# Display output file to stdout
+cat "$OUTPUT_FILE"
 
 # Append to history log
 echo "" >> "$HISTORY_FILE"

@@ -64,32 +64,54 @@ def release_connection(conn):
 
 
 def execute_query(
-    sql: str, params: Optional[Tuple] = None, fetch: bool = False
-) -> Optional[Any]:
+    sql: str, params: Optional[Tuple] = None, fetch: bool = True
+) -> Dict[str, Any]:
     """
     Execute a SQL query safely with parameterized inputs.
 
     Args:
         sql: SQL query with %s placeholders
         params: Tuple of parameters to substitute
-        fetch: If True, return query results
+        fetch: If True, return query results (default: True)
 
     Returns:
-        Query results if fetch=True, otherwise None
+        Dict with query results:
+        {
+            "success": bool,
+            "rows": list of dicts (if fetch=True) or None,
+            "error": str or None,
+            "host": str,
+            "port": int,
+            "database": str
+        }
     """
     conn = None
     try:
         conn = get_connection()
         if not conn:
-            return None
+            return {
+                "success": False,
+                "rows": None,
+                "error": "Failed to get database connection",
+                "host": DB_CONFIG.get("host", "unknown"),
+                "port": DB_CONFIG.get("port", "unknown"),
+                "database": DB_CONFIG.get("database", "unknown"),
+            }
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params or ())
             conn.commit()
 
-            if fetch:
-                return cur.fetchall()
-            return True
+            rows = cur.fetchall() if fetch else None
+
+            return {
+                "success": True,
+                "rows": rows,
+                "error": None,
+                "host": DB_CONFIG.get("host", "unknown"),
+                "port": DB_CONFIG.get("port", "unknown"),
+                "database": DB_CONFIG.get("database", "unknown"),
+            }
 
     except Exception as e:
         if conn:
@@ -97,7 +119,14 @@ def execute_query(
         print(f"Database query failed: {e}", file=sys.stderr)
         print(f"SQL: {sql}", file=sys.stderr)
         print(f"Params: {params}", file=sys.stderr)
-        return None
+        return {
+            "success": False,
+            "rows": None,
+            "error": str(e),
+            "host": DB_CONFIG.get("host", "unknown"),
+            "port": DB_CONFIG.get("port", "unknown"),
+            "database": DB_CONFIG.get("database", "unknown"),
+        }
     finally:
         if conn:
             release_connection(conn)

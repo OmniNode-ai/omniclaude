@@ -36,6 +36,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -86,10 +87,14 @@ try:
     from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
     from confidence_scoring_publisher import publish_confidence_scored
+    from data_sanitizer import sanitize_dict, sanitize_string
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
+
+    ACTION_LOGGER_AVAILABLE = True
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
+    ACTION_LOGGER_AVAILABLE = False
     raise
 
 # Import Slack notifier for error notifications
@@ -835,20 +840,70 @@ class AgentRouterEventService:
         """
         start_time = time.time()
 
-        # Initialize ActionLogger for debug information
-        action_logger = None
+        # CRITICAL: Validate correlation_id BEFORE ActionLogger initialization
+        # This prevents invalid state and silent failures
+        if not correlation_id:
+            self.logger.error("Missing correlation_id in routing request")
+            # Publish failure event
+            if self._producer:
+                error_envelope = {
+                    "correlation_id": "unknown",
+                    "event_type": "omninode.agent.routing.failed.v1",
+                    "payload": {
+                        "error_code": "VALIDATION_ERROR",
+                        "error_message": "Missing correlation_id in routing request",
+                        "routing_time_ms": 0,
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                try:
+                    await self._producer.send_and_wait(
+                        self.TOPIC_FAILED, error_envelope
+                    )
+                except Exception as publish_error:
+                    self.logger.error(f"Failed to publish error event: {publish_error}")
+            return
+
+        # Validate UUID format
         try:
-            action_logger = ActionLogger(
-                agent_name="agent-router-service",
-                correlation_id=correlation_id,
-                project_name="omniclaude",
-                project_path=str(Path(__file__).parent.parent.parent),
-                working_directory=os.getcwd(),
-                debug_mode=True,
-            )
-        except Exception as e:
-            # Non-blocking - log error but continue routing
-            self.logger.warning(f"Failed to initialize ActionLogger: {e}")
+            uuid.UUID(correlation_id)
+        except ValueError:
+            self.logger.error(f"Invalid correlation_id format: {correlation_id}")
+            # Publish failure event
+            if self._producer:
+                error_envelope = {
+                    "correlation_id": correlation_id,
+                    "event_type": "omninode.agent.routing.failed.v1",
+                    "payload": {
+                        "error_code": "VALIDATION_ERROR",
+                        "error_message": f"Invalid correlation_id format (not a valid UUID): {correlation_id}",
+                        "routing_time_ms": 0,
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                try:
+                    await self._producer.send_and_wait(
+                        self.TOPIC_FAILED, error_envelope
+                    )
+                except Exception as publish_error:
+                    self.logger.error(f"Failed to publish error event: {publish_error}")
+            return
+
+        # NOW safe to initialize ActionLogger with validated correlation_id
+        action_logger = None
+        if ACTION_LOGGER_AVAILABLE:
+            try:
+                action_logger = ActionLogger(
+                    agent_name="agent-router-service",
+                    correlation_id=correlation_id,  # Now validated!
+                    project_name="omniclaude",
+                    project_path=str(Path(__file__).parent.parent.parent),
+                    working_directory=os.getcwd(),
+                    debug_mode=True,
+                )
+            except Exception as e:
+                # Non-blocking - log error but continue routing
+                self.logger.warning(f"Failed to initialize ActionLogger: {e}")
 
         # Initialize execution logger for lifecycle tracking
         execution_logger = None
@@ -914,20 +969,22 @@ class AgentRouterEventService:
             # Primary recommendation
             primary = recommendations[0]
 
-            # Log routing decision with ActionLogger (non-blocking)
+            # Log routing decision with ActionLogger
             if action_logger:
                 try:
-                    asyncio.create_task(
-                        action_logger.log_decision(
-                            decision_name="agent_routing",
-                            decision_context={
-                                "user_request": user_request[
-                                    :200
-                                ],  # Truncate long requests
+                    await action_logger.log_decision(
+                        decision_name="agent_routing",
+                        decision_context=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
                                 "max_recommendations": max_recommendations,
                                 "candidates_evaluated": len(recommendations),
-                            },
-                            decision_result={
+                            }
+                        ),
+                        decision_result=sanitize_dict(
+                            {
                                 "selected_agent": primary.agent_name,
                                 "confidence": primary.confidence.total,
                                 "reasoning": primary.reason,
@@ -940,9 +997,9 @@ class AgentRouterEventService:
                                         1:3
                                     ]  # Top 2 alternatives
                                 ],
-                            },
-                            duration_ms=int(routing_time_ms),
-                        )
+                            }
+                        ),
+                        duration_ms=int(routing_time_ms),
                     )
                     self.logger.debug(
                         f"ActionLogger: Decision logged (agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%})"
@@ -951,24 +1008,28 @@ class AgentRouterEventService:
                     # Non-blocking - log error but don't fail routing
                     self.logger.debug(f"ActionLogger decision logging failed: {e}")
 
-            # Log routing as tool_call for performance tracking (non-blocking)
+            # Log routing as tool_call for performance tracking
             if action_logger:
                 try:
-                    asyncio.create_task(
-                        action_logger.log_tool_call(
-                            tool_name="AgentRouter",
-                            tool_parameters={
-                                "user_request": user_request[:200],  # Truncate
+                    await action_logger.log_tool_call(
+                        tool_name="AgentRouter",
+                        tool_parameters=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
                                 "max_recommendations": max_recommendations,
-                            },
-                            tool_result={
+                            }
+                        ),
+                        tool_result=sanitize_dict(
+                            {
                                 "selected_agent": primary.agent_name,
                                 "confidence": primary.confidence.total,
                                 "recommendation_count": len(recommendations),
-                            },
-                            duration_ms=int(routing_time_ms),
-                            success=True,
-                        )
+                            }
+                        ),
+                        duration_ms=int(routing_time_ms),
+                        success=True,
                     )
                     self.logger.debug(
                         f"ActionLogger: Tool call logged (routing_time: {routing_time_ms:.1f}ms)"
@@ -1131,23 +1192,25 @@ class AgentRouterEventService:
                 exc_info=True,
             )
 
-            # Log error with ActionLogger (non-blocking)
+            # Log error with ActionLogger
             if action_logger:
                 try:
-                    asyncio.create_task(
-                        action_logger.log_error(
-                            error_type=type(e).__name__,
-                            error_message=str(e),
-                            error_context={
-                                "user_request": user_request[:200],  # Truncate
+                    await action_logger.log_error(
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        error_context=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
                                 "routing_time_ms": routing_time_ms,
                                 "max_recommendations": options.get(
                                     "max_recommendations", 5
                                 ),
-                            },
-                            severity="error",
-                            send_slack_notification=False,  # Already handled by SlackNotifier below
-                        )
+                            }
+                        ),
+                        severity="error",
+                        send_slack_notification=False,  # Already handled by SlackNotifier below
                     )
                     self.logger.debug(
                         f"ActionLogger: Error logged (type: {type(e).__name__})"

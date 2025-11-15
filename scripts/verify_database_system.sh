@@ -33,7 +33,7 @@ if [ ! -f "$REPO_ROOT/.env" ]; then
     exit 2
 fi
 
-source .env
+source "$REPO_ROOT/.env"
 
 # Verify required env vars
 if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_DATABASE" ]; then
