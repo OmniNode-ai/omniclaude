@@ -187,10 +187,10 @@ categorize_comments() {
 
     # Output categorized comments as JSON
     jq -n \
-        --argjson critical "$(printf '%s\n' "${critical[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
-        --argjson major "$(printf '%s\n' "${major[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
-        --argjson minor "$(printf '%s\n' "${minor[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
-        --argjson nit "$(printf '%s\n' "${nit[@]}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson critical "$(printf '%s\n' "${critical[@]+"${critical[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson major "$(printf '%s\n' "${major[@]+"${major[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson minor "$(printf '%s\n' "${minor[@]+"${minor[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson nit "$(printf '%s\n' "${nit[@]+"${nit[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
         '{
             critical: $critical,
             major: $major,
