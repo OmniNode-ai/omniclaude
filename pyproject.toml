@@ -171,6 +171,7 @@ addopts = [
     "--ignore=agents/tests/test_pipeline_integration.py",
     "--ignore=agents/tests/test_interactive_pipeline.py",
     "--ignore=agents/tests/test_template_intelligence.py",
+    "--ignore=agents/tests/tools/node_gen/test_file_writer.py",  # Missing omnibase_core dependency
 ]
 
 [tool.bandit]

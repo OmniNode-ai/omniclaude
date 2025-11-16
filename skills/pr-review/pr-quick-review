@@ -105,19 +105,19 @@ if [[ -z "$SAVE_FILE" ]]; then
     SAVE_FILE="$REPO_ROOT/tmp/pr-review-${PR_NUMBER}.md"
 fi
 
-# Build review command
-REVIEW_CMD="$SCRIPT_DIR/review-pr $PR_NUMBER --output-file $SAVE_FILE"
+# Build review command (using array for safe path handling)
+REVIEW_CMD=("$SCRIPT_DIR/review-pr" "$PR_NUMBER" "--output-file" "$SAVE_FILE")
 if [[ "$JSON_MODE" == true ]]; then
-    REVIEW_CMD="$REVIEW_CMD --json"
+    REVIEW_CMD+=("--json")
 fi
 if [[ "$STRICT_MODE" == true ]]; then
-    REVIEW_CMD="$REVIEW_CMD --strict"
+    REVIEW_CMD+=("--strict")
 fi
 
 # Run review
 echo -e "${BLUE}[QUICK-REVIEW]${NC} Reviewing PR #${PR_NUMBER}..." >&2
 
-if $REVIEW_CMD; then
+if "${REVIEW_CMD[@]}"; then
     # Display output (unless JSON mode to stdout)
     if [[ "$JSON_MODE" == true ]]; then
         # Output JSON to stdout

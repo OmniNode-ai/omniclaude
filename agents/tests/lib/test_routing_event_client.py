@@ -151,14 +151,12 @@ class TestRoutingEventClientInitialization:
         with patch("agents.lib.routing_event_client.SCHEMAS_AVAILABLE", True):
             client = RoutingEventClient(bootstrap_servers="localhost:9092")
 
-            # Construct expected topics from settings (environment-agnostic)
-            expected_request = f"{settings.kafka_topic_prefix}routing.requested.v1"
-            expected_completed = f"{settings.kafka_topic_prefix}routing.completed.v1"
-            expected_failed = f"{settings.kafka_topic_prefix}routing.failed.v1"
-
-            assert client.TOPIC_REQUEST == expected_request
-            assert client.TOPIC_COMPLETED == expected_completed
-            assert client.TOPIC_FAILED == expected_failed
+            # Verify topic constants match the actual topic names defined in client
+            # These are hardcoded constants following EVENT_BUS_INTEGRATION_GUIDE standard
+            # Format: omninode.{domain}.{entity}.{action}.v{major}
+            assert client.TOPIC_REQUEST == "omninode.agent.routing.requested.v1"
+            assert client.TOPIC_COMPLETED == "omninode.agent.routing.completed.v1"
+            assert client.TOPIC_FAILED == "omninode.agent.routing.failed.v1"
 
 
 class TestRoutingEventClientLifecycle:

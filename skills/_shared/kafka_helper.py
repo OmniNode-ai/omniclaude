@@ -15,6 +15,8 @@ Created: 2025-11-12
 """
 
 import json
+import platform
+import re
 import subprocess
 from typing import Any, Dict, List, Optional
 
@@ -179,9 +181,10 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             }
 
         # Parse partition count from output
+        # Use regex to match specific partition line format to avoid false positives
         partitions = 0
         for line in result.stdout.split("\n"):
-            if "partition" in line.lower() and topic_name in line:
+            if re.search(rf'topic "{re.escape(topic_name)}" partition \d+', line):
                 partitions += 1
 
         return {
@@ -223,13 +226,23 @@ def get_consumer_groups() -> Dict[str, Any]:
         # This would require kafka-consumer-groups command or admin API
         # For now, return placeholder
         return {
-            "success": True,
+            "success": False,
             "groups": [],
             "count": 0,
             "error": "Consumer group listing requires kafka-consumer-groups command",
         }
     except Exception as e:
         return {"success": False, "groups": [], "count": 0, "error": str(e)}
+
+
+def get_timeout_command() -> str:
+    """
+    Get the platform-specific timeout command.
+
+    Returns:
+        'gtimeout' on macOS (Darwin), 'timeout' on Linux/Windows
+    """
+    return "gtimeout" if platform.system() == "Darwin" else "timeout"
 
 
 def check_topic_exists(topic_name: str) -> bool:
@@ -266,9 +279,11 @@ def get_recent_message_count(
 
     try:
         # Consume from end for a short time to estimate throughput
+        # Use platform-specific timeout command (gtimeout on macOS, timeout on Linux)
+        timeout_cmd = get_timeout_command()
         result = subprocess.run(
             [
-                "timeout",
+                timeout_cmd,
                 str(timeout_seconds),
                 "kcat",
                 "-C",

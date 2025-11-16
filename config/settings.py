@@ -1352,12 +1352,16 @@ def get_settings() -> Settings:
     """
     settings = Settings()
 
-    # Check if running in pytest (pytest sets PYTEST_CURRENT_TEST automatically)
-    # This prevents validation errors during test collection when environment
-    # variables from CI workflow aren't available yet
-    in_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
+    # Check if running in pytest collection phase only
+    # During collection, pytest discovers tests without running them, so validation
+    # would fail unnecessarily. However, during actual test execution (setup/run),
+    # we WANT validation to catch configuration issues.
+    # PYTEST_CURRENT_TEST format: "path/to/test.py::test_name (setup)" or "(call)"
+    in_pytest_collection = os.getenv(
+        "PYTEST_CURRENT_TEST"
+    ) is not None and "setup" not in os.getenv("PYTEST_CURRENT_TEST", "")
 
-    if in_pytest:
+    if in_pytest_collection:
         logger.debug(
             "Pytest environment detected - skipping validation during test collection. "
             "Tests should validate configuration explicitly if needed."

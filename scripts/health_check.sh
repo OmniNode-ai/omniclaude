@@ -366,6 +366,10 @@ echo "Timestamp: $TIMESTAMP"
 echo ""
 echo "Services:"
 
+# Disable exit-on-error to collect all issues
+# (re-enable after checks complete)
+set +e
+
 # Check Archon services
 check_service "archon-intelligence"
 check_service "archon-qdrant"
@@ -395,6 +399,9 @@ check_postgres
 check_intelligence
 check_router
 check_debug_loop
+
+# Re-enable exit-on-error
+set -e
 
 echo ""
 echo "=== Summary ==="

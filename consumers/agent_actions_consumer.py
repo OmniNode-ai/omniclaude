@@ -674,10 +674,10 @@ class AgentActionsConsumer:
         """Insert agent_routing_decisions events."""
         insert_sql = """
             INSERT INTO agent_routing_decisions (
-                id, correlation_id, project_name, user_request, selected_agent, confidence_score, alternatives,
-                reasoning, routing_strategy, context, routing_time_ms, created_at
+                id, correlation_id, user_request, selected_agent, confidence_score, alternatives,
+                reasoning, routing_strategy, context_snapshot, routing_time_ms, created_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (id) DO NOTHING
         """
@@ -713,7 +713,6 @@ class AgentActionsConsumer:
                 (
                     event_id,
                     str(correlation_id),  # Convert UUID to string for psycopg2
-                    event.get("project_name"),  # Extract project_name from event
                     event.get("user_request", ""),
                     event.get("selected_agent"),
                     event.get("confidence_score"),

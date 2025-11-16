@@ -16,8 +16,8 @@ Created: 2025-11-12
 """
 
 import json
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 
 def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
@@ -45,7 +45,7 @@ def format_status_indicator(status: str) -> str:
         status: Status string (e.g., "healthy", "ok", "connected", "error", "failed")
 
     Returns:
-        Status indicator (✓, ✗, ⚠, ℹ)
+        Status indicator (✓, ✗, ⚠, i)
     """
     status_lower = status.lower()
 
@@ -54,7 +54,14 @@ def format_status_indicator(status: str) -> str:
         return "✓"
 
     # Error indicators
-    if status_lower in ["error", "failed", "unhealthy", "unreachable", "critical", "false"]:
+    if status_lower in [
+        "error",
+        "failed",
+        "unhealthy",
+        "unreachable",
+        "critical",
+        "false",
+    ]:
         return "✗"
 
     # Warning indicators
@@ -65,8 +72,9 @@ def format_status_indicator(status: str) -> str:
     return "ℹ"
 
 
-def format_table(headers: List[str], rows: List[List[Any]],
-                title: Optional[str] = None) -> str:
+def format_table(
+    headers: List[str], rows: List[List[Any]], title: Optional[str] = None
+) -> str:
     """
     Format data as text-based table.
 
@@ -80,6 +88,12 @@ def format_table(headers: List[str], rows: List[List[Any]],
     """
     # Calculate column widths
     col_widths = [len(h) for h in headers]
+
+    # Extend col_widths to handle rows with more columns than headers
+    if rows:
+        max_row_len = max(len(r) for r in rows)
+        if max_row_len > len(col_widths):
+            col_widths.extend([0] * (max_row_len - len(col_widths)))
 
     for row in rows:
         for i, cell in enumerate(row):
@@ -107,7 +121,9 @@ def format_table(headers: List[str], rows: List[List[Any]],
 
     # Add data rows
     for row in rows:
-        row_str = " | ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+        row_str = " | ".join(
+            str(cell).ljust(col_widths[i]) for i, cell in enumerate(row)
+        )
         output.append(row_str)
 
     return "\n".join(output)
@@ -164,7 +180,13 @@ def format_status_summary(data: Dict[str, Any]) -> str:
             value_str = "Yes" if value else "No"
             output.append(f"{indicator} {key_formatted}: {value_str}")
         elif isinstance(value, str) and value.lower() in [
-            "healthy", "ok", "connected", "error", "failed", "warning", "degraded"
+            "healthy",
+            "ok",
+            "connected",
+            "error",
+            "failed",
+            "warning",
+            "degraded",
         ]:
             indicator = format_status_indicator(value)
             output.append(f"{indicator} {key_formatted}: {value}")
@@ -311,7 +333,7 @@ if __name__ == "__main__":
     rows = [
         ["archon-intelligence", "healthy", "5d 3h"],
         ["archon-qdrant", "healthy", "5d 3h"],
-        ["archon-bridge", "healthy", "5d 3h"]
+        ["archon-bridge", "healthy", "5d 3h"],
     ]
     table = format_table(headers, rows, title="Service Status")
     print(table)
