@@ -36,9 +36,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
-# Add lib to path for kafka_config
-sys.path.insert(0, str(Path.home() / ".claude" / "lib"))
+# Add shared_lib to path for kafka_config and kafka_publisher
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared_lib"))
 from kafka_config import get_kafka_bootstrap_servers
+from kafka_publisher import get_kafka_producer
 
 
 # Load .env file from project directory
@@ -66,56 +67,6 @@ def load_env_file():
 
 # Load .env on import
 load_env_file()
-
-# Kafka imports (lazy loaded)
-KafkaProducer = None
-_producer_instance = None  # Cached producer instance for singleton pattern
-
-
-def get_kafka_producer():
-    """
-    Get or create Kafka producer (singleton pattern).
-    Lazy imports kafka-python to avoid import errors if not installed.
-    Returns cached producer instance to prevent connection/memory leaks.
-    """
-    global KafkaProducer, _producer_instance
-
-    # Return cached instance if available
-    if _producer_instance is not None:
-        return _producer_instance
-
-    # Import KafkaProducer class if not already imported
-    if KafkaProducer is None:
-        try:
-            from kafka import KafkaProducer as KP
-
-            KafkaProducer = KP
-        except ImportError:
-            raise ImportError(
-                "kafka-python not installed. Install with: pip install kafka-python"
-            )
-
-    # Get Kafka brokers from centralized configuration
-    brokers = get_kafka_bootstrap_servers().split(",")
-
-    # Create producer with JSON serialization
-    producer = KafkaProducer(
-        bootstrap_servers=brokers,
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-        # Performance settings
-        compression_type="gzip",
-        linger_ms=10,  # Batch messages for 10ms
-        batch_size=16384,  # 16KB batches
-        # Reliability settings
-        acks=1,  # Wait for leader acknowledgment (balance of speed/reliability)
-        retries=3,
-        max_in_flight_requests_per_connection=5,
-    )
-
-    # Cache the instance for reuse
-    _producer_instance = producer
-
-    return producer
 
 
 def publish_to_kafka(event: dict, topic: str = "agent-routing-decisions") -> bool:

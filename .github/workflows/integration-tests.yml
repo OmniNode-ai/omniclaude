@@ -3,12 +3,18 @@ name: Integration Tests
 # Comprehensive integration testing workflow
 # Catches database issues, logging gaps, agent observability problems, and Kafka integration failures
 # before they reach production
+#
+# NOTE: Integration tests require remote services (PostgreSQL, Kafka, Qdrant) which are not available in CI.
+# These tests are disabled on pull requests to prevent CI failures. They run on main/develop branches
+# or can be triggered manually via workflow_dispatch.
 
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  # Integration tests disabled on PRs - they require remote services not available in CI
+  # Use enhanced-ci.yml and ci-cd.yml for unit tests on PRs
+  # pull_request:
+  #   branches: [main, develop]
   workflow_dispatch:
 
 env:

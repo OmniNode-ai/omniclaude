@@ -10,6 +10,7 @@ Provides comprehensive fixtures for:
 """
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Dict
 from uuid import uuid4
@@ -17,14 +18,21 @@ from uuid import uuid4
 import pytest
 from dotenv import load_dotenv
 
-# Load environment variables from .env file for distributed testing
-# This ensures tests use the correct remote infrastructure configuration
-env_path = Path(__file__).parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path, override=True)
-    print(f"✅ Loaded .env configuration from {env_path}")
+# Only load .env in local development (not in CI)
+# In CI, environment variables are set by GitHub Actions and should not be overridden
+if not os.getenv("CI"):
+    # Load environment variables from .env file for distributed testing
+    # This ensures tests use the correct remote infrastructure configuration
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=True)
+        print(f"✅ Loaded .env configuration from {env_path}")
+    else:
+        print(
+            f"⚠️  No .env file found at {env_path}, using system environment variables"
+        )
 else:
-    print(f"⚠️  No .env file found at {env_path}, using system environment variables")
+    print("ℹ️  Running in CI environment - using GitHub Actions environment variables")
 
 # Import project modules
 # Temporarily commented out - contract_validator depends on omnibase_core

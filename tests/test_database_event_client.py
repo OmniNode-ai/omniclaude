@@ -169,7 +169,7 @@ async def test_timeout_handling():
     print("TEST 4: Timeout Handling")
     print("=" * 60)
 
-    client = DatabaseEventClient(timeout_seconds=2)
+    client = DatabaseEventClient(timeout=2)
 
     try:
         await client.start()
