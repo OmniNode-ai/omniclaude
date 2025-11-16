@@ -357,9 +357,10 @@ check_debug_loop() {
 }
 
 # Main execution
-# Save original stdout to fd 3, then redirect stdout to output file
-exec 3>&1
-exec > "$OUTPUT_FILE"
+# Use exec with tee to write to both stdout and file simultaneously
+# This ensures ISSUES_FOUND updates happen in main shell (not subshell)
+exec > >(tee "$OUTPUT_FILE")
+exec 2>&1
 
 echo "=== System Health Check ==="
 echo "Timestamp: $TIMESTAMP"
@@ -419,17 +420,14 @@ fi
 echo ""
 echo "=== End Health Check ==="
 
-# Restore stdout and output to terminal
-exec 1>&3 3>&-
-
-# Display output file to stdout
-cat "$OUTPUT_FILE"
+# Wait for tee to finish writing
+wait
 
 # Append to history log
 echo "" >> "$HISTORY_FILE"
 cat "$OUTPUT_FILE" >> "$HISTORY_FILE"
 
-# Print summary to stderr for scripting
+# Exit with appropriate code based on issues found
 if [[ $ISSUES_FOUND -eq 0 ]]; then
     exit 0
 else

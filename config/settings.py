@@ -1333,10 +1333,11 @@ def get_settings() -> Settings:
     In development/test modes, errors are logged and notifications are sent.
 
     Pytest Detection:
-        Automatically detects pytest environment via PYTEST_CURRENT_TEST
-        environment variable and skips validation during test collection.
-        This prevents import-time validation errors when environment
-        variables are set in test steps rather than at collection time.
+        Automatically detects pytest collection phase by checking if pytest
+        module is imported AND PYTEST_CURRENT_TEST is not set. Validation
+        is skipped ONLY during collection to allow test discovery without
+        full configuration. Validation runs during actual test execution
+        (setup/call/teardown) to catch configuration issues in tests.
 
     Returns:
         Settings instance
@@ -1354,17 +1355,21 @@ def get_settings() -> Settings:
 
     # Check if running in pytest collection phase only
     # During collection, pytest discovers tests without running them, so validation
-    # would fail unnecessarily. However, during actual test execution (setup/run),
+    # would fail unnecessarily. However, during actual test execution (setup/call/teardown),
     # we WANT validation to catch configuration issues.
-    # PYTEST_CURRENT_TEST format: "path/to/test.py::test_name (setup)" or "(call)"
-    in_pytest_collection = os.getenv(
+    #
+    # PYTEST_CURRENT_TEST is only set during test execution, NOT during collection.
+    # So we detect collection by: pytest module imported AND PYTEST_CURRENT_TEST not set.
+    import sys
+
+    in_pytest_collection = "pytest" in sys.modules and not os.getenv(
         "PYTEST_CURRENT_TEST"
-    ) is not None and "setup" not in os.getenv("PYTEST_CURRENT_TEST", "")
+    )
 
     if in_pytest_collection:
         logger.debug(
-            "Pytest environment detected - skipping validation during test collection. "
-            "Tests should validate configuration explicitly if needed."
+            "Pytest collection phase detected - skipping validation. "
+            "Validation will run during actual test execution (setup/call/teardown)."
         )
         return settings
 
