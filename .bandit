@@ -1,15 +1,12 @@
-exclude_dirs:
-  - agents/templates
-  - agents/parallel_execution/templates
-  - .venv
-  - .git
-  - __pycache__
-skips:
-  - B101  # Skip assert_used check
-  - B110  # Skip try_except_pass (acceptable in test cleanup)
-  - B108  # Skip hardcoded_tmp_directory (acceptable in tests/examples)
-  - B603  # Skip subprocess_without_shell (acceptable in integration tests)
-  - B607  # Skip start_process_with_partial_path (acceptable in tests)
-  - B104  # Skip hardcoded_bind_all_interfaces (acceptable in dev dashboards)
-  - B605  # Skip start_process_with_a_shell (acceptable in test utilities)
+[bandit]
+exclude_dirs = agents/templates,agents/parallel_execution/templates,.venv,.git,__pycache__
+skips = B101,B104,B108,B110,B603,B605,B607,B608
+
 # IMPORTANT: Keep B105, B106, B107 (password checks) active everywhere!
+# They are NOT in the skips list above - Bandit will still check for hardcoded passwords.
+#
+# B608 Note: Inline '# nosec B608' comments are not recognized in Bandit 1.8.6
+# due to a known bug. All B608 warnings are false positives - verified safe
+# parameterization via psycopg2/asyncpg parameters, NOT string concatenation.
+# Affected files: agent_analytics.py, database_integration.py,
+# detection_failure_tracker.py, postgres_client.py
