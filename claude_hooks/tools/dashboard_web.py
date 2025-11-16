@@ -361,6 +361,6 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop")
     print("=" * 50)
 
-    uvicorn.run(  # noqa: S104 # nosec B104
-        app, host="0.0.0.0", port=8000, log_level="info"
-    )
+    # Security: Bind to localhost only (127.0.0.1) to prevent exposure to external networks.
+    # This is a development/diagnostic tool and should not be accessible from other machines.
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")

@@ -19,6 +19,10 @@ from pydantic import ValidationError
 
 from agents.lib.config.intelligence_config import IntelligenceConfig
 
+# IMPORTANT: Use settings from config framework, NOT hardcoded values
+# This ensures tests work across different environments (.env configs)
+from config import settings
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -105,7 +109,7 @@ class TestIntelligenceConfigDefaults:
         # Note: Values come from .env file loaded at module import time
         # The .env file is loaded by settings.py before Settings initialization,
         # so these are the actual runtime defaults
-        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
+        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
         assert config.kafka_enable_intelligence is True
         assert config.kafka_request_timeout_ms == 5000
         assert config.kafka_pattern_discovery_timeout_ms == 5000
@@ -197,7 +201,7 @@ class TestEnvironmentVariableLoading:
         """Test from_env() uses default values when env vars not set."""
         config = IntelligenceConfig.from_env()
         # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
-        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
+        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
         assert config.kafka_enable_intelligence is True
 
 
@@ -455,7 +459,7 @@ class TestEdgeCases:
         # Test verifies field access works correctly
         assert hasattr(config, "kafka_bootstrap_servers")
         # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
-        assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
+        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
 
         # Verify we can read all key fields
         assert hasattr(config, "kafka_enable_intelligence")

@@ -18,7 +18,10 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 # Add parent directories to path
 SCRIPT_DIR = Path(__file__).parent
@@ -36,13 +39,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def test_execution_started_with_action_logger():
+# -------------------------------------------------------------------------
+# Fixtures for Kafka Producer Mocking
+# -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_kafka_producer():
+    """
+    Mock AIOKafkaProducer for unit tests.
+
+    This prevents tests from attempting real Kafka connections,
+    which would fail in CI environments where the Docker internal
+    hostname 'omninode-bridge-redpanda:9092' doesn't resolve.
+    """
+    with patch(
+        "agents.lib.agent_execution_publisher.AIOKafkaProducer"
+    ) as mock_producer_class:
+        # Create async mock instance
+        mock_instance = MagicMock()
+        mock_producer_class.return_value = mock_instance
+
+        # Mock async methods with AsyncMock
+        mock_instance.start = AsyncMock()
+        mock_instance.stop = AsyncMock()
+        mock_instance.send_and_wait = AsyncMock()
+
+        # Mock send_and_wait to return a successful metadata response
+        mock_instance.send_and_wait.return_value = MagicMock(
+            topic="omninode.agent.execution.started.v1",
+            partition=0,
+            offset=42,
+        )
+
+        yield mock_producer_class, mock_instance
+
+
+@pytest.mark.asyncio
+async def test_execution_started_with_action_logger(mock_kafka_producer):
     """Test publish_execution_started with ActionLogger integration."""
     logger.info("=" * 60)
     logger.info("Test 1: Execution Started with ActionLogger")
     logger.info("=" * 60)
 
     # Create publisher (using context manager for auto start/stop)
+    # Kafka producer is mocked via the mock_kafka_producer fixture
     async with AgentExecutionPublisherContext() as publisher:
         correlation_id = str(uuid4())
         session_id = str(uuid4())
@@ -66,15 +107,25 @@ async def test_execution_started_with_action_logger():
         else:
             logger.warning("⚠ Event failed to publish (check Kafka connectivity)")
 
+    # Verify mock was called
+    mock_producer_class, mock_instance = mock_kafka_producer
+    assert mock_instance.start.called, "Producer start() should be called"
+    assert (
+        mock_instance.send_and_wait.called
+    ), "Producer send_and_wait() should be called"
+    assert mock_instance.stop.called, "Producer stop() should be called"
+
     logger.info("")
 
 
-async def test_execution_completed_with_action_logger():
+@pytest.mark.asyncio
+async def test_execution_completed_with_action_logger(mock_kafka_producer):
     """Test publish_execution_completed with ActionLogger integration."""
     logger.info("=" * 60)
     logger.info("Test 2: Execution Completed with ActionLogger")
     logger.info("=" * 60)
 
+    # Kafka producer is mocked via the mock_kafka_producer fixture
     async with AgentExecutionPublisherContext() as publisher:
         correlation_id = str(uuid4())
 
@@ -111,15 +162,25 @@ async def test_execution_completed_with_action_logger():
         else:
             logger.warning("⚠ Event failed to publish (check Kafka connectivity)")
 
+    # Verify mock was called
+    mock_producer_class, mock_instance = mock_kafka_producer
+    assert mock_instance.start.called, "Producer start() should be called"
+    assert (
+        mock_instance.send_and_wait.called
+    ), "Producer send_and_wait() should be called"
+    assert mock_instance.stop.called, "Producer stop() should be called"
+
     logger.info("")
 
 
-async def test_execution_failed_with_action_logger():
+@pytest.mark.asyncio
+async def test_execution_failed_with_action_logger(mock_kafka_producer):
     """Test publish_execution_failed with ActionLogger integration."""
     logger.info("=" * 60)
     logger.info("Test 3: Execution Failed with ActionLogger")
     logger.info("=" * 60)
 
+    # Kafka producer is mocked via the mock_kafka_producer fixture
     async with AgentExecutionPublisherContext() as publisher:
         correlation_id = str(uuid4())
 
@@ -159,15 +220,25 @@ FileNotFoundError: [Errno 2] No such file or directory: '/path/to/missing/file.p
         else:
             logger.warning("⚠ Event failed to publish (check Kafka connectivity)")
 
+    # Verify mock was called
+    mock_producer_class, mock_instance = mock_kafka_producer
+    assert mock_instance.start.called, "Producer start() should be called"
+    assert (
+        mock_instance.send_and_wait.called
+    ), "Producer send_and_wait() should be called"
+    assert mock_instance.stop.called, "Producer stop() should be called"
+
     logger.info("")
 
 
-async def test_complete_lifecycle():
+@pytest.mark.asyncio
+async def test_complete_lifecycle(mock_kafka_producer):
     """Test complete agent lifecycle with ActionLogger integration."""
     logger.info("=" * 60)
     logger.info("Test 4: Complete Agent Lifecycle")
     logger.info("=" * 60)
 
+    # Kafka producer is mocked via the mock_kafka_producer fixture
     async with AgentExecutionPublisherContext() as publisher:
         correlation_id = str(uuid4())
         session_id = str(uuid4())
@@ -203,23 +274,48 @@ async def test_complete_lifecycle():
         logger.info("  - Decision logged at start")
         logger.info("  - Success logged at completion with performance metrics")
 
+    # Verify mock was called
+    mock_producer_class, mock_instance = mock_kafka_producer
+    assert mock_instance.start.called, "Producer start() should be called"
+    # Should be called twice (started + completed events)
+    assert (
+        mock_instance.send_and_wait.call_count >= 2
+    ), "Producer send_and_wait() should be called at least twice"
+    assert mock_instance.stop.called, "Producer stop() should be called"
+
     logger.info("")
 
 
-async def main():
-    """Run all tests."""
+def main():
+    """
+    Run all tests using pytest.
+
+    NOTE: This test suite requires mocked Kafka producers to avoid
+    connection attempts to Docker internal hostnames in CI environments.
+
+    Run tests with:
+        pytest agents/tests/test_agent_execution_publisher_action_logger_integration.py -v
+
+    Or run this file directly (will invoke pytest):
+        python agents/tests/test_agent_execution_publisher_action_logger_integration.py
+    """
+    import subprocess
+
     logger.info("\n" + "=" * 60)
     logger.info("Agent Execution Publisher - ActionLogger Integration Tests")
     logger.info("=" * 60)
     logger.info("")
+    logger.info("Running tests via pytest (with Kafka mocking enabled)...")
+    logger.info("")
 
-    try:
-        # Run individual tests
-        await test_execution_started_with_action_logger()
-        await test_execution_completed_with_action_logger()
-        await test_execution_failed_with_action_logger()
-        await test_complete_lifecycle()
+    # Run pytest on this file
+    result = subprocess.run(
+        ["pytest", __file__, "-v", "--tb=short"],
+        capture_output=False,
+    )
 
+    if result.returncode == 0:
+        logger.info("")
         logger.info("=" * 60)
         logger.info("All Tests Passed!")
         logger.info("=" * 60)
@@ -235,11 +331,10 @@ async def main():
         logger.info(
             "   SELECT * FROM agent_actions WHERE correlation_id = '<correlation_id>';"
         )
-
-    except Exception as e:
-        logger.error(f"Test failed with error: {e}", exc_info=True)
+    else:
+        logger.error("Some tests failed. See output above for details.")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

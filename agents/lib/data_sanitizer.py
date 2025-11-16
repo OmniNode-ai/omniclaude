@@ -87,6 +87,7 @@ SENSITIVE_KEYS: Set[str] = {
     "redis_url",
     "kafka_password",
     "postgres_password",
+    "credentials",  # Credential objects should be fully redacted
 }
 
 # Sensitive value patterns (regex matching)
