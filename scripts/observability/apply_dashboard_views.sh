@@ -134,11 +134,9 @@ echo ""
 # Apply Views
 # =====================================================================
 
-# Get repo root and create tmp directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-mkdir -p "$REPO_ROOT/tmp"
-TMP_LOG="$REPO_ROOT/tmp/apply_views.log"
+# Create tmp directory (reuse PROJECT_ROOT from top of script)
+mkdir -p "$PROJECT_ROOT/tmp"
+TMP_LOG="$PROJECT_ROOT/tmp/apply_views.log"
 
 echo "Applying dashboard views from: $VIEWS_FILE"
 echo ""

@@ -102,5 +102,5 @@ The skill returns JSON output with the following structure:
 
 ## Version History
 
-- **v1.0.0** (YYYY-MM-DD): Initial release
-- **v1.1.0** (YYYY-MM-DD): Added new feature X
+- **v1.0.0** (<YYYY-MM-DD>): Initial release
+- **v1.1.0** (<YYYY-MM-DD>): Added new feature X

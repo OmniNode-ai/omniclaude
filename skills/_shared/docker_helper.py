@@ -15,9 +15,34 @@ Created: 2025-11-12
 """
 
 import json
-import subprocess
-from typing import Dict, List, Optional, Any
+import os
 import re
+import subprocess
+
+# Import type-safe configuration (Phase 2 - Pydantic Settings migration)
+import sys
+from typing import Any, Dict, List, Optional
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from config import settings
+
+
+def get_timeout_seconds() -> float:
+    """
+    Get timeout value in seconds from type-safe configuration.
+
+    Returns timeout from Pydantic Settings (default: 5 seconds).
+    Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Returns:
+        Timeout in seconds (float)
+
+    Note:
+        Timeout strategy: All helper subprocess/network calls use the same
+        timeout to prevent infinite hangs. Default is 5 seconds, configurable
+        via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+    """
+    return settings.request_timeout_ms / 1000.0
 
 
 def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
@@ -32,14 +57,16 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
     """
     try:
         cmd = ["docker", "ps", "-a", "--format", "{{json .}}"]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=get_timeout_seconds()
+        )
 
         if result.returncode != 0:
             return {
                 "success": False,
                 "containers": [],
                 "count": 0,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
 
         containers = []
@@ -50,14 +77,16 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
                 container = json.loads(line)
                 # Apply name filter if specified
                 if name_filter is None or name_filter in container.get("Names", ""):
-                    containers.append({
-                        "name": container.get("Names", ""),
-                        "status": container.get("Status", ""),
-                        "state": container.get("State", ""),
-                        "image": container.get("Image", ""),
-                        "ports": container.get("Ports", ""),
-                        "id": container.get("ID", "")
-                    })
+                    containers.append(
+                        {
+                            "name": container.get("Names", ""),
+                            "status": container.get("Status", ""),
+                            "state": container.get("State", ""),
+                            "image": container.get("Image", ""),
+                            "ports": container.get("Ports", ""),
+                            "id": container.get("ID", ""),
+                        }
+                    )
             except json.JSONDecodeError:
                 continue
 
@@ -65,15 +94,10 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "success": True,
             "containers": containers,
             "count": len(containers),
-            "error": None
+            "error": None,
         }
     except Exception as e:
-        return {
-            "success": False,
-            "containers": [],
-            "count": 0,
-            "error": str(e)
-        }
+        return {"success": False, "containers": [], "count": 0, "error": str(e)}
 
 
 def get_container_status(container_name: str) -> Dict[str, Any]:
@@ -92,7 +116,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             ["docker", "inspect", container_name],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode != 0:
@@ -100,7 +124,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "status": "not_found",
-                "error": "Container not found"
+                "error": "Container not found",
             }
 
         inspect_data = json.loads(result.stdout)[0]
@@ -124,14 +148,10 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "started_at": started_at,
             "restart_count": state.get("RestartCount", 0),
             "image": config.get("Image", ""),
-            "error": None
+            "error": None,
         }
     except Exception as e:
-        return {
-            "success": False,
-            "container": container_name,
-            "error": str(e)
-        }
+        return {"success": False, "container": container_name, "error": str(e)}
 
 
 def check_container_health(container_name: str) -> Dict[str, Any]:
@@ -155,7 +175,7 @@ def check_container_health(container_name: str) -> Dict[str, Any]:
         "healthy": status.get("health") == "healthy",
         "health_status": status.get("health", "unknown"),
         "running": status.get("running", False),
-        "error": None
+        "error": None,
     }
 
 
@@ -171,18 +191,24 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
     """
     try:
         result = subprocess.run(
-            ["docker", "stats", container_name, "--no-stream", "--format",
-             "{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}"],
+            [
+                "docker",
+                "stats",
+                container_name,
+                "--no-stream",
+                "--format",
+                "{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}",
+            ],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode != 0:
             return {
                 "success": False,
                 "container": container_name,
-                "error": result.stderr.strip()
+                "error": result.stderr.strip(),
             }
 
         # Parse stats output
@@ -193,7 +219,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             return {
                 "success": False,
                 "container": container_name,
-                "error": "Could not parse stats output"
+                "error": "Could not parse stats output",
             }
 
         cpu_percent = parts[0].replace("%", "").strip()
@@ -206,14 +232,10 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "cpu_percent": float(cpu_percent) if cpu_percent else 0.0,
             "memory_usage": mem_usage,
             "memory_percent": float(mem_percent) if mem_percent else 0.0,
-            "error": None
+            "error": None,
         }
     except Exception as e:
-        return {
-            "success": False,
-            "container": container_name,
-            "error": str(e)
-        }
+        return {"success": False, "container": container_name, "error": str(e)}
 
 
 def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
@@ -232,7 +254,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             ["docker", "logs", "--tail", str(tail), container_name],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=get_timeout_seconds(),
         )
 
         # Combine stdout and stderr
@@ -240,13 +262,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
         log_lines = logs.strip().split("\n")
 
         # Detect errors in logs
-        error_patterns = [
-            r"error",
-            r"exception",
-            r"failed",
-            r"fatal",
-            r"critical"
-        ]
+        error_patterns = [r"error", r"exception", r"failed", r"fatal", r"critical"]
 
         errors = []
         for line in log_lines:
@@ -263,14 +279,10 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "log_count": len(log_lines),
             "errors": errors,
             "error_count": len(errors),
-            "error": None
+            "error": None,
         }
     except Exception as e:
-        return {
-            "success": False,
-            "container": container_name,
-            "error": str(e)
-        }
+        return {"success": False, "container": container_name, "error": str(e)}
 
 
 def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
@@ -310,7 +322,7 @@ def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
         "stopped": stopped,
         "unhealthy": unhealthy,
         "healthy": running - unhealthy,
-        "error": None
+        "error": None,
     }
 
 

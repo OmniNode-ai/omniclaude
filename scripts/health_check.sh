@@ -17,15 +17,15 @@
 
 set -euo pipefail
 
-# Get repo root directory
+# Get project root directory (calculate once)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-mkdir -p "$REPO_ROOT/tmp"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+mkdir -p "$PROJECT_ROOT/tmp"
 
 # Configuration
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-OUTPUT_FILE="$REPO_ROOT/tmp/health_check_latest.txt"
-HISTORY_FILE="$REPO_ROOT/tmp/health_check_history.log"
+OUTPUT_FILE="$PROJECT_ROOT/tmp/health_check_latest.txt"
+HISTORY_FILE="$PROJECT_ROOT/tmp/health_check_history.log"
 
 # Colors for terminal output (disabled in file output)
 RED='\033[0;31m'
@@ -34,8 +34,6 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Load environment variables from .env
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
     echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"

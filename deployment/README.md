@@ -15,6 +15,26 @@ This directory contains a consolidated Docker Compose configuration following 12
 
 ## Prerequisites
 
+### Required Tools
+
+**kcat** (Kafka command-line consumer/producer):
+
+kcat is required for Kafka diagnostics, topic inspection, and skills that interact with the event bus.
+
+**Installation**:
+- **macOS**: `brew install kcat`
+- **Ubuntu/Debian**: `sudo apt-get install kafkacat` (kcat is symlinked as kafkacat)
+- **Alpine/Docker**: `apk add kafkacat`
+- **From Source**: https://github.com/edenhill/kcat
+
+**Verify Installation**:
+```bash
+kcat -V
+# Expected: kcat - Apache Kafka producer and consumer tool
+```
+
+**Note**: Some skills in `skills/_shared/kafka_helper.py` will fail silently if kcat is not installed. The error message will indicate the missing dependency.
+
 ### External Dependencies
 
 **⚠️ REQUIRED**: The `omninode_bridge` repository must be running before starting OmniClaude services.

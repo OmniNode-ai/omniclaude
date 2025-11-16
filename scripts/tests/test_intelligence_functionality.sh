@@ -89,16 +89,14 @@ echo ""
 echo "TEST 2: Collection Verification"
 echo "--------------------------------"
 
-# Get repo root and create tmp directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-mkdir -p "$REPO_ROOT/tmp"
+# Create tmp directory (reuse PROJECT_ROOT from top of script)
+mkdir -p "$PROJECT_ROOT/tmp"
 
 # Active collections (should have data)
 ACTIVE_COLLECTIONS=("archon_vectors" "code_generation_patterns")
 # Planned collections (expected to be empty)
 PLANNED_COLLECTIONS=("archon-intelligence" "quality_vectors")
-COLLECTION_STATS_FILE="$REPO_ROOT/tmp/qdrant_collection_stats.json"
+COLLECTION_STATS_FILE="$PROJECT_ROOT/tmp/qdrant_collection_stats.json"
 
 echo "Active Collections (should have data):"
 for collection in "${ACTIVE_COLLECTIONS[@]}"; do

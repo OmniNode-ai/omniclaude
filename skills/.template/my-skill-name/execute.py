@@ -14,8 +14,8 @@ Examples:
     # With optional parameter
     python3 execute.py --param1 "value1" --param2 "value2" --param3 "value3"
 
-Author: Your Name
-Created: YYYY-MM-DD
+Author: <your-name>
+Created: <YYYY-MM-DD>
 """
 
 import argparse

@@ -18,27 +18,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 try:
     from db_helper import execute_query
     from status_formatter import format_json
+    from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
 
 
-def parse_timeframe(timeframe: str) -> str:
-    """Convert timeframe string to PostgreSQL interval."""
-    mapping = {
-        "5m": "5 minutes",
-        "15m": "15 minutes",
-        "1h": "1 hour",
-        "24h": "24 hours",
-        "7d": "7 days"
-    }
-    return mapping.get(timeframe, "1 hour")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Check agent performance")
-    parser.add_argument("--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)")
-    parser.add_argument("--top-agents", type=int, default=10, help="Number of top agents")
+    parser.add_argument(
+        "--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)"
+    )
+    parser.add_argument(
+        "--top-agents", type=int, default=10, help="Number of top agents"
+    )
     args = parser.parse_args()
 
     interval = parse_timeframe(args.timeframe)
@@ -64,7 +57,7 @@ def main():
                 "total_decisions": row["total_decisions"] or 0,
                 "avg_routing_time_ms": round(float(row["avg_routing_time_ms"] or 0), 1),
                 "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
-                "threshold_violations": row["threshold_violations"] or 0
+                "threshold_violations": row["threshold_violations"] or 0,
             }
 
         # Get top agents
@@ -86,7 +79,7 @@ def main():
                 {
                     "agent": row["agent"],
                     "count": row["count"],
-                    "avg_confidence": round(float(row["avg_confidence"]), 2)
+                    "avg_confidence": round(float(row["avg_confidence"]), 2),
                 }
                 for row in top_result["rows"]
             ]
@@ -107,7 +100,7 @@ def main():
             result["transformations"] = {
                 "total": row["total"] or 0,
                 "success_rate": round(float(row["success_rate"] or 0), 2),
-                "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1)
+                "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1),
             }
 
         print(format_json(result))

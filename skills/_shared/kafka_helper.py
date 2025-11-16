@@ -9,19 +9,40 @@ Provides functions for:
 - Message throughput monitoring
 
 Usage:
-    from kafka_helper import check_kafka_connection, list_topics, get_consumer_lag
+    from kafka_helper import check_kafka_connection, list_topics, get_topic_stats
 
 Created: 2025-11-12
 """
 
 import json
+import os
 import platform
 import re
 import subprocess
+import sys
 from typing import Any, Dict, List, Optional
 
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
+
+
+def get_timeout_seconds() -> float:
+    """
+    Get timeout value in seconds from type-safe configuration.
+
+    Returns timeout from Pydantic Settings (default: 5 seconds).
+    Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Returns:
+        Timeout in seconds (float)
+
+    Note:
+        Timeout strategy: All helper subprocess/network calls use the same
+        timeout to prevent infinite hangs. Default is 5 seconds, configurable
+        via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+    """
+    return settings.request_timeout_ms / 1000.0
 
 
 def get_kafka_bootstrap_servers() -> str:
@@ -73,7 +94,7 @@ def check_kafka_connection() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode == 0:
@@ -95,14 +116,21 @@ def check_kafka_connection() -> Dict[str, Any]:
             "status": "timeout",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": "Connection timeout after 5s",
+            "error": f"Connection timeout after {get_timeout_seconds()}s",
         }
     except FileNotFoundError:
+        install_instructions = (
+            "kcat command not found. "
+            "Install: macOS: 'brew install kcat' | "
+            "Ubuntu/Debian: 'sudo apt-get install kafkacat' | "
+            "Alpine/Docker: 'apk add kafkacat' | "
+            "See deployment/README.md for details"
+        )
         return {
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": "kcat command not found. Install with: brew install kcat",
+            "error": install_instructions,
         }
     except Exception as e:
         return {
@@ -127,7 +155,7 @@ def list_topics() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode != 0:
@@ -170,7 +198,7 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers, "-t", topic_name],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode != 0:
@@ -211,7 +239,7 @@ def get_consumer_groups() -> Dict[str, Any]:
             ["kcat", "-L", "-b", bootstrap_servers],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=get_timeout_seconds(),
         )
 
         if result.returncode != 0:

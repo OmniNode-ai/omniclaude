@@ -14,16 +14,16 @@ from typing import Any, Dict, Optional, Tuple
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
-# Add config for type-safe settings
+# Add config for type-safe settings (Pydantic Settings framework)
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from config import settings
 
-# Database configuration
+# Database configuration - all values from type-safe Pydantic Settings
 DB_CONFIG = {
-    "host": os.environ.get("POSTGRES_HOST", "localhost"),
-    "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-    "database": os.environ.get("POSTGRES_DB", "omninode_bridge"),
-    "user": os.environ.get("POSTGRES_USER", "postgres"),
+    "host": settings.postgres_host,
+    "port": settings.postgres_port,
+    "database": settings.postgres_database,
+    "user": settings.postgres_user,
     "password": settings.get_effective_postgres_password(),
 }
 

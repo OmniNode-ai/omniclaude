@@ -15,22 +15,50 @@ Created: 2025-11-12
 """
 
 import json
+
+# Add path for config module (type-safe Pydantic Settings)
 import os
-import urllib.request
+import sys
 import urllib.error
-from typing import Dict, List, Optional, Any
+import urllib.request
+from typing import Any, Dict, List, Optional
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from config import settings
+
+
+def get_timeout_seconds() -> float:
+    """
+    Get timeout value in seconds from type-safe configuration.
+
+    Returns timeout from Pydantic Settings (default: 5 seconds).
+    Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Returns:
+        Timeout in seconds (float)
+
+    Note:
+        Timeout strategy: All helper subprocess/network calls use the same
+        timeout to prevent infinite hangs. Default is 5 seconds, configurable
+        via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+    """
+    return settings.request_timeout_ms / 1000.0
 
 
 def get_qdrant_url() -> str:
     """
-    Get Qdrant URL from environment.
+    Get Qdrant URL from type-safe configuration.
+
+    Uses Pydantic Settings framework for validated configuration.
 
     Returns:
         Qdrant URL (e.g., "http://localhost:6333")
+
+    Note:
+        Configuration is loaded from .env file and validated on import.
+        Default values: QDRANT_HOST=localhost, QDRANT_PORT=6333
     """
-    host = os.environ.get("QDRANT_HOST", "localhost")
-    port = os.environ.get("QDRANT_PORT", "6333")
-    return f"http://{host}:{port}"
+    return f"http://{settings.qdrant_host}:{settings.qdrant_port}"
 
 
 def check_qdrant_connection() -> Dict[str, Any]:
@@ -43,35 +71,37 @@ def check_qdrant_connection() -> Dict[str, Any]:
     qdrant_url = get_qdrant_url()
 
     try:
-        req = urllib.request.Request(f"{qdrant_url}/", method="GET")
-        with urllib.request.urlopen(req, timeout=5) as response:
+        req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310
+            req, timeout=get_timeout_seconds()
+        ) as response:
             if response.status == 200:
                 return {
                     "status": "connected",
                     "url": qdrant_url,
                     "reachable": True,
-                    "error": None
+                    "error": None,
                 }
             else:
                 return {
                     "status": "error",
                     "url": qdrant_url,
                     "reachable": False,
-                    "error": f"HTTP {response.status}"
+                    "error": f"HTTP {response.status}",
                 }
     except urllib.error.URLError as e:
         return {
             "status": "unreachable",
             "url": qdrant_url,
             "reachable": False,
-            "error": str(e.reason)
+            "error": str(e.reason),
         }
     except Exception as e:
         return {
             "status": "error",
             "url": qdrant_url,
             "reachable": False,
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -85,14 +115,18 @@ def list_collections() -> Dict[str, Any]:
     qdrant_url = get_qdrant_url()
 
     try:
-        req = urllib.request.Request(f"{qdrant_url}/collections", method="GET")
-        with urllib.request.urlopen(req, timeout=5) as response:
+        req = urllib.request.Request(  # noqa: S310
+            f"{qdrant_url}/collections", method="GET"
+        )
+        with urllib.request.urlopen(  # noqa: S310
+            req, timeout=get_timeout_seconds()
+        ) as response:
             if response.status != 200:
                 return {
                     "success": False,
                     "collections": [],
                     "count": 0,
-                    "error": f"HTTP {response.status}"
+                    "error": f"HTTP {response.status}",
                 }
 
             data = json.loads(response.read().decode())
@@ -104,15 +138,10 @@ def list_collections() -> Dict[str, Any]:
                 "success": True,
                 "collections": collection_names,
                 "count": len(collection_names),
-                "error": None
+                "error": None,
             }
     except Exception as e:
-        return {
-            "success": False,
-            "collections": [],
-            "count": 0,
-            "error": str(e)
-        }
+        return {"success": False, "collections": [], "count": 0, "error": str(e)}
 
 
 def get_collection_stats(collection_name: str) -> Dict[str, Any]:
@@ -128,16 +157,17 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
     qdrant_url = get_qdrant_url()
 
     try:
-        req = urllib.request.Request(
-            f"{qdrant_url}/collections/{collection_name}",
-            method="GET"
+        req = urllib.request.Request(  # noqa: S310
+            f"{qdrant_url}/collections/{collection_name}", method="GET"
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(  # noqa: S310
+            req, timeout=get_timeout_seconds()
+        ) as response:
             if response.status != 200:
                 return {
                     "success": False,
                     "collection": collection_name,
-                    "error": f"HTTP {response.status}"
+                    "error": f"HTTP {response.status}",
                 }
 
             data = json.loads(response.read().decode())
@@ -150,14 +180,10 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
                 "indexed_vectors_count": result.get("indexed_vectors_count", 0),
                 "status": result.get("status", "unknown"),
                 "optimizer_status": result.get("optimizer_status", {}),
-                "error": None
+                "error": None,
             }
     except Exception as e:
-        return {
-            "success": False,
-            "collection": collection_name,
-            "error": str(e)
-        }
+        return {"success": False, "collection": collection_name, "error": str(e)}
 
 
 def get_all_collections_stats() -> Dict[str, Any]:
@@ -180,7 +206,7 @@ def get_all_collections_stats() -> Dict[str, Any]:
         if stats["success"]:
             collections_stats[collection_name] = {
                 "vectors_count": stats["vectors_count"],
-                "status": stats["status"]
+                "status": stats["status"],
             }
             total_vectors += stats["vectors_count"]
 
@@ -189,7 +215,7 @@ def get_all_collections_stats() -> Dict[str, Any]:
         "collections": collections_stats,
         "collection_count": len(collections_stats),
         "total_vectors": total_vectors,
-        "error": None
+        "error": None,
     }
 
 
@@ -227,7 +253,7 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
             "success": False,
             "collection": collection_name,
             "healthy": False,
-            "error": stats["error"]
+            "error": stats["error"],
         }
 
     # Collection is healthy if status is "green" or "yellow" and has vectors
@@ -242,7 +268,7 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
         "healthy": healthy,
         "status": status,
         "vectors_count": vectors_count,
-        "error": None
+        "error": None,
     }
 
 

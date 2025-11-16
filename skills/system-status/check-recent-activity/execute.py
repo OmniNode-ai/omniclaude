@@ -18,20 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 try:
     from db_helper import execute_query
     from status_formatter import format_json
+    from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
-
-
-def parse_timeframe(since: str) -> str:
-    """Convert timeframe to PostgreSQL interval."""
-    mapping = {
-        "5m": "5 minutes",
-        "15m": "15 minutes",
-        "1h": "1 hour",
-        "24h": "24 hours"
-    }
-    return mapping.get(since, "5 minutes")
 
 
 def main():
@@ -41,7 +31,7 @@ def main():
     parser.add_argument("--include-errors", action="store_true", help="Include errors")
     args = parser.parse_args()
 
-    interval = parse_timeframe(args.since)
+    interval = parse_timeframe(args.since, default="5 minutes")
     result = {"timeframe": args.since}
 
     try:
@@ -62,7 +52,7 @@ def main():
                 "count": row["count"] or 0,
                 "avg_query_time_ms": round(float(row["avg_query_time_ms"] or 0), 1),
                 "avg_patterns_count": round(float(row["avg_patterns_count"] or 0), 1),
-                "fallbacks": row["fallbacks"] or 0
+                "fallbacks": row["fallbacks"] or 0,
             }
 
         # Routing decisions
@@ -80,7 +70,7 @@ def main():
             result["routing_decisions"] = {
                 "count": row["count"] or 0,
                 "avg_routing_time_ms": round(float(row["avg_routing_time_ms"] or 0), 1),
-                "avg_confidence": round(float(row["avg_confidence"] or 0), 2)
+                "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
             }
 
         # Agent actions
@@ -94,12 +84,14 @@ def main():
         """
         actions_result = execute_query(actions_query)
         if actions_result["success"]:
-            actions = {row["action_type"]: row["count"] for row in actions_result["rows"]}
+            actions = {
+                row["action_type"]: row["count"] for row in actions_result["rows"]
+            }
             result["agent_actions"] = {
                 "tool_calls": actions.get("tool_call", 0),
                 "decisions": actions.get("decision", 0),
                 "errors": actions.get("error", 0),
-                "successes": actions.get("success", 0)
+                "successes": actions.get("success", 0),
             }
 
         # Recent errors if requested
@@ -121,7 +113,7 @@ def main():
                     {
                         "agent": row["agent_name"],
                         "error": row["error"],
-                        "time": str(row["created_at"])
+                        "time": str(row["created_at"]),
                     }
                     for row in errors_result["rows"]
                 ]

@@ -16,8 +16,8 @@ cp -r skills/.template/my-skill-name skills/my-category/my-new-skill
   - `my-skill-name` → your skill name
   - `my-skill-category` → your skill category
   - `Brief description` → actual description
-  - `Your Name` → your name
-  - `YYYY-MM-DD` → current date
+  - `<your-name>` → your name
+  - `<YYYY-MM-DD>` → current date
 
 **3. Test the skill:**
 ```bash
