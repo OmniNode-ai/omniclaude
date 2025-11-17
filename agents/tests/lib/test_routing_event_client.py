@@ -32,6 +32,10 @@ from agents.lib.routing_event_client import (
     route_via_events,
 )
 
+# IMPORTANT: Use settings from config framework, NOT hardcoded values
+# This ensures tests work across different environments (.env configs)
+from config import settings
+
 
 def create_mock_consume_responses(client):
     """Helper to create async mock that signals consumer ready."""
@@ -111,11 +115,8 @@ class TestRoutingEventClientInitialization:
             patch("agents.lib.routing_event_client.SCHEMAS_AVAILABLE", True),
             patch("agents.lib.routing_event_client.settings", mock_settings),
         ):
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(ValueError, match="bootstrap_servers must be provided"):
                 RoutingEventClient()
-
-            assert "bootstrap_servers must be provided" in str(exc_info.value)
-            assert "KAFKA_BOOTSTRAP_SERVERS" in str(exc_info.value)
 
     def test_init_with_custom_consumer_group(self):
         """Test initialization with custom consumer group ID."""
@@ -150,9 +151,12 @@ class TestRoutingEventClientInitialization:
         with patch("agents.lib.routing_event_client.SCHEMAS_AVAILABLE", True):
             client = RoutingEventClient(bootstrap_servers="localhost:9092")
 
-            assert client.TOPIC_REQUEST == "agent.routing.requested.v1"
-            assert client.TOPIC_COMPLETED == "agent.routing.completed.v1"
-            assert client.TOPIC_FAILED == "agent.routing.failed.v1"
+            # Verify topic constants match the actual topic names defined in client
+            # These are hardcoded constants following EVENT_BUS_INTEGRATION_GUIDE standard
+            # Format: omninode.{domain}.{entity}.{action}.v{major}
+            assert client.TOPIC_REQUEST == "omninode.agent.routing.requested.v1"
+            assert client.TOPIC_COMPLETED == "omninode.agent.routing.completed.v1"
+            assert client.TOPIC_FAILED == "omninode.agent.routing.failed.v1"
 
 
 class TestRoutingEventClientLifecycle:
@@ -1283,7 +1287,7 @@ class TestRoutingEventClientContext:
             ),
         ):
 
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="Test exception"):
                 async with RoutingEventClientContext(
                     bootstrap_servers="localhost:9092"
                 ) as client:

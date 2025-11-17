@@ -627,8 +627,8 @@ Intelligence Collection (Last 5 min):
 ```
 
 **Output Files**:
-- `/tmp/health_check_latest.txt` - Latest check results
-- `/tmp/health_check_history.log` - Appended history
+- `{REPO}/tmp/health_check_latest.txt` - Latest check results
+- `{REPO}/tmp/health_check_history.log` - Appended history
 
 **Exit Codes**:
 - `0` - All systems healthy
@@ -763,9 +763,9 @@ System Health: 100%
 - Load testing (100+ req/s)
 
 **Output Files**:
-- `/tmp/test_system_functionality_latest.txt` - Latest test results
-- `/tmp/test_system_functionality_history.log` - Appended test history
-- Individual test logs: `/tmp/test_*_functionality_latest.txt`
+- `{REPO}/tmp/test_system_functionality_latest.txt` - Latest test results
+- `{REPO}/tmp/test_system_functionality_history.log` - Appended test history
+- Individual test logs: `{REPO}/tmp/test_*_functionality_latest.txt`
 
 **Troubleshooting Test Failures**:
 

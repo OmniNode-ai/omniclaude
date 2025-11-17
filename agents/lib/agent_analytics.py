@@ -128,6 +128,7 @@ class AgentAnalytics:
                     params.append(task_type)
 
                 # Get overall performance metrics
+                # where_conditions built from controlled parameterized clauses, values passed via *params
                 overall_metrics = await conn.fetchrow(
                     f"""
                 SELECT
@@ -139,11 +140,12 @@ class AgentAnalytics:
                     STDDEV(duration_ms) as duration_stddev
                 FROM agent_performance
                 WHERE {' AND '.join(where_conditions)}
-                """,
+                """,  # nosec B608
                     *params,
                 )
 
             # Get performance by agent
+            # where_conditions built from controlled parameterized clauses, values passed via *params
             agent_metrics = await conn.fetch(
                 f"""
                 SELECT
@@ -156,11 +158,12 @@ class AgentAnalytics:
                 WHERE {' AND '.join(where_conditions)}
                 GROUP BY agent_id
                 ORDER BY success_rate_percent DESC, avg_duration_ms ASC
-                """,
+                """,  # nosec B608
                 *params,
             )
 
             # Get performance by task type
+            # where_conditions built from controlled parameterized clauses, values passed via *params
             task_metrics = await conn.fetch(
                 f"""
                 SELECT
@@ -173,11 +176,12 @@ class AgentAnalytics:
                 WHERE {' AND '.join(where_conditions)}
                 GROUP BY task_type
                 ORDER BY success_rate_percent DESC, avg_duration_ms ASC
-                """,
+                """,  # nosec B608
                 *params,
             )
 
             # Get top performing agents for each task type
+            # where_conditions built from controlled parameterized clauses, values passed via *params
             top_agents_by_task = await conn.fetch(
                 f"""
                 WITH task_agent_performance AS (
@@ -214,7 +218,7 @@ class AgentAnalytics:
                 FROM ranked_agents
                 WHERE rank <= 3
                 ORDER BY task_type, rank
-                """,
+                """,  # nosec B608
                 *params,
             )
 
@@ -397,6 +401,7 @@ class AgentAnalytics:
                     params.append(task_type)
 
                 # Get performance trends by time interval
+                # where_conditions built from controlled parameterized clauses, values passed via *params
                 trends = await conn.fetch(
                     f"""
                     SELECT
@@ -409,7 +414,7 @@ class AgentAnalytics:
                     WHERE {' AND '.join(where_conditions)}
                     GROUP BY DATE_TRUNC('hour', created_at)
                     ORDER BY time_bucket
-                    """,
+                    """,  # nosec B608
                     *params,
                 )
 

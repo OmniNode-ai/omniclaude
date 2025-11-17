@@ -19,6 +19,7 @@ to the test execution environment.
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -34,13 +35,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Load .env from project root
-env_path = PROJECT_ROOT / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
+# Only load .env in local development (not in CI)
+# In CI, environment variables are set by GitHub Actions and should not be overridden
+if not os.getenv("CI"):
+    # Load .env from project root
+    env_path = PROJECT_ROOT / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        # Fallback: try to load from current directory
+        load_dotenv()
 else:
-    # Fallback: try to load from current directory
-    load_dotenv()
+    print("ℹ️  Running in CI environment - using GitHub Actions environment variables")
 
 # Add mocks directory for omnibase_core stub
 # This allows tests to use mock implementations of external dependencies

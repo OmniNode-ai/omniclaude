@@ -36,6 +36,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -81,15 +82,28 @@ except ImportError:
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
+# Import required modules (must succeed for service to function)
 try:
     from agent_execution_logger import log_agent_execution
     from agent_router import AgentRouter
     from confidence_scoring_publisher import publish_confidence_scored
+    from data_sanitizer import sanitize_dict, sanitize_string
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
     raise
+
+# Import ActionLogger separately (optional - graceful degradation if unavailable)
+try:
+    from action_logger import ActionLogger
+
+    ACTION_LOGGER_AVAILABLE = True
+except ImportError:
+    ACTION_LOGGER_AVAILABLE = False
+    logging.warning(
+        "ActionLogger not available - enhanced action logging disabled (routing will continue normally)"
+    )
 
 # Import Slack notifier for error notifications
 try:
@@ -691,8 +705,12 @@ class AgentRouterEventService:
             await self._health_runner.setup()
 
             # Start site (bind to all interfaces for Docker container accessibility)
-            site = web.TCPSite(  # noqa: S104 # nosec B104
-                self._health_runner, "0.0.0.0", self.health_check_port
+            # Security: Binding to 0.0.0.0 is intentional for Docker/Kubernetes deployments
+            # For production, use firewall rules or reverse proxy for access control
+            site = web.TCPSite(
+                self._health_runner,
+                "0.0.0.0",
+                self.health_check_port,  # nosec B104 # noqa: S104
             )
             await site.start()
 
@@ -834,6 +852,71 @@ class AgentRouterEventService:
         """
         start_time = time.time()
 
+        # CRITICAL: Validate correlation_id BEFORE ActionLogger initialization
+        # This prevents invalid state and silent failures
+        if not correlation_id:
+            self.logger.error("Missing correlation_id in routing request")
+            # Publish failure event
+            if self._producer:
+                error_envelope = {
+                    "correlation_id": "unknown",
+                    "event_type": "omninode.agent.routing.failed.v1",
+                    "payload": {
+                        "error_code": "VALIDATION_ERROR",
+                        "error_message": "Missing correlation_id in routing request",
+                        "routing_time_ms": 0,
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                try:
+                    await self._producer.send_and_wait(
+                        self.TOPIC_FAILED, error_envelope
+                    )
+                except Exception as publish_error:
+                    self.logger.error(f"Failed to publish error event: {publish_error}")
+            return
+
+        # Validate UUID format
+        try:
+            uuid.UUID(correlation_id)
+        except ValueError:
+            self.logger.error(f"Invalid correlation_id format: {correlation_id}")
+            # Publish failure event
+            if self._producer:
+                error_envelope = {
+                    "correlation_id": correlation_id,
+                    "event_type": "omninode.agent.routing.failed.v1",
+                    "payload": {
+                        "error_code": "VALIDATION_ERROR",
+                        "error_message": f"Invalid correlation_id format (not a valid UUID): {correlation_id}",
+                        "routing_time_ms": 0,
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                try:
+                    await self._producer.send_and_wait(
+                        self.TOPIC_FAILED, error_envelope
+                    )
+                except Exception as publish_error:
+                    self.logger.error(f"Failed to publish error event: {publish_error}")
+            return
+
+        # NOW safe to initialize ActionLogger with validated correlation_id
+        action_logger = None
+        if ACTION_LOGGER_AVAILABLE:
+            try:
+                action_logger = ActionLogger(
+                    agent_name="agent-router-service",
+                    correlation_id=correlation_id,  # Now validated!
+                    project_name="omniclaude",
+                    project_path=str(Path(__file__).parent.parent.parent),
+                    working_directory=os.getcwd(),
+                    debug_mode=True,
+                )
+            except Exception as e:
+                # Non-blocking - log error but continue routing
+                self.logger.warning(f"Failed to initialize ActionLogger: {e}")
+
         # Initialize execution logger for lifecycle tracking
         execution_logger = None
         try:
@@ -898,6 +981,75 @@ class AgentRouterEventService:
             # Primary recommendation
             primary = recommendations[0]
 
+            # Log routing decision with ActionLogger
+            if action_logger:
+                try:
+                    await action_logger.log_decision(
+                        decision_name="agent_routing",
+                        decision_context=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
+                                "max_recommendations": max_recommendations,
+                                "candidates_evaluated": len(recommendations),
+                            }
+                        ),
+                        decision_result=sanitize_dict(
+                            {
+                                "selected_agent": primary.agent_name,
+                                "confidence": primary.confidence.total,
+                                "reasoning": primary.reason,
+                                "alternatives": [
+                                    {
+                                        "agent_name": rec.agent_name,
+                                        "confidence": rec.confidence.total,
+                                    }
+                                    for rec in recommendations[
+                                        1:3
+                                    ]  # Top 2 alternatives
+                                ],
+                            }
+                        ),
+                        duration_ms=int(routing_time_ms),
+                    )
+                    self.logger.debug(
+                        f"ActionLogger: Decision logged (agent: {primary.agent_name}, confidence: {primary.confidence.total:.2%})"
+                    )
+                except Exception as e:
+                    # Non-blocking - log error but don't fail routing
+                    self.logger.debug(f"ActionLogger decision logging failed: {e}")
+
+            # Log routing as tool_call for performance tracking
+            if action_logger:
+                try:
+                    await action_logger.log_tool_call(
+                        tool_name="AgentRouter",
+                        tool_parameters=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
+                                "max_recommendations": max_recommendations,
+                            }
+                        ),
+                        tool_result=sanitize_dict(
+                            {
+                                "selected_agent": primary.agent_name,
+                                "confidence": primary.confidence.total,
+                                "recommendation_count": len(recommendations),
+                            }
+                        ),
+                        duration_ms=int(routing_time_ms),
+                        success=True,
+                    )
+                    self.logger.debug(
+                        f"ActionLogger: Tool call logged (routing_time: {routing_time_ms:.1f}ms)"
+                    )
+                except Exception as e:
+                    # Non-blocking - log error but don't fail routing
+                    self.logger.debug(f"ActionLogger tool call logging failed: {e}")
+
             # Build response envelope (using EVENT_BUS_INTEGRATION_GUIDE standard format)
             response_envelope = {
                 "correlation_id": correlation_id,
@@ -928,11 +1080,21 @@ class AgentRouterEventService:
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-            # Publish completed event
+            # Publish completed event with error handling
             if self._producer:
-                await self._producer.send_and_wait(
-                    self.TOPIC_COMPLETED, response_envelope
-                )
+                try:
+                    future = await self._producer.send_and_wait(
+                        self.TOPIC_COMPLETED, response_envelope
+                    )
+                    self.logger.debug(
+                        f"Routing completed event published successfully (correlation_id: {correlation_id})"
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to publish routing completed event (correlation_id: {correlation_id}): {e}",
+                        exc_info=True,
+                    )
+                    # Don't re-raise - routing succeeded, only event publishing failed
 
             # Publish confidence scoring event (non-blocking)
             try:
@@ -1051,6 +1213,35 @@ class AgentRouterEventService:
                 f"Routing failed (correlation_id: {correlation_id}): {e}",
                 exc_info=True,
             )
+
+            # Log error with ActionLogger
+            if action_logger:
+                try:
+                    await action_logger.log_error(
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        error_context=sanitize_dict(
+                            {
+                                "user_request": sanitize_string(
+                                    user_request, max_length=200
+                                ),  # Sanitize and truncate
+                                "routing_time_ms": routing_time_ms,
+                                "max_recommendations": options.get(
+                                    "max_recommendations", 5
+                                ),
+                            }
+                        ),
+                        severity="error",
+                        send_slack_notification=False,  # Already handled by SlackNotifier below
+                    )
+                    self.logger.debug(
+                        f"ActionLogger: Error logged (type: {type(e).__name__})"
+                    )
+                except Exception as action_log_error:
+                    # Non-blocking - log error but don't fail routing
+                    self.logger.debug(
+                        f"ActionLogger error logging failed: {action_log_error}"
+                    )
 
             # Send Slack notification for routing failure
             if SLACK_NOTIFIER_AVAILABLE:

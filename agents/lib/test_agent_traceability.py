@@ -340,19 +340,21 @@ async def test_complete_traceability():
     print()
     print("Query Examples:")
     print()
-    print(
+    # Note: These are example queries for documentation purposes only (not executed)
+    # Using literal values in examples to show actual correlation_id
+    print(  # nosec B608 - Not executing SQL, just printing examples
         f"  # Get complete trace\n  SELECT * FROM get_complete_trace('{correlation_id}');"
     )
     print()
-    print(
+    print(  # nosec B608 - Not executing SQL, just printing examples
         f"  # Get execution summary\n  SELECT * FROM v_complete_execution_trace WHERE correlation_id = '{correlation_id}';"
     )
     print()
-    print(
+    print(  # nosec B608 - Not executing SQL, just printing examples
         f"  # Get file operations\n  SELECT * FROM agent_file_operations WHERE correlation_id = '{correlation_id}';"
     )
     print()
-    print(
+    print(  # nosec B608 - Not executing SQL, just printing examples
         f"  # Get intelligence usage\n  SELECT * FROM agent_intelligence_usage WHERE correlation_id = '{correlation_id}';"
     )
     print()

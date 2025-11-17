@@ -293,6 +293,10 @@ coverage.json
 *.old
 *.orig
 
+# Repository scratch/temporary directory (for local development)
+tmp/
+tmp/*
+
 # Test and validation output files
 *_output.txt
 *_results.txt

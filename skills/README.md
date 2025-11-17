@@ -228,6 +228,50 @@ python3 ~/.claude/skills/system-status/generate-status-report/execute.py \
 - Status indicators (✓, ✗, ⚠)
 - Duration/bytes formatting
 
+`_shared/timeframe_helper.py` - Time range parsing
+- Parse timeframe strings (1h, 24h, 7d, 30d)
+- Convert to SQL WHERE clauses
+- Validate timeframe formats
+
+## Skill Documentation Standards
+
+### Required: SKILL.md (Uppercase)
+
+**All skills MUST use `SKILL.md` (uppercase) for documentation.**
+
+✅ **CORRECT**:
+- `skills/system-status/check-system-health/SKILL.md`
+- `skills/linear/SKILL.md`
+- `skills/pr-review/SKILL.md`
+
+❌ **INCORRECT**:
+- `skills/my-skill/skill.md` (lowercase - will be rejected)
+- `skills/my-skill/prompt.md` (legacy format - deprecated)
+
+**Why Uppercase?**
+- Consistent with established skills (system-status, debug-loop, pr-review)
+- Better visibility in file listings
+- Matches Claude Code convention expectations
+- Easier to spot in directory trees
+
+**YAML Frontmatter Required**:
+```yaml
+---
+name: skill-name
+description: Brief description of what this skill does
+---
+```
+
+**Migration from Legacy Formats**:
+If you have old `prompt.md` or `skill.md` (lowercase) files:
+```bash
+# Rename to SKILL.md (preserves git history)
+git mv skills/my-skill/prompt.md skills/my-skill/SKILL.md
+git mv skills/my-skill/skill.md skills/my-skill/SKILL.md
+```
+
+---
+
 ## Creating New Skills
 
 ### 1. Create directory structure

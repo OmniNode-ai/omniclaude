@@ -393,8 +393,22 @@ class PatternQualityScorer:
             connection_string: PostgreSQL connection string
 
         Raises:
+            ValueError: If pattern_id is not a valid UUID format
             Exception: Database connection or query errors
         """
+        # Validate UUID format before database operation
+        import uuid as uuid_module
+
+        try:
+            # Attempt to parse pattern_id as UUID to validate format
+            uuid_module.UUID(score.pattern_id)
+        except (ValueError, AttributeError, TypeError) as e:
+            raise ValueError(
+                f"Invalid UUID format for pattern_id: '{score.pattern_id}'. "
+                f"Expected valid UUID string (e.g., '550e8400-e29b-41d4-a716-446655440000'). "
+                f"Error: {e}"
+            )
+
         conn = None
         try:
             conn = psycopg2.connect(connection_string)

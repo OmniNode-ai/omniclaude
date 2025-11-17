@@ -237,6 +237,7 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Prevent infinite hangs
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -265,7 +266,8 @@ jobs:
       - name: Run unit tests
         run: |
           echo "::group::Unit Tests"
-          poetry run pytest \
+          # Add explicit timeout to prevent test hangs
+          timeout 600 poetry run pytest \
             agents/tests/ \
             -v \
             --ignore=agents/tests/test_integration_smoke.py \
@@ -277,7 +279,20 @@ jobs:
             --cov=agents \
             --cov-report=xml \
             --cov-report=term-missing \
-            --junitxml=junit-unit.xml
+            --junitxml=junit-unit.xml || {
+              echo "::error::Unit tests exceeded 10 minute timeout or failed"
+              exit 1
+            }
+          echo "::endgroup::"
+
+      - name: Check for resource leaks
+        if: always()
+        run: |
+          echo "::group::Resource Leak Detection"
+          # Check for unclosed file descriptors
+          lsof -p $$ 2>/dev/null | head -20 || echo "lsof not available, skipping"
+          # Check for zombie processes
+          ps aux | grep -i defunct || echo "No zombie processes found"
           echo "::endgroup::"
 
       - name: Upload unit test coverage
@@ -294,12 +309,24 @@ jobs:
           name: unit-test-results
           path: junit-unit.xml
 
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-failure-logs
+          path: |
+            logs/
+            tmp/
+            *.log
+            .pytest_cache/
+
   # ============================================================================
   # Integration Tests (with PostgreSQL and Redis)
   # ============================================================================
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # Prevent infinite hangs in integration tests
     services:
       postgres:
         image: postgres:16-alpine
@@ -357,11 +384,14 @@ jobs:
           POSTGRES_DB: test_db
           PGPASSWORD: test
         run: |
-          # Wait for PostgreSQL to be ready
-          until psql -h localhost -U test -d test_db -c '\q'; do
+          # Wait for PostgreSQL to be ready (with timeout)
+          timeout 60 bash -c 'until psql -h localhost -U test -d test_db -c '\''\q'\''; do
             echo "Waiting for PostgreSQL..."
             sleep 2
-          done
+          done' || {
+            echo "::error::PostgreSQL failed to become ready within 60 seconds"
+            exit 1
+          }
 
           # Run init script as bash (not as SQL input)
           bash scripts/init-db.sh || true
@@ -372,7 +402,8 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
         run: |
           echo "::group::Integration Tests"
-          poetry run pytest \
+          # Add explicit timeout to prevent test hangs
+          timeout 900 poetry run pytest \
             agents/tests/test_integration_smoke.py \
             agents/tests/test_phase4_integration.py \
             agents/tests/test_phase5_integration.py \
@@ -383,7 +414,22 @@ jobs:
             --cov=agents \
             --cov-report=xml \
             --cov-report=term-missing \
-            --junitxml=junit-integration.xml
+            --junitxml=junit-integration.xml || {
+              echo "::error::Integration tests exceeded 15 minute timeout or failed"
+              exit 1
+            }
+          echo "::endgroup::"
+
+      - name: Check for resource leaks
+        if: always()
+        run: |
+          echo "::group::Resource Leak Detection"
+          # Check database connections
+          psql -h localhost -U test -d test_db -c "SELECT COUNT(*) as active_connections FROM pg_stat_activity;" || echo "Cannot check DB connections"
+          # Check for unclosed file descriptors
+          lsof -p $$ 2>/dev/null | head -20 || echo "lsof not available, skipping"
+          # Check for zombie processes
+          ps aux | grep -i defunct || echo "No zombie processes found"
           echo "::endgroup::"
 
       - name: Upload integration test coverage
@@ -399,6 +445,17 @@ jobs:
         with:
           name: integration-test-results
           path: junit-integration.xml
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-failure-logs
+          path: |
+            logs/
+            tmp/
+            *.log
+            .pytest_cache/
 
   # ============================================================================
   # Hooks System Tests

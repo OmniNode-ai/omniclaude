@@ -4,10 +4,15 @@
 
 set -euo pipefail
 
+# Get repo root and create tmp directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+mkdir -p "$REPO_ROOT/tmp"
+
 HOOKS_LIB="$HOME/.claude/hooks/lib"
 TEST_CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-TEST_OUTPUT_DOMAIN="/tmp/test_intelligence_domain_${TEST_CORRELATION_ID}.json"
-TEST_OUTPUT_IMPL="/tmp/test_intelligence_impl_${TEST_CORRELATION_ID}.json"
+TEST_OUTPUT_DOMAIN="$REPO_ROOT/tmp/test_intelligence_domain_${TEST_CORRELATION_ID}.json"
+TEST_OUTPUT_IMPL="$REPO_ROOT/tmp/test_intelligence_impl_${TEST_CORRELATION_ID}.json"
 
 echo "========================================================================="
 echo "Intelligence Event Bus MVP Test"

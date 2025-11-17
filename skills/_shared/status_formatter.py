@@ -6,7 +6,6 @@ Provides functions for:
 - JSON formatting
 - Table formatting (text-based)
 - Markdown generation
-- HTML generation
 - Status indicators (✓, ✗, ⚠)
 
 Usage:
@@ -16,8 +15,21 @@ Created: 2025-11-12
 """
 
 import json
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
+
+class StatusJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for status data types."""
+
+    def default(self, obj):
+        """Handle special data types."""
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
@@ -32,9 +44,9 @@ def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
         JSON string
     """
     if pretty:
-        return json.dumps(data, indent=2, default=str)
+        return json.dumps(data, indent=2, cls=StatusJSONEncoder)
     else:
-        return json.dumps(data, default=str)
+        return json.dumps(data, cls=StatusJSONEncoder)
 
 
 def format_status_indicator(status: str) -> str:
@@ -45,7 +57,7 @@ def format_status_indicator(status: str) -> str:
         status: Status string (e.g., "healthy", "ok", "connected", "error", "failed")
 
     Returns:
-        Status indicator (✓, ✗, ⚠, ℹ)
+        Status indicator (✓, ✗, ⚠, i)
     """
     status_lower = status.lower()
 
@@ -54,7 +66,14 @@ def format_status_indicator(status: str) -> str:
         return "✓"
 
     # Error indicators
-    if status_lower in ["error", "failed", "unhealthy", "unreachable", "critical", "false"]:
+    if status_lower in [
+        "error",
+        "failed",
+        "unhealthy",
+        "unreachable",
+        "critical",
+        "false",
+    ]:
         return "✗"
 
     # Warning indicators
@@ -65,8 +84,9 @@ def format_status_indicator(status: str) -> str:
     return "ℹ"
 
 
-def format_table(headers: List[str], rows: List[List[Any]],
-                title: Optional[str] = None) -> str:
+def format_table(
+    headers: List[str], rows: List[List[Any]], title: Optional[str] = None
+) -> str:
     """
     Format data as text-based table.
 
@@ -78,14 +98,18 @@ def format_table(headers: List[str], rows: List[List[Any]],
     Returns:
         Formatted table string
     """
-    # Calculate column widths
+    # Calculate column widths from headers
     col_widths = [len(h) for h in headers]
 
+    # Expand to accommodate longest row (prevent IndexError)
+    max_cols = max([len(row) for row in rows] + [len(headers)])
+    col_widths.extend([0] * (max_cols - len(col_widths)))
+
+    # Update widths based on row data
     for row in rows:
         for i, cell in enumerate(row):
             cell_str = str(cell)
-            if i < len(col_widths):
-                col_widths[i] = max(col_widths[i], len(cell_str))
+            col_widths[i] = max(col_widths[i], len(cell_str))
 
     # Build table
     output = []
@@ -107,7 +131,14 @@ def format_table(headers: List[str], rows: List[List[Any]],
 
     # Add data rows
     for row in rows:
-        row_str = " | ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+        row_parts = []
+        for i, cell in enumerate(row):
+            if i < len(col_widths):
+                row_parts.append(str(cell).ljust(col_widths[i]))
+            else:
+                # Extra columns beyond headers - just append as-is
+                row_parts.append(str(cell))
+        row_str = " | ".join(row_parts)
         output.append(row_str)
 
     return "\n".join(output)
@@ -164,7 +195,13 @@ def format_status_summary(data: Dict[str, Any]) -> str:
             value_str = "Yes" if value else "No"
             output.append(f"{indicator} {key_formatted}: {value_str}")
         elif isinstance(value, str) and value.lower() in [
-            "healthy", "ok", "connected", "error", "failed", "warning", "degraded"
+            "healthy",
+            "ok",
+            "connected",
+            "error",
+            "failed",
+            "warning",
+            "degraded",
         ]:
             indicator = format_status_indicator(value)
             output.append(f"{indicator} {key_formatted}: {value}")
@@ -186,7 +223,7 @@ def format_percentage(value: float, decimals: int = 1) -> str:
         Formatted percentage string
     """
     # Assume value is 0-1 if less than 1, otherwise 0-100
-    if value <= 1.0:
+    if value < 1.0:
         percentage = value * 100
     else:
         percentage = value
@@ -311,7 +348,7 @@ if __name__ == "__main__":
     rows = [
         ["archon-intelligence", "healthy", "5d 3h"],
         ["archon-qdrant", "healthy", "5d 3h"],
-        ["archon-bridge", "healthy", "5d 3h"]
+        ["archon-bridge", "healthy", "5d 3h"],
     ]
     table = format_table(headers, rows, title="Service Status")
     print(table)

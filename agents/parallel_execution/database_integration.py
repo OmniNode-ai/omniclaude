@@ -692,7 +692,7 @@ class DatabaseIntegrationLayer:
             {where_clause}
             ORDER BY created_at DESC
             LIMIT ${param_count}
-        """
+        """  # nosec B608 - conditions list built from controlled parameterized clauses, values passed via *params
         params.append(limit)
 
         try:
@@ -748,7 +748,7 @@ class DatabaseIntegrationLayer:
             {where_clause}
             ORDER BY created_at DESC
             LIMIT ${param_count}
-        """
+        """  # nosec B608 - conditions list built from controlled parameterized clauses, values passed via *params
         params.append(limit)
 
         try:
