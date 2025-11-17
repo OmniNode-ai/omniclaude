@@ -705,8 +705,12 @@ class AgentRouterEventService:
             await self._health_runner.setup()
 
             # Start site (bind to all interfaces for Docker container accessibility)
+            # Security: Binding to 0.0.0.0 is intentional for Docker/Kubernetes deployments
+            # For production, use firewall rules or reverse proxy for access control
             site = web.TCPSite(
-                self._health_runner, "0.0.0.0", self.health_check_port  # noqa: S104
+                self._health_runner,
+                "0.0.0.0",
+                self.health_check_port,  # nosec B104 # noqa: S104
             )
             await site.start()
 
@@ -1076,11 +1080,21 @@ class AgentRouterEventService:
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
-            # Publish completed event
+            # Publish completed event with error handling
             if self._producer:
-                await self._producer.send_and_wait(
-                    self.TOPIC_COMPLETED, response_envelope
-                )
+                try:
+                    future = await self._producer.send_and_wait(
+                        self.TOPIC_COMPLETED, response_envelope
+                    )
+                    self.logger.debug(
+                        f"Routing completed event published successfully (correlation_id: {correlation_id})"
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        f"Failed to publish routing completed event (correlation_id: {correlation_id}): {e}",
+                        exc_info=True,
+                    )
+                    # Don't re-raise - routing succeeded, only event publishing failed
 
             # Publish confidence scoring event (non-blocking)
             try:

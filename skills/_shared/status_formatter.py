@@ -86,20 +86,18 @@ def format_table(
     Returns:
         Formatted table string
     """
-    # Calculate column widths
+    # Calculate column widths from headers
     col_widths = [len(h) for h in headers]
 
-    # Extend col_widths to handle rows with more columns than headers
-    if rows:
-        max_row_len = max(len(r) for r in rows)
-        if max_row_len > len(col_widths):
-            col_widths.extend([0] * (max_row_len - len(col_widths)))
+    # Expand to accommodate longest row (prevent IndexError)
+    max_cols = max([len(row) for row in rows] + [len(headers)])
+    col_widths.extend([0] * (max_cols - len(col_widths)))
 
+    # Update widths based on row data
     for row in rows:
         for i, cell in enumerate(row):
             cell_str = str(cell)
-            if i < len(col_widths):
-                col_widths[i] = max(col_widths[i], len(cell_str))
+            col_widths[i] = max(col_widths[i], len(cell_str))
 
     # Build table
     output = []

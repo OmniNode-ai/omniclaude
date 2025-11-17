@@ -8,14 +8,26 @@ Provides functions for:
 - Consumer group status
 - Message throughput monitoring
 
-Usage:
+Example:
     from kafka_helper import check_kafka_connection, list_topics, get_topic_stats
+
+    # Check Kafka connectivity
+    connection = check_kafka_connection()
+    if connection["reachable"]:
+        # List available topics
+        topics = list_topics()
+        print(f"Found {topics['count']} topics")
+
+        # Get stats for specific topic
+        stats = get_topic_stats("my-topic")
+        print(f"Partitions: {stats['partitions']}")
 
 Created: 2025-11-12
 """
 
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -76,6 +88,21 @@ def get_kafka_bootstrap_servers() -> str:
         )
 
     return bootstrap
+
+
+def get_timeout_command() -> str:
+    """
+    Get platform-specific timeout command.
+
+    Returns:
+        "gtimeout" on macOS (Darwin), "timeout" on Linux
+
+    Note:
+        macOS requires GNU coreutils: brew install coreutils
+        Provides gtimeout command for shell timeout operations.
+        Linux has timeout built-in from coreutils package.
+    """
+    return "gtimeout" if platform.system() == "Darwin" else "timeout"
 
 
 def check_kafka_connection() -> Dict[str, Any]:
@@ -165,15 +192,14 @@ def list_topics() -> Dict[str, Any]:
                 "error": result.stderr.strip(),
             }
 
-        # Parse topic names from output
+        # Parse topic names from output using regex for robustness
         topics = []
         for line in result.stdout.split("\n"):
-            if 'topic "' in line:
-                # Extract topic name between quotes
-                start = line.find('topic "') + 7
-                end = line.find('"', start)
-                if end > start:
-                    topics.append(line[start:end])
+            # Use regex to extract topic name (handles format changes gracefully)
+            match = re.search(r'topic "([^"]+)"', line)
+            if match:
+                topic_name = match.group(1)
+                topics.append(topic_name)
 
         return {"success": True, "topics": topics, "count": len(topics), "error": None}
     except Exception as e:

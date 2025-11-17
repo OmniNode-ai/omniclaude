@@ -6,17 +6,129 @@ Simple web interface for OmniClaude system monitoring
 
 import asyncio
 import json
-from typing import AsyncGenerator
+import logging
+from typing import Any, AsyncGenerator, Dict, Optional
 
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from system_dashboard_md import SystemDashboard
+
+logger = logging.getLogger(__name__)
 
 # Create app with minimal config to avoid middleware issues
 app = FastAPI()
 
 # Store for dashboard instance
 dashboard = SystemDashboard()
+
+
+def fetch_api_with_error_handling(
+    url: str, timeout: int = 10, retry_count: int = 0
+) -> Dict[str, Any]:
+    """
+    Fetch data from external API with comprehensive error handling.
+
+    Handles all HTTP error codes gracefully with specific error types
+    for different failure scenarios.
+
+    Args:
+        url: URL to fetch
+        timeout: Request timeout in seconds
+        retry_count: Number of times this request has been retried (internal)
+
+    Returns:
+        Dictionary with either:
+        - Success: {"success": True, "data": <response_data>}
+        - Error: {"success": False, "error": <error_type>, "message": <details>}
+
+    Error types:
+        - "timeout": Request timed out
+        - "not_found": Resource not found (404)
+        - "server_error": Server error (5xx)
+        - "unauthorized": Authentication required (401/403)
+        - "http_error": Other HTTP errors
+        - "connection_error": Network connectivity issues
+        - "unknown": Unexpected errors
+
+    Example:
+        >>> result = fetch_api_with_error_handling("http://api.example.com/data")
+        >>> if result["success"]:
+        ...     data = result["data"]
+        ... else:
+        ...     print(f"Error: {result['error']} - {result['message']}")
+    """
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return {"success": True, "data": response.json()}
+
+    except requests.Timeout:
+        logger.error(f"Request to {url} timed out after {timeout}s")
+        return {
+            "success": False,
+            "error": "timeout",
+            "message": f"Request timed out after {timeout} seconds",
+        }
+
+    except requests.ConnectionError as e:
+        logger.error(f"Connection error for {url}: {e}")
+        return {
+            "success": False,
+            "error": "connection_error",
+            "message": f"Failed to connect to {url}",
+        }
+
+    except requests.HTTPError as e:
+        status_code = e.response.status_code
+
+        if status_code == 404:
+            logger.warning(f"Resource not found: {url}")
+            return {
+                "success": False,
+                "error": "not_found",
+                "message": f"Resource not found at {url}",
+            }
+
+        elif status_code in (401, 403):
+            logger.error(f"Authorization failed for {url}: {status_code}")
+            return {
+                "success": False,
+                "error": "unauthorized",
+                "message": f"Authorization failed (HTTP {status_code})",
+            }
+
+        elif status_code >= 500:
+            logger.error(f"Server error from {url}: {status_code}")
+            return {
+                "success": False,
+                "error": "server_error",
+                "message": f"Server error (HTTP {status_code})",
+            }
+
+        else:
+            logger.error(f"HTTP error {status_code} from {url}")
+            return {
+                "success": False,
+                "error": "http_error",
+                "message": f"HTTP error {status_code}",
+            }
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON response from {url}: {e}")
+        return {
+            "success": False,
+            "error": "invalid_response",
+            "message": "Response is not valid JSON",
+        }
+
+    except Exception as e:
+        logger.error(f"Unexpected error fetching {url}: {e}")
+        return {
+            "success": False,
+            "error": "unknown",
+            "message": f"Unexpected error: {str(e)}",
+        }
 
 
 @app.get("/", response_class=HTMLResponse)

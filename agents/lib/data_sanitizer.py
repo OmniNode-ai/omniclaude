@@ -123,7 +123,10 @@ REDACTED = "[REDACTED]"
 
 
 def sanitize_dict(
-    data: Dict[str, Any], max_depth: int = 5, current_depth: int = 0
+    data: Dict[str, Any],
+    max_depth: int = 5,
+    current_depth: int = 0,
+    additional_fields: List[str] = None,
 ) -> Dict[str, Any]:
     """
     Recursively sanitize dictionary by replacing sensitive values.
@@ -136,6 +139,8 @@ def sanitize_dict(
         data: Dictionary to sanitize
         max_depth: Maximum recursion depth (prevents infinite loops)
         current_depth: Current recursion depth (internal use)
+        additional_fields: Additional custom field names to treat as sensitive
+                          (e.g., ["custom_secret", "internal_token"])
 
     Returns:
         Sanitized dictionary with sensitive values replaced
@@ -160,6 +165,11 @@ def sanitize_dict(
         '[REDACTED]'
         >>> sanitized["normal_field"]
         'safe value'
+        >>> # With additional custom fields
+        >>> context = {"my_custom_secret": "sensitive", "normal": "ok"}
+        >>> sanitized = sanitize_dict(context, additional_fields=["my_custom_secret"])
+        >>> sanitized["my_custom_secret"]
+        '[REDACTED]'
     """
     # Depth limit reached - truncate to prevent infinite recursion
     if current_depth >= max_depth:
@@ -173,21 +183,28 @@ def sanitize_dict(
     if not isinstance(data, dict):
         return {"_error": f"expected dict, got {type(data).__name__}"}
 
+    # Combine default sensitive fields with additional custom fields
+    sensitive_fields = SENSITIVE_KEYS.copy()
+    if additional_fields:
+        sensitive_fields.update(field.lower() for field in additional_fields)
+
     sanitized = {}
     for key, value in data.items():
         # Check if key is sensitive (case-insensitive substring match)
         key_lower = str(key).lower()
-        if any(sensitive in key_lower for sensitive in SENSITIVE_KEYS):
+        if any(sensitive in key_lower for sensitive in sensitive_fields):
             # Redact the entire value if key is sensitive
             sanitized[key] = REDACTED
         elif isinstance(value, dict):
             # Recursively sanitize nested dicts (only if key is not sensitive)
-            sanitized[key] = sanitize_dict(value, max_depth, current_depth + 1)
+            sanitized[key] = sanitize_dict(
+                value, max_depth, current_depth + 1, additional_fields
+            )
         elif isinstance(value, list):
             # Sanitize list items (only if key is not sensitive)
             sanitized[key] = [
                 (
-                    sanitize_dict(item, max_depth, current_depth + 1)
+                    sanitize_dict(item, max_depth, current_depth + 1, additional_fields)
                     if isinstance(item, dict)
                     else sanitize_value(item)
                 )
@@ -270,7 +287,9 @@ def sanitize_string(text: str, max_length: int = 200) -> str:
     return sanitized
 
 
-def sanitize_error_context(context: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_error_context(
+    context: Dict[str, Any], additional_fields: List[str] = None
+) -> Dict[str, Any]:
     """
     Sanitize error context for ActionLogger.
 
@@ -280,6 +299,7 @@ def sanitize_error_context(context: Dict[str, Any]) -> Dict[str, Any]:
 
     Args:
         context: Error context dictionary
+        additional_fields: Additional custom field names to treat as sensitive
 
     Returns:
         Sanitized context
@@ -296,8 +316,10 @@ def sanitize_error_context(context: Dict[str, Any]) -> Dict[str, Any]:
         False
         >>> sanitized["credentials"]
         '[REDACTED]'
+        >>> # With additional custom fields
+        >>> sanitized = sanitize_error_context(error_context, additional_fields=["custom_key"])
     """
-    return sanitize_dict(context)
+    return sanitize_dict(context, additional_fields=additional_fields)
 
 
 def sanitize_stack_trace(stack_trace: str) -> str:
@@ -350,6 +372,7 @@ def sanitize_for_logging(
     data: Union[Dict[str, Any], str, Any],
     max_string_length: int = 200,
     max_dict_depth: int = 5,
+    additional_fields: List[str] = None,
 ) -> Union[Dict[str, Any], str, Any]:
     """
     Universal sanitization function for any logging data.
@@ -360,6 +383,7 @@ def sanitize_for_logging(
         data: Data to sanitize (dict, string, or any type)
         max_string_length: Max length for string truncation
         max_dict_depth: Max depth for dict recursion
+        additional_fields: Additional custom field names to treat as sensitive
 
     Returns:
         Sanitized data (same type as input)
@@ -371,9 +395,14 @@ def sanitize_for_logging(
         'Bearer [REDACTED]'
         >>> sanitize_for_logging(12345)
         12345
+        >>> # With custom fields
+        >>> sanitize_for_logging({"custom_secret": "xyz"}, additional_fields=["custom_secret"])
+        {'custom_secret': '[REDACTED]'}
     """
     if isinstance(data, dict):
-        return sanitize_dict(data, max_depth=max_dict_depth)
+        return sanitize_dict(
+            data, max_depth=max_dict_depth, additional_fields=additional_fields
+        )
     elif isinstance(data, str):
         return sanitize_string(data, max_length=max_string_length)
     else:

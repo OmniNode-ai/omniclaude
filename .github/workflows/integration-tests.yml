@@ -30,6 +30,7 @@ jobs:
   database-integration:
     name: Database Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # Prevent infinite hangs
 
     services:
       postgres:
@@ -175,11 +176,40 @@ jobs:
         run: |
           echo "::group::Database Operations Tests"
 
-          # Run database integration tests
-          poetry run pytest tests/test_database_event_client.py -v --tb=short
-          poetry run pytest tests/test_agent_execution_logging.py -v --tb=short
+          # Run database integration tests (with timeout)
+          timeout 300 poetry run pytest tests/test_database_event_client.py -v --tb=short || {
+            echo "::error::Database event client tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
+          timeout 300 poetry run pytest tests/test_agent_execution_logging.py -v --tb=short || {
+            echo "::error::Agent execution logging tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
 
           echo "::endgroup::"
+
+      - name: Check for resource leaks
+        if: always()
+        env:
+          PGPASSWORD: test_password
+        run: |
+          echo "::group::Resource Leak Detection"
+          # Check database connections
+          psql -h localhost -U test_user -d test_omninode_bridge -c "SELECT COUNT(*) as active_connections FROM pg_stat_activity;" || echo "Cannot check DB connections"
+          # Check for unclosed file descriptors
+          lsof -p $$ 2>/dev/null | head -20 || echo "lsof not available, skipping"
+          echo "::endgroup::"
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-integration-failure-logs
+          path: |
+            logs/
+            tmp/
+            *.log
+            .pytest_cache/
 
       - name: Test UUID field handling
         env:
@@ -236,6 +266,7 @@ jobs:
   kafka-integration:
     name: Kafka Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # Prevent infinite hangs
 
     services:
       redpanda:
@@ -327,8 +358,14 @@ jobs:
         run: |
           echo "::group::Kafka Event Publishing Tests"
 
-          poetry run pytest tests/test_kafka_logging.py -v --tb=short
-          poetry run pytest tests/test_action_publishing.py -v --tb=short
+          timeout 300 poetry run pytest tests/test_kafka_logging.py -v --tb=short || {
+            echo "::error::Kafka logging tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
+          timeout 300 poetry run pytest tests/test_action_publishing.py -v --tb=short || {
+            echo "::error::Action publishing tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
 
           echo "::endgroup::"
 
@@ -345,10 +382,37 @@ jobs:
         run: |
           echo "::group::Routing Event Flow Tests"
 
-          poetry run pytest tests/test_routing_event_flow.py -v --tb=short
-          poetry run pytest tests/test_routing_flow.py -v --tb=short
+          timeout 300 poetry run pytest tests/test_routing_event_flow.py -v --tb=short || {
+            echo "::error::Routing event flow tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
+          timeout 300 poetry run pytest tests/test_routing_flow.py -v --tb=short || {
+            echo "::error::Routing flow tests exceeded 5 minute timeout or failed"
+            exit 1
+          }
 
           echo "::endgroup::"
+
+      - name: Check for resource leaks
+        if: always()
+        run: |
+          echo "::group::Resource Leak Detection"
+          # Check for unclosed file descriptors
+          lsof -p $$ 2>/dev/null | head -20 || echo "lsof not available, skipping"
+          # Check for zombie processes
+          ps aux | grep -i defunct || echo "No zombie processes found"
+          echo "::endgroup::"
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kafka-integration-failure-logs
+          path: |
+            logs/
+            tmp/
+            *.log
+            .pytest_cache/
 
       - name: Upload Kafka test results
         uses: actions/upload-artifact@v4
@@ -365,6 +429,7 @@ jobs:
   agent-observability:
     name: Agent Observability Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # Prevent infinite hangs
 
     services:
       postgres:
@@ -535,6 +600,7 @@ jobs:
   full-pipeline:
     name: Full Pipeline Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25  # Prevent infinite hangs (longer for full pipeline)
 
     services:
       postgres:

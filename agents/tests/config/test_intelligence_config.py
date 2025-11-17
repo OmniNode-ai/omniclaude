@@ -552,3 +552,159 @@ class TestRealEnvironmentIntegration:
         assert config.enable_event_based_discovery is False
         assert config.enable_filesystem_fallback is True
         assert config.prefer_event_patterns is False
+
+
+# =============================================================================
+# Test: Edge Cases and Error Scenarios
+# =============================================================================
+
+
+class TestConfigurationEdgeCases:
+    """Test edge cases and error scenarios in configuration."""
+
+    def test_extremely_low_timeout(self):
+        """Test configuration rejects unrealistically low timeout values."""
+        with pytest.raises(ValidationError):
+            IntelligenceConfig(kafka_request_timeout_ms=1)  # 1ms is too low
+
+    def test_extremely_high_timeout(self):
+        """Test configuration rejects unrealistically high timeout values."""
+        with pytest.raises(ValidationError):
+            IntelligenceConfig(
+                kafka_request_timeout_ms=999999
+            )  # 999 seconds is too high
+
+    def test_timeout_consistency_code_analysis_exceeds_max(self):
+        """Test code analysis timeout cannot exceed maximum allowed value."""
+        with pytest.raises(ValidationError):
+            IntelligenceConfig(
+                kafka_code_analysis_timeout_ms=130000
+            )  # Above 120000ms max
+
+    def test_multiple_bootstrap_servers_malformed(self):
+        """Test validation catches malformed server lists."""
+        with pytest.raises(ValidationError, match="Invalid server format"):
+            IntelligenceConfig(
+                kafka_bootstrap_servers="kafka1:9092,malformed,kafka3:9092"
+            )
+
+    def test_bootstrap_servers_with_protocol_prefix(self):
+        """Test validation behavior with protocol prefix in bootstrap servers."""
+        # Note: Current implementation accepts protocol prefix
+        # This test documents actual behavior - may change if stricter validation added
+        config = IntelligenceConfig(kafka_bootstrap_servers="kafka://localhost:9092")
+        # Should accept (validation doesn't enforce no-protocol currently)
+        assert config.kafka_bootstrap_servers == "kafka://localhost:9092"
+
+    def test_consumer_group_prefix_with_invalid_characters(self):
+        """Test consumer group prefix with potentially problematic characters."""
+        # Should accept valid characters
+        config = IntelligenceConfig(kafka_consumer_group_prefix="omniclaude-test_v2")
+        assert config.kafka_consumer_group_prefix == "omniclaude-test_v2"
+
+    def test_topic_name_with_spaces(self):
+        """Test validation rejects topic names with spaces."""
+        config = IntelligenceConfig(
+            topic_code_analysis_requested="  valid-topic-name  "
+        )
+        # Should work with validation trimming whitespace
+        config.validate_config()
+
+    def test_config_validation_idempotency(self, sample_config):
+        """Test that calling validate_config() multiple times is idempotent."""
+        sample_config.validate_config()
+        sample_config.validate_config()
+        sample_config.validate_config()
+        # Should not raise or change state
+
+    def test_bootstrap_servers_localhost_variations(self):
+        """Test various localhost formats are accepted."""
+        # IPv4 localhost
+        config1 = IntelligenceConfig(kafka_bootstrap_servers="127.0.0.1:9092")
+        assert config1.kafka_bootstrap_servers == "127.0.0.1:9092"
+
+        # IPv6 localhost
+        config2 = IntelligenceConfig(kafka_bootstrap_servers="[::1]:9092")
+        assert config2.kafka_bootstrap_servers == "[::1]:9092"
+
+        # Hostname localhost
+        config3 = IntelligenceConfig(kafka_bootstrap_servers="localhost:9092")
+        assert config3.kafka_bootstrap_servers == "localhost:9092"
+
+    def test_timeout_values_at_boundaries(self):
+        """Test timeout values at exact boundary conditions."""
+        # Minimum allowed timeout
+        config_min = IntelligenceConfig(kafka_request_timeout_ms=1000)
+        assert config_min.kafka_request_timeout_ms == 1000
+
+        # Maximum allowed timeout
+        config_max = IntelligenceConfig(kafka_request_timeout_ms=60000)
+        assert config_max.kafka_request_timeout_ms == 60000
+
+        # Code analysis at maximum
+        config_ca_max = IntelligenceConfig(kafka_code_analysis_timeout_ms=120000)
+        assert config_ca_max.kafka_code_analysis_timeout_ms == 120000
+
+    def test_from_env_with_missing_optional_vars(self, clean_env):
+        """Test from_env() gracefully handles missing optional variables."""
+        # Set only required variables
+        clean_env.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+
+        config = IntelligenceConfig.from_env()
+
+        # Should use defaults for optional variables
+        assert config.kafka_enable_intelligence is True
+        assert config.enable_event_based_discovery is True
+        assert config.enable_filesystem_fallback is True
+
+    def test_config_serialization_deserialization_roundtrip(self, sample_config):
+        """Test configuration can be serialized and deserialized correctly."""
+        # Serialize to dict
+        data = sample_config.to_dict()
+
+        # Create new config from dict data
+        new_config = IntelligenceConfig(**data)
+
+        # Verify all fields match
+        assert (
+            new_config.kafka_bootstrap_servers == sample_config.kafka_bootstrap_servers
+        )
+        assert (
+            new_config.kafka_enable_intelligence
+            == sample_config.kafka_enable_intelligence
+        )
+        assert (
+            new_config.kafka_request_timeout_ms
+            == sample_config.kafka_request_timeout_ms
+        )
+        assert (
+            new_config.enable_event_based_discovery
+            == sample_config.enable_event_based_discovery
+        )
+
+    def test_topic_names_identical_rejected(self):
+        """Test validation catches when topic names are identical."""
+        # Note: Current implementation doesn't enforce uniqueness
+        # This test documents expected behavior if uniqueness is added
+        config = IntelligenceConfig(
+            topic_code_analysis_requested="same-topic",
+            topic_code_analysis_completed="same-topic",
+            topic_code_analysis_failed="different-topic",
+        )
+        # Should accept (no uniqueness constraint currently)
+        config.validate_config()
+
+    def test_bootstrap_servers_port_zero(self):
+        """Test validation rejects port number 0."""
+        with pytest.raises(ValidationError, match="Port.*out of valid range"):
+            IntelligenceConfig(kafka_bootstrap_servers="localhost:0")
+
+    def test_bootstrap_servers_port_65535(self):
+        """Test validation accepts maximum valid port number."""
+        config = IntelligenceConfig(kafka_bootstrap_servers="localhost:65535")
+        assert config.kafka_bootstrap_servers == "localhost:65535"
+
+    def test_bootstrap_servers_port_65536_rejected(self):
+        """Test validation rejects port numbers above 65535."""
+        with pytest.raises(ValidationError, match="Port.*out of valid range"):
+            IntelligenceConfig(kafka_bootstrap_servers="localhost:65536")

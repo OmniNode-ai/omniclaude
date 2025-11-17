@@ -119,10 +119,13 @@ def main():
         table_result = execute_query(table_count_query)
 
         if table_result["success"] and table_result["rows"]:
+            result["success"] = True
             result["connection"] = "healthy"
             result["total_tables"] = table_result["rows"][0]["count"]
         else:
+            result["success"] = False
             result["connection"] = "failed"
+            result["error"] = table_result.get("error", "Database connection failed")
             print(format_json(result))
             return 1
 

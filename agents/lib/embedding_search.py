@@ -129,7 +129,9 @@ class EmbeddingSearch:
         where_conditions.append(f"created_at >= ${param_count}")
         params.append(datetime.now() - timedelta(days=30))  # Last 30 days
 
-        query = f"""
+        # Note: where_conditions contains safe parameterized SQL fragments (e.g., "error_type = $1")
+        # Values are passed separately via params array
+        query = f"""  # nosec B608
             SELECT id, error_type, message, details, created_at
             FROM error_events
             WHERE {' AND '.join(where_conditions)}

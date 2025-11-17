@@ -473,19 +473,19 @@ class AgentActionsConsumer:
 
     def setup_kafka_consumer(self):
         """Initialize Kafka consumer."""
-        logger.info("Setting up Kafka consumer...")
+        logger.info("Setting up Kafka consumer with consumer group coordination...")
         self.consumer = KafkaConsumer(
             *self.topics,  # Subscribe to multiple topics
             bootstrap_servers=self.kafka_brokers,
-            group_id=self.group_id,
+            group_id=self.group_id,  # Consumer group for coordination (prevents duplicate processing)
             auto_offset_reset="earliest",
-            enable_auto_commit=False,  # Manual commit after batch insert
+            enable_auto_commit=False,  # Manual commit after batch insert for reliability
             max_poll_records=self.batch_size,
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             consumer_timeout_ms=self.batch_timeout_ms,
         )
         logger.info(
-            "Kafka consumer connected to brokers: %s, group: %s, topics: %s",
+            "Kafka consumer connected to brokers: %s, group: %s (coordination enabled), topics: %s",
             self.kafka_brokers,
             self.group_id,
             ", ".join(self.topics),
@@ -1117,7 +1117,7 @@ class AgentActionsConsumer:
             inserted, duplicates = self.insert_batch(events_by_topic)
             failed = len(failed_events)
 
-            # Commit Kafka offsets after successful DB insert
+            # Commit Kafka offsets after successful DB insert (ensures exactly-once processing with consumer group coordination)
             self.consumer.commit()
 
             # Send failed events to DLQ

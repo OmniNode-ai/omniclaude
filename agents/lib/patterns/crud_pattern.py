@@ -243,7 +243,8 @@ class CRUDPattern:
             self.logger.info(f"Reading {entity_name} with ID: {{entity_id}}")
 
             # Query database
-            result = await self.db.query_one(
+            # Note: Table name is developer-controlled from ONEX entity definition
+            result = await self.db.query_one(  # nosec B608
                 "SELECT * FROM {entity_name.lower()}s WHERE id = $1",
                 entity_id
             )
@@ -320,7 +321,8 @@ class CRUDPattern:
             self.logger.info(f"Updating {entity_name} with ID: {{entity_id}}")
 
             # Check entity exists
-            existing = await self.db.query_one(
+            # Note: Table name is developer-controlled from ONEX entity definition
+            existing = await self.db.query_one(  # nosec B608
                 "SELECT id FROM {entity_name.lower()}s WHERE id = $1",
                 entity_id
             )
@@ -333,8 +335,9 @@ class CRUDPattern:
                 )
 
             # Database operation with transaction
+            # Note: Table name is developer-controlled from ONEX entity definition
             async with self.transaction_manager.begin():
-                await self.db.update(
+                await self.db.update(  # nosec B608
                     "{entity_name.lower()}s",
                     entity_id,
                     update_data
@@ -400,7 +403,8 @@ class CRUDPattern:
             self.logger.info(f"Deleting {entity_name} with ID: {{entity_id}}")
 
             # Check entity exists
-            existing = await self.db.query_one(
+            # Note: Table name is developer-controlled from ONEX entity definition
+            existing = await self.db.query_one(  # nosec B608
                 "SELECT id FROM {entity_name.lower()}s WHERE id = $1",
                 entity_id
             )
@@ -413,8 +417,9 @@ class CRUDPattern:
                 )
 
             # Database operation with transaction
+            # Note: Table name is developer-controlled from ONEX entity definition
             async with self.transaction_manager.begin():
-                await self.db.delete("{entity_name.lower()}s", entity_id)
+                await self.db.delete("{entity_name.lower()}s", entity_id)  # nosec B608
                 self.logger.info(f"{entity_name} deleted: {{entity_id}}")
 {event_code}
             return {{

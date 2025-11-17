@@ -46,10 +46,47 @@ python3 ~/.claude/skills/system-status/generate-status-report/execute.py \
 
 ### Arguments
 
-- `--format`: Output format (json, markdown, text) [default: json]
-- `--output`: Output file path (stdout if not specified)
-- `--include-trends`: Include trend analysis
-- `--timeframe`: Data timeframe (1h, 24h, 7d) [default: 24h]
+#### `--format`
+Output format: `json`, `markdown`, or `text` [default: `json`]
+- **json**: Structured JSON output for programmatic processing
+- **markdown**: Human-readable Markdown with tables and formatting
+- **text**: Plain text format (uses markdown as base)
+
+#### `--output`
+Output file path (stdout if not specified)
+- If provided, report is written to file
+- If omitted, report is printed to stdout
+
+#### `--include-trends`
+Enable historical trend analysis comparing current period with previous period
+
+**What it provides**:
+- Routing decisions change percentage
+- Average routing time change percentage
+- Average confidence change percentage
+- Comparison with equivalent previous timeframe
+
+**Example output**:
+```markdown
+## Trends Analysis
+
+**Comparison with Previous Period**:
+- **Routing Decisions**: +15.3% change
+- **Average Routing Time**: -8.2% change (improvement)
+- **Average Confidence**: +2.1% change
+
+*Positive values indicate increase, negative values indicate decrease*
+```
+
+**Performance note**: Adds ~100-200ms to report generation time due to additional database query.
+
+#### `--timeframe`
+Data collection period: `1h`, `24h`, or `7d` [default: `24h`]
+- `1h`: Last 1 hour (recent activity snapshot)
+- `24h`: Last 24 hours (daily overview)
+- `7d`: Last 7 days (weekly trends)
+
+**Note**: When using `--include-trends`, the comparison is with the equivalent previous period (e.g., `24h` compares last 24h vs previous 24h)
 
 ## Output Sections
 

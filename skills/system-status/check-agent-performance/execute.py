@@ -34,6 +34,10 @@ def main():
     )
     args = parser.parse_args()
 
+    # Validate --top-agents parameter
+    if args.top_agents <= 0:
+        parser.error(f"--top-agents must be positive (got: {args.top_agents})")
+
     interval = parse_timeframe(args.timeframe)
 
     try:

@@ -105,7 +105,7 @@ if [[ -z "$SAVE_FILE" ]]; then
     SAVE_FILE="$REPO_ROOT/tmp/pr-review-${PR_NUMBER}.md"
 fi
 
-# Build review command (using array for safe path handling)
+# Build review command (using array for safe path handling with spaces)
 REVIEW_CMD=("$SCRIPT_DIR/review-pr" "$PR_NUMBER" "--output-file" "$SAVE_FILE")
 if [[ "$JSON_MODE" == true ]]; then
     REVIEW_CMD+=("--json")

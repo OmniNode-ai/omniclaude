@@ -7,7 +7,10 @@ Provides utilities for converting shorthand timeframe codes to PostgreSQL interv
 Created: 2025-11-16
 """
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 def parse_timeframe(timeframe: str, default: Optional[str] = None) -> str:
@@ -41,4 +44,13 @@ def parse_timeframe(timeframe: str, default: Optional[str] = None) -> str:
     }
 
     fallback = default if default is not None else "1 hour"
-    return mapping.get(timeframe, fallback)
+    result = mapping.get(timeframe)
+
+    if result is None:
+        logger.warning(
+            f"Unknown timeframe '{timeframe}', defaulting to '{fallback}'. "
+            f"Valid options: {', '.join(mapping.keys())}"
+        )
+        return fallback
+
+    return result

@@ -11,8 +11,9 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 1. **pr-quick-review** - One-command quick review (NEW - RECOMMENDED)
 2. **fetch-pr-data** - Fetch all PR data from 4 GitHub endpoints
-3. **review-pr** - Comprehensive review with priority organization
-4. **pr-review-production** - Production-grade review wrapper with strict standards
+3. **analyze-pr-comments** - Pre-process raw PR data into categorized analysis (NEW)
+4. **review-pr** - Comprehensive review with priority organization
+5. **pr-review-production** - Production-grade review wrapper with strict standards
 
 ## Priority System
 
@@ -97,6 +98,77 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 - ✅ Smart defaults (auto-saves to tmp/)
 - ✅ Auto-displays output in terminal
 - ✅ Fewer agent actions needed
+
+### Pre-Categorized Analysis (For Agents)
+
+**New in v2**: Pre-process PR data into structured JSON for agent consumption without manual jq parsing.
+
+```bash
+# Analyze PR data from fetch-pr-data
+fetch-pr-data 36 | analyze-pr-comments > categorized.json
+
+# From file
+analyze-pr-comments pr_data.json > analysis.json
+
+# Pipeline usage
+fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
+```
+
+**Output Structure**:
+```json
+{
+  "pr_number": 36,
+  "analysis_timestamp": "2025-11-17T14:30:00Z",
+  "last_commit": {
+    "sha": "b4fe0d78...",
+    "timestamp": "2025-11-17T12:00:00Z"
+  },
+  "categorized_issues": {
+    "critical": [{
+      "id": "issue_1",
+      "source": "issue_comment",
+      "author": "claude-code[bot]",
+      "severity": "CRITICAL",
+      "title": "Run Tests job hung",
+      "description": "...",
+      "file": "ci.yml",
+      "line": 45,
+      "status": "unaddressed",
+      "created_at": "2025-11-17T13:00:00Z",
+      "structured_sections": {...}
+    }],
+    "major": [...],
+    "minor": [...],
+    "nitpicks": [...]
+  },
+  "summary": {
+    "total_critical": 4,
+    "total_major": 16,
+    "total_minor": 7,
+    "total_nitpicks": 19,
+    "total_all": 46,
+    "total_actionable": 27,
+    "unaddressed_critical": 4,
+    "unaddressed_major": 14,
+    "unaddressed_minor": 3
+  },
+  "structured_bot_reviews": [...]
+}
+```
+
+**Features**:
+- ✅ Pre-categorized by severity (CRITICAL/MAJOR/MINOR/NITPICK)
+- ✅ File:line references extracted from comments
+- ✅ Status tracking (unaddressed vs potentially_addressed)
+- ✅ Structured bot review sections parsed
+- ✅ Unique IDs for tracking
+- ✅ No manual jq parsing needed by agents
+
+**Why This Matters for Agents**:
+- Eliminates complex bash loops and jq parsing
+- Provides ready-to-use structured data
+- Includes status information for prioritization
+- Reduces agent token usage and processing time
 
 ### Basic Review (Advanced)
 
@@ -325,7 +397,8 @@ Issues are automatically classified based on keywords:
 **Claude Code Access**: `~/.claude/skills/pr-review/`
 **Executables**:
 - `~/.claude/skills/pr-review/pr-quick-review` - One-command quick review (RECOMMENDED)
-- `~/.claude/skills/pr-review/fetch-pr-data` - Fetch all PR data
+- `~/.claude/skills/pr-review/fetch-pr-data` - Fetch all PR data from 4 GitHub endpoints
+- `~/.claude/skills/pr-review/analyze-pr-comments` - Pre-process raw data into categorized analysis (NEW)
 - `~/.claude/skills/pr-review/review-pr` - Comprehensive review with priority organization
 - `~/.claude/skills/pr-review/pr-review-production` - Production-grade wrapper (NEW)
 

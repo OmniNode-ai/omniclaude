@@ -116,55 +116,34 @@ PR_DATA=$("$SCRIPT_DIR/fetch-pr-data" "$PR_NUMBER") || {
 }
 
 echo -e "${GREEN}✓${NC} PR data fetched" >&2
-echo -e "${BLUE}[DEV-REVIEW]${NC} Categorizing by dev priorities..." >&2
+echo -e "${BLUE}[DEV-REVIEW]${NC} Analyzing comments..." >&2
 
-# Categorize comments (dev-focused: skip nits)
-categorize_dev_comments() {
-    local pr_data="$1"
-    local critical=()
-    local major=()
-    local minor=()
+# Analyze using analyze-pr-comments (pre-categorized, no jq parsing needed)
+ANALYSIS=$(echo "$PR_DATA" | "$SCRIPT_DIR/analyze-pr-comments" 2>/dev/null) || {
+    echo -e "${RED}✗${NC} Failed to analyze PR comments" >&2
+    exit 1
+}
 
-    # Process all comment types
-    for comment_type in "reviews" "inline_comments" "pr_comments" "issue_comments"; do
-        local comments=$(echo "$pr_data" | jq -c ".${comment_type}[]" 2>/dev/null || echo "")
+# Transform analysis to dev-focused format (skip nits)
+categorize_dev_from_analysis() {
+    local analysis="$1"
 
-        while IFS= read -r comment; do
-            [[ -z "$comment" ]] && continue
-
-            local body=$(echo "$comment" | jq -r '.body' | tr '[:upper:]' '[:lower:]')
-
-            # CRITICAL: Security, bugs, tests
-            if echo "$body" | grep -qE "(critical|security|vulnerability|bug|test failure|breaks|data corruption)"; then
-                critical+=("$comment")
-            # MAJOR: Consistency, architecture, error handling
-            elif echo "$body" | grep -qE "(major|inconsistent|architecture|error handling|pattern|performance|missing)"; then
-                major+=("$comment")
-            # MINOR: Docs, tests, unused code (skip nits)
-            elif echo "$body" | grep -qE "(documentation|test|unused|edge case|type hint)" && \
-                ! echo "$body" | grep -qE "(nit|nitpick|consider|optional|style)"; then
-                minor+=("$comment")
-            fi
-            # Skip everything else (nits)
-        done <<< "$comments"
-    done
-
-    # Output JSON
-    jq -n \
-        --argjson critical "$(if [ ${#critical[@]} -gt 0 ]; then printf '%s\n' "${critical[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
-        --argjson major "$(if [ ${#major[@]} -gt 0 ]; then printf '%s\n' "${major[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
-        --argjson minor "$(if [ ${#minor[@]} -gt 0 ]; then printf '%s\n' "${minor[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
-        '{
-            critical: $critical,
-            major: $major,
-            minor: $minor,
-            summary: {
-                critical_count: ($critical | length),
-                major_count: ($major | length),
-                minor_count: ($minor | length),
-                total: (($critical | length) + ($major | length) + ($minor | length))
-            }
-        }'
+    # Extract categorized issues (skip nitpicks for dev review)
+    jq '{
+        critical: .categorized_issues.critical,
+        major: .categorized_issues.major,
+        minor: .categorized_issues.minor,
+        summary: {
+            critical_count: (.categorized_issues.critical | length),
+            major_count: (.categorized_issues.major | length),
+            minor_count: (.categorized_issues.minor | length),
+            total: (
+                (.categorized_issues.critical | length) +
+                (.categorized_issues.major | length) +
+                (.categorized_issues.minor | length)
+            )
+        }
+    }' <<< "$analysis"
 }
 
 # Format as markdown
@@ -208,11 +187,20 @@ EOF
             [[ -z "$issue" ]] && continue
 
             local author=$(echo "$issue" | jq -r '.author')
-            local body=$(echo "$issue" | jq -r '.body' | head -c 150)
-            local path=$(echo "$issue" | jq -r '.path // "N/A"')
+            local title=$(echo "$issue" | jq -r '.title // (.description | .[0:100])')
+            local file=$(echo "$issue" | jq -r '.file // "N/A"')
+            local status=$(echo "$issue" | jq -r '.status // "unknown"')
 
-            echo "$num. [$path] $author"
-            echo "   $body..."
+            # Status indicator
+            local status_icon=""
+            case "$status" in
+                unaddressed) status_icon="❌" ;;
+                potentially_addressed) status_icon="✓" ;;
+                *) status_icon="?" ;;
+            esac
+
+            echo "$num. [$file] $author $status_icon"
+            echo "   $title"
             echo ""
 
             ((num++))
@@ -223,8 +211,8 @@ EOF
     done
 }
 
-# Categorize
-CATEGORIZED=$(categorize_dev_comments "$PR_DATA")
+# Transform analysis to dev-focused format
+CATEGORIZED=$(categorize_dev_from_analysis "$ANALYSIS")
 
 echo -e "${GREEN}✓${NC} Issues categorized" >&2
 
