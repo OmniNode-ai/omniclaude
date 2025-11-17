@@ -26,7 +26,9 @@ except ImportError as e:
 def main():
     parser = argparse.ArgumentParser(description="Check database health")
     parser.add_argument("--tables", help="Comma-separated list of tables")
-    parser.add_argument("--include-sizes", action="store_true", help="Include table sizes")
+    parser.add_argument(
+        "--include-sizes", action="store_true", help="Include table sizes"
+    )
     args = parser.parse_args()
 
     try:
@@ -58,14 +60,18 @@ def main():
             result["connections"] = {
                 "active": row["active"] or 0,
                 "idle": row["idle"] or 0,
-                "total": row["total"] or 0
+                "total": row["total"] or 0,
             }
 
         # Check activity for specific tables
         if args.tables:
             tables_list = [t.strip() for t in args.tables.split(",")]
         else:
-            tables_list = ["agent_manifest_injections", "agent_routing_decisions", "agent_actions"]
+            tables_list = [
+                "agent_manifest_injections",
+                "agent_routing_decisions",
+                "agent_actions",
+            ]
 
         recent_activity = {}
         for table in tables_list:
@@ -82,7 +88,7 @@ def main():
                 recent_activity[table] = {
                     "5m": row["count_5m"] or 0,
                     "1h": row["count_1h"] or 0,
-                    "24h": row["count_24h"] or 0
+                    "24h": row["count_24h"] or 0,
                 }
 
         result["recent_activity"] = recent_activity
@@ -91,7 +97,9 @@ def main():
         if args.include_sizes:
             sizes = {}
             for table in tables_list:
-                size_query = f"SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size"
+                size_query = (
+                    f"SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size"
+                )
                 size_result = execute_query(size_query)
                 if size_result["success"] and size_result["rows"]:
                     sizes[table] = size_result["rows"][0]["size"]

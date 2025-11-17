@@ -30,15 +30,19 @@ def parse_timeframe(timeframe: str) -> str:
         "15m": "15 minutes",
         "1h": "1 hour",
         "24h": "24 hours",
-        "7d": "7 days"
+        "7d": "7 days",
     }
     return mapping.get(timeframe, "1 hour")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Check agent performance")
-    parser.add_argument("--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)")
-    parser.add_argument("--top-agents", type=int, default=10, help="Number of top agents")
+    parser.add_argument(
+        "--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)"
+    )
+    parser.add_argument(
+        "--top-agents", type=int, default=10, help="Number of top agents"
+    )
     args = parser.parse_args()
 
     interval = parse_timeframe(args.timeframe)
@@ -64,7 +68,7 @@ def main():
                 "total_decisions": row["total_decisions"] or 0,
                 "avg_routing_time_ms": round(float(row["avg_routing_time_ms"] or 0), 1),
                 "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
-                "threshold_violations": row["threshold_violations"] or 0
+                "threshold_violations": row["threshold_violations"] or 0,
             }
 
         # Get top agents
@@ -86,7 +90,7 @@ def main():
                 {
                     "agent": row["agent"],
                     "count": row["count"],
-                    "avg_confidence": round(float(row["avg_confidence"]), 2)
+                    "avg_confidence": round(float(row["avg_confidence"]), 2),
                 }
                 for row in top_result["rows"]
             ]
@@ -98,7 +102,7 @@ def main():
                 AVG(CASE WHEN success THEN 1.0 ELSE 0.0 END) as success_rate,
                 AVG(transformation_duration_ms) as avg_duration_ms
             FROM agent_transformation_events
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE started_at > NOW() - INTERVAL '{interval}'
         """
         transform_result = execute_query(transform_query)
 
@@ -107,7 +111,7 @@ def main():
             result["transformations"] = {
                 "total": row["total"] or 0,
                 "success_rate": round(float(row["success_rate"] or 0), 2),
-                "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1)
+                "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1),
             }
 
         print(format_json(result))

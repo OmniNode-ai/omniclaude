@@ -25,7 +25,9 @@ except ImportError as e:
 
 def main():
     parser = argparse.ArgumentParser(description="Check pattern discovery")
-    parser.add_argument("--detailed", action="store_true", help="Include detailed stats")
+    parser.add_argument(
+        "--detailed", action="store_true", help="Include detailed stats"
+    )
     args = parser.parse_args()
 
     try:
@@ -37,7 +39,7 @@ def main():
 
         result = {
             "total_patterns": stats.get("total_vectors", 0),
-            "collection_count": stats.get("collection_count", 0)
+            "collection_count": stats.get("collection_count", 0),
         }
 
         if args.detailed:
@@ -49,7 +51,7 @@ def main():
                     collections_detail[name] = {
                         "vectors": coll_stats.get("vectors_count", 0),
                         "status": coll_stats.get("status", "unknown"),
-                        "indexed_vectors": coll_stats.get("indexed_vectors_count", 0)
+                        "indexed_vectors": coll_stats.get("indexed_vectors_count", 0),
                     }
 
             result["collections"] = collections_detail

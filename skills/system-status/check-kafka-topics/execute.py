@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
-    from kafka_helper import check_kafka_connection, list_topics, get_topic_stats
+    from kafka_helper import check_kafka_connection, get_topic_stats, list_topics
     from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
@@ -26,7 +26,9 @@ except ImportError as e:
 def main():
     parser = argparse.ArgumentParser(description="Check Kafka topics")
     parser.add_argument("--topics", help="Comma-separated list of topics")
-    parser.add_argument("--include-partitions", action="store_true", help="Include partition details")
+    parser.add_argument(
+        "--include-partitions", action="store_true", help="Include partition details"
+    )
     args = parser.parse_args()
 
     try:
@@ -34,17 +36,18 @@ def main():
         conn = check_kafka_connection()
 
         if not conn["reachable"]:
-            print(format_json({
-                "broker": conn.get("broker"),
-                "status": "unreachable",
-                "error": conn.get("error")
-            }))
+            print(
+                format_json(
+                    {
+                        "broker": conn.get("broker"),
+                        "status": "unreachable",
+                        "error": conn.get("error"),
+                    }
+                )
+            )
             return 1
 
-        result = {
-            "broker": conn.get("broker"),
-            "status": "healthy"
-        }
+        result = {"broker": conn.get("broker"), "status": "healthy"}
 
         # List all topics
         all_topics = list_topics()
@@ -67,13 +70,26 @@ def main():
                 if "*" in topic_pattern:
                     # Match pattern against all topics
                     import fnmatch
-                    matched = [t for t in all_topics["topics"] if fnmatch.fnmatch(t, topic_pattern)]
+
+                    matched = [
+                        t
+                        for t in all_topics["topics"]
+                        if fnmatch.fnmatch(t, topic_pattern)
+                    ]
                     for topic in matched:
-                        stats = get_topic_stats(topic) if args.include_partitions else {"success": True}
+                        stats = (
+                            get_topic_stats(topic)
+                            if args.include_partitions
+                            else {"success": True}
+                        )
                         if stats["success"]:
                             topics_detail[topic] = {
                                 "exists": True,
-                                "partitions": stats.get("partitions") if args.include_partitions else None
+                                "partitions": (
+                                    stats.get("partitions")
+                                    if args.include_partitions
+                                    else None
+                                ),
                             }
                 else:
                     # Check specific topic
@@ -83,7 +99,9 @@ def main():
                     if exists and args.include_partitions:
                         stats = get_topic_stats(topic_pattern)
                         if stats["success"]:
-                            topics_detail[topic_pattern]["partitions"] = stats.get("partitions")
+                            topics_detail[topic_pattern]["partitions"] = stats.get(
+                                "partitions"
+                            )
 
             result["topics"] = topics_detail
 

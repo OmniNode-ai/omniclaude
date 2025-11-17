@@ -234,11 +234,18 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             }
 
         # Parse partition count from output
-        # Use regex to match specific partition line format to avoid false positives
+        # kcat format: topic "name" with X partitions:
+        #              partition 0, leader ...
+        # Extract partition count directly from the "with X partitions:" line
         partitions = 0
         for line in result.stdout.split("\n"):
-            if re.search(rf'topic "{re.escape(topic_name)}" partition \d+', line):
-                partitions += 1
+            # Match: topic "topic-name" with X partitions:
+            match = re.search(
+                rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line
+            )
+            if match:
+                partitions = int(match.group(1))
+                break
 
         return {
             "success": True,
