@@ -1358,12 +1358,13 @@ def get_settings() -> Settings:
     # would fail unnecessarily. However, during actual test execution (setup/call/teardown),
     # we WANT validation to catch configuration issues.
     #
-    # PYTEST_CURRENT_TEST is only set during test execution, NOT during collection.
-    # So we detect collection by: pytest module imported AND PYTEST_CURRENT_TEST not set.
-    import sys
-
-    in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-        "PYTEST_CURRENT_TEST"
+    # PYTEST_CURRENT_TEST is set during ALL pytest phases (collection, setup, call, teardown).
+    # During collection: "test_file.py::test_name" (no phase suffix)
+    # During execution: "test_file.py::test_name (setup|call|teardown)"
+    # We detect collection by checking if PYTEST_CURRENT_TEST exists but doesn't contain any phase indicator.
+    in_pytest_collection = os.getenv("PYTEST_CURRENT_TEST") is not None and not any(
+        phase in os.getenv("PYTEST_CURRENT_TEST", "")
+        for phase in ["setup", "call", "teardown"]
     )
 
     if in_pytest_collection:

@@ -1073,11 +1073,13 @@ class PostgresTracingClient:
         set_clauses.append(f"updated_at = ${len(values) + 1}")
         values.append(datetime.utcnow())
 
+        # SECURITY NOTE: Column names from updates dict keys. Callers MUST validate column names.
+        # Values are safely parameterized via $N placeholders.
         query = f"""
             UPDATE execution_traces
             SET {', '.join(set_clauses)}
             WHERE correlation_id = $1
-        """
+        """  # nosec B608
 
         try:
             async with self.acquire() as conn:

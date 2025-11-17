@@ -121,9 +121,14 @@ def format_table(
 
     # Add data rows
     for row in rows:
-        row_str = " | ".join(
-            str(cell).ljust(col_widths[i]) for i, cell in enumerate(row)
-        )
+        row_parts = []
+        for i, cell in enumerate(row):
+            if i < len(col_widths):
+                row_parts.append(str(cell).ljust(col_widths[i]))
+            else:
+                # Extra columns beyond headers - just append as-is
+                row_parts.append(str(cell))
+        row_str = " | ".join(row_parts)
         output.append(row_str)
 
     return "\n".join(output)

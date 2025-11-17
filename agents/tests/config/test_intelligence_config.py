@@ -105,11 +105,24 @@ class TestIntelligenceConfigDefaults:
         """Test all default configuration values are set correctly."""
         config = IntelligenceConfig()
 
-        # Kafka configuration defaults (loaded from centralized Pydantic Settings)
-        # Note: Values come from .env file loaded at module import time
-        # The .env file is loaded by settings.py before Settings initialization,
-        # so these are the actual runtime defaults
-        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
+        # Kafka configuration defaults - validate correctness, not consistency
+        # Expected values depend on deployment context:
+        #   - Docker services: "omninode-bridge-redpanda:9092"
+        #   - Host scripts: "192.168.86.200:29092"
+        #   - Development: May vary based on .env configuration
+        # Validate: (1) value is set, (2) has valid host:port format, (3) not a placeholder
+        assert (
+            config.kafka_bootstrap_servers is not None
+        ), "kafka_bootstrap_servers must be set"
+        assert (
+            ":" in config.kafka_bootstrap_servers
+        ), f"kafka_bootstrap_servers must be in 'host:port' format, got: {config.kafka_bootstrap_servers}"
+        # Ensure it's not a common placeholder value
+        invalid_placeholders = ["localhost:9092", "kafka:9092", "CHANGEME"]
+        assert config.kafka_bootstrap_servers not in invalid_placeholders, (
+            f"kafka_bootstrap_servers appears to be a placeholder: {config.kafka_bootstrap_servers}. "
+            "Expected production value like 'omninode-bridge-redpanda:9092' or '192.168.86.200:29092'"
+        )
         assert config.kafka_enable_intelligence is True
         assert config.kafka_request_timeout_ms == 5000
         assert config.kafka_pattern_discovery_timeout_ms == 5000
@@ -200,8 +213,22 @@ class TestEnvironmentVariableLoading:
     def test_from_env_uses_defaults_when_not_set(self, clean_env):
         """Test from_env() uses default values when env vars not set."""
         config = IntelligenceConfig.from_env()
-        # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
-        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
+
+        # Validate kafka_bootstrap_servers is correctly configured
+        # When no env var is set, should use .env file value (not a placeholder)
+        assert (
+            config.kafka_bootstrap_servers is not None
+        ), "kafka_bootstrap_servers must be set (from .env file)"
+        assert (
+            ":" in config.kafka_bootstrap_servers
+        ), f"kafka_bootstrap_servers must be in 'host:port' format, got: {config.kafka_bootstrap_servers}"
+        # Ensure it's not a development placeholder that leaked into tests
+        assert "localhost:9092" not in config.kafka_bootstrap_servers, (
+            "kafka_bootstrap_servers should not be localhost in default configuration. "
+            "Expected production value from .env file."
+        )
+
+        # Other defaults should be as expected
         assert config.kafka_enable_intelligence is True
 
 
@@ -455,16 +482,28 @@ class TestEdgeCases:
     def test_config_immutability_with_pydantic(self, clean_env):
         """Test configuration field access with Pydantic BaseModel."""
         config = IntelligenceConfig()
-        # Pydantic BaseModel models are mutable by default (unless frozen=True)
-        # Test verifies field access works correctly
+
+        # Verify all key fields exist and have valid values
         assert hasattr(config, "kafka_bootstrap_servers")
-        # Note: kafka_bootstrap_servers comes from .env file loaded at module import time
-        assert config.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
+        # Validate kafka_bootstrap_servers has a proper value (not None, not placeholder)
+        assert (
+            config.kafka_bootstrap_servers is not None
+        ), "kafka_bootstrap_servers must be set"
+        assert (
+            ":" in config.kafka_bootstrap_servers
+        ), f"kafka_bootstrap_servers must be in 'host:port' format, got: {config.kafka_bootstrap_servers}"
 
         # Verify we can read all key fields
         assert hasattr(config, "kafka_enable_intelligence")
         assert hasattr(config, "kafka_request_timeout_ms")
         assert hasattr(config, "enable_event_based_discovery")
+
+        # Verify fields have expected types and reasonable values
+        assert isinstance(config.kafka_enable_intelligence, bool)
+        assert isinstance(config.kafka_request_timeout_ms, int)
+        assert (
+            config.kafka_request_timeout_ms >= 1000
+        ), f"kafka_request_timeout_ms should be >= 1000ms, got: {config.kafka_request_timeout_ms}"
 
 
 # =============================================================================

@@ -16,7 +16,6 @@ Created: 2025-11-12
 
 import json
 import os
-import platform
 import re
 import subprocess
 import sys
@@ -263,16 +262,6 @@ def get_consumer_groups() -> Dict[str, Any]:
         return {"success": False, "groups": [], "count": 0, "error": str(e)}
 
 
-def get_timeout_command() -> str:
-    """
-    Get the platform-specific timeout command.
-
-    Returns:
-        'gtimeout' on macOS (Darwin), 'timeout' on Linux/Windows
-    """
-    return "gtimeout" if platform.system() == "Darwin" else "timeout"
-
-
 def check_topic_exists(topic_name: str) -> bool:
     """
     Check if a topic exists.
@@ -307,12 +296,9 @@ def get_recent_message_count(
 
     try:
         # Consume from end for a short time to estimate throughput
-        # Use platform-specific timeout command (gtimeout on macOS, timeout on Linux)
-        timeout_cmd = get_timeout_command()
+        # Use Python's built-in timeout for cross-platform compatibility
         result = subprocess.run(
             [
-                timeout_cmd,
-                str(timeout_seconds),
                 "kcat",
                 "-C",
                 "-b",
@@ -325,6 +311,7 @@ def get_recent_message_count(
             ],
             capture_output=True,
             text=True,
+            timeout=timeout_seconds,
         )
 
         # Count lines (each line is a message)
@@ -338,6 +325,22 @@ def get_recent_message_count(
             "messages_sampled": message_count,
             "sample_duration_s": timeout_seconds,
             "error": None,
+        }
+    except subprocess.TimeoutExpired:
+        # Timeout occurred - sampling didn't complete in time
+        return {
+            "success": False,
+            "topic": topic_name,
+            "messages_sampled": 0,
+            "sample_duration_s": timeout_seconds,
+            "error": f"Sampling timed out after {timeout_seconds}s",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "topic": topic_name,
+            "messages_sampled": 0,
+            "error": "kcat command not found. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
         }
     except Exception as e:
         return {

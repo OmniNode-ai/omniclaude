@@ -229,7 +229,7 @@ class DetectionFailureTracker:
         {where_clause}
         ORDER BY created_at DESC
         LIMIT %s
-        """
+        """  # nosec B608 - conditions list built from hardcoded column checks, values passed via params
 
         params.append(limit)
 

@@ -70,6 +70,11 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --save)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --save requires a file path argument" >&2
+                echo "Usage: $(basename "$0") <PR_NUMBER> --save <FILE_PATH>" >&2
+                exit 1
+            fi
             SAVE_FILE="$2"
             shift 2
             ;;
@@ -105,7 +110,7 @@ fi
 echo -e "${BLUE}[DEV-REVIEW]${NC} Fetching PR #${PR_NUMBER}..." >&2
 
 # Fetch PR data
-PR_DATA=$("$SCRIPT_DIR/fetch-pr-data" "$PR_NUMBER" 2>&1) || {
+PR_DATA=$("$SCRIPT_DIR/fetch-pr-data" "$PR_NUMBER") || {
     echo -e "${RED}✗${NC} Failed to fetch PR data" >&2
     exit 1
 }
@@ -146,9 +151,9 @@ categorize_dev_comments() {
 
     # Output JSON
     jq -n \
-        --argjson critical "$(printf '%s\n' "${critical[@]+"${critical[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
-        --argjson major "$(printf '%s\n' "${major[@]+"${major[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
-        --argjson minor "$(printf '%s\n' "${minor[@]+"${minor[@]}"}" | jq -s '.' 2>/dev/null || echo '[]')" \
+        --argjson critical "$(if [ ${#critical[@]} -gt 0 ]; then printf '%s\n' "${critical[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
+        --argjson major "$(if [ ${#major[@]} -gt 0 ]; then printf '%s\n' "${major[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
+        --argjson minor "$(if [ ${#minor[@]} -gt 0 ]; then printf '%s\n' "${minor[@]}" | jq -s '.' 2>/dev/null; else echo '[]'; fi)" \
         '{
             critical: $critical,
             major: $major,

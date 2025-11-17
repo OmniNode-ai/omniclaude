@@ -10,7 +10,6 @@ Created: 2025-11-12
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -24,22 +23,84 @@ except ImportError as e:
     sys.exit(1)
 
 
+# Whitelist of allowed table names for SQL injection prevention
+# Only these tables can be queried by this health check script
+ALLOWED_TABLES = {
+    # Agent framework tables
+    "agent_actions",
+    "agent_routing_decisions",
+    "agent_transformation_events",
+    "agent_manifest_injections",
+    "agent_execution_logs",
+    "agent_detection_failures",
+    "agent_definitions",
+    "agent_performance",
+    # Router and performance tables
+    "router_performance_metrics",
+    "pattern_quality_metrics",
+    "pattern_relationships",
+    "pattern_feedback_log",
+    # Debug and execution tables
+    "debug_transform_functions",
+    "debug_execution_attempts",
+    "debug_error_success_mappings",
+    "debug_golden_states",
+    # Model and LLM tables
+    "model_price_catalog",
+    "llm_calls",
+    "workflow_steps",
+    # Event tracking tables
+    "error_events",
+    "success_events",
+    "state_snapshots",
+    "error_success_maps",
+    # Clarification and quorum tables
+    "clarification_tickets",
+    "clarification_responses",
+    "quorum_votes",
+    "reward_events",
+    # Lineage and context tables
+    "lineage_edges",
+    "context_learning",
+    "context_predictions",
+    # Performance and reliability tables
+    "performance_metrics",
+    "circuit_breaker_state",
+    "retry_manager_state",
+    "batch_operation_logs",
+    "task_completion_metrics",
+    # Code generation tables
+    "generation_sessions",
+    "generation_artifacts",
+    "generation_intelligence",
+    "mixin_compatibility",
+    "mixin_compatibility_matrix",
+    "generation_performance_metrics",
+    "template_cache_metadata",
+    # Schema management
+    "schema_migrations",
+}
+
+
 def validate_table_name(name: str) -> bool:
     """
-    Validate table name follows PostgreSQL naming rules.
+    Validate table name against whitelist to prevent SQL injection.
 
-    Valid table names:
-    - Start with a letter (a-z, A-Z) or underscore (_)
-    - Contain only letters, digits, and underscores
-    - No SQL injection characters (quotes, semicolons, dashes, etc.)
+    Uses explicit whitelist validation instead of regex pattern matching
+    for maximum security. Only tables in ALLOWED_TABLES can be queried.
 
     Args:
         name: Table name to validate
 
     Returns:
-        True if valid, False otherwise
+        True if table is in whitelist, False otherwise
+
+    Security:
+        This function prevents SQL injection by ensuring only known,
+        safe table names can be used in queries. No user input can
+        inject arbitrary SQL through table names.
     """
-    return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name))
+    return name in ALLOWED_TABLES
 
 
 def main():

@@ -336,6 +336,46 @@ class AgentActionsConsumer:
             safe["postgres_password"] = "***REDACTED***"
         return safe
 
+    def _validate_correlation_id(self, event: Dict[str, Any]) -> str:
+        """
+        Standardized correlation_id validation.
+
+        Tries to extract correlation_id from:
+        1. Top-level event field
+        2. metadata field (if top-level not found)
+
+        Validates UUID format and generates new UUID if missing or invalid.
+
+        Args:
+            event: Event dictionary
+
+        Returns:
+            Valid correlation_id string (UUID format)
+        """
+        # Extract correlation_id from event (try top-level first, then metadata)
+        correlation_id = event.get("correlation_id")
+        if not correlation_id and "metadata" in event:
+            correlation_id = event.get("metadata", {}).get("correlation_id")
+
+        # Validate and normalize correlation_id
+        if not correlation_id:
+            return str(uuid.uuid4())
+
+        # Handle UUID objects
+        if isinstance(correlation_id, uuid.UUID):
+            return str(correlation_id)
+
+        # Validate string format
+        try:
+            uuid.UUID(correlation_id)
+            return correlation_id
+        except ValueError:
+            logger.warning(
+                "Invalid correlation_id format: %s, generating new UUID",
+                correlation_id,
+            )
+            return str(uuid.uuid4())
+
     def _log_file_operation_async(
         self,
         correlation_id: str,
@@ -609,7 +649,7 @@ class AgentActionsConsumer:
 
         for event in events:
             event_id = str(uuid.uuid4())
-            correlation_id = event.get("correlation_id")
+            correlation_id = self._validate_correlation_id(event)
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
             batch_data.append(
@@ -687,32 +727,13 @@ class AgentActionsConsumer:
             event_id = str(uuid.uuid4())
             timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
 
-            # Extract correlation_id from event (try top-level first, then metadata)
-            # This handles events where correlation_id may be in metadata field
-            correlation_id = event.get("correlation_id")
-            if not correlation_id and "metadata" in event:
-                correlation_id = event.get("metadata", {}).get("correlation_id")
-
-            # Convert to UUID if it's a string, generate new UUID if missing
-            if correlation_id and not isinstance(correlation_id, uuid.UUID):
-                try:
-                    correlation_id = uuid.UUID(correlation_id)
-                except ValueError:
-                    logger.warning(
-                        "Invalid correlation_id format: %s, generating new UUID",
-                        correlation_id,
-                    )
-                    correlation_id = uuid.uuid4()
-            elif not correlation_id:
-                logger.warning(
-                    "Missing correlation_id in routing decision event, generating new UUID"
-                )
-                correlation_id = uuid.uuid4()
+            # Use standardized correlation_id validation
+            correlation_id = self._validate_correlation_id(event)
 
             batch_data.append(
                 (
                     event_id,
-                    str(correlation_id),  # Convert UUID to string for psycopg2
+                    correlation_id,  # Already a string from validation
                     event.get("user_request", ""),
                     event.get("selected_agent"),
                     event.get("confidence_score"),
@@ -772,15 +793,8 @@ class AgentActionsConsumer:
             if routing_confidence is None:
                 routing_confidence = event.get("confidence_score")
 
-            # Parse correlation_id and session_id as UUIDs
-            correlation_id = event.get("correlation_id")
-            if correlation_id and not isinstance(correlation_id, uuid.UUID):
-                try:
-                    correlation_id = uuid.UUID(correlation_id)
-                except ValueError:
-                    correlation_id = uuid.uuid4()
-            elif not correlation_id:
-                correlation_id = uuid.uuid4()
+            # Use standardized correlation_id validation
+            correlation_id = self._validate_correlation_id(event)
 
             session_id = event.get("session_id")
             if session_id and not isinstance(session_id, uuid.UUID):
@@ -813,7 +827,7 @@ class AgentActionsConsumer:
                 (
                     event_id,
                     event.get("event_type", "transformation_complete"),
-                    str(correlation_id),  # Convert UUID to string for psycopg2
+                    correlation_id,  # Already a string from validation
                     (
                         str(session_id) if session_id else None
                     ),  # Convert UUID to string for psycopg2
@@ -926,7 +940,7 @@ class AgentActionsConsumer:
 
         batch_data = []
         for event in events:
-            correlation_id = event.get("correlation_id")
+            correlation_id = self._validate_correlation_id(event)
             user_request = event.get("user_request", "")
             prompt_length = len(user_request)
             prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
@@ -991,9 +1005,12 @@ class AgentActionsConsumer:
             if not execution_id:
                 logger.warning(
                     "Skipping event without execution_id: %s",
-                    event.get("correlation_id"),
+                    self._validate_correlation_id(event),
                 )
                 continue
+
+            # Use standardized correlation_id validation
+            correlation_id = self._validate_correlation_id(event)
 
             # Parse timestamps - may be string or datetime
             started_at = event.get("started_at")
@@ -1011,7 +1028,7 @@ class AgentActionsConsumer:
             batch_data.append(
                 (
                     execution_id,
-                    event.get("correlation_id"),
+                    correlation_id,
                     event.get("session_id"),
                     event.get("agent_name"),
                     event.get("user_prompt"),
@@ -1057,7 +1074,9 @@ class AgentActionsConsumer:
                 }
 
                 self.dlq_producer.send(dlq_topic, value=dlq_event)
-                logger.warning("Event sent to DLQ: %s", event.get("correlation_id"))
+                logger.warning(
+                    "Event sent to DLQ: %s", self._validate_correlation_id(event)
+                )
 
             except Exception as e:
                 logger.error("Failed to send event to DLQ: %s", e)

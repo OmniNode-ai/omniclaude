@@ -54,10 +54,23 @@ Analyze the provided PR and categorize all comments/reviews into actionable cate
 
 ## Execution Steps
 
+**🚨 CRITICAL: TEMPORARY FILE STORAGE**
+
+- **ALWAYS** use repository-local `./tmp/` for ALL temporary files
+- **NEVER** use system `/tmp/` - violates repository pattern and causes permission issues
+- **CREATE** the directory first: `mkdir -p ./tmp`
+- **EXAMPLE**: `./tmp/pr36_full.json` ✅ | `/tmp/pr_data.json` ❌
+
+---
+
 1. **Fetch PR data** using the pr-review skill:
    ```bash
-   # Fetch ALL PR data from 4 endpoints (reviews, inline comments, PR comments, issue comments)
-   PR_DATA=$(~/.claude/skills/pr-review/fetch-pr-data <PR#> 2>/dev/null)
+   # CREATE repository-local tmp directory first
+   mkdir -p ./tmp
+
+   # Fetch ALL PR data from 4 endpoints and save to repo-local tmp
+   ~/.claude/skills/pr-review/fetch-pr-data <PR#> > ./tmp/pr_full.json 2>&1
+   PR_DATA=$(cat ./tmp/pr_full.json)
 
    # Extract specific comment types for analysis
    REVIEWS=$(echo "$PR_DATA" | jq '.reviews')

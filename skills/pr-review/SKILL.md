@@ -70,6 +70,10 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 ## Usage
 
+> **📁 Temporary Files**: Always use repository-local `./tmp/` directory for temporary files.
+> Never use system `/tmp/` - this violates the repository pattern established in PR #36.
+> All examples below correctly use `{REPO}/tmp/` for output files.
+
 ### Quick Review (RECOMMENDED)
 
 **Single command for most use cases** - fetches, categorizes, and displays automatically:
