@@ -612,7 +612,9 @@ class IntelligenceUsageTracker:
 
             async with pool.acquire() as conn:
                 # Query usage statistics
-                result = await conn.fetchrow(
+                # Note: where_clause contains safe parameterized SQL fragments (e.g., "WHERE intelligence_name = $1")
+                # Values are passed separately via params array
+                result = await conn.fetchrow(  # nosec B608
                     f"""
                     SELECT
                         COUNT(*) as total_retrievals,

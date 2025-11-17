@@ -104,6 +104,97 @@ Location: `agent-observability/generate-report/`
 **check-agent** - Deep dive into specific agent
 Location: `agent-observability/check-agent/`
 
+### System Status
+
+Comprehensive system status checking skills for monitoring the entire OmniClaude agent infrastructure.
+
+#### Tier 1: Quick Status Checks (< 5 seconds)
+
+**check-system-health** - Fast overall system health snapshot
+Location: `system-status/check-system-health/`
+- Checks: Docker services, infrastructure, recent activity
+- Output: Overall status (healthy/degraded/critical)
+- Usage: Quick health verification before/after deployments
+
+**check-service-status** - Detailed status for specific Docker services
+Location: `system-status/check-service-status/`
+- Checks: Container health, resource usage, logs, errors
+- Output: Service-specific health details
+- Usage: Debug specific service issues
+
+**check-infrastructure** - Infrastructure component connectivity
+Location: `system-status/check-infrastructure/`
+- Checks: Kafka, PostgreSQL, Qdrant, Valkey connectivity
+- Output: Component-specific health and stats
+- Usage: Verify infrastructure accessibility
+
+#### Tier 2: Performance & Activity Analysis (5-15 seconds)
+
+**check-agent-performance** - Agent routing and execution metrics
+Location: `system-status/check-agent-performance/`
+- Checks: Routing times, confidence scores, agent frequency
+- Output: Performance metrics and threshold violations
+- Usage: Analyze routing performance and agent selection
+
+**check-recent-activity** - Recent agent executions and system activity
+Location: `system-status/check-recent-activity/`
+- Checks: Manifest injections, routing decisions, agent actions
+- Output: Activity summary with trends
+- Usage: Monitor system activity and identify patterns
+
+**check-pattern-discovery** - Qdrant pattern collections and stats
+Location: `system-status/check-pattern-discovery/`
+- Checks: Collection sizes, vector counts, retrieval performance
+- Output: Pattern discovery metrics
+- Usage: Monitor pattern availability and collection health
+
+**check-database-health** - PostgreSQL database health and activity
+Location: `system-status/check-database-health/`
+- Checks: Table stats, connection pool, recent inserts
+- Output: Database health and activity metrics
+- Usage: Monitor database performance and capacity
+
+**check-kafka-topics** - Kafka topic health and consumer status
+Location: `system-status/check-kafka-topics/`
+- Checks: Topics, partitions, consumer groups, throughput
+- Output: Topic-specific health and activity
+- Usage: Monitor Kafka infrastructure and message flow
+
+#### Tier 3: Diagnostics & Reporting (15-60 seconds)
+
+**diagnose-issues** - Identify and diagnose common problems
+Location: `system-status/diagnose-issues/`
+- Checks: Services, infrastructure, performance degradation
+- Output: Issues list with severity and recommendations
+- Usage: Troubleshoot problems and get actionable fixes
+
+**generate-status-report** - Comprehensive system status report
+Location: `system-status/generate-status-report/`
+- Generates: Complete system report (JSON, Markdown, HTML)
+- Output: Multi-section report with trends and analysis
+- Usage: Daily reports, audits, stakeholder updates
+
+### Usage Examples
+
+**Quick health check before deployment**:
+```bash
+python3 ~/.claude/skills/system-status/check-system-health/execute.py
+```
+
+**Diagnose performance issues**:
+```bash
+python3 ~/.claude/skills/system-status/check-agent-performance/execute.py --timeframe 24h
+python3 ~/.claude/skills/system-status/diagnose-issues/execute.py
+```
+
+**Generate weekly status report**:
+```bash
+python3 ~/.claude/skills/system-status/generate-status-report/execute.py \
+  --format markdown \
+  --output weekly-report.md \
+  --timeframe 7d
+```
+
 ## Shared Utilities
 
 `_shared/db_helper.py` - Database connection utilities
@@ -111,6 +202,70 @@ Location: `agent-observability/check-agent/`
 - Query execution with error handling
 - Correlation ID management
 - JSON parameter parsing
+
+`_shared/kafka_helper.py` - Kafka operations (NEW)
+- Kafka connectivity checking
+- Topic listing and stats
+- Consumer group status
+- Message throughput monitoring
+
+`_shared/docker_helper.py` - Docker operations (NEW)
+- Container status checking
+- Health check status
+- Resource usage monitoring (CPU, memory)
+- Log retrieval and error detection
+
+`_shared/qdrant_helper.py` - Qdrant operations (NEW)
+- Qdrant connectivity checking
+- Collection listing and stats
+- Vector count monitoring
+- Collection health checking
+
+`_shared/status_formatter.py` - Output formatting (NEW)
+- JSON formatting
+- Text table generation
+- Markdown report generation
+- Status indicators (✓, ✗, ⚠)
+- Duration/bytes formatting
+
+## Skill Documentation Standards
+
+### Required: SKILL.md (Uppercase)
+
+**All skills MUST use `SKILL.md` (uppercase) for documentation.**
+
+✅ **CORRECT**:
+- `skills/system-status/check-system-health/SKILL.md`
+- `skills/linear/SKILL.md`
+- `skills/pr-review/SKILL.md`
+
+❌ **INCORRECT**:
+- `skills/my-skill/skill.md` (lowercase - will be rejected)
+- `skills/my-skill/prompt.md` (legacy format - deprecated)
+
+**Why Uppercase?**
+- Consistent with established skills (system-status, debug-loop, pr-review)
+- Better visibility in file listings
+- Matches Claude Code convention expectations
+- Easier to spot in directory trees
+
+**YAML Frontmatter Required**:
+```yaml
+---
+name: skill-name
+description: Brief description of what this skill does
+---
+```
+
+**Migration from Legacy Formats**:
+If you have old `prompt.md` or `skill.md` (lowercase) files:
+```bash
+# Rename to SKILL.md (preserves git history)
+git mv skills/my-skill/prompt.md skills/my-skill/SKILL.md
+git mv skills/my-skill/skill.md skills/my-skill/SKILL.md
+```
+
+---
 
 ## Creating New Skills
 

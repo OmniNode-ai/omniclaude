@@ -12,7 +12,7 @@ Usage:
         --correlation-id "uuid" \\
         --agent-name "agent-research" \\
         --agent-domain "research" \\
-        --output-file "/tmp/agent_intelligence_domain_uuid.json" \\
+        --output-file "{REPO}/tmp/agent_intelligence_domain_uuid.json" \\
         --timeout-ms 500
 
 Topics:

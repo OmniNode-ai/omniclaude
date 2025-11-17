@@ -68,7 +68,8 @@ class ObservabilityReporter:
         counts = {}
         with self.conn.cursor() as cur:
             for table in tables:
-                cur.execute(f"SELECT COUNT(*) FROM {table}")
+                # Note: Table names from database introspection (information_schema.tables)
+                cur.execute(f"SELECT COUNT(*) FROM {table}")  # nosec B608
                 counts[table] = cur.fetchone()[0]
         return counts
 
@@ -140,7 +141,8 @@ class ObservabilityReporter:
 
             if timestamp_col:
                 time_col = timestamp_col["column_name"]
-                cur.execute(
+                # Note: Column name from database introspection (information_schema.columns)
+                cur.execute(  # nosec B608
                     f"""
                     SELECT *
                     FROM agent_transformation_events

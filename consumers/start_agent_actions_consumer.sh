@@ -13,8 +13,9 @@ set -o pipefail # Propagate pipe failures
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Log file location
-LOG_FILE="/tmp/agent_actions_consumer.log"
+# Create tmp directory and set log file location
+mkdir -p "$PROJECT_ROOT/tmp"
+LOG_FILE="$PROJECT_ROOT/tmp/agent_actions_consumer.log"
 
 echo "========================================" | tee -a "$LOG_FILE"
 echo "Agent Actions Consumer Startup" | tee -a "$LOG_FILE"

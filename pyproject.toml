@@ -158,8 +158,10 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["agents/tests"]
 markers = [
+    "unit: Unit tests with no external dependencies (fast)",
+    "integration: Integration tests requiring external services (DB, Kafka, Qdrant)",
+    "e2e: End-to-end tests requiring full system",
     "benchmark: mark benchmark tests using pytest-benchmark",
-    "integration: integration tests that may hit external services",
     "database: marks tests that require database connectivity",
     "slow: marks tests that take a long time to run",
 ]
@@ -171,6 +173,7 @@ addopts = [
     "--ignore=agents/tests/test_pipeline_integration.py",
     "--ignore=agents/tests/test_interactive_pipeline.py",
     "--ignore=agents/tests/test_template_intelligence.py",
+    "--ignore=agents/tests/tools/node_gen/test_file_writer.py",  # Missing omnibase_core dependency
 ]
 
 [tool.bandit]

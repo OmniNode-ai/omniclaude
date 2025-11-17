@@ -6,6 +6,7 @@ Publishes test events to Kafka and verifies they appear in the database.
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -14,6 +15,14 @@ from pathlib import Path
 from uuid import uuid4
 
 import psycopg2
+import pytest
+
+# Load environment variables (no fallback values)
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
 
 def publish_to_kafka(topic, payload):
@@ -52,19 +61,26 @@ def publish_to_kafka(topic, payload):
 def verify_in_database(execution_id):
     """Check if execution exists in database."""
     try:
-        import os
-
-        password = os.getenv("POSTGRES_PASSWORD", "")
-        if not password:
-            print("⚠️  POSTGRES_PASSWORD not set, skipping database verification")
+        if not all(
+            [
+                POSTGRES_HOST,
+                POSTGRES_PORT,
+                POSTGRES_DATABASE,
+                POSTGRES_USER,
+                POSTGRES_PASSWORD,
+            ]
+        ):
+            print(
+                "⚠️  PostgreSQL environment variables not set, skipping database verification"
+            )
             return None
 
         conn = psycopg2.connect(
-            host="192.168.86.200",
-            port=5436,
-            database="omninode_bridge",
-            user="postgres",
-            password=password,
+            host=POSTGRES_HOST,
+            port=int(POSTGRES_PORT),
+            database=POSTGRES_DATABASE,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
         )
 
         cursor = conn.cursor()
@@ -94,6 +110,24 @@ def verify_in_database(execution_id):
     except Exception as e:
         print(f"❌ Database query failed: {e}")
         return None
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not all(
+        [
+            POSTGRES_HOST,
+            POSTGRES_PORT,
+            POSTGRES_DATABASE,
+            POSTGRES_USER,
+            POSTGRES_PASSWORD,
+        ]
+    ),
+    reason="Requires PostgreSQL environment variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD)",
+)
+def test_kafka_execution_logging():
+    """Test Kafka-based agent execution logging by publishing events directly."""
+    return main()
 
 
 def main():

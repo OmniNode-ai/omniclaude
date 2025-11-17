@@ -83,7 +83,8 @@ async def run_migrations() -> None:
             migration_id = sql.name
             row = None
             if ident_col in col_meta:
-                row = await conn.fetchrow(
+                # Note: ident_col is from database introspection (fixed set: filename/name/id/version)
+                row = await conn.fetchrow(  # nosec B608
                     f"SELECT 1 FROM schema_migrations WHERE {ident_col}=$1",
                     migration_id,
                 )
@@ -122,7 +123,8 @@ async def run_migrations() -> None:
                 placeholders = ",".join(f"${i+1}" for i in range(len(insert_vals)))
                 cols_sql = ",".join(insert_cols)
                 try:
-                    await conn.execute(
+                    # Note: Column names from database introspection (information_schema.columns)
+                    await conn.execute(  # nosec B608
                         f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",
                         *insert_vals,
                     )

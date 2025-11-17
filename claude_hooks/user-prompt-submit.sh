@@ -14,6 +14,9 @@ export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Create tmp directory for this session
+mkdir -p "$PROJECT_ROOT/tmp"
+
 # Load environment variables from .env if available
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a  # automatically export all variables
@@ -55,6 +58,22 @@ fi
 log "Prompt: ${PROMPT:0:100}..."
 PROMPT_B64="$(b64 "$PROMPT")"
 
+# Generate correlation ID early (before agent detection)
+if command -v uuidgen >/dev/null 2>&1; then
+    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+else
+    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+fi
+
+# Log hook invocation (non-blocking)
+(
+  python3 "${HOOKS_LIB}/log_hook_event.py" invocation \
+    --hook-name "UserPromptSubmit" \
+    --prompt "$PROMPT" \
+    --correlation-id "$CORRELATION_ID" \
+    2>>"$LOG_FILE" || true
+) &
+
 # -----------------------------
 # Workflow detection
 # -----------------------------
@@ -78,16 +97,6 @@ if [[ "$WORKFLOW_TRIGGER" == "AUTOMATED_WORKFLOW_DETECTED" ]]; then
 fi
 
 # -----------------------------
-# Correlation ID (generated before agent detection)
-# -----------------------------
-# Use uuidgen if available, fallback to Python
-if command -v uuidgen >/dev/null 2>&1; then
-    CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-else
-    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
-fi
-
-# -----------------------------
 # Agent detection via Event-Based Routing
 # -----------------------------
 log "Calling event-based routing service via Kafka..."
@@ -99,6 +108,18 @@ ROUTING_RESULT="$(python3 "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "
 ROUTING_EXIT_CODE=$?
 if [ $ROUTING_EXIT_CODE -ne 0 ] || [ -z "$ROUTING_RESULT" ]; then
   log "Event-based routing unavailable (exit code: $ROUTING_EXIT_CODE), using fallback"
+
+  # Log routing error (non-blocking)
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+      --hook-name "UserPromptSubmit" \
+      --error-message "Event-based routing service unavailable (exit code: $ROUTING_EXIT_CODE)" \
+      --error-type "ServiceUnavailable" \
+      --correlation-id "$CORRELATION_ID" \
+      --context "{\"service\":\"event-based-routing\",\"exit_code\":$ROUTING_EXIT_CODE}" \
+      2>>"$LOG_FILE" || true
+  ) &
+
   ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"Event-based routing unavailable - using fallback","method":"fallback","latency_ms":0,"domain":"workflow_coordination","purpose":"Intelligent coordinator for development workflows"}'
   SERVICE_USED="false"
 else
@@ -124,6 +145,22 @@ IMPL_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.implementation_query // ""')"
 log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATENCY_MS}ms (service=${SERVICE_USED})"
 log "Domain: $AGENT_DOMAIN"
 log "Reasoning: ${SELECTION_REASONING:0:120}..."
+
+# Log routing decision (non-blocking)
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" routing \
+      --agent "$AGENT_NAME" \
+      --confidence "$CONFIDENCE" \
+      --method "$SELECTION_METHOD" \
+      --correlation-id "$CORRELATION_ID" \
+      --latency-ms "${LATENCY_MS%.*}" \
+      --reasoning "${SELECTION_REASONING:0:200}" \
+      --domain "$AGENT_DOMAIN" \
+      --context "{\"service_used\":\"$SERVICE_USED\"}" \
+      2>>"$LOG_FILE" || true
+  ) &
+fi
 
 # -----------------------------
 # Agent Invocation (NEW - Migration 015)
@@ -165,6 +202,17 @@ fi
 # Handle no agent detected
 if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
   log "No agent detected, logging failure..."
+
+  # Log no agent detected error (non-blocking)
+  (
+    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+      --hook-name "UserPromptSubmit" \
+      --error-message "No agent detected by router service" \
+      --error-type "NoAgentDetected" \
+      --correlation-id "$CORRELATION_ID" \
+      --context "{\"service_used\":\"$SERVICE_USED\",\"method\":\"$SELECTION_METHOD\"}" \
+      2>>"$LOG_FILE" || true
+  ) &
 
   # Log detection failure
   FAILURE_CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
@@ -372,7 +420,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
       --correlation-id "$CORRELATION_ID" \
       --agent-name "${AGENT_NAME:-unknown}" \
       --agent-domain "${AGENT_DOMAIN:-general}" \
-      --output-file "/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
+      --output-file "$PROJECT_ROOT/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
       --match-count 5 \
       --timeout-ms 500 \
       2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
@@ -388,7 +436,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
       --correlation-id "$CORRELATION_ID" \
       --agent-name "${AGENT_NAME:-unknown}" \
       --agent-domain "${AGENT_DOMAIN:-general}" \
-      --output-file "/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
+      --output-file "$PROJECT_ROOT/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
       --match-count 3 \
       --timeout-ms 500 \
       2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
@@ -474,8 +522,8 @@ Intelligence Context Available:
 │ Detection Reasoning: ${SELECTION_REASONING:0:150}                   │
 │                                                                      │
 │ RAG Intelligence:                                                   │
-│   - Domain: /tmp/agent_intelligence_domain_${CORRELATION_ID}.json   │
-│   - Implementation: /tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
+│   - Domain: {REPO}/tmp/agent_intelligence_domain_${CORRELATION_ID}.json   │
+│   - Implementation: {REPO}/tmp/agent_intelligence_impl_${CORRELATION_ID}.json │
 │                                                                      │
 │ Correlation ID: ${CORRELATION_ID}                                   │
 │                                                                      │
@@ -509,7 +557,7 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
     '{user_prompt: $prompt, workspace_path: $workspace, correlation_id: $corr_id}')"
 
   # Launch dispatch_runner.py and capture output to log only
-  OUTPUT_FILE="/tmp/workflow_${CORRELATION_ID}.log"
+  OUTPUT_FILE="$PROJECT_ROOT/tmp/workflow_${CORRELATION_ID}.log"
 
   (
     cd "$REPO_ROOT/agents/parallel_execution" 2>/dev/null || cd "${WORKSPACE_PATH:-$PWD}/agents/parallel_execution"

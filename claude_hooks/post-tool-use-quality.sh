@@ -67,13 +67,19 @@ fi
 # ============================================================================
 
 # Collect enhanced metrics and log to database (async, non-blocking)
+# Can be disabled via ENABLE_HOOK_DATABASE_LOGGING=false in .env
 if [[ -f "${SCRIPT_DIR}/lib/hook_event_logger.py" && -f "${SCRIPT_DIR}/lib/post_tool_metrics.py" ]]; then
-    (
-        # Export variables to avoid shell injection
-        export TOOL_INFO SCRIPT_DIR LOG_FILE
+    # Check if database logging is enabled (default: false to prevent backlog accumulation)
+    ENABLE_DB_LOGGING="${ENABLE_HOOK_DATABASE_LOGGING:-false}"
 
-        # Use single-quoted here-doc to prevent shell expansion
-        python3 << 'EOF' 2>>"${LOG_FILE}"
+    if [[ "$ENABLE_DB_LOGGING" == "true" ]]; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Database logging enabled, logging event to PostgreSQL" >> "$LOG_FILE"
+        (
+            # Export variables to avoid shell injection
+            export TOOL_INFO SCRIPT_DIR LOG_FILE
+
+            # Use single-quoted here-doc to prevent shell expansion
+            python3 << 'EOF' 2>>"${LOG_FILE}"
 import sys
 import os
 import json
@@ -135,7 +141,10 @@ if enhanced_metadata:
     exec_time = enhanced_metadata.get('performance_metrics', {}).get('execution_time_ms', 0)
     print(f'[PostToolUse] Success: {success}, Quality: {quality_score:.2f}, Time: {exec_time:.2f}ms', file=sys.stderr)
 EOF
-    ) &
+        ) &
+    else
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Database logging disabled (ENABLE_HOOK_DATABASE_LOGGING=false)" >> "$LOG_FILE"
+    fi
 fi
 
 # ============================================================================

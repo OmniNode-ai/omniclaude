@@ -100,8 +100,10 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
     )
 
     scorer = PatternQualityScorer()
+    # Use valid UUID format (string representation)
+    test_uuid = str(uuid.uuid4())
     score = PatternQualityScore(
-        pattern_id="test-duplicate",
+        pattern_id=test_uuid,
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -137,12 +139,15 @@ async def test_store_quality_metrics_with_unique_constraint_violation():
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolationError
 
-        # Should handle gracefully and raise wrapped exception
-        with pytest.raises(MockDatabaseError, match="duplicate key value") as exc_info:
+        # Should handle gracefully and raise wrapped exception with "Failed to store quality metrics" message
+        with pytest.raises(
+            Exception, match="Failed to store quality metrics"
+        ) as exc_info:
             await scorer.store_quality_metrics(score, "postgresql://test")
 
-        # Verify error message
+        # Verify error message contains both the wrapper and original error
         assert "Failed to store quality metrics" in str(exc_info.value)
+        assert "duplicate key value" in str(exc_info.value)
 
         # Verify rollback was called
         mock_conn.rollback.assert_called()
@@ -225,34 +230,10 @@ async def test_store_quality_metrics_with_invalid_uuid_format():
         measurement_timestamp=datetime.now(UTC),
     )
 
-    # Create a mock ForeignKeyViolation error
-    class MockForeignKeyViolationError(Exception):
-        """Mock for psycopg2.errors.ForeignKeyViolation."""
-
-        pass
-
-    class MockInvalidUUIDError(Exception):
-        """Mock for invalid UUID syntax error."""
-
-        pass
-
-    mock_cursor = MagicMock()
-    mock_cursor.execute.side_effect = MockInvalidUUIDError(
-        "invalid input syntax for type uuid"
-    )
-    mock_conn = MagicMock()
-    mock_conn.cursor.return_value = mock_cursor
-
-    with patch("agents.lib.pattern_quality_scorer.psycopg2") as mock_psycopg2:
-        mock_psycopg2.connect.return_value = mock_conn
-        mock_psycopg2.errors.ForeignKeyViolation = MockForeignKeyViolationError
-
-        with pytest.raises(
-            MockInvalidUUIDError, match="invalid input syntax for type uuid"
-        ) as exc_info:
-            await scorer.store_quality_metrics(score, "postgresql://test")
-
-        assert "Failed to store quality metrics" in str(exc_info.value)
+    # UUID validation now happens before database connection,
+    # so we expect ValueError with clear error message
+    with pytest.raises(ValueError, match="Invalid UUID format"):
+        await scorer.store_quality_metrics(score, "postgresql://test")
 
 
 # ============================================================================

@@ -31,6 +31,7 @@ from .contract_analyzer import (
 # Contract builders
 from .contract_builder import ContractBuilder
 from .contract_builder_factory import ContractBuilderFactory
+from .contract_validator import ContractValidator, ValidationResult
 from .effect_contract_builder import EffectContractBuilder
 from .enum_generator import EnumGenerator, EnumInfo
 from .orchestrator_contract_builder import OrchestratorContractBuilder
@@ -55,6 +56,8 @@ __all__ = [
     # Contract builders
     "ContractBuilder",
     "ContractBuilderFactory",
+    "ContractValidator",
+    "ValidationResult",
     "EffectContractBuilder",
     "ComputeContractBuilder",
     "ReducerContractBuilder",

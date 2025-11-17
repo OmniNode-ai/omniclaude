@@ -128,10 +128,12 @@ jobs:
           # Low severity issues (961 found) are informational but don't fail CI
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --ini .bandit \
             --severity-level medium \
             -f json -o bandit-report.json
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --ini .bandit \
             --severity-level medium \
             -f txt
 

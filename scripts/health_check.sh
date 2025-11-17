@@ -12,15 +12,20 @@
 # - Debug loop infrastructure (STF registry, model catalog)
 #
 # Usage: ./scripts/health_check.sh
-# Output: Saves to /tmp/health_check_latest.txt and appends to /tmp/health_check_history.log
+# Output: Saves to {REPO}/tmp/health_check_latest.txt and appends to {REPO}/tmp/health_check_history.log
 #
 
 set -euo pipefail
 
+# Get project root directory (calculate once)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+mkdir -p "$PROJECT_ROOT/tmp"
+
 # Configuration
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-OUTPUT_FILE="/tmp/health_check_latest.txt"
-HISTORY_FILE="/tmp/health_check_history.log"
+OUTPUT_FILE="$PROJECT_ROOT/tmp/health_check_latest.txt"
+HISTORY_FILE="$PROJECT_ROOT/tmp/health_check_history.log"
 
 # Colors for terminal output (disabled in file output)
 RED='\033[0;31m'
@@ -29,8 +34,6 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Load environment variables from .env
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
     echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
@@ -79,7 +82,7 @@ declare -a ISSUES=()
 # Function to add issue
 add_issue() {
     ISSUES+=("$1")
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND++)) || true  # Always return 0 to prevent set -e exit
 }
 
 # Function to check service health
@@ -352,66 +355,86 @@ check_debug_loop() {
 }
 
 # Main execution
-{
-    echo "=== System Health Check ==="
-    echo "Timestamp: $TIMESTAMP"
+# Use exec with tee to write to both stdout and file simultaneously
+# This ensures ISSUES_FOUND updates happen in main shell (not subshell)
+# Save the PID of the tee process for later waiting
+exec > >(tee "$OUTPUT_FILE") 2>&1
+TEE_PID=$!
+
+echo "=== System Health Check ==="
+echo "Timestamp: $TIMESTAMP"
+echo ""
+echo "Services:"
+
+# Disable exit-on-error to collect all issues
+# (re-enable after checks complete)
+set +e
+
+# Check Archon services
+check_service "archon-intelligence"
+check_service "archon-qdrant"
+check_service "archon-bridge"
+check_service "archon-search"
+check_service "archon-memgraph"
+
+# Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
+# Those services are managed by omniarchon repository, not checked here
+# Similarly, archon-server and archon-router services do not exist
+
+# Check Omninode services (if they exist)
+if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then
     echo ""
-    echo "Services:"
+    echo "Omninode Services:"
+    for service in $(docker ps --filter "name=omninode-" --format "{{.Names}}"); do
+        check_service "$service"
+    done
+fi
 
-    # Check Archon services
-    check_service "archon-intelligence"
-    check_service "archon-qdrant"
-    check_service "archon-bridge"
-    check_service "archon-search"
-    check_service "archon-memgraph"
+echo ""
+echo "Infrastructure:"
 
-    # Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
-    # Those services are managed by omniarchon repository, not checked here
-    # Similarly, archon-server and archon-router services do not exist
+check_kafka
+check_qdrant
+check_postgres
+check_intelligence
+check_router
+check_debug_loop
 
-    # Check Omninode services (if they exist)
-    if docker ps --filter "name=omninode-" --format "{{.Names}}" | grep -q "omninode-"; then
-        echo ""
-        echo "Omninode Services:"
-        for service in $(docker ps --filter "name=omninode-" --format "{{.Names}}"); do
-            check_service "$service"
-        done
-    fi
+# Re-enable exit-on-error
+set -e
 
+echo ""
+echo "=== Summary ==="
+
+if [[ $ISSUES_FOUND -eq 0 ]]; then
+    echo "✅ All systems healthy"
+else
+    echo "❌ Issues Found: $ISSUES_FOUND"
     echo ""
-    echo "Infrastructure:"
+    for issue in "${ISSUES[@]}"; do
+        echo "  - $issue"
+    done
+fi
 
-    check_kafka
-    check_qdrant
-    check_postgres
-    check_intelligence
-    check_router
-    check_debug_loop
+echo ""
+echo "=== End Health Check ==="
 
-    echo ""
-    echo "=== Summary ==="
+# Save the exit code decision first (while ISSUES_FOUND is still accessible)
+EXIT_CODE=0
+if [[ $ISSUES_FOUND -gt 0 ]]; then
+    EXIT_CODE=1
+fi
 
-    if [[ $ISSUES_FOUND -eq 0 ]]; then
-        echo "✅ All systems healthy"
-    else
-        echo "❌ Issues Found: $ISSUES_FOUND"
-        echo ""
-        for issue in "${ISSUES[@]}"; do
-            echo "  - $issue"
-        done
-    fi
-
-    echo ""
-    echo "=== End Health Check ==="
-} | tee "$OUTPUT_FILE"
+# Close stdout to signal tee to finish, then wait for it
+exec 1>&-
+exec 2>&-
+wait $TEE_PID 2>/dev/null || true
 
 # Append to history log
-echo "" >> "$HISTORY_FILE"
-cat "$OUTPUT_FILE" >> "$HISTORY_FILE"
+{
+    echo ""
+    cat "$OUTPUT_FILE"
+} >> "$HISTORY_FILE"
 
-# Print summary to stderr for scripting
-if [[ $ISSUES_FOUND -eq 0 ]]; then
-    exit 0
-else
-    exit 1
-fi
+# Exit with appropriate code based on issues found
+exit $EXIT_CODE

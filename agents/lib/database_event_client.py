@@ -50,6 +50,7 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
+from agents.lib.security_utils import validate_sql_identifier
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -452,13 +453,24 @@ class DatabaseEventClient:
 
         timeout = timeout_ms or self.request_timeout_ms
 
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table, "table")
+
         # Build INSERT query
         columns = list(data.keys())
+
+        # Validate column names to prevent SQL injection
+        for col in columns:
+            validate_sql_identifier(col, "column")
+
         placeholders = [f"${i+1}" for i in range(len(columns))]
-        query = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
+        # Table and column names validated above
+        query = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"  # nosec B608
 
         if returning:
-            query += f" RETURNING {returning}"
+            # Validate RETURNING clause
+            validate_sql_identifier(returning, "column")
+            query += f" RETURNING {returning}"  # nosec B608
 
         params = [data[col] for col in columns]
 
@@ -525,13 +537,23 @@ class DatabaseEventClient:
 
         timeout = timeout_ms or self.request_timeout_ms
 
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table, "table")
+
+        # Validate column names to prevent SQL injection
+        for col in data.keys():
+            validate_sql_identifier(col, "column")
+        for col in filters.keys():
+            validate_sql_identifier(col, "column")
+
         # Build UPDATE query
         set_clauses = [f"{col} = ${i+1}" for i, col in enumerate(data.keys())]
         where_clauses = [
             f"{col} = ${i+len(data)+1}" for i, col in enumerate(filters.keys())
         ]
 
-        query = f"UPDATE {table} SET {', '.join(set_clauses)} WHERE {' AND '.join(where_clauses)}"
+        # Table and column names validated above
+        query = f"UPDATE {table} SET {', '.join(set_clauses)} WHERE {' AND '.join(where_clauses)}"  # nosec B608
         params = list(data.values()) + list(filters.values())
 
         # Create request payload
@@ -595,9 +617,17 @@ class DatabaseEventClient:
 
         timeout = timeout_ms or self.request_timeout_ms
 
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table, "table")
+
+        # Validate column names to prevent SQL injection
+        for col in filters.keys():
+            validate_sql_identifier(col, "column")
+
         # Build DELETE query
         where_clauses = [f"{col} = ${i+1}" for i, col in enumerate(filters.keys())]
-        query = f"DELETE FROM {table} WHERE {' AND '.join(where_clauses)}"
+        # Table and column names validated above
+        query = f"DELETE FROM {table} WHERE {' AND '.join(where_clauses)}"  # nosec B608
         params = list(filters.values())
 
         # Create request payload
@@ -671,21 +701,40 @@ class DatabaseEventClient:
 
         timeout = timeout_ms or self.request_timeout_ms
 
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table, "table")
+
         # Build UPSERT query (INSERT ... ON CONFLICT ... DO UPDATE)
         columns = list(data.keys())
+
+        # Validate column names to prevent SQL injection
+        for col in columns:
+            validate_sql_identifier(col, "column")
+        for col in conflict_columns:
+            validate_sql_identifier(col, "column")
+
         placeholders = [f"${i+1}" for i in range(len(columns))]
 
-        query = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
-        query += f" ON CONFLICT ({', '.join(conflict_columns)}) DO UPDATE SET "
+        # Table and column names validated above
+        query = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"  # nosec B608
+        query += (
+            f" ON CONFLICT ({', '.join(conflict_columns)}) DO UPDATE SET "  # nosec B608
+        )
 
         # Determine which columns to update on conflict
         if update_columns is None:
             update_columns = [col for col in columns if col not in conflict_columns]
+        else:
+            # Validate update_columns if provided
+            for col in update_columns:
+                validate_sql_identifier(col, "column")
 
         update_clauses = [f"{col} = EXCLUDED.{col}" for col in update_columns]
         query += ", ".join(update_clauses)
 
         if returning:
+            # Validate RETURNING clause
+            validate_sql_identifier(returning, "column")
             query += f" RETURNING {returning}"
 
         params = [data[col] for col in columns]

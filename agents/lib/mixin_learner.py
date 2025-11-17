@@ -7,11 +7,30 @@ intelligent recommendations for mixin combinations based on historical data.
 
 Author: OmniClaude Autonomous Code Generation System
 Target Accuracy: ≥95%
+
+SECURITY NOTE:
+    This module uses pickle for ML model serialization (standard Python ML practice).
+    Pickle can execute arbitrary code during deserialization. Security measures:
+
+    1. Model files are generated internally by this system (not from external sources)
+    2. Model paths are controlled (not user-provided)
+    3. Files are stored in trusted local directory (.cache/models/)
+    4. Only load models from trusted sources
+
+    For production deployments with untrusted model sources, consider:
+    - Using joblib with compression instead of raw pickle
+    - Implementing file integrity checks (SHA-256 hashes)
+    - Using model signing/verification
+    - Restricting file permissions (0600)
+
+    References:
+    - https://docs.python.org/3/library/pickle.html#module-pickle (security warnings)
+    - https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data
 """
 
 import asyncio
 import logging
-import pickle
+import pickle  # noqa: S403 - pickle usage documented in module docstring
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -153,14 +172,26 @@ class MixinLearner:
             asyncio.create_task(self.train_model())
 
     def _load_model(self):
-        """Load trained model and metrics from disk"""
+        """
+        Load trained model and metrics from disk.
+
+        Security: Model files are generated internally by this system in a trusted
+        directory. For production with untrusted sources, implement file integrity
+        checks before loading. See module docstring for security considerations.
+        """
         try:
+            # Load ML model (generated internally, trusted source)
             with open(self.model_path, "rb") as f:
-                self.model = pickle.load(f)
+                self.model = pickle.load(  # noqa: S301 - internal model files only
+                    f
+                )  # nosec B301
 
             if self.metrics_path.exists():
+                # Load model metrics (generated internally, trusted source)
                 with open(self.metrics_path, "rb") as f:
-                    self.metrics = pickle.load(f)
+                    self.metrics = pickle.load(  # noqa: S301 - internal metrics files only
+                        f
+                    )  # nosec B301
 
             self.logger.info("Successfully loaded model and metrics")
 
@@ -213,11 +244,11 @@ class MixinLearner:
 
         self.logger.info(f"Fetched {len(training_data)} training samples")
 
-        # Prepare features and labels
-        X, y, historical_map = self._prepare_training_data(training_data)
+        # Prepare features and labels (X is ML convention for features)
+        X, y, historical_map = self._prepare_training_data(training_data)  # noqa: N806
 
-        # Split train/test
-        X_train, X_test, y_train, y_test = train_test_split(
+        # Split train/test (X_train, X_test are ML conventions)
+        X_train, X_test, y_train, y_test = train_test_split(  # noqa: N806
             X, y, test_size=test_size, random_state=42, stratify=y
         )
 

@@ -163,7 +163,9 @@ class STFRegistry:
                 where_conditions.append(f"is_pure = ${param_count}")
                 params.append(is_pure)
 
-            query = f"""
+            # Note: where_conditions contains safe parameterized SQL fragments (e.g., "is_pure = $1")
+            # Values are passed separately via params array
+            query = f"""  # nosec B608
                 SELECT id, name, version, code_repo, commit_sha, file_path, symbol,
                        line_start, line_end, is_pure, lang, inputs_schema, outputs_schema, notes
                 FROM debug_transform_functions

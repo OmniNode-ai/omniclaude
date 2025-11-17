@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from .db import get_pg_pool
+from .security_utils import validate_sql_identifier
 
 
 @dataclass
@@ -568,13 +569,22 @@ class PerformanceOptimizer:
 
         # Get table schema for dynamic insert
         table_name = op.table_name
+
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table_name, "table")
+
         columns = list(op.data[0].keys())
+
+        # Validate column names to prevent SQL injection
+        for col in columns:
+            validate_sql_identifier(col, "column")
 
         # Build dynamic INSERT statement
         placeholders = ", ".join([f"${i+1}" for i in range(len(columns))])
         columns_str = ", ".join(columns)
 
-        insert_sql = f"""
+        # Table and column names validated above
+        insert_sql = f"""  # nosec B608
         INSERT INTO {table_name} ({columns_str})
         VALUES ({placeholders})
         ON CONFLICT DO NOTHING
@@ -599,10 +609,19 @@ class PerformanceOptimizer:
         # This is a simplified implementation
         table_name = op.table_name
 
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table_name, "table")
+
+        # Validate column names to prevent SQL injection
+        columns = [col for col in op.data[0].keys() if col != "id"]
+        for col in columns:
+            validate_sql_identifier(col, "column")
+
         # Assume 'id' is the primary key
-        update_sql = f"""
+        # Table and column names validated above
+        update_sql = f"""  # nosec B608
         UPDATE {table_name}
-        SET {', '.join([f'{col} = ${i+2}' for i, col in enumerate(op.data[0].keys()) if col != 'id'])}
+        SET {', '.join([f'{col} = ${i+2}' for i, col in enumerate(columns)])}
         WHERE id = $1
         """
 
@@ -625,7 +644,14 @@ class PerformanceOptimizer:
 
         # Assume 'id' is the primary key for deletion
         table_name = op.table_name
-        delete_sql = f"DELETE FROM {table_name} WHERE id = ANY($1::uuid[])"
+
+        # Validate table name to prevent SQL injection
+        validate_sql_identifier(table_name, "table")
+
+        # Table name validated above
+        delete_sql = (
+            f"DELETE FROM {table_name} WHERE id = ANY($1::uuid[])"  # nosec B608
+        )
 
         # Extract IDs
         ids = [record.get("id") for record in op.data if record.get("id")]
@@ -752,7 +778,12 @@ class PerformanceOptimizer:
 
             for table in tables:
                 try:
-                    count = await conn.fetchval(f"SELECT COUNT(*) FROM {table}")
+                    # Validate table name to prevent SQL injection (even though from hardcoded list)
+                    validate_sql_identifier(table, "table")
+                    # Table name validated above
+                    count = await conn.fetchval(
+                        f"SELECT COUNT(*) FROM {table}"
+                    )  # nosec B608
                     row_counts[table] = count
                 except Exception as e:
                     print(f"Warning: Failed to get count for {table}: {e}")

@@ -28,6 +28,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 AGENTS_LIB = SCRIPT_DIR.parent / "agents" / "lib"
@@ -70,18 +72,35 @@ class ActionLoggingE2ETest:
             return False
 
         try:
-            # Load credentials from environment
-            db_config = {
-                "host": os.getenv("POSTGRES_HOST", "192.168.86.200"),
-                "port": int(os.getenv("POSTGRES_PORT", "5436")),
-                "database": os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
-                "user": os.getenv("POSTGRES_USER", "postgres"),
-                "password": os.getenv("POSTGRES_PASSWORD"),
-            }
+            # Load credentials from environment (no fallback values - must be set)
+            postgres_host = os.getenv("POSTGRES_HOST")
+            postgres_port = os.getenv("POSTGRES_PORT")
+            postgres_database = os.getenv("POSTGRES_DATABASE")
+            postgres_user = os.getenv("POSTGRES_USER")
+            postgres_password = os.getenv("POSTGRES_PASSWORD")
 
-            if not db_config["password"]:
-                logger.error("POSTGRES_PASSWORD environment variable not set")
+            if not all(
+                [
+                    postgres_host,
+                    postgres_port,
+                    postgres_database,
+                    postgres_user,
+                    postgres_password,
+                ]
+            ):
+                logger.error("Required PostgreSQL environment variables not set")
+                logger.error(
+                    "Please set: POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD"
+                )
                 return False
+
+            db_config = {
+                "host": postgres_host,
+                "port": int(postgres_port),
+                "database": postgres_database,
+                "user": postgres_user,
+                "password": postgres_password,
+            }
 
             self.db_conn = psycopg2.connect(**db_config)
             logger.info(
@@ -381,6 +400,27 @@ class ActionLoggingE2ETest:
         return success
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not all(
+        [
+            os.getenv("POSTGRES_HOST"),
+            os.getenv("POSTGRES_PORT"),
+            os.getenv("POSTGRES_DATABASE"),
+            os.getenv("POSTGRES_USER"),
+            os.getenv("POSTGRES_PASSWORD"),
+        ]
+    ),
+    reason="Requires PostgreSQL environment variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD)",
+)
+@pytest.mark.asyncio
+async def test_action_logging_e2e():
+    """Pytest wrapper for action logging e2e test."""
+    test = ActionLoggingE2ETest(verbose=False)
+    success = await test.run()
+    assert success, "Action logging e2e test failed"
+
+
 async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -393,7 +433,8 @@ async def main():
     args = parser.parse_args()
 
     # Check environment
-    if not os.getenv("POSTGRES_PASSWORD"):
+    postgres_password = os.getenv("POSTGRES_PASSWORD")
+    if not postgres_password:
         logger.error("POSTGRES_PASSWORD environment variable not set")
         logger.error("Please run: source .env")
         sys.exit(1)

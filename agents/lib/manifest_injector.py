@@ -144,6 +144,49 @@ except ImportError:
         sys.path.insert(0, str(lib_path))
     from intelligence_usage_tracker import IntelligenceUsageTracker
 
+# Import ActionLogger for tracking intelligence gathering performance
+try:
+    from agents.lib.action_logger import ActionLogger
+
+    ACTION_LOGGER_AVAILABLE = True
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    try:
+        from action_logger import ActionLogger
+
+        ACTION_LOGGER_AVAILABLE = True
+    except ImportError:
+        ACTION_LOGGER_AVAILABLE = False
+        ActionLogger = None  # type: ignore
+
+# Import data sanitizer for secure logging
+try:
+    from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
+except ImportError:
+    # Handle imports when module is installed in ~/.claude/agents/lib/
+    import sys
+    from pathlib import Path
+
+    lib_path = Path(__file__).parent
+    if str(lib_path) not in sys.path:
+        sys.path.insert(0, str(lib_path))
+    try:
+        from data_sanitizer import sanitize_dict, sanitize_string
+    except ImportError:
+        # Fallback: no-op sanitization functions
+        def sanitize_dict(d, **kwargs):
+            return d
+
+        def sanitize_string(s, **kwargs):
+            return s
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -805,6 +848,9 @@ class ManifestInjector:
         self.enable_quality_filtering = settings.enable_pattern_quality_filter
         self.min_quality_threshold = settings.min_pattern_quality
 
+        # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
+        self._action_logger_cache: Dict[str, Optional[ActionLogger]] = {}
+
         self.logger = logging.getLogger(__name__)
 
     async def __aenter__(self):
@@ -1013,6 +1059,43 @@ class ManifestInjector:
             )
             return self._get_minimal_manifest()
 
+    def _get_action_logger(self, correlation_id: str) -> Optional[ActionLogger]:
+        """
+        Get or create ActionLogger instance with caching.
+
+        Performance optimization: Avoid creating ActionLogger on every manifest
+        generation by caching instances per correlation_id.
+
+        Args:
+            correlation_id: Correlation ID for this request
+
+        Returns:
+            ActionLogger instance or None if unavailable/failed
+        """
+        # Check cache first
+        if correlation_id in self._action_logger_cache:
+            return self._action_logger_cache[correlation_id]
+
+        # Check availability (explicit check added for consistency)
+        if not ACTION_LOGGER_AVAILABLE:
+            self.logger.debug("ActionLogger not available, skipping logging")
+            self._action_logger_cache[correlation_id] = None
+            return None
+
+        # Create new instance
+        try:
+            logger = ActionLogger(
+                agent_name=self.agent_name or "manifest-injector",
+                correlation_id=correlation_id,
+                project_path=os.getcwd(),
+            )
+            self._action_logger_cache[correlation_id] = logger
+            return logger
+        except Exception as e:
+            self.logger.warning(f"Failed to create ActionLogger: {e}")
+            self._action_logger_cache[correlation_id] = None
+            return None
+
     async def generate_dynamic_manifest_async(
         self,
         correlation_id: str,
@@ -1054,6 +1137,9 @@ class ManifestInjector:
         self._current_query_failures = {}
         self._current_warnings = []
 
+        # Get or create ActionLogger for performance tracking (cached)
+        action_logger = self._get_action_logger(str(correlation_id_uuid))
+
         # Check cache first
         if not force_refresh and self._is_cache_valid():
             self.logger.debug(
@@ -1061,12 +1147,52 @@ class ManifestInjector:
             )
             # Still log cache hit
             self._store_manifest_if_enabled(from_cache=True)
+
+            # Log cache hit for performance tracking
+            if action_logger:
+                try:
+                    await action_logger.log_success(
+                        success_name="manifest_generation_complete",
+                        success_details=sanitize_dict(
+                            {
+                                "total_time_ms": 0,  # Cache hit is instant
+                                "cache_used": True,
+                                "sections_included": (
+                                    list(self._manifest_data.keys())
+                                    if self._manifest_data
+                                    else []
+                                ),
+                            }
+                        ),
+                        duration_ms=0,
+                    )
+                except Exception as log_err:
+                    self.logger.debug(
+                        f"ActionLogger cache hit logging failed: {log_err}"
+                    )
+
             return self._manifest_data
 
         start_time = time.time()
         self.logger.info(
             f"[{correlation_id}] Generating dynamic manifest for agent '{self.agent_name or 'unknown'}'"
         )
+
+        # Log intelligence query start
+        if action_logger:
+            try:
+                await action_logger.log_decision(
+                    decision_name="manifest_generation_start",
+                    decision_context=sanitize_dict(
+                        {
+                            "agent_name": self.agent_name or "unknown",
+                            "enable_intelligence": self.enable_intelligence,
+                            "query_timeout_ms": self.query_timeout_ms,
+                        }
+                    ),
+                )
+            except Exception as log_err:
+                self.logger.debug(f"ActionLogger decision logging failed: {log_err}")
 
         # Task classification for section selection
         task_context = None
@@ -1190,15 +1316,65 @@ class ManifestInjector:
             # Calculate total generation time
             total_time_ms = int((time.time() - start_time) * 1000)
 
+            # Extract pattern metrics
+            pattern_count = len(manifest.get("patterns", {}).get("available", []))
+            debug_successes = manifest.get("debug_intelligence", {}).get(
+                "total_successes", 0
+            )
+            debug_failures = manifest.get("debug_intelligence", {}).get(
+                "total_failures", 0
+            )
+
+            # Log pattern discovery performance
+            if action_logger:
+                try:
+                    await action_logger.log_decision(
+                        decision_name="pattern_discovery",
+                        decision_context=sanitize_dict(
+                            {
+                                "collections_queried": list(query_tasks.keys()),
+                                "sections_selected": sections_to_query,
+                            }
+                        ),
+                        decision_result=sanitize_dict(
+                            {
+                                "pattern_count": pattern_count,
+                                "debug_successes": debug_successes,
+                                "debug_failures": debug_failures,
+                                "query_times_ms": self._current_query_times,
+                            }
+                        ),
+                        duration_ms=total_time_ms,
+                    )
+                except Exception as log_err:
+                    self.logger.debug(f"ActionLogger pattern logging failed: {log_err}")
+
             self.logger.info(
                 f"[{correlation_id}] Dynamic manifest generated successfully "
-                f"(total_time: {total_time_ms}ms, patterns: {len(manifest.get('patterns', {}).get('available', []))}, "
-                f"debug_intel: {manifest.get('debug_intelligence', {}).get('total_successes', 0)} successes/"
-                f"{manifest.get('debug_intelligence', {}).get('total_failures', 0)} failures)"
+                f"(total_time: {total_time_ms}ms, patterns: {pattern_count}, "
+                f"debug_intel: {debug_successes} successes/{debug_failures} failures)"
             )
 
             # Store manifest injection record
             self._store_manifest_if_enabled(from_cache=False)
+
+            # Log successful manifest generation
+            if action_logger:
+                try:
+                    await action_logger.log_success(
+                        success_name="manifest_generation_complete",
+                        success_details=sanitize_dict(
+                            {
+                                "total_time_ms": total_time_ms,
+                                "pattern_count": pattern_count,
+                                "sections_included": list(manifest.keys()),
+                                "cache_used": False,
+                            }
+                        ),
+                        duration_ms=total_time_ms,
+                    )
+                except Exception as log_err:
+                    self.logger.debug(f"ActionLogger final logging failed: {log_err}")
 
             return manifest
 
@@ -1208,6 +1384,26 @@ class ManifestInjector:
                 exc_info=True,
             )
             self._current_warnings.append(f"Intelligence query failed: {str(e)}")
+
+            # Log intelligence query failure
+            if action_logger:
+                try:
+                    await action_logger.log_error(
+                        error_type="IntelligenceQueryError",
+                        error_message=str(e),
+                        error_context=sanitize_dict(
+                            {
+                                "agent_name": self.agent_name or "unknown",
+                                "correlation_id": str(correlation_id),
+                                "query_timeout_ms": self.query_timeout_ms,
+                                "warnings": self._current_warnings,
+                            }
+                        ),
+                        severity="error",
+                    )
+                except Exception as log_err:
+                    self.logger.debug(f"ActionLogger error logging failed: {log_err}")
+
             # Fall back to minimal manifest
             return self._get_minimal_manifest()
 

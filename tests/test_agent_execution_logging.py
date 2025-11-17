@@ -12,15 +12,38 @@ Usage:
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add agents/lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
 
 from agent_execution_logger import AgentExecutionLogger
 
+# Load environment variables (no fallback values)
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not all(
+        [
+            POSTGRES_HOST,
+            POSTGRES_PORT,
+            POSTGRES_DATABASE,
+            POSTGRES_USER,
+            POSTGRES_PASSWORD,
+        ]
+    ),
+    reason="Requires PostgreSQL environment variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD)",
+)
 async def test_agent_execution_logging():
     """Test complete agent execution logging flow."""
     print("=" * 70)
@@ -90,23 +113,15 @@ async def test_agent_execution_logging():
     print()
 
     try:
-        import os
-
         import psycopg2
 
-        # Connect to database
-        password = os.getenv("POSTGRES_PASSWORD", "")
-        if not password:
-            print("⚠️  POSTGRES_PASSWORD not set in environment")
-            print("   Please run: source .env")
-            return
-
+        # Connect to database using environment variables
         conn = psycopg2.connect(
-            host="192.168.86.200",
-            port=5436,
-            database="omninode_bridge",
-            user="postgres",
-            password=password,
+            host=POSTGRES_HOST,
+            port=int(POSTGRES_PORT),
+            database=POSTGRES_DATABASE,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
         )
 
         cursor = conn.cursor()
