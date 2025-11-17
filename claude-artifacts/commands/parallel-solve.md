@@ -1,68 +1,84 @@
 ---
 name: parallel-solve
-description: Auto-detect issues and solve them in parallel using polymorphic agents
-tags: [automation, parallel, planning, fix, build]
+description: Execute any task (bugs, features, optimizations, requirements) in parallel using polymorphic agents
+tags: [automation, parallel, planning, fix, build, feature, enhancement]
 ---
 
-# Parallel Solve - Smart Context-Aware Problem Solving
+# Parallel Solve - Smart Context-Aware Task Execution
 
-You are an intelligent problem solver that automatically detects what needs to be fixed or built, creates a plan, and executes it in parallel using multiple polymorphic agents.
+You are an intelligent task executor that automatically detects what needs to be done (bugs, features, enhancements, optimizations, requirements), creates a plan, and executes it in parallel using multiple polymorphic agents.
 
 ## Phase 1: Context Detection
 
 Analyze the **current conversation context** to determine what needs to be done:
 
-1. **Extract the Current Issue**:
+1. **Extract the Current Task**:
    - Identify what the user is asking you to work on
-   - Look for the main task/problem described in recent messages
+   - Look for the main task/objective described in recent messages
    - Extract any specific requirements or constraints mentioned
+   - Understand if this is a bug fix, new feature, enhancement, optimization, or requirement
 
 2. **Check Conversation History**:
-   - Review recent messages for identified issues or sub-tasks
-   - Look for "TODO", "FIXME", "blocker", "critical" mentions
-   - Extract any prioritized issue lists from previous analysis
-   - Identify if test failures or errors were mentioned in conversation
+   - Review recent messages for identified tasks or sub-tasks
+   - Look for "TODO", "FIXME", "blocker", "critical", "enhancement", "feature", "optimize" mentions
+   - Extract any prioritized task lists from previous analysis
+   - Identify if test failures, errors, or new requirements were mentioned
 
 3. **Understand the Task Context**:
    - What files/modules are involved?
    - What's the expected outcome?
    - Are there dependencies between sub-tasks?
    - What validation is needed?
+   - Is this building something new or fixing something existing?
 
 **❌ DO NOT**: Check PRs, run CI checks, or look for external issues unless explicitly mentioned in the conversation
 
-## Phase 2: Issue Classification
+## Phase 2: Task Classification
 
-Categorize detected issues:
+Categorize detected tasks by priority and type:
 
-- **Blockers** (MUST fix): Import errors, syntax errors, critical bugs
-- **High Priority** (SHOULD fix): Logic bugs, security issues, test failures
-- **Medium Priority** (CAN fix): Configuration improvements, refactoring, documentation
-- **Low Priority** (NICE to have): Code style, minor optimizations
+**By Type**:
+- **Bug Fix**: Fixing errors, crashes, incorrect behavior
+- **New Feature**: Building new functionality from scratch
+- **Enhancement**: Improving existing features
+- **Optimization**: Performance, cost, or efficiency improvements
+- **Refactoring**: Code quality, structure, or maintainability improvements
+- **Documentation**: Adding or updating documentation
+- **Configuration**: Setup, deployment, or infrastructure changes
+
+**By Priority**:
+- **Critical** (MUST do): Blockers, security issues, data loss risks, broken builds
+- **High Priority** (SHOULD do): Important bugs, key features, significant optimizations
+- **Medium Priority** (CAN do): Nice-to-have features, moderate improvements, refactoring
+- **Low Priority** (NICE to have): Code style, minor optimizations, documentation polish
 
 ## Phase 3: Parallel Execution Plan
 
-Create a plan to fix issues in parallel:
+Create a plan to execute tasks in parallel:
 
-1. **Group issues** by independence (can be fixed simultaneously)
-2. **Identify dependencies** (must be fixed sequentially)
+1. **Group tasks** by independence (can be done simultaneously)
+2. **Identify dependencies** (must be done sequentially)
 3. **Allocate to agents** based on specialization:
    - Import/dependency issues → dependency agent
    - Test failures → testing agent
    - Security issues → security agent
    - Logic bugs → debugging agent
+   - New features → feature development agent
+   - Performance optimization → performance agent
+   - Infrastructure/deployment → devops agent
    - Documentation → documentation agent
 
-4. **Define validation** for each fix:
+4. **Define validation** for each task:
    - What tests should pass?
    - What checks should succeed?
-   - How to verify the fix?
+   - How to verify completion?
+   - What are the success criteria?
 
 ## Phase 4: Execute Plan
 
 **🚨 CRITICAL REQUIREMENT: YOU MUST USE THE TASK TOOL 🚨**
 
-**DO NOT execute fixes yourself** - you MUST dispatch EVERY task to a polymorphic agent using the Task tool.
+**DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a polymorphic agent using the Task tool.
 
 ### ❌ WRONG (Running commands directly):
 ```
@@ -76,13 +92,12 @@ DO NOT DO THIS:
 
 **For EACH task, you MUST call Task tool like this:**
 
+**Example 1: Bug Fix**
 ```
 Task(
   description="Fix import errors in reducer node",
   subagent_type="polymorphic-agent",
-  prompt="Load configuration for role 'polymorphic-agent' and execute:
-
-  **Task**: Fix import errors in node_user_reducer.py
+  prompt="**Task**: Fix import errors in node_user_reducer.py
 
   **Context**: [Detailed problem description]
 
@@ -93,13 +108,50 @@ Task(
 
   **Success Criteria**:
   - Code compiles without errors
-  - All imports resolve correctly
+  - All imports resolve correctly"
+)
+```
 
-  **Intelligence Context**:
-  - Correlation ID: [from hook]
-  - RAG Domain Intelligence: [path]
-  - RAG Implementation Intelligence: [path]
-  "
+**Example 2: New Feature**
+```
+Task(
+  description="Implement Docker optimization feature",
+  subagent_type="polymorphic-agent",
+  prompt="**Task**: Add multi-stage Docker build optimization
+
+  **Context**: Reduce Docker image size and build time
+
+  **Required Actions**:
+  1. Analyze current Dockerfile
+  2. Implement multi-stage build
+  3. Add build caching
+  4. Test image builds correctly
+
+  **Success Criteria**:
+  - Image size reduced by >30%
+  - Build time reduced by >20%
+  - All services start correctly"
+)
+```
+
+**Example 3: Enhancement**
+```
+Task(
+  description="Enhance caching strategy",
+  subagent_type="polymorphic-agent",
+  prompt="**Task**: Improve Valkey caching hit rate
+
+  **Context**: Current hit rate is 60%, target 80%
+
+  **Required Actions**:
+  1. Analyze cache miss patterns
+  2. Implement cache warming
+  3. Optimize TTL values
+  4. Add cache metrics
+
+  **Success Criteria**:
+  - Cache hit rate >80%
+  - Cache metrics visible in Grafana"
 )
 ```
 
@@ -107,10 +159,10 @@ Task(
 
 **To run multiple tasks in parallel, dispatch multiple Task tools in ONE message:**
 
-Example - fixing 3 independent issues:
-1. Call Task tool for issue 1
-2. Call Task tool for issue 2
-3. Call Task tool for issue 3
+Example - working on 3 independent tasks:
+1. Call Task tool for task 1 (bug fix)
+2. Call Task tool for task 2 (new feature)
+3. Call Task tool for task 3 (optimization)
 4. Send all 3 in one message (parallel execution)
 
 **Sequential tasks** - wait for Task results before dispatching next task.
@@ -163,8 +215,10 @@ Generate final summary across **all polymorphic agent cycles**:
 
 Ask user if they want to:
 - Commit the changes
-- Continue with remaining issues
+- Continue with remaining tasks
 - Review captured debug intelligence
+- Test the new features/optimizations
+- Deploy the changes
 
 ---
 
@@ -172,7 +226,7 @@ Ask user if they want to:
 
 **MANDATORY PROCESS:**
 
-1. Analyze **current conversation context** to understand the task
+1. Analyze **current conversation context** to understand the task (bug, feature, enhancement, optimization, etc.)
 2. Break down the task into independent sub-tasks
 3. Create parallel execution plan (identify what can run in parallel vs sequential)
 4. **🚨 USE TASK TOOL TO DISPATCH TO POLYMORPHIC AGENTS 🚨**
@@ -181,18 +235,20 @@ Ask user if they want to:
 7. Report summary
 
 **DO NOT**:
-- Run Bash/Edit/Write commands directly to fix issues
-- Execute fixes yourself instead of using Task tool
+- Run Bash/Edit/Write commands directly to execute tasks
+- Execute tasks yourself instead of using Task tool
 - Skip dispatching to polymorphic agents
+- Reject tasks because they're "enhancements" or "features" instead of bugs
 
 **DO**:
-- Use Task tool for EVERY fix in your plan
+- Use Task tool for EVERY task in your plan (bugs, features, enhancements, optimizations, etc.)
 - Dispatch multiple independent tasks in parallel
 - Provide detailed context in each Task prompt
 - Include Intelligence Context from hooks
 - Track refactor attempts per task (use internal state tracking)
 - Capture debug information after each agent cycle
 - Run quality checks after each cycle, not just at the end
+- **Accept ANY type of work** - bugs, features, enhancements, optimizations, requirements, documentation, infrastructure
 
 **REFACTOR ATTEMPT TRACKING**:
 ```
@@ -212,5 +268,7 @@ After each cycle:
       report_quality_issue_limit_reached(task)
 ```
 
-If NO issues are detected, respond with:
-"✅ No issues detected in current context. Everything looks good!"
+**IMPORTANT**: If no specific tasks are mentioned in the conversation, respond with:
+"✅ No specific tasks detected in current context. What would you like me to work on?"
+
+**DO NOT** say "no issues detected" if the user is asking you to build features or enhancements - those are valid tasks!

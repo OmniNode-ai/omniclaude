@@ -16,9 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from db_helper import execute_query
     from kafka_helper import check_kafka_connection, list_topics
     from qdrant_helper import check_qdrant_connection, get_all_collections_stats
-    from db_helper import execute_query
     from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
@@ -35,7 +35,7 @@ def check_kafka(detailed: bool = False):
         "broker": conn.get("broker"),
         "reachable": conn.get("reachable"),
         "topics": topics.get("count") if detailed else None,
-        "error": conn.get("error")
+        "error": conn.get("error"),
     }
 
 
@@ -55,7 +55,7 @@ def check_postgres(detailed: bool = False):
                 "host": f"{result.get('host', 'unknown')}:{result.get('port', 'unknown')}",
                 "database": result.get("database", "unknown"),
                 "tables": table_count,
-                "error": None
+                "error": None,
             }
 
             # Add connection count if detailed
@@ -68,15 +68,9 @@ def check_postgres(detailed: bool = False):
 
             return response
         else:
-            return {
-                "status": "error",
-                "error": result.get("error", "Unknown error")
-            }
+            return {"status": "error", "error": result.get("error", "Unknown error")}
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e)
-        }
+        return {"status": "error", "error": str(e)}
 
 
 def check_qdrant(detailed: bool = False):
@@ -88,7 +82,7 @@ def check_qdrant(detailed: bool = False):
         "status": conn.get("status"),
         "url": conn.get("url"),
         "reachable": conn.get("reachable"),
-        "error": conn.get("error")
+        "error": conn.get("error"),
     }
 
     if detailed and stats.get("success"):
@@ -105,7 +99,9 @@ def check_qdrant(detailed: bool = False):
 def main():
     parser = argparse.ArgumentParser(description="Check infrastructure")
     parser.add_argument("--components", help="Comma-separated list of components")
-    parser.add_argument("--detailed", action="store_true", help="Include detailed stats")
+    parser.add_argument(
+        "--detailed", action="store_true", help="Include detailed stats"
+    )
     args = parser.parse_args()
 
     # Determine which components to check

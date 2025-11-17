@@ -21,24 +21,28 @@ import argparse
 import json
 import sys
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from db_helper import execute_query
     from docker_helper import get_service_summary
     from kafka_helper import check_kafka_connection, list_topics
     from qdrant_helper import check_qdrant_connection, get_all_collections_stats
-    from db_helper import execute_query
     from status_formatter import format_json, format_status_indicator, format_timestamp
 except ImportError as e:
-    print(json.dumps({
-        "success": False,
-        "error": f"Failed to import helpers: {e}",
-        "hint": "Ensure _shared helpers are installed"
-    }))
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"Failed to import helpers: {e}",
+                "hint": "Ensure _shared helpers are installed",
+            }
+        )
+    )
     sys.exit(3)
 
 
@@ -67,14 +71,11 @@ def check_docker_services(verbose: bool = False) -> dict:
             "details": {
                 "archon": archon_services if verbose else None,
                 "omninode": omninode_services if verbose else None,
-                "app": app_services if verbose else None
-            }
+                "app": app_services if verbose else None,
+            },
         }
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 def check_infrastructure(verbose: bool = False) -> dict:
@@ -91,13 +92,10 @@ def check_infrastructure(verbose: bool = False) -> dict:
             "broker": kafka_conn.get("broker", "unknown"),
             "reachable": kafka_conn.get("reachable", False),
             "topics": kafka_topics.get("count", 0) if verbose else None,
-            "error": kafka_conn.get("error")
+            "error": kafka_conn.get("error"),
         }
     except Exception as e:
-        infrastructure["kafka"] = {
-            "status": "error",
-            "error": str(e)
-        }
+        infrastructure["kafka"] = {"status": "error", "error": str(e)}
 
     # Check PostgreSQL
     try:
@@ -111,23 +109,24 @@ def check_infrastructure(verbose: bool = False) -> dict:
                 "host": f"{postgres_result.get('host', 'unknown')}:{postgres_result.get('port', 'unknown')}",
                 "database": postgres_result.get("database", "unknown"),
                 "tables": table_count,
-                "error": None
+                "error": None,
             }
         else:
             infrastructure["postgres"] = {
                 "status": "error",
-                "error": postgres_result.get("error", "Unknown error")
+                "error": postgres_result.get("error", "Unknown error"),
             }
     except Exception as e:
-        infrastructure["postgres"] = {
-            "status": "error",
-            "error": str(e)
-        }
+        infrastructure["postgres"] = {"status": "error", "error": str(e)}
 
     # Check Qdrant
     try:
         qdrant_conn = check_qdrant_connection()
-        qdrant_stats = get_all_collections_stats() if verbose else {"collection_count": 0, "total_vectors": 0}
+        qdrant_stats = (
+            get_all_collections_stats()
+            if verbose
+            else {"collection_count": 0, "total_vectors": 0}
+        )
 
         infrastructure["qdrant"] = {
             "status": qdrant_conn.get("status", "unknown"),
@@ -135,13 +134,10 @@ def check_infrastructure(verbose: bool = False) -> dict:
             "reachable": qdrant_conn.get("reachable", False),
             "collections": qdrant_stats.get("collection_count", 0) if verbose else None,
             "total_vectors": qdrant_stats.get("total_vectors", 0) if verbose else None,
-            "error": qdrant_conn.get("error")
+            "error": qdrant_conn.get("error"),
         }
     except Exception as e:
-        infrastructure["qdrant"] = {
-            "status": "error",
-            "error": str(e)
-        }
+        infrastructure["qdrant"] = {"status": "error", "error": str(e)}
 
     return infrastructure
 
@@ -152,7 +148,7 @@ def check_recent_activity() -> dict:
         "timeframe": "5m",
         "agent_executions": 0,
         "routing_decisions": 0,
-        "agent_actions": 0
+        "agent_actions": 0,
     }
 
     try:
@@ -195,44 +191,58 @@ def determine_overall_status(services: dict, infrastructure: dict) -> tuple:
 
     # Check services
     if not services.get("success"):
-        issues.append({
-            "severity": "critical",
-            "component": "docker",
-            "issue": "Failed to check Docker services",
-            "details": services.get("error", "Unknown error")
-        })
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "docker",
+                "issue": "Failed to check Docker services",
+                "details": services.get("error", "Unknown error"),
+            }
+        )
     elif services.get("stopped", 0) > 0:
-        issues.append({
-            "severity": "critical",
-            "component": "docker",
-            "issue": f"{services['stopped']} service(s) stopped",
-            "details": f"{services['stopped']} containers are not running"
-        })
-        recommendations.append("Start stopped services with: docker start <container-name>")
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "docker",
+                "issue": f"{services['stopped']} service(s) stopped",
+                "details": f"{services['stopped']} containers are not running",
+            }
+        )
+        recommendations.append(
+            "Start stopped services with: docker start <container-name>"
+        )
     elif services.get("unhealthy", 0) > 0:
-        issues.append({
-            "severity": "warning",
-            "component": "docker",
-            "issue": f"{services['unhealthy']} service(s) unhealthy",
-            "details": f"{services['unhealthy']} containers are running but unhealthy"
-        })
+        issues.append(
+            {
+                "severity": "warning",
+                "component": "docker",
+                "issue": f"{services['unhealthy']} service(s) unhealthy",
+                "details": f"{services['unhealthy']} containers are running but unhealthy",
+            }
+        )
         recommendations.append("Check service logs with: docker logs <container-name>")
 
     # Check infrastructure
     for component, status in infrastructure.items():
         if status.get("status") in ["error", "unreachable", "timeout"]:
-            issues.append({
-                "severity": "critical",
-                "component": component,
-                "issue": f"{component.capitalize()} unreachable",
-                "details": status.get("error", "Connection failed")
-            })
+            issues.append(
+                {
+                    "severity": "critical",
+                    "component": component,
+                    "issue": f"{component.capitalize()} unreachable",
+                    "details": status.get("error", "Connection failed"),
+                }
+            )
             if component == "kafka":
-                recommendations.append("Check Kafka broker at: docker logs omninode-bridge-redpanda")
+                recommendations.append(
+                    "Check Kafka broker at: docker logs omninode-bridge-redpanda"
+                )
             elif component == "postgres":
                 recommendations.append("Verify PostgreSQL credentials in .env file")
             elif component == "qdrant":
-                recommendations.append("Check Qdrant service: docker logs archon-qdrant")
+                recommendations.append(
+                    "Check Qdrant service: docker logs archon-qdrant"
+                )
 
     # Determine status
     critical_count = sum(1 for issue in issues if issue["severity"] == "critical")
@@ -261,7 +271,7 @@ def format_output(data: dict, format_type: str) -> str:
             f"{indicator} System Status: {status.upper()}",
             f"  Services: {services.get('running', 0)}/{services.get('total', 0)} running",
             f"  Issues: {len(issues)}",
-            f"  Duration: {data.get('check_duration_ms', 0)}ms"
+            f"  Duration: {data.get('check_duration_ms', 0)}ms",
         ]
         return "\n".join(lines)
     else:  # text format
@@ -277,29 +287,38 @@ def format_output(data: dict, format_type: str) -> str:
             f"  Running: {data.get('services', {}).get('running', 0)}/{data.get('services', {}).get('total', 0)}",
             f"  Unhealthy: {data.get('services', {}).get('unhealthy', 0)}",
             "",
-            "Infrastructure:"
+            "Infrastructure:",
         ]
 
         for component, status in data.get("infrastructure", {}).items():
             indicator = format_status_indicator(status.get("status", "unknown"))
-            lines.append(f"  {indicator} {component.capitalize()}: {status.get('status', 'unknown')}")
+            lines.append(
+                f"  {indicator} {component.capitalize()}: {status.get('status', 'unknown')}"
+            )
 
         if data.get("issues"):
             lines.append("")
             lines.append("Issues:")
             for issue in data["issues"]:
                 severity_indicator = "✗" if issue["severity"] == "critical" else "⚠"
-                lines.append(f"  {severity_indicator} {issue['component']}: {issue['issue']}")
+                lines.append(
+                    f"  {severity_indicator} {issue['component']}: {issue['issue']}"
+                )
 
         return "\n".join(lines)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Check system health")
-    parser.add_argument("--format", choices=["json", "text", "summary"], default="json",
-                      help="Output format")
-    parser.add_argument("--verbose", action="store_true",
-                      help="Include detailed information")
+    parser.add_argument(
+        "--format",
+        choices=["json", "text", "summary"],
+        default="json",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Include detailed information"
+    )
     args = parser.parse_args()
 
     start_time = time.time()
@@ -311,7 +330,9 @@ def main():
         activity = check_recent_activity()
 
         # Determine overall status
-        status, issues, recommendations = determine_overall_status(services, infrastructure)
+        status, issues, recommendations = determine_overall_status(
+            services, infrastructure
+        )
 
         # Calculate duration
         duration_ms = int((time.time() - start_time) * 1000)
@@ -325,7 +346,7 @@ def main():
             "infrastructure": infrastructure,
             "recent_activity": activity,
             "issues": issues,
-            "recommendations": recommendations
+            "recommendations": recommendations,
         }
 
         # Output result
@@ -343,7 +364,7 @@ def main():
         error_result = {
             "success": False,
             "error": str(e),
-            "timestamp": format_timestamp()
+            "timestamp": format_timestamp(),
         }
         print(format_json(error_result))
         return 3
