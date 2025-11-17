@@ -357,8 +357,9 @@ check_debug_loop() {
 # Main execution
 # Use exec with tee to write to both stdout and file simultaneously
 # This ensures ISSUES_FOUND updates happen in main shell (not subshell)
-exec > >(tee "$OUTPUT_FILE")
-exec 2>&1
+# Save the PID of the tee process for later waiting
+exec > >(tee "$OUTPUT_FILE") 2>&1
+TEE_PID=$!
 
 echo "=== System Health Check ==="
 echo "Timestamp: $TIMESTAMP"
@@ -418,16 +419,22 @@ fi
 echo ""
 echo "=== End Health Check ==="
 
-# Wait for tee to finish writing
-wait
+# Save the exit code decision first (while ISSUES_FOUND is still accessible)
+EXIT_CODE=0
+if [[ $ISSUES_FOUND -gt 0 ]]; then
+    EXIT_CODE=1
+fi
+
+# Close stdout to signal tee to finish, then wait for it
+exec 1>&-
+exec 2>&-
+wait $TEE_PID 2>/dev/null || true
 
 # Append to history log
-echo "" >> "$HISTORY_FILE"
-cat "$OUTPUT_FILE" >> "$HISTORY_FILE"
+{
+    echo ""
+    cat "$OUTPUT_FILE"
+} >> "$HISTORY_FILE"
 
 # Exit with appropriate code based on issues found
-if [[ $ISSUES_FOUND -eq 0 ]]; then
-    exit 0
-else
-    exit 1
-fi
+exit $EXIT_CODE

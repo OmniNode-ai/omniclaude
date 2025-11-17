@@ -13,17 +13,18 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def parse_timeframe(timeframe: str, default: Optional[str] = None) -> str:
+def parse_timeframe(timeframe: str) -> str:
     """
     Convert shorthand timeframe string to PostgreSQL interval.
 
     Args:
         timeframe: Shorthand code (e.g., "5m", "1h", "7d")
-        default: Optional PostgreSQL interval to return if code not found.
-                 If None, returns "1 hour" by default.
 
     Returns:
         PostgreSQL interval string (e.g., "5 minutes", "1 hour", "7 days")
+
+    Raises:
+        ValueError: If timeframe is not a valid code
 
     Examples:
         >>> parse_timeframe("5m")
@@ -31,9 +32,9 @@ def parse_timeframe(timeframe: str, default: Optional[str] = None) -> str:
         >>> parse_timeframe("1h")
         '1 hour'
         >>> parse_timeframe("unknown")
-        '1 hour'
-        >>> parse_timeframe("unknown", default="5 minutes")
-        '5 minutes'
+        Traceback (most recent call last):
+            ...
+        ValueError: Unsupported timeframe: unknown. Valid options: 5m, 15m, 1h, 24h, 7d
     """
     mapping = {
         "5m": "5 minutes",
@@ -43,14 +44,10 @@ def parse_timeframe(timeframe: str, default: Optional[str] = None) -> str:
         "7d": "7 days",
     }
 
-    fallback = default if default is not None else "1 hour"
-    result = mapping.get(timeframe)
-
-    if result is None:
-        logger.warning(
-            f"Unknown timeframe '{timeframe}', defaulting to '{fallback}'. "
+    if timeframe not in mapping:
+        raise ValueError(
+            f"Unsupported timeframe: {timeframe}. "
             f"Valid options: {', '.join(mapping.keys())}"
         )
-        return fallback
 
-    return result
+    return mapping[timeframe]

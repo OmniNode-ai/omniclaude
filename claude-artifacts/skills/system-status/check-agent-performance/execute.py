@@ -30,15 +30,39 @@ def main():
         "--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)"
     )
     parser.add_argument(
-        "--top-agents", type=int, default=10, help="Number of top agents"
+        "--top-agents", type=int, default=10, help="Number of top agents (1-100)"
     )
     args = parser.parse_args()
 
     # Validate --top-agents parameter
     if args.top_agents <= 0:
-        parser.error(f"--top-agents must be positive (got: {args.top_agents})")
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": f"top_agents must be positive (got {args.top_agents})",
+                }
+            )
+        )
+        return 1
 
-    interval = parse_timeframe(args.timeframe)
+    if args.top_agents > 100:
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": f"top_agents must be <= 100 (got {args.top_agents})",
+                }
+            )
+        )
+        return 1
+
+    # Validate and parse timeframe
+    try:
+        interval = parse_timeframe(args.timeframe)
+    except ValueError as e:
+        print(format_json({"success": False, "error": str(e)}))
+        return 1
 
     try:
         result = {"timeframe": args.timeframe}

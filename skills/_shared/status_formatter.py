@@ -6,7 +6,6 @@ Provides functions for:
 - JSON formatting
 - Table formatting (text-based)
 - Markdown generation
-- HTML generation
 - Status indicators (✓, ✗, ⚠)
 
 Usage:
@@ -17,7 +16,20 @@ Created: 2025-11-12
 
 import json
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
+
+class StatusJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for status data types."""
+
+    def default(self, obj):
+        """Handle special data types."""
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
@@ -32,9 +44,9 @@ def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
         JSON string
     """
     if pretty:
-        return json.dumps(data, indent=2, default=str)
+        return json.dumps(data, indent=2, cls=StatusJSONEncoder)
     else:
-        return json.dumps(data, default=str)
+        return json.dumps(data, cls=StatusJSONEncoder)
 
 
 def format_status_indicator(status: str) -> str:
@@ -211,7 +223,7 @@ def format_percentage(value: float, decimals: int = 1) -> str:
         Formatted percentage string
     """
     # Assume value is 0-1 if less than 1, otherwise 0-100
-    if value <= 1.0:
+    if value < 1.0:
         percentage = value * 100
     else:
         percentage = value

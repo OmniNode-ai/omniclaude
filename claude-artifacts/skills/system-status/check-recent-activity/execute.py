@@ -27,11 +27,19 @@ except ImportError as e:
 def main():
     parser = argparse.ArgumentParser(description="Check recent activity")
     parser.add_argument("--limit", type=int, default=20, help="Number of records")
-    parser.add_argument("--since", default="5m", help="Time period")
+    parser.add_argument(
+        "--since", default="5m", help="Time period (5m, 15m, 1h, 24h, 7d)"
+    )
     parser.add_argument("--include-errors", action="store_true", help="Include errors")
     args = parser.parse_args()
 
-    interval = parse_timeframe(args.since, default="5 minutes")
+    # Validate and parse timeframe
+    try:
+        interval = parse_timeframe(args.since)
+    except ValueError as e:
+        print(format_json({"success": False, "error": str(e)}))
+        return 1
+
     result = {"timeframe": args.since}
 
     try:

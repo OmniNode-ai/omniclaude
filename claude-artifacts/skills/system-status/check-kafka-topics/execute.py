@@ -19,7 +19,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent / "skills" / "_shared")
+)
 
 try:
     from kafka_helper import check_kafka_connection, get_topic_stats, list_topics
@@ -83,7 +85,11 @@ def main():
 
                     if not matched:
                         # Unmatched wildcard - report as not existing
-                        topics_detail[topic_pattern] = {"exists": False, "matched": 0}
+                        topics_detail[topic_pattern] = {
+                            "exists": False,
+                            "matched": 0,
+                            "message": f"No topics match pattern: {topic_pattern}",
+                        }
                     else:
                         # Process matched topics
                         for topic in matched:

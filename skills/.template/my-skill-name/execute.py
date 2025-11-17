@@ -32,7 +32,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 # from docker_helper import list_containers, get_container_status
 # from kafka_helper import check_kafka_connection, list_topics
 # from qdrant_helper import check_qdrant_connection, list_collections
-# from status_formatter import format_json, format_table
+from status_formatter import (  # Use shared formatter for consistent JSON output
+    format_json,
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -121,7 +123,8 @@ def format_output(result: Dict[str, Any], format_type: str) -> str:
         Formatted output string
     """
     if format_type == "json":
-        return json.dumps(result, indent=2)
+        # Use shared formatter for consistent JSON output with proper Decimal/datetime handling
+        return format_json(result)
     elif format_type == "text":
         # Text format implementation
         if result.get("success"):
@@ -129,7 +132,8 @@ def format_output(result: Dict[str, Any], format_type: str) -> str:
         else:
             return f"❌ Error: {result.get('error', 'Operation failed')}"
     else:
-        return json.dumps(result, indent=2)
+        # Default to JSON format using shared formatter
+        return format_json(result)
 
 
 def main() -> int:
@@ -162,7 +166,7 @@ def main() -> int:
             "error": "Validation Error",
             "details": str(e),
         }
-        print(json.dumps(error_result, indent=2), file=sys.stderr)
+        print(format_json(error_result), file=sys.stderr)
         return 1
 
     except Exception as e:
@@ -173,7 +177,7 @@ def main() -> int:
             "details": str(e),
             "type": type(e).__name__,
         }
-        print(json.dumps(error_result, indent=2), file=sys.stderr)
+        print(format_json(error_result), file=sys.stderr)
         return 1
 
 

@@ -206,9 +206,18 @@ def get_all_collections_stats() -> Dict[str, Any]:
         if stats["success"]:
             collections_stats[collection_name] = {
                 "vectors_count": stats["vectors_count"],
+                "indexed_vectors_count": stats["indexed_vectors_count"],
                 "status": stats["status"],
             }
             total_vectors += stats["vectors_count"]
+        else:
+            # Include failed collections with error details
+            collections_stats[collection_name] = {
+                "vectors_count": 0,
+                "indexed_vectors_count": 0,
+                "status": "error",
+                "error": stats.get("error", "Unknown error"),
+            }
 
     return {
         "success": True,

@@ -218,24 +218,21 @@ def generate_markdown_output(data: dict) -> str:
     """Generate Markdown format report."""
     sections = []
 
-    # Executive summary
+    # Executive summary (timestamp added by generate_markdown_report)
     services_running = sum(
         1 for s in data.get("services", []) if s["status"] == "running"
     )
     services_total = len(data.get("services", []))
     perf = data.get("performance", {})
 
-    summary = f"""**Generated**: {data['generated']}
-**Timeframe**: {data['timeframe']}
-
-## Executive Summary
+    summary = f"""**Timeframe**: {data['timeframe']}
 
 - **Services Running**: {services_running}/{services_total}
 - **Agent Executions**: {data.get('recent_activity', {}).get('agent_executions', 0)}
 - **Routing Decisions**: {perf.get('routing_decisions', 0)}
 - **Average Confidence**: {int(perf.get('avg_confidence', 0) * 100)}%
 """
-    sections.append({"title": "Overview", "content": summary})
+    sections.append({"title": "Executive Summary", "content": summary})
 
     # Services table
     if data.get("services"):

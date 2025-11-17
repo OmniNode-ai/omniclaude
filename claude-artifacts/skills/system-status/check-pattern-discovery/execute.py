@@ -13,10 +13,13 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+# Path to shared modules: go up to repo root, then into skills/_shared
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent / "skills" / "_shared")
+)
 
 try:
-    from qdrant_helper import get_all_collections_stats, get_collection_stats
+    from qdrant_helper import get_all_collections_stats
     from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
@@ -45,14 +48,15 @@ def main():
         if args.detailed:
             collections_detail = {}
             for name, info in stats.get("collections", {}).items():
-                # Get full stats for each collection
-                coll_stats = get_collection_stats(name)
-                if coll_stats["success"]:
-                    collections_detail[name] = {
-                        "vectors": coll_stats.get("vectors_count", 0),
-                        "status": coll_stats.get("status", "unknown"),
-                        "indexed_vectors": coll_stats.get("indexed_vectors_count", 0),
-                    }
+                # Use already-fetched data (no redundant query)
+                collections_detail[name] = {
+                    "vectors": info.get("vectors_count", 0),
+                    "status": info.get("status", "unknown"),
+                    "indexed_vectors": info.get("indexed_vectors_count", 0),
+                }
+                # Include error details for failed collections
+                if "error" in info:
+                    collections_detail[name]["error"] = info["error"]
 
             result["collections"] = collections_detail
         else:
