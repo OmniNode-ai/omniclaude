@@ -990,6 +990,27 @@ class Settings(BaseSettings):
             )
         return password
 
+    def get_postgres_password_or_none(self) -> Optional[str]:
+        """
+        Get PostgreSQL password without raising error.
+
+        Returns:
+            PostgreSQL password or None if not configured
+
+        Example:
+            >>> password = settings.get_postgres_password_or_none()
+            >>> if password:
+            ...     # Use PostgreSQL
+            ... else:
+            ...     # Skip PostgreSQL, gracefully degrade
+        """
+        return (
+            self.postgres_password
+            or self.db_password
+            or self.omninode_bridge_postgres_password
+            or None
+        )
+
     def get_effective_kafka_bootstrap_servers(self) -> str:
         """
         Get effective Kafka bootstrap servers (handles legacy aliases).
@@ -1003,9 +1024,13 @@ class Settings(BaseSettings):
             or ""
         )
 
-    def validate_required_services(self) -> list[str]:
+    def validate_required_services(self, strict: bool = False) -> list[str]:
         """
         Validate that required services are configured.
+
+        Args:
+            strict: If True, validate all services. If False, only validate
+                   services that are explicitly enabled (for graceful degradation).
 
         Returns:
             List of validation error messages (empty if all valid)
@@ -1018,21 +1043,22 @@ class Settings(BaseSettings):
         """
         errors = []
 
-        # Validate PostgreSQL password
-        try:
-            self.get_effective_postgres_password()
-        except ValueError as e:
-            errors.append(str(e))
+        # PostgreSQL is optional - only validate if explicitly required
+        if strict:
+            try:
+                self.get_effective_postgres_password()
+            except ValueError as e:
+                errors.append(str(e))
 
-        # Validate Kafka bootstrap servers
-        if not self.get_effective_kafka_bootstrap_servers():
+        # Kafka is optional - only validate if intelligence is enabled
+        if self.kafka_enable_intelligence and not self.get_effective_kafka_bootstrap_servers():
             errors.append(
-                "Kafka bootstrap servers not configured. "
-                "Set KAFKA_BOOTSTRAP_SERVERS in .env file"
+                "Kafka bootstrap servers not configured but intelligence is enabled. "
+                "Set KAFKA_BOOTSTRAP_SERVERS in .env file or set KAFKA_ENABLE_INTELLIGENCE=false"
             )
 
-        # Validate agent registry exists (if configured)
-        if self.agent_registry_path:
+        # Agent registry is optional - only validate if routing is enabled
+        if self.use_event_routing and self.agent_registry_path:
             registry_path = Path(self.agent_registry_path)
             if not registry_path.exists():
                 errors.append(
@@ -1040,8 +1066,8 @@ class Settings(BaseSettings):
                     f"Set AGENT_REGISTRY_PATH environment variable or ensure file exists."
                 )
 
-        # Validate agent definitions directory exists (if configured)
-        if self.agent_definitions_path:
+        # Agent definitions directory is optional - only validate if routing is enabled
+        if self.use_event_routing and self.agent_definitions_path:
             definitions_path = Path(self.agent_definitions_path)
             if not definitions_path.is_dir():
                 errors.append(
@@ -1281,15 +1307,19 @@ def get_settings() -> Settings:
     """
     settings = Settings()
 
+    # Use strict validation in production, lenient in development/test
+    # This allows hooks and optional components to gracefully degrade
+    strict = settings.environment == "production"
+
     # Validate required services on first load
-    errors = settings.validate_required_services()
+    errors = settings.validate_required_services(strict=strict)
     if errors:
         error_msg = "\n".join(f"  - {error}" for error in errors)
-        logger.error(f"Configuration validation failed:\n{error_msg}")
+        logger.warning(f"Configuration validation warnings:\n{error_msg}")
 
         # CRITICAL: Enforce strict validation in production mode
         # Production deployments MUST have valid configuration
-        if settings.environment == "production":
+        if strict:
             raise ValueError(
                 f"Configuration validation failed in production mode. "
                 f"Cannot start service with invalid configuration. "

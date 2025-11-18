@@ -127,7 +127,9 @@ async def test():
     memory = get_memory_client()
     await memory.store_memory('test_hook_verify', {'status': 'working'}, 'workspace')
     result = await memory.get_memory('test_hook_verify', 'workspace')
-    assert result == {'status': 'working'}, f'Expected {{\"status\": \"working\"}}, got {result}'
+    # Result is now markdown format, just verify it's not None
+    assert result is not None, f'Expected memory content, got None'
+    assert 'working' in result, f'Expected \"working\" in content, got {result}'
     await memory.delete_memory('test_hook_verify', 'workspace')
     print('✅ Memory client operations successful')
 

@@ -131,50 +131,90 @@ class FilesystemMemoryBackend(MemoryBackend):
         # Can be enhanced to parse back to dict/list if needed
         return content.strip()
 
-    def _get_file_path(self, category: str, key: str) -> Path:
-        """Get file path for a memory item"""
+    def _get_file_path(self, category: str, key: str, extension: str = "md") -> Path:
+        """Get file path for a memory item
+
+        Args:
+            category: Memory category
+            key: Memory key
+            extension: File extension (md for markdown, json for structured data)
+        """
         category_path = self.base_path / category
         category_path.mkdir(exist_ok=True)
         # Use safe filename (replace problematic characters)
         safe_key = key.replace("/", "_").replace("\\", "_").replace(":", "_")
-        return category_path / f"{safe_key}.md"
+        return category_path / f"{safe_key}.{extension}"
 
     async def store(self, category: str, key: str, value: Any, metadata: Optional[Dict] = None) -> None:
-        """Store memory item to filesystem as markdown"""
-        file_path = self._get_file_path(category, key)
+        """Store memory item to filesystem (dual storage: markdown + JSON)
+
+        Stores both markdown (for Claude Code memory tool) and JSON (for programmatic access).
+        This allows human-readable memory for Claude while preserving structure for code.
+        """
+        md_path = self._get_file_path(category, key, "md")
+        json_path = self._get_file_path(category, key, "json")
 
         # Add timestamp to metadata
         full_metadata = metadata or {}
         full_metadata["timestamp"] = datetime.utcnow().isoformat()
         full_metadata["category"] = category
 
-        # Format as markdown
-        content = self._format_as_markdown(key, value, category, full_metadata)
-
         try:
-            async with aiofiles.open(file_path, 'w') as f:
+            # Store as markdown (for Claude Code memory tool)
+            content = self._format_as_markdown(key, value, category, full_metadata)
+            async with aiofiles.open(md_path, 'w') as f:
                 await f.write(content)
-            logger.debug(f"Stored memory: {category}/{key}")
+
+            # Store as JSON (for programmatic access)
+            json_data = {
+                "key": key,
+                "value": value,
+                "category": category,
+                "metadata": full_metadata,
+                "version": 1
+            }
+            async with aiofiles.open(json_path, 'w') as f:
+                await f.write(json.dumps(json_data, indent=2))
+
+            logger.debug(f"Stored memory: {category}/{key} (markdown + JSON)")
         except Exception as e:
             logger.error(f"Failed to store memory {category}/{key}: {e}")
             raise
 
     async def retrieve(self, category: str, key: str) -> Optional[Any]:
-        """Retrieve memory item from filesystem"""
-        file_path = self._get_file_path(category, key)
+        """Retrieve memory item from filesystem
 
-        if not file_path.exists():
-            logger.debug(f"Memory not found: {category}/{key}")
-            return None
+        Prioritizes JSON (structured data) over markdown (human-readable).
+        Falls back to markdown if JSON doesn't exist (backward compatibility).
+        """
+        json_path = self._get_file_path(category, key, "json")
+        md_path = self._get_file_path(category, key, "md")
 
-        try:
-            async with aiofiles.open(file_path, 'r') as f:
-                content = await f.read()
-                # Return markdown content directly
-                return self._parse_markdown(content)
-        except Exception as e:
-            logger.error(f"Failed to retrieve memory {category}/{key}: {e}")
-            return None
+        # Try JSON first (structured data for programmatic access)
+        if json_path.exists():
+            try:
+                async with aiofiles.open(json_path, 'r') as f:
+                    content = await f.read()
+                    data = json.loads(content)
+                    # Return just the value (not the wrapper)
+                    return data.get("value")
+            except Exception as e:
+                logger.warning(f"Failed to load JSON for {category}/{key}: {e}")
+                # Fall through to markdown
+
+        # Fall back to markdown (backward compatibility)
+        if md_path.exists():
+            try:
+                async with aiofiles.open(md_path, 'r') as f:
+                    content = await f.read()
+                    # Return markdown content directly
+                    return self._parse_markdown(content)
+            except Exception as e:
+                logger.error(f"Failed to retrieve memory {category}/{key}: {e}")
+                return None
+
+        logger.debug(f"Memory not found: {category}/{key}")
+        return None
 
     async def update(self, category: str, key: str, delta: Any) -> None:
         """Update memory item with delta (merge for dicts, replace otherwise)"""
@@ -210,16 +250,24 @@ class FilesystemMemoryBackend(MemoryBackend):
         return result
 
     async def delete(self, category: str, key: str) -> None:
-        """Delete memory item from filesystem"""
-        file_path = self._get_file_path(category, key)
+        """Delete memory item from filesystem (both markdown and JSON)"""
+        md_path = self._get_file_path(category, key, "md")
+        json_path = self._get_file_path(category, key, "json")
 
-        if file_path.exists():
-            try:
-                file_path.unlink()
+        deleted = False
+        try:
+            if md_path.exists():
+                md_path.unlink()
+                deleted = True
+            if json_path.exists():
+                json_path.unlink()
+                deleted = True
+
+            if deleted:
                 logger.debug(f"Deleted memory: {category}/{key}")
-            except Exception as e:
-                logger.error(f"Failed to delete memory {category}/{key}: {e}")
-                raise
+        except Exception as e:
+            logger.error(f"Failed to delete memory {category}/{key}: {e}")
+            raise
 
     async def list_keys(self, category: str) -> List[str]:
         """List all keys in a category"""

@@ -26,7 +26,7 @@ Usage:
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, field, as_dict
+from dataclasses import dataclass, field, asdict
 import asyncio
 
 logger = logging.getLogger(__name__)
