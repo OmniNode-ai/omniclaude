@@ -15,7 +15,7 @@ Created: 2025-11-12
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -283,7 +283,7 @@ def format_timestamp(timestamp: Optional[datetime] = None) -> str:
         ISO formatted timestamp string
     """
     if timestamp is None:
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
     return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 

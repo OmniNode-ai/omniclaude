@@ -31,7 +31,12 @@ except ImportError as e:
     sys.exit(1)
 
 
-def main():
+def main() -> int:
+    """Check Kafka topic health and consumer status.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(description="Check Kafka topics")
     parser.add_argument("--topics", help="Comma-separated list of topics")
     parser.add_argument(

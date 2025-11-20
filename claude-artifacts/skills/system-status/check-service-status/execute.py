@@ -12,10 +12,17 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from constants import (
+        DEFAULT_LOG_LINES,
+        MAX_LOG_LINES,
+        MAX_RECENT_ERRORS_DISPLAY,
+        MIN_LOG_LINES,
+    )
     from docker_helper import (
         get_container_logs,
         get_container_stats,
@@ -27,7 +34,27 @@ except ImportError as e:
     sys.exit(1)
 
 
-def main():
+def validate_log_lines(value: str) -> int:
+    """Validate --log-lines parameter is within acceptable range.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        Validated integer value
+
+    Raises:
+        argparse.ArgumentTypeError: If value is out of bounds
+    """
+    ivalue: int = int(value)
+    if not (MIN_LOG_LINES <= ivalue <= MAX_LOG_LINES):
+        raise argparse.ArgumentTypeError(
+            f"log-lines must be between {MIN_LOG_LINES} and {MAX_LOG_LINES}"
+        )
+    return ivalue
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Check service status")
     parser.add_argument("--service", required=True, help="Service name")
     parser.add_argument(
@@ -36,7 +63,12 @@ def main():
     parser.add_argument(
         "--include-stats", action="store_true", help="Include resource stats"
     )
-    parser.add_argument("--log-lines", type=int, default=50, help="Number of log lines")
+    parser.add_argument(
+        "--log-lines",
+        type=validate_log_lines,
+        default=DEFAULT_LOG_LINES,
+        help=f"Number of log lines ({MIN_LOG_LINES}-{MAX_LOG_LINES})",
+    )
     args = parser.parse_args()
 
     try:
@@ -74,7 +106,7 @@ def main():
                 result["logs"] = {
                     "total_lines": logs.get("log_count"),
                     "error_count": logs.get("error_count"),
-                    "recent_errors": logs.get("errors", [])[:5],  # Top 5 errors
+                    "recent_errors": logs.get("errors", [])[:MAX_RECENT_ERRORS_DISPLAY],
                 }
 
         print(format_json(result))

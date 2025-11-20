@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+from psycopg2 import sql
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
@@ -103,7 +105,12 @@ def validate_table_name(name: str) -> bool:
     return name in ALLOWED_TABLES
 
 
-def main():
+def main() -> int:
+    """Check database health and activity.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(description="Check database health")
     parser.add_argument("--tables", help="Comma-separated list of tables")
     parser.add_argument(
@@ -166,13 +173,16 @@ def main():
                 }
                 continue
 
-            activity_query = f"""
+            # Use sql.Identifier() for safe table name handling (defense-in-depth)
+            activity_query = sql.SQL(
+                """
                 SELECT
                     COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '5 minutes') as count_5m,
                     COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour') as count_1h,
                     COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as count_24h
                 FROM {table}
             """
+            ).format(table=sql.Identifier(table))
             activity_result = execute_query(activity_query)
             if activity_result["success"] and activity_result["rows"]:
                 row = activity_result["rows"][0]
@@ -196,9 +206,10 @@ def main():
                     }
                     continue
 
-                size_query = (
-                    f"SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size"
-                )
+                # Use sql.Identifier() for safe table name handling (defense-in-depth)
+                size_query = sql.SQL(
+                    "SELECT pg_size_pretty(pg_total_relation_size({table})) as size"
+                ).format(table=sql.Identifier(table))
                 size_result = execute_query(size_query)
                 if size_result["success"] and size_result["rows"]:
                     sizes[table] = size_result["rows"][0]["size"]

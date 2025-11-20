@@ -189,7 +189,7 @@ def list_topics() -> Dict[str, Any]:
                 "success": False,
                 "topics": [],
                 "count": 0,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
             }
 
         # Parse topic names from output using regex for robustness
@@ -202,6 +202,27 @@ def list_topics() -> Dict[str, Any]:
                 topics.append(topic_name)
 
         return {"success": True, "topics": topics, "count": len(topics), "error": None}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "topics": [],
+            "count": 0,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        install_instructions = (
+            "kcat command not found. "
+            "Install: macOS: 'brew install kcat' | "
+            "Ubuntu/Debian: 'sudo apt-get install kafkacat' | "
+            "Alpine/Docker: 'apk add kafkacat' | "
+            "See deployment/README.md for details"
+        )
+        return {
+            "success": False,
+            "topics": [],
+            "count": 0,
+            "error": install_instructions,
+        }
     except Exception as e:
         return {"success": False, "topics": [], "count": 0, "error": str(e)}
 
@@ -230,7 +251,7 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             return {
                 "success": False,
                 "topic": topic_name,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
             }
 
         # Parse partition count from output
@@ -252,6 +273,18 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             "topic": topic_name,
             "partitions": partitions,
             "error": None,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "topic": topic_name,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "topic": topic_name,
+            "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
         }
     except Exception as e:
         return {"success": False, "topic": topic_name, "error": str(e)}
@@ -279,7 +312,7 @@ def get_consumer_groups() -> Dict[str, Any]:
                 "success": False,
                 "groups": [],
                 "count": 0,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
             }
 
         # Note: kcat -L doesn't show consumer groups
@@ -290,6 +323,20 @@ def get_consumer_groups() -> Dict[str, Any]:
             "groups": [],
             "count": 0,
             "error": "Consumer group listing requires kafka-consumer-groups command",
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "groups": [],
+            "count": 0,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "groups": [],
+            "count": 0,
+            "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
         }
     except Exception as e:
         return {"success": False, "groups": [], "count": 0, "error": str(e)}

@@ -257,6 +257,14 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             timeout=get_timeout_seconds(),
         )
 
+        # Check if Docker command failed
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "container": container_name,
+                "error": f"Docker logs failed: {result.stderr.strip()}",
+            }
+
         # Combine stdout and stderr
         logs = result.stdout + result.stderr
         log_lines = logs.strip().split("\n")
@@ -280,6 +288,18 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "errors": errors,
             "error_count": len(errors),
             "error": None,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Docker logs timed out after {get_timeout_seconds()}s",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": "Docker CLI not found. Ensure Docker is installed.",
         }
     except Exception as e:
         return {"success": False, "container": container_name, "error": str(e)}

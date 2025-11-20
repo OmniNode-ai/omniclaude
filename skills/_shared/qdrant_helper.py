@@ -20,11 +20,113 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
+
+
+def validate_qdrant_url(url: str) -> str:
+    """
+    Validate Qdrant URL to prevent SSRF (Server-Side Request Forgery) attacks.
+
+    Security checks:
+    - Requires HTTPS in production environments
+    - Validates hostname against whitelist
+    - Blocks dangerous ports (SSH, Telnet, RDP, etc.)
+    - Prevents access to internal services
+
+    Args:
+        url: The Qdrant URL to validate
+
+    Returns:
+        The validated URL (unchanged if valid)
+
+    Raises:
+        ValueError: If URL fails security validation
+
+    Example:
+        >>> validate_qdrant_url("http://localhost:6333")  # OK in dev
+        'http://localhost:6333'
+        >>> validate_qdrant_url("https://qdrant.internal:6333")  # OK in prod
+        'https://qdrant.internal:6333'
+        >>> validate_qdrant_url("http://internal-admin:80")  # BLOCKED
+        ValueError: Qdrant host not in whitelist: internal-admin
+
+    Note:
+        This prevents environment variable compromise from enabling SSRF attacks
+        where an attacker could access internal services (databases, admin panels,
+        cloud metadata endpoints, etc.) via the Qdrant client.
+    """
+    parsed = urllib.parse.urlparse(url)
+
+    # Get environment (default to 'development' if not set)
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+
+    # Require HTTPS in production
+    if environment == "production" and parsed.scheme != "https":
+        raise ValueError(
+            f"HTTPS required for production Qdrant (got: {parsed.scheme}). "
+            f"Set QDRANT_URL to use https:// in production environment."
+        )
+
+    # Whitelist allowed hosts (add your production Qdrant hosts here)
+    allowed_hosts = [
+        "localhost",
+        "127.0.0.1",
+        "::1",  # IPv6 localhost
+        "qdrant.internal",  # Internal DNS name
+        "192.168.86.101",  # Archon server IP
+        "192.168.86.200",  # OmniNode bridge IP (fallback)
+    ]
+
+    # Additional allowed hosts from environment (comma-separated)
+    extra_hosts = os.getenv("QDRANT_ALLOWED_HOSTS", "")
+    if extra_hosts:
+        allowed_hosts.extend(h.strip() for h in extra_hosts.split(",") if h.strip())
+
+    if parsed.hostname not in allowed_hosts:
+        raise ValueError(
+            f"Qdrant host not in whitelist: {parsed.hostname}. "
+            f"Allowed hosts: {', '.join(allowed_hosts)}. "
+            f"Add to QDRANT_ALLOWED_HOSTS environment variable if needed."
+        )
+
+    # Validate port is in valid range (if specified)
+    # Note: Port 0 is parsed as None by urllib, so we need explicit checks
+    if parsed.port is not None:
+        if not (1 <= parsed.port <= 65535):
+            raise ValueError(f"Invalid port number: {parsed.port}. Must be 1-65535.")
+
+    # Handle special case: port 0 in URL string (parsed.port becomes None)
+    # Check if URL explicitly contains ":0" which is invalid
+    if ":0" in url or url.endswith(":0/") or ":0/" in url:
+        raise ValueError("Invalid port number: 0. Must be 1-65535.")
+
+    # Block dangerous ports that could be used for SSRF attacks
+    dangerous_ports = [
+        22,  # SSH
+        23,  # Telnet
+        25,  # SMTP
+        3389,  # RDP
+        5432,  # PostgreSQL (prevent DB access via Qdrant)
+        6379,  # Redis (prevent cache access)
+        27017,  # MongoDB
+        3306,  # MySQL
+        1521,  # Oracle
+        9092,  # Kafka (prevent message bus access)
+    ]
+
+    if parsed.port and parsed.port in dangerous_ports:
+        raise ValueError(
+            f"Dangerous port blocked: {parsed.port}. "
+            f"This port is commonly used for sensitive services and should not "
+            f"be accessed via Qdrant client."
+        )
+
+    return url
 
 
 def get_timeout_seconds() -> float:
@@ -47,18 +149,46 @@ def get_timeout_seconds() -> float:
 
 def get_qdrant_url() -> str:
     """
-    Get Qdrant URL from type-safe configuration.
+    Get Qdrant URL from type-safe configuration with SSRF protection.
 
     Uses Pydantic Settings framework for validated configuration.
+    Applies security validation to prevent SSRF attacks.
 
     Returns:
-        Qdrant URL (e.g., "http://localhost:6333")
+        Validated Qdrant URL (e.g., "http://localhost:6333")
+
+    Raises:
+        ValueError: If URL fails SSRF validation checks
 
     Note:
         Configuration is loaded from .env file and validated on import.
         Default values: QDRANT_HOST=localhost, QDRANT_PORT=6333
+
+        Security features:
+        - HTTPS enforcement in production (ENVIRONMENT=production)
+        - Hostname whitelist validation
+        - Dangerous port blocking (SSH, DB, etc.)
+        - Connection timeout (5 seconds default)
+
+        To use HTTPS in production:
+        1. Set ENVIRONMENT=production in .env
+        2. Set QDRANT_URL=https://your-qdrant-host:6333
+        3. Ensure TLS certificate is valid
+
+        To allow additional hosts:
+        Set QDRANT_ALLOWED_HOSTS=host1.com,host2.com in .env
     """
-    return f"http://{settings.qdrant_host}:{settings.qdrant_port}"
+    # Determine protocol based on environment
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+
+    # Use HTTPS in production, HTTP in development
+    protocol = "https" if environment == "production" else "http"
+
+    # Construct URL from settings
+    url = f"{protocol}://{settings.qdrant_host}:{settings.qdrant_port}"
+
+    # Validate URL for SSRF protection
+    return validate_qdrant_url(url)
 
 
 def check_qdrant_connection() -> Dict[str, Any]:
@@ -157,8 +287,10 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
     qdrant_url = get_qdrant_url()
 
     try:
+        # URL-encode collection name to prevent URL injection attacks
+        encoded_collection = urllib.parse.quote(collection_name, safe="")
         req = urllib.request.Request(  # noqa: S310
-            f"{qdrant_url}/collections/{collection_name}", method="GET"
+            f"{qdrant_url}/collections/{encoded_collection}", method="GET"
         )
         with urllib.request.urlopen(  # noqa: S310
             req, timeout=get_timeout_seconds()

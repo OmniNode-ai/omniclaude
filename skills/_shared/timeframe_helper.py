@@ -31,10 +31,12 @@ def parse_timeframe(timeframe: str) -> str:
         '5 minutes'
         >>> parse_timeframe("1h")
         '1 hour'
+        >>> parse_timeframe("30d")
+        '30 days'
         >>> parse_timeframe("unknown")
         Traceback (most recent call last):
             ...
-        ValueError: Unsupported timeframe: unknown. Valid options: 5m, 15m, 1h, 24h, 7d
+        ValueError: Unsupported timeframe: unknown. Valid options: 5m, 15m, 1h, 24h, 7d, 30d
     """
     mapping = {
         "5m": "5 minutes",
@@ -42,6 +44,7 @@ def parse_timeframe(timeframe: str) -> str:
         "1h": "1 hour",
         "24h": "24 hours",
         "7d": "7 days",
+        "30d": "30 days",
     }
 
     if timeframe not in mapping:

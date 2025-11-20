@@ -26,7 +26,12 @@ except ImportError as e:
     sys.exit(1)
 
 
-def main():
+def main() -> int:
+    """Check Qdrant pattern collections and statistics.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(description="Check pattern discovery")
     parser.add_argument(
         "--detailed", action="store_true", help="Include detailed stats"
