@@ -1,9 +1,66 @@
 #!/usr/bin/env python3
 """
-Check Recent Activity - Recent agent executions and system activity
+Skill: check-recent-activity
+Purpose: Check recent agent executions and system activity
+
+Description:
+    Retrieves recent system activity including manifest injections, routing
+    decisions, and agent actions over a specified timeframe. Optionally
+    includes recent error details with timestamps and affected agents.
 
 Usage:
-    python3 execute.py [--limit 20] [--since 5m] [--include-errors]
+    python3 execute.py [--limit N] [--since TIMEFRAME] [--include-errors]
+
+    Options:
+        --limit N                Number of error records to retrieve
+                                Default: 20
+        --since TIMEFRAME        Time period to check (5m, 15m, 1h, 24h, 7d)
+                                Default: 5m
+        --include-errors         Include recent error details in output
+
+Output:
+    JSON object with the following structure:
+    {
+        "timeframe": "5m",
+        "manifest_injections": {
+            "count": 12,
+            "avg_query_time_ms": 1842.5,
+            "avg_patterns_count": 47.3,
+            "fallbacks": 0
+        },
+        "routing_decisions": {
+            "count": 15,
+            "avg_routing_time_ms": 7.8,
+            "avg_confidence": 0.92
+        },
+        "agent_actions": {
+            "tool_calls": 34,
+            "decisions": 12,
+            "errors": 1,
+            "successes": 45
+        },
+        "recent_errors": [
+            {
+                "agent": "agent-api",
+                "error": "Connection timeout",
+                "time": "2025-11-12 14:30:00"
+            }
+        ]
+    }
+
+Exit Codes:
+    0: Success - activity data retrieved successfully
+    1: Error - database query failed or invalid timeframe
+
+Examples:
+    # Check last 5 minutes (default)
+    python3 execute.py
+
+    # Check last hour with errors
+    python3 execute.py --since 1h --include-errors
+
+    # Check last 24 hours with top 10 errors
+    python3 execute.py --since 24h --include-errors --limit 10
 
 Created: 2025-11-12
 """
@@ -11,9 +68,12 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from db_helper import execute_query
@@ -22,16 +82,11 @@ except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
 
-
-def parse_timeframe(since: str) -> str:
-    """Convert timeframe to PostgreSQL interval."""
-    mapping = {
-        "5m": "5 minutes",
-        "15m": "15 minutes",
-        "1h": "1 hour",
-        "24h": "24 hours"
-    }
-    return mapping.get(since, "5 minutes")
+try:
+    from lib.helpers.timeframe_helpers import parse_timeframe
+except ImportError as e:
+    print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
+    sys.exit(1)
 
 
 def main():
@@ -62,7 +117,7 @@ def main():
                 "count": row["count"] or 0,
                 "avg_query_time_ms": round(float(row["avg_query_time_ms"] or 0), 1),
                 "avg_patterns_count": round(float(row["avg_patterns_count"] or 0), 1),
-                "fallbacks": row["fallbacks"] or 0
+                "fallbacks": row["fallbacks"] or 0,
             }
 
         # Routing decisions
@@ -80,7 +135,7 @@ def main():
             result["routing_decisions"] = {
                 "count": row["count"] or 0,
                 "avg_routing_time_ms": round(float(row["avg_routing_time_ms"] or 0), 1),
-                "avg_confidence": round(float(row["avg_confidence"] or 0), 2)
+                "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
             }
 
         # Agent actions
@@ -94,12 +149,14 @@ def main():
         """
         actions_result = execute_query(actions_query)
         if actions_result["success"]:
-            actions = {row["action_type"]: row["count"] for row in actions_result["rows"]}
+            actions = {
+                row["action_type"]: row["count"] for row in actions_result["rows"]
+            }
             result["agent_actions"] = {
                 "tool_calls": actions.get("tool_call", 0),
                 "decisions": actions.get("decision", 0),
                 "errors": actions.get("error", 0),
-                "successes": actions.get("success", 0)
+                "successes": actions.get("success", 0),
             }
 
         # Recent errors if requested
@@ -121,16 +178,28 @@ def main():
                     {
                         "agent": row["agent_name"],
                         "error": row["error"],
-                        "time": str(row["created_at"])
+                        "time": str(row["created_at"]),
                     }
                     for row in errors_result["rows"]
                 ]
+
+        # Add success and timestamp to response
+        result["success"] = True
+        result["timestamp"] = datetime.now(timezone.utc).isoformat()
 
         print(format_json(result))
         return 0
 
     except Exception as e:
-        print(format_json({"success": False, "error": str(e)}))
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
         return 1
 
 

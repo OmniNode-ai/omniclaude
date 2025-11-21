@@ -20,12 +20,13 @@ Designed for Claude Code hooks and PatternTracker integration.
 import asyncio
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
 from config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -867,7 +868,7 @@ class Phase4APIClient:
         pattern_data = {
             "code": code,
             "language": language,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         if context:
@@ -915,7 +916,7 @@ class Phase4APIClient:
         pattern_data = {
             "code": code,
             "language": language,
-            "modified_at": datetime.utcnow().isoformat(),
+            "modified_at": datetime.now(timezone.utc).isoformat(),
         }
 
         return await self.track_lineage(

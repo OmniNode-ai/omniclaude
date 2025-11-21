@@ -1,15 +1,61 @@
 #!/usr/bin/env python3
 """
-Diagnose Issues - Identify and diagnose common system problems
+Skill: diagnose-issues
+Purpose: Identify and diagnose common system problems
+
+Description:
+    Performs comprehensive system diagnostics including Docker service health,
+    infrastructure connectivity, and performance metrics. Categorizes issues
+    by severity (critical, warning, info) and provides actionable
+    recommendations for resolution.
 
 Usage:
-    python3 execute.py [--severity critical,warning] [--format json|text]
+    python3 execute.py [--severity SEVERITIES] [--format FORMAT]
+
+    Options:
+        --severity SEVERITIES    Filter by severity levels (critical,warning,info)
+                                Comma-separated list. Default: all
+        --format FORMAT          Output format: json or text
+                                Default: json
+
+Output:
+    JSON object with the following structure:
+    {
+        "system_health": "healthy|degraded|critical",
+        "issues_found": 3,
+        "critical": 1,
+        "warnings": 2,
+        "issues": [
+            {
+                "severity": "critical",
+                "component": "kafka",
+                "issue": "Kafka broker unreachable",
+                "details": "Connection timeout after 5s",
+                "recommendation": "Check Kafka broker: docker logs omninode-bridge-redpanda",
+                "auto_fix_available": false
+            }
+        ],
+        "recommendations": [
+            "Check Kafka broker: docker logs omninode-bridge-redpanda",
+            "Verify PostgreSQL credentials in .env file"
+        ]
+    }
 
 Exit Codes:
-    0 - No issues found
-    1 - Warnings found
-    2 - Critical issues found
-    3 - Execution error
+    0: Success - no issues found, system healthy
+    1: Warning - non-critical issues found, system degraded
+    2: Critical - critical issues found, system unhealthy
+    3: Error - diagnostic execution failed
+
+Examples:
+    # Run full diagnostics
+    python3 execute.py
+
+    # Check only critical issues in text format
+    python3 execute.py --severity critical --format text
+
+    # Check critical and warning issues
+    python3 execute.py --severity critical,warning
 
 Created: 2025-11-12
 """
@@ -17,7 +63,9 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -342,12 +390,14 @@ def main():
 
         # Build result
         result = {
+            "success": True,
             "system_health": system_health,
             "issues_found": len(all_issues),
             "critical": critical_count,
             "warnings": warning_count,
             "issues": all_issues,
             "recommendations": list(set(i["recommendation"] for i in all_issues)),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Output result
@@ -359,7 +409,11 @@ def main():
         return exit_code
 
     except Exception as e:
-        error_result = {"success": False, "error": str(e)}
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
         print(format_json(error_result))
         return 3
 

@@ -95,6 +95,19 @@ python3 ~/.claude/skills/system-status/check-system-health/execute.py \
 - **Typical**: 2-3 seconds
 - **Checks**: 3 services + 3 infrastructure components + 3 database queries
 
+## Output Format & Exit Codes
+
+For complete details on output structures, exit codes, field standards, and examples, see:
+
+**[Output Format Specification](../OUTPUT_FORMAT_SPECIFICATION.md)**
+
+This includes:
+- Detailed JSON schema and field descriptions
+- All exit code scenarios with examples
+- Status value conventions and indicators
+- Error response formats
+- Edge case handling
+
 ## Integration Examples
 
 ### In Agent Workflows

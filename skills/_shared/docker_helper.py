@@ -23,6 +23,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
 
@@ -67,6 +68,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
                 "containers": [],
                 "count": 0,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
 
         containers = []
@@ -95,6 +97,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "containers": containers,
             "count": len(containers),
             "error": None,
+            "return_code": 0,
         }
     except Exception as e:
         return {"success": False, "containers": [], "count": 0, "error": str(e)}
@@ -125,6 +128,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
                 "container": container_name,
                 "status": "not_found",
                 "error": "Container not found",
+                "return_code": result.returncode,
             }
 
         inspect_data = json.loads(result.stdout)[0]
@@ -149,6 +153,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "restart_count": state.get("RestartCount", 0),
             "image": config.get("Image", ""),
             "error": None,
+            "return_code": 0,
         }
     except Exception as e:
         return {"success": False, "container": container_name, "error": str(e)}
@@ -209,6 +214,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
 
         # Parse stats output
@@ -220,6 +226,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": "Could not parse stats output",
+                "return_code": 0,
             }
 
         cpu_percent = parts[0].replace("%", "").strip()
@@ -233,6 +240,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "memory_usage": mem_usage,
             "memory_percent": float(mem_percent) if mem_percent else 0.0,
             "error": None,
+            "return_code": 0,
         }
     except Exception as e:
         return {"success": False, "container": container_name, "error": str(e)}
@@ -263,6 +271,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": f"Docker logs failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Combine stdout and stderr
@@ -288,6 +297,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "errors": errors,
             "error_count": len(errors),
             "error": None,
+            "return_code": 0,
         }
     except subprocess.TimeoutExpired:
         return {

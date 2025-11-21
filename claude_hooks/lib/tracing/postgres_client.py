@@ -14,11 +14,12 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from .models import ExecutionTrace, HookExecution
+
 
 try:
     import asyncpg
@@ -1071,7 +1072,7 @@ class PostgresTracingClient:
 
         # Always update updated_at timestamp
         set_clauses.append(f"updated_at = ${len(values) + 1}")
-        values.append(datetime.utcnow())
+        values.append(datetime.now(timezone.utc))
 
         # SECURITY NOTE: Column names from updates dict keys. Callers MUST validate column names.
         # Values are safely parameterized via $N placeholders.

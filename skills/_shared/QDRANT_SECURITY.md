@@ -17,23 +17,49 @@ Added comprehensive SSRF (Server-Side Request Forgery) protection to `qdrant_hel
 - ✅ **Port range validation** (1-65535)
 - ✅ **Custom allowed hosts** support
 
-### 2. HTTPS Enforcement
+### 2. HTTPS Enforcement & Protocol Support
+
+**Flexible Protocol Configuration**:
+- ✅ **Explicit HTTPS/HTTP** via `QDRANT_URL` environment variable
+- ✅ **Auto-detection** based on `ENVIRONMENT` (production → HTTPS, development → HTTP)
+- ✅ **URL resolution priority**: Explicit URL > Auto-constructed URL
 
 **Development**:
 - HTTP allowed for localhost testing
 - No certificate validation required
+- Example: `QDRANT_URL=http://localhost:6333`
 
 **Production** (ENVIRONMENT=production):
 - HTTPS required for all Qdrant connections
 - HTTP connections rejected with clear error message
 - Ensures encrypted communication in production
+- Example: `QDRANT_URL=https://qdrant.internal:6333`
 
-**Example**:
+**Configuration Examples**:
 ```bash
-# Production .env
-ENVIRONMENT=production
+# Option 1: Explicit HTTPS URL (recommended for production)
 QDRANT_URL=https://qdrant.internal:6333
+
+# Option 2: Auto-HTTPS via ENVIRONMENT
+ENVIRONMENT=production
+QDRANT_HOST=qdrant.internal
+QDRANT_PORT=6333
+# → Auto-constructs: https://qdrant.internal:6333
+
+# Development: Explicit HTTP URL
+QDRANT_URL=http://localhost:6333
+
+# Development: Auto-HTTP via ENVIRONMENT
+ENVIRONMENT=development
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+# → Auto-constructs: http://localhost:6333
 ```
+
+**Backward Compatibility**:
+- Existing configurations continue to work
+- Auto-detection maintains previous behavior
+- Explicit URL configuration provides override capability
 
 ### 3. Hostname Whitelist
 
@@ -180,10 +206,38 @@ ENVIRONMENT=development         # or 'production'
 QDRANT_ALLOWED_HOSTS=host1,host2  # comma-separated
 REQUEST_TIMEOUT_MS=5000         # connection timeout
 
-# Production (recommended)
-ENVIRONMENT=production
-QDRANT_URL=https://qdrant.internal:6333
+# HTTPS Configuration (Two Options)
+
+# Option 1 (Recommended): Explicit QDRANT_URL with protocol
+QDRANT_URL=https://qdrant.internal:6333  # Production
+QDRANT_URL=http://localhost:6333         # Development
+
+# Option 2: Auto-detection based on ENVIRONMENT
+ENVIRONMENT=production          # Auto-selects HTTPS
+QDRANT_HOST=qdrant.internal
+QDRANT_PORT=6333
+# → Constructs: https://qdrant.internal:6333
+
+ENVIRONMENT=development         # Auto-selects HTTP
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+# → Constructs: http://localhost:6333
 ```
+
+### URL Resolution Priority
+
+The `get_qdrant_url()` function resolves URLs in the following priority order:
+
+1. **Explicit URL with protocol** (highest priority)
+   - If `QDRANT_URL` contains `http://` or `https://`, use it directly
+   - Example: `QDRANT_URL=https://qdrant.internal:6333`
+
+2. **Auto-constructed URL** (fallback)
+   - Construct from `QDRANT_HOST` + `QDRANT_PORT`
+   - Protocol determined by `ENVIRONMENT` variable:
+     - `production` → `https://`
+     - `development` → `http://`
+   - Example: `https://qdrant.internal:6333` (production)
 
 ### Type-Safe Configuration
 

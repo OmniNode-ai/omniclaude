@@ -47,12 +47,13 @@ import logging
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +469,7 @@ class PatternCache:
             # Create cached event
             cached_event = CachedPatternEvent(
                 event_id=event_id,
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 event_type=event.get("event_type", "unknown"),
                 pattern_id=event.get("pattern_id", "unknown"),
                 event_data=event,
@@ -551,7 +552,7 @@ class PatternCache:
                 except Exception as e:
                     # Update retry count
                     cached_event.retry_count += 1
-                    cached_event.last_retry = datetime.utcnow().isoformat()
+                    cached_event.last_retry = datetime.now(timezone.utc).isoformat()
 
                     # Save updated event
                     with open(cache_file, "w") as f:
@@ -589,7 +590,7 @@ class PatternCache:
         cleaned = 0
 
         try:
-            cutoff_time = datetime.utcnow() - timedelta(days=self.max_age_days)
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
 
             for cache_file in self.cache_dir.glob("pending_*.json"):
                 try:

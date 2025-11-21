@@ -9,7 +9,7 @@ import os
 import re
 import sys
 from contextlib import redirect_stdout
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 # Import the dashboard logic
@@ -136,7 +136,7 @@ def metric_status(
 def print_header(width: int, height: int = None, layout_mode: str = "single"):
     """Print dashboard header"""
     title = "🎯 OmniClaude System Dashboard"
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # Optional: show terminal info in debug mode
     if height:

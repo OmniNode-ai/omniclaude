@@ -517,7 +517,7 @@ class TestOmninodeCompleteExamples:
     def test_complete_model_file(self):
         """Complete model file should pass all checks."""
         code = """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
@@ -536,7 +536,7 @@ class ModelTaskData(BaseModel):
     task_order: int = Field(0, ge=0, le=100)
     status: EnumTaskStatus
     correlation_id: UUID
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def validate_business_rules(self) -> bool:
         if self.task_order > 80:

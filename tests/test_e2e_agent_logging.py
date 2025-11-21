@@ -24,14 +24,16 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import asyncpg
 import pytest
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
+
 
 # Add paths
 sys.path.insert(
@@ -309,7 +311,7 @@ class TestEndToEndAgentLogging:
         for i in range(10):
             data = {
                 "index": i,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "checksum": f"checksum-{i}",
             }
             test_data.append(data)

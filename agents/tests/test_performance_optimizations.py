@@ -16,8 +16,10 @@ Tests all implemented performance improvements including:
 import asyncio
 import time
 import uuid
+from datetime import datetime, timezone
 
 import pytest
+
 
 # Import the modules we're testing
 # Note: Some modules have optional dependencies and will be None if unavailable
@@ -802,7 +804,6 @@ class TestBatchInsertMethods:
     @pytest.mark.asyncio
     async def test_batch_insert_workflow_steps(self):
         """Test batch insert workflow steps."""
-        from datetime import datetime
         from unittest.mock import AsyncMock, MagicMock, patch
 
         optimizer = PerformanceOptimizer()
@@ -816,8 +817,8 @@ class TestBatchInsertMethods:
                 "phase": f"phase_{i}",
                 "correlation_id": str(uuid.uuid4()),
                 "applied_tf_id": str(uuid.uuid4()),
-                "started_at": datetime.utcnow(),
-                "completed_at": datetime.utcnow(),
+                "started_at": datetime.now(timezone.utc),
+                "completed_at": datetime.now(timezone.utc),
                 "duration_ms": 100 + i * 10,
                 "success": True,
                 "error": None,
@@ -850,7 +851,6 @@ class TestBatchInsertMethods:
     @pytest.mark.asyncio
     async def test_batch_insert_llm_calls(self):
         """Test batch insert LLM calls."""
-        from datetime import datetime
         from unittest.mock import AsyncMock, MagicMock, patch
 
         optimizer = PerformanceOptimizer()
@@ -869,7 +869,7 @@ class TestBatchInsertMethods:
                 "computed_cost_usd": 0.003,
                 "request_data": {"prompt": "test"},
                 "response_data": {"response": "test response"},
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
             }
             for i in range(10)
         ]
@@ -983,7 +983,6 @@ class TestBatchInsertMethods:
     @pytest.mark.asyncio
     async def test_batch_insert_lineage_edges(self):
         """Test batch insert lineage edges."""
-        from datetime import datetime
         from unittest.mock import AsyncMock, MagicMock, patch
 
         optimizer = PerformanceOptimizer()
@@ -998,7 +997,7 @@ class TestBatchInsertMethods:
                 "dst_id": str(uuid.uuid4()),
                 "edge_type": "triggered",
                 "attributes": {"priority": "high", "weight": 1.0},
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
             }
             for i in range(10)
         ]

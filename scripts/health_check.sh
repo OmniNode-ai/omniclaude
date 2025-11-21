@@ -53,6 +53,8 @@ POSTGRES_USER="${POSTGRES_USER}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
 QDRANT_HOST="${QDRANT_HOST}"
 QDRANT_PORT="${QDRANT_PORT}"
+QDRANT_URL="${QDRANT_URL:-}"  # Optional: Full URL with protocol
+ENVIRONMENT="${ENVIRONMENT:-development}"  # Default to development
 
 # Verify required variables are set
 missing_vars=()
@@ -139,26 +141,40 @@ check_qdrant() {
     echo ""
     echo "Qdrant:"
 
-    local response=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections" 2>/dev/null || echo "")
+    # Determine Qdrant URL with protocol support
+    local qdrant_url
+    if [[ -n "$QDRANT_URL" ]] && [[ "$QDRANT_URL" =~ ^https?:// ]]; then
+        # Use explicit QDRANT_URL if it contains protocol
+        qdrant_url="$QDRANT_URL"
+    else
+        # Construct URL from host+port with protocol based on ENVIRONMENT
+        local protocol="http"
+        if [[ "$ENVIRONMENT" == "production" ]]; then
+            protocol="https"
+        fi
+        qdrant_url="${protocol}://${QDRANT_HOST}:${QDRANT_PORT}"
+    fi
+
+    local response=$(curl -s "${qdrant_url}/collections" 2>/dev/null || echo "")
 
     if [[ -n "$response" ]]; then
         # Parse collection count and vector counts
         local collection_count=$(echo "$response" | jq -r '.result.collections | length' 2>/dev/null || echo "0")
 
         if [[ $collection_count -gt 0 ]]; then
-            echo "  ✅ Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connected, $collection_count collections)"
+            echo "  ✅ Qdrant: ${qdrant_url} (connected, $collection_count collections)"
 
             # Get vector counts for key collections
-            local code_patterns=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections/code_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
-            local exec_patterns=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections/execution_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
+            local code_patterns=$(curl -s "${qdrant_url}/collections/code_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
+            local exec_patterns=$(curl -s "${qdrant_url}/collections/execution_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
 
             echo "  📊 Collections: code_patterns ($code_patterns vectors), execution_patterns ($exec_patterns vectors)"
         else
-            echo "  ⚠️  Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connected, but no collections)"
+            echo "  ⚠️  Qdrant: ${qdrant_url} (connected, but no collections)"
             add_issue "Qdrant has no collections"
         fi
     else
-        echo "  ❌ Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connection failed)"
+        echo "  ❌ Qdrant: ${qdrant_url} (connection failed)"
         add_issue "Qdrant connection failed"
     fi
 }

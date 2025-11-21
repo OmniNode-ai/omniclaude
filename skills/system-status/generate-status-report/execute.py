@@ -1,9 +1,83 @@
 #!/usr/bin/env python3
 """
-Generate Status Report - Comprehensive system status report
+Skill: generate-status-report
+Purpose: Generate comprehensive system status report
+
+Description:
+    Generates a detailed system status report including service health,
+    infrastructure status, performance metrics, and top agents. Supports
+    multiple output formats (JSON, Markdown, text) and can be saved to a
+    file or output to stdout.
 
 Usage:
-    python3 execute.py [--format json|markdown|text] [--output file] [--include-trends]
+    python3 execute.py [--format FORMAT] [--output FILE] [--include-trends] [--timeframe TIMEFRAME]
+
+    Options:
+        --format FORMAT          Output format: json, markdown, or text
+                                Default: json
+        --output FILE            Output file path (optional)
+                                If not specified, outputs to stdout
+        --include-trends         Include trend analysis (future feature)
+        --timeframe TIMEFRAME    Data collection timeframe (1h, 24h, 7d)
+                                Default: 24h
+
+Output:
+    JSON object (when --format json):
+    {
+        "generated": "2025-11-12T14:30:00Z",
+        "timeframe": "24h",
+        "services": [
+            {
+                "name": "archon-intelligence",
+                "status": "running",
+                "health": "healthy",
+                "restart_count": 0
+            }
+        ],
+        "infrastructure": {
+            "kafka": {
+                "status": "connected",
+                "topics": 15
+            },
+            "postgres": {
+                "status": "connected",
+                "tables": 34
+            },
+            "qdrant": {
+                "status": "connected",
+                "total_vectors": 15689
+            }
+        },
+        "performance": {
+            "routing_decisions": 1423,
+            "avg_routing_time_ms": 7.8,
+            "avg_confidence": 0.92
+        },
+        "recent_activity": {
+            "agent_executions": 1234
+        },
+        "top_agents": [
+            {
+                "agent": "agent-api",
+                "count": 456,
+                "avg_confidence": 0.94
+            }
+        ]
+    }
+
+Exit Codes:
+    0: Success - report generated successfully
+    1: Error - report generation failed
+
+Examples:
+    # Generate JSON report to stdout
+    python3 execute.py
+
+    # Generate Markdown report to file
+    python3 execute.py --format markdown --output status-report.md
+
+    # Generate text report for last 7 days with trends
+    python3 execute.py --format text --timeframe 7d --include-trends
 
 Created: 2025-11-12
 """
@@ -11,10 +85,12 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from db_helper import execute_query
@@ -32,11 +108,11 @@ except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
 
-
-def parse_timeframe(timeframe: str) -> str:
-    """Convert timeframe to PostgreSQL interval."""
-    mapping = {"1h": "1 hour", "24h": "24 hours", "7d": "7 days"}
-    return mapping.get(timeframe, "24 hours")
+try:
+    from lib.helpers.timeframe_helpers import parse_timeframe
+except ImportError as e:
+    print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
+    sys.exit(1)
 
 
 def collect_report_data(timeframe: str, include_trends: bool):
@@ -278,6 +354,11 @@ def main():
         # Collect data
         data = collect_report_data(args.timeframe, args.include_trends)
 
+        # Add success and timestamp to data
+        data["success"] = True
+        if "timestamp" not in data:
+            data["timestamp"] = datetime.now(timezone.utc).isoformat()
+
         # Format output
         if args.format == "markdown":
             output = generate_markdown_output(data)
@@ -290,14 +371,28 @@ def main():
         if args.output:
             with open(args.output, "w") as f:
                 f.write(output)
-            print(f"Report written to: {args.output}")
+            result = {
+                "success": True,
+                "message": f"Report written to: {args.output}",
+                "file": args.output,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            print(format_json(result))
         else:
             print(output)
 
         return 0
 
     except Exception as e:
-        print(format_json({"success": False, "error": str(e)}))
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
         return 1
 
 

@@ -18,12 +18,13 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import asyncpg
 import pytest
 from kafka import KafkaProducer
+
 
 # Add agents lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -141,7 +142,7 @@ class TestKafkaConsumerIntegration:
             "action_details": {"key": "value"},
             "debug_mode": True,
             "duration_ms": 100,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         kafka_producer.send(test_topic, value=event)
@@ -203,7 +204,7 @@ class TestKafkaConsumerIntegration:
                 "action_details": {"index": i},
                 "debug_mode": True,
                 "duration_ms": i * 10,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)
@@ -248,7 +249,7 @@ class TestKafkaConsumerIntegration:
     ):
         """Test consumer handles duplicate events correctly (idempotency)."""
         correlation_id = f"test-duplicate-{uuid.uuid4()}"
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         # Create duplicate event
         event = {
@@ -354,7 +355,7 @@ class TestKafkaConsumerIntegration:
             "action_name": "offset_test",
             "action_details": {},
             "debug_mode": True,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         kafka_producer.send(test_topic, value=event)
@@ -437,7 +438,7 @@ class TestKafkaConsumerIntegration:
                 "action_name": f"test_{action_type}",
                 "action_details": {"type": action_type},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)
@@ -503,7 +504,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)

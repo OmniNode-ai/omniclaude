@@ -10,7 +10,7 @@ Run with: pytest tests/test_event_memory_store.py -v
 
 import tempfile
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -370,7 +370,7 @@ class TestEventStore:
             intent=sample_intent,
         )
         # Manually set old timestamp
-        old_event.timestamp = datetime.utcnow() - timedelta(days=91)
+        old_event.timestamp = datetime.now(timezone.utc) - timedelta(days=91)
         event_store.record_event(old_event)
 
         # Create recent event

@@ -21,7 +21,7 @@ Usage:
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import psycopg2
@@ -360,7 +360,7 @@ class MigrationValidator:
 
     def generate_migration_report(self) -> str:
         """Generate comprehensive migration report"""
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         report = []
         report.append("=" * 80)

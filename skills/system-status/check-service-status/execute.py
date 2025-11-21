@@ -1,9 +1,64 @@
 #!/usr/bin/env python3
 """
-Check Service Status - Detailed status for specific Docker services
+Skill: check-service-status
+Purpose: Check detailed status for specific Docker services
+
+Description:
+    Retrieves detailed status information for a specific Docker service
+    including runtime status, health status, resource usage, and recent
+    logs. Useful for deep-diving into individual service health and
+    troubleshooting issues.
 
 Usage:
-    python3 execute.py --service <service-name> [--include-logs] [--include-stats]
+    python3 execute.py --service SERVICE [--include-logs] [--include-stats] [--log-lines N]
+
+    Options:
+        --service SERVICE        Name of the Docker service to check (required)
+        --include-logs          Include recent log entries in output
+        --include-stats         Include resource usage statistics (CPU, memory)
+        --log-lines N           Number of log lines to retrieve
+                               Default: 50
+
+Output:
+    JSON object with the following structure:
+    {
+        "service": "archon-intelligence",
+        "status": "running",
+        "health": "healthy",
+        "running": true,
+        "started_at": "2025-11-12T10:00:00Z",
+        "restart_count": 0,
+        "image": "archon-intelligence:latest",
+        "resources": {
+            "cpu_percent": 5.2,
+            "memory_usage": "256 MB",
+            "memory_percent": 12.5
+        },
+        "logs": {
+            "total_lines": 1234,
+            "error_count": 2,
+            "recent_errors": [
+                "2025-11-12 14:30:00 ERROR: Connection timeout"
+            ]
+        }
+    }
+
+Exit Codes:
+    0: Success - service status retrieved successfully
+    1: Error - service not found or Docker communication failed
+
+Examples:
+    # Check basic service status
+    python3 execute.py --service archon-intelligence
+
+    # Check service with resource stats
+    python3 execute.py --service archon-intelligence --include-stats
+
+    # Check service with logs and stats
+    python3 execute.py --service archon-intelligence --include-logs --include-stats
+
+    # Check service with last 100 log lines
+    python3 execute.py --service archon-intelligence --include-logs --log-lines 100
 
 Created: 2025-11-12
 """
@@ -11,12 +66,18 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
-    from docker_helper import get_container_status, get_container_stats, get_container_logs
+    from docker_helper import (
+        get_container_logs,
+        get_container_stats,
+        get_container_status,
+    )
     from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
@@ -26,8 +87,12 @@ except ImportError as e:
 def main():
     parser = argparse.ArgumentParser(description="Check service status")
     parser.add_argument("--service", required=True, help="Service name")
-    parser.add_argument("--include-logs", action="store_true", help="Include recent logs")
-    parser.add_argument("--include-stats", action="store_true", help="Include resource stats")
+    parser.add_argument(
+        "--include-logs", action="store_true", help="Include recent logs"
+    )
+    parser.add_argument(
+        "--include-stats", action="store_true", help="Include resource stats"
+    )
     parser.add_argument("--log-lines", type=int, default=50, help="Number of log lines")
     args = parser.parse_args()
 
@@ -46,7 +111,7 @@ def main():
             "running": status.get("running"),
             "started_at": status.get("started_at"),
             "restart_count": status.get("restart_count"),
-            "image": status.get("image")
+            "image": status.get("image"),
         }
 
         # Add resource stats if requested
@@ -56,7 +121,7 @@ def main():
                 result["resources"] = {
                     "cpu_percent": stats.get("cpu_percent"),
                     "memory_usage": stats.get("memory_usage"),
-                    "memory_percent": stats.get("memory_percent")
+                    "memory_percent": stats.get("memory_percent"),
                 }
 
         # Add logs if requested
@@ -66,14 +131,26 @@ def main():
                 result["logs"] = {
                     "total_lines": logs.get("log_count"),
                     "error_count": logs.get("error_count"),
-                    "recent_errors": logs.get("errors", [])[:5]  # Top 5 errors
+                    "recent_errors": logs.get("errors", [])[:5],  # Top 5 errors
                 }
+
+        # Add success and timestamp to response
+        result["success"] = True
+        result["timestamp"] = datetime.now(timezone.utc).isoformat()
 
         print(format_json(result))
         return 0
 
     except Exception as e:
-        print(format_json({"success": False, "error": str(e)}))
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
         return 1
 
 

@@ -24,11 +24,13 @@ from typing import Dict, List, Optional
 
 import yaml
 
+
 # Add project root to path for config import
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from config import settings
+
 
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -106,7 +108,7 @@ class ViolationsLogger:
             return
 
         try:
-            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             # Get relative path if possible (cleaner display)
             try:
@@ -159,7 +161,7 @@ class ViolationsLogger:
                     pass
 
             # Check if this is today's data (reset counter at midnight UTC)
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             last_update_date = summary.get("last_updated", "")[:10]
 
             if last_update_date != today:

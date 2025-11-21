@@ -18,8 +18,9 @@ Usage:
 import argparse
 import hashlib
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
 
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -109,7 +110,7 @@ def main():
                 "intent_type": "agent_request",
                 "intent_summary": intent_summary,
                 "source": "claude_code_hook",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "quality_score": 1.0,  # Intents don't have quality violations
                 "violations_found": 0,
                 "reason": f"User requested {args.agent} agent for: {intent_summary}",

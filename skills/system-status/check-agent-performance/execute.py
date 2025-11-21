@@ -1,9 +1,59 @@
 #!/usr/bin/env python3
 """
-Check Agent Performance - Agent routing and execution metrics
+Skill: check-agent-performance
+Purpose: Check agent routing and execution performance metrics
+
+Description:
+    Analyzes agent routing decisions, execution metrics, and transformation
+    statistics over a specified timeframe. Provides insights into routing
+    efficiency, confidence scores, and agent usage patterns.
 
 Usage:
-    python3 execute.py [--timeframe 1h] [--top-agents 10]
+    python3 execute.py [--timeframe TIMEFRAME] [--top-agents N]
+
+    Options:
+        --timeframe TIMEFRAME    Time period to analyze (5m, 15m, 1h, 24h, 7d)
+                                Default: 1h
+        --top-agents N           Number of top agents to display
+                                Default: 10
+
+Output:
+    JSON object with the following structure:
+    {
+        "timeframe": "1h",
+        "routing": {
+            "total_decisions": 142,
+            "avg_routing_time_ms": 7.8,
+            "avg_confidence": 0.92,
+            "threshold_violations": 2
+        },
+        "top_agents": [
+            {
+                "agent": "agent-api",
+                "count": 45,
+                "avg_confidence": 0.94
+            }
+        ],
+        "transformations": {
+            "total": 12,
+            "success_rate": 0.92,
+            "avg_duration_ms": 1842.5
+        }
+    }
+
+Exit Codes:
+    0: Success - metrics retrieved successfully
+    1: Error - database connection failed or query error
+
+Examples:
+    # Check last hour of performance (default)
+    python3 execute.py
+
+    # Check last 24 hours
+    python3 execute.py --timeframe 24h
+
+    # Check last 5 minutes with top 5 agents
+    python3 execute.py --timeframe 5m --top-agents 5
 
 Created: 2025-11-12
 """
@@ -11,9 +61,12 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from db_helper import execute_query
@@ -22,17 +75,11 @@ except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
 
-
-def parse_timeframe(timeframe: str) -> str:
-    """Convert timeframe string to PostgreSQL interval."""
-    mapping = {
-        "5m": "5 minutes",
-        "15m": "15 minutes",
-        "1h": "1 hour",
-        "24h": "24 hours",
-        "7d": "7 days",
-    }
-    return mapping.get(timeframe, "1 hour")
+try:
+    from lib.helpers.timeframe_helpers import parse_timeframe
+except ImportError as e:
+    print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
+    sys.exit(1)
 
 
 def main():
@@ -45,7 +92,12 @@ def main():
     )
     args = parser.parse_args()
 
-    interval = parse_timeframe(args.timeframe)
+    # Validate timeframe (SQL injection protection)
+    try:
+        interval = parse_timeframe(args.timeframe)
+    except ValueError as e:
+        print(format_json({"success": False, "error": str(e)}))
+        return 1
 
     try:
         result = {"timeframe": args.timeframe}
@@ -114,11 +166,23 @@ def main():
                 "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1),
             }
 
+        # Add success and timestamp to response
+        result["success"] = True
+        result["timestamp"] = datetime.now(timezone.utc).isoformat()
+
         print(format_json(result))
         return 0
 
     except Exception as e:
-        print(format_json({"success": False, "error": str(e)}))
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
         return 1
 
 

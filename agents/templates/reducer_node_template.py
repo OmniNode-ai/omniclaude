@@ -7,7 +7,7 @@ Generated from PRD: {BUSINESS_DESCRIPTION}
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -161,7 +161,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
             "parameters": input_data.parameters,
             "metadata": input_data.metadata,
             "operations": operations,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Step 2: Emit intents based on aggregated state
@@ -189,7 +189,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
         return {
             "service": "{MICROSERVICE_NAME}",
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": "1.0.0",
             "reduction_capability": "enabled"
         }
@@ -202,7 +202,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Reducer(NodeReducer{MIXIN_INHERITANCE}):
             "error_count": 0,
             "uptime_seconds": 0,
             "reduction_efficiency": 0.0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 # Main execution

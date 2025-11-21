@@ -23,7 +23,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from time import time
@@ -32,6 +32,7 @@ from uuid import UUID, uuid4
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 
 load_dotenv()  # Load .env file automatically
 
@@ -116,6 +117,7 @@ from .validators.sequential_validators import (  # noqa: E402
     ProcessValidationValidator,
 )
 from .warning_fixer import apply_automatic_fixes  # noqa: E402
+
 
 # Import quorum validation (optional dependency)
 try:
@@ -1026,7 +1028,7 @@ class GenerationPipeline:
                 {
                     "uaks_knowledge": {
                         "execution_id": str(correlation_id),
-                        "timestamp": datetime.utcnow(),
+                        "timestamp": datetime.now(timezone.utc),
                         "agent_type": "generation_pipeline",
                         "success": True,
                         "duration_ms": int((time() - start_time) * 1000),
@@ -1294,7 +1296,7 @@ class GenerationPipeline:
             metadata={
                 "prompt": prompt,
                 "output_directory": output_directory,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 # Week 1 Day 5: Add performance metrics and quality gates
                 "performance_metrics": self.metrics_collector.get_summary(),
                 "quality_gates": self.quality_gate_registry.get_summary(),
@@ -1318,7 +1320,7 @@ class GenerationPipeline:
         - G8: Context has expected fields (WARNING)
         """
         stage = PipelineStage(stage_name="prompt_parsing", status=StageStatus.RUNNING)
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -1371,7 +1373,7 @@ class GenerationPipeline:
             return stage, {}
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -1395,7 +1397,7 @@ class GenerationPipeline:
         stage = PipelineStage(
             stage_name="intelligence_gathering", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -1462,14 +1464,14 @@ class GenerationPipeline:
             }
 
             stage.status = StageStatus.COMPLETED
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
 
             return stage, intelligence
 
         except Exception as e:
             stage.status = StageStatus.FAILED
             stage.error = str(e)
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             self.logger.error(f"Intelligence gathering failed: {e}")
             return stage, IntelligenceContext()  # Return empty context
 
@@ -1504,7 +1506,7 @@ class GenerationPipeline:
         stage = PipelineStage(
             stage_name="contract_building", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
         contract = None
 
@@ -1676,7 +1678,7 @@ class GenerationPipeline:
             return stage, None
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -1702,7 +1704,7 @@ class GenerationPipeline:
         stage = PipelineStage(
             stage_name="pre_generation_validation", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -1772,7 +1774,7 @@ class GenerationPipeline:
             return stage
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
     async def _stage_4_generate_code(
@@ -1790,7 +1792,7 @@ class GenerationPipeline:
         No blocking validation gates (G7-G8 are warnings in Stage 1).
         """
         stage = PipelineStage(stage_name="code_generation", status=StageStatus.RUNNING)
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -1818,7 +1820,7 @@ class GenerationPipeline:
             return stage, {}
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -1848,7 +1850,7 @@ class GenerationPipeline:
         stage = PipelineStage(
             stage_name="event_bus_integration", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -1961,7 +1963,7 @@ class GenerationPipeline:
 # Event Bus Integration (Stage 4.5 + Day 4 Orchestrator Enhancements)
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from typing import Any, Optional
 
@@ -2016,25 +2018,23 @@ except ImportError:
             self.event_publisher: Optional[EventPublisher] = None
             self._bootstrap_servers = os.getenv(
                 "KAFKA_BOOTSTRAP_SERVERS",
-                "%s"
+                "{}"
             )
-            self._service_name = "%s"
-            self._instance_id = f"%s-{uuid4().hex[:8]}"
+            self._service_name = "{}"
+            self._instance_id = f"{{}}-{{uuid4().hex[:8]}}"
             self._node_id = uuid4()
             self.is_running = False
             self._shutdown_event = asyncio.Event()
             self.logger.info(
-                f"%s initialized | "
-                f"service={self._service_name} | "
-                f"instance={self._instance_id}"
+                f"{{}} initialized | "
+                f"service={{self._service_name}} | "
+                f"instance={{self._instance_id}}"
             )
         else:
             self.logger.warning("Event bus not available - node will run in standalone mode")
-""" % (
+""".format(
                 context["kafka_bootstrap_servers"],
                 context["service_name"],
-                context["name_lower"],
-                context["node_name"],
             )
 
             # Find the last line in __init__ and append event bus code
@@ -2113,7 +2113,7 @@ except ImportError:
             return stage, generation_result  # Return original result on failure
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -2137,7 +2137,7 @@ except ImportError:
         stage = PipelineStage(
             stage_name="post_generation_validation", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -2201,7 +2201,7 @@ except ImportError:
             return stage
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -2244,7 +2244,7 @@ except ImportError:
             Tuple of (PipelineStage, refined_files_dict)
         """
         stage = PipelineStage(stage_name="code_refinement", status=StageStatus.RUNNING)
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -2342,7 +2342,7 @@ except ImportError:
             return stage, generated_files
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
             # Record performance metrics (Week 1 Day 5)
@@ -2529,7 +2529,7 @@ except ImportError:
         Files are already written by template engine, this stage verifies.
         """
         stage = PipelineStage(stage_name="file_writing", status=StageStatus.RUNNING)
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -2571,7 +2571,7 @@ except ImportError:
             return stage, {}
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
     async def _stage_7_compile_test(
@@ -2587,7 +2587,7 @@ except ImportError:
         stage = PipelineStage(
             stage_name="compilation_testing", status=StageStatus.RUNNING
         )
-        stage.start_time = datetime.utcnow()
+        stage.start_time = datetime.now(timezone.utc)
         start_ms = time()
 
         try:
@@ -2626,7 +2626,7 @@ except ImportError:
             return stage, {"passed": False}
 
         finally:
-            stage.end_time = datetime.utcnow()
+            stage.end_time = datetime.now(timezone.utc)
             stage.duration_ms = int((time() - start_ms) * 1000)
 
     # -------------------------------------------------------------------------

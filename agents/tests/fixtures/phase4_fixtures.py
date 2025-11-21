@@ -15,6 +15,7 @@ from agents.lib.simple_prd_analyzer import (
     PRDAnalysisResult,
 )
 
+
 # ============================================================================
 # SAMPLE PRDs FOR EACH NODE TYPE
 # ============================================================================
@@ -416,7 +417,7 @@ class Model{microservice_name_pascal}Input(BaseModel):
     operation: str = Field(..., description="Operation to perform")
     data: Dict[str, Any] = Field(default_factory=dict, description="Input data")
     correlation_id: UUID = Field(..., description="Correlation ID for tracing")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Request timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Request timestamp")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
 
     class Config:
@@ -447,7 +448,7 @@ class Model{microservice_name_pascal}Output(BaseModel):
     success: bool = Field(..., description="Operation success status")
     result_data: Dict[str, Any] = Field(default_factory=dict, description="Result data")
     correlation_id: UUID = Field(..., description="Correlation ID for tracing")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Response timestamp")
     error_message: Optional[str] = Field(default=None, description="Error message if failed")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
 

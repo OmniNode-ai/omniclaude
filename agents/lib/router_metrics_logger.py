@@ -24,11 +24,12 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from queue import Queue
 from typing import Any, Dict, List, Optional
 
 import asyncpg
+
 
 # Import Pydantic Settings for type-safe configuration
 try:
@@ -231,7 +232,7 @@ class RouterMetricsLogger:
             trigger_match_strategy=trigger_match_strategy,
             confidence_components=confidence_components or {},
             candidates_evaluated=candidates_evaluated,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         try:
@@ -255,12 +256,14 @@ class RouterMetricsLogger:
         asyncio.set_event_loop(loop)
 
         batch: List[CacheMetric] = []
-        last_write = datetime.utcnow()
+        last_write = datetime.now(timezone.utc)
 
         while not self.shutdown_event.is_set():
             try:
                 # Check if we should write batch
-                time_since_write = (datetime.utcnow() - last_write).total_seconds()
+                time_since_write = (
+                    datetime.now(timezone.utc) - last_write
+                ).total_seconds()
                 should_write = len(batch) >= self.batch_size or (
                     len(batch) > 0 and time_since_write >= self.batch_interval
                 )
@@ -270,7 +273,7 @@ class RouterMetricsLogger:
                     try:
                         loop.run_until_complete(self._write_batch_async(batch, loop))
                         batch.clear()
-                        last_write = datetime.utcnow()
+                        last_write = datetime.now(timezone.utc)
                     except Exception as e:
                         logger.error(f"Failed to write batch: {e}")
                         self.stats["failed_writes"] += len(batch)
@@ -369,7 +372,7 @@ class RouterMetricsLogger:
                     # Update stats
                     self.stats["total_logged"] += len(batch)
                     self.stats["total_batches"] += 1
-                    self.stats["last_write_time"] = datetime.utcnow()
+                    self.stats["last_write_time"] = datetime.now(timezone.utc)
 
                     logger.debug(f"Wrote batch of {len(batch)} metrics to database")
                     return

@@ -8,15 +8,17 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
+
 # Add config for type-safe settings (Pydantic Settings framework)
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from config import settings
+
 
 # Database configuration - all values from type-safe Pydantic Settings
 DB_CONFIG = {
@@ -186,7 +188,7 @@ def handle_db_error(error: Exception, operation: str) -> Dict[str, Any]:
         "success": False,
         "error": str(error),
         "operation": operation,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -215,7 +217,7 @@ def test_connection() -> bool:
 def format_timestamp(dt: Optional[datetime] = None) -> str:
     """Format timestamp for database insertion."""
     if dt is None:
-        dt = datetime.utcnow()
+        dt = datetime.now(timezone.utc)
     return dt.isoformat()
 
 

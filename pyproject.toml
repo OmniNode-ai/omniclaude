@@ -150,6 +150,13 @@ ignore = [
     "PT023",     # Pytest mark parentheses (technical debt)
 ]
 
+[tool.ruff.lint.isort]
+# Configure ruff's import sorting to match Black profile (same as old isort config)
+combine-as-imports = true
+force-sort-within-sections = false
+lines-after-imports = 2
+known-first-party = ["agents", "parallel_execution", "config", "claude_hooks"]
+
 [tool.ruff.lint.per-file-ignores]
 "agents/tests/test_parallel_generation.py" = ["B017", "PT011"]  # Intentionally broad exception for error handling tests
 

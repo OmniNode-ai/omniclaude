@@ -10,11 +10,12 @@ import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class ModelGenerationResult:
     quality_score: float = 0.0
     onex_compliant: bool = False
     violations: List[str] = field(default_factory=list)
-    generated_at: datetime = field(default_factory=datetime.utcnow)
+    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ModelGenerator:
@@ -278,7 +279,7 @@ class ModelGenerator:
             "from pydantic import BaseModel, Field",
             "from typing import Optional, Dict, Any, List",
             "from uuid import UUID, uuid4",
-            "from datetime import datetime, timezone",
+            "from datetime import datetime, timezone, timezone",
         ]
 
         # Create class config with example
@@ -381,7 +382,7 @@ class ModelGenerator:
             "from pydantic import BaseModel, Field",
             "from typing import Optional, Dict, Any, List",
             "from uuid import UUID",
-            "from datetime import datetime, timezone",
+            "from datetime import datetime, timezone, timezone",
         ]
 
         class_config = {
@@ -556,7 +557,7 @@ class ModelGenerator:
         if candidates:
             candidates.add("result_data")
 
-        return sorted(list(candidates))[:5]  # Limit to 5 inferred fields
+        return sorted(candidates)[:5]  # Limit to 5 inferred fields
 
     def _infer_field_type(self, field_name: str) -> str:
         """

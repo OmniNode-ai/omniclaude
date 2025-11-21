@@ -24,6 +24,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
 
@@ -155,14 +156,18 @@ def get_qdrant_url() -> str:
     Applies security validation to prevent SSRF attacks.
 
     Returns:
-        Validated Qdrant URL (e.g., "http://localhost:6333")
+        Validated Qdrant URL (e.g., "http://localhost:6333" or "https://qdrant.internal:6333")
 
     Raises:
         ValueError: If URL fails SSRF validation checks
 
     Note:
         Configuration is loaded from .env file and validated on import.
-        Default values: QDRANT_HOST=localhost, QDRANT_PORT=6333
+        Default values: QDRANT_HOST=localhost, QDRANT_PORT=6333, QDRANT_URL=http://localhost:6333
+
+        URL Resolution Priority:
+        1. Use QDRANT_URL directly if it contains a protocol (http:// or https://)
+        2. Otherwise, construct from QDRANT_HOST + QDRANT_PORT with protocol based on ENVIRONMENT
 
         Security features:
         - HTTPS enforcement in production (ENVIRONMENT=production)
@@ -171,16 +176,41 @@ def get_qdrant_url() -> str:
         - Connection timeout (5 seconds default)
 
         To use HTTPS in production:
+        Option 1 (Recommended - Explicit):
+        1. Set QDRANT_URL=https://your-qdrant-host:6333 in .env
+        2. Ensure TLS certificate is valid
+
+        Option 2 (Environment-based):
         1. Set ENVIRONMENT=production in .env
-        2. Set QDRANT_URL=https://your-qdrant-host:6333
-        3. Ensure TLS certificate is valid
+        2. Set QDRANT_HOST=your-qdrant-host
+        3. Set QDRANT_PORT=6333
+        4. Protocol will auto-select HTTPS
 
         To allow additional hosts:
         Set QDRANT_ALLOWED_HOSTS=host1.com,host2.com in .env
     """
-    # Determine protocol based on environment
+    # Determine environment first
     environment = os.getenv("ENVIRONMENT", "development").lower()
 
+    # Priority 1: Use settings.qdrant_url if it contains a protocol
+    # This allows explicit HTTPS/HTTP configuration via QDRANT_URL env var
+    if settings.qdrant_url and (
+        str(settings.qdrant_url).startswith("http://")
+        or str(settings.qdrant_url).startswith("https://")
+    ):
+        url = str(settings.qdrant_url)
+
+        # Security check: Ensure protocol matches environment requirements
+        # In production, HTTP URLs from .env should be rejected
+        if environment == "production" and url.startswith("http://"):
+            # Fall through to Priority 2 to construct HTTPS URL
+            pass
+        else:
+            # Use the provided URL directly (Pydantic already validated it as HttpUrl)
+            # Validate URL for SSRF protection
+            return validate_qdrant_url(url)
+
+    # Priority 2: Construct URL from host+port with environment-based protocol
     # Use HTTPS in production, HTTP in development
     protocol = "https" if environment == "production" else "http"
 

@@ -63,9 +63,10 @@ import logging
 import sys
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 
 # HTTP client imports
 try:
@@ -485,7 +486,7 @@ class SlackNotifier:
             tb_str = tb_str[:2000] + "\n... (truncated)"
 
         # Build timestamp
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         # Build Slack message using Block Kit format
         message = {

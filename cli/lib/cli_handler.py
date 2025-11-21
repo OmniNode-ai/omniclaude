@@ -22,6 +22,7 @@ from agents.lib.generation_pipeline import GenerationPipeline
 from agents.lib.models.pipeline_models import PipelineResult
 from agents.lib.models.quorum_config import QuorumConfig
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -146,7 +147,7 @@ class CLIHandler:
         #     event_type="PromptSubmitted",
         #     event_id=uuid4(),
         #     correlation_id=correlation_id,
-        #     timestamp=datetime.utcnow(),
+        #     timestamp=datetime.now(timezone.utc),
         #     stage="parsing",
         #     status="started",
         #     payload={

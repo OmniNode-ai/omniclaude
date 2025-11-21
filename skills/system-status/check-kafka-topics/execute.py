@@ -1,9 +1,76 @@
 #!/usr/bin/env python3
 """
-Check Kafka Topics - Topic health and consumer status
+Skill: check-kafka-topics
+Purpose: Check Kafka topic health and configuration
+
+Description:
+    Verifies Kafka broker connectivity and retrieves topic information
+    including existence checks, partition details, and topic counts.
+    Supports wildcard topic matching and selective topic checking.
 
 Usage:
-    python3 execute.py [--topics topic1,topic2] [--include-partitions]
+    python3 execute.py [--topics TOPICS] [--include-partitions]
+
+    Options:
+        --topics TOPICS          Comma-separated list of topics or patterns
+                                Supports wildcards (e.g., agent.*, *.v1)
+                                Default: all topics (count only)
+        --include-partitions    Include partition details for each topic
+
+Output:
+    JSON object with the following structure:
+    {
+        "broker": "192.168.86.200:29092",
+        "status": "healthy",
+        "total_topics": 15,
+        "topics": {
+            "agent.routing.requested.v1": {
+                "exists": true,
+                "partitions": 3
+            },
+            "agent.routing.completed.v1": {
+                "exists": true,
+                "partitions": 3
+            }
+        }
+    }
+
+    With --include-partitions flag:
+    {
+        "broker": "192.168.86.200:29092",
+        "status": "healthy",
+        "total_topics": 15,
+        "topics": {
+            "agent.routing.requested.v1": {
+                "exists": true,
+                "partitions": {
+                    "count": 3,
+                    "details": [
+                        {"partition": 0, "leader": 1, "replicas": [1]},
+                        {"partition": 1, "leader": 1, "replicas": [1]},
+                        {"partition": 2, "leader": 1, "replicas": [1]}
+                    ]
+                }
+            }
+        }
+    }
+
+Exit Codes:
+    0: Success - Kafka broker reachable and topics retrieved
+    1: Error - Kafka broker unreachable or topic query failed
+
+Examples:
+    # Check Kafka connection and topic count
+    python3 execute.py
+
+    # Check specific topics
+    python3 execute.py --topics agent.routing.requested.v1,agent.routing.completed.v1
+
+    # Check all agent topics with partitions
+    python3 execute.py --topics "agent.*" --include-partitions
+
+    # Check intelligence topics with partition details
+    python3 execute.py --topics "*.intelligence.*" --include-partitions
 
 Created: 2025-11-12
 """
@@ -11,7 +78,9 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -39,15 +108,21 @@ def main():
             print(
                 format_json(
                     {
+                        "success": False,
                         "broker": conn.get("broker"),
                         "status": "unreachable",
                         "error": conn.get("error"),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 )
             )
             return 1
 
-        result = {"broker": conn.get("broker"), "status": "healthy"}
+        result = {
+            "success": True,
+            "broker": conn.get("broker"),
+            "status": "healthy",
+        }
 
         # List all topics
         all_topics = list_topics()
@@ -105,11 +180,22 @@ def main():
 
             result["topics"] = topics_detail
 
+        # Add timestamp to response
+        result["timestamp"] = datetime.now(timezone.utc).isoformat()
+
         print(format_json(result))
         return 0
 
     except Exception as e:
-        print(format_json({"success": False, "error": str(e)}))
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
         return 1
 
 

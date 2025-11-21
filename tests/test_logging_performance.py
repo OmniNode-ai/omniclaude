@@ -20,7 +20,7 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
 from typing import Dict, List
@@ -30,9 +30,11 @@ import psutil
 import pytest
 from kafka import KafkaConsumer, KafkaProducer
 
+
 # Add config for type-safe settings
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
+
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -167,7 +169,7 @@ class TestKafkaPublishPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             start = time.time()
@@ -208,7 +210,7 @@ class TestKafkaPublishPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             events.append(event)
 
@@ -259,7 +261,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             kafka_producer.send("agent-actions", value=event)
 
@@ -355,7 +357,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{event_count}",
                 "action_details": {},
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             kafka_producer.send("agent-actions", value=event)
@@ -438,7 +440,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"data": "x" * 100},  # 100 bytes payload
                 "debug_mode": True,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             kafka_producer.send("agent-actions", value=event)
@@ -509,7 +511,7 @@ class TestBatchSizeOptimization:
                     "action_name": f"action_{i}",
                     "action_details": {},
                     "debug_mode": True,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 kafka_producer.send("agent-actions", value=event)
 

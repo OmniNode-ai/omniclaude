@@ -17,7 +17,7 @@ Performance Targets:
 """
 
 import statistics
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,7 +45,8 @@ class ThresholdBreach(BaseModel):
         ..., description="Breach severity: warning/critical/emergency"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Breach detection timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Breach detection timestamp",
     )
     context: Dict[str, Any] = Field(
         default_factory=dict, description="Additional breach context"
@@ -64,7 +65,8 @@ class StageTiming(BaseModel):
         default=None, description="Performance threshold (if applicable)"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Timing timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timing timestamp",
     )
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
@@ -270,8 +272,8 @@ class MetricsCollector:
 
         if not self.stage_timings:
             # Return summary with breach data but no timing data
-            window_start = datetime.utcnow()
-            window_end = datetime.utcnow()
+            window_start = datetime.now(timezone.utc)
+            window_end = datetime.now(timezone.utc)
             if self.threshold_breaches:
                 timestamps = [b.timestamp for b in self.threshold_breaches]
                 window_start = min(timestamps)

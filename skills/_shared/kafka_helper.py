@@ -33,6 +33,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
@@ -129,6 +130,7 @@ def check_kafka_connection() -> Dict[str, Any]:
                 "broker": bootstrap_servers,
                 "reachable": True,
                 "error": None,
+                "return_code": 0,
             }
         else:
             return {
@@ -136,6 +138,7 @@ def check_kafka_connection() -> Dict[str, Any]:
                 "broker": bootstrap_servers,
                 "reachable": False,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
     except subprocess.TimeoutExpired:
         return {
@@ -190,6 +193,7 @@ def list_topics() -> Dict[str, Any]:
                 "topics": [],
                 "count": 0,
                 "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Parse topic names from output using regex for robustness
@@ -201,7 +205,13 @@ def list_topics() -> Dict[str, Any]:
                 topic_name = match.group(1)
                 topics.append(topic_name)
 
-        return {"success": True, "topics": topics, "count": len(topics), "error": None}
+        return {
+            "success": True,
+            "topics": topics,
+            "count": len(topics),
+            "error": None,
+            "return_code": 0,
+        }
     except subprocess.TimeoutExpired:
         return {
             "success": False,
@@ -252,6 +262,7 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
                 "success": False,
                 "topic": topic_name,
                 "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Parse partition count from output
@@ -273,6 +284,7 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             "topic": topic_name,
             "partitions": partitions,
             "error": None,
+            "return_code": 0,
         }
     except subprocess.TimeoutExpired:
         return {
@@ -313,6 +325,7 @@ def get_consumer_groups() -> Dict[str, Any]:
                 "groups": [],
                 "count": 0,
                 "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Note: kcat -L doesn't show consumer groups
@@ -323,6 +336,7 @@ def get_consumer_groups() -> Dict[str, Any]:
             "groups": [],
             "count": 0,
             "error": "Consumer group listing requires kafka-consumer-groups command",
+            "return_code": 0,
         }
     except subprocess.TimeoutExpired:
         return {
@@ -394,6 +408,17 @@ def get_recent_message_count(
             timeout=timeout_seconds,
         )
 
+        # Check if command succeeded
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "topic": topic_name,
+                "messages_sampled": 0,
+                "sample_duration_s": timeout_seconds,
+                "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
+            }
+
         # Count lines (each line is a message)
         message_count = len(
             [line for line in result.stdout.split("\n") if line.strip()]
@@ -405,6 +430,7 @@ def get_recent_message_count(
             "messages_sampled": message_count,
             "sample_duration_s": timeout_seconds,
             "error": None,
+            "return_code": 0,
         }
     except subprocess.TimeoutExpired:
         # Timeout occurred - sampling didn't complete in time

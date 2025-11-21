@@ -7,7 +7,7 @@ Generated from PRD: {BUSINESS_DESCRIPTION}
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -151,7 +151,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
             "parameters": input_data.parameters,
             "metadata": input_data.metadata,
             "operations": operations,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "completed"
         }
 
@@ -162,7 +162,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
         return {
             "service": "{MICROSERVICE_NAME}",
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": "1.0.0",
             "compute_capability": "enabled"
         }
@@ -175,7 +175,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Compute(NodeCompute{MIXIN_INHERITANCE}):
             "error_count": 0,
             "uptime_seconds": 0,
             "compute_efficiency": 0.0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 # Main execution
