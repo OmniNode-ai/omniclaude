@@ -13,6 +13,7 @@ import uuid
 
 from config import settings
 
+
 # Add hooks to path
 sys.path.insert(0, "/Users/jonah/.claude/hooks")
 

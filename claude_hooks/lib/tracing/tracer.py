@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 from .postgres_client import PostgresTracingClient
 
+
 logger = logging.getLogger(__name__)
 
 

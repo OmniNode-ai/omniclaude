@@ -50,6 +50,7 @@ from .event_models import (
 )
 from .event_store import EventStore
 
+
 __all__ = [
     # Enums
     "EventType",

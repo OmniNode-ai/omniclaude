@@ -7,6 +7,7 @@ Provides colored, emoji-enhanced announcements when agents are activated.
 import sys
 from typing import Optional
 
+
 # Agent emoji mappings
 AGENT_EMOJIS = {
     "agent-testing": "🧪",

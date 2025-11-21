@@ -17,6 +17,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 
+
 # Load environment variables (no fallback values)
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT")

@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+
 # Add skills path
 sys.path.insert(
     0,

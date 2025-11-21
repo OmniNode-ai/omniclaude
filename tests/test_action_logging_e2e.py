@@ -30,6 +30,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 AGENTS_LIB = SCRIPT_DIR.parent / "agents" / "lib"
@@ -45,6 +46,7 @@ except ImportError:
     print("WARNING: psycopg2 not installed. Database verification will be skipped.")
 
 from action_logger import ActionLogger
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

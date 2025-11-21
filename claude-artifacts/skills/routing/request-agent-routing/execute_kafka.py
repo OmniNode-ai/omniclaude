@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+
 # Determine project root (skills are in ~/.claude/skills, not in project)
 OMNICLAUDE_PATH = Path(
     os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
@@ -43,6 +44,7 @@ if not OMNICLAUDE_PATH.exists():
 
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings
+
 
 # Add _shared to path for utilities
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))

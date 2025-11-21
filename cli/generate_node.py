@@ -57,6 +57,7 @@ from typing import Optional
 # Load environment variables from .env file
 from dotenv import load_dotenv
 
+
 load_dotenv()  # Load .env file before any other imports
 
 # Add parent directory to path for imports

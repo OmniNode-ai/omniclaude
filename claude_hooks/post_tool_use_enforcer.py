@@ -9,6 +9,7 @@ from typing import Dict, Optional
 
 import yaml
 
+
 # Add lib directory to path AFTER stdlib imports
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR / "lib"))

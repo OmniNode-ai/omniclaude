@@ -131,16 +131,16 @@ def main():
         result = {"timeframe": args.timeframe}
 
         # Get routing statistics
-        routing_query = f"""
+        routing_query = """
             SELECT
                 COUNT(*) as total_decisions,
                 AVG(routing_time_ms) as avg_routing_time_ms,
                 AVG(confidence_score) as avg_confidence,
                 COUNT(CASE WHEN routing_time_ms > 100 THEN 1 END) as threshold_violations
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
         """
-        routing_result = execute_query(routing_query)
+        routing_result = execute_query(routing_query, (interval,))
 
         if routing_result["success"] and routing_result["rows"]:
             row = routing_result["rows"][0]
@@ -152,18 +152,18 @@ def main():
             }
 
         # Get top agents
-        top_agents_query = f"""
+        top_agents_query = """
             SELECT
                 selected_agent as agent,
                 COUNT(*) as count,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
-            LIMIT {args.top_agents}
+            LIMIT %s
         """
-        top_result = execute_query(top_agents_query)
+        top_result = execute_query(top_agents_query, (interval, args.top_agents))
 
         if top_result["success"]:
             result["top_agents"] = [
@@ -176,15 +176,15 @@ def main():
             ]
 
         # Get transformation stats
-        transform_query = f"""
+        transform_query = """
             SELECT
                 COUNT(*) as total,
                 AVG(CASE WHEN success THEN 1.0 ELSE 0.0 END) as success_rate,
                 AVG(transformation_duration_ms) as avg_duration_ms
             FROM agent_transformation_events
-            WHERE started_at > NOW() - INTERVAL '{interval}'
+            WHERE started_at > NOW() - %s::interval
         """
-        transform_result = execute_query(transform_query)
+        transform_result = execute_query(transform_query, (interval,))
 
         if transform_result["success"] and transform_result["rows"]:
             row = transform_result["rows"][0]

@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+
 # Add omniclaude to path dynamically
 # Determine repository root (3 levels up from this file)
 REPO_ROOT = Path(__file__).resolve().parent

@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .framework_detector import FrameworkMethodDetector
 
+
 logger = logging.getLogger(__name__)
 
 # Try to import libcst

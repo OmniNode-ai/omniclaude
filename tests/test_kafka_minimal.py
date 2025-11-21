@@ -6,6 +6,7 @@ import json
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient
 
+
 # Test 1: AdminClient to check broker connectivity
 print("=" * 60)
 print("TEST 1: AdminClient connectivity test")

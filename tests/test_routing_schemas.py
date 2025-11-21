@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add schemas directory to path
 schemas_path = Path(__file__).parent / "services" / "routing_adapter" / "schemas"
 sys.path.insert(0, str(schemas_path))

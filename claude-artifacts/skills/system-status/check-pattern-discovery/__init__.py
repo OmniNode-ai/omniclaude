@@ -7,4 +7,5 @@ and pattern discovery quality metrics.
 
 from .execute import main
 
+
 __all__ = ["main"]

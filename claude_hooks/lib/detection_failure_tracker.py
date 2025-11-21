@@ -12,6 +12,7 @@ from uuid import UUID
 import psycopg2
 from psycopg2.extras import Json
 
+
 # Add config for type-safe settings
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from config import settings

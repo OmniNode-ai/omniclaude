@@ -17,9 +17,11 @@ from unittest.mock import patch
 
 import pytest
 
+
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
+
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)

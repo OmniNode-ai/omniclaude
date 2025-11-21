@@ -33,6 +33,7 @@ import logging
 import sys
 from pathlib import Path
 
+
 # CRITICAL: Add project root FIRST to avoid config module conflicts
 # There's a config module in agents/lib/config/ that conflicts with main config/
 project_root = Path(__file__).resolve().parents[2]  # claude_hooks/lib → omniclaude root
@@ -62,6 +63,7 @@ except ImportError as e:
 
 # Import settings for type-safe configuration
 from config import settings
+
 
 # Suppress verbose logging unless DEBUG env var set
 if settings.debug:

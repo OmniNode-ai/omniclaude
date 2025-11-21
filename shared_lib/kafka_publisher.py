@@ -41,6 +41,7 @@ from typing import Optional
 # Import centralized Kafka configuration
 from kafka_config import get_kafka_bootstrap_servers
 
+
 # Lazy-loaded Kafka types (imported only when needed)
 # Type hints only - actual import happens in get_kafka_producer()
 try:

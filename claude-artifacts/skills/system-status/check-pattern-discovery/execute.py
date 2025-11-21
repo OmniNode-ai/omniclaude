@@ -13,6 +13,7 @@ import json
 import sys
 from pathlib import Path
 
+
 # Path to shared modules: go up to repo root, then into skills/_shared
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "skills" / "_shared")

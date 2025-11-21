@@ -18,6 +18,7 @@ from uuid import uuid4
 import pytest
 from dotenv import load_dotenv
 
+
 # Only load .env in local development (not in CI)
 # In CI, environment variables are set by GitHub Actions and should not be overridden
 if not os.getenv("CI"):

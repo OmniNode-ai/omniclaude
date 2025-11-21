@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -40,6 +41,7 @@ from model_routing_response import (
     ModelRoutingResponse,
 )
 from pydantic import ValidationError
+
 
 spec = importlib.util.spec_from_file_location(
     "model_routing_event_envelope",

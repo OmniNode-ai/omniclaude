@@ -19,6 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
 # Add project root to path for config import
 project_root = (
     Path(__file__).resolve().parents[2]

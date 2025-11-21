@@ -10,11 +10,7 @@ from .models import (
     HookExecution,
     HookExecutionSummary,
     HookMetadata,
-)
-from .models import (
     TraceContext as ModelTraceContext,  # Core models; Helper models; Utility functions
-)
-from .models import (
     create_new_hook_execution,
     create_new_trace,
     create_trace_context,
@@ -24,8 +20,8 @@ from .models import (
     parse_trace_from_row,
 )
 from .postgres_client import PostgresTracingClient
-from .tracer import ExecutionTracer
-from .tracer import TraceContext as TracerContext
+from .tracer import ExecutionTracer, TraceContext as TracerContext
+
 
 # Re-export TracerContext as the primary TraceContext
 # (for use with ExecutionTracer context managers)

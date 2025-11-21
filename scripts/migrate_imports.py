@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Dict
 
+
 # Import migration mapping
 IMPORT_MIGRATIONS: Dict[str, str] = {
     # Base classes

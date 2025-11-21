@@ -33,6 +33,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+
 try:
     from kafka import KafkaConsumer, KafkaProducer
 except ImportError:

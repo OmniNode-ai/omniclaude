@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+
 # Add project root to path for config import
 project_root = (
     Path(__file__).resolve().parents[2]
@@ -27,6 +28,7 @@ project_root = (
 sys.path.insert(0, str(project_root))
 
 from config import settings
+
 
 # Add agent framework to path (use settings or relative path)
 if settings.omniclaude_agents_path:

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add repository root to path for module imports
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))

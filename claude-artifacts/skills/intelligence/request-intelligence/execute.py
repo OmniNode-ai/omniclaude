@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+
 # Determine project root dynamically (skills are in ~/.claude/skills, not in project)
 # First check environment variable, then try to find via repository structure
 if os.environ.get("OMNICLAUDE_PATH"):
@@ -65,6 +66,7 @@ else:
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings
 
+
 # Add omniclaude agents/lib to path for IntelligenceEventClient
 sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
 
@@ -87,6 +89,7 @@ except ImportError as e:
 # Add _shared to path for helper functions
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id  # noqa: E402
+
 
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",

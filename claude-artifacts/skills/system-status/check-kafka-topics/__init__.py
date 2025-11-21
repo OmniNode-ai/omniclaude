@@ -7,4 +7,5 @@ and event bus connectivity for the OmniNode platform.
 
 from .execute import main
 
+
 __all__ = ["main"]

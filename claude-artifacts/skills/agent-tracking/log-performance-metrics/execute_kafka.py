@@ -25,9 +25,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
+
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared_lib"))

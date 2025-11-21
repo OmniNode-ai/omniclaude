@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 
+
 # Colors for terminal output
 GREEN = "\033[92m"
 RED = "\033[91m"

@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 import psycopg2
 
+
 # Add config for type-safe settings
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from config import settings

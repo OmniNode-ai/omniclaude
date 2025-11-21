@@ -25,6 +25,7 @@ from typing import List, Tuple
 import psycopg2
 from psycopg2.extras import Json
 
+
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,

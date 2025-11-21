@@ -17,12 +17,14 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 AGENTS_LIB = SCRIPT_DIR.parent / "agents" / "lib"
 sys.path.insert(0, str(AGENTS_LIB))
 
 from action_logger import ActionLogger
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

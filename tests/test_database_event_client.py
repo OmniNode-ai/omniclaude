@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import datetime
 
+
 sys.path.insert(0, "agents/lib")
 
 from database_event_client import DatabaseEventClient

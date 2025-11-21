@@ -19,6 +19,7 @@ from textwrap import dedent
 
 import pytest
 
+
 # Add parent directory to path to import tools module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

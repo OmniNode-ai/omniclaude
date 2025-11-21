@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 from .event_models import EventType, WorkflowEvent, WorkflowSummary
 from .event_store import EventStore
 
+
 logger = logging.getLogger(__name__)
 
 

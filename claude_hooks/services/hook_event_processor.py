@@ -33,10 +33,12 @@ from uuid import UUID
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from services.event_handlers import EventHandlerRegistry, HandlerResult
+
 
 # Configure logging to use secure user-space directory
 log_dir = Path.home() / ".claude" / "logs"

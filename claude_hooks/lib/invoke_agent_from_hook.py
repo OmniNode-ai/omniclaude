@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+
 # Add hooks lib to path
 HOOKS_LIB_PATH = Path("/Users/jonah/.claude/hooks/lib")
 sys.path.insert(0, str(HOOKS_LIB_PATH))

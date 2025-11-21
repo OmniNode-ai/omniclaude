@@ -23,6 +23,7 @@ from omniclaude.debug_loop.node_model_price_catalog_effect import (
 # TASK-8: Import STF Hash Compute Node
 from omniclaude.debug_loop.node_stf_hash_compute import NodeSTFHashCompute
 
+
 # ============================================================================
 # TASK-8: STF Hash Compute - AST-based normalization tests
 # ============================================================================

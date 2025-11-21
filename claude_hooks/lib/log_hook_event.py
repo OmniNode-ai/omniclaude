@@ -138,6 +138,7 @@ sys.path.insert(0, str(OMNICLAUDE_ROOT / "agents" / "lib"))  # For direct import
 
 from logging_event_publisher import LoggingEventPublisher, LogLevel
 
+
 logger = logging.getLogger(__name__)
 
 

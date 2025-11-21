@@ -82,6 +82,7 @@ from .model_routing_response import (
 # Topics and event types
 from .topics import TOPICS, EventTypes, RoutingTopics
 
+
 __all__ = [
     # Request
     "ModelRoutingRequest",

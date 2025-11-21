@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+
 # Add hooks lib to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -34,6 +35,7 @@ from hook_event_logger import HookEventLogger
 
 # Import settings for type-safe configuration
 from config import settings
+
 
 # PostgreSQL connection (lazy import to avoid dependency issues)
 try:

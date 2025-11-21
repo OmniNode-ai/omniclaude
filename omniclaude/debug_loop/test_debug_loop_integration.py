@@ -14,6 +14,7 @@ import uuid
 
 from agents.lib.manifest_injector import ManifestInjector
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

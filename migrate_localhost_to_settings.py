@@ -6,6 +6,7 @@ Automated migration script to replace hardcoded localhost:8053 with settings.arc
 import re
 from pathlib import Path
 
+
 # Files to migrate
 FILES_TO_MIGRATE = [
     "claude_hooks/debug_utils.py",
