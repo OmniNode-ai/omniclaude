@@ -24,6 +24,23 @@ The skills directory is **symlinked** from `~/.claude/skills/` to the repository
 - Skills are version-controlled in git
 - Changes to repo automatically reflect in Claude Code
 
+## Dependencies
+
+System status monitoring skills require external command-line tools (Docker, kcat, psql) and Python packages.
+
+**See [system-status/DEPENDENCIES.md](system-status/DEPENDENCIES.md) for**:
+- Complete dependency list with installation instructions
+- Platform-specific setup (macOS, Ubuntu, CentOS, Arch)
+- Troubleshooting common installation issues
+- Verification commands to test all dependencies
+
+**Quick Verification**:
+```bash
+# Test all dependencies are installed
+docker --version && kcat -V && psql --version
+python3 -c "import psycopg2; print('✓ All dependencies OK')"
+```
+
 ## How Skills Work
 
 ### 1. Claude reads SKILL.md

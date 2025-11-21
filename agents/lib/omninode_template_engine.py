@@ -35,6 +35,7 @@ from .template_helpers import (
 )
 from .version_config import get_config
 
+
 # TODO: Add omnibase_spi imports when available
 # from omnibase_spi.validation.tool_metadata_validator import ToolMetadataValidator
 
@@ -92,10 +93,12 @@ class NodeTemplate:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Template validation failed: Missing required placeholders",
-                context={
-                    "missing_placeholders": list(missing),
-                    "required_placeholders": list(self.placeholders),
-                    "provided_keys": list(context.keys()),
+                details={
+                    "context": {
+                        "missing_placeholders": list(missing),
+                        "required_placeholders": list(self.placeholders),
+                        "provided_keys": list(context.keys()),
+                    }
                 },
             )
 
@@ -887,7 +890,7 @@ class OmniNodeTemplateEngine:
             "PostgresCRUD" -> "PostgresCRUD" (preserved)
         """
         # Core acronyms that should ALWAYS be uppercase (even as first word)
-        CORE_ACRONYMS = {
+        core_acronyms = {
             "CRUD",
             "API",
             "SQL",
@@ -902,7 +905,7 @@ class OmniNodeTemplateEngine:
         }
 
         # Protocol/tech acronyms that should be uppercase only when NOT first word
-        PROTOCOL_ACRONYMS = {
+        protocol_acronyms = {
             "HTTP",
             "REST",
             "SMTP",
@@ -928,10 +931,10 @@ class OmniNodeTemplateEngine:
         for idx, word in enumerate(words):
             word_upper = word.upper()
 
-            if word_upper in CORE_ACRONYMS:
+            if word_upper in core_acronyms:
                 # Core acronyms always uppercase
                 result_parts.append(word_upper)
-            elif word_upper in PROTOCOL_ACRONYMS:
+            elif word_upper in protocol_acronyms:
                 if idx == 0:
                     # First word: capitalize first letter only (e.g., "rest" -> "Rest", "http" -> "Http")
                     result_parts.append(word.capitalize())
@@ -950,7 +953,7 @@ class OmniNodeTemplateEngine:
             return ""
 
         # Filter to only include mixins that exist in omnibase_core
-        AVAILABLE_MIXINS = {
+        available_mixins_set = {
             "MixinEventBus",
             "MixinHealthCheck",
             "MixinEventListener",
@@ -962,7 +965,7 @@ class OmniNodeTemplateEngine:
             "MixinFailFast",
         }
 
-        available_mixins = [m for m in mixins if m in AVAILABLE_MIXINS]
+        available_mixins = [m for m in mixins if m in available_mixins_set]
 
         if not available_mixins:
             return ""
@@ -977,7 +980,7 @@ class OmniNodeTemplateEngine:
             return ""
 
         # Filter to only include mixins that exist in omnibase_core
-        AVAILABLE_MIXINS = {
+        available_mixins_set = {
             "MixinEventBus",
             "MixinHealthCheck",
             "MixinEventListener",
@@ -989,7 +992,7 @@ class OmniNodeTemplateEngine:
             "MixinFailFast",
         }
 
-        available_mixins = [m for m in mixins if m in AVAILABLE_MIXINS]
+        available_mixins = [m for m in mixins if m in available_mixins_set]
 
         if not available_mixins:
             return ""
