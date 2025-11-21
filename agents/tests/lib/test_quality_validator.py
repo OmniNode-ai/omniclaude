@@ -22,9 +22,9 @@ import ast
 from uuid import uuid4
 
 import pytest
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
 from agents.lib.codegen_config import CodegenConfig
+from agents.lib.errors import EnumCoreErrorCode, OnexError
 from agents.lib.quality_validator import (
     ONEXComplianceCheck,
     QualityValidator,

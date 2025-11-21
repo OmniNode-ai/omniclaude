@@ -211,7 +211,8 @@ def main():
 
     print("\n")
     print("╔" + "=" * 68 + "╗")
-    print("║" + " " * 15 + "Phase 4 API Client Verification Suite" + " " * 15 + "║")
+    padding = " " * 15
+    print(f"║{padding}Phase 4 API Client Verification Suite{padding}║")
     print("╚" + "=" * 68 + "╝")
 
     # 1. Verify implementation
@@ -225,7 +226,8 @@ def main():
     asyncio.run(test_basic_client_usage())
 
     print("\n" + "╔" + "=" * 68 + "╗")
-    print("║" + " " * 20 + "ALL VERIFICATIONS PASSED!" + " " * 20 + "║")
+    padding = " " * 20
+    print(f"║{padding}ALL VERIFICATIONS PASSED!{padding}║")
     print("╚" + "=" * 68 + "╝")
     print()
 
