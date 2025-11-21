@@ -81,8 +81,11 @@ except ImportError as e:
 
 
 def check_service_issues():
-    """Check for Docker service issues."""
+    """Check for Docker service issues (filtered to relevant OmniNode containers)."""
     issues = []
+
+    # Define monitored container prefixes (OmniNode services only)
+    monitored_prefixes = ["archon-", "omninode-", "omniclaude-"]
 
     try:
         containers = list_containers()
@@ -99,7 +102,14 @@ def check_service_issues():
             )
             return issues
 
-        for container in containers["containers"]:
+        # Filter to monitored containers only
+        monitored_containers = [
+            c
+            for c in containers["containers"]
+            if any(c["name"].startswith(prefix) for prefix in monitored_prefixes)
+        ]
+
+        for container in monitored_containers:
             name = container["name"]
             state = container["state"].lower()
             status = container["status"].lower()
@@ -207,7 +217,19 @@ def check_infrastructure_issues():
                 }
             )
         else:
-            # Check connection pool
+            # Check connection pool usage
+            # First, query the actual max_connections setting
+            max_conn_result = execute_query("SHOW max_connections")
+            max_connections = None
+            if max_conn_result.get("success") and max_conn_result.get("rows"):
+                try:
+                    max_connections = int(
+                        max_conn_result["rows"][0].get("max_connections", 100)
+                    )
+                except (ValueError, TypeError):
+                    max_connections = None
+
+            # Query active connections
             conn_result = execute_query(
                 """
                 SELECT count(*) as active
@@ -217,17 +239,46 @@ def check_infrastructure_issues():
             )
             if conn_result.get("success") and conn_result.get("rows"):
                 active = conn_result["rows"][0]["active"]
-                if active > 80:
-                    issues.append(
-                        {
-                            "severity": "warning",
-                            "component": "postgres",
-                            "issue": "Connection pool near capacity",
-                            "details": f"Active connections: {active}/100",
-                            "recommendation": "Consider increasing max_connections or optimizing queries",
-                            "auto_fix_available": False,
-                        }
-                    )
+
+                # Calculate usage percentage based on actual max_connections
+                if max_connections:
+                    usage_pct = (active / max_connections) * 100
+                    details = f"Active connections: {active}/{max_connections} ({usage_pct:.1f}%)"
+
+                    # Determine severity based on percentage thresholds
+                    if usage_pct > 80:
+                        severity = "critical"
+                        issue_text = "Connection pool critically high"
+                    elif usage_pct > 60:
+                        severity = "warning"
+                        issue_text = "Connection pool near capacity"
+                    else:
+                        severity = None  # No issue if under 60%
+
+                    if severity:
+                        issues.append(
+                            {
+                                "severity": severity,
+                                "component": "postgres",
+                                "issue": issue_text,
+                                "details": details,
+                                "recommendation": "Consider increasing max_connections or optimizing queries",
+                                "auto_fix_available": False,
+                            }
+                        )
+                else:
+                    # Fallback: max_connections unknown, use absolute threshold
+                    if active > 80:
+                        issues.append(
+                            {
+                                "severity": "warning",
+                                "component": "postgres",
+                                "issue": "High active connection count",
+                                "details": f"Active connections: {active} (max_connections unknown)",
+                                "recommendation": "Consider increasing max_connections or optimizing queries",
+                                "auto_fix_available": False,
+                            }
+                        )
     except Exception as e:
         issues.append(
             {
@@ -273,8 +324,8 @@ def check_performance_issues():
     """Check for performance degradation."""
     issues = []
 
+    # Check manifest injection performance (separate try/except)
     try:
-        # Check manifest injection performance
         manifest_query = """
             SELECT AVG(total_query_time_ms) as avg_time
             FROM agent_manifest_injections
@@ -295,8 +346,31 @@ def check_performance_issues():
                         "auto_fix_available": False,
                     }
                 )
+        elif not result.get("success"):
+            issues.append(
+                {
+                    "severity": "info",
+                    "component": "manifest-injection",
+                    "issue": "Manifest performance check returned error",
+                    "details": result.get("error", "Query failed"),
+                    "recommendation": "Verify agent_manifest_injections table exists",
+                    "auto_fix_available": False,
+                }
+            )
+    except Exception as e:
+        issues.append(
+            {
+                "severity": "info",
+                "component": "manifest-injection",
+                "issue": "Manifest performance check failed",
+                "details": str(e),
+                "recommendation": "Check database schema and permissions",
+                "auto_fix_available": False,
+            }
+        )
 
-        # Check routing performance
+    # Check routing performance (separate try/except)
+    try:
         routing_query = """
             SELECT AVG(routing_time_ms) as avg_time
             FROM agent_routing_decisions
@@ -317,9 +391,28 @@ def check_performance_issues():
                         "auto_fix_available": False,
                     }
                 )
-    except Exception:
-        # Silently skip performance checks if tables don't exist
-        pass
+        elif not result.get("success"):
+            issues.append(
+                {
+                    "severity": "info",
+                    "component": "routing",
+                    "issue": "Routing performance check returned error",
+                    "details": result.get("error", "Query failed"),
+                    "recommendation": "Verify agent_routing_decisions table exists",
+                    "auto_fix_available": False,
+                }
+            )
+    except Exception as e:
+        issues.append(
+            {
+                "severity": "info",
+                "component": "routing",
+                "issue": "Routing performance check failed",
+                "details": str(e),
+                "recommendation": "Check database schema and permissions",
+                "auto_fix_available": False,
+            }
+        )
 
     return issues
 

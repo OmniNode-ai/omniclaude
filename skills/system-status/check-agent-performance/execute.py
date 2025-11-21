@@ -76,10 +76,35 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from lib.helpers.timeframe_helpers import parse_timeframe
+    from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
+
+
+def validate_limit(value):
+    """Validate LIMIT value to prevent SQL injection and DoS attacks.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        int: Validated integer value (1-100)
+
+    Raises:
+        argparse.ArgumentTypeError: If value is outside valid range
+    """
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer: {value}")
+
+    if not (1 <= ivalue <= 100):
+        raise argparse.ArgumentTypeError(
+            f"Value must be between 1 and 100 (got {ivalue})"
+        )
+
+    return ivalue
 
 
 def main():
@@ -88,7 +113,10 @@ def main():
         "--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)"
     )
     parser.add_argument(
-        "--top-agents", type=int, default=10, help="Number of top agents"
+        "--top-agents",
+        type=validate_limit,
+        default=10,
+        help="Number of top agents (1-100, default: 10)",
     )
     args = parser.parse_args()
 

@@ -1201,4 +1201,4 @@ python3 check-database-health/execute.py --tables "users; DROP TABLE--"
 - [System Status Skills README](README.md) - Overview and usage guide
 - [Individual SKILL.md files](*/SKILL.md) - Skill-specific documentation
 - [status_formatter.py](../_shared/status_formatter.py) - Formatting utilities
-- [timeframe_helpers.py](lib/helpers/timeframe_helpers.py) - Timeframe validation
+- [timeframe_helper.py](../_shared/timeframe_helper.py) - Timeframe validation (shared)

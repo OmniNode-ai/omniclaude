@@ -71,7 +71,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
-    from qdrant_helper import get_all_collections_stats, get_collection_stats
+    from qdrant_helper import get_all_collections_stats
     from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
@@ -100,14 +100,13 @@ def main():
         if args.detailed:
             collections_detail = {}
             for name, info in stats.get("collections", {}).items():
-                # Get full stats for each collection
-                coll_stats = get_collection_stats(name)
-                if coll_stats["success"]:
-                    collections_detail[name] = {
-                        "vectors": coll_stats.get("vectors_count", 0),
-                        "status": coll_stats.get("status", "unknown"),
-                        "indexed_vectors": coll_stats.get("indexed_vectors_count", 0),
-                    }
+                # Reuse stats already fetched by get_all_collections_stats()
+                # No redundant API call needed - info already contains full stats
+                collections_detail[name] = {
+                    "vectors": info.get("vectors_count", 0),
+                    "status": info.get("status", "unknown"),
+                    "indexed_vectors": info.get("indexed_vectors_count", 0),
+                }
 
             result["collections"] = collections_detail
         else:

@@ -109,7 +109,7 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from lib.helpers.timeframe_helpers import parse_timeframe
+    from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)

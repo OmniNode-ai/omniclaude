@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 
 
-# Add parent directory to path to import shared helper module
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add shared helper directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
-from lib.helpers.timeframe_helpers import parse_timeframe
+from timeframe_helper import parse_timeframe
 
 
 class TestSQLInjectionProtection(unittest.TestCase):
@@ -32,6 +32,7 @@ class TestSQLInjectionProtection(unittest.TestCase):
             "1h": "1 hour",
             "24h": "24 hours",
             "7d": "7 days",
+            "30d": "30 days",
         }
 
         for input_value, expected_output in valid_cases.items():
@@ -73,7 +74,6 @@ class TestSQLInjectionProtection(unittest.TestCase):
         invalid_inputs = [
             "10m",  # Not in whitelist
             "2h",  # Not in whitelist
-            "30d",  # Not in whitelist
             "1 hour",  # Correct output format, but not valid input
             "HOUR",  # Wrong case
             "1H",  # Wrong case
@@ -108,6 +108,7 @@ class TestSQLInjectionProtection(unittest.TestCase):
         assert "1h" in error_message
         assert "24h" in error_message
         assert "7d" in error_message
+        assert "30d" in error_message
 
     def test_case_sensitivity(self):
         """Test that timeframe validation is case-sensitive."""

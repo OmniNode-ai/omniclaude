@@ -18,6 +18,7 @@ import json
 
 # Add path for config module (type-safe Pydantic Settings)
 import os
+import socket
 import sys
 import urllib.error
 import urllib.parse
@@ -256,12 +257,28 @@ def check_qdrant_connection() -> Dict[str, Any]:
             "reachable": False,
             "error": str(e.reason),
         }
-    except Exception as e:
+    except socket.timeout:
+        return {
+            "status": "timeout",
+            "url": qdrant_url,
+            "reachable": False,
+            "error": f"Connection timed out after {get_timeout_seconds()}s",
+        }
+    except (OSError, IOError) as e:
+        # OSError/IOError: network-level errors (connection reset, etc.)
         return {
             "status": "error",
             "url": qdrant_url,
             "reachable": False,
-            "error": str(e),
+            "error": f"Network error: {str(e)}",
+        }
+    except ValueError as e:
+        # ValueError: URL validation or SSRF protection errors
+        return {
+            "status": "error",
+            "url": qdrant_url,
+            "reachable": False,
+            "error": f"Configuration error: {str(e)}",
         }
 
 
@@ -300,8 +317,44 @@ def list_collections() -> Dict[str, Any]:
                 "count": len(collection_names),
                 "error": None,
             }
-    except Exception as e:
-        return {"success": False, "collections": [], "count": 0, "error": str(e)}
+    except urllib.error.URLError as e:
+        return {
+            "success": False,
+            "collections": [],
+            "count": 0,
+            "error": f"Connection error: {str(e.reason)}",
+        }
+    except socket.timeout:
+        return {
+            "success": False,
+            "collections": [],
+            "count": 0,
+            "error": f"Connection timed out after {get_timeout_seconds()}s",
+        }
+    except json.JSONDecodeError as e:
+        # JSONDecodeError: Qdrant returned invalid JSON
+        return {
+            "success": False,
+            "collections": [],
+            "count": 0,
+            "error": f"Invalid JSON response: {str(e)}",
+        }
+    except (OSError, IOError) as e:
+        # OSError/IOError: network-level errors
+        return {
+            "success": False,
+            "collections": [],
+            "count": 0,
+            "error": f"Network error: {str(e)}",
+        }
+    except ValueError as e:
+        # ValueError: URL validation or data parsing errors
+        return {
+            "success": False,
+            "collections": [],
+            "count": 0,
+            "error": f"Configuration error: {str(e)}",
+        }
 
 
 def get_collection_stats(collection_name: str) -> Dict[str, Any]:
@@ -344,8 +397,39 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
                 "optimizer_status": result.get("optimizer_status", {}),
                 "error": None,
             }
-    except Exception as e:
-        return {"success": False, "collection": collection_name, "error": str(e)}
+    except urllib.error.URLError as e:
+        return {
+            "success": False,
+            "collection": collection_name,
+            "error": f"Connection error: {str(e.reason)}",
+        }
+    except socket.timeout:
+        return {
+            "success": False,
+            "collection": collection_name,
+            "error": f"Connection timed out after {get_timeout_seconds()}s",
+        }
+    except json.JSONDecodeError as e:
+        # JSONDecodeError: Qdrant returned invalid JSON
+        return {
+            "success": False,
+            "collection": collection_name,
+            "error": f"Invalid JSON response: {str(e)}",
+        }
+    except (OSError, IOError) as e:
+        # OSError/IOError: network-level errors
+        return {
+            "success": False,
+            "collection": collection_name,
+            "error": f"Network error: {str(e)}",
+        }
+    except ValueError as e:
+        # ValueError: URL validation or data parsing errors
+        return {
+            "success": False,
+            "collection": collection_name,
+            "error": f"Configuration error: {str(e)}",
+        }
 
 
 def get_all_collections_stats() -> Dict[str, Any]:

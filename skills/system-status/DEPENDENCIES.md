@@ -50,6 +50,14 @@ sudo systemctl start docker
 
 **Purpose**: Kafka topic operations, message sampling, broker metadata
 
+**Required by**:
+- `check-kafka-topics` - Topic listing and metadata retrieval
+- `check-infrastructure` - Kafka connectivity and topic health checks
+- `check-system-health` - Overall Kafka health status
+- `diagnose-issues` - Kafka troubleshooting and diagnostics
+- `generate-status-report` - Kafka metrics in comprehensive reports
+- All skills using `kafka_helper.py` functions (`check_kafka_connection`, `list_topics`, `get_topic_stats`)
+
 **Commands Used**:
 - `kcat -L` - List topics and broker metadata
 - `kcat -C` - Consume messages from topics
