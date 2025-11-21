@@ -124,7 +124,11 @@ class TestCheckDatabaseHealth:
 
             assert exit_code == 0
             # Verify log-lines parameter was used
-            call_params = mock_query.call_args_list[-1][1]["params"]
+            call_args = mock_query.call_args_list[-1][1]
+            call_params = call_args.get("params")
+            assert (
+                call_params is not None
+            ), "Expected 'params' parameter not found in call"
             assert 50 in call_params
 
     def test_validate_log_lines(self):
@@ -149,5 +153,7 @@ class TestCheckDatabaseHealth:
 
             exit_code = main()
 
-            # Should handle error gracefully
-            assert exit_code == 1 or exit_code == 0  # Depends on error handling
+            # Should handle error gracefully and return non-zero exit code
+            assert (
+                exit_code == 1
+            ), "Expected exit code 1 for database connection failure"

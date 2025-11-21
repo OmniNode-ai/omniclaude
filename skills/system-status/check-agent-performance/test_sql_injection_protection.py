@@ -58,12 +58,14 @@ class TestSQLInjectionProtection(unittest.TestCase):
 
         for malicious_input in injection_attempts:
             with self.subTest(injection=malicious_input):
-                with pytest.raises(ValueError, match=r"Invalid timeframe") as context:
+                with pytest.raises(
+                    ValueError, match=r"(Invalid|Unsupported) timeframe"
+                ) as context:
                     parse_timeframe(malicious_input)
 
                 error_message = str(context.value)
                 assert (
-                    "Invalid timeframe" in error_message
+                    "timeframe" in error_message.lower()
                 ), f"Error message should indicate invalid timeframe for: {malicious_input}"
                 assert (
                     "Valid options:" in error_message
@@ -84,17 +86,21 @@ class TestSQLInjectionProtection(unittest.TestCase):
 
         for invalid_input in invalid_inputs:
             with self.subTest(invalid=invalid_input):
-                with pytest.raises(ValueError, match=r"Invalid timeframe") as context:
+                with pytest.raises(
+                    ValueError, match=r"(Invalid|Unsupported) timeframe"
+                ) as context:
                     parse_timeframe(invalid_input)
 
                 error_message = str(context.value)
                 assert (
-                    "Invalid timeframe" in error_message
+                    "timeframe" in error_message.lower()
                 ), f"Error message should indicate invalid timeframe for: {invalid_input}"
 
     def test_error_message_quality(self):
         """Test that error messages are helpful and include valid options."""
-        with pytest.raises(ValueError, match=r"Invalid timeframe") as context:
+        with pytest.raises(
+            ValueError, match=r"(Invalid|Unsupported) timeframe"
+        ) as context:
             parse_timeframe("invalid")
 
         error_message = str(context.value)
@@ -113,10 +119,10 @@ class TestSQLInjectionProtection(unittest.TestCase):
     def test_case_sensitivity(self):
         """Test that timeframe validation is case-sensitive."""
         # Uppercase should be rejected
-        with pytest.raises(ValueError, match=r"Invalid timeframe"):
+        with pytest.raises(ValueError, match=r"(Invalid|Unsupported) timeframe"):
             parse_timeframe("1H")
 
-        with pytest.raises(ValueError, match=r"Invalid timeframe"):
+        with pytest.raises(ValueError, match=r"(Invalid|Unsupported) timeframe"):
             parse_timeframe("7D")
 
         # Lowercase should work

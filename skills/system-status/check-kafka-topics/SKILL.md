@@ -1,18 +1,18 @@
 ---
 name: check-kafka-topics
-description: Kafka topic health, consumer status, and message throughput monitoring
+description: Kafka topic existence, partition counts, and wildcard pattern matching
 ---
 
 # Check Kafka Topics
 
-Monitor Kafka topics, partitions, and consumer groups.
+Verify Kafka topic existence and partition configuration using exact names or wildcard patterns.
 
 ## What It Checks
 
-- Topic list and partition counts
-- Consumer group status
-- Recent message activity
-- Topic-specific health
+- Kafka broker connectivity
+- Topic existence (single topic or wildcard patterns)
+- Partition counts (optional with `--include-partitions`)
+<!-- Future: Consumer group status, message activity, topic health metrics -->
 
 ## How to Use
 

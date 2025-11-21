@@ -16,7 +16,7 @@ Usage:
         --service SERVICE        Name of the Docker service to check (required)
         --include-logs          Include recent log entries in output
         --include-stats         Include resource usage statistics (CPU, memory)
-        --log-lines N           Number of log lines to retrieve
+        --log-lines N           Number of log lines to retrieve (1-1000)
                                Default: 50
 
 Output:
@@ -93,8 +93,26 @@ def main():
     parser.add_argument(
         "--include-stats", action="store_true", help="Include resource stats"
     )
-    parser.add_argument("--log-lines", type=int, default=50, help="Number of log lines")
+    parser.add_argument(
+        "--log-lines",
+        type=int,
+        default=50,
+        help="Number of log lines (1-1000, default: 50)",
+    )
     args = parser.parse_args()
+
+    # Validate log-lines range
+    if not 1 <= args.log_lines <= 1000:
+        print(
+            format_json(
+                {
+                    "success": False,
+                    "error": "log-lines must be between 1 and 1000",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        )
+        return 1
 
     try:
         # Get container status

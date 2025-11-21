@@ -1,19 +1,18 @@
 ---
 name: check-infrastructure
-description: Infrastructure component connectivity and health checks for Kafka, PostgreSQL, Qdrant, Valkey, and Memgraph
+description: Infrastructure component connectivity and health checks for Kafka, PostgreSQL, and Qdrant
 ---
 
 # Check Infrastructure
 
-Check connectivity and health of all infrastructure components supporting the OmniClaude agent system.
+Check connectivity and health of core infrastructure components supporting the OmniClaude agent system.
 
 ## What It Checks
 
-- **Kafka**: Broker connectivity, topic count, consumer groups
-- **PostgreSQL**: Database connectivity, table count, connection pool
-- **Qdrant**: Collection stats, vector counts, search performance
-- **Valkey**: Cache connectivity and stats (optional)
-- **Memgraph**: Graph database connectivity (optional)
+- **Kafka**: Broker connectivity and topic count
+- **PostgreSQL**: Database connectivity, table count, connection pool stats (with `--detailed`)
+- **Qdrant**: Collection stats, vector counts, and per-collection breakdowns (with `--detailed`)
+<!-- Future: Valkey cache, Memgraph graph database -->
 
 ## When to Use
 

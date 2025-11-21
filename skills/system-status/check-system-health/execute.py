@@ -220,21 +220,24 @@ def check_recent_activity() -> dict:
     try:
         # Check manifest injections
         manifest_result = execute_query(
-            "SELECT COUNT(*) as count FROM agent_manifest_injections WHERE created_at > NOW() - INTERVAL '5 minutes'"
+            "SELECT COUNT(*) as count FROM agent_manifest_injections WHERE created_at > NOW() - %s::interval",
+            ("5 minutes",),
         )
         if manifest_result["success"] and manifest_result["rows"]:
             activity["agent_executions"] = manifest_result["rows"][0]["count"]
 
         # Check routing decisions
         routing_result = execute_query(
-            "SELECT COUNT(*) as count FROM agent_routing_decisions WHERE created_at > NOW() - INTERVAL '5 minutes'"
+            "SELECT COUNT(*) as count FROM agent_routing_decisions WHERE created_at > NOW() - %s::interval",
+            ("5 minutes",),
         )
         if routing_result["success"] and routing_result["rows"]:
             activity["routing_decisions"] = routing_result["rows"][0]["count"]
 
         # Check agent actions
         actions_result = execute_query(
-            "SELECT COUNT(*) as count FROM agent_actions WHERE created_at > NOW() - INTERVAL '5 minutes'"
+            "SELECT COUNT(*) as count FROM agent_actions WHERE created_at > NOW() - %s::interval",
+            ("5 minutes",),
         )
         if actions_result["success"] and actions_result["rows"]:
             activity["agent_actions"] = actions_result["rows"][0]["count"]

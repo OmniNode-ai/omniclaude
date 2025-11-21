@@ -511,11 +511,12 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
             "error": stats["error"],
         }
 
-    # Collection is healthy if status is "green" or "yellow" and has vectors
+    # Collection is healthy if status is "green" or "yellow"
+    # Trust Qdrant's status regardless of vector count (empty collections can be healthy)
     status = stats.get("status", "unknown").lower()
     vectors_count = stats.get("vectors_count", 0)
 
-    healthy = status in ["green", "yellow"] and vectors_count > 0
+    healthy = status in ["green", "yellow"]
 
     return {
         "success": True,

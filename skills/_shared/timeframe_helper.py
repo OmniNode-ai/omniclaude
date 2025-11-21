@@ -53,17 +53,17 @@ def parse_timeframe(timeframe: str) -> str:
         >>> parse_timeframe("unknown")
         Traceback (most recent call last):
             ...
-        ValueError: Invalid timeframe: unknown. Valid options: 15m, 1h, 24h, 30d, 5m, 7d
+        ValueError: Unsupported timeframe: unknown. Valid options: 15m, 1h, 24h, 30d, 5m, 7d
         >>> parse_timeframe("1h'; DROP TABLE--")
         Traceback (most recent call last):
             ...
-        ValueError: Invalid timeframe: 1h'; DROP TABLE--. Valid options: 15m, 1h, 24h, 30d, 5m, 7d
+        ValueError: Unsupported timeframe: 1h'; DROP TABLE--. Valid options: 15m, 1h, 24h, 30d, 5m, 7d
     """
     interval = VALID_INTERVALS.get(timeframe)
     if not interval:
         valid_options = ", ".join(sorted(VALID_INTERVALS.keys()))
         raise ValueError(
-            f"Invalid timeframe: {timeframe}. Valid options: {valid_options}"
+            f"Unsupported timeframe: {timeframe}. Valid options: {valid_options}"
         )
 
     return interval

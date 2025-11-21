@@ -199,7 +199,12 @@ def main():
 
         recent_activity = {}
         for table in tables_list:
-            # Table is already validated (either from whitelist check or default list)
+            # SECURITY NOTE: Table name uses f-string (not parameterized) because PostgreSQL
+            # does not support parameterized table names (%s can only be used for values,
+            # not identifiers). This is safe because:
+            # 1. All table names are validated against VALID_TABLES whitelist (lines 80-115)
+            # 2. Whitelist contains only known-safe table names from omninode_bridge schema
+            # 3. This is the standard PostgreSQL security pattern for dynamic table names
             activity_query = f"""
                 SELECT
                     COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '5 minutes') as count_5m,
@@ -222,6 +227,8 @@ def main():
         if args.include_sizes:
             sizes = {}
             for table in tables_list:
+                # SECURITY NOTE: Table name uses f-string (see comment above for rationale)
+                # All tables are validated against whitelist before reaching this point
                 size_query = (
                     f"SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size"
                 )

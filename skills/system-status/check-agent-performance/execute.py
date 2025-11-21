@@ -42,8 +42,9 @@ Output:
     }
 
 Exit Codes:
-    0: Success - metrics retrieved successfully
-    1: Error - database connection failed or query error
+    0: Healthy - all systems nominal
+    1: Degraded - performance issues detected (threshold violations)
+    2: Critical - cannot fetch metrics or database error
 
 Examples:
     # Check last hour of performance (default)
@@ -199,6 +200,17 @@ def main():
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
 
         print(format_json(result))
+
+        # Evaluate health status based on metrics
+        # Critical: Can't fetch core metrics
+        if not routing_result.get("success") or not top_result.get("success"):
+            return 2
+
+        # Degraded: Performance issues detected
+        if result.get("routing", {}).get("threshold_violations", 0) > 0:
+            return 1
+
+        # Healthy: All systems nominal
         return 0
 
     except Exception as e:
@@ -211,7 +223,7 @@ def main():
                 }
             )
         )
-        return 1
+        return 2
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
@@ -156,7 +155,7 @@ def main() -> int:
                         "error": row["error"],
                         "time": str(row["created_at"]),
                     }
-                    for row in errors_result["rows"][:MAX_RECENT_ERRORS_DISPLAY]
+                    for row in errors_result["rows"]
                 ]
 
         print(format_json(result))

@@ -17,7 +17,7 @@ Generate comprehensive system status report with complete metrics and analysis.
 - Top agents and patterns
 - Issues and recommendations
 - Trend analysis
-- Export formats: JSON, Markdown, HTML
+- Export formats: JSON, Markdown, Text
 
 ## When to Use
 

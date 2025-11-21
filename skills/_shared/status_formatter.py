@@ -15,9 +15,13 @@ Created: 2025-11-12
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 class StatusJSONEncoder(json.JSONEncoder):
@@ -106,7 +110,14 @@ def format_table(
     col_widths.extend([0] * (max_cols - len(col_widths)))
 
     # Update widths based on row data
-    for row in rows:
+    for row_idx, row in enumerate(rows):
+        # Warn if row has more columns than headers (potential data loss)
+        if len(row) > len(headers):
+            logger.warning(
+                f"Row {row_idx} has {len(row)} columns but only {len(headers)} headers - "
+                f"extra columns will be appended without proper alignment"
+            )
+
         for i, cell in enumerate(row):
             cell_str = str(cell)
             col_widths[i] = max(col_widths[i], len(cell_str))
@@ -216,14 +227,18 @@ def format_percentage(value: float, decimals: int = 1) -> str:
     Format a value as percentage.
 
     Args:
-        value: Value between 0 and 1 (or 0 and 100)
+        value: Value between 0 and 1 (decimal) or 0 and 100 (percentage)
         decimals: Number of decimal places
 
     Returns:
         Formatted percentage string
+
+    Note:
+        Values in range [0.0, 1.0] are treated as decimal (e.g., 0.5 → 50%, 1.0 → 100%)
+        Values > 1.0 are treated as already being percentages (e.g., 50.0 → 50%)
     """
-    # Assume value is 0-1 if less than 1, otherwise 0-100
-    if value < 1.0:
+    # Treat values 0.0-1.0 as decimal (multiply by 100), values > 1.0 as already percentage
+    if value <= 1.0:
         percentage = value * 100
     else:
         percentage = value

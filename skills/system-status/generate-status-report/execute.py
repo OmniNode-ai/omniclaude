@@ -163,15 +163,15 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Performance metrics
     try:
-        routing_query = f"""
+        routing_query = """
             SELECT
                 COUNT(*) as total,
                 AVG(routing_time_ms) as avg_time,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
         """
-        routing_result = execute_query(routing_query)
+        routing_result = execute_query(routing_query, (interval,))
 
         if routing_result["success"] and routing_result["rows"]:
             row = routing_result["rows"][0]
@@ -185,12 +185,12 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Recent activity
     try:
-        manifest_query = f"""
+        manifest_query = """
             SELECT COUNT(*) as count
             FROM agent_manifest_injections
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
         """
-        manifest_result = execute_query(manifest_query)
+        manifest_result = execute_query(manifest_query, (interval,))
 
         data["recent_activity"] = {
             "agent_executions": (
@@ -202,18 +202,18 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Top agents
     try:
-        top_agents_query = f"""
+        top_agents_query = """
             SELECT
                 selected_agent,
                 COUNT(*) as count,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
             LIMIT 10
         """
-        top_result = execute_query(top_agents_query)
+        top_result = execute_query(top_agents_query, (interval,))
 
         if top_result["success"]:
             data["top_agents"] = [

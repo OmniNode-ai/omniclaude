@@ -329,9 +329,9 @@ def check_performance_issues():
         manifest_query = """
             SELECT AVG(total_query_time_ms) as avg_time
             FROM agent_manifest_injections
-            WHERE created_at > NOW() - INTERVAL '1 hour'
+            WHERE created_at > NOW() - %s::interval
         """
-        result = execute_query(manifest_query)
+        result = execute_query(manifest_query, ("1 hour",))
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")
@@ -374,9 +374,9 @@ def check_performance_issues():
         routing_query = """
             SELECT AVG(routing_time_ms) as avg_time
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '1 hour'
+            WHERE created_at > NOW() - %s::interval
         """
-        result = execute_query(routing_query)
+        result = execute_query(routing_query, ("1 hour",))
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")

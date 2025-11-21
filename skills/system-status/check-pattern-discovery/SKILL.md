@@ -25,6 +25,12 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 
 - `--detailed`: Include collection-specific statistics
 
+## Exit Codes
+
+- **0**: Healthy - Pattern discovery working normally
+- **1**: Degraded - Performance issues or warnings
+- **2**: Critical - Cannot access Qdrant or other critical failure
+
 ## Example Output
 
 ```json
@@ -45,6 +51,17 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
   "collection_count": 4
 }
 ```
+
+## Prerequisites
+
+- Qdrant must be running and accessible
+- Collections must exist (archon_vectors, code_generation_patterns)
+
+## Collection Status Values
+
+- **green**: Collection is healthy and fully operational
+- **yellow**: Collection is operational but may have warnings
+- **red**: Collection has critical issues or is unavailable
 
 ## Output Format & Exit Codes
 
