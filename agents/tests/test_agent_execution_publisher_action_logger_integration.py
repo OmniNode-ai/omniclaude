@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add parent directories to path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
@@ -31,6 +32,7 @@ from agents.lib.agent_execution_publisher import (
     AgentExecutionPublisher,
     AgentExecutionPublisherContext,
 )
+
 
 logging.basicConfig(
     level=logging.INFO,

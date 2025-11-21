@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -727,4 +728,4 @@ class MixinFeatureExtractor:
         return feature_names
 
 
-__all__ = ["MixinFeatureExtractor", "MixinFeatureVector", "MixinCharacteristics"]
+__all__ = ["MixinCharacteristics", "MixinFeatureExtractor", "MixinFeatureVector"]

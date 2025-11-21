@@ -37,6 +37,7 @@ from uuid import UUID, uuid4
 from database_integration import DatabaseIntegrationLayer, get_database_layer
 from pydantic import BaseModel, Field
 
+
 logger = logging.getLogger(__name__)
 
 

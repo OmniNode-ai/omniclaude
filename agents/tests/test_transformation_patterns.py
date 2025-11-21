@@ -15,6 +15,7 @@ import pytest
 
 from agents.lib.patterns.transformation_pattern import TransformationPattern
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================

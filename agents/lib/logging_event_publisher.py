@@ -56,6 +56,7 @@ from prometheus_client import Counter, Gauge, Histogram
 
 from config import settings
 
+
 logger = logging.getLogger(__name__)
 
 # Maximum payload size (1MB)

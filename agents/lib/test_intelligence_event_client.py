@@ -17,10 +17,12 @@ import os
 import sys
 from pathlib import Path
 
+
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from intelligence_event_client import IntelligenceEventClient
+
 
 # Configure logging
 logging.basicConfig(

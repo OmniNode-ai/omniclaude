@@ -22,6 +22,7 @@ from ..quality_gate_publisher import (
     publish_quality_gate_passed,
 )
 
+
 logger = logging.getLogger(__name__)
 
 

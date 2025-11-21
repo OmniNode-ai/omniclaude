@@ -34,6 +34,7 @@ from typing import List, Tuple
 from lib.mixin_features import MixinFeatureExtractor
 from lib.persistence import CodegenPersistence
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

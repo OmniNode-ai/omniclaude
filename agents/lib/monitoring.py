@@ -25,6 +25,7 @@ from uuid import uuid4
 
 from .db import get_pg_pool
 
+
 logger = logging.getLogger(__name__)
 
 

@@ -21,6 +21,7 @@ from .prd_intelligence_client import PRDIntelligenceClient
 from .simple_prd_analyzer import PRDAnalysisResult, PRDAnalyzer
 from .version_config import get_config
 
+
 logger = logging.getLogger(__name__)
 
 

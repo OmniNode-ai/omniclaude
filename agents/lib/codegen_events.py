@@ -86,7 +86,7 @@ __all__ = [
     "CodegenAnalysisRequest",
     "CodegenAnalysisResponse",
     "CodegenGenerationRequest",
+    "CodegenStatusEvent",
     "CodegenValidationRequest",
     "CodegenValidationResponse",
-    "CodegenStatusEvent",
 ]

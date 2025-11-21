@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+
 # ============================================================================
 # YAML PARSING AND VALIDATION
 # ============================================================================
@@ -547,25 +548,25 @@ def estimate_code_complexity(tree: ast.Module) -> Dict[str, int]:
 # ============================================================================
 
 __all__ = [
-    # YAML utilities
-    "parse_generated_yaml",
-    "validate_contract_schema",
-    # Python utilities
-    "parse_generated_python",
-    "check_type_annotations",
     "check_for_any_types",
-    "extract_class_definitions",
-    "extract_imports",
-    # ONEX validation
-    "validate_onex_naming",
-    "validate_class_naming",
+    "check_type_annotations",
     # Code comparison
     "compare_generated_code",
+    # Performance
+    "estimate_code_complexity",
+    "extract_class_definitions",
+    "extract_imports",
     "normalize_whitespace",
+    # Python utilities
+    "parse_generated_python",
+    # YAML utilities
+    "parse_generated_yaml",
+    "validate_class_naming",
+    "validate_contract_schema",
     # Enum validation
     "validate_enum_serialization",
     # Contract validation
     "validate_mixin_compatibility",
-    # Performance
-    "estimate_code_complexity",
+    # ONEX validation
+    "validate_onex_naming",
 ]

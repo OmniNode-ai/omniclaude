@@ -16,6 +16,7 @@ from pathlib import Path
 # Load environment variables
 from dotenv import load_dotenv
 
+
 # Add project root to sys.path (3 levels up: lib -> agents -> project root)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:

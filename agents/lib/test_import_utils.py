@@ -172,11 +172,11 @@ def test_drop_in_replacement():
     from import_utils import import_from_lib
 
     intelligence_event_client = import_from_lib("intelligence_event_client")
-    IntelligenceEventClientNew = intelligence_event_client.IntelligenceEventClient
+    intelligence_event_client_new = intelligence_event_client.IntelligenceEventClient
     print("  ✓ Import via import_from_lib works")
 
     # Verify both methods get the same class
-    if IntelligenceEventClient is IntelligenceEventClientNew:
+    if IntelligenceEventClient is intelligence_event_client_new:
         print("✓ Both methods import the same class")
     else:
         print("✗ Classes are different (unexpected)")
@@ -189,11 +189,11 @@ def test_drop_in_replacement():
     print("  ✓ Can import multiple modules")
 
     # Test class access
-    IntelligenceCache = cache_module.IntelligenceCache
-    PatternQualityScorer = scorer_module.PatternQualityScorer
+    intelligence_cache = cache_module.IntelligenceCache
+    pattern_quality_scorer = scorer_module.PatternQualityScorer
     print("  ✓ Can access classes from imported modules")
-    print(f"    - {IntelligenceCache.__name__}")
-    print(f"    - {PatternQualityScorer.__name__}")
+    print(f"    - {intelligence_cache.__name__}")
+    print(f"    - {pattern_quality_scorer.__name__}")
 
     print("✓ Can be used as drop-in replacement")
     return True

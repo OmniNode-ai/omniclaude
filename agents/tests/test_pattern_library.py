@@ -19,6 +19,7 @@ from agents.tests.fixtures.phase4_fixtures import (
     TRANSFORMATION_PATTERN_CONTRACT,
 )
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================

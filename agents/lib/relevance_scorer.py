@@ -10,6 +10,7 @@ Part of Phase 3: Relevance Scoring implementation.
 
 from typing import Any, Dict
 
+
 # Import TaskClassifier types with fallback for different import contexts
 try:
     from .task_classifier import TaskContext, TaskIntent

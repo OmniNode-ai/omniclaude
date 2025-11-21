@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+
 try:
     import psycopg2
     import psycopg2.extras

@@ -18,6 +18,7 @@ from omnibase_core.models.contracts.model_performance_requirements import (
 
 from .contract_builder import ContractBuilder
 
+
 logger = logging.getLogger(__name__)
 
 

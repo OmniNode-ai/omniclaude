@@ -25,6 +25,7 @@ from typing import Any, Dict, Optional
 from .db import get_pg_pool
 from .monitoring import update_health_status
 
+
 logger = logging.getLogger(__name__)
 
 

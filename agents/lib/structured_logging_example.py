@@ -17,6 +17,7 @@ from .log_context import async_log_context, with_log_context
 from .log_rotation import LogRotationConfig, configure_global_rotation
 from .structured_logger import get_logger
 
+
 # Initialize loggers for different components
 research_logger = get_logger(__name__ + ".research", component="agent-researcher")
 analysis_logger = get_logger(__name__ + ".analysis", component="agent-analyzer")

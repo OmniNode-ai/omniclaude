@@ -852,7 +852,7 @@ class Test:
     def test_very_long_file(self):
         """Test handling very long file."""
         # Create a file with many lines
-        lines = ["def function_{}(): pass".format(i) for i in range(1000)]
+        lines = [f"def function_{i}(): pass" for i in range(1000)]
         code = "\n".join(lines)
 
         fixer = WarningFixer()

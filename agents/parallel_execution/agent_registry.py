@@ -15,6 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
+
 # Configure logging for agent registry
 logger = logging.getLogger(__name__)
 

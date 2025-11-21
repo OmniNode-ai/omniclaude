@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+
 # Mock qdrant_client before importing backfill script
 sys_modules_backup = {}
 

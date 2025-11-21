@@ -41,6 +41,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
 # Configure logging FIRST (before any logging calls)
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +51,7 @@ logging.basicConfig(
 # Import type-safe configuration
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import settings
+
 
 # Kafka imports
 try:
@@ -709,8 +711,8 @@ class AgentRouterEventService:
             # For production, use firewall rules or reverse proxy for access control
             site = web.TCPSite(
                 self._health_runner,
-                "0.0.0.0",
-                self.health_check_port,  # nosec B104 # noqa: S104
+                "0.0.0.0",  # nosec B104 # noqa: S104
+                self.health_check_port,
             )
             await site.start()
 

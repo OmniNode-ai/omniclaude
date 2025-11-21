@@ -67,6 +67,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
 # Pydantic imports for handling typed agent outputs
 try:
     from pydantic import BaseModel
@@ -81,6 +82,7 @@ from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask
 from agent_registry import agent_exists, list_registered_agents
 from context_manager import ContextManager
+
 
 # Configure logging to write to both stderr and file
 log_file = Path(tempfile.gettempdir()) / "logging_implementation_coord.log"

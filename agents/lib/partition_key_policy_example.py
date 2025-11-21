@@ -9,6 +9,7 @@ Created: 2025-11-13
 
 from uuid import uuid4
 
+
 try:
     from partition_key_policy import (
         EventFamily,

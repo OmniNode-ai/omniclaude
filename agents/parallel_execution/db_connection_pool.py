@@ -25,6 +25,7 @@ from typing import AsyncGenerator, Optional
 import asyncpg
 from asyncpg.pool import Pool
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

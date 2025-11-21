@@ -948,55 +948,55 @@ EXPECTED_CRUD_METHOD_STUBS = '''
 # ============================================================================
 
 __all__ = [
-    # PRD Content
-    "EFFECT_NODE_PRD",
-    "COMPUTE_NODE_PRD",
-    "REDUCER_NODE_PRD",
-    "ORCHESTRATOR_NODE_PRD",
-    # Analysis Results
-    "EFFECT_ANALYSIS_RESULT",
+    "AGGREGATION_PATTERN_CONTRACT",
     "COMPUTE_ANALYSIS_RESULT",
-    "REDUCER_ANALYSIS_RESULT",
-    "ORCHESTRATOR_ANALYSIS_RESULT",
-    # Expected Outputs
-    "EXPECTED_EFFECT_CONTRACT_YAML",
-    "EXPECTED_COMPUTE_CONTRACT_YAML",
-    "EXPECTED_INPUT_MODEL_TEMPLATE",
-    "EXPECTED_OUTPUT_MODEL_TEMPLATE",
-    "EXPECTED_OPERATION_ENUM_TEMPLATE",
-    # Organized Fixtures
-    "NODE_TYPE_FIXTURES",
-    # Validation Data
-    "ONEX_NAMING_VIOLATIONS",
-    "ONEX_NAMING_VALID",
-    "TYPE_SAFETY_VIOLATIONS",
-    "TYPE_SAFETY_VALID",
-    # Performance Data
-    "PERFORMANCE_EXPECTATIONS",
-    "LARGE_PRD_CONTENT",
-    # Error Cases
-    "EMPTY_PRD",
-    "MALFORMED_PRD",
-    "MINIMAL_PRD",
-    # Helper Functions
-    "create_mock_analysis_result",
-    # Phase 5: Generated Code Samples
-    "VALID_EFFECT_NODE_CODE",
-    "INVALID_SYNTAX_CODE",
-    "ONEX_VIOLATION_CODE",
-    "MISSING_ERROR_HANDLING_CODE",
-    # Phase 5: Validation Results
-    "VALID_CODE_QUALITY_RESULT",
-    "INVALID_CODE_QUALITY_RESULT",
+    "COMPUTE_NODE_PRD",
     # Phase 5: Pattern Test Cases
     "CRUD_PATTERN_CONTRACT",
-    "TRANSFORMATION_PATTERN_CONTRACT",
-    "AGGREGATION_PATTERN_CONTRACT",
+    # Analysis Results
+    "EFFECT_ANALYSIS_RESULT",
+    # PRD Content
+    "EFFECT_NODE_PRD",
+    # Error Cases
+    "EMPTY_PRD",
+    "EXPECTED_COMPUTE_CONTRACT_YAML",
+    # Phase 5: Expected Code Patterns
+    "EXPECTED_CRUD_METHOD_STUBS",
+    # Expected Outputs
+    "EXPECTED_EFFECT_CONTRACT_YAML",
+    "EXPECTED_INPUT_MODEL_TEMPLATE",
+    "EXPECTED_OPERATION_ENUM_TEMPLATE",
+    "EXPECTED_OUTPUT_MODEL_TEMPLATE",
+    "INVALID_CODE_QUALITY_RESULT",
+    "INVALID_SYNTAX_CODE",
+    "LARGE_PRD_CONTENT",
+    "MALFORMED_PRD",
+    "MINIMAL_PRD",
+    "MISSING_ERROR_HANDLING_CODE",
+    # Organized Fixtures
+    "NODE_TYPE_FIXTURES",
+    "ONEX_NAMING_VALID",
+    # Validation Data
+    "ONEX_NAMING_VIOLATIONS",
+    "ONEX_VIOLATION_CODE",
     "ORCHESTRATION_PATTERN_CONTRACT",
+    "ORCHESTRATOR_ANALYSIS_RESULT",
+    "ORCHESTRATOR_NODE_PRD",
     "PATTERN_DETECTION_CASES",
+    # Performance Data
+    "PERFORMANCE_EXPECTATIONS",
+    "REDUCER_ANALYSIS_RESULT",
+    "REDUCER_NODE_PRD",
     # Phase 5: Sample Contracts
     "SAMPLE_CONTRACT_WITH_CRUD",
     "SAMPLE_CONTRACT_WITH_TRANSFORMATION",
-    # Phase 5: Expected Code Patterns
-    "EXPECTED_CRUD_METHOD_STUBS",
+    "TRANSFORMATION_PATTERN_CONTRACT",
+    "TYPE_SAFETY_VALID",
+    "TYPE_SAFETY_VIOLATIONS",
+    # Phase 5: Validation Results
+    "VALID_CODE_QUALITY_RESULT",
+    # Phase 5: Generated Code Samples
+    "VALID_EFFECT_NODE_CODE",
+    # Helper Functions
+    "create_mock_analysis_result",
 ]

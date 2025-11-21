@@ -22,6 +22,7 @@ import google.generativeai as genai
 from .config.intelligence_config import IntelligenceConfig
 from .intelligence_event_client import IntelligenceEventClient
 
+
 logger = logging.getLogger(__name__)
 
 

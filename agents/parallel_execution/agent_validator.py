@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

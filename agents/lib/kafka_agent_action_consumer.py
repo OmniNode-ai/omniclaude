@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 import asyncpg
 from kafka import KafkaConsumer
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

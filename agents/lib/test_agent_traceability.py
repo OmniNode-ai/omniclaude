@@ -22,6 +22,7 @@ from agents.lib.agent_execution_logger import log_agent_execution
 from agents.lib.agent_traceability_logger import create_traceability_logger
 from agents.lib.traceability_events import get_traceability_publisher
 
+
 # Portable path resolution
 # Use environment variable if set, otherwise compute relative path
 PROJECT_ROOT = os.getenv("PROJECT_ROOT")

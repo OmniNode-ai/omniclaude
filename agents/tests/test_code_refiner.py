@@ -27,6 +27,7 @@ from agents.lib.code_refiner import (
 from agents.lib.config.intelligence_config import IntelligenceConfig
 from agents.lib.intelligence_event_client import IntelligenceEventClient
 
+
 # ============================================================================
 # ProductionPatternMatcher Tests
 # ============================================================================

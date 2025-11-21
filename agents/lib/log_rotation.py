@@ -33,6 +33,7 @@ from typing import Literal, Optional
 
 from .structured_logger import JSONFormatter, StructuredLogger
 
+
 LogRotationType = Literal["size", "time"]
 
 

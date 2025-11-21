@@ -15,10 +15,12 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 from manifest_injector import ManifestInjector, inject_manifest_async
+
 
 # Configure logging
 logging.basicConfig(

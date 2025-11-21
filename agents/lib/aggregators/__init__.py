@@ -3,4 +3,5 @@
 
 from .gate_result_aggregator import GateResultAggregator
 
+
 __all__ = ["GateResultAggregator"]

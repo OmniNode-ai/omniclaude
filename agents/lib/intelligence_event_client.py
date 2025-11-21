@@ -53,8 +53,7 @@ import os
 # Import centralized Kafka configuration
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
-from pathlib import Path as PathLib
+from pathlib import Path, Path as PathLib
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -62,6 +61,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
 from config import settings
+
 
 logger = logging.getLogger(__name__)
 

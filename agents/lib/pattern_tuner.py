@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 from .pattern_feedback import PatternAnalysis, PatternFeedbackCollector
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 

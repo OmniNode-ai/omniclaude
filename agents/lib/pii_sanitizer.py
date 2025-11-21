@@ -63,6 +63,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+
 logger = logging.getLogger(__name__)
 
 # =========================================================================
@@ -777,21 +778,21 @@ def sanitize_error_context_for_slack(
 # =========================================================================
 
 __all__ = [
-    "sanitize_for_slack",
-    "sanitize_string",
-    "sanitize_email",
-    "sanitize_ip",
-    "sanitize_username",
-    "sanitize_correlation_id",
-    "sanitize_file_path",
-    "sanitize_db_connection",
-    "sanitize_api_key",
-    "sanitize_phone",
-    "sanitize_credit_card",
-    "sanitize_ssn",
-    "sanitize_uuid",
-    "sanitize_token",
-    "sanitize_correlation_id_for_slack",
-    "sanitize_error_context_for_slack",
     "is_sensitive_field",
+    "sanitize_api_key",
+    "sanitize_correlation_id",
+    "sanitize_correlation_id_for_slack",
+    "sanitize_credit_card",
+    "sanitize_db_connection",
+    "sanitize_email",
+    "sanitize_error_context_for_slack",
+    "sanitize_file_path",
+    "sanitize_for_slack",
+    "sanitize_ip",
+    "sanitize_phone",
+    "sanitize_ssn",
+    "sanitize_string",
+    "sanitize_token",
+    "sanitize_username",
+    "sanitize_uuid",
 ]

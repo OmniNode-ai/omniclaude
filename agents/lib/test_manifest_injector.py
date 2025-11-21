@@ -21,6 +21,7 @@ from pathlib import Path as PathLib
 
 import pytest
 
+
 # Add project root to path for proper imports
 project_root = PathLib(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))

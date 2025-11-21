@@ -23,6 +23,7 @@ from agents.lib.config.intelligence_config import IntelligenceConfig
 # This ensures tests work across different environments (.env configs)
 from config import settings
 
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================

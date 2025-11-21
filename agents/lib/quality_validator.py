@@ -26,6 +26,7 @@ from omnibase_core.errors import EnumCoreErrorCode, OnexError
 from .codegen_config import CodegenConfig
 from .codegen_events import CodegenValidationRequest, CodegenValidationResponse
 
+
 # Framework: ML-powered mixin compatibility (optional import)
 try:
     from .mixin_compatibility import MixinCompatibilityManager
@@ -1701,8 +1702,8 @@ async def validate_code(
 
 
 __all__ = [
+    "ONEXComplianceCheck",
     "QualityValidator",
     "ValidationResult",
-    "ONEXComplianceCheck",
     "validate_code",
 ]

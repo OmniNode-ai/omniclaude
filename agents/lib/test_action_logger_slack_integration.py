@@ -30,12 +30,14 @@ import os
 import sys
 from pathlib import Path
 
+
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from agents.lib.action_logger import ActionLogger
 from agents.lib.slack_notifier import get_slack_notifier
+
 
 # Configure logging
 logging.basicConfig(

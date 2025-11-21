@@ -395,7 +395,6 @@ class TriggerMatcher:
             "research",
             "analyze",
             "analysis",
-            "investigate",
             # API & Architecture
             "api",
             "endpoint",

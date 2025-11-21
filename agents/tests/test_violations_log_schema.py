@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = PROJECT_ROOT / "claude_hooks" / "logs"
 SUMMARY_PATH = LOG_DIR / "violations_summary.json"

@@ -30,6 +30,7 @@ from agents.lib.confidence_scorer import ConfidenceScore, ConfidenceScorer
 from agents.lib.result_cache import ResultCache
 from agents.lib.trigger_matcher import TriggerMatcher
 
+
 # Sample test registry data
 SAMPLE_REGISTRY = {
     "agents": {

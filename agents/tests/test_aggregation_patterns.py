@@ -15,6 +15,7 @@ import pytest
 
 from agents.lib.patterns.aggregation_pattern import AggregationPattern
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================

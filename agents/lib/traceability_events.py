@@ -47,6 +47,7 @@ from uuid import UUID
 
 from .structured_logger import StructuredLogger
 
+
 # Try to import Kafka client
 try:
     from confluent_kafka import Producer as ConfluentProducer

@@ -18,6 +18,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

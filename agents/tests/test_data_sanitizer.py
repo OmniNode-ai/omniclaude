@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+
 # Add lib directory to Python path
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))

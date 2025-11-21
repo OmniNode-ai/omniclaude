@@ -7,6 +7,7 @@ that ensure type safety and validation in the ONEX framework.
 
 from typing import Dict, List
 
+
 # Model Contract Template
 MODEL_CONTRACT_TEMPLATE = '''
 """

@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

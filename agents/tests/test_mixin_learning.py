@@ -21,6 +21,7 @@ from agents.lib.mixin_features import MixinFeatureExtractor
 from agents.lib.mixin_learner import MixinLearner
 from agents.lib.persistence import CodegenPersistence
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

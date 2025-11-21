@@ -409,6 +409,7 @@ from typing import Any, Dict, Optional
 
 from confluent_kafka import Consumer, KafkaError, Producer
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

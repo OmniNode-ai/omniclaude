@@ -26,6 +26,7 @@ Resolution:
 
 import pytest
 
+
 # Skip entire test module due to missing omnibase_core dependency
 # TODO(Week 4): Install omnibase_core package and remove --ignore from pyproject.toml
 pytestmark = pytest.mark.skip(

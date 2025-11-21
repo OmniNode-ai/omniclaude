@@ -26,6 +26,7 @@ import yaml
 
 from .monitoring import AlertSeverity, MonitoringAlert
 
+
 logger = logging.getLogger(__name__)
 
 

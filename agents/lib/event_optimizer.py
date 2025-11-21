@@ -29,6 +29,7 @@ from .batch_processor import BatchConfig, BatchProcessor
 from .codegen_events import BaseEvent
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 

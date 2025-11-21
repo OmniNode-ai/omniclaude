@@ -8,4 +8,5 @@ from .node_effect import NodeEffect
 from .node_orchestrator import NodeOrchestrator
 from .node_reducer import NodeReducer
 
-__all__ = ["NodeEffect", "NodeCompute", "NodeReducer", "NodeOrchestrator"]
+
+__all__ = ["NodeCompute", "NodeEffect", "NodeOrchestrator", "NodeReducer"]

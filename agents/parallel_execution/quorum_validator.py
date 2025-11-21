@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

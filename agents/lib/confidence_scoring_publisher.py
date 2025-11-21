@@ -44,6 +44,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
+
 logger = logging.getLogger(__name__)
 
 # Event type constant following EVENT_BUS_INTEGRATION_PATTERNS
