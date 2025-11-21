@@ -232,12 +232,16 @@ jobs:
           echo "::endgroup::"
 
   # ============================================================================
-  # Unit Tests (Fast, Isolated)
+  # Unit Tests (Fast, Isolated) - Split across 10 parallel jobs
   # ============================================================================
   unit-tests:
-    name: Unit Tests
+    name: Unit Tests (Split ${{ matrix.split }}/10)
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Prevent infinite hangs
+    strategy:
+      fail-fast: false  # Don't cancel other jobs if one fails
+      matrix:
+        split: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -263,10 +267,15 @@ jobs:
             true
           }
 
-      - name: Run unit tests
+      - name: Install pytest-split for parallel test execution
         run: |
-          echo "::group::Unit Tests"
+          poetry run pip install pytest-split
+
+      - name: Run unit tests (Split ${{ matrix.split }}/10)
+        run: |
+          echo "::group::Unit Tests - Split ${{ matrix.split }}/10"
           # Add explicit timeout to prevent test hangs
+          # Use pytest-split to distribute tests evenly across 10 splits
           timeout 600 poetry run pytest \
             agents/tests/ \
             -v \
@@ -276,10 +285,12 @@ jobs:
             --ignore=agents/tests/test_framework_integration.py \
             --ignore=agents/tests/test_end_to_end_workflows.py \
             -m "not integration" \
+            --splits 10 \
+            --group ${{ matrix.split }} \
             --cov=agents \
             --cov-report=xml \
             --cov-report=term-missing \
-            --junitxml=junit-unit.xml || {
+            --junitxml=junit-unit-split-${{ matrix.split }}.xml || {
               echo "::error::Unit tests exceeded 10 minute timeout or failed"
               exit 1
             }
@@ -300,20 +311,20 @@ jobs:
         with:
           files: ./coverage.xml
           flags: unittests
-          name: unit-tests
+          name: unit-tests-split-${{ matrix.split }}
 
       - name: Upload unit test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unit-test-results
-          path: junit-unit.xml
+          name: unit-test-results-split-${{ matrix.split }}
+          path: junit-unit-split-${{ matrix.split }}.xml
 
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-failure-logs
+          name: unit-test-failure-logs-split-${{ matrix.split }}
           path: |
             logs/
             tmp/
