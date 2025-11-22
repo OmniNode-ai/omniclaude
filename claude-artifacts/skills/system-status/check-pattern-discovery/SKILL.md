@@ -23,52 +23,76 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 
 ### Arguments
 
-#### --detailed
+- `--detailed`: Include collection-specific statistics
 
-Controls the level of detail in collection statistics:
+## Output Formats
 
-**Standard output** (default):
-- Uses cached collection summary data
-- Returns basic collection names and vector counts
-- Faster execution (single query)
-- Best for quick status checks
+### Non-Detailed Mode (Default)
 
-**Detailed output** (with --detailed flag):
-- Queries each collection individually
-- Returns comprehensive per-collection metrics:
-  - Vector counts (total and indexed)
-  - Collection health status
-  - Indexing progress
-- Slower execution (one query per collection)
-- Best for troubleshooting or detailed analysis
+Returns basic collection statistics with full field names. Suitable for programmatic parsing and data processing.
 
-**Usage examples**:
 ```bash
-# Quick status check (standard)
 python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
-
-# Comprehensive analysis (detailed)
-python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py --detailed
 ```
 
-## Example Output
-
-**Standard output** (without --detailed):
+**JSON Structure**:
 ```json
 {
+  "success": true,
   "total_patterns": 15689,
   "collection_count": 4,
   "collections": {
-    "archon_vectors": {"vectors": 7118},
-    "code_generation_patterns": {"vectors": 8571}
-  }
+    "archon_vectors": {
+      "vectors_count": 7118,
+      "indexed_vectors_count": 7118,
+      "status": "green"
+    },
+    "code_generation_patterns": {
+      "vectors_count": 8571,
+      "indexed_vectors_count": 8571,
+      "status": "green"
+    },
+    "archon-intelligence": {
+      "vectors_count": 0,
+      "indexed_vectors_count": 0,
+      "status": "green"
+    },
+    "quality_vectors": {
+      "vectors_count": 0,
+      "indexed_vectors_count": 0,
+      "status": "green"
+    }
+  },
+  "timestamp": "2025-11-21T14:30:00.123456+00:00"
 }
 ```
 
-**Detailed output** (with --detailed):
+**Fields**:
+- `success` (boolean): Whether the operation succeeded
+- `total_patterns` (integer): Sum of all vectors across collections
+- `collection_count` (integer): Number of collections found
+- `collections` (object): Per-collection statistics with full field names
+  - `vectors_count` (integer): Total vectors in collection
+  - `indexed_vectors_count` (integer): Vectors that are indexed
+  - `status` (string): Collection health status ("green", "yellow", "red")
+- `timestamp` (string): ISO 8601 timestamp in UTC
 
+**When to use**: Scripts, automation, data pipelines, JSON parsing
+
+### Detailed Mode
+
+Returns collection statistics with simplified field names for better readability. Suitable for human consumption and dashboards.
+
+```bash
+python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py --detailed
+```
+
+**JSON Structure**:
 ```json
 {
+  "success": true,
+  "total_patterns": 15689,
+  "collection_count": 4,
   "collections": {
     "archon_vectors": {
       "vectors": 7118,
@@ -79,9 +103,62 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py --deta
       "vectors": 8571,
       "status": "green",
       "indexed_vectors": 8571
+    },
+    "archon-intelligence": {
+      "vectors": 0,
+      "status": "green",
+      "indexed_vectors": 0
+    },
+    "quality_vectors": {
+      "vectors": 0,
+      "status": "green",
+      "indexed_vectors": 0
     }
   },
-  "total_patterns": 15689,
-  "collection_count": 4
+  "timestamp": "2025-11-21T14:30:00.123456+00:00"
 }
 ```
+
+**Fields**:
+- `success` (boolean): Whether the operation succeeded
+- `total_patterns` (integer): Sum of all vectors across collections
+- `collection_count` (integer): Number of collections found
+- `collections` (object): Per-collection statistics with simplified field names
+  - `vectors` (integer): Total vectors in collection
+  - `indexed_vectors` (integer): Vectors that are indexed
+  - `status` (string): Collection health status ("green", "yellow", "red")
+- `timestamp` (string): ISO 8601 timestamp in UTC
+
+**When to use**: Human-readable output, dashboards, reports, debugging
+
+### Error Response Format
+
+When an error occurs (Qdrant unreachable, connection timeout, etc.):
+
+```json
+{
+  "success": false,
+  "error": "Connection error: Not Found",
+  "timestamp": "2025-11-21T14:30:00.123456+00:00"
+}
+```
+
+**Fields**:
+- `success` (boolean): Always `false` for errors
+- `error` (string): Error description
+- `timestamp` (string): ISO 8601 timestamp in UTC
+
+## Exit Codes
+
+Exit codes enable reliable scripting and automation:
+
+- **0**: Success - Pattern collections retrieved successfully
+  - All collections accessible
+  - Statistics retrieved without errors
+  - Qdrant connection healthy
+
+- **1**: Error - Failed to retrieve pattern statistics
+  - Qdrant connection failed (unreachable, timeout, refused)
+  - Collection query error (invalid response, permission denied)
+  - Network error or configuration issue
+  - Check `error` field in JSON output for details

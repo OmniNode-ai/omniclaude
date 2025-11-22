@@ -226,21 +226,55 @@ def format_percentage(value: float, decimals: int = 1) -> str:
     """
     Format a value as percentage.
 
+    This function handles two input formats:
+    - Fractional values (0.0-1.0): Treated as decimal fractions and multiplied by 100
+    - Whole percentages (>1.0): Treated as already-converted percentages
+
     Args:
-        value: Value between 0 and 1 (decimal) or 0 and 100 (percentage)
-        decimals: Number of decimal places
+        value: Numeric value to format as percentage
+            - If 0.0 <= value <= 1.0: Treated as fraction (e.g., 0.95 → 95%)
+            - If value > 1.0: Treated as whole percentage (e.g., 95 → 95%)
+        decimals: Number of decimal places in output (default: 1)
 
     Returns:
-        Formatted percentage string
+        Formatted percentage string with '%' suffix
+
+    Examples:
+        Fractional input (0.0-1.0):
+        >>> format_percentage(0.0)
+        '0.0%'
+        >>> format_percentage(0.5)
+        '50.0%'
+        >>> format_percentage(0.95)
+        '95.0%'
+        >>> format_percentage(1.0)
+        '100.0%'
+
+        Whole percentage input (>1.0):
+        >>> format_percentage(50)
+        '50.0%'
+        >>> format_percentage(95)
+        '95.0%'
+        >>> format_percentage(100)
+        '100.0%'
+
+        Custom decimal places:
+        >>> format_percentage(0.9567, decimals=2)
+        '95.67%'
+        >>> format_percentage(0.9567, decimals=0)
+        '96%'
 
     Note:
-        Values in range [0.0, 1.0] are treated as decimal (e.g., 0.5 → 50%, 1.0 → 100%)
-        Values > 1.0 are treated as already being percentages (e.g., 50.0 → 50%)
+        The value 1.0 is unambiguously treated as 100% (fraction format).
+        Values exactly at the boundary (1.0) are treated as fractions, not whole percentages.
     """
-    # Treat values 0.0-1.0 as decimal (multiply by 100), values > 1.0 as already percentage
+    # Unambiguous logic: values in [0.0, 1.0] are fractions (multiply by 100)
+    # Values > 1.0 are already whole percentages (use as-is)
     if value <= 1.0:
+        # Fraction format: multiply by 100 to convert to percentage
         percentage = value * 100
     else:
+        # Already a whole percentage: use as-is
         percentage = value
 
     return f"{percentage:.{decimals}f}%"

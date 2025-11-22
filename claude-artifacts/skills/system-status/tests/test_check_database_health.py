@@ -97,7 +97,9 @@ class TestCheckDatabaseHealth:
 
             assert exit_code == 0
 
-    @pytest.mark.skip(reason="Argument name mismatch - check actual argument usage")
+    @pytest.mark.skip(
+        reason="check-database-health script does not support --log-lines parameter (only --tables and --include-sizes)"
+    )
     def test_recent_errors_retrieval(self):
         """Test recent error retrieval with log lines limit."""
         with (
@@ -124,12 +126,24 @@ class TestCheckDatabaseHealth:
 
             assert exit_code == 0
             # Verify log-lines parameter was used
-            call_args = mock_query.call_args_list[-1][1]
-            call_params = call_args.get("params")
+            # Handle both positional and keyword arguments
+            last_call = mock_query.call_args_list[-1]
+
+            # Check if params was passed as keyword argument
+            if "params" in last_call.kwargs:
+                call_params = last_call.kwargs["params"]
+            # Check if params was passed as positional argument (2nd arg)
+            elif len(last_call.args) >= 2:
+                call_params = last_call.args[1]
+            else:
+                call_params = None
+
             assert (
                 call_params is not None
-            ), "Expected 'params' parameter not found in call"
-            assert 50 in call_params
+            ), "Expected 'params' parameter not found in call (checked both positional and keyword arguments)"
+            assert (
+                50 in call_params
+            ), "Expected log_lines value (50) not found in params"
 
     def test_validate_log_lines(self):
         """Test log_lines parameter validation."""

@@ -7,12 +7,13 @@ description: Infrastructure component connectivity and health checks for Kafka, 
 
 Check connectivity and health of core infrastructure components supporting the OmniClaude agent system.
 
-## What It Checks
+## Current Features
 
-- **Kafka**: Broker connectivity and topic count
-- **PostgreSQL**: Database connectivity, table count, connection pool stats (with `--detailed`)
-- **Qdrant**: Collection stats, vector counts, and per-collection breakdowns (with `--detailed`)
-<!-- Future: Valkey cache, Memgraph graph database -->
+- ✅ **Kafka**: Broker connectivity and topic count
+- ✅ **PostgreSQL**: Database connectivity, table count, connection pool stats (with `--detailed`)
+- ✅ **Qdrant**: Collection stats, vector counts, and per-collection breakdowns (with `--detailed`)
+- ✅ **Component filtering**: Check specific components only
+- ✅ **Detailed mode**: Extended statistics for capacity planning
 
 ## When to Use
 
@@ -66,6 +67,16 @@ python3 ~/.claude/skills/system-status/check-infrastructure/execute.py \
   }
 }
 ```
+
+## Future Enhancements
+
+- ⏳ **Valkey cache**: Redis-compatible cache connectivity and stats
+- ⏳ **Memgraph**: Graph database connectivity and node/edge counts
+- ⏳ **Kafka consumer groups**: Consumer lag and group coordination status
+- ⏳ **PostgreSQL query performance**: Slow query analysis and index utilization
+- ⏳ **Qdrant search performance**: Benchmark search latency and throughput
+- ⏳ **Health scoring**: Aggregate health score across all components
+- ⏳ **Alerting thresholds**: Configurable thresholds for capacity warnings
 
 ## Output Format & Exit Codes
 
