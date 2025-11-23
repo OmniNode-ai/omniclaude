@@ -43,14 +43,7 @@ Output:
         "topics": {
             "agent.routing.requested.v1": {
                 "exists": true,
-                "partitions": {
-                    "count": 3,
-                    "details": [
-                        {"partition": 0, "leader": 1, "replicas": [1]},
-                        {"partition": 1, "leader": 1, "replicas": [1]},
-                        {"partition": 2, "leader": 1, "replicas": [1]}
-                    ]
-                }
+                "partitions": 3
             }
         }
     }

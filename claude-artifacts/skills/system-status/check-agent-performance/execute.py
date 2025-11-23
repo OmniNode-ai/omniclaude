@@ -31,6 +31,31 @@ except ImportError as e:
     sys.exit(1)
 
 
+def validate_limit(value):
+    """Validate LIMIT value to prevent SQL injection and DoS attacks.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        int: Validated integer value (1-100)
+
+    Raises:
+        argparse.ArgumentTypeError: If value is outside valid range
+    """
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer: {value}")
+
+    if not (1 <= ivalue <= 100):
+        raise argparse.ArgumentTypeError(
+            f"Value must be between 1 and 100 (got {ivalue})"
+        )
+
+    return ivalue
+
+
 def validate_top_agents(value: str) -> int:
     """Validate top_agents is in range MIN_TOP_AGENTS to MAX_TOP_AGENTS.
 
@@ -83,13 +108,11 @@ def main() -> int:
                 COUNT(*) as total_decisions,
                 AVG(routing_time_ms) as avg_routing_time_ms,
                 AVG(confidence_score) as avg_confidence,
-                COUNT(CASE WHEN routing_time_ms > %s THEN 1 END) as threshold_violations
+                COUNT(CASE WHEN routing_time_ms > 100 THEN 1 END) as threshold_violations
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL %s
+            WHERE created_at > NOW() - %s::interval
         """
-        routing_result = execute_query(
-            routing_query, params=(ROUTING_TIMEOUT_THRESHOLD_MS, interval)
-        )
+        routing_result = execute_query(routing_query, (interval,))
 
         if routing_result["success"] and routing_result["rows"]:
             row = routing_result["rows"][0]
@@ -107,12 +130,12 @@ def main() -> int:
                 COUNT(*) as count,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL %s
+            WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
             LIMIT %s
         """
-        top_result = execute_query(top_agents_query, params=(interval, args.top_agents))
+        top_result = execute_query(top_agents_query, (interval, args.top_agents))
 
         if top_result["success"]:
             result["top_agents"] = [
@@ -131,9 +154,9 @@ def main() -> int:
                 AVG(CASE WHEN success THEN 1.0 ELSE 0.0 END) as success_rate,
                 AVG(transformation_duration_ms) as avg_duration_ms
             FROM agent_transformation_events
-            WHERE created_at > NOW() - INTERVAL %s
+            WHERE started_at > NOW() - %s::interval
         """
-        transform_result = execute_query(transform_query, params=(interval,))
+        transform_result = execute_query(transform_query, (interval,))
 
         if transform_result["success"] and transform_result["rows"]:
             row = transform_result["rows"][0]

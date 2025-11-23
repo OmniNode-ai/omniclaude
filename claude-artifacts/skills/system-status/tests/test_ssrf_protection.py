@@ -34,7 +34,12 @@ class TestSSRFProtection:
 
     @pytest.fixture
     def qdrant_helper(self):
-        """Import qdrant_helper module."""
+        """Import qdrant_helper module with stable path resolution."""
+        # Ensure _shared directory is in path for consistent imports
+        shared_path = str(Path(__file__).parent.parent.parent / "_shared")
+        if shared_path not in sys.path:
+            sys.path.insert(0, shared_path)
+
         import qdrant_helper
 
         return qdrant_helper
@@ -54,7 +59,7 @@ class TestSSRFProtection:
 
         for url in malicious_urls:
             if hasattr(qdrant_helper, "validate_qdrant_url"):
-                with pytest.raises(ValueError) as exc_info:
+                with pytest.raises(ValueError, match=r".*whitelist.*") as exc_info:
                     qdrant_helper.validate_qdrant_url(url)
                 # Verify error message mentions whitelist
                 assert "whitelist" in str(exc_info.value).lower()
@@ -78,7 +83,7 @@ class TestSSRFProtection:
 
         for url in malicious_urls:
             if hasattr(qdrant_helper, "validate_qdrant_url"):
-                with pytest.raises(ValueError):
+                with pytest.raises(ValueError, match=r".*"):
                     qdrant_helper.validate_qdrant_url(url)
 
     def test_redirect_blocked(self, qdrant_helper):
@@ -104,14 +109,27 @@ class TestSSRFProtection:
 
         for url in malicious_urls:
             if hasattr(qdrant_helper, "validate_qdrant_url"):
-                # Should either normalize and reject, or reject directly
+                # These URLs should be rejected (either immediately or after normalization)
+                # We accept either:
+                # 1. ValueError raised (URL rejected)
+                # 2. URL passes but doesn't resolve to localhost (safe behavior)
+                validation_failed = False
                 try:
-                    qdrant_helper.validate_qdrant_url(url)
-                    # If it doesn't raise, check that it's not localhost
-                    assert "localhost" not in url.lower()
-                    assert "127.0.0.1" not in url
+                    result = qdrant_helper.validate_qdrant_url(url)
+                    # If validation passes, verify the result is NOT localhost
+                    # (meaning Unicode was NOT decoded to localhost)
+                    assert (
+                        "localhost" not in result.lower()
+                    ), f"Unicode URL {url} was incorrectly normalized to localhost"
+                    assert (
+                        "127.0.0.1" not in result
+                    ), f"Unicode URL {url} was incorrectly normalized to 127.0.0.1"
                 except ValueError:
-                    pass  # Expected rejection
+                    # Expected rejection - Unicode URL was caught
+                    validation_failed = True
+
+                # Either validation failed OR the URL was not normalized to localhost
+                # Both are acceptable secure behaviors
 
     def test_whitelisted_urls_allowed(self, qdrant_helper):
         """Test that whitelisted URLs are allowed."""
@@ -153,27 +171,33 @@ class TestSSRFProtection:
 
         for url in dangerous_port_urls:
             if hasattr(qdrant_helper, "validate_qdrant_url"):
-                with pytest.raises(ValueError) as exc_info:
+                with pytest.raises(ValueError, match=r"[Dd]angerous port") as exc_info:
                     qdrant_helper.validate_qdrant_url(url)
                 # Verify error message mentions dangerous port
                 assert "dangerous port" in str(exc_info.value).lower()
 
-    def test_dns_rebinding_protection(self, qdrant_helper):
+    def test_dns_rebinding_protection(self, qdrant_helper, monkeypatch):
         """Test protection against DNS rebinding attacks."""
         # DNS rebinding: domain resolves to external IP first, then internal IP
         # This requires DNS resolution checking at connection time
+
+        # Mock environment variable to ensure consistent test behavior
+        test_url = "http://192.168.86.101:6333"
+        monkeypatch.setenv("QDRANT_URL", test_url)
 
         # Verify that get_qdrant_url() returns value from environment/config
         # (which goes through validate_qdrant_url during startup)
         if hasattr(qdrant_helper, "get_qdrant_url"):
             url = qdrant_helper.get_qdrant_url()
             # Returned URL should be valid (would have failed validation otherwise)
-            assert url.startswith("http://") or url.startswith("https://")
+            assert url.startswith("http://") or url.startswith(
+                "https://"
+            ), f"URL should start with http:// or https://, got: {url}"
 
-            # Verify validate_qdrant_url exists for URL validation
-            assert hasattr(
-                qdrant_helper, "validate_qdrant_url"
-            ), "qdrant_helper should provide validate_qdrant_url for SSRF protection"
+        # Verify validate_qdrant_url exists for URL validation
+        assert hasattr(
+            qdrant_helper, "validate_qdrant_url"
+        ), "qdrant_helper should provide validate_qdrant_url for SSRF protection"
 
 
 class TestQdrantURLParsing:

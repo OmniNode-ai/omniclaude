@@ -49,8 +49,10 @@ class TestDatabaseErrorHandling:
 
             exit_code = main()
 
-            # Should handle error gracefully (not crash)
-            assert exit_code in [0, 1]  # Either continues or fails cleanly
+            # Should handle error gracefully - script continues with partial data
+            # The check-recent-activity script is resilient and returns success
+            # even if individual queries fail (it just omits those sections)
+            assert exit_code == 0  # Partial failure handled gracefully
 
     def test_query_syntax_error(self):
         """Test handling of SQL syntax errors."""
@@ -70,8 +72,10 @@ class TestDatabaseErrorHandling:
 
             exit_code = main()
 
-            # Should not crash
-            assert exit_code in [0, 1]
+            # Should handle error gracefully - script continues with partial data
+            # The check-recent-activity script is resilient and returns success
+            # even if individual queries fail (it just omits those sections)
+            assert exit_code == 0  # Partial failure handled gracefully
 
     def test_authentication_failure(self):
         """Test handling of database authentication failure."""
@@ -169,7 +173,6 @@ class TestNetworkErrorHandling:
 class TestDataErrorHandling:
     """Test malformed data handling."""
 
-    @pytest.mark.skip(reason="Behavior mismatch - check actual error handling")
     def test_null_values_in_results(self):
         """Test handling of NULL values in query results."""
         execute = load_skill_module("check-recent-activity")
@@ -180,24 +183,38 @@ class TestDataErrorHandling:
             patch("sys.argv", ["execute.py"]),
         ):
 
+            # Mock execute_query to return NULL values (should handle gracefully)
             mock_query.side_effect = [
+                # Manifest injections query
                 {
                     "success": True,
                     "rows": [
                         {
-                            "agent_name": None,
-                            "executions": None,
-                            "avg_duration_ms": None,
+                            "count": 0,
+                            "avg_query_time_ms": None,
+                            "avg_patterns_count": None,
+                            "fallbacks": 0,
                         }
                     ],
                 },
-                {"success": True, "rows": []},
+                # Routing decisions query
+                {
+                    "success": True,
+                    "rows": [
+                        {
+                            "count": 0,
+                            "avg_routing_time_ms": None,
+                            "avg_confidence": None,
+                        }
+                    ],
+                },
+                # Agent actions query
                 {"success": True, "rows": []},
             ]
 
             exit_code = main()
 
-            # Should handle NULL values gracefully
+            # Should handle NULL values gracefully (convert to 0)
             assert exit_code == 0
 
     def test_empty_result_set(self):
@@ -210,6 +227,7 @@ class TestDataErrorHandling:
             patch("sys.argv", ["execute.py"]),
         ):
 
+            # All queries return empty results
             mock_query.return_value = {"success": True, "rows": []}
 
             exit_code = main()
@@ -227,32 +245,32 @@ class TestDataErrorHandling:
             patch("sys.argv", ["execute.py"]),
         ):
 
-            # Missing expected columns
+            # Missing expected columns (empty dictionary)
             mock_query.return_value = {
                 "success": True,
-                "rows": [{}],  # Empty dictionary
+                "rows": [{}],  # Empty dictionary - missing all expected keys
             }
 
             exit_code = main()
 
-            # Should handle missing columns
+            # Should handle missing columns (KeyError handling)
             assert exit_code in [0, 1]
 
-    @pytest.mark.skip(reason="Argument mismatch - check actual argument names")
-    def test_malformed_json(self):
-        """Test handling of malformed JSON in database."""
+    def test_query_with_valid_empty_data(self):
+        """Test handling of valid queries returning no data."""
         execute = load_skill_module("check-agent-performance")
         main = execute.main
 
         with (
             patch.object(execute, "execute_query") as mock_query,
-            patch("sys.argv", ["execute.py", "--include-errors"]),
+            patch("sys.argv", ["execute.py", "--timeframe", "1h"]),
         ):
 
+            # All queries succeed but return no rows (valid scenario)
             mock_query.side_effect = [
-                {"success": True, "rows": []},
-                {"success": True, "rows": []},
-                {"success": True, "rows": []},
+                {"success": True, "rows": []},  # routing query
+                {"success": True, "rows": []},  # top agents query
+                {"success": True, "rows": []},  # transformations query
             ]
 
             exit_code = main()
@@ -314,19 +332,49 @@ class TestExceptionHandling:
 class TestResourceManagement:
     """Test resource management on errors."""
 
-    def test_connection_closed_on_error(self):
-        """Test that database connections are closed on error."""
-        # This would require checking the db_helper implementation
-        # to ensure connections are properly closed
-        pass
-
-    def test_no_resource_leaks(self):
-        """Test for resource leaks on repeated errors."""
+    def test_connection_error_handled_gracefully(self):
+        """Test that connection errors are handled gracefully without resource leaks."""
         execute = load_skill_module("check-infrastructure")
         check_postgres = execute.check_postgres
 
+        # Test that connection errors don't cause exceptions or resource leaks
+        with patch.object(execute, "execute_query") as mock_query:
+            # Simulate connection error
+            mock_query.return_value = {
+                "success": False,
+                "error": "Connection closed unexpectedly",
+                "rows": [],
+            }
+
+            result = check_postgres()
+
+            # Should return error status without raising exception
+            assert result["status"] == "error"
+            assert "error" in result
+            assert "Connection" in result["error"]
+
+    def test_no_resource_leaks(self):
+        """Test for resource leaks on repeated errors."""
+        import gc
+        import os
+
+        execute = load_skill_module("check-infrastructure")
+        check_postgres = execute.check_postgres
+
+        # Get initial open file descriptors count
+        try:
+            initial_fd_count = len(os.listdir("/proc/self/fd"))
+        except (OSError, FileNotFoundError):
+            # /proc not available (macOS), use alternative approach
+            import resource
+
+            initial_fd_count = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+        # Track mock calls to ensure proper cleanup
+        call_count = 0
+
         # Run multiple times with errors
-        for _ in range(10):
+        for i in range(10):
             with patch.object(execute, "execute_query") as mock_query:
                 mock_query.return_value = {
                     "success": False,
@@ -335,3 +383,60 @@ class TestResourceManagement:
                 }
                 result = check_postgres()
                 assert result["status"] == "error"
+                call_count += 1
+
+                # Verify mock was called exactly once per iteration
+                assert mock_query.call_count == 1
+
+        # Verify all 10 calls were made
+        assert call_count == 10
+
+        # Force garbage collection to release any unreferenced resources
+        gc.collect()
+
+        # Check file descriptors didn't increase significantly
+        try:
+            final_fd_count = len(os.listdir("/proc/self/fd"))
+            # Allow small variance (±2 FDs) due to test infrastructure
+            assert (
+                abs(final_fd_count - initial_fd_count) <= 2
+            ), f"File descriptor leak detected: initial={initial_fd_count}, final={final_fd_count}"
+        except (OSError, FileNotFoundError):
+            # /proc not available, verify memory didn't grow excessively
+            import resource
+
+            final_fd_count = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # Allow 10% memory growth for test overhead
+            assert (
+                final_fd_count <= initial_fd_count * 1.1
+            ), f"Possible memory leak: initial={initial_fd_count}, final={final_fd_count}"
+
+    def test_exception_during_query_cleanup(self):
+        """Test that exceptions during query execution are handled properly."""
+        execute = load_skill_module("check-recent-activity")
+        main = execute.main
+
+        with (
+            patch.object(execute, "execute_query") as mock_query,
+            patch("sys.argv", ["execute.py"]),
+        ):
+            # First query succeeds, second raises exception
+            mock_query.side_effect = [
+                {
+                    "success": True,
+                    "rows": [
+                        {
+                            "count": 10,
+                            "avg_query_time_ms": 100,
+                            "avg_patterns_count": 5,
+                            "fallbacks": 0,
+                        }
+                    ],
+                },
+                Exception("Database connection lost"),
+            ]
+
+            exit_code = main()
+
+            # Should handle exception gracefully (not crash)
+            assert exit_code == 1

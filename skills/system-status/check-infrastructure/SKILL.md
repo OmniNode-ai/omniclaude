@@ -70,8 +70,10 @@ python3 ~/.claude/skills/system-status/check-infrastructure/execute.py \
 
 ## Future Enhancements
 
-- ⏳ **Valkey cache**: Redis-compatible cache connectivity and stats
-- ⏳ **Memgraph**: Graph database connectivity and node/edge counts
+**Note**: The following features are planned but not yet implemented. The current implementation checks Kafka, PostgreSQL, and Qdrant only.
+
+- ⏳ **Valkey cache**: Redis-compatible cache connectivity and stats (not yet implemented)
+- ⏳ **Memgraph**: Graph database connectivity and node/edge counts (not yet implemented)
 - ⏳ **Kafka consumer groups**: Consumer lag and group coordination status
 - ⏳ **PostgreSQL query performance**: Slow query analysis and index utilization
 - ⏳ **Qdrant search performance**: Benchmark search latency and throughput

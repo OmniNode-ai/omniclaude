@@ -93,12 +93,10 @@ class NodeTemplate:
             raise ModelOnexError(
                 error_code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message="Template validation failed: Missing required placeholders",
-                details={
-                    "context": {
-                        "missing_placeholders": list(missing),
-                        "required_placeholders": list(self.placeholders),
-                        "provided_keys": list(context.keys()),
-                    }
+                context={
+                    "missing_placeholders": list(missing),
+                    "required_placeholders": list(self.placeholders),
+                    "provided_keys": list(context.keys()),
                 },
             )
 

@@ -60,12 +60,11 @@ class TestCheckKafkaTopics:
             assert exit_code == 0
             mock_topics.assert_called_once()
 
-    @pytest.mark.skip(reason="Argument mismatch - check actual argument names")
     def test_filter_topics_by_pattern(self):
         """Test filtering topics by pattern."""
         with (
             patch.object(execute, "list_topics") as mock_topics,
-            patch("sys.argv", ["execute.py", "--pattern", "agent.routing.*"]),
+            patch("sys.argv", ["execute.py", "--topics", "agent.routing.*"]),
         ):
 
             mock_topics.return_value = {

@@ -157,6 +157,10 @@ class KafkaAgentActionConsumer:
         """
         Insert batch of events to PostgreSQL with idempotency.
 
+        Uses ON CONFLICT DO NOTHING to handle duplicates gracefully.
+        Relies on unique constraint: unique_action_per_correlation_timestamp
+        (correlation_id, action_name, created_at)
+
         Args:
             events: List of event dictionaries
 
@@ -166,14 +170,8 @@ class KafkaAgentActionConsumer:
         if not events or not self.db_pool:
             return 0
 
-        # Prepare insert query without ON CONFLICT (constraint doesn't exist in schema)
-        # Idempotency: Check for duplicates before inserting
-        # Uses correlation_id, action_name, and timestamp to identify duplicates
-        check_duplicate_sql = """
-            SELECT id FROM agent_actions
-            WHERE correlation_id = $1 AND action_name = $2 AND created_at = $3
-        """
-
+        # Insert with ON CONFLICT DO NOTHING for thread-safe idempotency
+        # Constraint: unique_action_per_correlation_timestamp (correlation_id, action_name, created_at)
         insert_sql = """
             INSERT INTO agent_actions (
                 correlation_id,
@@ -185,10 +183,14 @@ class KafkaAgentActionConsumer:
                 duration_ms,
                 created_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT ON CONSTRAINT unique_action_per_correlation_timestamp
+            DO NOTHING
             RETURNING id
         """
 
         inserted_count = 0
+        duplicate_count = 0
+
         async with self.db_pool.acquire() as conn:
             async with conn.transaction():
                 for event in events:
@@ -198,22 +200,7 @@ class KafkaAgentActionConsumer:
                             event["timestamp"].replace("Z", "+00:00")
                         )
 
-                        # Check if duplicate exists
-                        existing = await conn.fetchrow(
-                            check_duplicate_sql,
-                            event["correlation_id"],
-                            event["action_name"],
-                            timestamp,
-                        )
-
-                        if existing:
-                            # Skip duplicate
-                            logger.debug(
-                                f"Skipping duplicate event: {event['correlation_id']}/{event['action_name']}"
-                            )
-                            continue
-
-                        # Insert new event
+                        # Insert new event (ON CONFLICT handles duplicates)
                         result = await conn.fetch(
                             insert_sql,
                             event["correlation_id"],
@@ -227,12 +214,29 @@ class KafkaAgentActionConsumer:
                         )
 
                         if result:
+                            # Insert succeeded (new record)
                             inserted_count += 1
+                        else:
+                            # Insert skipped due to conflict (duplicate)
+                            duplicate_count += 1
+                            logger.debug(
+                                f"Skipped duplicate event: {event['correlation_id']}/{event['action_name']}"
+                            )
+
+                    except asyncpg.UniqueViolationError as e:
+                        # This should not happen with ON CONFLICT, but handle gracefully
+                        duplicate_count += 1
+                        logger.debug(
+                            f"Duplicate detected via exception: {event['correlation_id']}/{event['action_name']}"
+                        )
 
                     except Exception as e:
                         logger.error(f"Failed to insert event: {e}", exc_info=True)
                         # Continue with other events
 
+        logger.debug(
+            f"Batch insert complete: {inserted_count} inserted, {duplicate_count} duplicates skipped"
+        )
         return inserted_count
 
     async def consume_loop(self):

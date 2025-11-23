@@ -84,6 +84,31 @@ except ImportError as e:
     sys.exit(1)
 
 
+def validate_log_lines(value):
+    """Validate log-lines value to prevent errors and DoS attacks.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        int: Validated integer value (1-1000)
+
+    Raises:
+        argparse.ArgumentTypeError: If value is outside valid range or non-integer
+    """
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer: {value}")
+
+    if not (1 <= ivalue <= 1000):
+        raise argparse.ArgumentTypeError(
+            f"Value must be between 1 and 1000 (got {ivalue})"
+        )
+
+    return ivalue
+
+
 def main():
     parser = argparse.ArgumentParser(description="Check service status")
     parser.add_argument("--service", required=True, help="Service name")
@@ -95,24 +120,11 @@ def main():
     )
     parser.add_argument(
         "--log-lines",
-        type=int,
+        type=validate_log_lines,
         default=50,
         help="Number of log lines (1-1000, default: 50)",
     )
     args = parser.parse_args()
-
-    # Validate log-lines range
-    if not 1 <= args.log_lines <= 1000:
-        print(
-            format_json(
-                {
-                    "success": False,
-                    "error": "log-lines must be between 1 and 1000",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-        )
-        return 1
 
     try:
         # Get container status

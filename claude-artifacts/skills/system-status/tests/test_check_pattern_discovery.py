@@ -86,8 +86,6 @@ class TestCheckPatternDiscovery:
 
     def test_qdrant_unavailable(self):
         """Test handling when Qdrant is unavailable."""
-        from conftest import load_skill_module
-
         with (
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),
@@ -107,8 +105,6 @@ class TestCheckPatternDiscovery:
 
     def test_collection_statistics(self):
         """Test collection statistics calculation."""
-        from conftest import load_skill_module
-
         with (
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),

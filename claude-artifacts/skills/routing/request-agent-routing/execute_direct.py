@@ -50,7 +50,20 @@ from db_helper import get_correlation_id
 
 
 # Add agents/lib to path for AgentRouter
-sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
+agents_lib_path = OMNICLAUDE_PATH / "agents" / "lib"
+if not agents_lib_path.exists():
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"AgentRouter library path not found: {agents_lib_path}",
+                "hint": "Ensure OMNICLAUDE_PATH is set correctly and agents/lib directory exists",
+            }
+        )
+    )
+    sys.exit(1)
+
+sys.path.insert(0, str(agents_lib_path))
 
 
 def request_routing_direct(

@@ -211,8 +211,13 @@ class SystemDashboard:
                 )
                 row = cur.fetchone()
                 if row and row["count"] > 0:
+                    # Ensure row["oldest"] is timezone-aware (assume UTC if naive)
+                    oldest = row["oldest"]
+                    if oldest.tzinfo is None:
+                        oldest = oldest.replace(tzinfo=timezone.utc)
+
                     age_hours = (
-                        datetime.now(timezone.utc) - row["oldest"].replace(tzinfo=None)
+                        datetime.now(timezone.utc) - oldest
                     ).total_seconds() / 3600
                     issues.append(
                         {

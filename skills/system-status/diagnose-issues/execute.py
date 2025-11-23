@@ -80,6 +80,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from constants import (
+        CONN_POOL_CRITICAL_THRESHOLD_PCT,
+        CONN_POOL_WARNING_THRESHOLD_PCT,
+        DEFAULT_POSTGRES_MAX_CONNECTIONS,
+        EXIT_CRITICAL,
+        EXIT_ERROR,
+        EXIT_SUCCESS,
+        EXIT_WARNING,
+        MAX_CONNECTIONS_THRESHOLD,
+        MAX_RESTART_COUNT_THRESHOLD,
+        QUERY_TIMEOUT_THRESHOLD_MS,
+        ROUTING_TIMEOUT_THRESHOLD_MS,
+    )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
     from kafka_helper import check_kafka_connection
@@ -87,7 +100,7 @@ try:
     from status_formatter import format_json, format_status_indicator
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
-    sys.exit(3)
+    sys.exit(EXIT_ERROR)
 
 
 def check_service_issues():
@@ -149,7 +162,8 @@ def check_service_issues():
             container_status = get_container_status(name)
             if (
                 container_status.get("success")
-                and container_status.get("restart_count", 0) > 5
+                and container_status.get("restart_count", 0)
+                > MAX_RESTART_COUNT_THRESHOLD
             ):
                 issues.append(
                     {
@@ -229,7 +243,9 @@ def check_infrastructure_issues():
             if max_conn_result.get("success") and max_conn_result.get("rows"):
                 try:
                     max_connections = int(
-                        max_conn_result["rows"][0].get("max_connections", 100)
+                        max_conn_result["rows"][0].get(
+                            "max_connections", DEFAULT_POSTGRES_MAX_CONNECTIONS
+                        )
                     )
                 except (ValueError, TypeError):
                     max_connections = None
@@ -251,14 +267,14 @@ def check_infrastructure_issues():
                     details = f"Active connections: {active}/{max_connections} ({usage_pct:.1f}%)"
 
                     # Determine severity based on percentage thresholds
-                    if usage_pct > 80:
+                    if usage_pct > CONN_POOL_CRITICAL_THRESHOLD_PCT:
                         severity = "critical"
                         issue_text = "Connection pool critically high"
-                    elif usage_pct > 60:
+                    elif usage_pct > CONN_POOL_WARNING_THRESHOLD_PCT:
                         severity = "warning"
                         issue_text = "Connection pool near capacity"
                     else:
-                        severity = None  # No issue if under 60%
+                        severity = None  # No issue if under thresholds
 
                     if severity:
                         issues.append(
@@ -273,7 +289,7 @@ def check_infrastructure_issues():
                         )
                 else:
                     # Fallback: max_connections unknown, use absolute threshold
-                    if active > 80:
+                    if active > MAX_CONNECTIONS_THRESHOLD:
                         issues.append(
                             {
                                 "severity": "warning",
@@ -340,7 +356,7 @@ def check_performance_issues():
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")
-            if avg_time and float(avg_time) > 5000:
+            if avg_time and float(avg_time) > QUERY_TIMEOUT_THRESHOLD_MS:
                 issues.append(
                     {
                         "severity": "warning",
@@ -385,7 +401,7 @@ def check_performance_issues():
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")
-            if avg_time and float(avg_time) > 100:
+            if avg_time and float(avg_time) > ROUTING_TIMEOUT_THRESHOLD_MS:
                 issues.append(
                     {
                         "severity": "warning",
@@ -487,13 +503,13 @@ def main():
         # Determine system health
         if critical_count > 0:
             system_health = "critical"
-            exit_code = 2
+            exit_code = EXIT_CRITICAL
         elif warning_count > 0:
             system_health = "degraded"
-            exit_code = 1
+            exit_code = EXIT_WARNING
         else:
             system_health = "healthy"
-            exit_code = 0
+            exit_code = EXIT_SUCCESS
 
         # Build result
         result = {
@@ -522,7 +538,7 @@ def main():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         print(format_json(error_result))
-        return 3
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":

@@ -39,7 +39,14 @@ from db_helper import get_correlation_id, parse_json_param
 
 
 # Add shared_lib to path for kafka_config and kafka_publisher
-# Path: execute_kafka.py -> log-routing-decision/ -> agent-tracking/ -> skills/ -> claude-artifacts/ -> omniclaude/
+# Relative path resolution from execute_kafka.py:
+#   execute_kafka.py (current file)
+#   └── parent: log-routing-decision/
+#       └── parent: agent-tracking/
+#           └── parent: skills/
+#               └── parent: claude-artifacts/
+#                   └── parent: omniclaude/ (project root)
+#                       └── shared_lib/ (target directory)
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )

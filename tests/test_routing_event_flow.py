@@ -47,7 +47,8 @@ from config import settings
 
 
 # Add services to path (parent of routing_adapter)
-services_path = Path(__file__).parent / "services"
+# NOTE: services/ is at project root, not in tests/
+services_path = Path(__file__).parent.parent / "services"
 sys.path.insert(0, str(services_path))
 
 # Import routing schemas

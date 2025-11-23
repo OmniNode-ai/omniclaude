@@ -38,103 +38,130 @@ main = execute.main
 class TestDiagnoseIssues:
     """Test diagnose-issues skill."""
 
-    @pytest.mark.skip(reason="Missing function: check_infrastructure not in execute.py")
     def test_detect_kafka_issues(self):
         """Test detection of Kafka issues."""
         with (
-            patch.object(execute, "check_infrastructure") as mock_infra,
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
             patch("sys.argv", ["execute.py"]),
         ):
-
-            mock_infra.return_value = {
-                "kafka": {
-                    "status": "error",
-                    "reachable": False,
-                    "error": "Connection refused",
-                }
+            # Mock Kafka failure
+            mock_kafka.return_value = {
+                "reachable": False,
+                "error": "Connection refused",
             }
+
+            # Mock successful PostgreSQL and Qdrant
+            mock_db.return_value = {"success": True, "rows": []}
+            mock_qdrant.return_value = {"reachable": True}
+
+            # Mock successful Docker
+            mock_containers.return_value = {"success": True, "containers": []}
 
             exit_code = main()
 
-            assert exit_code == 0
+            # Kafka issue is critical, expect exit code 2
+            assert exit_code == 2
 
-    @pytest.mark.skip(reason="Missing function: check_infrastructure not in execute.py")
     def test_detect_postgres_issues(self):
         """Test detection of PostgreSQL issues."""
         with (
-            patch.object(execute, "check_infrastructure") as mock_infra,
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
             patch("sys.argv", ["execute.py"]),
         ):
-
-            mock_infra.return_value = {
-                "postgres": {
-                    "status": "error",
-                    "error": "Connection timeout",
-                }
+            # Mock PostgreSQL failure
+            mock_db.return_value = {
+                "success": False,
+                "error": "Connection timeout",
             }
+
+            # Mock successful Kafka and Qdrant
+            mock_kafka.return_value = {"reachable": True}
+            mock_qdrant.return_value = {"reachable": True}
+
+            # Mock successful Docker
+            mock_containers.return_value = {"success": True, "containers": []}
 
             exit_code = main()
 
-            assert exit_code == 0
+            # PostgreSQL issue is critical, expect exit code 2
+            assert exit_code == 2
 
-    @pytest.mark.skip(reason="Missing function: check_infrastructure not in execute.py")
     def test_detect_qdrant_issues(self):
         """Test detection of Qdrant issues."""
         with (
-            patch.object(execute, "check_infrastructure") as mock_infra,
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
             patch("sys.argv", ["execute.py"]),
         ):
-
-            mock_infra.return_value = {
-                "qdrant": {
-                    "status": "error",
-                    "reachable": False,
-                    "error": "Service unavailable",
-                }
+            # Mock Qdrant failure
+            mock_qdrant.return_value = {
+                "reachable": False,
+                "error": "Service unavailable",
             }
+
+            # Mock successful Kafka and PostgreSQL
+            mock_kafka.return_value = {"reachable": True}
+            mock_db.return_value = {"success": True, "rows": []}
+
+            # Mock successful Docker
+            mock_containers.return_value = {"success": True, "containers": []}
 
             exit_code = main()
 
-            assert exit_code == 0
+            # Qdrant issue is critical, expect exit code 2
+            assert exit_code == 2
 
-    @pytest.mark.skip(reason="Missing function: check_infrastructure not in execute.py")
     def test_no_issues_detected(self):
         """Test when no issues are detected."""
         with (
-            patch.object(execute, "check_infrastructure") as mock_infra,
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
             patch("sys.argv", ["execute.py"]),
         ):
-
-            mock_infra.return_value = {
-                "kafka": {"status": "connected", "reachable": True},
-                "postgres": {"status": "connected"},
-                "qdrant": {"status": "connected", "reachable": True},
-            }
+            # Mock all services healthy
+            mock_kafka.return_value = {"reachable": True}
+            mock_db.return_value = {"success": True, "rows": []}
+            mock_qdrant.return_value = {"reachable": True}
+            mock_containers.return_value = {"success": True, "containers": []}
 
             exit_code = main()
 
+            # No issues, expect exit code 0
             assert exit_code == 0
 
-    @pytest.mark.skip(reason="Missing function: check_infrastructure not in execute.py")
     def test_severity_classification(self):
         """Test issue severity classification."""
         with (
-            patch.object(execute, "check_infrastructure") as mock_infra,
-            patch.object(execute, "check_recent_activity") as mock_activity,
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
             patch("sys.argv", ["execute.py"]),
         ):
-
-            # Critical: PostgreSQL down
-            mock_infra.return_value = {
-                "postgres": {"status": "error", "error": "Connection refused"},
-                "kafka": {"status": "connected"},
-                "qdrant": {"status": "connected"},
+            # Mock PostgreSQL failure (critical)
+            mock_db.return_value = {
+                "success": False,
+                "error": "Connection refused",
             }
 
-            mock_activity.return_value = {
-                "agent_actions": {"errors": 25}  # High error rate
-            }
+            # Mock successful Kafka and Qdrant
+            mock_kafka.return_value = {"reachable": True}
+            mock_qdrant.return_value = {"reachable": True}
+
+            # Mock successful Docker
+            mock_containers.return_value = {"success": True, "containers": []}
 
             exit_code = main()
 
-            assert exit_code == 0
+            # Critical issue, expect exit code 2
+            assert exit_code == 2

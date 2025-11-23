@@ -90,3 +90,35 @@ DEFAULT_REQUEST_TIMEOUT_SECONDS: int = 5
 
 # Default connection timeout for database/infrastructure
 DEFAULT_CONNECTION_TIMEOUT_SECONDS: int = 10
+
+# =============================================================================
+# Exit Codes
+# =============================================================================
+
+# Success exit code - no issues found
+EXIT_SUCCESS: int = 0
+
+# Warning exit code - non-critical issues found
+EXIT_WARNING: int = 1
+
+# Critical exit code - critical issues found requiring immediate attention
+EXIT_CRITICAL: int = 2
+
+# Error exit code - diagnostic/execution failed
+EXIT_ERROR: int = 3
+
+# =============================================================================
+# PostgreSQL Thresholds
+# =============================================================================
+
+# Default PostgreSQL max_connections value (fallback when SHOW max_connections fails)
+# PostgreSQL default is 100, but many installations increase this
+DEFAULT_POSTGRES_MAX_CONNECTIONS: int = 100
+
+# Connection pool warning threshold (percentage)
+# Triggers warning when active connections exceed this percentage of max_connections
+CONN_POOL_WARNING_THRESHOLD_PCT: int = 60
+
+# Connection pool critical threshold (percentage)
+# Triggers critical alert when active connections exceed this percentage
+CONN_POOL_CRITICAL_THRESHOLD_PCT: int = 80

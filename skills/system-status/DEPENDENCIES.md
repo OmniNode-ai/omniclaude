@@ -409,7 +409,7 @@ env | grep -E "(POSTGRES|KAFKA|QDRANT)"
 - [Kafka Helper](_shared/kafka_helper.py) - Kafka operations helper
 - [Database Helper](_shared/db_helper.py) - PostgreSQL operations helper
 - [Qdrant Helper](_shared/qdrant_helper.py) - Qdrant operations helper
-- [OmniClaude CLAUDE.md](/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md) - Main project documentation
+- [OmniClaude CLAUDE.md](../../CLAUDE.md) - Main project documentation
 - [Environment Configuration](../../.env.example) - Environment variable template
 
 ## Platform Support

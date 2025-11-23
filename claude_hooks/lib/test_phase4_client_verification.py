@@ -210,10 +210,10 @@ def main():
     """Run all verification tests"""
 
     print("\n")
-    print("╔" + "=" * 68 + "╗")
+    print("╔" + "=" * 68 + "╗")  # nosec B608  # Bandit false positive - not SQL
     padding = " " * 15
     print(f"║{padding}Phase 4 API Client Verification Suite{padding}║")
-    print("╚" + "=" * 68 + "╝")
+    print("╚" + "=" * 68 + "╝")  # nosec B608  # Bandit false positive - not SQL
 
     # 1. Verify implementation
     implementation_ok = verify_client_implementation()
@@ -225,10 +225,10 @@ def main():
     # 2. Test basic usage
     asyncio.run(test_basic_client_usage())
 
-    print("\n" + "╔" + "=" * 68 + "╗")
+    print("\n" + "╔" + "=" * 68 + "╗")  # nosec B608  # Bandit false positive - not SQL
     padding = " " * 20
     print(f"║{padding}ALL VERIFICATIONS PASSED!{padding}║")
-    print("╚" + "=" * 68 + "╝")
+    print("╚" + "=" * 68 + "╝")  # nosec B608  # Bandit false positive - not SQL
     print()
 
     return True

@@ -38,117 +38,148 @@ main = execute.main
 class TestCheckServiceStatus:
     """Test check-service-status skill."""
 
-    @pytest.mark.skip(reason="Missing function: get_service_summary not in execute.py")
-    def test_list_all_services(self):
-        """Test listing all Docker services."""
+    def test_service_status_healthy(self):
+        """Test getting status for a healthy service."""
         with (
-            patch.object(execute, "get_service_summary") as mock_services,
-            patch("sys.argv", ["execute.py"]),
+            patch.object(execute, "get_container_status") as mock_status,
+            patch("sys.argv", ["execute.py", "--service", "archon-intelligence"]),
         ):
 
-            mock_services.return_value = {
+            mock_status.return_value = {
                 "success": True,
-                "containers": [
-                    {
-                        "name": "archon-intelligence",
-                        "status": "running",
-                        "health": "healthy",
-                    },
-                    {
-                        "name": "archon-qdrant",
-                        "status": "running",
-                        "health": "healthy",
-                    },
-                ],
-                "count": 2,
+                "status": "running",
+                "health": "healthy",
+                "running": True,
+                "started_at": "2025-11-20T10:00:00Z",
+                "restart_count": 0,
+                "image": "archon-intelligence:latest",
             }
 
             exit_code = main()
 
             assert exit_code == 0
+            mock_status.assert_called_once_with("archon-intelligence")
 
-    @pytest.mark.skip(reason="Missing function: get_service_summary not in execute.py")
-    def test_filter_services_by_pattern(self):
-        """Test filtering services by name pattern."""
+    def test_service_status_with_logs(self):
+        """Test getting status with logs included."""
         with (
-            patch.object(execute, "get_service_summary") as mock_services,
-            patch("sys.argv", ["execute.py", "--pattern", "archon-*"]),
+            patch.object(execute, "get_container_status") as mock_status,
+            patch.object(execute, "get_container_logs") as mock_logs,
+            patch(
+                "sys.argv",
+                ["execute.py", "--service", "archon-qdrant", "--include-logs"],
+            ),
         ):
 
-            mock_services.return_value = {
+            mock_status.return_value = {
                 "success": True,
-                "containers": [
-                    {"name": "archon-intelligence", "status": "running"},
-                    {"name": "archon-qdrant", "status": "running"},
-                ],
-                "count": 2,
+                "status": "running",
+                "health": "healthy",
+                "running": True,
+                "started_at": "2025-11-20T10:00:00Z",
+                "restart_count": 0,
+                "image": "qdrant:latest",
+            }
+
+            mock_logs.return_value = {
+                "success": True,
+                "log_count": 100,
+                "error_count": 2,
+                "errors": ["Error 1", "Error 2"],
             }
 
             exit_code = main()
 
             assert exit_code == 0
+            mock_status.assert_called_once_with("archon-qdrant")
+            mock_logs.assert_called_once()
 
-    @pytest.mark.skip(reason="Missing function: get_service_summary not in execute.py")
-    def test_docker_unavailable(self):
-        """Test handling when Docker is unavailable."""
+    def test_service_status_with_stats(self):
+        """Test getting status with resource stats included."""
         with (
-            patch.object(execute, "get_service_summary") as mock_services,
-            patch("sys.argv", ["execute.py"]),
+            patch.object(execute, "get_container_status") as mock_status,
+            patch.object(execute, "get_container_stats") as mock_stats,
+            patch(
+                "sys.argv",
+                ["execute.py", "--service", "archon-bridge", "--include-stats"],
+            ),
         ):
 
-            mock_services.return_value = {
+            mock_status.return_value = {
+                "success": True,
+                "status": "running",
+                "health": "healthy",
+                "running": True,
+                "started_at": "2025-11-20T10:00:00Z",
+                "restart_count": 0,
+                "image": "archon-bridge:latest",
+            }
+
+            mock_stats.return_value = {
+                "success": True,
+                "cpu_percent": 15.5,
+                "memory_usage": "256MB",
+                "memory_percent": 12.3,
+            }
+
+            exit_code = main()
+
+            assert exit_code == 0
+            mock_status.assert_called_once_with("archon-bridge")
+            mock_stats.assert_called_once_with("archon-bridge")
+
+    def test_service_not_found(self):
+        """Test handling when service is not found."""
+        with (
+            patch.object(execute, "get_container_status") as mock_status,
+            patch("sys.argv", ["execute.py", "--service", "nonexistent-service"]),
+        ):
+
+            mock_status.return_value = {
                 "success": False,
-                "error": "Docker daemon not running",
-                "containers": [],
-                "count": 0,
+                "error": "Container not found: nonexistent-service",
             }
 
             exit_code = main()
 
             assert exit_code == 1
 
-    @pytest.mark.skip(reason="Missing function: get_service_summary not in execute.py")
-    def test_unhealthy_services_detected(self):
-        """Test detection of unhealthy services."""
+    def test_unhealthy_service_detected(self):
+        """Test detection of unhealthy service."""
         with (
-            patch.object(execute, "get_service_summary") as mock_services,
-            patch("sys.argv", ["execute.py"]),
+            patch.object(execute, "get_container_status") as mock_status,
+            patch("sys.argv", ["execute.py", "--service", "archon-search"]),
         ):
 
-            mock_services.return_value = {
+            mock_status.return_value = {
                 "success": True,
-                "containers": [
-                    {
-                        "name": "archon-intelligence",
-                        "status": "running",
-                        "health": "unhealthy",
-                    },
-                ],
-                "count": 1,
+                "status": "running",
+                "health": "unhealthy",
+                "running": True,
+                "started_at": "2025-11-20T10:00:00Z",
+                "restart_count": 3,
+                "image": "archon-search:latest",
             }
 
             exit_code = main()
 
             assert exit_code == 0
 
-    @pytest.mark.skip(reason="Missing function: get_service_summary not in execute.py")
-    def test_stopped_services_detected(self):
-        """Test detection of stopped services."""
+    def test_stopped_service_detected(self):
+        """Test detection of stopped service."""
         with (
-            patch.object(execute, "get_service_summary") as mock_services,
-            patch("sys.argv", ["execute.py"]),
+            patch.object(execute, "get_container_status") as mock_status,
+            patch("sys.argv", ["execute.py", "--service", "archon-memgraph"]),
         ):
 
-            mock_services.return_value = {
+            mock_status.return_value = {
                 "success": True,
-                "containers": [
-                    {
-                        "name": "archon-search",
-                        "status": "stopped",
-                        "health": None,
-                    },
-                ],
-                "count": 1,
+                "status": "exited",
+                "health": None,
+                "running": False,
+                "started_at": None,
+                "restart_count": 0,
+                "image": "memgraph:latest",
             }
 
             exit_code = main()

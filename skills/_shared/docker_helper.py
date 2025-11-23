@@ -152,6 +152,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "containers": [],
             "count": 0,
             "error": f"Docker command timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
@@ -159,6 +160,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "containers": [],
             "count": 0,
             "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -168,6 +170,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "containers": [],
             "count": 0,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -228,12 +231,14 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Docker inspect timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
             "success": False,
             "container": container_name,
             "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
         }
     except json.JSONDecodeError as e:
         # JSONDecodeError: Docker returned invalid JSON
@@ -241,6 +246,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Invalid JSON from Docker: {str(e)}",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -249,6 +255,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -274,6 +281,7 @@ def check_container_health(container_name: str) -> Dict[str, Any]:
         "health_status": status.get("health", "unknown"),
         "running": status.get("running", False),
         "error": None,
+        "return_code": 0,
     }
 
 
@@ -340,12 +348,14 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Docker stats timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
             "success": False,
             "container": container_name,
             "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
         }
     except ValueError as e:
         # ValueError: float conversion errors from stats parsing
@@ -353,6 +363,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Failed to parse stats: {str(e)}",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -361,6 +372,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -422,12 +434,14 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Docker logs timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
             "success": False,
             "container": container_name,
             "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -436,6 +450,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "success": False,
             "container": container_name,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -477,6 +492,7 @@ def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
         "unhealthy": unhealthy,
         "healthy": running - unhealthy,
         "error": None,
+        "return_code": 0,
     }
 
 

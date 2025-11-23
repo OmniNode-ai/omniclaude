@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================================
-# PR Review - Production Mode - OPTIMIZED VERSION
+# pr-review-production - Strict Production-Ready PR Review
 # ============================================================================
 # Strict PR review wrapper for production deployments with smart caching.
 #

@@ -5,7 +5,6 @@ Builds ModelContractEffect instances from parsed prompt data using
 Pydantic models instead of string concatenation.
 """
 
-import logging
 from typing import Any, Dict, List
 from uuid import uuid4
 
@@ -26,9 +25,6 @@ from omnibase_core.models.contracts.model_transaction_config import (
 )
 
 from .contract_builder import ContractBuilder
-
-
-logger = logging.getLogger(__name__)
 
 
 class EffectContractBuilder(ContractBuilder[ModelContractEffect]):

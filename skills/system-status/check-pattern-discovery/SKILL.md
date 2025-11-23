@@ -29,7 +29,9 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 
 ### Non-Detailed Mode (Default)
 
-Returns basic collection statistics with full field names. Suitable for programmatic parsing and data processing.
+Returns basic collection statistics with verbose field names (`vectors_count`, `indexed_vectors_count`).
+
+**Note**: Counter-intuitively, this "non-detailed" mode uses MORE verbose field names for better self-documentation in programmatic contexts. Suitable for programmatic parsing and data processing where explicit field names improve code readability.
 
 ```bash
 python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
@@ -81,7 +83,9 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 
 ### Detailed Mode
 
-Returns collection statistics with simplified field names for better readability. Suitable for human consumption and dashboards.
+Returns collection statistics with shortened field names (`vectors`, `indexed_vectors`) for better readability.
+
+**Note**: Counter-intuitively, this "detailed" mode uses SHORTER field names for more compact output. Suitable for human consumption and dashboards where brevity improves readability.
 
 ```bash
 python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py --detailed

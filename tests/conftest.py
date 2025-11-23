@@ -36,8 +36,7 @@ else:
     print("ℹ️  Running in CI environment - using GitHub Actions environment variables")
 
 # Import project modules
-# Temporarily commented out - contract_validator depends on omnibase_core
-# from agents.lib.generation.contract_validator import ContractValidator, ValidationResult
+from agents.lib.generation.contract_validator import ContractValidator, ValidationResult
 
 
 # -------------------------------------------------------------------------
@@ -64,8 +63,12 @@ lifecycle:
   initialization: ["connect_to_database"]
   cleanup: ["close_connection"]
 dependencies:
-  - asyncpg
-  - psycopg2-binary
+  - name: asyncpg
+    module: asyncpg
+    dependency_type: module
+  - name: psycopg2-binary
+    module: psycopg2
+    dependency_type: module
 performance:
   expected_duration_ms: 100
   timeout_ms: 5000
@@ -82,11 +85,19 @@ description: "Transforms data using pure computation"
 node_type: COMPUTE
 input_model: ModelDataInput
 output_model: ModelDataOutput
-error_model: ModelOnexError
-computation_type: transformation
-is_pure: true
+algorithm:
+  algorithm_type: transformation
+  factors:
+    factor_1:
+      weight: 0.6
+      calculation_method: linear
+    factor_2:
+      weight: 0.4
+      calculation_method: exponential
 dependencies:
-  - numpy
+  - name: numpy
+    module: numpy
+    dependency_type: module
 performance:
   expected_duration_ms: 50
   timeout_ms: 2000
@@ -103,14 +114,17 @@ description: "Aggregates data and emits intents"
 node_type: REDUCER
 input_model: ModelAggregationInput
 output_model: ModelAggregationOutput
-error_model: ModelOnexError
 aggregation_strategy: sum
-state_management: true
+state_management:
+  state_management_enabled: true
+  state_scope: node_local
 intent_emissions:
   - intent_type: data_aggregated
     destination: event_bus
 dependencies:
-  - redis
+  - name: redis
+    module: redis
+    dependency_type: module
 performance:
   expected_duration_ms: 200
   timeout_ms: 10000
@@ -127,16 +141,18 @@ description: "Orchestrates multi-step workflow"
 node_type: ORCHESTRATOR
 input_model: ModelWorkflowInput
 output_model: ModelWorkflowOutput
-error_model: ModelOnexError
-workflow_steps:
-  - step: validate_input
-  - step: process_data
-  - step: store_results
-lease_management: true
+workflow_coordination:
+  workflow_coordination_enabled: true
+  orchestration_pattern: sequential
 dependencies:
-  - redis
-  - asyncio
+  - name: redis
+    module: redis
+    dependency_type: module
+  - name: asyncio
+    module: asyncio
+    dependency_type: module
 performance:
+  single_operation_max_ms: 500
   expected_duration_ms: 500
   timeout_ms: 30000
 """
@@ -157,19 +173,18 @@ input_model: ModelInput
 # -------------------------------------------------------------------------
 
 
-# Temporarily commented out - contract_validator depends on omnibase_core
-# @pytest.fixture
-# def contract_validator() -> ContractValidator:
-#     """Create contract validator instance."""
-#     return ContractValidator()
-#
-#
-# @pytest.fixture
-# def contract_validator_with_search_paths(tmp_path: Path) -> ContractValidator:
-#     """Create contract validator with model search paths."""
-#     models_dir = tmp_path / "models"
-#     models_dir.mkdir()
-#     return ContractValidator(model_search_paths=[models_dir])
+@pytest.fixture
+def contract_validator() -> ContractValidator:
+    """Create contract validator instance."""
+    return ContractValidator()
+
+
+@pytest.fixture
+def contract_validator_with_search_paths(tmp_path: Path) -> ContractValidator:
+    """Create contract validator with model search paths."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    return ContractValidator(model_search_paths=[models_dir])
 
 
 # -------------------------------------------------------------------------
@@ -268,29 +283,29 @@ def correlation_id() -> str:
 # Validation Result Helpers
 # -------------------------------------------------------------------------
 
-# Temporarily commented out - ValidationResult depends on omnibase_core
-# def create_valid_validation_result(
-#     node_type: str = "EFFECT",
-# ) -> ValidationResult:
-#     """Helper to create valid validation result for testing."""
-#     return ValidationResult(
-#         valid=True,
-#         node_type=node_type,
-#         schema_compliance=True,
-#         model_references_valid=True,
-#     )
-#
-#
-# def create_invalid_validation_result(
-#     node_type: str = "EFFECT", errors: list = None
-# ) -> ValidationResult:
-#     """Helper to create invalid validation result for testing."""
-#     return ValidationResult(
-#         valid=False,
-#         node_type=node_type,
-#         schema_compliance=False,
-#         errors=errors or [{"loc": ["test"], "msg": "Test error", "type": "test"}],
-#     )
+
+def create_valid_validation_result(
+    node_type: str = "EFFECT",
+) -> ValidationResult:
+    """Helper to create valid validation result for testing."""
+    return ValidationResult(
+        valid=True,
+        node_type=node_type,
+        schema_compliance=True,
+        model_references_valid=True,
+    )
+
+
+def create_invalid_validation_result(
+    node_type: str = "EFFECT", errors: list = None
+) -> ValidationResult:
+    """Helper to create invalid validation result for testing."""
+    return ValidationResult(
+        valid=False,
+        node_type=node_type,
+        schema_compliance=False,
+        errors=errors or [{"loc": ["test"], "msg": "Test error", "type": "test"}],
+    )
 
 
 # -------------------------------------------------------------------------

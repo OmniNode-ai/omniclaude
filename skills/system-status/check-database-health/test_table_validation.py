@@ -164,8 +164,16 @@ class TestTableValidationIntegration(unittest.TestCase):
                 assert result == table
 
     def test_whitelist_no_duplicates(self):
-        """Test that whitelist contains no duplicates."""
-        # Sets automatically remove duplicates, so length comparison reveals dupes
+        """Test that whitelist contains no duplicates.
+
+        Note: VALID_TABLES is currently a set, so this test will always pass.
+        However, this test provides defensive programming value:
+        - If someone changes VALID_TABLES to a list (e.g., for ordering),
+          this test will catch duplicate entries
+        - Documents the invariant that duplicates are not allowed
+        - Acts as a regression test for data integrity
+        """
+        # Convert to list and check if set conversion changes length
         whitelist_list = list(VALID_TABLES)
         assert len(whitelist_list) == len(
             set(whitelist_list)

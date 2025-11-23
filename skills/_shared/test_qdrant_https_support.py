@@ -20,7 +20,6 @@ Created: 2025-11-20
 import os
 import sys
 import unittest
-from unittest.mock import patch
 
 
 class TestQdrantHttpsSupport(unittest.TestCase):
@@ -36,70 +35,76 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self.original_env)
 
-    @patch("config.Settings")
-    def test_explicit_https_url(self, mock_settings):
+    def test_explicit_https_url(self):
         """Test explicit HTTPS URL in QDRANT_URL."""
-        # Mock settings with HTTPS URL
-        mock_settings.qdrant_url = "https://qdrant.internal:6333"
-        mock_settings.qdrant_host = "localhost"
-        mock_settings.qdrant_port = 6333
-        mock_settings.request_timeout_ms = 5000
-
         # Set production environment to allow HTTPS
         os.environ["ENVIRONMENT"] = "production"
+        os.environ["QDRANT_URL"] = "https://qdrant.internal:6333"
+        os.environ["QDRANT_HOST"] = "qdrant.internal"
+        os.environ["QDRANT_PORT"] = "6333"
+
+        # Reload settings to pick up environment changes
+        import importlib
+        import sys
+
+        # Remove qdrant_helper from sys.modules to force reimport
+        if "qdrant_helper" in sys.modules:
+            del sys.modules["qdrant_helper"]
+        if "config" in sys.modules:
+            del sys.modules["config"]
 
         # Import after environment is set
-        # Mock settings object
-        import qdrant_helper
         from qdrant_helper import get_qdrant_url
-
-        qdrant_helper.settings = mock_settings
 
         # Get URL - should return HTTPS
         url = get_qdrant_url()
         assert url.startswith("https://"), f"Expected HTTPS URL, got: {url}"
 
-    @patch("config.Settings")
-    def test_explicit_http_url_dev(self, mock_settings):
+    def test_explicit_http_url_dev(self):
         """Test explicit HTTP URL in development."""
-        # Mock settings with HTTP URL
-        mock_settings.qdrant_url = "http://localhost:6333"
-        mock_settings.qdrant_host = "localhost"
-        mock_settings.qdrant_port = 6333
-        mock_settings.request_timeout_ms = 5000
-
         # Set development environment
         os.environ["ENVIRONMENT"] = "development"
+        os.environ["QDRANT_URL"] = "http://localhost:6333"
+        os.environ["QDRANT_HOST"] = "localhost"
+        os.environ["QDRANT_PORT"] = "6333"
+
+        # Reload settings to pick up environment changes
+        import sys
+
+        # Remove qdrant_helper from sys.modules to force reimport
+        if "qdrant_helper" in sys.modules:
+            del sys.modules["qdrant_helper"]
+        if "config" in sys.modules:
+            del sys.modules["config"]
 
         # Import after environment is set
-        # Mock settings object
-        import qdrant_helper
         from qdrant_helper import get_qdrant_url
-
-        qdrant_helper.settings = mock_settings
 
         # Get URL - should return HTTP
         url = get_qdrant_url()
         assert url.startswith("http://"), f"Expected HTTP URL, got: {url}"
 
-    @patch("config.Settings")
-    def test_auto_https_production(self, mock_settings):
+    def test_auto_https_production(self):
         """Test auto HTTPS selection in production."""
-        # Mock settings without protocol in URL
-        mock_settings.qdrant_url = None  # No URL set
-        mock_settings.qdrant_host = "qdrant.internal"
-        mock_settings.qdrant_port = 6333
-        mock_settings.request_timeout_ms = 5000
-
-        # Set production environment
+        # Set production environment without explicit protocol
         os.environ["ENVIRONMENT"] = "production"
+        # Don't set QDRANT_URL or set it without protocol
+        if "QDRANT_URL" in os.environ:
+            del os.environ["QDRANT_URL"]
+        os.environ["QDRANT_HOST"] = "qdrant.internal"
+        os.environ["QDRANT_PORT"] = "6333"
+
+        # Reload settings to pick up environment changes
+        import sys
+
+        # Remove qdrant_helper from sys.modules to force reimport
+        if "qdrant_helper" in sys.modules:
+            del sys.modules["qdrant_helper"]
+        if "config" in sys.modules:
+            del sys.modules["config"]
 
         # Import after environment is set
-        # Mock settings object
-        import qdrant_helper
         from qdrant_helper import get_qdrant_url
-
-        qdrant_helper.settings = mock_settings
 
         # Get URL - should auto-select HTTPS
         url = get_qdrant_url()
@@ -107,24 +112,27 @@ class TestQdrantHttpsSupport(unittest.TestCase):
             "https://"
         ), f"Expected HTTPS URL in production, got: {url}"
 
-    @patch("config.Settings")
-    def test_auto_http_development(self, mock_settings):
+    def test_auto_http_development(self):
         """Test auto HTTP selection in development."""
-        # Mock settings without protocol in URL
-        mock_settings.qdrant_url = None  # No URL set
-        mock_settings.qdrant_host = "localhost"
-        mock_settings.qdrant_port = 6333
-        mock_settings.request_timeout_ms = 5000
-
-        # Set development environment
+        # Set development environment without explicit protocol
         os.environ["ENVIRONMENT"] = "development"
+        # Don't set QDRANT_URL or set it without protocol
+        if "QDRANT_URL" in os.environ:
+            del os.environ["QDRANT_URL"]
+        os.environ["QDRANT_HOST"] = "localhost"
+        os.environ["QDRANT_PORT"] = "6333"
+
+        # Reload settings to pick up environment changes
+        import sys
+
+        # Remove qdrant_helper from sys.modules to force reimport
+        if "qdrant_helper" in sys.modules:
+            del sys.modules["qdrant_helper"]
+        if "config" in sys.modules:
+            del sys.modules["config"]
 
         # Import after environment is set
-        # Mock settings object
-        import qdrant_helper
         from qdrant_helper import get_qdrant_url
-
-        qdrant_helper.settings = mock_settings
 
         # Get URL - should auto-select HTTP
         url = get_qdrant_url()
@@ -132,24 +140,26 @@ class TestQdrantHttpsSupport(unittest.TestCase):
             "http://"
         ), f"Expected HTTP URL in development, got: {url}"
 
-    @patch("config.Settings")
-    def test_https_validation_production(self, mock_settings):
+    def test_https_validation_production(self):
         """Test HTTPS validation is enforced in production."""
-        # Mock settings with HTTP URL in production (should fail validation)
-        mock_settings.qdrant_url = None  # No URL set, will construct
-        mock_settings.qdrant_host = "localhost"
-        mock_settings.qdrant_port = 6333
-        mock_settings.request_timeout_ms = 5000
-
-        # Set production environment
+        # Set production environment without explicit protocol
         os.environ["ENVIRONMENT"] = "production"
+        if "QDRANT_URL" in os.environ:
+            del os.environ["QDRANT_URL"]
+        os.environ["QDRANT_HOST"] = "localhost"
+        os.environ["QDRANT_PORT"] = "6333"
+
+        # Reload settings to pick up environment changes
+        import sys
+
+        # Remove qdrant_helper from sys.modules to force reimport
+        if "qdrant_helper" in sys.modules:
+            del sys.modules["qdrant_helper"]
+        if "config" in sys.modules:
+            del sys.modules["config"]
 
         # Import after environment is set
-        # Mock settings object
-        import qdrant_helper
         from qdrant_helper import get_qdrant_url
-
-        qdrant_helper.settings = mock_settings
 
         # Get URL - should construct with HTTPS, then validate
         # (validation will pass because we construct with https://)

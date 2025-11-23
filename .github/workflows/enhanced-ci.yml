@@ -276,6 +276,7 @@ jobs:
           echo "::group::Unit Tests - Split ${{ matrix.split }}/10"
           # Add explicit timeout to prevent test hangs
           # Use pytest-split to distribute tests evenly across 10 splits
+          # Generate unique coverage file per split to avoid overwrites
           timeout 600 poetry run pytest -o addopts="" \
             agents/tests/ \
             -v \
@@ -288,12 +289,14 @@ jobs:
             --splits 10 \
             --group ${{ matrix.split }} \
             --cov=agents \
-            --cov-report=xml \
             --cov-report=term-missing \
             --junitxml=junit-unit-split-${{ matrix.split }}.xml || {
               echo "::error::Unit tests exceeded 10 minute timeout or failed"
               exit 1
             }
+
+          # Rename coverage file to be unique for this split
+          mv .coverage .coverage.${{ matrix.split }}
           echo "::endgroup::"
 
       - name: Check for resource leaks
@@ -306,12 +309,12 @@ jobs:
           ps aux | grep -i defunct || echo "No zombie processes found"
           echo "::endgroup::"
 
-      - name: Upload unit test coverage
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage artifact for merge
+        uses: actions/upload-artifact@v4
         with:
-          files: ./coverage.xml
-          flags: unittests
-          name: unit-tests-split-${{ matrix.split }}
+          name: coverage-unit-split-${{ matrix.split }}
+          path: .coverage.${{ matrix.split }}
+          retention-days: 1
 
       - name: Upload unit test results
         uses: actions/upload-artifact@v4
@@ -330,6 +333,64 @@ jobs:
             tmp/
             *.log
             .pytest_cache/
+
+  # ============================================================================
+  # Merge Coverage from Parallel Unit Tests
+  # ============================================================================
+  merge-unit-coverage:
+    name: Merge Unit Test Coverage
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install coverage
+        run: pip install coverage[toml]
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-unit-split-*
+          path: coverage-files/
+
+      - name: Combine coverage files
+        run: |
+          echo "::group::Combining Coverage Files"
+          # Move all coverage files to current directory
+          find coverage-files/ -name '.coverage.*' -exec mv {} . \;
+          ls -la .coverage.*
+
+          # Combine all coverage files
+          coverage combine .coverage.*
+
+          # Generate XML and term reports
+          coverage xml -o coverage-unit.xml
+          coverage report
+
+          echo "::endgroup::"
+
+      - name: Upload merged coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-unit.xml
+          flags: unittests
+          name: unit-tests-merged
+          fail_ci_if_error: false
+
+      - name: Upload merged coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit-merged
+          path: |
+            coverage-unit.xml
+            .coverage
 
   # ============================================================================
   # Integration Tests (with PostgreSQL and Redis)
@@ -801,7 +862,7 @@ jobs:
     needs:
       - quality-strict
       - onex-validation
-      - unit-tests
+      - merge-unit-coverage
       - integration-tests
       - hooks-tests
       - agent-framework-tests
@@ -857,7 +918,7 @@ jobs:
     name: Test Summary Report
     runs-on: ubuntu-latest
     needs:
-      - unit-tests
+      - merge-unit-coverage
       - integration-tests
       - hooks-tests
       - agent-framework-tests

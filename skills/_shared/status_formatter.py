@@ -265,11 +265,12 @@ def format_percentage(value: float, decimals: int = 1) -> str:
         '96%'
 
     Note:
-        The value 1.0 is unambiguously treated as 100% (fraction format).
-        Values exactly at the boundary (1.0) are treated as fractions, not whole percentages.
+        Boundary condition: The value 1.0 is treated as a fraction (100%).
+        This handles the common case where 1.0 represents "100% complete".
+        Only values strictly greater than 1.0 are treated as pre-converted percentages.
     """
-    # Unambiguous logic: values in [0.0, 1.0] are fractions (multiply by 100)
-    # Values > 1.0 are already whole percentages (use as-is)
+    # Decision boundary: values <= 1.0 are fractions (need *100 conversion)
+    # Only values > 1.0 are treated as already-converted percentages
     if value <= 1.0:
         # Fraction format: multiply by 100 to convert to percentage
         percentage = value * 100

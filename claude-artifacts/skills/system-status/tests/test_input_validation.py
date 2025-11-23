@@ -38,10 +38,10 @@ class TestBoundsChecking:
         assert validate_limit("1000") == 1000
 
         # Invalid boundaries
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_limit("0")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_limit("1001")
 
     def test_log_lines_bounds(self):
@@ -54,10 +54,10 @@ class TestBoundsChecking:
         assert validate_log_lines("10000") == 10000
 
         # Invalid boundaries
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_log_lines("0")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_log_lines("10001")
 
     def test_top_agents_bounds(self):
@@ -70,10 +70,10 @@ class TestBoundsChecking:
         assert validate_top_agents("100") == 100
 
         # Invalid boundaries
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_top_agents("0")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_top_agents("101")
 
 
@@ -96,7 +96,7 @@ class TestInputSanitization:
         ]
 
         for invalid in invalid_inputs:
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
                 validate_limit(invalid)
 
     def test_negative_numbers_rejected(self):
@@ -104,10 +104,10 @@ class TestInputSanitization:
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(negative|must be positive|invalid)"):
             validate_limit("-1")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(negative|must be positive|invalid)"):
             validate_limit("-100")
 
     def test_floating_point_rejected(self):
@@ -115,10 +115,10 @@ class TestInputSanitization:
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be|integer)"):
             validate_limit("10.5")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be|integer)"):
             validate_limit("3.14159")
 
     def test_scientific_notation_rejected(self):
@@ -126,10 +126,10 @@ class TestInputSanitization:
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("1e3")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("10e2")
 
     def test_hexadecimal_rejected(self):
@@ -137,25 +137,33 @@ class TestInputSanitization:
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("0x10")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("0xFF")
 
     def test_whitespace_handling(self):
-        """Test handling of whitespace in inputs."""
+        """Test handling of whitespace in inputs.
+
+        Note: argparse typically strips leading/trailing whitespace before
+        passing values to type validators. This test verifies that if whitespace
+        is NOT stripped (due to argparse version differences or manual validation
+        calls), the validator either:
+        1. Accepts and converts to integer (Python's int() strips whitespace), OR
+        2. Rejects the input (stricter validation)
+
+        Both behaviors are acceptable for robustness.
+        """
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        # Leading/trailing whitespace might be stripped by argparse
-        # But if not, should be rejected
         try:
             result = validate_limit(" 10 ")
-            # If accepted, should be converted to 10
+            # Python's int() strips whitespace, so this should work
             assert result == 10
         except Exception:
-            # If rejected, that's also acceptable
+            # Some validators might reject whitespace - also acceptable
             pass
 
     def test_empty_string_rejected(self):
@@ -163,7 +171,7 @@ class TestInputSanitization:
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(empty|invalid|not a valid|must be)"):
             validate_limit("")
 
 
@@ -240,7 +248,7 @@ class TestTimeframeValidation:
         ]
 
         for invalid in invalid_timeframes:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match=r"(invalid|not supported|unknown)"):
                 parse_timeframe(invalid)
 
 
@@ -253,10 +261,10 @@ class TestEdgeCases:
         validate_limit = execute.validate_limit
 
         # Should reject values larger than 1000
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_limit("999999")
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(out of range|must be between|invalid)"):
             validate_limit(str(2**31))  # Max int32
 
     def test_unicode_characters(self):
@@ -265,11 +273,11 @@ class TestEdgeCases:
         validate_limit = execute.validate_limit
 
         # Unicode digits should be rejected
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("①②③")
 
         # Unicode letters should be rejected
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
             validate_limit("ⓐⓑⓒ")
 
     def test_null_byte_injection(self):
@@ -278,7 +286,9 @@ class TestEdgeCases:
         validate_limit = execute.validate_limit
 
         # Null bytes should be rejected
-        with pytest.raises(Exception):
+        with pytest.raises(
+            ValueError, match=r"(invalid|not a valid|must be|null byte)"
+        ):
             validate_limit("10\x00")
 
     def test_special_characters(self):
@@ -289,5 +299,5 @@ class TestEdgeCases:
         special_chars = ["10!", "10@", "10#", "10$", "10%", "10^", "10&", "10*"]
 
         for special in special_chars:
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError, match=r"(invalid|not a valid|must be)"):
                 validate_limit(special)

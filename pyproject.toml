@@ -4,7 +4,14 @@ version = "0.1.0"
 description = "Parallel agent execution framework with MCP integration"
 authors = ["OmniClaude Team"]
 readme = "README.md"
-packages = [{include = "parallel_execution", from = "agents"}]
+packages = [
+    {include = "parallel_execution", from = "agents"},
+    {include = "agents"},
+    {include = "cli"},
+    {include = "claude_hooks"},
+    {include = "config"},
+    {include = "services"},
+]
 
 [tool.poetry.dependencies]
 python = "^3.12"

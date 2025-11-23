@@ -50,19 +50,40 @@ class TestSQLParameterization:
         for skill_file in skill_paths:
             content = skill_file.read_text()
 
-            # Look for SQL query patterns with f-strings
-            # Pattern: f""" or f''' or f" or f'
-            fstring_pattern = re.compile(
-                r'f["\']["\'][\'"]\s*(SELECT|INSERT|UPDATE|DELETE)', re.IGNORECASE
+            # Find all f-strings in the file, then check each one for SQL + interpolation
+            # This two-step approach is more reliable than trying to match both in one regex
+
+            # Step 1: Find all f-strings (simple and triple-quoted)
+            fstring_finder = re.compile(
+                r'f("""|\'\'\'|"|\')'  # f-string start with quote type
+                r"((?:(?!\1).)*?)"  # content (non-greedy, stops at matching quote)
+                r"\1",  # matching close quote
+                re.DOTALL | re.IGNORECASE,
             )
 
-            matches = fstring_pattern.findall(content)
-            if matches:
+            # Step 2: Check each f-string for SQL keywords AND interpolation
+            found_violations = []
+            for match in fstring_finder.finditer(content):
+                fstring_content = match.group(2)  # The content inside the f-string
+
+                # Check if this f-string has SQL keyword
+                has_sql = re.search(
+                    r"\b(SELECT|INSERT|UPDATE|DELETE)\b", fstring_content, re.IGNORECASE
+                )
+
+                # Check if this f-string has variable interpolation
+                has_interpolation = "{" in fstring_content
+
+                # Only flag if it has BOTH SQL and interpolation
+                if has_sql and has_interpolation:
+                    found_violations.append(match.group(0))
+
+            if found_violations:
                 violations.append(
                     {
                         "file": skill_file.name,
                         "skill": skill_file.parent.name,
-                        "count": len(matches),
+                        "count": len(found_violations),
                     }
                 )
 
@@ -79,14 +100,35 @@ class TestSQLParameterization:
         for skill_file in skill_paths:
             content = skill_file.read_text()
 
-            # Look for string concatenation patterns in SQL
-            # Pattern: "SELECT ... " + variable
-            concat_pattern = re.compile(
-                r'["\']["\']["\'].*?(SELECT|INSERT|UPDATE|DELETE).*?["\']["\']["\'].*?\+',
-                re.IGNORECASE,
+            # Find all string literals, then check for SQL + concatenation
+            # This two-step approach is more reliable
+            string_finder = re.compile(
+                r'("""|\'\'\'|"|\')'  # string start with quote type
+                r"((?:(?!\1).)*?)"  # content (non-greedy, stops at matching quote)
+                r"\1"  # matching close quote
+                r"(\s*(?:\+|%\s*(?![s(])|\.format\())?",  # optional unsafe operation
+                re.DOTALL | re.IGNORECASE,
             )
 
-            if concat_pattern.search(content):
+            found_violations = False
+            for match in string_finder.finditer(content):
+                string_content = match.group(2)
+                operation = match.group(3) if len(match.groups()) >= 3 else ""
+
+                # Check if this string has SQL keyword
+                has_sql = re.search(
+                    r"\b(SELECT|INSERT|UPDATE|DELETE)\b", string_content, re.IGNORECASE
+                )
+
+                # Check if followed by unsafe concatenation/formatting
+                has_concat = bool(operation and operation.strip())
+
+                # Only flag if it has BOTH SQL and unsafe concatenation
+                if has_sql and has_concat:
+                    found_violations = True
+                    break
+
+            if found_violations:
                 violations.append(
                     {
                         "file": skill_file.name,
@@ -196,7 +238,7 @@ class TestSQLInjectionPrevention:
         ]
 
         for malicious in malicious_inputs:
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError, match=r"(?i)invalid|limit|must be"):
                 validate_limit(malicious)
 
     def test_malicious_timeframe_rejected(self):
@@ -212,7 +254,7 @@ class TestSQLInjectionPrevention:
         ]
 
         for malicious in malicious_inputs:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match=r"(?i)invalid|format|timeframe"):
                 parse_timeframe(malicious)
 
     def test_no_raw_user_input_in_queries(self, tmp_path):
@@ -233,15 +275,44 @@ def execute_unsafe_query(limit):
         ), "Should detect f-string interpolation"
 
         # Verify our actual skills don't have this pattern
+        # Use same two-step approach as test_no_fstring_in_sql for consistency
         base_path = Path(__file__).parent.parent
         for skill_file in base_path.glob("*/execute.py"):
             content = skill_file.read_text()
 
-            # Check for f-string with SQL and variable interpolation
-            unsafe_pattern = re.compile(
-                r'f["\']["\'][\'"]\s*(SELECT|INSERT|UPDATE|DELETE).*?{', re.IGNORECASE
+            # Check for f-strings with SQL + interpolation
+            fstring_finder = re.compile(
+                r'f("""|\'\'\'|"|\')'  # f-string start
+                r"((?:(?!\1).)*?)"  # content
+                r"\1",  # matching close quote
+                re.DOTALL | re.IGNORECASE,
             )
 
-            assert not unsafe_pattern.search(
-                content
-            ), f"Found unsafe query in {skill_file.parent.name}/{skill_file.name}"
+            for match in fstring_finder.finditer(content):
+                fstring_content = match.group(2)
+
+                has_sql = re.search(
+                    r"\b(SELECT|INSERT|UPDATE|DELETE)\b", fstring_content, re.IGNORECASE
+                )
+                has_interpolation = "{" in fstring_content
+
+                assert not (has_sql and has_interpolation), (
+                    f"Found f-string with SQL + interpolation in "
+                    f"{skill_file.parent.name}/{skill_file.name}: {match.group(0)[:100]}"
+                )
+
+            # Also check for string concatenation with SQL
+            concat_pattern = re.compile(
+                r'(["\'])'  # opening quote
+                r"((?:(?!\1).)*?)"  # content (non-greedy, stop at matching quote)
+                r"(SELECT|INSERT|UPDATE|DELETE)"  # SQL keyword
+                r"((?:(?!\1).)*?)"  # more content
+                r"\1"  # closing quote
+                r"\s*\+",  # concatenation operator
+                re.IGNORECASE | re.DOTALL,
+            )
+
+            assert not concat_pattern.search(content), (
+                f"Found string concatenation with SQL in "
+                f"{skill_file.parent.name}/{skill_file.name}"
+            )

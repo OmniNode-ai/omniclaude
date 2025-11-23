@@ -103,6 +103,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
+    from constants import (
+        DEFAULT_TOP_AGENTS,
+        EXIT_ERROR,
+        EXIT_SUCCESS,
+        MAX_CONTAINERS_DISPLAY,
+    )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
     from kafka_helper import check_kafka_connection, list_topics
@@ -116,13 +122,13 @@ try:
     )
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
-    sys.exit(1)
+    sys.exit(EXIT_ERROR)
 
 try:
     from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
-    sys.exit(1)
+    sys.exit(EXIT_ERROR)
 
 
 def collect_report_data(timeframe: str, include_trends: bool):
@@ -134,7 +140,9 @@ def collect_report_data(timeframe: str, include_trends: bool):
     containers = list_containers()
     if containers["success"]:
         services_data = []
-        for container in containers["containers"][:20]:  # Limit to 20 for report
+        for container in containers["containers"][
+            :MAX_CONTAINERS_DISPLAY
+        ]:  # Limit for report readability
             status = get_container_status(container["name"])
             services_data.append(
                 {
@@ -191,6 +199,8 @@ def collect_report_data(timeframe: str, include_trends: bool):
                 "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
             }
     except Exception:
+        # Silent error handling: Performance metrics are optional. If query fails (e.g., table doesn't exist,
+        # connection issues), we still want to return other status data. Empty dict indicates metrics unavailable.
         data["performance"] = {}
 
     # Recent activity
@@ -212,7 +222,7 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Top agents
     try:
-        top_agents_query = """
+        top_agents_query = f"""
             SELECT
                 selected_agent,
                 COUNT(*) as count,
@@ -221,7 +231,7 @@ def collect_report_data(timeframe: str, include_trends: bool):
             WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
-            LIMIT 10
+            LIMIT {DEFAULT_TOP_AGENTS}
         """
         top_result = execute_query(top_agents_query, (interval,))
 
@@ -400,7 +410,7 @@ def main():
         else:
             print(output)
 
-        return 0
+        return EXIT_SUCCESS
 
     except Exception as e:
         print(
@@ -412,7 +422,7 @@ def main():
                 }
             )
         )
-        return 1
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":

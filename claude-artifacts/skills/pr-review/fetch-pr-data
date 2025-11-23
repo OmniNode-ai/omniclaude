@@ -307,13 +307,17 @@ fetch_pr_data() {
                 })
             " > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
         else
-            gh api "$endpoint" --paginate \
+            # Capture stderr to surface GitHub API errors instead of silently failing
+            if ! gh api "$endpoint" --paginate \
                 --jq '[.[] | {
                     author: .user.login,
                     body: .body,
                     created_at: .created_at,
                     id: .id
-                }]' > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
+                }]' > "$issue_comments_file" 2>&1; then
+                echo "[]" > "$issue_comments_file"
+                print_error "GitHub API error fetching issue comments (endpoint: $endpoint)"
+            fi
         fi
         print_success "Issue Comments API (Claude bot comments!)"
     ) &
