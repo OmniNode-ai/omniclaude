@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FETCH_SCRIPT="$SCRIPT_DIR/fetch-pr-data"
 SHOW_STATS=false
 INCLUDE_NITPICKS=false
+PARALLEL_SOLVE_FORMAT=false
 
 # Usage
 usage() {
@@ -33,9 +34,10 @@ Arguments:
   PR_NUMBER    PR number (e.g., 33) or full GitHub URL
 
 Options:
-  --include-nitpicks    Include nitpick issues in output (default: excluded)
-  --stats               Show statistics summary
-  --help                Show this help message
+  --include-nitpicks       Include nitpick issues in output (default: excluded)
+  --parallel-solve-format  Output in format ready for /parallel-solve command
+  --stats                  Show statistics summary
+  --help                   Show this help message
 
 Output:
   Clean prioritized list of all PR issues by severity:
@@ -215,43 +217,78 @@ collate_pr_issues() {
     local total_count=$((critical_count + major_count + minor_count + nit_count))
 
     # Output results
-    echo "PR #${pr_number} Issues - Prioritized"
-    echo ""
-
-    # Critical issues
-    if [[ $critical_count -gt 0 ]]; then
-        echo "🔴 CRITICAL ($critical_count):"
-        echo "$categorized" | jq -r '.critical // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+    if [[ "$PARALLEL_SOLVE_FORMAT" == "true" ]]; then
+        # Parallel-solve format - ready to pass to /parallel-solve command
+        echo "Fix all PR #${pr_number} review issues:"
         echo ""
-    fi
 
-    # Major issues
-    if [[ $major_count -gt 0 ]]; then
-        echo "🟠 MAJOR ($major_count):"
-        echo "$categorized" | jq -r '.major // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-        echo ""
-    fi
+        # Critical issues
+        if [[ $critical_count -gt 0 ]]; then
+            echo "🔴 CRITICAL:"
+            echo "$categorized" | jq -r '.critical // [] | to_entries | map("- \(.value)") | .[]'
+            echo ""
+        fi
 
-    # Minor issues
-    if [[ $minor_count -gt 0 ]]; then
-        echo "🟡 MINOR ($minor_count):"
-        echo "$categorized" | jq -r '.minor // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-        echo ""
-    fi
+        # Major issues
+        if [[ $major_count -gt 0 ]]; then
+            echo "🟠 MAJOR:"
+            echo "$categorized" | jq -r '.major // [] | to_entries | map("- \(.value)") | .[]'
+            echo ""
+        fi
 
-    # Nitpicks (only if flag is set)
-    if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
-        echo "⚪ NITPICK ($nit_count):"
-        echo "$categorized" | jq -r '.nit // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-        echo ""
-    fi
+        # Minor issues
+        if [[ $minor_count -gt 0 ]]; then
+            echo "🟡 MINOR:"
+            echo "$categorized" | jq -r '.minor // [] | to_entries | map("- \(.value)") | .[]'
+            echo ""
+        fi
 
-    # Summary
-    if [[ "$INCLUDE_NITPICKS" == "true" ]]; then
-        echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick = ${total_count} issues total"
+        # Nitpicks (only if flag is set)
+        if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
+            echo "⚪ NITPICK:"
+            echo "$categorized" | jq -r '.nit // [] | to_entries | map("- \(.value)") | .[]'
+            echo ""
+        fi
     else
-        local actionable_count=$((critical_count + major_count + minor_count))
-        echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor = ${actionable_count} actionable issues (nitpicks excluded)"
+        # Regular human-readable format
+        echo "PR #${pr_number} Issues - Prioritized"
+        echo ""
+
+        # Critical issues
+        if [[ $critical_count -gt 0 ]]; then
+            echo "🔴 CRITICAL ($critical_count):"
+            echo "$categorized" | jq -r '.critical // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+            echo ""
+        fi
+
+        # Major issues
+        if [[ $major_count -gt 0 ]]; then
+            echo "🟠 MAJOR ($major_count):"
+            echo "$categorized" | jq -r '.major // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+            echo ""
+        fi
+
+        # Minor issues
+        if [[ $minor_count -gt 0 ]]; then
+            echo "🟡 MINOR ($minor_count):"
+            echo "$categorized" | jq -r '.minor // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+            echo ""
+        fi
+
+        # Nitpicks (only if flag is set)
+        if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
+            echo "⚪ NITPICK ($nit_count):"
+            echo "$categorized" | jq -r '.nit // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+            echo ""
+        fi
+
+        # Summary
+        if [[ "$INCLUDE_NITPICKS" == "true" ]]; then
+            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick = ${total_count} issues total"
+        else
+            local actionable_count=$((critical_count + major_count + minor_count))
+            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor = ${actionable_count} actionable issues (nitpicks excluded)"
+        fi
     fi
 
     # Optional statistics
@@ -279,6 +316,10 @@ main() {
         case $1 in
             --include-nitpicks)
                 INCLUDE_NITPICKS=true
+                shift
+                ;;
+            --parallel-solve-format)
+                PARALLEL_SOLVE_FORMAT=true
                 shift
                 ;;
             --stats)

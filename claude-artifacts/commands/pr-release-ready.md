@@ -1,62 +1,38 @@
-# PR Release Ready - Comprehensive Pre-Merge Review
+# PR Release Ready - Fix ALL Issues
 
-**Purpose**: Verify PR is production-ready with all feedback addressed, including polish items.
-
-**Philosophy**: Nothing ships with known issues. All feedback should be addressed or explicitly documented as acceptable.
+**Workflow**: Fetch issues (with nitpicks) → Fire `/parallel-solve` (all issues)
 
 ---
 
-## Execution
+## Step 1: Run Helper Script
+
+Execute the collate-issues helper with `--include-nitpicks` to get /parallel-solve-ready output:
 
 ```bash
-# PR number is provided as $1
-PR_NUM="${1:-}"
-
-if [[ -z "$PR_NUM" ]]; then
-    echo "Usage: /pr-release-ready <PR#>"
-    exit 1
-fi
-
-# Use optimized collate-issues script with nitpicks included
-~/.claude/skills/pr-review/collate-issues "$PR_NUM" --include-nitpicks
+~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format --include-nitpicks 2>&1
 ```
 
 ---
 
-## What This Provides
+## Step 2: Fire Parallel-Solve
 
-**Comprehensive review including ALL feedback categories**:
-- ✅ **Critical issues** (must fix before merge)
-- ✅ **Major issues** (should fix to prevent tech debt)
-- ✅ **Minor issues** (fix now to maintain quality)
-- ✅ **Nitpicks** (polish for production release)
+**Take the COMPLETE output from Step 1** and pass it directly to `/parallel-solve` (including nitpicks).
 
-**Performance**:
-- < 3 seconds (with caching)
-- ~800 tokens (vs 10K+ before)
-- 1 tool call (vs 15+ before)
+Example:
+```
+/parallel-solve Fix all PR #33 review issues:
 
-**Data Sources**:
-- Fetches from all 4 GitHub endpoints (reviews, inline comments, PR comments, issue comments)
-- Intelligently categorizes using Claude bot structured recommendations
-- Prioritizes issue_comments[] first (where Claude Code bot posts comprehensive reviews)
+🔴 CRITICAL:
+- [file:line] issue description
 
----
+🟠 MAJOR:
+- [file:line] issue description
 
-## Difference from /pr-dev-review
+🟡 MINOR:
+- [file:line] issue description
 
-| Command | Nitpicks Included? | Use Case |
-|---------|-------------------|----------|
-| `/pr-dev-review` | ❌ No | Development focus - actionable issues only |
-| `/pr-release-ready` | ✅ Yes | Production release - comprehensive polish |
+⚪ NITPICK:
+- [file:line] issue description
+```
 
-**When to use this command**:
-- Before final merge to main/master
-- Production release preparation
-- When you want comprehensive code review including polish items
-- When nothing should ship with known issues
-
-**When to use /pr-dev-review instead**:
-- During active development
-- When you want to focus on critical/major/minor only
-- When nitpicks are deferred to later polish pass
+**Note**: This command is for production releases. ALL feedback gets addressed (including nitpicks).

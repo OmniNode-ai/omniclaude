@@ -214,6 +214,10 @@ jobs:
             true
           }
 
+      - name: Install pytest-split for parallel test execution
+        run: |
+          poetry run pip install pytest-split
+
       - name: Run tests with coverage
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db

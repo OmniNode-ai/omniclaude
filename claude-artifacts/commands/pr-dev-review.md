@@ -1,65 +1,45 @@
-# PR Dev Review - Development-Focused Review
+# PR Dev Review - Fix Critical/Major/Minor Issues
 
-**Purpose**: Identify issues that should be fixed during development to prevent tech debt.
-
-**Philosophy**: Fix anything that affects code quality, correctness, or maintainability. Skip nitpicks (use `/pr-release-ready` for those).
+**Workflow**: Fetch issues → Fire `/parallel-solve` (non-nits) → Ask about nitpicks
 
 ---
 
-## Execution
+## Step 1: Run Helper Script
 
-Execute the optimized `collate-issues` script which handles all fetching, parsing, and categorization automatically:
+Execute the collate-issues helper to get /parallel-solve-ready output:
 
 ```bash
-# PR number is provided as argument
-PR_NUM="${1:-}"
-
-if [[ -z "$PR_NUM" ]]; then
-    echo "Usage: /pr-dev-review <PR#>"
-    echo "Example: /pr-dev-review 33"
-    exit 1
-fi
-
-# Use optimized collate-issues script (excludes nitpicks by default)
-~/.claude/skills/pr-review/collate-issues "$PR_NUM"
+~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
 ```
 
-**What this provides**:
-- ✅ 🔴 Critical issues (must fix before merge)
-- ✅ 🟠 Major issues (should fix to prevent tech debt)
-- ✅ 🟡 Minor issues (fix now to maintain quality)
-- ❌ ⚪ Nitpicks (excluded - use `/pr-release-ready` for those)
+---
 
-**Performance**:
-- < 3 seconds with caching
-- ~600 tokens (vs 10K+ with polymorphic agent)
-- 1 tool call (vs 15+ manual parsing)
-- Automatic categorization using CodeRabbit patterns + keyword analysis
+## Step 2: Fire Parallel-Solve
 
-**Output format**:
+**Take the output from Step 1** and pass it directly to `/parallel-solve`, **but EXCLUDE any ⚪ NITPICK sections**.
+
+Example:
 ```
-PR #33 Issues - Prioritized
+/parallel-solve Fix all PR #33 review issues:
 
-🔴 CRITICAL (2):
-1. [agents/lib/kafka_helper.py:45] Missing error handling for Kafka connection failures
-2. [tests/test_kafka.py:12] Test failures in test_consume_event
+🔴 CRITICAL:
+- [file:line] issue description
 
-🟠 MAJOR (3):
-1. [skills/_shared/kafka_helper.py:23] Inconsistent API pattern with other helpers
-2. [scripts/health_check.sh:67] Missing exit code standardization
-3. [agents/lib/kafka_rpk_client.py:89] No validation for environment variables
+🟠 MAJOR:
+- [file:line] issue description
 
-🟡 MINOR (5):
-1. [README.md:45] Missing documentation for new EXIT_CODES.md
-2. [tests/test_kafka.py:34] Missing test coverage for error scenarios
-3. [kafka_helper.py:12] Consider adding type hints for better IDE support
-4. [scripts/health_check.sh:23] Edge case not handled for empty responses
-5. [agents/lib/kafka_rpk_client.py:56] Unused import: typing.Optional
-
-Summary: 2 critical, 3 major, 5 minor = 10 actionable issues (nitpicks excluded)
+🟡 MINOR:
+- [file:line] issue description
 ```
 
-**Next steps after reviewing**:
-1. Address all critical issues first (blocking merge)
-2. Fix major issues to prevent tech debt
-3. Clean up minor issues to maintain quality
+**IMPORTANT**: Do NOT include the ⚪ NITPICK section in the /parallel-solve command.
+
+---
+
+## Step 3: Ask About Nitpicks
+
+After `/parallel-solve` completes, if there were nitpicks in the original output:
+
+Ask the user: "Critical/major/minor issues are being addressed. There are [N] nitpick items. Address them now?"
+
+If yes → Fire another `/parallel-solve` with just the nitpicks.
