@@ -82,6 +82,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# Security: Maximum length for topic patterns to prevent DoS via extremely long patterns
+MAX_TOPIC_PATTERN_LENGTH = 256
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
@@ -94,7 +97,10 @@ except ImportError as e:
 
 def main():
     parser = argparse.ArgumentParser(description="Check Kafka topics")
-    parser.add_argument("--topics", help="Comma-separated list of topics")
+    parser.add_argument(
+        "--topics",
+        help=f"Comma-separated list of topics (max {MAX_TOPIC_PATTERN_LENGTH} chars per pattern)",
+    )
     parser.add_argument(
         "--include-partitions", action="store_true", help="Include partition details"
     )
@@ -138,6 +144,19 @@ def main():
         # Check specific topics if requested
         if args.topics:
             topics_list = [t.strip() for t in args.topics.split(",")]
+
+            # Validate topic pattern lengths to prevent DoS
+            for pattern in topics_list:
+                if len(pattern) > MAX_TOPIC_PATTERN_LENGTH:
+                    result["success"] = False
+                    result["status"] = "error"
+                    result["error"] = (
+                        f"Topic pattern exceeds maximum length of {MAX_TOPIC_PATTERN_LENGTH} characters: "
+                        f"'{pattern[:50]}...' ({len(pattern)} chars)"
+                    )
+                    print(format_json(result))
+                    return 1
+
             topics_detail = {}
 
             for topic_pattern in topics_list:

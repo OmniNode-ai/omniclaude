@@ -115,7 +115,7 @@ source .env
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Kafka/Redpanda running at configured address
 - PostgreSQL with `omninode_bridge` database
 - Agent registry at `~/.claude/agent-definitions/`

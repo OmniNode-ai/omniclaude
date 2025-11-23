@@ -10,7 +10,7 @@ Description:
     file or output to stdout.
 
 Usage:
-    python3 execute.py [--format FORMAT] [--output FILE] [--include-trends] [--timeframe TIMEFRAME]
+    python3 execute.py [--format FORMAT] [--output FILE] [--include-trends] [--timeframe TIMEFRAME] [--timeout SECONDS]
 
     Options:
         --format FORMAT          Output format: json, markdown, or text
@@ -20,6 +20,9 @@ Usage:
         --include-trends         Include trend analysis (future feature)
         --timeframe TIMEFRAME    Data collection timeframe (1h, 24h, 7d)
                                 Default: 24h
+        --timeout SECONDS        Custom timeout in seconds for operations
+                                Default: 5 seconds (from REQUEST_TIMEOUT_MS)
+                                Useful for long-running reports
 
 Output:
     JSON object (when --format json):
@@ -79,11 +82,18 @@ Examples:
     # Generate text report for last 7 days with trends
     python3 execute.py --format text --timeframe 7d --include-trends
 
+    # Generate report with custom timeout (30 seconds)
+    python3 execute.py --timeout 30
+
+    # Generate comprehensive report with extended timeout
+    python3 execute.py --format markdown --timeframe 7d --timeout 60 --output full-report.md
+
 Created: 2025-11-12
 """
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -348,7 +358,16 @@ def main():
     parser.add_argument(
         "--timeframe", default="24h", help="Data timeframe (1h, 24h, 7d)"
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Custom timeout in seconds for operations (default: 5 seconds from config)",
+    )
     args = parser.parse_args()
+
+    # Set timeout override if provided
+    if args.timeout is not None:
+        os.environ["OPERATION_TIMEOUT_OVERRIDE"] = str(args.timeout)
 
     try:
         # Collect data

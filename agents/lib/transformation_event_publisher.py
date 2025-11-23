@@ -41,6 +41,10 @@ from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
 
+# Kafka publish timeout (10 seconds)
+# Prevents indefinite blocking if broker is slow/unresponsive
+KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
+
 
 # Event type enumeration following EVENT_BUS_INTEGRATION_PATTERNS
 class TransformationEventType(str, Enum):
@@ -307,8 +311,11 @@ async def publish_transformation_event(
         # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id.encode("utf-8")
 
-        # Publish to Kafka
-        await producer.send_and_wait(topic, value=envelope, key=partition_key)
+        # Publish to Kafka with timeout to prevent indefinite hanging
+        await asyncio.wait_for(
+            producer.send_and_wait(topic, value=envelope, key=partition_key),
+            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
+        )
 
         logger.debug(
             f"Published transformation event (OnexEnvelopeV1): {event_type.value} | "
@@ -317,6 +324,17 @@ async def publish_transformation_event(
             f"topic={topic}"
         )
         return True
+
+    except asyncio.TimeoutError:
+        # Handle timeout specifically for better observability
+        logger.error(
+            f"Timeout publishing transformation event to Kafka "
+            f"(event_type={event_type.value if isinstance(event_type, TransformationEventType) else event_type}, "
+            f"source_agent={source_agent}, target_agent={target_agent}, "
+            f"timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+            extra={"correlation_id": correlation_id},
+        )
+        return False
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution

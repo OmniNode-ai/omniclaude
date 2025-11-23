@@ -250,24 +250,25 @@ class TestSingletonPattern:
 class TestPerformanceBenchmarks:
     """Performance benchmarks for singleton vs context manager."""
 
-    @pytest.mark.asyncio
     @pytest.mark.benchmark
-    async def test_benchmark_context_manager_pattern(self, benchmark):
+    def test_benchmark_context_manager_pattern(self, benchmark):
         """Benchmark context manager pattern (old approach)."""
 
         async def create_publisher_context_manager():
             async with LoggingEventPublisherContext(enable_events=False) as publisher:
                 return publisher
 
+        def sync_wrapper():
+            return asyncio.run(create_publisher_context_manager())
+
         # Warmup
-        await create_publisher_context_manager()
+        asyncio.run(create_publisher_context_manager())
 
         # Benchmark
-        result = await benchmark(create_publisher_context_manager)
+        result = benchmark(sync_wrapper)
 
-    @pytest.mark.asyncio
     @pytest.mark.benchmark
-    async def test_benchmark_singleton_pattern(self, benchmark):
+    def test_benchmark_singleton_pattern(self, benchmark):
         """Benchmark singleton pattern (new approach)."""
         from agents.lib import logging_event_publisher
 
@@ -277,11 +278,14 @@ class TestPerformanceBenchmarks:
         async def get_singleton_publisher():
             return await _get_global_publisher(enable_events=False)
 
+        def sync_wrapper():
+            return asyncio.run(get_singleton_publisher())
+
         # Warmup (creates singleton)
-        await get_singleton_publisher()
+        asyncio.run(get_singleton_publisher())
 
         # Benchmark subsequent calls (reuses singleton)
-        result = await benchmark(get_singleton_publisher)
+        result = benchmark(sync_wrapper)
 
 
 if __name__ == "__main__":

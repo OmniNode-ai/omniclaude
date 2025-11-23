@@ -12,15 +12,19 @@ Tests:
 
 import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 
-# Add lib path for imports
-lib_path = Path(__file__).parent / "agents" / "lib"
-sys.path.insert(0, str(lib_path))
+# Add parent directory to path for imports
+parent_path = Path(__file__).parent.parent
+sys.path.insert(0, str(parent_path))
 
-from manifest_injector import CacheEntry, CacheMetrics, ManifestCache  # noqa: E402
+from agents.lib.manifest_injector import (  # noqa: E402
+    CacheEntry,
+    CacheMetrics,
+    ManifestCache,
+)
 
 
 def test_cache_metrics():
@@ -55,10 +59,10 @@ def test_cache_entry():
     """Test CacheEntry class."""
     print("\n=== Testing CacheEntry ===")
 
-    # Create entry with 1-second TTL
+    # Create entry with 1-second TTL (use timezone-aware datetime)
     entry = CacheEntry(
         data={"test": "data"},
-        timestamp=datetime.now(),
+        timestamp=datetime.now(UTC),
         ttl_seconds=1,
         query_type="test",
         size_bytes=100,
@@ -83,24 +87,24 @@ def test_manifest_cache():
     # Initialize cache with 2-second default TTL
     cache = ManifestCache(default_ttl_seconds=2, enable_metrics=True)
 
-    # Test cache miss
-    result = cache.get("patterns")
+    # Test cache miss (use "filesystem" which has 1x TTL multiplier)
+    result = cache.get("filesystem")
     assert result is None
-    print("✅ Cache miss for 'patterns'")
+    print("✅ Cache miss for 'filesystem'")
 
     # Set cache entry
-    test_data = {"patterns": ["pattern1", "pattern2"], "total": 2}
-    cache.set("patterns", test_data)
-    print("✅ Cache entry set for 'patterns'")
+    test_data = {"files": ["file1.py", "file2.py"], "total": 2}
+    cache.set("filesystem", test_data)
+    print("✅ Cache entry set for 'filesystem'")
 
     # Test cache hit
-    result = cache.get("patterns")
+    result = cache.get("filesystem")
     assert result is not None
     assert result["total"] == 2
-    print("✅ Cache hit for 'patterns'")
+    print("✅ Cache hit for 'filesystem'")
 
     # Test metrics
-    metrics = cache.get_metrics("patterns")
+    metrics = cache.get_metrics("filesystem")
     assert metrics["total_queries"] == 2
     assert metrics["cache_hits"] == 1
     assert metrics["cache_misses"] == 1
@@ -114,10 +118,10 @@ def test_manifest_cache():
         f"✅ Cache info: {info['cache_size']} entries, {info['total_size_bytes']} bytes"
     )
 
-    # Test expiration
+    # Test expiration (filesystem uses 1x TTL = 2 seconds)
     print("⏳ Waiting for cache expiration (2 seconds)...")
     time.sleep(2.1)
-    result = cache.get("patterns")
+    result = cache.get("filesystem")
     assert result is None
     print("✅ Cache entry expired and removed")
 
@@ -194,7 +198,8 @@ def test_cache_metrics_aggregation():
     assert overall["total_queries"] == 9
     assert overall["cache_hits"] == 6  # 2 hits per type * 3 types
     assert overall["cache_misses"] == 3  # 1 miss per type * 3 types
-    assert overall["hit_rate_percent"] == (6 / 9) * 100
+    # Round expected value to match the rounding in CacheMetrics.to_dict()
+    assert overall["hit_rate_percent"] == round((6 / 9) * 100, 2)
 
     print("✅ Overall metrics:")
     print(f"   Total queries: {overall['total_queries']}")

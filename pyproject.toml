@@ -63,6 +63,7 @@ psutil = "^6.1.0"
 isort = "^7.0.0"
 pre-commit = "^4.3.0"
 tabulate = "^0.9.0"
+pytest-xdist = "^3.8.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -163,7 +164,6 @@ known-first-party = ["agents", "parallel_execution", "config", "claude_hooks"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 testpaths = ["agents/tests"]
 markers = [
     "unit: Unit tests with no external dependencies (fast)",
@@ -171,11 +171,30 @@ markers = [
     "e2e: End-to-end tests requiring full system",
     "benchmark: mark benchmark tests using pytest-benchmark",
     "database: marks tests that require database connectivity",
-    "slow: marks tests that take a long time to run",
+    "slow: marks tests as slow (>2 seconds)",
+    "performance: marks tests that measure performance metrics",
 ]
-# Skip tests with import collection issues (will be fixed in Week 4)
-# These tests have detailed documentation explaining the import issues
+
+# Sane defaults optimized for 3499 tests on M2 Ultra (10 cores)
+# Uses pytest-xdist for parallel execution with smart load balancing
+#
+# Performance characteristics:
+# - Fast mode: `pytest -n 8 -m "not slow"` (~30s, 99% coverage)
+# - Full run: `pytest -n 8` (~45-60s with loadscope, 100% coverage)
+# - CI mode: `pytest --splits 10 --group N` (parallel CI jobs)
+#
+# Configuration details:
+# - `-n 8`: 8 parallel workers (optimal for 10-core M2 Ultra)
+# - `--dist=loadscope`: Distribute tests by module/class for better isolation
+# - `--tb=short`: Shorter tracebacks for faster reading
+# - `-ra`: Show summary of all test results (skipped, failed, etc.)
 addopts = [
+    "-n", "8",                    # 8 workers (optimal for 10-core M2 Ultra)
+    "--dist=loadscope",           # Distribute by module/class (NOT random)
+    "--tb=short",                 # Shorter tracebacks for faster reading
+    "-ra",                        # Show summary of all test results
+    # Skip tests with import collection issues (will be fixed in Week 4)
+    # These tests have detailed documentation explaining the import issues
     "--ignore=agents/tests/test_casing_preservation.py",
     "--ignore=agents/tests/test_generation_all_node_types.py",
     "--ignore=agents/tests/test_pipeline_integration.py",
@@ -183,7 +202,6 @@ addopts = [
     "--ignore=agents/tests/test_template_intelligence.py",
     "--ignore=agents/tests/tools/node_gen/test_file_writer.py",  # Missing omnibase_core dependency
 ]
-
 [tool.bandit]
 # Bandit security scanner configuration - matches CI workflow
 exclude_dirs = [

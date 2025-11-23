@@ -65,6 +65,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Kafka publish timeout (10 seconds)
+# Prevents indefinite blocking if broker is slow/unresponsive
+KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
+
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer = None
 _producer_lock: Optional[asyncio.Lock] = None
@@ -250,7 +254,11 @@ async def publish_action_event(
         # Track timing for Prometheus
         start_time = time.time()
 
-        await producer.send_and_wait(topic, value=event, key=partition_key)
+        # Publish with timeout to prevent indefinite hanging
+        await asyncio.wait_for(
+            producer.send_and_wait(topic, value=event, key=partition_key),
+            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
+        )
 
         # Calculate metrics
         duration = time.time() - start_time
@@ -270,6 +278,24 @@ async def publish_action_event(
             f"(agent={agent_name}, correlation_id={correlation_id})"
         )
         return True
+
+    except asyncio.TimeoutError:
+        # Handle timeout specifically for better observability
+        logger.error(
+            f"Timeout publishing action event to Kafka "
+            f"(action_type={action_type}, action_name={action_name}, "
+            f"timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+            extra={"correlation_id": correlation_id},
+        )
+
+        # Record failure in Prometheus
+        if PROMETHEUS_AVAILABLE:
+            event_publish_counter.labels(topic="agent-actions", status="timeout").inc()
+            event_publish_errors_counter.labels(
+                topic="agent-actions", error_type="TimeoutError"
+            ).inc()
+
+        return False
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution

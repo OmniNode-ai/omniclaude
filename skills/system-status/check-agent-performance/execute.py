@@ -151,6 +151,9 @@ def main():
                 "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
                 "threshold_violations": row["threshold_violations"] or 0,
             }
+        else:
+            result["routing_error"] = routing_result.get("error", "Unknown error")
+            result["routing_query_failed"] = True
 
         # Get top agents
         top_agents_query = """
@@ -175,6 +178,9 @@ def main():
                 }
                 for row in top_result["rows"]
             ]
+        else:
+            result["top_agents_error"] = top_result.get("error", "Unknown error")
+            result["top_agents_query_failed"] = True
 
         # Get transformation stats
         transform_query = """
@@ -194,6 +200,11 @@ def main():
                 "success_rate": round(float(row["success_rate"] or 0), 2),
                 "avg_duration_ms": round(float(row["avg_duration_ms"] or 0), 1),
             }
+        else:
+            result["transformations_error"] = transform_result.get(
+                "error", "Unknown error"
+            )
+            result["transformations_query_failed"] = True
 
         # Add success and timestamp to response
         result["success"] = True

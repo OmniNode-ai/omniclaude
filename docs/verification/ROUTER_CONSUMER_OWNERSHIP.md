@@ -156,7 +156,7 @@ archon-router-consumer:
 **Status**: ✅ **CORRECT** (with one minor issue - see Health Check section)
 
 **Key Components**:
-- Base image: `python:3.11-slim` (lightweight, appropriate)
+- Base image: `python:3.12-slim` (lightweight, appropriate)
 - Runtime dependencies: `aiokafka`, `asyncpg`, `pyyaml`
 - Non-root user: `omniclaude:omniclaude` (security best practice)
 - Python modules: Copies agent router library files
@@ -291,7 +291,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 **Issue**: ❌ `ps: not found`
 
 **Root Cause**:
-- Base image `python:3.11-slim` does NOT include `ps` utility
+- Base image `python:3.12-slim` does NOT include `ps` utility
 - Health check command fails with `sh: 1: ps: not found`
 - Service is actually running correctly (logs confirm functionality)
 

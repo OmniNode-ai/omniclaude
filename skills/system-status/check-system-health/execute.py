@@ -112,20 +112,74 @@ except ImportError as e:
     sys.exit(3)
 
 
+def _calculate_service_summary(containers: list) -> dict:
+    """
+    Calculate service summary from container list.
+
+    Args:
+        containers: List of container dictionaries
+
+    Returns:
+        Dictionary with summary statistics
+    """
+    running = 0
+    stopped = 0
+    unhealthy = 0
+
+    for container in containers:
+        state = container.get("state", "").lower()
+        status = container.get("status", "").lower()
+
+        if state == "running":
+            running += 1
+            if "unhealthy" in status:
+                unhealthy += 1
+        else:
+            stopped += 1
+
+    return {
+        "success": True,
+        "total": len(containers),
+        "running": running,
+        "stopped": stopped,
+        "unhealthy": unhealthy,
+        "healthy": running - unhealthy,
+        "error": None,
+    }
+
+
 def check_docker_services(verbose: bool = False) -> dict:
     """Check Docker services status."""
     try:
-        # Check all services
-        all_services = get_service_summary()
+        # Call docker ps once and filter in memory
+        from docker_helper import list_containers
 
-        # Check archon services specifically
-        archon_services = get_service_summary("archon-")
+        all_containers_result = list_containers()
 
-        # Check omninode services
-        omninode_services = get_service_summary("omninode-")
+        if not all_containers_result["success"]:
+            return {
+                "success": False,
+                "error": all_containers_result.get(
+                    "error", "Failed to list containers"
+                ),
+            }
 
-        # Check app services
-        app_services = get_service_summary("app")
+        all_containers = all_containers_result["containers"]
+
+        # Filter containers by name prefix in memory
+        archon_containers = [
+            c for c in all_containers if c["name"].startswith("archon-")
+        ]
+        omninode_containers = [
+            c for c in all_containers if c["name"].startswith("omninode-")
+        ]
+        app_containers = [c for c in all_containers if "app" in c["name"]]
+
+        # Calculate summaries
+        all_services = _calculate_service_summary(all_containers)
+        archon_services = _calculate_service_summary(archon_containers)
+        omninode_services = _calculate_service_summary(omninode_containers)
+        app_services = _calculate_service_summary(app_containers)
 
         return {
             "success": True,

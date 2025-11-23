@@ -131,12 +131,18 @@ def validate_qdrant_url(url: str) -> str:
     return url
 
 
-def get_timeout_seconds() -> float:
+def get_timeout_seconds(override_seconds: Optional[int] = None) -> float:
     """
     Get timeout value in seconds from type-safe configuration.
 
     Returns timeout from Pydantic Settings (default: 5 seconds).
     Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Args:
+        override_seconds: Optional custom timeout in seconds. If provided,
+                         this value takes precedence over configuration.
+                         Useful for long-running operations that need
+                         extended timeouts.
 
     Returns:
         Timeout in seconds (float)
@@ -145,7 +151,26 @@ def get_timeout_seconds() -> float:
         Timeout strategy: All helper subprocess/network calls use the same
         timeout to prevent infinite hangs. Default is 5 seconds, configurable
         via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+
+        Use override_seconds for specific operations that require longer
+        timeouts (e.g., generate-status-report --timeout 30).
+
+        Priority order:
+        1. override_seconds parameter (highest priority)
+        2. OPERATION_TIMEOUT_OVERRIDE environment variable (for CLI scripts)
+        3. REQUEST_TIMEOUT_MS from Pydantic Settings (default)
     """
+    if override_seconds is not None:
+        return float(override_seconds)
+
+    # Check for operation-specific timeout override (for CLI scripts)
+    env_override = os.getenv("OPERATION_TIMEOUT_OVERRIDE")
+    if env_override is not None:
+        try:
+            return float(env_override)
+        except (ValueError, TypeError):
+            pass  # Fall through to default
+
     return settings.request_timeout_ms / 1000.0
 
 
@@ -437,7 +462,22 @@ def get_all_collections_stats() -> Dict[str, Any]:
     Get statistics for all collections.
 
     Returns:
-        Dictionary with stats for all collections
+        Dictionary with stats for all collections, including:
+        - success: bool - Whether the operation succeeded
+        - collections: dict - Per-collection statistics with:
+            - vectors_count: int - Number of vectors in collection
+            - indexed_vectors_count: int - Number of indexed vectors
+            - status: str - Collection status (green/yellow/red/error)
+            - optimizer_status: dict - Optimizer state from Qdrant
+            - error: str - Error message (only for failed collections)
+        - collection_count: int - Total number of collections
+        - total_vectors: int - Sum of vectors across all collections
+        - error: None or str - Overall error message if operation failed
+
+    Note:
+        This function makes one API call per collection. All fields from
+        get_collection_stats() are included, so callers do not need to
+        make redundant API calls to fetch additional details.
     """
     collections_result = list_collections()
 
@@ -454,6 +494,7 @@ def get_all_collections_stats() -> Dict[str, Any]:
                 "vectors_count": stats["vectors_count"],
                 "indexed_vectors_count": stats["indexed_vectors_count"],
                 "status": stats["status"],
+                "optimizer_status": stats.get("optimizer_status", {}),
             }
             total_vectors += stats["vectors_count"]
         else:
@@ -462,6 +503,7 @@ def get_all_collections_stats() -> Dict[str, Any]:
                 "vectors_count": 0,
                 "indexed_vectors_count": 0,
                 "status": "error",
+                "optimizer_status": {},
                 "error": stats.get("error", "Unknown error"),
             }
 

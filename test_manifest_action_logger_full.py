@@ -20,9 +20,43 @@ project_root = Path(__file__).parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# Set up environment
-os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
-os.environ.setdefault("QDRANT_URL", "http://192.168.86.101:6333")
+# Load environment from .env file (PREFERRED approach)
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available, will use environment variables
+
+# Validate required environment variables
+if not os.getenv("KAFKA_BOOTSTRAP_SERVERS"):
+    print(
+        "WARNING: KAFKA_BOOTSTRAP_SERVERS not set. Please source .env file or set environment variable.",
+        file=sys.stderr,
+    )
+    print(
+        "         Using fallback: 192.168.86.200:29092 (development environment)",
+        file=sys.stderr,
+    )
+    os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+else:
+    # Environment variable already set (from .env or shell)
+    pass
+
+if not os.getenv("QDRANT_URL"):
+    print(
+        "WARNING: QDRANT_URL not set. Please source .env file or set environment variable.",
+        file=sys.stderr,
+    )
+    print(
+        "         Using fallback: http://192.168.86.101:6333 (development environment)",
+        file=sys.stderr,
+    )
+    os.environ.setdefault("QDRANT_URL", "http://192.168.86.101:6333")
+else:
+    # Environment variable already set (from .env or shell)
+    pass
+
 os.environ.setdefault("AGENT_NAME", "test-manifest-logger-full")
 
 from uuid import uuid4

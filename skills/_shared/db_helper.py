@@ -2,9 +2,13 @@
 """
 Shared Database Helper for Claude Skills
 Provides reusable PostgreSQL connection and query utilities.
+
+Note: This module uses structured logging for error reporting.
+All errors are logged via Python's logging module with proper severity levels.
 """
 
 import json
+import logging
 import os
 import sys
 import uuid
@@ -15,6 +19,10 @@ import psycopg2
 from psycopg2.extensions import connection as psycopg_connection
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
+
+
+# Module-level logger for structured logging
+logger = logging.getLogger(__name__)
 
 
 # Add config for type-safe settings (Pydantic Settings framework)
@@ -36,10 +44,20 @@ _connection_pool: Optional[SimpleConnectionPool] = None
 
 
 def get_connection_pool() -> SimpleConnectionPool:
-    """Get or create connection pool."""
+    """
+    Get or create connection pool.
+
+    Pool sizes are configurable via environment variables:
+    - POSTGRES_POOL_MIN_SIZE (default: 1)
+    - POSTGRES_POOL_MAX_SIZE (default: 5)
+    """
     global _connection_pool
     if _connection_pool is None:
-        _connection_pool = SimpleConnectionPool(minconn=1, maxconn=5, **DB_CONFIG)
+        _connection_pool = SimpleConnectionPool(
+            minconn=settings.postgres_pool_min_size,
+            maxconn=settings.postgres_pool_max_size,
+            **DB_CONFIG,
+        )
     return _connection_pool
 
 
@@ -57,11 +75,11 @@ def get_connection() -> Optional[psycopg_connection]:
         return conn
     except psycopg2.Error as e:
         # psycopg2.Error: database-level errors (connection, auth, pool exhaustion)
-        print(f"Database connection error: {e}", file=sys.stderr)
+        logger.error(f"Database connection error: {e}")
         return None
     except (OSError, IOError) as e:
         # OSError/IOError: system-level errors (network issues, file descriptors)
-        print(f"System error getting database connection: {e}", file=sys.stderr)
+        logger.error(f"System error getting database connection: {e}")
         return None
 
 
@@ -78,7 +96,7 @@ def release_connection(conn: Optional[psycopg_connection]) -> None:
             pool.putconn(conn)
     except psycopg2.Error as e:
         # psycopg2.Error: database-level errors during connection release
-        print(f"Database error releasing connection: {e}", file=sys.stderr)
+        logger.error(f"Database error releasing connection: {e}")
 
 
 def execute_query(
@@ -157,9 +175,9 @@ def execute_query(
         # psycopg2.Error: SQL errors, constraint violations, connection issues
         if conn:
             conn.rollback()
-        print(f"Database query failed: {e}", file=sys.stderr)
-        print(f"SQL: {sql}", file=sys.stderr)
-        print(f"Params: {params}", file=sys.stderr)
+        logger.error(f"Database query failed: {e}")
+        logger.error(f"SQL: {sql}")
+        logger.error(f"Params: {params}")
         return {
             "success": False,
             "rows": None,
@@ -172,9 +190,9 @@ def execute_query(
         # TypeError/ValueError: parameter type mismatches, data conversion errors
         if conn:
             conn.rollback()
-        print(f"Query parameter error: {e}", file=sys.stderr)
-        print(f"SQL: {sql}", file=sys.stderr)
-        print(f"Params: {params}", file=sys.stderr)
+        logger.error(f"Query parameter error: {e}")
+        logger.error(f"SQL: {sql}")
+        logger.error(f"Params: {params}")
         return {
             "success": False,
             "rows": None,
@@ -214,7 +232,7 @@ def handle_db_error(error: Exception, operation: str) -> Dict[str, Any]:
         Dict with error details
     """
     error_msg = f"{operation} failed: {str(error)}"
-    print(error_msg, file=sys.stderr)
+    logger.error(error_msg)
 
     return {
         "success": False,
@@ -243,11 +261,11 @@ def test_connection() -> bool:
 
     except psycopg2.Error as e:
         # psycopg2.Error: database-level errors during connection test
-        print(f"Connection test failed (database error): {e}", file=sys.stderr)
+        logger.error(f"Connection test failed (database error): {e}")
         return False
     except (OSError, IOError) as e:
         # OSError/IOError: network issues, system-level errors
-        print(f"Connection test failed (system error): {e}", file=sys.stderr)
+        logger.error(f"Connection test failed (system error): {e}")
         return False
 
 
@@ -273,7 +291,7 @@ def parse_json_param(param: Optional[str]) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(param)
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON parameter: {e}", file=sys.stderr)
+        logger.error(f"Invalid JSON parameter: {e}")
         return None
 
 

@@ -2,7 +2,7 @@
 # Kafka-based event consumer for agent routing (replaces HTTP service)
 # Consumes from agent.routing.requested.v1 and publishes to completed/failed topics
 
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 # Set build arguments for metadata
 ARG BUILD_DATE

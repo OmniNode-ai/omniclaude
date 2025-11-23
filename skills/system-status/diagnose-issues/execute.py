@@ -10,13 +10,16 @@ Description:
     recommendations for resolution.
 
 Usage:
-    python3 execute.py [--severity SEVERITIES] [--format FORMAT]
+    python3 execute.py [--severity SEVERITIES] [--format FORMAT] [--timeout SECONDS]
 
     Options:
         --severity SEVERITIES    Filter by severity levels (critical,warning,info)
                                 Comma-separated list. Default: all
         --format FORMAT          Output format: json or text
                                 Default: json
+        --timeout SECONDS        Custom timeout in seconds for operations
+                                Default: 5 seconds (from REQUEST_TIMEOUT_MS)
+                                Useful for comprehensive diagnostics
 
 Output:
     JSON object with the following structure:
@@ -57,11 +60,18 @@ Examples:
     # Check critical and warning issues
     python3 execute.py --severity critical,warning
 
+    # Run diagnostics with extended timeout (30 seconds)
+    python3 execute.py --timeout 30
+
+    # Comprehensive diagnostics with custom timeout
+    python3 execute.py --severity critical,warning --format text --timeout 60
+
 Created: 2025-11-12
 """
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,10 +95,11 @@ def check_service_issues():
     issues = []
 
     # Define monitored container prefixes (OmniNode services only)
-    monitored_prefixes = ["archon-", "omninode-", "omniclaude-"]
+    # Pass filter to list_containers to avoid scanning all containers
+    name_filter = "archon-|omninode-|omniclaude-"
 
     try:
-        containers = list_containers()
+        containers = list_containers(name_filter=name_filter)
         if not containers["success"]:
             issues.append(
                 {
@@ -102,14 +113,8 @@ def check_service_issues():
             )
             return issues
 
-        # Filter to monitored containers only
-        monitored_containers = [
-            c
-            for c in containers["containers"]
-            if any(c["name"].startswith(prefix) for prefix in monitored_prefixes)
-        ]
-
-        for container in monitored_containers:
+        # Containers are already filtered by list_containers()
+        for container in containers["containers"]:
             name = container["name"]
             state = container["state"].lower()
             status = container["status"].lower()
@@ -452,7 +457,16 @@ def main():
     parser.add_argument(
         "--format", choices=["json", "text"], default="json", help="Output format"
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Custom timeout in seconds for operations (default: 5 seconds from config)",
+    )
     args = parser.parse_args()
+
+    # Set timeout override if provided
+    if args.timeout is not None:
+        os.environ["OPERATION_TIMEOUT_OVERRIDE"] = str(args.timeout)
 
     try:
         # Collect issues from all checks
