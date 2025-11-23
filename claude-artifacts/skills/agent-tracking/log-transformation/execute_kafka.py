@@ -32,13 +32,16 @@ from db_helper import get_correlation_id
 
 
 # Add shared_lib to path for kafka_config and kafka_publisher
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared_lib"))
+# Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> claude-artifacts/ -> omniclaude/
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
+)
 from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
 
 
 # Add agents/lib to path for transformation_validator
-agents_lib_path = Path(__file__).parent.parent.parent.parent / "agents" / "lib"
+agents_lib_path = Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib"
 if agents_lib_path.exists():
     sys.path.insert(0, str(agents_lib_path))
     from transformation_validator import validate_transformation
@@ -48,7 +51,7 @@ if agents_lib_path.exists():
 def load_env_file():
     """Load environment variables from project .env file."""
     # Calculate project root from this file's location (skills/agent-tracking/log-transformation/)
-    project_root = Path(__file__).parent.parent.parent.parent.resolve()
+    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
     env_paths = [
         project_root / ".env",
         Path.home() / "Code" / "omniclaude" / ".env",

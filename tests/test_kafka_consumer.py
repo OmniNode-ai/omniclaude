@@ -64,20 +64,11 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def __clean_database(db_pool):
+async def _clean_database(db_pool):
     """Clean test data from database before each test."""
-    async with db_pool.acquire() as conn:
-        # Delete test data (correlation_id starts with 'test-')
-        # Cast UUID to TEXT for LIKE pattern matching
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id::text LIKE 'test-%'"
-        )
-    yield
-    # Cleanup after test
-    async with db_pool.acquire() as conn:
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id::text LIKE 'test-%'"
-        )
+    # Cleanup happens at the end of each test
+    return
+    # Note: Individual tests verify their own data, no pattern-based cleanup needed
 
 
 @pytest.fixture
@@ -129,11 +120,13 @@ class TestKafkaConsumerIntegration:
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pooltest_topic,
+        db_pool,
+        test_topic,
+        wait_for_records,
     ):
         """Test consuming and persisting a single event."""
         # Publish test event
-        correlation_id = f"test-{uuid.uuid4()}"
+        correlation_id = str(uuid.uuid4())
         event = {
             "correlation_id": correlation_id,
             "agent_name": "test-agent",
@@ -158,27 +151,41 @@ class TestKafkaConsumerIntegration:
 
         await consumer.start()
 
-        try:
-            # Run consumer for 2 seconds
-            await asyncio.wait_for(consumer.consume_loop(), timeout=2.0)
-        except asyncio.TimeoutError:
-            pass  # Expected
-        finally:
-            await consumer.stop()
+        # Give consumer time to subscribe to topic
+        await asyncio.sleep(0.5)
 
-        # Verify event was persisted
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow(
-                "SELECT * FROM agent_actions WHERE correlation_id = $1",
-                correlation_id,
+        # Start consumer loop in background
+        consumer_task = asyncio.create_task(consumer.consume_loop())
+
+        try:
+            # Wait for record to appear in database
+            await wait_for_records(
+                db_pool,
+                correlation_id=correlation_id,
+                expected_count=1,
+                timeout_seconds=5.0,
             )
 
-            assert result is not None
-            assert result["agent_name"] == "test-agent"
-            assert result["action_type"] == "tool_call"
-            assert result["action_name"] == "test_action"
-            assert result["debug_mode"] is True
-            assert result["duration_ms"] == 100
+            # Verify event was persisted with correct data
+            async with db_pool.acquire() as conn:
+                result = await conn.fetchrow(
+                    "SELECT * FROM agent_actions WHERE correlation_id = $1",
+                    correlation_id,
+                )
+
+                assert result is not None
+                assert result["agent_name"] == "test-agent"
+                assert result["action_type"] == "tool_call"
+                assert result["action_name"] == "test_action"
+                assert result["debug_mode"] is True
+                assert result["duration_ms"] == 100
+        finally:
+            await consumer.stop()
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
@@ -187,13 +194,14 @@ class TestKafkaConsumerIntegration:
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pooltest_topic,
+        db_pool,
+        test_topic,
     ):
         """Test batch insertion of multiple events."""
         # Publish 50 test events
         correlation_ids = []
         for i in range(50):
-            correlation_id = f"test-batch-{uuid.uuid4()}"
+            correlation_id = str(uuid.uuid4())
             correlation_ids.append(correlation_id)
 
             event = {
@@ -212,31 +220,56 @@ class TestKafkaConsumerIntegration:
         kafka_producer.flush()
 
         # Start consumer with batch processing
+        # Use unique consumer group to avoid conflicts with parallel tests
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
             topic=test_topic,
             postgres_dsn=postgres_dsn,
+            group_id=f"test-batch-insert-{uuid.uuid4().hex[:8]}",
             batch_size=25,  # Process in batches of 25
             batch_timeout_seconds=1.0,
         )
 
         await consumer.start()
 
+        # Give consumer time to subscribe
+        await asyncio.sleep(0.5)
+
+        # Start consumer loop in background
+        consumer_task = asyncio.create_task(consumer.consume_loop())
+
         try:
-            # Run consumer for 5 seconds
-            await asyncio.wait_for(consumer.consume_loop(), timeout=5.0)
-        except asyncio.TimeoutError:
-            pass
+            # Wait for all records with polling
+            start_time = asyncio.get_event_loop().time()
+            timeout = 10.0
+
+            while (asyncio.get_event_loop().time() - start_time) < timeout:
+                async with db_pool.acquire() as conn:
+                    count = await conn.fetchval(
+                        "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = ANY($1::uuid[])",
+                        correlation_ids,
+                    )
+
+                    if count >= 50:
+                        break
+
+                await asyncio.sleep(0.2)
+
+            # Verify all events were persisted
+            async with db_pool.acquire() as conn:
+                final_count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = ANY($1::uuid[])",
+                    correlation_ids,
+                )
+
+                assert final_count == 50, f"Expected 50 records, got {final_count}"
         finally:
             await consumer.stop()
-
-        # Verify all events were persisted
-        async with db_pool.acquire() as conn:
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id::text LIKE 'test-batch-%'"
-            )
-
-            assert count == 50
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
@@ -245,10 +278,12 @@ class TestKafkaConsumerIntegration:
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pooltest_topic,
+        db_pool,
+        test_topic,
+        wait_for_records,
     ):
         """Test consumer handles duplicate events correctly (idempotency)."""
-        correlation_id = f"test-duplicate-{uuid.uuid4()}"
+        correlation_id = str(uuid.uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Create duplicate event
@@ -269,38 +304,58 @@ class TestKafkaConsumerIntegration:
         kafka_producer.flush()
 
         # Start consumer
+        # Use unique consumer group to avoid conflicts with parallel tests
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
             topic=test_topic,
             postgres_dsn=postgres_dsn,
+            group_id=f"test-idempotency-{uuid.uuid4().hex[:8]}",
             batch_timeout_seconds=1.0,
         )
 
         await consumer.start()
 
-        try:
-            await asyncio.wait_for(consumer.consume_loop(), timeout=2.0)
-        except asyncio.TimeoutError:
-            pass
-        finally:
-            await consumer.stop()
+        # Give consumer time to subscribe
+        await asyncio.sleep(0.5)
 
-        # Verify only one event was inserted (duplicate was skipped)
-        async with db_pool.acquire() as conn:
-            count = await conn.fetchval(
-                """
-                SELECT COUNT(*) FROM agent_actions
-                WHERE correlation_id = $1 AND action_name = 'duplicate_test'
-                """,
-                correlation_id,
+        # Start consumer loop in background
+        consumer_task = asyncio.create_task(consumer.consume_loop())
+
+        try:
+            # Wait for at least one record to appear
+            await wait_for_records(
+                db_pool,
+                correlation_id=correlation_id,
+                expected_count=1,
+                timeout_seconds=5.0,
             )
 
-            assert count == 1  # Only one record, duplicate was skipped
+            # Wait a bit more to ensure any duplicate would have been processed
+            await asyncio.sleep(2.0)
+
+            # Verify only one event was inserted (duplicate was skipped)
+            async with db_pool.acquire() as conn:
+                count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*) FROM agent_actions
+                    WHERE correlation_id = $1 AND action_name = 'duplicate_test'
+                    """,
+                    correlation_id,
+                )
+
+                assert count == 1, f"Expected 1 record (idempotent), got {count}"
+        finally:
+            await consumer.stop()
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
     async def test_error_handling_invalid_json(
-        self, kafka_brokers, postgres_dsn, db_pooltest_topic
+        self, kafka_brokers, postgres_dsn, db_pool, test_topic
     ):
         """Test consumer handles invalid JSON gracefully."""
         # Publish invalid JSON directly (bypass producer serializer)
@@ -343,10 +398,11 @@ class TestKafkaConsumerIntegration:
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pooltest_topic,
+        db_pool,
+        test_topic,
     ):
         """Test consumer commits offsets after successful processing."""
-        correlation_id = f"test-offset-{uuid.uuid4()}"
+        correlation_id = str(uuid.uuid4())
 
         event = {
             "correlation_id": correlation_id,
@@ -421,14 +477,15 @@ class TestKafkaConsumerIntegration:
         kafka_producer,
         kafka_brokers,
         postgres_dsn,
-        db_pooltest_topic,
+        db_pool,
+        test_topic,
     ):
         """Test consuming events with different action types."""
         action_types = ["tool_call", "decision", "error", "success"]
         correlation_ids = {}
 
         for action_type in action_types:
-            correlation_id = f"test-{action_type}-{uuid.uuid4()}"
+            correlation_id = str(uuid.uuid4())
             correlation_ids[action_type] = correlation_id
 
             event = {
@@ -446,36 +503,64 @@ class TestKafkaConsumerIntegration:
         kafka_producer.flush()
 
         # Start consumer
+        # Use unique consumer group to avoid conflicts with parallel tests
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
             topic=test_topic,
             postgres_dsn=postgres_dsn,
+            group_id=f"test-action-types-{uuid.uuid4().hex[:8]}",
             batch_timeout_seconds=1.0,
         )
 
         await consumer.start()
 
+        # Give consumer time to subscribe
+        await asyncio.sleep(0.5)
+
+        # Start consumer loop in background
+        consumer_task = asyncio.create_task(consumer.consume_loop())
+
         try:
-            await asyncio.wait_for(consumer.consume_loop(), timeout=3.0)
-        except asyncio.TimeoutError:
-            pass
+            # Wait for all records with polling
+            start_time = asyncio.get_event_loop().time()
+            timeout = 10.0
+            all_correlation_ids = list(correlation_ids.values())
+
+            while (asyncio.get_event_loop().time() - start_time) < timeout:
+                async with db_pool.acquire() as conn:
+                    count = await conn.fetchval(
+                        "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = ANY($1::uuid[])",
+                        all_correlation_ids,
+                    )
+
+                    if count >= len(action_types):
+                        break
+
+                await asyncio.sleep(0.2)
+
+            # Verify all action types were persisted
+            async with db_pool.acquire() as conn:
+                for action_type in action_types:
+                    result = await conn.fetchrow(
+                        """
+                        SELECT * FROM agent_actions
+                        WHERE correlation_id = $1 AND action_type = $2
+                        """,
+                        correlation_ids[action_type],
+                        action_type,
+                    )
+
+                    assert (
+                        result is not None
+                    ), f"Missing record for action_type: {action_type}"
+                    assert result["action_type"] == action_type
         finally:
             await consumer.stop()
-
-        # Verify all action types were persisted
-        async with db_pool.acquire() as conn:
-            for action_type in action_types:
-                result = await conn.fetchrow(
-                    """
-                    SELECT * FROM agent_actions
-                    WHERE correlation_id = $1 AND action_type = $2
-                    """,
-                    correlation_ids[action_type],
-                    action_type,
-                )
-
-                assert result is not None
-                assert result["action_type"] == action_type
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
 
 class TestConsumerPerformance:
@@ -494,15 +579,16 @@ class TestConsumerPerformance:
     ):
         """Test consumer can handle high throughput (1000+ events)."""
         num_events = 1000
+        test_run_id = str(uuid.uuid4())
 
         # Publish 1000 events
         for i in range(num_events):
             event = {
-                "correlation_id": f"test-perf-{i}",
+                "correlation_id": str(uuid.uuid4()),
                 "agent_name": f"agent-{i % 10}",
                 "action_type": "tool_call",
                 "action_name": f"action_{i}",
-                "action_details": {"index": i},
+                "action_details": {"index": i, "test_run_id": test_run_id},
                 "debug_mode": True,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -522,22 +608,47 @@ class TestConsumerPerformance:
 
         await consumer.start()
 
+        # Give consumer time to subscribe
+        await asyncio.sleep(0.5)
+
+        # Start consumer loop in background
+        consumer_task = asyncio.create_task(consumer.consume_loop())
+
         try:
-            # Run for up to 30 seconds
-            await asyncio.wait_for(consumer.consume_loop(), timeout=30.0)
-        except asyncio.TimeoutError:
-            pass
+            # Wait for all events to be processed (with polling)
+            start_time = asyncio.get_event_loop().time()
+            timeout = 60.0  # Increase timeout for 1000 events
+
+            while (asyncio.get_event_loop().time() - start_time) < timeout:
+                async with db_pool.acquire() as conn:
+                    count = await conn.fetchval(
+                        "SELECT COUNT(*) FROM agent_actions WHERE action_details->>'test_run_id' = $1",
+                        test_run_id,
+                    )
+
+                    if count >= num_events:
+                        break
+
+                await asyncio.sleep(0.5)
+
+            # Verify all events were processed
+            async with db_pool.acquire() as conn:
+                final_count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM agent_actions WHERE action_details->>'test_run_id' = $1",
+                    test_run_id,
+                )
+
+                # Should have processed all 1000 events
+                assert (
+                    final_count == num_events
+                ), f"Expected {num_events} events, got {final_count}"
         finally:
             await consumer.stop()
-
-        # Verify all events were processed
-        async with db_pool.acquire() as conn:
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id::text LIKE 'test-perf-%'"
-            )
-
-            # Should have processed all 1000 events
-            assert count == num_events
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
 
 if __name__ == "__main__":

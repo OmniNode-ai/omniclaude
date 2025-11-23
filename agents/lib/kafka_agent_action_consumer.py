@@ -146,8 +146,14 @@ class KafkaAgentActionConsumer:
         if not events or not self.db_pool:
             return 0
 
-        # Prepare insert query with ON CONFLICT for idempotency
-        # Assumes agent_actions table has unique constraint on (correlation_id, action_name, timestamp)
+        # Prepare insert query without ON CONFLICT (constraint doesn't exist in schema)
+        # Idempotency: Check for duplicates before inserting
+        # Uses correlation_id, action_name, and timestamp to identify duplicates
+        check_duplicate_sql = """
+            SELECT id FROM agent_actions
+            WHERE correlation_id = $1 AND action_name = $2 AND created_at = $3
+        """
+
         insert_sql = """
             INSERT INTO agent_actions (
                 correlation_id,
@@ -159,7 +165,6 @@ class KafkaAgentActionConsumer:
                 duration_ms,
                 created_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (correlation_id, action_name, created_at) DO NOTHING
             RETURNING id
         """
 
@@ -173,6 +178,22 @@ class KafkaAgentActionConsumer:
                             event["timestamp"].replace("Z", "+00:00")
                         )
 
+                        # Check if duplicate exists
+                        existing = await conn.fetchrow(
+                            check_duplicate_sql,
+                            event["correlation_id"],
+                            event["action_name"],
+                            timestamp,
+                        )
+
+                        if existing:
+                            # Skip duplicate
+                            logger.debug(
+                                f"Skipping duplicate event: {event['correlation_id']}/{event['action_name']}"
+                            )
+                            continue
+
+                        # Insert new event
                         result = await conn.fetch(
                             insert_sql,
                             event["correlation_id"],
@@ -218,7 +239,8 @@ class KafkaAgentActionConsumer:
                             batch = []
                             last_batch_time = asyncio.get_event_loop().time()
                             # Commit offset after successful processing
-                            self.consumer.commit()
+                            if self.consumer is not None:
+                                self.consumer.commit()
 
                 # Check batch timeout
                 current_time = asyncio.get_event_loop().time()
@@ -229,7 +251,8 @@ class KafkaAgentActionConsumer:
                     await self._process_batch(batch)
                     batch = []
                     last_batch_time = current_time
-                    self.consumer.commit()
+                    if self.consumer is not None:
+                        self.consumer.commit()
 
                 # Small sleep to prevent tight loop
                 await asyncio.sleep(0.01)
@@ -241,7 +264,8 @@ class KafkaAgentActionConsumer:
             # Process remaining batch
             if batch:
                 await self._process_batch(batch)
-                self.consumer.commit()
+                if self.consumer is not None:
+                    self.consumer.commit()
 
     async def _process_batch(self, batch: List[Dict]):
         """Process a batch of events."""

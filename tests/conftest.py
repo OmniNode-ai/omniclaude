@@ -338,6 +338,111 @@ def pytest_configure(config):
 
 
 # -------------------------------------------------------------------------
+# Database Wait Helper for Kafka Consumer Tests
+# -------------------------------------------------------------------------
+
+
+async def wait_for_db_condition(
+    db_pool,
+    query: str,
+    expected_condition,
+    timeout_seconds: float = 10.0,
+    poll_interval: float = 0.2,
+    *query_args,
+):
+    """
+    Wait for a database condition to be met with retry logic.
+
+    Args:
+        db_pool: asyncpg connection pool
+        query: SQL query to execute
+        expected_condition: Callable that takes query result and returns True if condition met
+        timeout_seconds: Maximum time to wait
+        poll_interval: Time between polls
+        *query_args: Arguments for the query
+
+    Returns:
+        Query result when condition is met
+
+    Raises:
+        TimeoutError: If condition not met within timeout
+    """
+    start_time = asyncio.get_event_loop().time()
+
+    while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        async with db_pool.acquire() as conn:
+            result = (
+                await conn.fetchval(query, *query_args)
+                if query_args
+                else await conn.fetchval(query)
+            )
+
+            if expected_condition(result):
+                return result
+
+        await asyncio.sleep(poll_interval)
+
+    # Timeout - get final result for error message
+    async with db_pool.acquire() as conn:
+        final_result = (
+            await conn.fetchval(query, *query_args)
+            if query_args
+            else await conn.fetchval(query)
+        )
+
+    raise TimeoutError(
+        f"Database condition not met within {timeout_seconds}s. "
+        f"Final result: {final_result}"
+    )
+
+
+@pytest.fixture
+async def wait_for_records():
+    """
+    Fixture that provides a helper to wait for records in database.
+
+    Usage in tests:
+        count = await wait_for_records(
+            db_pool,
+            correlation_id=correlation_id,
+            expected_count=4,
+            timeout_seconds=10.0
+        )
+    """
+
+    async def _wait_for_records(
+        db_pool,
+        correlation_id: str = None,
+        agent_name: str = None,
+        expected_count: int = 1,
+        timeout_seconds: float = 10.0,
+        poll_interval: float = 0.2,
+    ):
+        """Wait for expected number of records to appear in agent_actions table."""
+        if correlation_id:
+            query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
+            args = (correlation_id,)
+        elif agent_name:
+            query = (
+                f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
+            )
+            args = ()
+        else:
+            raise ValueError("Must provide either correlation_id or agent_name")
+
+        return await wait_for_db_condition(
+            db_pool,
+            query,
+            lambda count: count >= expected_count,
+            timeout_seconds,
+            poll_interval,
+            *args if args else (),
+        )
+
+    return _wait_for_records
+
+
+# -------------------------------------------------------------------------
 # Kafka Producer Cleanup Fixtures
 # -------------------------------------------------------------------------
 

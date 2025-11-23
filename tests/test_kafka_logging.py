@@ -26,10 +26,15 @@ import pytest
 sys.path.insert(
     0,
     str(
-        Path(__file__).parent.parent / "skills" / "agent-tracking" / "log-agent-action"
+        Path(__file__).parent.parent
+        / "claude-artifacts"
+        / "skills"
+        / "agent-tracking"
+        / "log-agent-action"
     ),
 )
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
 
 
 class TestKafkaLoggingUnit:
@@ -42,10 +47,23 @@ class TestKafkaLoggingUnit:
         import execute_kafka
 
         self.execute_kafka = execute_kafka
+
+        # Import kafka_publisher to reset singleton
+        sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
+        import kafka_publisher
+        from kafka_publisher import close_kafka_producer
+
+        self.kafka_publisher = kafka_publisher
+
+        # Reset singleton before each test
+        kafka_publisher._producer_instance = None
+        kafka_publisher.KafkaProducer = None
+
         yield
-        # Cleanup
-        if hasattr(self.execute_kafka, "KafkaProducer"):
-            self.execute_kafka.KafkaProducer = None
+
+        # Cleanup after test
+        kafka_publisher._producer_instance = None
+        kafka_publisher.KafkaProducer = None
 
     @pytest.fixture
     def mock_kafka_producer(self):
@@ -133,6 +151,7 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=None,  # Not provided
                 debug_mode=False,
+                duration_ms=None,
             )
 
             with patch("builtins.print") as mock_print:
@@ -192,6 +211,7 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=correlation_id,
                 debug_mode=False,
+                duration_ms=None,
             )
 
             self.execute_kafka.log_agent_action_kafka(args)
@@ -220,6 +240,7 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=str(uuid.uuid4()),
                 debug_mode=False,
+                duration_ms=None,
             )
 
             with patch("sys.stderr"):
@@ -242,6 +263,7 @@ class TestKafkaLoggingUnit:
                     details='{"error": "timeout"}',
                     correlation_id=str(uuid.uuid4()),
                     debug_mode=False,
+                    duration_ms=None,
                 )
 
                 with patch("sys.stderr"):
@@ -260,6 +282,7 @@ class TestKafkaLoggingUnit:
                 details='{"invalid": json}',  # Invalid JSON
                 correlation_id=str(uuid.uuid4()),
                 debug_mode=False,
+                duration_ms=None,
             )
 
             # Should handle gracefully by using empty dict
@@ -285,6 +308,7 @@ class TestKafkaLoggingUnit:
                     details=None,
                     correlation_id=str(uuid.uuid4()),
                     debug_mode=False,
+                    duration_ms=None,
                 )
 
                 result = self.execute_kafka.log_agent_action_kafka(args)
@@ -303,6 +327,7 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=str(uuid.uuid4()),
                 debug_mode=False,
+                duration_ms=None,
             )
             self.execute_kafka.log_agent_action_kafka(args1)
 
@@ -314,13 +339,14 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=str(uuid.uuid4()),
                 debug_mode=False,
+                duration_ms=None,
             )
             self.execute_kafka.log_agent_action_kafka(args2)
 
             # Producer should only be created once (singleton pattern)
-            # Note: This depends on implementation - if producer is created per-call,
-            # this test might need adjustment
-            assert mock_producer_class.call_count >= 1
+            assert mock_producer_class.call_count == 1
+            # But send should be called twice (once per log call)
+            assert mock_instance.send.call_count == 2
 
     def test_duration_ms_optional(self, mock_kafka_producer):
         """Test duration_ms is optional and handled correctly."""
@@ -357,6 +383,7 @@ class TestKafkaLoggingUnit:
                 details=None,
                 correlation_id=str(uuid.uuid4()),
                 debug_mode=False,
+                duration_ms=None,
             )
 
             self.execute_kafka.log_agent_action_kafka(args)
@@ -383,14 +410,31 @@ class TestKafkaProducerConfiguration:
         import execute_kafka
 
         self.execute_kafka = execute_kafka
+
+        # Import kafka_publisher to reset singleton
+        sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
+        import kafka_publisher
+
+        self.kafka_publisher = kafka_publisher
+
+        # Reset singleton before each test
+        kafka_publisher._producer_instance = None
+        kafka_publisher.KafkaProducer = None
+
         yield
-        if hasattr(self.execute_kafka, "KafkaProducer"):
-            self.execute_kafka.KafkaProducer = None
+
+        # Cleanup after test
+        kafka_publisher._producer_instance = None
+        kafka_publisher.KafkaProducer = None
 
     def test_producer_compression_enabled(self):
         """Test Kafka producer uses gzip compression."""
         with patch("kafka.KafkaProducer") as mock_producer_class:
-            self.execute_kafka.get_kafka_producer()
+            # Force reimport by resetting singleton
+            self.kafka_publisher._producer_instance = None
+            self.kafka_publisher.KafkaProducer = None
+
+            self.kafka_publisher.get_kafka_producer()
 
             # Verify producer was created with compression
             call_kwargs = mock_producer_class.call_args[1]
@@ -399,7 +443,11 @@ class TestKafkaProducerConfiguration:
     def test_producer_batching_configured(self):
         """Test Kafka producer batching is configured."""
         with patch("kafka.KafkaProducer") as mock_producer_class:
-            self.execute_kafka.get_kafka_producer()
+            # Force reimport by resetting singleton
+            self.kafka_publisher._producer_instance = None
+            self.kafka_publisher.KafkaProducer = None
+
+            self.kafka_publisher.get_kafka_producer()
 
             call_kwargs = mock_producer_class.call_args[1]
             assert "linger_ms" in call_kwargs
@@ -410,7 +458,11 @@ class TestKafkaProducerConfiguration:
     def test_producer_reliability_settings(self):
         """Test Kafka producer reliability settings."""
         with patch("kafka.KafkaProducer") as mock_producer_class:
-            self.execute_kafka.get_kafka_producer()
+            # Force reimport by resetting singleton
+            self.kafka_publisher._producer_instance = None
+            self.kafka_publisher.KafkaProducer = None
+
+            self.kafka_publisher.get_kafka_producer()
 
             call_kwargs = mock_producer_class.call_args[1]
             assert call_kwargs["acks"] == 1  # Leader acknowledgment
@@ -419,9 +471,19 @@ class TestKafkaProducerConfiguration:
 
     def test_custom_kafka_brokers_env_var(self):
         """Test custom Kafka brokers can be set via environment variable."""
-        with patch.dict(os.environ, {"KAFKA_BROKERS": "kafka1:9092,kafka2:9092"}):
+        # Clear all Kafka-related env vars and set only KAFKA_BROKERS
+        env_vars = {
+            "KAFKA_BOOTSTRAP_SERVERS": "",
+            "KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS": "",
+            "KAFKA_BROKERS": "kafka1:9092,kafka2:9092",
+        }
+        with patch.dict(os.environ, env_vars, clear=False):
             with patch("kafka.KafkaProducer") as mock_producer_class:
-                self.execute_kafka.get_kafka_producer()
+                # Force reimport by resetting singleton
+                self.kafka_publisher._producer_instance = None
+                self.kafka_publisher.KafkaProducer = None
+
+                self.kafka_publisher.get_kafka_producer()
 
                 call_kwargs = mock_producer_class.call_args[1]
                 assert call_kwargs["bootstrap_servers"] == [
@@ -430,13 +492,17 @@ class TestKafkaProducerConfiguration:
                 ]
 
     def test_default_kafka_broker(self):
-        """Test default Kafka broker is localhost:9092."""
+        """Test default Kafka broker is 192.168.86.200:9092."""
         with patch.dict(os.environ, {}, clear=True):
             with patch("kafka.KafkaProducer") as mock_producer_class:
-                self.execute_kafka.get_kafka_producer()
+                # Force reimport by resetting singleton
+                self.kafka_publisher._producer_instance = None
+                self.kafka_publisher.KafkaProducer = None
+
+                self.kafka_publisher.get_kafka_producer()
 
                 call_kwargs = mock_producer_class.call_args[1]
-                assert call_kwargs["bootstrap_servers"] == ["localhost:9092"]
+                assert call_kwargs["bootstrap_servers"] == ["192.168.86.200:9092"]
 
 
 if __name__ == "__main__":
