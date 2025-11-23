@@ -1,3 +1,28 @@
+---
+name: "request-intelligence"
+description: "Request intelligence operations from the Omni Archon intelligence adapter"
+version: "1.0.0"
+author: "OmniClaude Team"
+category: "intelligence"
+tags:
+  - intelligence
+  - pattern-discovery
+  - code-analysis
+  - quality-assessment
+  - kafka
+  - qdrant
+dependencies:
+  - kafkacat
+  - kcat
+usage: |
+  /request-intelligence --operation OPERATION [OPTIONS]
+  Operations: pattern-discovery, code-analysis, quality-assessment
+examples:
+  - "/request-intelligence --operation pattern-discovery --source-path 'node_*_effect.py' --language python"
+  - "/request-intelligence --operation code-analysis --file path/to/file.py --language python"
+  - "/request-intelligence --operation quality-assessment --content 'code here' --language python --include-metrics"
+---
+
 # Request Intelligence Skill
 
 Request intelligence operations from the Omni Archon intelligence adapter.

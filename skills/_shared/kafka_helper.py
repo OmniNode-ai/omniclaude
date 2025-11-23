@@ -8,21 +8,26 @@ Provides functions for:
 - Consumer group status
 - Message throughput monitoring
 
+All functions follow a standardized API contract with TypedDict return values.
+See kafka_types.py for complete API documentation.
+
 Example:
     from kafka_helper import check_kafka_connection, list_topics, get_topic_stats
 
     # Check Kafka connectivity
     connection = check_kafka_connection()
-    if connection["reachable"]:
+    if connection["success"] and connection["reachable"]:
         # List available topics
         topics = list_topics()
         print(f"Found {topics['count']} topics")
 
         # Get stats for specific topic
         stats = get_topic_stats("my-topic")
-        print(f"Partitions: {stats['partitions']}")
+        if stats["success"]:
+            print(f"Partitions: {stats['partitions']}")
 
 Created: 2025-11-12
+Updated: 2025-11-23 - Added standardized type hints and API contract
 """
 
 import json
@@ -32,6 +37,15 @@ import re
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional
+
+# Import standardized Kafka result types
+from kafka_types import (
+    KafkaConnectionResult,
+    KafkaConsumerGroupsResult,
+    KafkaMessageCountResult,
+    KafkaTopicsResult,
+    KafkaTopicStatsResult,
+)
 
 
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
@@ -131,12 +145,25 @@ def get_timeout_command() -> str:
     return "gtimeout" if platform.system() == "Darwin" else "timeout"
 
 
-def check_kafka_connection() -> Dict[str, Any]:
+def check_kafka_connection() -> KafkaConnectionResult:
     """
     Check if Kafka is reachable and responsive.
 
     Returns:
-        Dictionary with connection status and metadata
+        KafkaConnectionResult with:
+        - success: True if connected, False otherwise
+        - status: Connection status ("connected", "error", "timeout")
+        - broker: Bootstrap server address
+        - reachable: Whether broker is reachable
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = check_kafka_connection()
+        >>> if result["success"] and result["reachable"]:
+        ...     print(f"Connected to {result['broker']}")
+        ... else:
+        ...     print(f"Connection failed: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -151,6 +178,7 @@ def check_kafka_connection() -> Dict[str, Any]:
 
         if result.returncode == 0:
             return {
+                "success": True,
                 "status": "connected",
                 "broker": bootstrap_servers,
                 "reachable": True,
@@ -159,6 +187,7 @@ def check_kafka_connection() -> Dict[str, Any]:
             }
         else:
             return {
+                "success": False,
                 "status": "error",
                 "broker": bootstrap_servers,
                 "reachable": False,
@@ -167,6 +196,7 @@ def check_kafka_connection() -> Dict[str, Any]:
             }
     except subprocess.TimeoutExpired:
         return {
+            "success": False,
             "status": "timeout",
             "broker": bootstrap_servers,
             "reachable": False,
@@ -181,6 +211,7 @@ def check_kafka_connection() -> Dict[str, Any]:
             "See deployment/README.md for details"
         )
         return {
+            "success": False,
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
@@ -190,6 +221,7 @@ def check_kafka_connection() -> Dict[str, Any]:
         # SubprocessError: subprocess-related failures
         # OSError: system-level errors (permissions, resource limits, etc.)
         return {
+            "success": False,
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
@@ -197,12 +229,24 @@ def check_kafka_connection() -> Dict[str, Any]:
         }
 
 
-def list_topics() -> Dict[str, Any]:
+def list_topics() -> KafkaTopicsResult:
     """
     List all Kafka topics.
 
     Returns:
-        Dictionary with topic list and count
+        KafkaTopicsResult with:
+        - success: True if topics retrieved, False otherwise
+        - topics: List of topic names (empty list on failure)
+        - count: Number of topics found
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = list_topics()
+        >>> if result["success"]:
+        ...     print(f"Found {result['count']} topics: {result['topics']}")
+        ... else:
+        ...     print(f"Failed to list topics: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -271,7 +315,7 @@ def list_topics() -> Dict[str, Any]:
         }
 
 
-def get_topic_stats(topic_name: str) -> Dict[str, Any]:
+def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
     """
     Get statistics for a specific topic.
 
@@ -279,7 +323,19 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
         topic_name: Name of the topic
 
     Returns:
-        Dictionary with topic statistics
+        KafkaTopicStatsResult with:
+        - success: True if stats retrieved, False otherwise
+        - topic: Topic name
+        - partitions: Number of partitions
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = get_topic_stats("my-topic")
+        >>> if result["success"]:
+        ...     print(f"Topic '{result['topic']}' has {result['partitions']} partitions")
+        ... else:
+        ...     print(f"Failed to get stats: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -342,12 +398,31 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
         }
 
 
-def get_consumer_groups() -> Dict[str, Any]:
+def get_consumer_groups() -> KafkaConsumerGroupsResult:
     """
     List all consumer groups.
 
     Returns:
-        Dictionary with consumer group list
+        KafkaConsumerGroupsResult with:
+        - success: True if groups retrieved, False otherwise
+        - groups: List of consumer group names (empty list on failure)
+        - count: Number of consumer groups found
+        - error: Error message on failure, None on success
+        - implemented: Whether the operation is implemented (False for placeholder)
+        - return_code: Process return code if applicable
+
+    Note:
+        This operation is not yet fully implemented.
+        Requires kafka-consumer-groups command or Kafka Admin API.
+
+    Example:
+        >>> result = get_consumer_groups()
+        >>> if result["success"] and result["implemented"]:
+        ...     print(f"Found {result['count']} consumer groups")
+        ... elif not result["implemented"]:
+        ...     print("Consumer group listing not yet implemented")
+        ... else:
+        ...     print(f"Failed: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -423,7 +498,7 @@ def check_topic_exists(topic_name: str) -> bool:
 
 def get_recent_message_count(
     topic_name: str, timeout_seconds: int = 2
-) -> Dict[str, Any]:
+) -> KafkaMessageCountResult:
     """
     Get count of recent messages in a topic (sample).
 
@@ -432,18 +507,25 @@ def get_recent_message_count(
         timeout_seconds: How long to consume messages (default: 2s)
 
     Returns:
-        Dictionary with message count estimate. Always includes:
-        - success: bool - True only when kcat executed successfully
-        - topic: str - Topic name
-        - messages_sampled: int - Number of messages found (0 on failure)
-        - sample_duration_s: int - Sampling duration
-        - error: Optional[str] - Error message if success is False
-        - return_code: Optional[int] - kcat exit code (None for non-kcat errors)
+        KafkaMessageCountResult with:
+        - success: True if operation succeeded, False otherwise
+        - topic: Topic name
+        - messages_sampled: Number of messages found (0 on failure)
+        - sample_duration_s: Sampling duration in seconds
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
 
     Note:
         Distinguishes between:
         - "0 messages found" (success=True, messages_sampled=0)
-        - "kcat failed" (success=False, error contains details)
+        - "operation failed" (success=False, error contains details)
+
+    Example:
+        >>> result = get_recent_message_count("my-topic", timeout_seconds=5)
+        >>> if result["success"]:
+        ...     print(f"Found {result['messages_sampled']} messages in {result['sample_duration_s']}s")
+        ... else:
+        ...     print(f"Failed to sample messages: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 

@@ -124,17 +124,17 @@ jobs:
         run: |
           pip install bandit
           # Explicitly exclude template directories to avoid false positives
-          # Only fail on MEDIUM/HIGH severity issues (--confidence 2 --severity 2)
+          # Only fail on MEDIUM/HIGH severity issues (--confidence-level medium --severity-level medium)
           # Low severity issues (961 found) are informational but don't fail CI
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
             --ini .bandit \
-            --confidence 2 --severity 2 \
+            --confidence-level medium --severity-level medium \
             -f json -o bandit-report.json
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
             --ini .bandit \
-            --confidence 2 --severity 2 \
+            --confidence-level medium --severity-level medium \
             -f txt
 
       - name: Upload Bandit report
@@ -225,7 +225,7 @@ jobs:
           POSTGRES_DATABASE: test_db
           TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
-          poetry run pytest tests/ \
+          poetry run pytest -o addopts="" tests/ \
             --splits 5 \
             --group ${{ matrix.group }} \
             -v -m "not integration" \

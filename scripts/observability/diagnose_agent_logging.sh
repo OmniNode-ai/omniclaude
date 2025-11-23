@@ -29,10 +29,12 @@
 #   POSTGRES_DATABASE (required)
 #   KAFKA_BOOTSTRAP_SERVERS (required)
 #
-# Exit Codes:
+# Exit Codes (see scripts/observability/EXIT_CODES.md):
 #   0 - All checks passed
 #   1 - Critical issues found
 #   2 - Warnings found (non-critical)
+#   3 - Configuration error (missing .env or credentials)
+#   4 - Dependency missing (psql, docker, etc.)
 #
 # Created: 2025-10-29
 ################################################################################
@@ -82,7 +84,7 @@ done
 if [ ! -f "$PROJECT_ROOT/.env" ]; then
     echo -e "${RED}❌ ERROR: .env file not found at $PROJECT_ROOT/.env${NC}"
     echo "   Please copy .env.example to .env and configure it"
-    exit 1
+    exit 3  # Configuration error
 fi
 
 set -a
@@ -113,7 +115,7 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     done
     echo ""
     echo "Please update your .env file with these variables."
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Helper functions

@@ -1,3 +1,27 @@
+---
+name: "log-execution"
+description: "Track agent execution in PostgreSQL for observability and intelligence gathering"
+version: "1.0.0"
+author: "OmniClaude Team"
+category: "observability"
+tags:
+  - logging
+  - execution-tracking
+  - observability
+  - postgresql
+  - correlation-tracking
+dependencies:
+  - psql
+usage: |
+  /log-execution start --agent AGENT_NAME --description "DESCRIPTION"
+  /log-execution progress --execution-id UUID --stage STAGE --percent PERCENT
+  /log-execution complete --execution-id UUID --status STATUS [--quality-score SCORE]
+examples:
+  - "/log-execution start --agent agent-research --description 'Research Claude Code skills'"
+  - "/log-execution progress --execution-id uuid --stage analyzing --percent 50"
+  - "/log-execution complete --execution-id uuid --status success --quality-score 0.95"
+---
+
 # Log Execution Skill
 
 Track your agent execution in PostgreSQL for observability and intelligence gathering.

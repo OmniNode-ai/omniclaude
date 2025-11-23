@@ -2,16 +2,17 @@
 set -euo pipefail
 
 # ============================================================================
-# PR Review Data Fetcher
+# PR Review Data Fetcher - OPTIMIZED VERSION
 # ============================================================================
-# Fetches ALL PR review data from the 4 GitHub API endpoints where comments
-# and reviews can appear:
-#   1. Reviews API - Formal PR reviews (approve/request changes/comment)
-#   2. Pull Comments API - Inline code review comments (file:line specific)
-#   3. PR Comments API - PR conversation thread comments
-#   4. Issue Comments API - Where bots (including Claude Code bot) post
+# Fetches PR review data from 4 GitHub API endpoints with smart limits,
+# caching, and graceful degradation for large PRs.
 #
-# This ensures no reviews or comments are missed during PR analysis.
+# Optimizations:
+#   - 5-minute cache to avoid redundant API calls
+#   - --limit flag for large PRs (only recent + bot comments)
+#   - Summary-only mode for extremely large datasets
+#   - Parallel fetching with error recovery
+#   - Statistics tracking
 # ============================================================================
 
 # Colors for output
@@ -20,6 +21,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Configuration
+CACHE_DIR="${TMPDIR:-/tmp}/pr-review-cache"
+CACHE_TTL=300  # 5 minutes
+MAX_COMMENTS_DEFAULT=1000  # Default limit before summarization
 
 # Function to print colored status (to stderr to keep stdout clean for JSON)
 print_status() {
@@ -41,30 +47,33 @@ print_error() {
 # Usage
 usage() {
     cat << EOF
-Usage: $(basename "$0") <PR_NUMBER>
+Usage: $(basename "$0") <PR_NUMBER> [OPTIONS]
 
-Fetch all PR review data from GitHub API (4 endpoints).
+Fetch PR review data from GitHub API (4 endpoints) with smart caching.
 
 Arguments:
   PR_NUMBER    PR number (e.g., 20) or full GitHub URL
 
+Options:
+  --limit NUM       Limit comments per endpoint (default: no limit)
+                    For large PRs, fetches recent + bot comments only
+  --summary-only    Statistics only, no comment bodies (for huge PRs)
+  --no-cache        Skip cache, always fetch fresh data
+  --cache-only      Use cached data only, fail if not cached
+
 Examples:
-  $(basename "$0") 20
-  $(basename "$0") https://github.com/OmniNode-ai/omniclaude/pull/20
+  $(basename "$0") 20                    # Full fetch (cached)
+  $(basename "$0") 88 --limit 50         # Large PR, recent 50 only
+  $(basename "$0") 88 --summary-only     # Statistics only
 
 Output:
-  JSON object with 4 arrays:
-  {
-    "reviews": [...],           # Formal PR reviews
-    "inline_comments": [...],   # File:line specific comments
-    "pr_comments": [...],       # PR conversation thread
-    "issue_comments": [...]     # Issue comments (WHERE CLAUDE BOT POSTS!)
-  }
+  JSON object with 4 arrays + summary statistics
 
 Exit codes:
   0 - Success
   1 - Missing dependencies or arguments
   2 - GitHub API error
+  3 - Cache miss (with --cache-only)
 EOF
     exit 1
 }
@@ -84,11 +93,11 @@ check_dependencies() {
     if [ ${#missing_deps[@]} -ne 0 ]; then
         print_error "Missing required dependencies:"
         for dep in "${missing_deps[@]}"; do
-            echo "  - $dep"
+            echo "  - $dep" >&2
         done
-        echo ""
-        echo "Install with:"
-        echo "  brew install gh jq"
+        echo "" >&2
+        echo "Install with:" >&2
+        echo "  brew install gh jq" >&2
         exit 1
     fi
 }
@@ -117,10 +126,71 @@ get_repo_name() {
     }
 }
 
+# Check cache validity
+check_cache() {
+    local cache_file="$1"
+
+    if [[ ! -f "$cache_file" ]]; then
+        return 1  # Cache miss
+    fi
+
+    # Check age
+    local cache_age=$(($(date +%s) - $(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null)))
+
+    if [[ $cache_age -gt $CACHE_TTL ]]; then
+        print_warning "Cache expired (${cache_age}s old, TTL: ${CACHE_TTL}s)"
+        return 1  # Cache expired
+    fi
+
+    print_success "Cache hit (${cache_age}s old)"
+    return 0  # Cache valid
+}
+
+# Fetch with smart limits
+fetch_endpoint_smart() {
+    local endpoint="$1"
+    local limit="$2"
+    local summary_only="$3"
+
+    if [[ "$summary_only" == "true" ]]; then
+        # Summary only: count + metadata, no bodies
+        gh api "$endpoint" --jq '[.[] | {author: .user.login, created_at: .created_at // .submitted_at}] | {count: length, authors: [.[].author] | unique, latest: .[0].created_at}' 2>/dev/null || echo '{"count": 0, "authors": [], "latest": null}'
+    elif [[ -n "$limit" ]] && [[ "$limit" -gt 0 ]]; then
+        # Limited fetch: recent + bots
+        gh api "$endpoint" --paginate --jq "
+            [.[] | select(.user.login | contains(\"bot\") or contains(\"claude\"))] as \$bots |
+            [.[] | select(.user.login | contains(\"bot\") or contains(\"claude\") | not)] | sort_by(.created_at // .submitted_at) | reverse | .[0:$limit] as \$recent |
+            (\$bots + \$recent) | unique_by(.id)
+        " 2>/dev/null || echo '[]'
+    else
+        # Full fetch
+        gh api "$endpoint" --paginate --jq '.' 2>/dev/null || echo '[]'
+    fi
+}
+
 # Main fetch function
 fetch_pr_data() {
     local pr_number="$1"
+    local limit="${2:-}"
+    local summary_only="${3:-false}"
+    local use_cache="${4:-true}"
+    local cache_only="${5:-false}"
     local repo_name
+
+    # Setup cache
+    mkdir -p "$CACHE_DIR"
+    local cache_file="$CACHE_DIR/pr_${pr_number}_data.json"
+
+    # Check cache
+    if [[ "$use_cache" == "true" ]] && check_cache "$cache_file"; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    if [[ "$cache_only" == "true" ]]; then
+        print_error "Cache miss and --cache-only specified"
+        exit 3
+    fi
 
     print_status "Fetching PR #$pr_number data from all endpoints..."
 
@@ -138,55 +208,114 @@ fetch_pr_data() {
     # Fetch in parallel for speed
     print_status "Fetching from 4 endpoints in parallel..."
 
-    # 1. Formal PR reviews (approve/request changes/comment)
+    if [[ -n "$limit" ]]; then
+        print_warning "Limiting to $limit recent comments per endpoint + all bot comments"
+    fi
+
+    # 1. Formal PR reviews
     (
-        gh api "repos/$repo_name/pulls/$pr_number/reviews" \
-            --jq '[.[] | {
-                author: .user.login,
-                state: .state,
-                body: .body,
-                submitted_at: .submitted_at,
-                id: .id
-            }]' > "$reviews_file" 2>/dev/null || echo "[]" > "$reviews_file"
-        print_success "Reviews API (formal reviews)"
+        if [[ "$summary_only" == "true" ]]; then
+            gh api "repos/$repo_name/pulls/$pr_number/reviews" \
+                --jq '{count: length, states: [.[].state] | group_by(.) | map({state: .[0], count: length})}' > "$reviews_file" 2>/dev/null || echo '{"count": 0, "states": []}' > "$reviews_file"
+        else
+            gh api "repos/$repo_name/pulls/$pr_number/reviews" \
+                --jq '[.[] | {
+                    author: .user.login,
+                    state: .state,
+                    body: .body,
+                    submitted_at: .submitted_at,
+                    id: .id
+                }]' > "$reviews_file" 2>/dev/null || echo "[]" > "$reviews_file"
+        fi
+        print_success "Reviews API"
     ) &
 
-    # 2. Inline code review comments (file:line specific)
+    # 2. Inline code review comments
     (
-        gh api "repos/$repo_name/pulls/$pr_number/comments" \
-            --jq '[.[] | {
-                author: .user.login,
-                path: .path,
-                line: .line,
-                body: .body,
-                created_at: .created_at,
-                id: .id
-            }]' > "$inline_file" 2>/dev/null || echo "[]" > "$inline_file"
-        print_success "Pull Comments API (inline comments)"
+        local endpoint="repos/$repo_name/pulls/$pr_number/comments"
+        if [[ "$summary_only" == "true" ]]; then
+            gh api "$endpoint" --jq '{count: length, files: [.[].path] | unique | length}' > "$inline_file" 2>/dev/null || echo '{"count": 0, "files": 0}' > "$inline_file"
+        elif [[ -n "$limit" ]]; then
+            # Fetch all bot comments + recent N human comments
+            gh api "$endpoint" --paginate --jq "
+                ([.[] | select(.user.login | test(\"bot|claude\"; \"i\"))]) as \$bots |
+                ([.[] | select(.user.login | test(\"bot|claude\"; \"i\") | not)] | sort_by(.created_at) | reverse | .[0:${limit}]) as \$recent |
+                (\$bots + \$recent) | unique_by(.id) | map({
+                    author: .user.login,
+                    path: .path,
+                    line: .line,
+                    body: .body,
+                    created_at: .created_at,
+                    id: .id
+                })
+            " > "$inline_file" 2>/dev/null || echo "[]" > "$inline_file"
+        else
+            gh api "$endpoint" --paginate \
+                --jq '[.[] | {
+                    author: .user.login,
+                    path: .path,
+                    line: .line,
+                    body: .body,
+                    created_at: .created_at,
+                    id: .id
+                }]' > "$inline_file" 2>/dev/null || echo "[]" > "$inline_file"
+        fi
+        print_success "Inline Comments API"
     ) &
 
-    # 3. PR conversation comments (native PR thread)
+    # 3. PR conversation comments
     (
-        gh pr view "$pr_number" --json comments \
-            --jq '[.comments[] | {
-                author: .author.login,
-                body: .body,
-                created_at: .createdAt,
-                id: .id
-            }]' > "$pr_comments_file" 2>/dev/null || echo "[]" > "$pr_comments_file"
-        print_success "PR Comments (conversation thread)"
+        if [[ "$summary_only" == "true" ]]; then
+            gh pr view "$pr_number" --json comments --jq '{count: (.comments | length)}' > "$pr_comments_file" 2>/dev/null || echo '{"count": 0}' > "$pr_comments_file"
+        elif [[ -n "$limit" ]]; then
+            gh pr view "$pr_number" --json comments --jq "
+                ([.comments[] | select(.author.login | test(\"bot|claude\"; \"i\"))]) as \$bots |
+                ([.comments[] | select(.author.login | test(\"bot|claude\"; \"i\") | not)] | sort_by(.createdAt) | reverse | .[0:${limit}]) as \$recent |
+                (\$bots + \$recent) | unique_by(.id) | map({
+                    author: .author.login,
+                    body: .body,
+                    created_at: .createdAt,
+                    id: .id
+                })
+            " > "$pr_comments_file" 2>/dev/null || echo "[]" > "$pr_comments_file"
+        else
+            gh pr view "$pr_number" --json comments \
+                --jq '[.comments[] | {
+                    author: .author.login,
+                    body: .body,
+                    created_at: .createdAt,
+                    id: .id
+                }]' > "$pr_comments_file" 2>/dev/null || echo "[]" > "$pr_comments_file"
+        fi
+        print_success "PR Comments API"
     ) &
 
-    # 4. Issue comments (WHERE CLAUDE CODE BOT AND OTHER BOTS POST!)
+    # 4. Issue comments (WHERE CLAUDE CODE BOT POSTS!)
     (
-        gh api "repos/$repo_name/issues/$pr_number/comments" \
-            --jq '[.[] | {
-                author: .user.login,
-                body: .body,
-                created_at: .created_at,
-                id: .id
-            }]' > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
-        print_success "Issue Comments API (WHERE CLAUDE BOT POSTS!)"
+        local endpoint="repos/$repo_name/issues/$pr_number/comments"
+        if [[ "$summary_only" == "true" ]]; then
+            gh api "$endpoint" --jq '{count: length, has_bot: ([.[].user.login] | any(test(\"bot|claude\"; \"i\")))}' > "$issue_comments_file" 2>/dev/null || echo '{"count": 0, "has_bot": false}' > "$issue_comments_file"
+        elif [[ -n "$limit" ]]; then
+            gh api "$endpoint" --paginate --jq "
+                ([.[] | select(.user.login | test(\"bot|claude\"; \"i\"))]) as \$bots |
+                ([.[] | select(.user.login | test(\"bot|claude\"; \"i\") | not)] | sort_by(.created_at) | reverse | .[0:${limit}]) as \$recent |
+                (\$bots + \$recent) | unique_by(.id) | map({
+                    author: .user.login,
+                    body: .body,
+                    created_at: .created_at,
+                    id: .id
+                })
+            " > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
+        else
+            gh api "$endpoint" --paginate \
+                --jq '[.[] | {
+                    author: .user.login,
+                    body: .body,
+                    created_at: .created_at,
+                    id: .id
+                }]' > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
+        fi
+        print_success "Issue Comments API (Claude bot comments!)"
     ) &
 
     # Wait for all parallel fetches to complete
@@ -197,34 +326,54 @@ fetch_pr_data() {
     # Combine into single JSON object
     print_status "Combining results..."
 
+    # Use file-based approach to avoid "Argument list too long" errors
+    local combined_file="$tmp_dir/combined.json"
+
+    # Create combined JSON using slurpfile instead of --argjson (handles large data)
     jq -n \
         --arg pr_num "$pr_number" \
         --arg repo "$repo_name" \
-        --argjson reviews "$(cat "$reviews_file")" \
-        --argjson inline "$(cat "$inline_file")" \
-        --argjson pr_comments "$(cat "$pr_comments_file")" \
-        --argjson issue_comments "$(cat "$issue_comments_file")" \
+        --arg limit "$limit" \
+        --arg summary_only "$summary_only" \
+        --slurpfile reviews "$reviews_file" \
+        --slurpfile inline "$inline_file" \
+        --slurpfile pr_comments "$pr_comments_file" \
+        --slurpfile issue_comments "$issue_comments_file" \
         '{
             pr_number: ($pr_num | tonumber),
             repository: $repo,
             fetched_at: (now | todate),
-            reviews: $reviews,
-            inline_comments: $inline,
-            pr_comments: $pr_comments,
-            issue_comments: $issue_comments,
+            fetch_mode: (if $summary_only == "true" then "summary" elif $limit != "" then "limited" else "full" end),
+            limit: (if $limit != "" then ($limit | tonumber) else null end),
+            reviews: $reviews[0],
+            inline_comments: $inline[0],
+            pr_comments: $pr_comments[0],
+            issue_comments: $issue_comments[0],
             summary: {
-                total_reviews: ($reviews | length),
-                total_inline_comments: ($inline | length),
-                total_pr_comments: ($pr_comments | length),
-                total_issue_comments: ($issue_comments | length),
+                total_reviews: (if $reviews[0] | type == "array" then ($reviews[0] | length) else 0 end),
+                total_inline_comments: (if $inline[0] | type == "array" then ($inline[0] | length) else 0 end),
+                total_pr_comments: (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) else 0 end),
+                total_issue_comments: (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) else 0 end),
                 total_all_comments: (
-                    ($reviews | length) +
-                    ($inline | length) +
-                    ($pr_comments | length) +
-                    ($issue_comments | length)
+                    (if $reviews[0] | type == "array" then ($reviews[0] | length) else 0 end) +
+                    (if $inline[0] | type == "array" then ($inline[0] | length) else 0 end) +
+                    (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) else 0 end) +
+                    (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) else 0 end)
                 )
             }
-        }'
+        }' > "$combined_file"
+
+    local output
+    output=$(cat "$combined_file")
+
+    # Cache the output
+    if [[ "$use_cache" == "true" ]]; then
+        echo "$output" > "$cache_file"
+        print_success "Cached to: $cache_file"
+    fi
+
+    # Output result
+    echo "$output"
 
     # Cleanup
     rm -rf "$tmp_dir"
@@ -232,16 +381,55 @@ fetch_pr_data() {
 
 # Main
 main() {
-    if [ $# -eq 0 ]; then
+    local pr_number=""
+    local limit=""
+    local summary_only=false
+    local use_cache=true
+    local cache_only=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --limit)
+                limit="$2"
+                shift 2
+                ;;
+            --summary-only)
+                summary_only=true
+                shift
+                ;;
+            --no-cache)
+                use_cache=false
+                shift
+                ;;
+            --cache-only)
+                cache_only=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                if [[ -z "$pr_number" ]]; then
+                    pr_number="$1"
+                else
+                    print_error "Unknown argument: $1"
+                    usage
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$pr_number" ]]; then
         usage
     fi
 
     check_dependencies
 
-    local pr_number
-    pr_number=$(extract_pr_number "$1")
+    pr_number=$(extract_pr_number "$pr_number")
 
-    fetch_pr_data "$pr_number"
+    fetch_pr_data "$pr_number" "$limit" "$summary_only" "$use_cache" "$cache_only"
 }
 
 main "$@"

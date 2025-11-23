@@ -1,0 +1,314 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# PR Issue Collator - Automated Priority-Based Issue Aggregation
+# ============================================================================
+# Fetches, parses, categorizes, and prioritizes all PR review issues
+# in a single automated command.
+#
+# Features:
+#   - Single command execution: collate-issues <PR#>
+#   - Automatic caching via fetch-pr-data
+#   - Smart categorization by severity (Critical > Major > Minor > Nit)
+#   - Deduplication of similar issues
+#   - Token-efficient output (< 2000 tokens)
+#   - Ready for agent consumption (no parsing needed)
+# ============================================================================
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FETCH_SCRIPT="$SCRIPT_DIR/fetch-pr-data"
+SHOW_STATS=false
+INCLUDE_NITPICKS=false
+
+# Usage
+usage() {
+    cat << 'EOF'
+Usage: collate-issues <PR_NUMBER> [OPTIONS]
+
+Automated PR issue collation and prioritization.
+
+Arguments:
+  PR_NUMBER    PR number (e.g., 33) or full GitHub URL
+
+Options:
+  --include-nitpicks    Include nitpick issues in output (default: excluded)
+  --stats               Show statistics summary
+  --help                Show this help message
+
+Output:
+  Clean prioritized list of all PR issues by severity:
+    🔴 CRITICAL - Must address before merge
+    🟠 MAJOR    - Must address before merge
+    🟡 MINOR    - Must address before merge
+    ⚪ NITPICK  - Optional improvements (only with --include-nitpicks)
+
+Examples:
+  collate-issues 33                      # Critical, Major, Minor only
+  collate-issues 33 --include-nitpicks   # Include nitpicks too
+  collate-issues 33 --stats              # With statistics summary
+
+Exit codes:
+  0 - Success
+  1 - Missing arguments or dependencies
+  2 - PR data fetch failed
+EOF
+    exit 1
+}
+
+# Check dependencies
+check_dependencies() {
+    local missing_deps=()
+
+    if [[ ! -x "$FETCH_SCRIPT" ]]; then
+        missing_deps+=("fetch-pr-data script (not found or not executable)")
+    fi
+
+    if ! command -v jq &> /dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        echo "ERROR: Missing required dependencies:" >&2
+        for dep in "${missing_deps[@]}"; do
+            echo "  - $dep" >&2
+        done
+        exit 1
+    fi
+}
+
+# Extract PR number from argument (handles URLs)
+extract_pr_number() {
+    local input="$1"
+
+    # If it's a URL, extract the PR number
+    if [[ "$input" =~ pull/([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    # If it's already a number, use it
+    elif [[ "$input" =~ ^[0-9]+$ ]]; then
+        echo "$input"
+    else
+        echo "ERROR: Invalid PR number or URL: $input" >&2
+        exit 1
+    fi
+}
+
+# Main collation function
+collate_pr_issues() {
+    local pr_number="$1"
+
+    # Fetch PR data (uses cache if available)
+    local pr_data
+    pr_data=$("$FETCH_SCRIPT" "$pr_number" 2>/dev/null) || {
+        echo "ERROR: Failed to fetch PR data for PR #$pr_number" >&2
+        echo "Try running: $FETCH_SCRIPT $pr_number" >&2
+        exit 2
+    }
+
+    # Use jq to do ALL parsing and categorization
+    # This is much more efficient and handles multiline bodies correctly
+    local categorized
+    categorized=$(echo "$pr_data" | jq -r '
+        # Function to extract severity and summary from CodeRabbit comments
+        def parse_coderabbit:
+            if (. | test("^_⚠️ Potential issue_|^_🛠️ Refactor suggestion_")) then
+                # Extract severity from first line
+                (split("\n")[0] |
+                    if test("🔴.*Critical") then "critical"
+                    elif test("🟠.*Major") then "major"
+                    elif test("🟡.*Minor") then "minor"
+                    else "nit"
+                    end
+                ) as $severity |
+
+                # Extract bold summary (look for **text**)
+                ((split("\n") | map(select(test("^\\*\\*[^*]")) | gsub("^\\*\\*|\\*\\*$"; "")) | first) //
+                 (split("\n")[1:3] | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first)) as $summary |
+
+                {severity: $severity, summary: $summary}
+            else
+                null
+            end;
+
+        # Function to extract first non-empty line
+        def extract_summary:
+            split("\n") | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first // "";
+
+        # Process all comments
+        [
+            # Reviews
+            (.reviews[]? |
+                {location: "", body: (.body // "")}),
+
+            # Inline comments
+            (.inline_comments[]? |
+                {location: "[\(.path):\(.line)]", body: (.body // "")}),
+
+            # PR comments
+            (.pr_comments[]? |
+                {location: "", body: (.body // "")}),
+
+            # Issue comments
+            (.issue_comments[]? |
+                {location: "", body: (.body // "")})
+        ] |
+
+        # Filter and categorize
+        map(
+            select(.body != "" and .body != null) |
+
+            # Skip already addressed
+            select(.body | test("✅ Addressed") | not) |
+
+            # Skip auto-generated summary headers and standalone HTML comments
+            select(.body | test("^\\*\\*Actionable comments posted:|^## Summary by CodeRabbit|^[[:space:]]*<!--.*-->[[:space:]]*$") | not) |
+
+            # Skip positive feedback
+            select(.body | test("^✅|^✔|excellent|great job|well done|looks good|lgtm|approved"; "i") | not) |
+
+            # Parse CodeRabbit or extract summary
+            (.body | parse_coderabbit) as $cr |
+
+            if $cr != null then
+                # Use CodeRabbit categorization
+                {
+                    severity: $cr.severity,
+                    location: .location,
+                    summary: $cr.summary
+                }
+            else
+                # Manual categorization based on keywords
+                (.body | extract_summary) as $summary |
+
+                select($summary | length > 10) |
+                select($summary | test("^<!--.*-->$") | not) |
+
+                if (.body | test("(missing|vulnerable|unprotected|exposed|insecure).*(security|SQL|injection|XSS|CSRF)|deprecated.*(flag|option|command)|(test|tests).*(fail|failing|failure)|pytest-xdist.*(conflict|incompatible)|breaking.?change|crashes|critical.?bug"; "i")) then
+                    {severity: "critical", location: .location, summary: $summary}
+                elif (.body | test("(inconsistent|missing|should|need).*(API|contract|pattern|architecture)|(missing|no|lacks).*(error.?handling|validation|exit.?code)|standardize.*(exit.?code|error)|race.?condition|deadlock|performance.?issue"; "i")) then
+                    {severity: "major", location: .location, summary: $summary}
+                elif (.body | test("missing.*(documentation|docstring|YAML|frontmatter|test|type.?hint)|(should|need).*(document|test|edge.?case)|consider.*(add|document|test)"; "i")) then
+                    {severity: "minor", location: .location, summary: $summary}
+                elif (.body | test("nitpick|nit:|style|consider.?renaming|optional|minor.?improvement"; "i")) then
+                    {severity: "nit", location: .location, summary: $summary}
+                else
+                    empty
+                end
+            end
+        ) |
+
+        # Group by severity
+        group_by(.severity) |
+        map({
+            key: .[0].severity,
+            value: map(if .location != "" then (.location + " " + .summary) else .summary end)
+        }) |
+        from_entries
+    ')
+
+    # Extract counts
+    local critical_count=$(echo "$categorized" | jq -r '.critical // [] | length')
+    local major_count=$(echo "$categorized" | jq -r '.major // [] | length')
+    local minor_count=$(echo "$categorized" | jq -r '.minor // [] | length')
+    local nit_count=$(echo "$categorized" | jq -r '.nit // [] | length')
+    local total_count=$((critical_count + major_count + minor_count + nit_count))
+
+    # Output results
+    echo "PR #${pr_number} Issues - Prioritized"
+    echo ""
+
+    # Critical issues
+    if [[ $critical_count -gt 0 ]]; then
+        echo "🔴 CRITICAL ($critical_count):"
+        echo "$categorized" | jq -r '.critical // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+        echo ""
+    fi
+
+    # Major issues
+    if [[ $major_count -gt 0 ]]; then
+        echo "🟠 MAJOR ($major_count):"
+        echo "$categorized" | jq -r '.major // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+        echo ""
+    fi
+
+    # Minor issues
+    if [[ $minor_count -gt 0 ]]; then
+        echo "🟡 MINOR ($minor_count):"
+        echo "$categorized" | jq -r '.minor // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+        echo ""
+    fi
+
+    # Nitpicks (only if flag is set)
+    if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
+        echo "⚪ NITPICK ($nit_count):"
+        echo "$categorized" | jq -r '.nit // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+        echo ""
+    fi
+
+    # Summary
+    if [[ "$INCLUDE_NITPICKS" == "true" ]]; then
+        echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick = ${total_count} issues total"
+    else
+        local actionable_count=$((critical_count + major_count + minor_count))
+        echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor = ${actionable_count} actionable issues (nitpicks excluded)"
+    fi
+
+    # Optional statistics
+    if [[ "$SHOW_STATS" == "true" ]]; then
+        echo ""
+        echo "Statistics:"
+        local stats
+        stats=$(echo "$pr_data" | jq -r '.summary |
+            "  Total comments: \(.total_all_comments)",
+            "  Reviews: \(.total_reviews)",
+            "  Inline: \(.total_inline_comments)",
+            "  PR comments: \(.total_pr_comments)",
+            "  Issue comments: \(.total_issue_comments)"
+        ')
+        echo "$stats"
+    fi
+}
+
+# Main
+main() {
+    local pr_number=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --include-nitpicks)
+                INCLUDE_NITPICKS=true
+                shift
+                ;;
+            --stats)
+                SHOW_STATS=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            *)
+                if [[ -z "$pr_number" ]]; then
+                    pr_number="$1"
+                else
+                    echo "ERROR: Unknown argument: $1" >&2
+                    usage
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -z "$pr_number" ]]; then
+        usage
+    fi
+
+    check_dependencies
+
+    pr_number=$(extract_pr_number "$pr_number")
+
+    collate_pr_issues "$pr_number"
+}
+
+main "$@"

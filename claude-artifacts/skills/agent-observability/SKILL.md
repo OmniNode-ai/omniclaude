@@ -1,3 +1,31 @@
+---
+name: "agent-observability"
+description: "Real-time monitoring and diagnostics for the OmniClaude agent execution system"
+version: "1.0.0"
+author: "OmniClaude Team"
+category: "observability"
+tags:
+  - monitoring
+  - diagnostics
+  - agents
+  - health-check
+  - error-analysis
+  - performance
+dependencies:
+  - psql
+  - jq
+usage: |
+  /agent-observability/check-health
+  /agent-observability/diagnose-errors [--time-range TIME] [--agent AGENT]
+  /agent-observability/generate-report [--time-range TIME]
+  /agent-observability/check-agent --agent AGENT_NAME [--time-range TIME]
+examples:
+  - "/agent-observability/check-health"
+  - "/agent-observability/diagnose-errors --time-range 24h"
+  - "/agent-observability/generate-report --time-range 7d"
+  - "/agent-observability/check-agent --agent agent-research"
+---
+
 # Agent Observability Skills
 
 Real-time monitoring and diagnostics for the OmniClaude agent execution system. These skills provide comprehensive health monitoring, error analysis, and performance insights.

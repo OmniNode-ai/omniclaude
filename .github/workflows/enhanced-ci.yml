@@ -276,7 +276,7 @@ jobs:
           echo "::group::Unit Tests - Split ${{ matrix.split }}/10"
           # Add explicit timeout to prevent test hangs
           # Use pytest-split to distribute tests evenly across 10 splits
-          timeout 600 poetry run pytest \
+          timeout 600 poetry run pytest -o addopts="" \
             agents/tests/ \
             -v \
             --ignore=agents/tests/test_integration_smoke.py \

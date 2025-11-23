@@ -6,6 +6,12 @@
 # Focus: Which agents are being used, what actions they take, success rates
 # Database: Configured via .env file (POSTGRES_* variables)
 # Usage: ./agent_activity_dashboard.sh [--routing|--manifests|--actions|--summary|--all]
+#
+# Exit Codes (see scripts/observability/EXIT_CODES.md):
+#   0 - Dashboard displayed successfully
+#   1 - Invalid mode/argument
+#   3 - Configuration error (missing .env or credentials)
+#   4 - Dependency missing (psql not installed)
 # =====================================================================
 
 set -euo pipefail
@@ -24,7 +30,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
     echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
     echo "   Please copy .env.example to .env and configure it"
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Source .env file
@@ -52,7 +58,7 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     done
     echo ""
     echo "Please update your .env file with these variables."
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # =====================================================================
@@ -76,10 +82,22 @@ print_section() {
 }
 
 run_query() {
+    # Check if psql is available
+    if ! command -v psql &> /dev/null; then
+        echo "❌ ERROR: psql command not found. Please install PostgreSQL client."
+        exit 4  # Dependency missing
+    fi
+
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "$1"
 }
 
 run_query_quiet() {
+    # Check if psql is available
+    if ! command -v psql &> /dev/null; then
+        echo "❌ ERROR: psql command not found. Please install PostgreSQL client."
+        exit 4  # Dependency missing
+    fi
+
     psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "$1" | xargs
 }
 
@@ -340,6 +358,12 @@ Examples:
   ./agent_activity_dashboard.sh                    # Show all
   ./agent_activity_dashboard.sh routing            # Just routing decisions
   ./agent_activity_dashboard.sh summary            # 24h summary
+
+Exit Codes:
+  0 - Dashboard displayed successfully
+  1 - Invalid mode/argument
+  3 - Configuration error (missing .env or credentials)
+  4 - Dependency missing (psql not installed)
 
 Database: ${DB_HOST}:${DB_PORT}/${DB_NAME}
 

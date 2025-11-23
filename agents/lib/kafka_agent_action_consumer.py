@@ -34,6 +34,26 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def safe_json_deserializer(message_bytes: bytes) -> Optional[Dict]:
+    """
+    Safely deserialize JSON message, returning None on error.
+
+    Args:
+        message_bytes: Raw message bytes from Kafka
+
+    Returns:
+        Deserialized dict or None if JSON is invalid
+    """
+    try:
+        return json.loads(message_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error(
+            f"Failed to deserialize message: {e}. "
+            f"Raw bytes (first 100): {message_bytes[:100]!r}"
+        )
+        return None
+
+
 class KafkaAgentActionConsumer:
     """
     Consumer for agent action events from Kafka with PostgreSQL persistence.
@@ -102,7 +122,7 @@ class KafkaAgentActionConsumer:
             group_id=self.group_id,
             enable_auto_commit=False,  # Manual commit for safety
             auto_offset_reset="earliest",  # Process all messages
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            value_deserializer=safe_json_deserializer,
             max_poll_records=self.batch_size,
         )
 
@@ -231,6 +251,13 @@ class KafkaAgentActionConsumer:
                 # Process messages
                 for topic_partition, messages in message_batch.items():
                     for message in messages:
+                        # Skip messages with invalid JSON (deserializer returned None)
+                        if message.value is None:
+                            logger.warning(
+                                f"Skipping message with invalid JSON at offset {message.offset}"
+                            )
+                            continue
+
                         batch.append(message.value)
 
                         # Check if batch is full

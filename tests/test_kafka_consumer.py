@@ -142,10 +142,12 @@ class TestKafkaConsumerIntegration:
         kafka_producer.flush()
 
         # Start consumer
+        # Use unique consumer group to avoid conflicts with parallel tests
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
             topic=test_topic,
             postgres_dsn=postgres_dsn,
+            group_id=f"test-consume-single-{uuid.uuid4().hex[:8]}",
             batch_timeout_seconds=1.0,  # Short timeout for testing
         )
 
