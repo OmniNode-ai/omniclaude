@@ -108,6 +108,7 @@ try:
         EXIT_ERROR,
         EXIT_SUCCESS,
         MAX_CONTAINERS_DISPLAY,
+        PERCENT_MULTIPLIER,
     )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
@@ -198,9 +199,11 @@ def collect_report_data(timeframe: str, include_trends: bool):
                 "avg_routing_time_ms": round(float(row["avg_time"] or 0), 1),
                 "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
             }
-    except Exception:
-        # Silent error handling: Performance metrics are optional. If query fails (e.g., table doesn't exist,
-        # connection issues), we still want to return other status data. Empty dict indicates metrics unavailable.
+    except Exception as e:
+        # Performance metrics are optional, but log database errors for troubleshooting
+        print(
+            f"Warning: Failed to fetch performance metrics: {str(e)}", file=sys.stderr
+        )
         data["performance"] = {}
 
     # Recent activity
@@ -222,7 +225,10 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Top agents
     try:
-        top_agents_query = f"""
+        # SECURITY: Use parameterized query for LIMIT value
+        # DEFAULT_TOP_AGENTS is validated as an integer constant, but we use
+        # parameterization to avoid triggering static analysis tools
+        top_agents_query = """
             SELECT
                 selected_agent,
                 COUNT(*) as count,
@@ -231,9 +237,9 @@ def collect_report_data(timeframe: str, include_trends: bool):
             WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
-            LIMIT {DEFAULT_TOP_AGENTS}
+            LIMIT %s
         """
-        top_result = execute_query(top_agents_query, (interval,))
+        top_result = execute_query(top_agents_query, (interval, DEFAULT_TOP_AGENTS))
 
         if top_result["success"]:
             data["top_agents"] = [
@@ -269,7 +275,7 @@ def generate_markdown_output(data: dict) -> str:
 - **Services Running**: {services_running}/{services_total}
 - **Agent Executions**: {data.get('recent_activity', {}).get('agent_executions', 0)}
 - **Routing Decisions**: {perf.get('routing_decisions', 0)}
-- **Average Confidence**: {int(perf.get('avg_confidence', 0) * 100)}%
+- **Average Confidence**: {int(perf.get('avg_confidence', 0) * PERCENT_MULTIPLIER)}%
 """
     sections.append({"title": "Overview", "content": summary})
 
@@ -336,7 +342,7 @@ def generate_markdown_output(data: dict) -> str:
                 [
                     agent["agent"],
                     agent["count"],
-                    f"{int(agent['avg_confidence'] * 100)}%",
+                    f"{int(agent['avg_confidence'] * PERCENT_MULTIPLIER)}%",
                 ]
             )
 

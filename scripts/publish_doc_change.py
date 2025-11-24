@@ -182,7 +182,7 @@ def publish_doc_change(
     # Build event payload
     payload = {
         "event_type": event_type,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "file_path": file_path,
         "file_name": os.path.basename(file_path),
         "file_extension": file_extension,
