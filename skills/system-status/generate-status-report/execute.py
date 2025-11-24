@@ -104,11 +104,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from constants import (
+        CONFIDENCE_DECIMALS,
         DEFAULT_TOP_AGENTS,
         EXIT_ERROR,
         EXIT_SUCCESS,
         MAX_CONTAINERS_DISPLAY,
         PERCENT_MULTIPLIER,
+        ROUTING_TIME_DECIMALS,
     )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
@@ -196,8 +198,12 @@ def collect_report_data(timeframe: str, include_trends: bool):
             row = routing_result["rows"][0]
             data["performance"] = {
                 "routing_decisions": row["total"] or 0,
-                "avg_routing_time_ms": round(float(row["avg_time"] or 0), 1),
-                "avg_confidence": round(float(row["avg_confidence"] or 0), 2),
+                "avg_routing_time_ms": round(
+                    float(row["avg_time"] or 0), ROUTING_TIME_DECIMALS
+                ),
+                "avg_confidence": round(
+                    float(row["avg_confidence"] or 0), CONFIDENCE_DECIMALS
+                ),
             }
     except Exception as e:
         # Performance metrics are optional, but log database errors for troubleshooting
@@ -246,7 +252,9 @@ def collect_report_data(timeframe: str, include_trends: bool):
                 {
                     "agent": row["selected_agent"],
                     "count": row["count"],
-                    "avg_confidence": round(float(row["avg_confidence"]), 2),
+                    "avg_confidence": round(
+                        float(row["avg_confidence"]), CONFIDENCE_DECIMALS
+                    ),
                 }
                 for row in top_result["rows"]
             ]

@@ -11,17 +11,20 @@ Tests that Qdrant URL validation properly rejects malicious URLs that could:
 All tests should PASS (except skipped tests marked as production code TODOs).
 
 Current implementation:
-  - ✅ Whitelist-based host validation
-  - ✅ Dangerous port blocking (SSH, PostgreSQL, Redis, Kafka, etc.)
-  - ✅ HTTPS enforcement in production
-  - ⚠️ File protocol blocking (TODO - currently skipped)
+  - Whitelist-based host validation
+  - Dangerous port blocking (SSH, PostgreSQL, Redis, Kafka, etc.)
+  - HTTPS enforcement in production
+  - File protocol blocking (TODO - currently skipped)
+  - Redirect blocking (TODO - requires HTTP request mocking, currently skipped)
 
 Created: 2025-11-20
-Updated: 2025-11-20 (fixed to match whitelist-based validation)
+Updated: 2025-11-24 (stabilized environment-dependent tests)
 """
 
+import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -30,7 +33,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 
 class TestSSRFProtection:
-    """Test SSRF attack prevention in Qdrant URL handling."""
+    """Test SSRF attack prevention in Qdrant URL handling.
+
+    Note: Tests mock ENVIRONMENT to 'development' to ensure consistent behavior
+    regardless of the actual environment. Production-specific tests explicitly
+    set ENVIRONMENT='production'.
+    """
 
     @pytest.fixture(scope="class")
     def qdrant_helper(self):
@@ -38,6 +46,9 @@ class TestSSRFProtection:
 
         Uses class scope to avoid repeated sys.path manipulation and ensure
         consistent imports across all tests in the class.
+
+        Important: This fixture does NOT set ENVIRONMENT - individual tests
+        should mock os.getenv or os.environ to control environment behavior.
         """
         # Save original sys.path to restore after tests
         original_path = sys.path.copy()
@@ -54,6 +65,16 @@ class TestSSRFProtection:
         finally:
             # Restore original sys.path after all tests complete
             sys.path[:] = original_path
+
+    @pytest.fixture(autouse=True)
+    def _mock_environment(self):
+        """Mock environment to development for consistent test behavior.
+
+        This fixture ensures tests don't fail due to ENVIRONMENT being
+        set to 'production' in the user's shell, which would require HTTPS.
+        """
+        with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False):
+            yield
 
     def test_non_whitelisted_hosts_blocked(self, qdrant_helper):
         """Test that non-whitelisted hosts are blocked."""
@@ -97,11 +118,29 @@ class TestSSRFProtection:
                 with pytest.raises(ValueError, match=r".*"):
                     qdrant_helper.validate_qdrant_url(url)
 
+    @pytest.mark.skip(
+        reason="Redirect blocking requires HTTP request mocking - not yet implemented. "
+        "URL validation alone cannot prevent redirects; full protection requires "
+        "HTTP client configuration (e.g., follow_redirects=False or redirect validation)"
+    )
     def test_redirect_blocked(self, qdrant_helper):
-        """Test that URL redirects to internal IPs are prevented."""
-        # Note: This requires actual HTTP request mocking
-        # For now, we test URL validation only
+        """Test that URL redirects to internal IPs are prevented.
 
+        NOTE: This test is skipped because redirect protection cannot be implemented
+        through URL validation alone. It requires:
+        1. HTTP client configuration to disable automatic redirects, OR
+        2. A custom redirect handler that validates each redirect target
+
+        TODO: Implement redirect protection in qdrant_helper HTTP client usage:
+        - Use urllib with a custom redirect handler
+        - Or switch to httpx/requests with follow_redirects=False
+        - Validate redirect targets against the same whitelist as initial URLs
+
+        When implemented, this test should verify:
+        1. Direct requests to malicious URLs are blocked (already tested elsewhere)
+        2. Redirects from allowed hosts to non-allowed hosts are blocked
+        3. Redirect chains are properly validated at each hop
+        """
         suspicious_urls = [
             "http://evil.com/redirect?url=http://127.0.0.1",
             "http://shorturl.com/abc123",  # Could redirect anywhere
@@ -109,6 +148,10 @@ class TestSSRFProtection:
 
         # These should be validated by URL structure
         # Full redirect protection requires HTTP client checks
+        for url in suspicious_urls:
+            if hasattr(qdrant_helper, "validate_qdrant_url"):
+                with pytest.raises(ValueError, match=r".*whitelist.*"):
+                    qdrant_helper.validate_qdrant_url(url)
 
     def test_unicode_encoding_blocked(self, qdrant_helper):
         """Test that Unicode-encoded URLs are normalized and validated."""

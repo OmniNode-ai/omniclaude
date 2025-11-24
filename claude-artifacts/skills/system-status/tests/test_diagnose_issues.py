@@ -120,7 +120,7 @@ class TestDiagnoseIssues:
             assert exit_code == 2
 
     def test_no_issues_detected(self):
-        """Test when no issues are detected.
+        """Test when no issues are detected (empty containers scenario).
 
         Verifies that when all services are healthy and accessible:
         1. check_kafka_connection returns reachable=True
@@ -140,6 +140,7 @@ class TestDiagnoseIssues:
             patch.object(execute, "execute_query") as mock_db,
             patch.object(execute, "check_qdrant_connection") as mock_qdrant,
             patch.object(execute, "list_containers") as mock_containers,
+            patch.object(execute, "get_container_status") as mock_container_status,
             patch("sys.argv", ["execute.py"]),
         ):
             # Mock all services healthy (minimal required fields - no "error" when successful)
@@ -147,6 +148,54 @@ class TestDiagnoseIssues:
             mock_db.return_value = {"success": True, "rows": []}
             mock_qdrant.return_value = {"reachable": True}
             mock_containers.return_value = {"success": True, "containers": []}
+            # get_container_status won't be called with empty containers, but mock it for safety
+            mock_container_status.return_value = {"success": True, "restart_count": 0}
+
+            exit_code = main()
+
+            # Verify infrastructure checks were called
+            assert mock_kafka.called, "Kafka check should be called"
+            assert mock_db.called, "Database check should be called"
+            assert mock_qdrant.called, "Qdrant check should be called"
+            assert mock_containers.called, "Docker containers check should be called"
+
+            # No issues, expect exit code 0 (healthy)
+            assert exit_code == 0, "Exit code should be 0 when all services are healthy"
+
+    def test_no_issues_with_healthy_containers(self):
+        """Test when containers exist but all are healthy.
+
+        This is a more comprehensive no-issues test that includes running
+        containers to verify that healthy containers don't generate issues.
+        """
+        with (
+            patch.object(execute, "check_kafka_connection") as mock_kafka,
+            patch.object(execute, "execute_query") as mock_db,
+            patch.object(execute, "check_qdrant_connection") as mock_qdrant,
+            patch.object(execute, "list_containers") as mock_containers,
+            patch.object(execute, "get_container_status") as mock_container_status,
+            patch("sys.argv", ["execute.py"]),
+        ):
+            # Mock all infrastructure services healthy
+            mock_kafka.return_value = {"reachable": True}
+            mock_db.return_value = {"success": True, "rows": []}
+            mock_qdrant.return_value = {"reachable": True}
+
+            # Mock running containers that are all healthy
+            mock_containers.return_value = {
+                "success": True,
+                "containers": [
+                    {
+                        "name": "archon-intelligence",
+                        "state": "running",
+                        "status": "healthy",
+                    },
+                    {"name": "archon-qdrant", "state": "running", "status": "healthy"},
+                ],
+            }
+
+            # Mock container status with low restart count (below threshold)
+            mock_container_status.return_value = {"success": True, "restart_count": 0}
 
             exit_code = main()
 
@@ -155,9 +204,15 @@ class TestDiagnoseIssues:
             assert mock_db.called, "Database check should be called"
             assert mock_qdrant.called, "Qdrant check should be called"
             assert mock_containers.called, "Docker containers check should be called"
+            # get_container_status should be called for each container
+            assert (
+                mock_container_status.call_count == 2
+            ), "Container status should be checked for each container"
 
             # No issues, expect exit code 0 (healthy)
-            assert exit_code == 0, "Exit code should be 0 when all services are healthy"
+            assert (
+                exit_code == 0
+            ), "Exit code should be 0 when all containers are healthy"
 
     def test_severity_classification(self):
         """Test issue severity classification."""

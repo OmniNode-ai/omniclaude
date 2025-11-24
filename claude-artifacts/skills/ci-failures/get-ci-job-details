@@ -514,10 +514,12 @@ display_job_details() {
             echo -e "${RED}${BOLD}Step $step_number_display: $step_name${NC}"
             echo ""
 
+            # Initialize errors variable before conditional block
+            local errors=""
+
             # Extract error messages from logs
             if [ -n "$job_logs" ]; then
                 # Find error patterns in logs
-                local errors
                 errors=$(extract_error_patterns "$job_logs")
 
                 if [ -n "$errors" ]; then
@@ -531,7 +533,7 @@ display_job_details() {
                 echo ""
             fi
 
-            # Suggest fixes
+            # Suggest fixes (errors may be empty if logs unavailable)
             suggest_fixes "$job_name" "$step_name" "$errors"
 
             echo ""

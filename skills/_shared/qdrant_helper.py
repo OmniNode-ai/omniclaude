@@ -544,25 +544,29 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
         Dictionary with health status:
         - success: bool - Whether the health check succeeded
         - collection: str - Collection name
-        - healthy: bool - True if status is "green" or "yellow"
+        - healthy: bool - True unless Qdrant explicitly reports "red" status
         - status: str - Qdrant's reported status (green/yellow/red/unknown)
         - vectors_count: int - Number of vectors in collection
         - error: str or None - Error message if health check failed
 
     Health Determination Logic:
         A collection is considered HEALTHY if:
-        - The collection exists and is accessible, AND
-        - Qdrant reports its status as "green" or "yellow"
-
-        IMPORTANT: Empty collections (0 vectors) are considered HEALTHY
-        as long as Qdrant reports them as "green" or "yellow". This is
-        intentional - a newly created collection with no vectors yet is
-        a valid healthy state.
+        - The collection exists and is accessible (successful API query), AND
+        - Qdrant does NOT explicitly report "red" status
 
         A collection is considered UNHEALTHY if:
         - The collection does not exist (404 error)
-        - Connection to Qdrant fails (network error)
-        - Qdrant reports status as "red" or "unknown"
+        - Connection to Qdrant fails (network error, timeout)
+        - Qdrant explicitly reports "red" status (indicates a problem)
+
+        IMPORTANT: Empty collections (0 vectors) are considered HEALTHY.
+        Vector count is NOT a health indicator - a newly created empty
+        collection is a perfectly valid, healthy state.
+
+        IMPORTANT: "unknown" status is treated as HEALTHY. If we can
+        successfully query a collection but Qdrant doesn't report a status,
+        the collection is functional and accessible. Only an explicit "red"
+        status indicates an actual problem that requires attention.
 
     Examples:
         >>> # Empty collection with green status -> HEALTHY
@@ -572,6 +576,10 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
         >>> # Populated collection with green status -> HEALTHY
         >>> get_collection_health("active_collection")
         {'healthy': True, 'vectors_count': 1000, 'status': 'green'}
+
+        >>> # Empty collection with unknown status -> HEALTHY (not an error)
+        >>> get_collection_health("empty_new_collection")
+        {'healthy': True, 'vectors_count': 0, 'status': 'unknown'}
 
         >>> # Collection with red status (regardless of count) -> UNHEALTHY
         >>> get_collection_health("broken_collection")
@@ -591,14 +599,39 @@ def get_collection_health(collection_name: str) -> Dict[str, Any]:
             "error": stats["error"],
         }
 
-    # Collection is healthy if status is "green" or "yellow"
-    # Trust Qdrant's status regardless of vector count (empty collections can be healthy)
     status = stats.get("status", "unknown").lower()
     vectors_count = stats.get("vectors_count", 0)
 
-    # Health determination based on Qdrant's status field ONLY
-    # Vector count is NOT considered for health - empty collections are valid
-    healthy = status in ["green", "yellow"]
+    # Health determination logic:
+    #
+    # A collection is HEALTHY if we can successfully query it AND
+    # Qdrant does not explicitly report a problem ("red" status).
+    #
+    # Status meanings:
+    # - "green" = fully optimized, definitely healthy
+    # - "yellow" = optimizing/transitioning, functional and healthy
+    # - "red" = explicit problem reported by Qdrant, UNHEALTHY
+    # - "unknown"/other = status unclear but collection accessible
+    #
+    # For "unknown" or unexpected status values:
+    # Since we successfully queried the collection (no API errors),
+    # the collection exists and is accessible. We treat this as healthy
+    # because:
+    # 1. Empty collections may not have status reported yet
+    # 2. Newly created collections are valid even with 0 vectors
+    # 3. API response format changes shouldn't break health checks
+    # 4. Only explicit "red" status indicates actual problems
+    #
+    # IMPORTANT: Vector count (empty vs populated) is NOT a health
+    # indicator. A collection with 0 vectors is perfectly valid and
+    # healthy - it's just empty.
+    if status == "red":
+        # Explicit problem reported by Qdrant
+        healthy = False
+    else:
+        # "green", "yellow", "unknown", or any other status
+        # Collection exists and is accessible = healthy
+        healthy = True
 
     return {
         "success": True,

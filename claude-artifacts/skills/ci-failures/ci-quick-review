@@ -89,23 +89,27 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Fetch CI data (capture stdout only - stderr goes to terminal for status messages)
+# Fetch CI data - run once and capture both stdout and stderr
 CI_DATA=""
 FETCH_EXIT_CODE=0
+FETCH_STDERR=""
 
-# Capture stdout (JSON) separately from stderr (status messages)
-# Status messages go to terminal, JSON captured in CI_DATA
-if ! CI_DATA=$("$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>/dev/null); then
+# Create temp file for stderr capture
+STDERR_FILE=$(mktemp)
+trap "rm -f '$STDERR_FILE'" EXIT
+
+# Single execution: capture stdout in CI_DATA, stderr in temp file
+if ! CI_DATA=$("$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>"$STDERR_FILE"); then
     FETCH_EXIT_CODE=$?
-    # On failure, re-run to show error messages
-    "$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" >/dev/null 2>&1 || true
+    FETCH_STDERR=$(cat "$STDERR_FILE")
 fi
 
-# If fetch failed with no data, show error
-if [ $FETCH_EXIT_CODE -eq 1 ] && [ -z "$CI_DATA" ]; then
+# If fetch failed with no data, show error from captured stderr
+if [ $FETCH_EXIT_CODE -ne 0 ] && [ -z "$CI_DATA" ]; then
     echo -e "${RED}✗ Failed to fetch CI data${NC}" >&2
-    # Re-run to capture error output
-    "$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>&1 | grep -E '✗' >&2 || true
+    if [ -n "$FETCH_STDERR" ]; then
+        echo "$FETCH_STDERR" | grep -E '✗|Error|error' >&2 || echo "$FETCH_STDERR" >&2
+    fi
     exit 1
 fi
 

@@ -109,10 +109,10 @@ settings = get_settings()
 
 # Public API
 __all__ = [
-    "settings",
     "Settings",
     "get_settings",
     "reload_settings",
+    "settings",
 ]
 
 # Version information

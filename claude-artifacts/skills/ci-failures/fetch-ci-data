@@ -20,7 +20,7 @@ set -euo pipefail
 #   - Context extraction (Python, JavaScript, Django, FastAPI, etc.)
 #
 # Output: JSON to stdout, status messages to stderr
-# Cache: 5-minute TTL in $TMPDIR/ci-failures-cache/
+# Cache: 5-minute TTL in {REPO}/tmp/.ci-failures-cache/
 
 # Colors for output (to stderr)
 RED='\033[0;31m'
@@ -34,8 +34,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 mkdir -p "$REPO_ROOT/tmp"
 
-# Cache configuration
-CACHE_DIR="${TMPDIR:-/tmp}/ci-failures-cache"
+# Cache configuration - use repo-local tmp per SKILL.md convention
+CACHE_DIR="${REPO_ROOT}/tmp/.ci-failures-cache"
 CACHE_TTL=300  # 5 minutes
 
 # Global variables

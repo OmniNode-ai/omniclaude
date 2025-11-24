@@ -69,13 +69,12 @@ class MemgraphLineageStore:
 
         def _write(tx):
             tx.run(
-                """
-                MERGE (s:Entity {type:$src_type, id:$src_id})
-                MERGE (d:Entity {type:$dst_type, id:$dst_id})
-                MERGE (s)-[r:%s]->(d)
+                f"""
+                MERGE (s:Entity {{type:$src_type, id:$src_id}})
+                MERGE (d:Entity {{type:$dst_type, id:$dst_id}})
+                MERGE (s)-[r:{edge.edge_type}]->(d)
                 SET r += $attrs
-                """
-                % edge.edge_type,
+                """,
                 src_type=edge.src_type,
                 src_id=edge.src_id,
                 dst_type=edge.dst_type,

@@ -27,18 +27,23 @@ from uuid import uuid4
 
 
 # Determine project root (skills are in ~/.claude/skills, not in project)
-OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", str(Path.home() / "Code" / "omniclaude"))
-)
-if not OMNICLAUDE_PATH.exists():
-    # Fallback to common locations
-    for fallback in [
-        Path.home() / "Code" / "omniclaude",
-        Path("/Users") / "Shared" / "omniclaude",
-    ]:
-        if fallback.exists():
-            OMNICLAUDE_PATH = fallback
-            break
+# Respect explicit environment variable - only fallback if NOT explicitly set
+_explicit_omniclaude_path = os.environ.get("OMNICLAUDE_PATH")
+if _explicit_omniclaude_path:
+    # Environment variable explicitly set - respect it (validation happens below)
+    OMNICLAUDE_PATH = Path(_explicit_omniclaude_path)
+else:
+    # No explicit env var - try default then fallbacks
+    OMNICLAUDE_PATH = Path.home() / "Code" / "omniclaude"
+    if not OMNICLAUDE_PATH.exists():
+        # Fallback to common locations only when env var not set
+        for fallback in [
+            Path("/Users") / "Shared" / "omniclaude",
+            Path("/Volumes/PRO-G40/Code/omniclaude"),
+        ]:
+            if fallback.exists():
+                OMNICLAUDE_PATH = fallback
+                break
 
 # Validate OMNICLAUDE_PATH before adding to sys.path
 if not OMNICLAUDE_PATH.exists():

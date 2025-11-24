@@ -367,15 +367,15 @@ fetch_pr_data() {
             pr_comments: $pr_comments[0],
             issue_comments: $issue_comments[0],
             summary: {
-                total_reviews: (if $reviews[0] | type == "array" then ($reviews[0] | length) else 0 end),
-                total_inline_comments: (if $inline[0] | type == "array" then ($inline[0] | length) else 0 end),
-                total_pr_comments: (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) else 0 end),
-                total_issue_comments: (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) else 0 end),
+                total_reviews: (if $reviews[0] | type == "array" then ($reviews[0] | length) elif $reviews[0].count? then $reviews[0].count else 0 end),
+                total_inline_comments: (if $inline[0] | type == "array" then ($inline[0] | length) elif $inline[0].count? then $inline[0].count else 0 end),
+                total_pr_comments: (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) elif $pr_comments[0].count? then $pr_comments[0].count else 0 end),
+                total_issue_comments: (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) elif $issue_comments[0].count? then $issue_comments[0].count else 0 end),
                 total_all_comments: (
-                    (if $reviews[0] | type == "array" then ($reviews[0] | length) else 0 end) +
-                    (if $inline[0] | type == "array" then ($inline[0] | length) else 0 end) +
-                    (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) else 0 end) +
-                    (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) else 0 end)
+                    (if $reviews[0] | type == "array" then ($reviews[0] | length) elif $reviews[0].count? then $reviews[0].count else 0 end) +
+                    (if $inline[0] | type == "array" then ($inline[0] | length) elif $inline[0].count? then $inline[0].count else 0 end) +
+                    (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) elif $pr_comments[0].count? then $pr_comments[0].count else 0 end) +
+                    (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) elif $issue_comments[0].count? then $issue_comments[0].count else 0 end)
                 )
             }
         }' > "$combined_file"

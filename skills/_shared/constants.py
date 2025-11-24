@@ -82,6 +82,16 @@ PERCENT_MULTIPLIER: int = 100
 MIN_DIVISOR: int = 1
 
 # =============================================================================
+# Display Precision (decimal places)
+# =============================================================================
+
+# Decimal places for routing time display (e.g., 7.8 ms)
+ROUTING_TIME_DECIMALS: int = 1
+
+# Decimal places for confidence score display (e.g., 0.92)
+CONFIDENCE_DECIMALS: int = 2
+
+# =============================================================================
 # Timeouts (seconds)
 # =============================================================================
 

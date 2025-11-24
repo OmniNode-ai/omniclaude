@@ -46,7 +46,8 @@ from db_helper import get_correlation_id, parse_json_param
 #           └── parent: skills/
 #               └── parent: claude-artifacts/
 #                   └── parent: omniclaude/ (project root)
-#                       └── shared_lib/ (target: omniclaude/shared_lib/)
+# Full path: omniclaude/claude-artifacts/skills/agent-tracking/log-routing-decision/execute_kafka.py
+# Target: omniclaude/shared_lib/ (5 parent levels up + shared_lib)
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )

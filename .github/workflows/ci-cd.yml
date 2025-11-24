@@ -66,15 +66,29 @@ jobs:
 
       - name: Run Black (code formatting check)
         run: |
-          # Explicitly scan only project source directories to avoid .venv
+          echo "::group::Black Formatting Check"
+          echo "🎨 Running Black formatter check..."
+          echo "📁 Scanning directories: agents/ claude_hooks/ cli/ scripts/ tests/"
           poetry run black --check --diff \
             --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
-            agents/ claude_hooks/ cli/ scripts/ tests/
+            agents/ claude_hooks/ cli/ scripts/ tests/ && echo "✅ Black check passed" || {
+              echo "❌ Black check failed - files need formatting"
+              echo "💡 Run: poetry run black agents/ claude_hooks/ cli/ scripts/ tests/"
+              exit 1
+            }
+          echo "::endgroup::"
 
       - name: Run Ruff (linting)
         run: |
-          # Scan only project source directories, aligned with pre-commit config
-          poetry run ruff check agents/ claude_hooks/ cli/ scripts/ tests/
+          echo "::group::Ruff Linting"
+          echo "🔍 Running Ruff linter..."
+          echo "📁 Scanning directories: agents/ claude_hooks/ cli/ scripts/ tests/"
+          poetry run ruff check agents/ claude_hooks/ cli/ scripts/ tests/ && echo "✅ Ruff check passed" || {
+              echo "❌ Ruff check failed - linting errors found"
+              echo "💡 Run: poetry run ruff check --fix agents/ claude_hooks/ cli/ scripts/ tests/"
+              exit 1
+            }
+          echo "::endgroup::"
 
       # Temporarily disabled - 499 pre-existing type errors need separate cleanup PR
       # Costs money to run on every CI iteration
@@ -122,20 +136,31 @@ jobs:
 
       - name: Run Bandit (security linter for Python)
         run: |
+          echo "::group::Bandit Security Scan"
           pip install bandit
-          # Explicitly exclude template directories to avoid false positives
-          # Only fail on MEDIUM/HIGH severity issues (--confidence-level medium --severity-level medium)
-          # Low severity issues (961 found) are informational but don't fail CI
+          echo "🔒 Running Bandit security scanner..."
+          echo "📁 Scanning: agents/ claude_hooks/"
+          echo "⏭️  Excluding: templates, tests, .venv, __pycache__"
+          echo "📊 Severity/Confidence: MEDIUM and above"
+
+          # Generate JSON report
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
-            -f json -o bandit-report.json
+            -f json -o bandit-report.json || true
+
+          # Run with text output for CI logs
           bandit -r agents/ claude_hooks/ \
             --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
-            -f txt
+            -f txt && echo "✅ Bandit scan passed" || {
+              echo "❌ Bandit found security issues"
+              echo "📋 Check bandit-report.json artifact for details"
+              exit 1
+            }
+          echo "::endgroup::"
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
@@ -214,6 +239,14 @@ jobs:
             true
           }
 
+      - name: Install project in development mode
+        run: |
+          echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
+          poetry install --no-interaction --with dev
+          echo "✅ Project packages installed"
+          echo "📋 Verifying cli package is available..."
+          poetry run python -c "from cli.lib import CLIHandler; print('✅ CLIHandler import successful')"
+
       - name: Install pytest-split for parallel test execution
         run: |
           poetry run pip install pytest-split
@@ -229,16 +262,49 @@ jobs:
           POSTGRES_DATABASE: test_db
           TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
+          echo "::group::Running Test Group ${{ matrix.group }}/5"
+          echo "🧪 Test Configuration:"
+          echo "   - Split: 5 groups"
+          echo "   - Current group: ${{ matrix.group }}"
+          echo "   - Markers: not integration"
+          echo "   - Coverage: agents/"
+          echo ""
+          echo "📦 Verifying test dependencies..."
+          poetry run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
+          poetry run python -c "from cli.lib import CLIHandler; print('✅ CLIHandler import OK')" || {
+            echo "❌ CLIHandler import FAILED"
+            echo "📋 Available packages:"
+            poetry show --tree | head -50
+            exit 1
+          }
+          echo ""
+          echo "🚀 Starting test execution..."
+
           # Generate unique coverage file per group to avoid overwrites
           poetry run pytest -o addopts="" tests/ \
             --splits 5 \
             --group ${{ matrix.group }} \
             -v -m "not integration" \
             --cov=agents \
-            --cov-report=term-missing
+            --cov-report=term-missing && TEST_EXIT=0 || TEST_EXIT=$?
+
+          echo ""
+          if [ $TEST_EXIT -eq 0 ]; then
+            echo "✅ Tests passed for group ${{ matrix.group }}"
+          else
+            echo "❌ Tests failed for group ${{ matrix.group }} (exit code: $TEST_EXIT)"
+          fi
 
           # Rename coverage file to be unique for this group
-          mv .coverage .coverage.${{ matrix.group }}
+          if [ -f .coverage ]; then
+            mv .coverage .coverage.${{ matrix.group }}
+            echo "📊 Coverage file saved as .coverage.${{ matrix.group }}"
+          else
+            echo "⚠️ No coverage file generated"
+          fi
+
+          echo "::endgroup::"
+          exit $TEST_EXIT
 
       - name: Upload coverage artifact for merge
         uses: actions/upload-artifact@v4
@@ -254,7 +320,8 @@ jobs:
     name: Merge Test Coverage
     runs-on: ubuntu-latest
     needs: test
-    if: always()
+    # Only run if test job succeeded (don't waste time if tests failed)
+    if: needs.test.result == 'success'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -276,14 +343,40 @@ jobs:
       - name: Combine coverage files
         run: |
           echo "::group::Combining Coverage Files"
+          echo "📊 Looking for coverage files..."
+
+          # Check if coverage files directory exists
+          if [ ! -d "coverage-files" ]; then
+            echo "⚠️ No coverage-files directory found"
+            echo "This likely means no test jobs completed successfully"
+            exit 0
+          fi
+
+          # List what we found
+          echo "📁 Contents of coverage-files/:"
+          ls -laR coverage-files/ || echo "Directory empty or not accessible"
+
+          # Find and move coverage files
+          COVERAGE_COUNT=$(find coverage-files/ -name '.coverage.*' 2>/dev/null | wc -l)
+          echo "📈 Found $COVERAGE_COUNT coverage files"
+
+          if [ "$COVERAGE_COUNT" -eq 0 ]; then
+            echo "⚠️ No coverage files to combine"
+            echo "::endgroup::"
+            exit 0
+          fi
+
           # Move all coverage files to current directory
           find coverage-files/ -name '.coverage.*' -exec mv {} . \;
-          ls -la .coverage.*
+          echo "📋 Coverage files in current directory:"
+          ls -la .coverage.* 2>/dev/null || echo "No files moved"
 
           # Combine all coverage files
+          echo "🔄 Combining coverage files..."
           coverage combine .coverage.*
 
           # Generate XML and term reports
+          echo "📄 Generating coverage reports..."
           coverage xml -o coverage.xml
           coverage report
 
@@ -299,11 +392,13 @@ jobs:
 
       - name: Upload merged coverage artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: coverage-merged
           path: |
             coverage.xml
             .coverage
+          if-no-files-found: ignore
 
   # ============================================================================
   # Build Docker Image
