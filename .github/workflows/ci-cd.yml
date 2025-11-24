@@ -254,11 +254,6 @@ jobs:
           poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
-      - name: Verify CLI package installation
-        run: |
-          echo "📋 Verifying cli package is available..."
-          poetry run python -c "import sys; import cli; print(f'cli location: {cli.__file__}'); from cli.lib import CLIHandler; print('✅ CLIHandler import successful')"
-
       - name: Install pytest-split for parallel test execution
         run: |
           poetry run pip install pytest-split
