@@ -162,9 +162,10 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "error": "Docker CLI not found. Ensure Docker is installed.",
             "return_code": 1,
         }
-    except (subprocess.SubprocessError, OSError) as e:
+    except (subprocess.SubprocessError, OSError, Exception) as e:
         # SubprocessError: subprocess-related failures
         # OSError: system-level errors (permissions, resource limits, etc.)
+        # Exception: catch-all for unexpected errors (JSON decode, etc.)
         return {
             "success": False,
             "containers": [],

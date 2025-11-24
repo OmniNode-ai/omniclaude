@@ -46,7 +46,7 @@ from db_helper import get_correlation_id, parse_json_param
 #           └── parent: skills/
 #               └── parent: claude-artifacts/
 #                   └── parent: omniclaude/ (project root)
-#                       └── shared_lib/ (target directory)
+#                       └── shared_lib/ (target: omniclaude/shared_lib/)
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )

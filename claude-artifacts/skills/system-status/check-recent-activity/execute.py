@@ -20,7 +20,6 @@ try:
     from constants import (
         DEFAULT_ACTIVITY_LIMIT,
         MAX_LIMIT,
-        MAX_RECENT_ERRORS_DISPLAY,
         MIN_LIMIT,
     )
     from db_helper import execute_query
