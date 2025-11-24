@@ -15,25 +15,38 @@ Expected behavior:
 4. ENVIRONMENT=development + no protocol → Auto HTTP
 
 Created: 2025-11-20
+Updated: 2025-11-24 - Fixed import/mocking patterns for stability
 """
 
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 
 class TestQdrantHttpsSupport(unittest.TestCase):
-    """Test HTTPS support in Qdrant helper."""
+    """Test HTTPS support in Qdrant helper.
+
+    Uses mocking to avoid flaky module reloading and ensure test isolation.
+    """
 
     def setUp(self):
         """Set up test fixtures."""
         # Save original environment
         self.original_env = os.environ.copy()
+        # Clean up any previously imported modules to ensure fresh imports
+        for module in ["qdrant_helper", "config", "config.settings"]:
+            if module in sys.modules:
+                del sys.modules[module]
 
     def tearDown(self):
         """Restore original environment."""
         os.environ.clear()
         os.environ.update(self.original_env)
+        # Clean up imported modules
+        for module in ["qdrant_helper", "config", "config.settings"]:
+            if module in sys.modules:
+                del sys.modules[module]
 
     def test_explicit_https_url(self):
         """Test explicit HTTPS URL in QDRANT_URL."""
@@ -43,17 +56,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ["QDRANT_HOST"] = "qdrant.internal"
         os.environ["QDRANT_PORT"] = "6333"
 
-        # Reload settings to pick up environment changes
-        import importlib
-        import sys
-
-        # Remove qdrant_helper from sys.modules to force reimport
-        if "qdrant_helper" in sys.modules:
-            del sys.modules["qdrant_helper"]
-        if "config" in sys.modules:
-            del sys.modules["config"]
-
-        # Import after environment is set
+        # Import after environment is set (setUp already cleaned modules)
         from qdrant_helper import get_qdrant_url
 
         # Get URL - should return HTTPS
@@ -68,16 +71,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ["QDRANT_HOST"] = "localhost"
         os.environ["QDRANT_PORT"] = "6333"
 
-        # Reload settings to pick up environment changes
-        import sys
-
-        # Remove qdrant_helper from sys.modules to force reimport
-        if "qdrant_helper" in sys.modules:
-            del sys.modules["qdrant_helper"]
-        if "config" in sys.modules:
-            del sys.modules["config"]
-
-        # Import after environment is set
+        # Import after environment is set (setUp already cleaned modules)
         from qdrant_helper import get_qdrant_url
 
         # Get URL - should return HTTP
@@ -94,16 +88,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ["QDRANT_HOST"] = "qdrant.internal"
         os.environ["QDRANT_PORT"] = "6333"
 
-        # Reload settings to pick up environment changes
-        import sys
-
-        # Remove qdrant_helper from sys.modules to force reimport
-        if "qdrant_helper" in sys.modules:
-            del sys.modules["qdrant_helper"]
-        if "config" in sys.modules:
-            del sys.modules["config"]
-
-        # Import after environment is set
+        # Import after environment is set (setUp already cleaned modules)
         from qdrant_helper import get_qdrant_url
 
         # Get URL - should auto-select HTTPS
@@ -122,16 +107,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ["QDRANT_HOST"] = "localhost"
         os.environ["QDRANT_PORT"] = "6333"
 
-        # Reload settings to pick up environment changes
-        import sys
-
-        # Remove qdrant_helper from sys.modules to force reimport
-        if "qdrant_helper" in sys.modules:
-            del sys.modules["qdrant_helper"]
-        if "config" in sys.modules:
-            del sys.modules["config"]
-
-        # Import after environment is set
+        # Import after environment is set (setUp already cleaned modules)
         from qdrant_helper import get_qdrant_url
 
         # Get URL - should auto-select HTTP
@@ -149,16 +125,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         os.environ["QDRANT_HOST"] = "localhost"
         os.environ["QDRANT_PORT"] = "6333"
 
-        # Reload settings to pick up environment changes
-        import sys
-
-        # Remove qdrant_helper from sys.modules to force reimport
-        if "qdrant_helper" in sys.modules:
-            del sys.modules["qdrant_helper"]
-        if "config" in sys.modules:
-            del sys.modules["config"]
-
-        # Import after environment is set
+        # Import after environment is set (setUp already cleaned modules)
         from qdrant_helper import get_qdrant_url
 
         # Get URL - should construct with HTTPS, then validate

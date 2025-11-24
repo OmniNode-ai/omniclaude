@@ -146,25 +146,39 @@ class TestInputSanitization:
     def test_whitespace_handling(self):
         """Test handling of whitespace in inputs.
 
-        Note: argparse typically strips leading/trailing whitespace before
-        passing values to type validators. This test verifies that if whitespace
-        is NOT stripped (due to argparse version differences or manual validation
-        calls), the validator either:
-        1. Accepts and converts to integer (Python's int() strips whitespace), OR
-        2. Rejects the input (stricter validation)
+        Expected Behavior:
+        - Python's int() function automatically strips leading/trailing whitespace
+        - Therefore, " 10 " should successfully convert to integer 10
+        - If a validator explicitly rejects whitespace (e.g., with regex), it should
+          raise ValueError with a clear message
 
-        Both behaviors are acceptable for robustness.
+        Testing Strategy:
+        - Verify that whitespace is either stripped and accepted, OR
+        - Verify that rejection provides a clear error message
+
+        Context: argparse typically strips whitespace before calling type validators,
+        but validators may be called manually in other contexts, so robust handling
+        is important.
         """
         execute = import_from_skill("check-recent-activity")
         validate_limit = execute.validate_limit
 
+        # Test whitespace input
         try:
             result = validate_limit(" 10 ")
-            # Python's int() strips whitespace, so this should work
-            assert result == 10
-        except Exception:
-            # Some validators might reject whitespace - also acceptable
-            pass
+            # Success path: Python's int() strips whitespace
+            assert (
+                result == 10
+            ), "Whitespace should be stripped and value converted to 10"
+        except ValueError as e:
+            # Rejection path: Validator explicitly rejects whitespace
+            # Verify error message is informative
+            error_msg = str(e).lower()
+            assert any(
+                keyword in error_msg
+                for keyword in ["whitespace", "invalid", "must be", "format"]
+            ), f"Error message should be informative, got: {e}"
+            # This is also acceptable behavior for stricter validation
 
     def test_empty_string_rejected(self):
         """Test that empty strings are rejected."""

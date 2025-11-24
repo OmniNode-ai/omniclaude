@@ -32,17 +32,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 class TestSSRFProtection:
     """Test SSRF attack prevention in Qdrant URL handling."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def qdrant_helper(self):
-        """Import qdrant_helper module with stable path resolution."""
+        """Import qdrant_helper module with stable path resolution.
+
+        Uses class scope to avoid repeated sys.path manipulation and ensure
+        consistent imports across all tests in the class.
+        """
+        # Save original sys.path to restore after tests
+        original_path = sys.path.copy()
+
         # Ensure _shared directory is in path for consistent imports
         shared_path = str(Path(__file__).parent.parent.parent / "_shared")
         if shared_path not in sys.path:
             sys.path.insert(0, shared_path)
 
-        import qdrant_helper
+        try:
+            import qdrant_helper
 
-        return qdrant_helper
+            yield qdrant_helper
+        finally:
+            # Restore original sys.path after all tests complete
+            sys.path[:] = original_path
 
     def test_non_whitelisted_hosts_blocked(self, qdrant_helper):
         """Test that non-whitelisted hosts are blocked."""
@@ -176,28 +187,31 @@ class TestSSRFProtection:
                 # Verify error message mentions dangerous port
                 assert "dangerous port" in str(exc_info.value).lower()
 
-    def test_dns_rebinding_protection(self, qdrant_helper, monkeypatch):
-        """Test protection against DNS rebinding attacks."""
-        # DNS rebinding: domain resolves to external IP first, then internal IP
-        # This requires DNS resolution checking at connection time
+    def test_dns_rebinding_protection(self, qdrant_helper):
+        """Test protection against DNS rebinding attacks.
 
-        # Mock environment variable to ensure consistent test behavior
-        test_url = "http://192.168.86.101:6333"
-        monkeypatch.setenv("QDRANT_URL", test_url)
+        DNS rebinding attacks involve a domain that initially resolves to a safe
+        external IP but later resolves to an internal IP. This test verifies that:
+        1. URL validation occurs at configuration time
+        2. The helper provides validate_qdrant_url for SSRF protection
 
-        # Verify that get_qdrant_url() returns value from environment/config
-        # (which goes through validate_qdrant_url during startup)
-        if hasattr(qdrant_helper, "get_qdrant_url"):
-            url = qdrant_helper.get_qdrant_url()
-            # Returned URL should be valid (would have failed validation otherwise)
-            assert url.startswith("http://") or url.startswith(
-                "https://"
-            ), f"URL should start with http:// or https://, got: {url}"
-
+        Note: Full DNS rebinding protection requires runtime DNS resolution checks
+        at connection time, which is outside the scope of URL validation.
+        """
         # Verify validate_qdrant_url exists for URL validation
         assert hasattr(
             qdrant_helper, "validate_qdrant_url"
         ), "qdrant_helper should provide validate_qdrant_url for SSRF protection"
+
+        # Test that validation properly checks whitelisted hosts
+        # (this prevents initial DNS rebinding setup)
+        test_url = "http://192.168.86.101:6333"
+        if hasattr(qdrant_helper, "validate_qdrant_url"):
+            # Should pass validation for whitelisted host
+            result = qdrant_helper.validate_qdrant_url(test_url)
+            assert result.startswith("http://") or result.startswith(
+                "https://"
+            ), f"URL should start with http:// or https://, got: {result}"
 
 
 class TestQdrantURLParsing:

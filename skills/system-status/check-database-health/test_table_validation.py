@@ -164,16 +164,23 @@ class TestTableValidationIntegration(unittest.TestCase):
                 assert result == table
 
     def test_whitelist_no_duplicates(self):
-        """Test that whitelist contains no duplicates.
+        """Test that whitelist data structure prevents duplicates.
 
-        Note: VALID_TABLES is currently a set, so this test will always pass.
-        However, this test provides defensive programming value:
-        - If someone changes VALID_TABLES to a list (e.g., for ordering),
-          this test will catch duplicate entries
-        - Documents the invariant that duplicates are not allowed
-        - Acts as a regression test for data integrity
+        This test provides defensive programming value by:
+        1. Verifying VALID_TABLES is a set (which inherently prevents duplicates)
+        2. If implementation changes to list/tuple, catching duplicate entries
+        3. Documenting the invariant that duplicates are not allowed
+
+        Rationale: While sets prevent duplicates by definition, explicitly testing
+        this ensures that future refactoring (e.g., to a list for ordering) will
+        trigger a test failure, prompting developers to consider duplicate handling.
         """
-        # Convert to list and check if set conversion changes length
+        # Verify VALID_TABLES is a set (best data structure for uniqueness)
+        assert isinstance(
+            VALID_TABLES, set
+        ), f"VALID_TABLES should be a set for uniqueness guarantees, got {type(VALID_TABLES)}"
+
+        # Defensive check: if someone changes to list/tuple, catch duplicates
         whitelist_list = list(VALID_TABLES)
         assert len(whitelist_list) == len(
             set(whitelist_list)

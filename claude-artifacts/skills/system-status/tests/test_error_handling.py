@@ -253,8 +253,9 @@ class TestDataErrorHandling:
 
             exit_code = main()
 
-            # Should handle missing columns (KeyError handling)
-            assert exit_code in [0, 1]
+            # Should handle missing columns gracefully with error exit code
+            # Script should detect KeyError and exit with non-zero status
+            assert exit_code == 1, "Missing columns should cause error exit (code 1)"
 
     def test_query_with_valid_empty_data(self):
         """Test handling of valid queries returning no data."""
