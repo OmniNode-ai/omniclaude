@@ -276,15 +276,6 @@ jobs:
           echo "   - Markers: not integration"
           echo "   - Coverage: agents/"
           echo ""
-          echo "📦 Verifying test dependencies..."
-          poetry run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
-          poetry run python -c "from cli.lib import CLIHandler; print('✅ CLIHandler import OK')" || {
-            echo "❌ CLIHandler import FAILED"
-            echo "📋 Available packages:"
-            poetry show --tree | head -50
-            exit 1
-          }
-          echo ""
           echo "🚀 Starting test execution..."
 
           # Generate unique coverage file per group to avoid overwrites
