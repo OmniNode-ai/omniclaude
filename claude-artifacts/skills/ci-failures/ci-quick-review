@@ -1,0 +1,277 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# CI Quick Review - One-Command CI Failure Summary
+# ============================================================================
+# Simplified wrapper for quick CI failure reviews.
+# Fetches CI data and displays a concise, colorized summary.
+#
+# Usage:
+#   ci-quick-review 33                    # Review CI failures for PR #33
+#   ci-quick-review my-branch             # Review CI failures for branch
+#   ci-quick-review                       # Review CI failures for current branch
+#   ci-quick-review --workflow ci-cd 33   # Filter to specific workflow
+#   ci-quick-review --json 33             # JSON output only
+# ============================================================================
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS] [PR_NUMBER|BRANCH]
+
+Quick CI failure review with concise summary and colorized output.
+
+OPTIONS:
+    --workflow WORKFLOW_NAME    Filter to specific workflow
+    --json                      Output JSON only (no formatted display)
+    --no-cache                  Bypass cache and fetch fresh data
+    --help, -h                  Show this help
+
+ARGUMENTS:
+    PR_NUMBER                   Pull request number (e.g., 33)
+    BRANCH                      Branch name (e.g., 'my-feature-branch')
+    (none)                      Use current branch
+
+EXAMPLES:
+    # Quick review of current branch
+    $(basename "$0")
+
+    # Review specific PR
+    $(basename "$0") 33
+
+    # Review specific branch
+    $(basename "$0") my-feature-branch
+
+    # Filter to specific workflow
+    $(basename "$0") --workflow ci-cd 33
+
+    # JSON output for scripting
+    $(basename "$0") --json 33 | jq '.summary'
+
+EXIT CODES:
+    0 - Success (CI data fetched)
+    1 - Error (dependency missing, API failure, etc.)
+    2 - No CI failures found (success!)
+EOF
+    exit 0
+}
+
+# Parse arguments for JSON mode
+JSON_MODE=false
+FETCH_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_MODE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            FETCH_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Fetch CI data (capture both stdout and exit code)
+CI_DATA=""
+FETCH_EXIT_CODE=0
+
+if ! CI_DATA=$("$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>&1); then
+    FETCH_EXIT_CODE=$?
+fi
+
+# If fetch failed, show error and exit
+if [ $FETCH_EXIT_CODE -eq 1 ]; then
+    echo -e "${RED}✗ Failed to fetch CI data${NC}" >&2
+    echo "$CI_DATA" | grep -E '\[✗\]' >&2
+    exit 1
+fi
+
+# If JSON mode, just output raw JSON
+if [ "$JSON_MODE" = true ]; then
+    echo "$CI_DATA" | grep -v '^\[' || echo "$CI_DATA"
+    exit $FETCH_EXIT_CODE
+fi
+
+# Extract JSON from output (filter out status messages)
+CI_JSON=$(echo "$CI_DATA" | grep -v '^\[' || echo "$CI_DATA")
+
+# Check if we got valid JSON
+if ! echo "$CI_JSON" | jq empty 2>/dev/null; then
+    echo -e "${RED}✗ Invalid JSON response from fetch-ci-data${NC}" >&2
+    exit 1
+fi
+
+# Parse summary
+TOTAL=$(echo "$CI_JSON" | jq -r '.summary.total')
+CRITICAL=$(echo "$CI_JSON" | jq -r '.summary.critical')
+MAJOR=$(echo "$CI_JSON" | jq -r '.summary.major')
+MINOR=$(echo "$CI_JSON" | jq -r '.summary.minor')
+PR_NUMBER=$(echo "$CI_JSON" | jq -r '.pr_number')
+REPO=$(echo "$CI_JSON" | jq -r '.repository')
+
+# Display summary header
+echo ""
+echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║${NC}           ${CYAN}${BOLD}CI FAILURES SUMMARY${NC}                              ${BOLD}║${NC}"
+echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${BLUE}Repository:${NC} $REPO"
+echo -e "${BLUE}PR Number:${NC} #$PR_NUMBER"
+echo ""
+
+# Check if there are any failures
+if [ "$TOTAL" -eq 0 ]; then
+    echo -e "${GREEN}${BOLD}✅ No CI failures found!${NC}"
+    echo ""
+    echo -e "${GREEN}All workflows passed successfully.${NC}"
+    echo ""
+    exit 2
+fi
+
+# Display failure counts with color coding
+echo -e "${BOLD}Failure Summary:${NC}"
+echo ""
+
+if [ "$CRITICAL" -gt 0 ]; then
+    echo -e "  ${RED}${BOLD}🔴 CRITICAL:${NC} $CRITICAL failure(s) - ${RED}Must fix before merge${NC}"
+fi
+
+if [ "$MAJOR" -gt 0 ]; then
+    echo -e "  ${YELLOW}${BOLD}🟠 MAJOR:${NC} $MAJOR failure(s) - ${YELLOW}Should fix before merge${NC}"
+fi
+
+if [ "$MINOR" -gt 0 ]; then
+    echo -e "  ${BLUE}${BOLD}🟡 MINOR:${NC} $MINOR failure(s) - ${BLUE}Nice to fix${NC}"
+fi
+
+echo ""
+echo -e "${BOLD}Total Failures:${NC} ${RED}$TOTAL${NC}"
+echo ""
+
+# Display failed jobs grouped by workflow
+echo -e "${BOLD}Failed Jobs:${NC}"
+echo ""
+
+# Group failures by workflow
+WORKFLOWS=$(echo "$CI_JSON" | jq -r '.failures[].workflow' | sort -u)
+
+while IFS= read -r workflow; do
+    if [ -z "$workflow" ]; then
+        continue
+    fi
+
+    echo -e "${CYAN}${BOLD}$workflow:${NC}"
+
+    # Get failures for this workflow
+    echo "$CI_JSON" | jq -r --arg workflow "$workflow" '
+        .failures[] |
+        select(.workflow == $workflow) |
+        "  \(.severity)||\(.job)||\(.step)"
+    ' | while IFS='||' read -r severity job step; do
+        # Color code by severity
+        case $severity in
+            critical)
+                echo -e "    ${RED}●${NC} ${job} → ${step}"
+                ;;
+            major)
+                echo -e "    ${YELLOW}●${NC} ${job} → ${step}"
+                ;;
+            minor)
+                echo -e "    ${BLUE}●${NC} ${job} → ${step}"
+                ;;
+            *)
+                echo -e "    ${NC}●${NC} ${job} → ${step}"
+                ;;
+        esac
+    done
+
+    echo ""
+done <<< "$WORKFLOWS"
+
+# Display top error patterns (extract from step names)
+echo -e "${BOLD}Top Error Patterns:${NC}"
+echo ""
+
+# Get unique step names and count occurrences
+echo "$CI_JSON" | jq -r '.failures[].step' | sort | uniq -c | sort -rn | head -5 | while read -r count step; do
+    echo -e "  ${MAGENTA}●${NC} ${step} ${CYAN}(${count} occurrence(s))${NC}"
+done
+
+echo ""
+
+# Generate helpful suggestions based on error patterns
+echo -e "${BOLD}💡 Suggested Actions:${NC}"
+echo ""
+
+# Check for common patterns
+HAS_TEST_FAILURES=$(echo "$CI_JSON" | jq -r '.failures[] | select(.step | test("[Tt]est|pytest"))' | wc -l)
+HAS_LINT_FAILURES=$(echo "$CI_JSON" | jq -r '.failures[] | select(.step | test("[Ll]int|ruff|flake8"))' | wc -l)
+HAS_TYPE_FAILURES=$(echo "$CI_JSON" | jq -r '.failures[] | select(.step | test("[Tt]ype|mypy"))' | wc -l)
+HAS_BUILD_FAILURES=$(echo "$CI_JSON" | jq -r '.failures[] | select(.step | test("[Bb]uild|compile"))' | wc -l)
+
+if [ "$HAS_TEST_FAILURES" -gt 0 ]; then
+    echo -e "  ${GREEN}1.${NC} Review test failures - run tests locally to reproduce"
+    echo -e "     ${CYAN}→ pytest -v tests/${NC}"
+fi
+
+if [ "$HAS_LINT_FAILURES" -gt 0 ]; then
+    echo -e "  ${GREEN}2.${NC} Fix linting errors - run linter locally"
+    echo -e "     ${CYAN}→ ruff check . --fix${NC}"
+fi
+
+if [ "$HAS_TYPE_FAILURES" -gt 0 ]; then
+    echo -e "  ${GREEN}3.${NC} Fix type checking errors - run mypy locally"
+    echo -e "     ${CYAN}→ mypy .${NC}"
+fi
+
+if [ "$HAS_BUILD_FAILURES" -gt 0 ]; then
+    echo -e "  ${GREEN}4.${NC} Fix build failures - check dependencies and syntax"
+    echo -e "     ${CYAN}→ Check requirements.txt and package.json${NC}"
+fi
+
+echo -e "  ${GREEN}5.${NC} View detailed logs on GitHub Actions"
+echo -e "     ${CYAN}→ https://github.com/$REPO/pull/$PR_NUMBER/checks${NC}"
+
+echo ""
+
+# Display footer
+echo -e "${BOLD}─────────────────────────────────────────────────────────────────${NC}"
+
+# Determine merge readiness
+if [ "$CRITICAL" -gt 0 ]; then
+    echo -e "${RED}${BOLD}❌ NOT READY TO MERGE${NC} - Critical failures must be fixed"
+elif [ "$MAJOR" -gt 0 ]; then
+    echo -e "${YELLOW}${BOLD}⚠️  REVIEW NEEDED${NC} - Major failures should be addressed"
+elif [ "$MINOR" -gt 0 ]; then
+    echo -e "${BLUE}${BOLD}✓ READY TO MERGE${NC} - Minor issues can be addressed later"
+else
+    echo -e "${GREEN}${BOLD}✅ READY TO MERGE${NC} - All checks passed"
+fi
+
+echo -e "${BOLD}─────────────────────────────────────────────────────────────────${NC}"
+echo ""
+
+# Exit with appropriate code
+if [ "$CRITICAL" -gt 0 ] || [ "$MAJOR" -gt 0 ]; then
+    exit 1
+else
+    exit 0
+fi
