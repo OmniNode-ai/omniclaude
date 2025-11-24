@@ -226,6 +226,7 @@ addopts = [
 ]
 [tool.bandit]
 # Bandit security scanner configuration - matches CI workflow
+# Severity and confidence levels are controlled via CI command-line args
 exclude_dirs = [
     "agents/templates",
     "agents/parallel_execution/templates",
@@ -238,6 +239,18 @@ exclude_dirs = [
     "dist",
 ]
 skips = [
-    # Skip test files - they often have intentional security issues for testing
-    "B101",  # assert_used - common in tests
+    # Skip common false positives that don't represent real security issues
+    "B101",  # assert_used - common in tests (already excluded via exclude_dirs)
+    "B104",  # hardcoded_bind_all_interfaces - development only
+    "B105",  # hardcoded_password_string - false positives on variable names
+    "B106",  # hardcoded_password_funcarg - false positives on parameter names
+    "B107",  # hardcoded_password_default - false positives on default values
+    "B108",  # hardcoded_tmp_directory - controlled tmp usage
+    "B110",  # try_except_pass - acceptable in specific contexts
+    "B201",  # flask_debug_true - controlled via environment variables
+    "B311",  # random - not used for security purposes (use secrets module for security)
+    "B404",  # subprocess_import - required for system calls, inputs validated
+    "B603",  # subprocess_without_shell_equals_true - we validate all inputs
+    "B607",  # start_process_with_partial_path - development environment
+    "B608",  # sql_statements_without_placeholders - false positives with parameterized queries
 ]

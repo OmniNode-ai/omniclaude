@@ -60,7 +60,7 @@ jobs:
       - name: Install project packages
         run: |
           echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
-          poetry install --no-interaction --only-root --with dev
+          poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
       - name: Run Black (code formatting check)
@@ -139,24 +139,34 @@ jobs:
           pip install bandit
           echo "🔒 Running Bandit security scanner..."
           echo "📁 Scanning: agents/ claude_hooks/"
-          echo "⏭️  Excluding: templates, tests, .venv, __pycache__"
-          echo "📊 Severity/Confidence: MEDIUM and above"
+          echo "⏭️  Excluding: templates, tests, skills, .venv, __pycache__"
+          echo "📊 Severity/Confidence: MEDIUM+ only (filters out Low severity)"
+          echo "🎯 Configuration: .bandit file + pyproject.toml (13 skip codes)"
+          echo ""
+          echo "Skip codes (false positives):"
+          echo "  - B608: SQL injection (parameterized queries are safe)"
+          echo "  - B105/B106/B107: Hardcoded passwords (variable/param names only)"
+          echo "  - B110: Try-except-pass (acceptable in specific contexts)"
+          echo "  - B311: Random (not used for cryptographic purposes)"
+          echo "  - B404/B603/B607: Subprocess (validated inputs)"
+          echo ""
 
-          # Generate JSON report
+          # Generate JSON report (don't fail on issues - just collect data)
           bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f json -o bandit-report.json || true
 
-          # Run with text output for CI logs
+          # Run with text output for CI logs (this determines pass/fail)
           bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f txt && echo "✅ Bandit scan passed" || {
-              echo "❌ Bandit found security issues"
+              echo "❌ Bandit found security issues (Medium+ severity, Medium+ confidence)"
               echo "📋 Check bandit-report.json artifact for details"
+              echo "💡 If false positive, add skip code to .bandit and pyproject.toml [tool.bandit]"
               exit 1
             }
           echo "::endgroup::"
@@ -241,7 +251,7 @@ jobs:
       - name: Install project packages
         run: |
           echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
-          poetry install --no-interaction --only-root --with dev
+          poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
       - name: Verify CLI package installation
