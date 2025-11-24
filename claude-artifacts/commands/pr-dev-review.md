@@ -38,8 +38,11 @@ Example:
 
 ## Step 3: Ask About Nitpicks
 
-After `/parallel-solve` completes, if there were nitpicks in the original output:
+After `/parallel-solve` completes, check the **Step 1 output** for any ⚪ NITPICK sections:
 
-Ask the user: "Critical/major/minor issues are being addressed. There are [N] nitpick items. Address them now?"
+- If nitpicks were found in the original collate-issues output, ask the user:
+  "Critical/major/minor issues are being addressed. There are [N] nitpick items from the PR review. Address them now?"
 
-If yes → Fire another `/parallel-solve` with just the nitpicks.
+- If yes → Fire another `/parallel-solve` with just the nitpick items from the Step 1 output.
+
+**Note**: Nitpicks are discovered from the Step 1 collate-issues output but excluded from Step 2's /parallel-solve command.

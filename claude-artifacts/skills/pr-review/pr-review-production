@@ -9,7 +9,7 @@ set -euo pipefail
 # Optimizations:
 #   - Single data fetch (no redundant API calls)
 #   - Uses cached data for multiple passes
-#   - Passes data via stdin to review-pr (avoids re-fetch)
+#   - Passes data via stdin to analyze-pr-comments (avoids re-fetch)
 #   - Smart auto-limiting for large PRs
 # ============================================================================
 
