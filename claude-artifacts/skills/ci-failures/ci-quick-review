@@ -89,29 +89,39 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Fetch CI data (capture both stdout and exit code)
+# Fetch CI data (capture stdout only - stderr goes to terminal for status messages)
 CI_DATA=""
 FETCH_EXIT_CODE=0
 
-if ! CI_DATA=$("$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>&1); then
+# Capture stdout (JSON) separately from stderr (status messages)
+# Status messages go to terminal, JSON captured in CI_DATA
+if ! CI_DATA=$("$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>/dev/null); then
     FETCH_EXIT_CODE=$?
+    # On failure, re-run to show error messages
+    "$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" >/dev/null 2>&1 || true
 fi
 
-# If fetch failed, show error and exit
-if [ $FETCH_EXIT_CODE -eq 1 ]; then
+# If fetch failed with no data, show error
+if [ $FETCH_EXIT_CODE -eq 1 ] && [ -z "$CI_DATA" ]; then
     echo -e "${RED}✗ Failed to fetch CI data${NC}" >&2
-    echo "$CI_DATA" | grep -E '\[✗\]' >&2
+    # Re-run to capture error output
+    "$SCRIPT_DIR/fetch-ci-data" "${FETCH_ARGS[@]}" 2>&1 | grep -E '✗' >&2 || true
     exit 1
 fi
 
 # If JSON mode, just output raw JSON
 if [ "$JSON_MODE" = true ]; then
-    echo "$CI_DATA" | grep -v '^\[' || echo "$CI_DATA"
+    echo "$CI_DATA"
     exit $FETCH_EXIT_CODE
 fi
 
-# Extract JSON from output (filter out status messages)
-CI_JSON=$(echo "$CI_DATA" | grep -v '^\[' || echo "$CI_DATA")
+# Extract JSON - remove any non-JSON lines (ANSI codes, status messages)
+# First try to extract just the JSON object
+CI_JSON=$(echo "$CI_DATA" | sed -n '/^{/,/^}/p' | head -1)
+# If that didn't work, try removing ANSI codes and filtering
+if [ -z "$CI_JSON" ] || ! echo "$CI_JSON" | jq empty 2>/dev/null; then
+    CI_JSON=$(echo "$CI_DATA" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^\[' | grep -v '^$' || echo "$CI_DATA")
+fi
 
 # Check if we got valid JSON
 if ! echo "$CI_JSON" | jq empty 2>/dev/null; then
@@ -184,8 +194,8 @@ while IFS= read -r workflow; do
     echo "$CI_JSON" | jq -r --arg workflow "$workflow" '
         .failures[] |
         select(.workflow == $workflow) |
-        "  \(.severity)||\(.job)||\(.step)"
-    ' | while IFS='||' read -r severity job step; do
+        "\(.severity)\t\(.job)\t\(.step)"
+    ' | while IFS=$'\t' read -r severity job step; do
         # Color code by severity
         case $severity in
             critical)
