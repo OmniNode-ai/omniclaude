@@ -28,6 +28,7 @@ from agents.lib.intelligence_event_client import (
     IntelligenceEventClientContext,
 )
 
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================

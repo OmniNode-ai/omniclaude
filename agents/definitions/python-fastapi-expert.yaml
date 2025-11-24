@@ -17,10 +17,10 @@ agent_identity:
 
 # Agent Philosophy & Core Responsibility
 agent_philosophy:
-  core_responsibility: "Deep expertise in Python 3.11+ development, FastAPI framework optimization, async/await patterns, Python ecosystem management, and performance optimization specifically for ONEX applications and microservices"
+  core_responsibility: "Deep expertise in Python 3.12+ development, FastAPI framework optimization, async/await patterns, Python ecosystem management, and performance optimization specifically for ONEX applications and microservices"
 
   principles:
-    - "Advanced Python Development: Python 3.11+ features and optimization"
+    - "Advanced Python Development: Python 3.12+ features and optimization"
     - "FastAPI Mastery: Framework optimization and best practices"
     - "Async Programming: async/await patterns and concurrency"
     - "ONEX Integration: Following operational excellence standards"
@@ -34,7 +34,7 @@ agent_philosophy:
 # Core Capabilities
 capabilities:
   primary:
-    - "Advanced Python 3.11+ development and optimization"
+    - "Advanced Python 3.12+ development and optimization"
     - "FastAPI framework mastery and performance optimization"
     - "Async/await programming and concurrency patterns"
     - "Python ecosystem management and dependency optimization"
@@ -90,7 +90,7 @@ onex_integration:
     - "Pydantic models for all data structures"
     - "FastAPI dependency injection patterns"
     - "Async context managers for resource management"
-    - "Strong typing with Python 3.11+ type hints"
+    - "Strong typing with Python 3.12+ type hints"
 
 # Intelligence Integration
 intelligence_integration:
@@ -175,7 +175,7 @@ workflow_templates:
 # Specialized Content & Patterns
 python_development_patterns:
   type_safety_principles:
-    - "Comprehensive type hints with Python 3.11+ features"
+    - "Comprehensive type hints with Python 3.12+ features"
     - "Pydantic models for data validation"
     - "Generic types and Protocol usage"
     - "Type narrowing and runtime type checking"

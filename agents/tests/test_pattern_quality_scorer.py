@@ -13,6 +13,7 @@ import pytest
 
 from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
 
+
 # ============================================================================
 # Test Fixtures
 # ============================================================================
@@ -22,7 +23,7 @@ from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualit
 def excellent_pattern():
     """High-quality ONEX pattern with comprehensive documentation."""
     return {
-        "pattern_id": "test-excellent-001",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440001",
         "pattern_name": "UserAuthEffect",
         "code": '''"""User authentication effect node.
 
@@ -87,7 +88,7 @@ class NodeUserAuthEffect:
 def good_pattern():
     """Good quality pattern with decent documentation."""
     return {
-        "pattern_id": "test-good-002",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440002",
         "pattern_name": "DataProcessorCompute",
         "code": '''"""Data processing compute node."""
 from typing import List
@@ -118,7 +119,7 @@ class NodeDataProcessorCompute:
 def stub_pattern():
     """Incomplete stub pattern with TODOs."""
     return {
-        "pattern_id": "test-stub-003",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440003",
         "pattern_name": "IncompleteNode",
         "code": """def process():
     # TODO: implement logic
@@ -139,7 +140,7 @@ def stub_pattern():
 def poor_pattern():
     """Poor quality pattern with minimal content."""
     return {
-        "pattern_id": "test-poor-004",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440004",
         "pattern_name": "MinimalNode",
         "code": "def run():\n    return None",
         "text": "Node",
@@ -166,7 +167,7 @@ def test_pattern_quality_score_instantiation():
     """Test PatternQualityScore can be instantiated with all fields."""
     timestamp = datetime.now(UTC)
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -179,7 +180,7 @@ def test_pattern_quality_score_instantiation():
         version="1.0.0",
     )
 
-    assert score.pattern_id == "test-001"
+    assert score.pattern_id == "550e8400-e29b-41d4-a716-446655440000"
     assert score.pattern_name == "TestPattern"
     assert score.composite_score == 0.85
     assert score.completeness_score == 0.90
@@ -195,7 +196,7 @@ def test_pattern_quality_score_instantiation():
 def test_pattern_quality_score_default_version():
     """Test PatternQualityScore has default version."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -233,7 +234,7 @@ def test_score_excellent_pattern(scorer, excellent_pattern):
     assert score.complexity_score >= 0.4
 
     # Metadata should match
-    assert score.pattern_id == "test-excellent-001"
+    assert score.pattern_id == "550e8400-e29b-41d4-a716-446655440001"
     assert score.pattern_name == "UserAuthEffect"
     assert score.confidence == 0.95
 
@@ -284,7 +285,7 @@ def test_score_poor_pattern(scorer, poor_pattern):
 def test_score_pattern_with_missing_fields(scorer):
     """Test scoring handles missing fields gracefully."""
     minimal_pattern = {
-        "pattern_id": "test-minimal",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440005",
         "pattern_name": "Minimal",
         # Missing: code, text, metadata, etc.
     }
@@ -767,7 +768,7 @@ def test_score_complexity_thresholds(scorer):
 async def test_store_quality_metrics_success(scorer):
     """Test successful storage of quality metrics."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -803,7 +804,7 @@ async def test_store_quality_metrics_success(scorer):
 async def test_store_quality_metrics_upsert(scorer):
     """Test upsert behavior (ON CONFLICT UPDATE)."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -834,7 +835,7 @@ async def test_store_quality_metrics_upsert(scorer):
 async def test_store_quality_metrics_json_serialization(scorer):
     """Test metadata JSON serialization."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -867,7 +868,7 @@ async def test_store_quality_metrics_json_serialization(scorer):
 async def test_store_quality_metrics_connection_error(scorer):
     """Test error handling with invalid connection."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -897,7 +898,7 @@ async def test_store_quality_metrics_connection_error(scorer):
 async def test_store_quality_metrics_query_error_rollback(scorer):
     """Test rollback on query error."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -934,7 +935,7 @@ async def test_store_quality_metrics_query_error_rollback(scorer):
 async def test_store_quality_metrics_missing_psycopg2(scorer):
     """Test error when psycopg2 is not installed."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -957,7 +958,7 @@ async def test_store_quality_metrics_missing_psycopg2(scorer):
 async def test_store_quality_metrics_default_connection_string(scorer):
     """Test default connection string from environment."""
     score = PatternQualityScore(
-        pattern_id="test-001",
+        pattern_id="550e8400-e29b-41d4-a716-446655440000",
         pattern_name="TestPattern",
         composite_score=0.85,
         completeness_score=0.90,
@@ -1062,7 +1063,7 @@ def test_scoring_multiple_patterns(
 def test_pattern_with_all_dimensions_maxed(scorer):
     """Test pattern that maximizes all scoring dimensions."""
     perfect_pattern = {
-        "pattern_id": "test-perfect",
+        "pattern_id": "550e8400-e29b-41d4-a716-446655440006",
         "pattern_name": "PerfectEffect",
         "code": '''"""Perfect ONEX effect node with comprehensive documentation.
 

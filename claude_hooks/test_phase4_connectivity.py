@@ -18,11 +18,12 @@ Enhanced features:
 """
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
 from config import settings
+
 
 # Test configuration
 PHASE4_BASE_URL = str(settings.archon_intelligence_url)
@@ -48,7 +49,7 @@ def test_pattern_tracking():
     try:
         payload = {
             "event_type": "pattern_created",
-            "pattern_id": f"connectivity_test_{datetime.utcnow().timestamp()}",
+            "pattern_id": f"connectivity_test_{datetime.now(timezone.utc).timestamp()}",
             "pattern_name": "connectivity_test",
             "pattern_type": "code",
             "pattern_version": "1.0.0",

@@ -19,6 +19,7 @@ from pathlib import Path
 from agent_dispatcher import ParallelCoordinator
 from agent_model import AgentTask
 
+
 # Calculator contract
 CALCULATOR_CONTRACT = {
     "name": "Calculator",

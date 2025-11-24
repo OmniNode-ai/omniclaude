@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 import asyncpg
 
+
 try:
     # Load variables from .env if present
     from dotenv import load_dotenv  # type: ignore

@@ -51,6 +51,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings
@@ -91,13 +92,11 @@ class IntelligenceCache:
 
         # Default uses Docker hostname (archon-valkey:6379); override with VALKEY_URL in .env for localhost development
         # Password 'archon_cache_2025' is Docker default; change via VALKEY_URL for production deployments
+        default_url = "redis://:archon_cache_2025@archon-valkey:6379/0"
         if settings is not None:
-            self.redis_url = redis_url or settings.valkey_url
+            self.redis_url = redis_url or settings.valkey_url or default_url
         else:
-            self.redis_url = redis_url or os.getenv(
-                "VALKEY_URL",
-                "redis://:archon_cache_2025@archon-valkey:6379/0",
-            )
+            self.redis_url = redis_url or os.getenv("VALKEY_URL", default_url)
         self._client: Optional[Any] = None
 
         # Default TTLs by operation type (in seconds)
@@ -177,7 +176,9 @@ class IntelligenceCache:
         # Sort params for consistent hashing
         sorted_params = json.dumps(params, sort_keys=True)
         # MD5 used for cache key generation (non-cryptographic), not security
-        params_hash = hashlib.md5(sorted_params.encode()).hexdigest()[:12]  # nosec B324
+        params_hash = hashlib.md5(  # noqa: S324 # nosec B324
+            sorted_params.encode()
+        ).hexdigest()[:12]
 
         return f"intelligence:{operation_type}:{params_hash}"
 

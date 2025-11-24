@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add project root to path for centralized config import
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
@@ -37,6 +38,7 @@ except ImportError:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from postgres_logger import PostgresLogger
+
 
 # Configure logging
 logging.basicConfig(

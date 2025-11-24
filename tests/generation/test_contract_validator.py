@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -24,6 +25,7 @@ from agents.lib.generation.contract_validator import (
     ContractValidator,
     ValidationResult,
 )
+
 
 # -------------------------------------------------------------------------
 # Basic Validation Tests
@@ -284,9 +286,7 @@ def test_validate_contract_non_dict_yaml(contract_validator: ContractValidator):
 def test_validate_contract_invalid_node_type(contract_validator: ContractValidator):
     """Test validation with invalid node type."""
     with pytest.raises(ValueError, match="Invalid node type"):
-        contract_validator.validate_contract(
-            sample_effect_contract_yaml="name: Test\n", node_type="INVALID"
-        )
+        contract_validator.validate_contract("name: Test\n", node_type="INVALID")
 
 
 # -------------------------------------------------------------------------
@@ -315,7 +315,9 @@ description: "Test node"
 node_type: EFFECT
 input_model: ModelNonexistentInput
 output_model: ModelNonexistentOutput
-error_model: ModelOnexError
+io_operations:
+  - operation_type: test_operation
+    target: test_target
 """
     result = contract_validator_with_search_paths.validate_contract(
         yaml_with_refs, "EFFECT"

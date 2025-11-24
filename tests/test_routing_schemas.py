@@ -13,8 +13,10 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add schemas directory to path
-schemas_path = Path(__file__).parent / "services" / "routing_adapter" / "schemas"
+# Navigate from tests/ to project root, then to services/routing_adapter/schemas
+schemas_path = Path(__file__).parent.parent / "services" / "routing_adapter" / "schemas"
 sys.path.insert(0, str(schemas_path))
 
 print("Testing routing event schemas...")

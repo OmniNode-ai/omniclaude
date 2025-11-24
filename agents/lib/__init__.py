@@ -22,12 +22,13 @@ from .confidence_scorer import ConfidenceScore, ConfidenceScorer
 from .result_cache import ResultCache
 from .trigger_matcher import TriggerMatcher
 
+
 __all__ = [
-    "TriggerMatcher",
-    "ConfidenceScorer",
-    "ConfidenceScore",
-    "CapabilityIndex",
-    "ResultCache",
-    "AgentRouter",
     "AgentRecommendation",
+    "AgentRouter",
+    "CapabilityIndex",
+    "ConfidenceScore",
+    "ConfidenceScorer",
+    "ResultCache",
+    "TriggerMatcher",
 ]

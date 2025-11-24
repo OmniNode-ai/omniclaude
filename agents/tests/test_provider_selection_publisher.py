@@ -28,6 +28,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add project root to path
 _project_root = PathLib(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:

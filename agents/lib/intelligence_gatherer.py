@@ -22,6 +22,7 @@ from .config.intelligence_config import IntelligenceConfig
 from .intelligence_event_client import IntelligenceEventClient
 from .models.intelligence_context import IntelligenceContext
 
+
 logger = logging.getLogger(__name__)
 
 

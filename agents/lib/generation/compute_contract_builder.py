@@ -17,6 +17,7 @@ from omnibase_core.models.contracts.model_contract_compute import ModelContractC
 
 from .contract_builder import ContractBuilder
 
+
 logger = logging.getLogger(__name__)
 
 

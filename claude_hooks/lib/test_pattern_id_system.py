@@ -17,6 +17,7 @@ import threading
 
 import pytest
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -198,10 +199,10 @@ class TestPatternVersion:
         assert v1.minor == 2
         assert v1.patch == 3
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid version format|version string"):
             PatternVersion.from_string("invalid")
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid version format|version string"):
             PatternVersion.from_string("1.2")
 
     def test_version_increment_patch(self):

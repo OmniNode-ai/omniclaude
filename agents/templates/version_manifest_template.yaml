@@ -47,7 +47,7 @@ deployment:
     cpu_cores: {CPU_CORES}
 
   runtime_requirements:
-    python_version: ">=3.11"
+    python_version: ">=3.12"
     container_support: true
     event_bus_required: {EVENT_BUS_REQUIRED}
 

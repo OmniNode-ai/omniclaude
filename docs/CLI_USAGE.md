@@ -24,7 +24,7 @@ The ONEX Node Generation CLI (`generate_node.py`) provides a command-line interf
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Poetry package manager
 - `omnibase_core` package installed
 

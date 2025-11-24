@@ -9,7 +9,7 @@ import hashlib
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import requests
@@ -144,7 +144,7 @@ class PatternTrackerSync:
                     "session_id": self.session_id,
                     "quality_score": context.get("quality_score", 1.0),
                     "violations_found": context.get("violations_found", 0),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             }
 

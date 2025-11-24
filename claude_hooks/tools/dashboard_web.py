@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from system_dashboard_md import SystemDashboard
 
+
 logger = logging.getLogger(__name__)
 
 # Create app with minimal config to avoid middleware issues

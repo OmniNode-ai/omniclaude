@@ -29,6 +29,7 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add lib directory to path for imports
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
@@ -41,6 +42,7 @@ from confidence_scoring_publisher import (
     publish_confidence_scored,
     publish_confidence_scored_sync,
 )
+
 
 # Disable logging during tests
 logging.disable(logging.CRITICAL)

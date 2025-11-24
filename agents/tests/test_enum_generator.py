@@ -6,7 +6,7 @@ Comprehensive tests for Phase 4 enum generation.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -122,7 +122,7 @@ class TestEnumGenerator:
             external_systems=["PostgreSQL", "Redis", "Kafka"],
             quality_baseline=0.85,
             confidence_score=0.9,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
     def test_generator_initialization(self, generator):
@@ -257,7 +257,7 @@ class TestEnumGenerator:
             external_systems=[],
             quality_baseline=0.7,
             confidence_score=0.8,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         values = generator.infer_enum_values(
@@ -512,7 +512,7 @@ class EnumTestOperationType(str, Enum):
                 external_systems=[],
                 quality_baseline=0.7,
                 confidence_score=0.8,
-                analysis_timestamp=datetime.utcnow(),
+                analysis_timestamp=datetime.now(timezone.utc),
             )
 
             result = generator.generate_operation_type_enum(
@@ -560,7 +560,7 @@ class TestEnumGeneratorEdgeCases:
             external_systems=[],
             quality_baseline=0.0,
             confidence_score=0.0,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         # Should still generate at least CRUD operations
@@ -600,7 +600,7 @@ class TestEnumGeneratorEdgeCases:
             external_systems=[],
             quality_baseline=0.5,
             confidence_score=0.6,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         # Test with hyphens
@@ -651,7 +651,7 @@ class TestEnumGeneratorEdgeCases:
             external_systems=[],
             quality_baseline=0.7,
             confidence_score=0.8,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         result = generator.generate_operation_type_enum(

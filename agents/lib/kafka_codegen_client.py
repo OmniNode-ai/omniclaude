@@ -24,6 +24,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from .codegen_events import BaseEvent
 from .version_config import get_config
 
+
 # Optional confluent fallback
 try:
     from .kafka_confluent_client import ConfluentKafkaClient  # type: ignore
@@ -211,8 +212,9 @@ class KafkaCodegenClient:
             async for msg in self._consumer:
                 try:
                     yield json.loads(msg.value.decode("utf-8"))
-                except Exception:
+                except Exception as e:  # noqa: S112
                     # Skip malformed messages
+                    self.logger.debug(f"Skipping malformed message: {e}")
                     continue
         except Exception as e:
             self.logger.warning(
@@ -240,7 +242,8 @@ class KafkaCodegenClient:
                 async for msg in self._consumer:
                     try:
                         payload = json.loads(msg.value.decode("utf-8"))
-                    except Exception:
+                    except Exception as e:  # noqa: S112
+                        self.logger.debug(f"Skipping malformed message: {e}")
                         continue
                     if predicate(payload):
                         return payload

@@ -400,7 +400,7 @@ Quality Improvements:
 - ✅ G14: Import paths fixed
 - ✅ Aggregation patterns from production
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from omnibase_core.nodes.node_reducer import NodeReducer  # ✅ CORRECT PATH
@@ -500,7 +500,7 @@ class NodeUsageAnalyticsReducer(NodeReducer):
                     max_value=round(max_value, 2),
                     count=count,
                     time_window=contract.time_window,
-                    aggregated_at=datetime.utcnow()
+                    aggregated_at=datetime.now(timezone.utc)
                 )
 
                 # ✅ PATTERN APPLIED: Persist aggregated state

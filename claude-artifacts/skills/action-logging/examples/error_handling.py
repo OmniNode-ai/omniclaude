@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 from uuid import uuid4
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agents" / "lib"))
 
 from action_logger import ActionLogger

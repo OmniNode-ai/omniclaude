@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
+
 # ============================================================================
 # Pydantic Models for Structured Outputs
 # ============================================================================

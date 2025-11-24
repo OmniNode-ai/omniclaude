@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
@@ -34,6 +35,7 @@ from correlation_manager import (  # noqa: E402
 )
 from hook_event_logger import HookEventLogger  # noqa: E402
 from metadata_extractor import MetadataExtractor  # noqa: E402
+
 
 # ============================================================================
 # FIXTURES

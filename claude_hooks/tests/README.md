@@ -179,7 +179,7 @@ run_test "Test Name" \
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.12+
 - pytest
 - pytest-asyncio
 - tempfile (standard library)

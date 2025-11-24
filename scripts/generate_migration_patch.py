@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+
 # Known environment variable mappings
 ENV_VAR_MAPPING = {
     "KAFKA_BOOTSTRAP_SERVERS": "settings.get_effective_kafka_bootstrap_servers()",

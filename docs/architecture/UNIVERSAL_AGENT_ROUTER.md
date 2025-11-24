@@ -1292,7 +1292,7 @@ volumes:
 - ⏳ Valkey service (will be added to docker-compose)
 
 **Software Dependencies**:
-- Python 3.11+
+- Python 3.12+
 - Docker & Docker Compose
 - vLLM-compatible GPU (RTX 5090 or similar)
 - Agent registry YAML files

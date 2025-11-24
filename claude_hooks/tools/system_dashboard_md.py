@@ -6,11 +6,12 @@ Auto-generates markdown dashboard from database metrics
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
 
 # Add config for type-safe settings
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -210,8 +211,13 @@ class SystemDashboard:
                 )
                 row = cur.fetchone()
                 if row and row["count"] > 0:
+                    # Ensure row["oldest"] is timezone-aware (assume UTC if naive)
+                    oldest = row["oldest"]
+                    if oldest.tzinfo is None:
+                        oldest = oldest.replace(tzinfo=timezone.utc)
+
                     age_hours = (
-                        datetime.utcnow() - row["oldest"].replace(tzinfo=None)
+                        datetime.now(timezone.utc) - oldest
                     ).total_seconds() / 3600
                     issues.append(
                         {
@@ -495,7 +501,7 @@ class SystemDashboard:
         task_stats = self.get_task_completion_stats()
         recent_tasks = self.get_recent_task_completions(5)
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         md = []
 
         # Header

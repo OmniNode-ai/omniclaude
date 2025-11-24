@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
 
+
 # Framework: ML-powered mixin compatibility (optional import)
 try:
     from .mixin_compatibility import MixinCompatibilityManager

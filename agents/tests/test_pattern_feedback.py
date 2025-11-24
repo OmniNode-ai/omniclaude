@@ -26,6 +26,7 @@ from agents.lib.pattern_feedback import PatternFeedback, PatternFeedbackCollecto
 from agents.lib.pattern_tuner import PatternTuner, TuningResult, TuningStrategy
 from agents.lib.patterns.pattern_matcher import PatternMatcher, PatternType
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

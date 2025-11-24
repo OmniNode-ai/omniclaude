@@ -12,6 +12,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any, Dict, Optional
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -25,8 +27,15 @@ except ImportError as e:
     sys.exit(1)
 
 
-def check_kafka(detailed: bool = False):
-    """Check Kafka infrastructure."""
+def check_kafka(detailed: bool = False) -> Dict[str, Any]:
+    """Check Kafka infrastructure.
+
+    Args:
+        detailed: Include detailed statistics (topic counts)
+
+    Returns:
+        Dictionary with Kafka status information
+    """
     conn = check_kafka_connection()
     topics = list_topics() if detailed else {"count": 0}
 
@@ -39,12 +48,20 @@ def check_kafka(detailed: bool = False):
     }
 
 
-def check_postgres(detailed: bool = False):
-    """Check PostgreSQL infrastructure."""
+def check_postgres(detailed: bool = False) -> Dict[str, Any]:
+    """Check PostgreSQL infrastructure.
+
+    Args:
+        detailed: Include detailed statistics (connection counts)
+
+    Returns:
+        Dictionary with PostgreSQL status information
+    """
     try:
         # Check table count
         result = execute_query(
-            "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'"
+            "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = %s",
+            params=("public",),
         )
 
         if result["success"] and result["rows"]:
@@ -73,8 +90,15 @@ def check_postgres(detailed: bool = False):
         return {"status": "error", "error": str(e)}
 
 
-def check_qdrant(detailed: bool = False):
-    """Check Qdrant infrastructure."""
+def check_qdrant(detailed: bool = False) -> Dict[str, Any]:
+    """Check Qdrant infrastructure.
+
+    Args:
+        detailed: Include detailed statistics (collection counts and vectors)
+
+    Returns:
+        Dictionary with Qdrant status information
+    """
     conn = check_qdrant_connection()
     stats = get_all_collections_stats() if detailed else {}
 
@@ -96,7 +120,7 @@ def check_qdrant(detailed: bool = False):
     return response
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Check infrastructure")
     parser.add_argument("--components", help="Comma-separated list of components")
     parser.add_argument(

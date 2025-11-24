@@ -10,6 +10,7 @@ Typical for EFFECT nodes with database dependencies.
 import logging
 from typing import Any, Dict, List
 
+
 logger = logging.getLogger(__name__)
 
 

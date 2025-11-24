@@ -6,6 +6,7 @@
 import os
 import sys
 
+
 # Find and import the real omnibase_core.models.contracts module
 real_module_name = "omnibase_core.models.contracts"
 

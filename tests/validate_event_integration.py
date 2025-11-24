@@ -12,8 +12,9 @@ Tests:
 import asyncio
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
+
 
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -76,7 +77,7 @@ async def test_event_flow():
     request_payload = {
         "correlation_id": correlation_id,
         "event_type": "code_analysis_requested",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "payload": {
             "source_path": "validation_test.py",
             "language": "python",

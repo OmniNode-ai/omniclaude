@@ -2,6 +2,7 @@
 
 from .intent_classifier import IntentClassifier, IntentContext
 
+
 # IntentDispatcher will be added in Phase 1.3
 # from .intent_dispatcher import IntentDispatcher, DispatchResult
 

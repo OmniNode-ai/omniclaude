@@ -26,6 +26,7 @@ AFTER migration:
 # Use absolute path for hooks (location is fixed)
 import sys
 
+
 sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
 
 # --- OPTION B: Skills (.claude/skills/<name>/scripts/*.py) ---
@@ -44,6 +45,7 @@ sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
 # =============================================================================
 
 from config import settings
+
 
 # =============================================================================
 # STEP 3: REMOVE LEGACY IMPORTS

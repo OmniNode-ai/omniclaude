@@ -23,6 +23,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from agents.lib.action_logger import (

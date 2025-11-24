@@ -1,5 +1,6 @@
 import os
 
+
 try:
     from neo4j import GraphDatabase  # type: ignore
 except Exception:

@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 import psycopg2
 from psycopg2.extras import Json
 
+
 # Add project root to path for config import
 project_root = (
     Path(__file__).resolve().parents[2]

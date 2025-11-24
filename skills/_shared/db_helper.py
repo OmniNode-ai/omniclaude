@@ -2,21 +2,33 @@
 """
 Shared Database Helper for Claude Skills
 Provides reusable PostgreSQL connection and query utilities.
+
+Note: This module uses structured logging for error reporting.
+All errors are logged via Python's logging module with proper severity levels.
 """
 
 import json
+import logging
 import os
 import sys
 import uuid
-from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
+import psycopg2
+from psycopg2.extensions import connection as psycopg_connection
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
+
+
+# Module-level logger for structured logging
+logger = logging.getLogger(__name__)
+
 
 # Add config for type-safe settings (Pydantic Settings framework)
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
 from config import settings
+
 
 # Database configuration - all values from type-safe Pydantic Settings
 DB_CONFIG = {
@@ -32,39 +44,63 @@ _connection_pool: Optional[SimpleConnectionPool] = None
 
 
 def get_connection_pool() -> SimpleConnectionPool:
-    """Get or create connection pool."""
+    """
+    Get or create connection pool.
+
+    Pool sizes are configurable via environment variables:
+    - POSTGRES_POOL_MIN_SIZE (default: 1)
+    - POSTGRES_POOL_MAX_SIZE (default: 5)
+    """
     global _connection_pool
     if _connection_pool is None:
-        _connection_pool = SimpleConnectionPool(minconn=1, maxconn=5, **DB_CONFIG)
+        _connection_pool = SimpleConnectionPool(
+            minconn=settings.postgres_pool_min_size,
+            maxconn=settings.postgres_pool_max_size,
+            **DB_CONFIG,
+        )
     return _connection_pool
 
 
-def get_connection():
+def get_connection() -> Optional[psycopg_connection]:
     """
     Get a database connection from the pool.
     Returns a connection with RealDictCursor for dict-like row access.
+
+    Returns:
+        A psycopg2 connection object if successful, None if connection fails.
     """
     try:
         pool = get_connection_pool()
         conn = pool.getconn()
         return conn
-    except Exception as e:
-        print(f"Error getting database connection: {e}", file=sys.stderr)
+    except psycopg2.Error as e:
+        # psycopg2.Error: database-level errors (connection, auth, pool exhaustion)
+        logger.error(f"Database connection error: {e}")
+        return None
+    except (OSError, IOError) as e:
+        # OSError/IOError: system-level errors (network issues, file descriptors)
+        logger.error(f"System error getting database connection: {e}")
         return None
 
 
-def release_connection(conn):
-    """Release connection back to pool."""
+def release_connection(conn: Optional[psycopg_connection]) -> None:
+    """
+    Release connection back to pool.
+
+    Args:
+        conn: The psycopg2 connection to release, or None (which is safely ignored).
+    """
     try:
         if conn:
             pool = get_connection_pool()
             pool.putconn(conn)
-    except Exception as e:
-        print(f"Error releasing connection: {e}", file=sys.stderr)
+    except psycopg2.Error as e:
+        # psycopg2.Error: database-level errors during connection release
+        logger.error(f"Database error releasing connection: {e}")
 
 
 def execute_query(
-    sql: str, params: Optional[Tuple] = None, fetch: bool = True
+    sql: str, params: Optional[Tuple[Any, ...]] = None, fetch: bool = True
 ) -> Dict[str, Any]:
     """
     Execute a SQL query safely with parameterized inputs.
@@ -135,16 +171,32 @@ def execute_query(
                 "database": DB_CONFIG.get("database", "unknown"),
             }
 
-    except Exception as e:
+    except psycopg2.Error as e:
+        # psycopg2.Error: SQL errors, constraint violations, connection issues
         if conn:
             conn.rollback()
-        print(f"Database query failed: {e}", file=sys.stderr)
-        print(f"SQL: {sql}", file=sys.stderr)
-        print(f"Params: {params}", file=sys.stderr)
+        logger.error(f"Database query failed: {e}")
+        logger.error(f"SQL: {sql}")
+        logger.error(f"Params: {params}")
         return {
             "success": False,
             "rows": None,
             "error": str(e),
+            "host": DB_CONFIG.get("host", "unknown"),
+            "port": DB_CONFIG.get("port", "unknown"),
+            "database": DB_CONFIG.get("database", "unknown"),
+        }
+    except (TypeError, ValueError) as e:
+        # TypeError/ValueError: parameter type mismatches, data conversion errors
+        if conn:
+            conn.rollback()
+        logger.error(f"Query parameter error: {e}")
+        logger.error(f"SQL: {sql}")
+        logger.error(f"Params: {params}")
+        return {
+            "success": False,
+            "rows": None,
+            "error": f"Parameter error: {str(e)}",
             "host": DB_CONFIG.get("host", "unknown"),
             "port": DB_CONFIG.get("port", "unknown"),
             "database": DB_CONFIG.get("database", "unknown"),
@@ -180,13 +232,13 @@ def handle_db_error(error: Exception, operation: str) -> Dict[str, Any]:
         Dict with error details
     """
     error_msg = f"{operation} failed: {str(error)}"
-    print(error_msg, file=sys.stderr)
+    logger.error(error_msg)
 
     return {
         "success": False,
         "error": str(error),
         "operation": operation,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -207,19 +259,24 @@ def test_connection() -> bool:
         release_connection(conn)
         return result is not None
 
-    except Exception as e:
-        print(f"Connection test failed: {e}", file=sys.stderr)
+    except psycopg2.Error as e:
+        # psycopg2.Error: database-level errors during connection test
+        logger.error(f"Connection test failed (database error): {e}")
+        return False
+    except (OSError, IOError) as e:
+        # OSError/IOError: network issues, system-level errors
+        logger.error(f"Connection test failed (system error): {e}")
         return False
 
 
 def format_timestamp(dt: Optional[datetime] = None) -> str:
     """Format timestamp for database insertion."""
     if dt is None:
-        dt = datetime.utcnow()
+        dt = datetime.now(timezone.utc)
     return dt.isoformat()
 
 
-def parse_json_param(param: Optional[str]) -> Optional[Dict]:
+def parse_json_param(param: Optional[str]) -> Optional[Dict[str, Any]]:
     """
     Safely parse JSON parameter from command line.
 
@@ -227,14 +284,14 @@ def parse_json_param(param: Optional[str]) -> Optional[Dict]:
         param: JSON string or None
 
     Returns:
-        Parsed dict or None
+        Parsed dict or None if param is empty or invalid JSON.
     """
     if not param:
         return None
     try:
         return json.loads(param)
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON parameter: {e}", file=sys.stderr)
+        logger.error(f"Invalid JSON parameter: {e}")
         return None
 
 

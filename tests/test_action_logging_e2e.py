@@ -30,26 +30,101 @@ from uuid import uuid4
 
 import pytest
 
+
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 AGENTS_LIB = SCRIPT_DIR.parent / "agents" / "lib"
 sys.path.insert(0, str(AGENTS_LIB))
 
 try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
+    import asyncpg
 
     POSTGRES_AVAILABLE = True
 except ImportError:
     POSTGRES_AVAILABLE = False
-    print("WARNING: psycopg2 not installed. Database verification will be skipped.")
+    print("WARNING: asyncpg not installed. Database verification will be skipped.")
+
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    pass
 
 from action_logger import ActionLogger
+from kafka_agent_action_consumer import KafkaAgentActionConsumer
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+# -------------------------------------------------------------------------
+# Pytest Fixtures
+# -------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def kafka_brokers():
+    """Kafka brokers for E2E testing."""
+    return os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+
+
+@pytest.fixture(scope="session")
+def postgres_dsn():
+    """PostgreSQL DSN for E2E testing."""
+    host = os.getenv("POSTGRES_HOST", "192.168.86.200")
+    port = os.getenv("POSTGRES_PORT", "5436")
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD")
+    database = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+
+    if not password:
+        pytest.skip("POSTGRES_PASSWORD environment variable not set")
+
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
+@pytest.fixture
+async def db_pool(postgres_dsn):
+    """Database connection pool."""
+    pool = await asyncpg.create_pool(postgres_dsn, min_size=1, max_size=5)
+    yield pool
+    await pool.close()
+
+
+@pytest.fixture
+async def running_consumer(kafka_brokers, postgres_dsn):
+    """Start consumer in background for E2E tests."""
+    consumer = KafkaAgentActionConsumer(
+        kafka_brokers=kafka_brokers,
+        topic="agent-actions",
+        postgres_dsn=postgres_dsn,
+        batch_size=50,
+        batch_timeout_seconds=2.0,
+    )
+
+    await consumer.start()
+
+    # Start consumer loop in background task
+    consumer_task = asyncio.create_task(consumer.consume_loop())
+
+    yield consumer
+
+    # Stop consumer
+    await consumer.stop()
+
+    try:
+        consumer_task.cancel()
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
+
+
+# -------------------------------------------------------------------------
+# Legacy Test Class (for backwards compatibility with standalone execution)
+# -------------------------------------------------------------------------
 
 
 class ActionLoggingE2ETest:
@@ -402,23 +477,210 @@ class ActionLoggingE2ETest:
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not all(
-        [
-            os.getenv("POSTGRES_HOST"),
-            os.getenv("POSTGRES_PORT"),
-            os.getenv("POSTGRES_DATABASE"),
-            os.getenv("POSTGRES_USER"),
-            os.getenv("POSTGRES_PASSWORD"),
-        ]
-    ),
-    reason="Requires PostgreSQL environment variables (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD)",
+    not POSTGRES_AVAILABLE,
+    reason="Requires asyncpg and PostgreSQL connection",
 )
 @pytest.mark.asyncio
-async def test_action_logging_e2e():
-    """Pytest wrapper for action logging e2e test."""
-    test = ActionLoggingE2ETest(verbose=False)
-    success = await test.run()
-    assert success, "Action logging e2e test failed"
+async def test_action_logging_e2e(running_consumer, db_pool):
+    """
+    End-to-end test for action logging with Kafka consumer.
+
+    Tests the complete flow:
+    1. Publish action events to Kafka topic 'agent-actions'
+    2. Consumer processes events and writes to PostgreSQL
+    3. Query database to verify actions were persisted
+    4. Validate correlation IDs and action details
+    """
+    correlation_id = str(uuid4())
+
+    logger.info("=" * 60)
+    logger.info("Agent Action Logging E2E Test")
+    logger.info("=" * 60)
+    logger.info(f"Correlation ID: {correlation_id}")
+
+    # Step 1: Publish test actions to Kafka
+    logger.info("\nStep 1: Publishing test actions to Kafka...")
+
+    action_logger = ActionLogger(
+        agent_name="test-agent-e2e",
+        correlation_id=correlation_id,
+        project_name="omniclaude-test",
+        project_path="/tmp/test",
+        debug_mode=True,
+    )
+
+    # Test actions to publish
+    test_actions = []
+
+    # Test 1: Tool call - Read
+    async with action_logger.tool_call(
+        "Read",
+        tool_parameters={"file_path": "/tmp/test.py", "offset": 0, "limit": 100},
+    ) as action:
+        await asyncio.sleep(0.02)
+        action.set_result({"line_count": 100, "success": True})
+
+    test_actions.append(
+        {
+            "action_type": "tool_call",
+            "action_name": "Read",
+        }
+    )
+    logger.info("✓ Published Read action")
+
+    # Test 2: Tool call - Write
+    await action_logger.log_tool_call(
+        tool_name="Write",
+        tool_parameters={"file_path": "/tmp/output.py", "content_length": 2048},
+        tool_result={"success": True, "bytes_written": 2048},
+        duration_ms=30,
+        success=True,
+    )
+
+    test_actions.append(
+        {
+            "action_type": "tool_call",
+            "action_name": "Write",
+        }
+    )
+    logger.info("✓ Published Write action")
+
+    # Test 3: Decision
+    await action_logger.log_decision(
+        decision_name="select_agent",
+        decision_context={"candidates": ["agent-a", "agent-b"]},
+        decision_result={"selected": "agent-a", "confidence": 0.92},
+        duration_ms=15,
+    )
+
+    test_actions.append(
+        {
+            "action_type": "decision",
+            "action_name": "select_agent",
+        }
+    )
+    logger.info("✓ Published Decision action")
+
+    # Test 4: Error
+    await action_logger.log_error(
+        error_type="ImportError",
+        error_message="Module 'test_module' not found",
+        error_context={"file": "/tmp/test.py", "line": 42},
+    )
+
+    test_actions.append(
+        {
+            "action_type": "error",
+            "action_name": "ImportError",
+        }
+    )
+    logger.info("✓ Published Error action")
+
+    # Test 5: Success
+    await action_logger.log_success(
+        success_name="task_completed",
+        success_details={"files_processed": 5, "quality_score": 0.95},
+        duration_ms=250,
+    )
+
+    test_actions.append(
+        {
+            "action_type": "success",
+            "action_name": "task_completed",
+        }
+    )
+    logger.info("✓ Published Success action")
+
+    # Test 6: Bash command
+    async with action_logger.tool_call(
+        "Bash", tool_parameters={"command": "ls -la", "working_directory": "/tmp"}
+    ) as action:
+        await asyncio.sleep(0.01)
+        action.set_result({"exit_code": 0, "success": True})
+
+    test_actions.append(
+        {
+            "action_type": "tool_call",
+            "action_name": "Bash",
+        }
+    )
+    logger.info("✓ Published Bash action")
+
+    logger.info(f"\nPublished {len(test_actions)} test actions")
+
+    # Step 2: Wait for consumer to process events
+    logger.info("\nStep 2: Waiting for consumer to process events...")
+
+    max_wait_seconds = 15.0
+    poll_interval = 0.5
+    start_time = asyncio.get_event_loop().time()
+    found_count = 0
+
+    while (asyncio.get_event_loop().time() - start_time) < max_wait_seconds:
+        async with db_pool.acquire() as conn:
+            found_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1",
+                correlation_id,
+            )
+
+            if found_count >= len(test_actions):
+                break
+
+        logger.info(f"Found {found_count}/{len(test_actions)} actions, waiting...")
+        await asyncio.sleep(poll_interval)
+
+    # Step 3: Verify all actions were persisted
+    logger.info("\nStep 3: Verifying actions in database...")
+
+    async with db_pool.acquire() as conn:
+        results = await conn.fetch(
+            """
+            SELECT
+                id, correlation_id, agent_name, action_type, action_name,
+                action_details, duration_ms, created_at
+            FROM agent_actions
+            WHERE correlation_id = $1
+            ORDER BY created_at ASC
+            """,
+            correlation_id,
+        )
+
+    # Verify count
+    assert len(results) >= len(
+        test_actions
+    ), f"Expected at least {len(test_actions)} actions, found {len(results)}"
+    logger.info(f"✓ Found all {len(results)} actions in database")
+
+    # Verify each action
+    for i, result in enumerate(results):
+        if i < len(test_actions):
+            expected = test_actions[i]
+
+            assert result["action_type"] == expected["action_type"], (
+                f"Action {i+1}: Type mismatch - expected {expected['action_type']}, "
+                f"got {result['action_type']}"
+            )
+
+            assert result["action_name"] == expected["action_name"], (
+                f"Action {i+1}: Name mismatch - expected {expected['action_name']}, "
+                f"got {result['action_name']}"
+            )
+
+            assert (
+                str(result["correlation_id"]) == correlation_id
+            ), f"Action {i+1}: Correlation ID mismatch"
+
+            assert (
+                result["agent_name"] == "test-agent-e2e"
+            ), f"Action {i+1}: Agent name mismatch"
+
+            logger.info(
+                f"✓ Action {i+1}: {result['action_type']} - {result['action_name']}"
+            )
+
+    logger.info("\n" + "=" * 60)
+    logger.info("✅ Test PASSED - All actions logged and verified")
+    logger.info("=" * 60)
 
 
 async def main():

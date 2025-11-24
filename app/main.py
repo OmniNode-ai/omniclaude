@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST
 
+
 # Import Pydantic Settings for configuration
 try:
     from config import settings
@@ -39,6 +40,7 @@ from agents.lib.prometheus_metrics import (
     service_health_status,
     service_startup_time,
 )
+
 
 logger = logging.getLogger(__name__)
 

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+
 # Add agents/lib to path
 lib_path = Path(__file__).parent.parent / "agents" / "lib"
 if str(lib_path) not in sys.path:

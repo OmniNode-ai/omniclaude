@@ -17,6 +17,7 @@ from uuid import UUID
 
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 

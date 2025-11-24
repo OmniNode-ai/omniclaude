@@ -34,6 +34,7 @@ import requests
 
 from config import settings
 
+
 # Service URL configuration from environment
 INTELLIGENCE_SERVICE_URL = os.environ.get(
     "INTELLIGENCE_SERVICE_URL", str(settings.archon_intelligence_url)

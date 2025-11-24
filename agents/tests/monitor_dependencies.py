@@ -6,7 +6,7 @@ Monitors Archon task completion status for streams 1-7
 
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 
@@ -39,7 +39,7 @@ class DependencyMonitor:
             Dict with status information
         """
         self.check_count += 1
-        self.last_check = datetime.utcnow()
+        self.last_check = datetime.now(timezone.utc)
 
         # TODO: Integrate with Archon MCP client
         # For now, return mock status for testing

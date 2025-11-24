@@ -26,6 +26,7 @@ from jinja2 import StrictUndefined, Template
 from ..models.model_code_pattern import ModelCodePattern, ModelPatternMatch
 from .pattern_storage import PatternStorage
 
+
 logger = logging.getLogger(__name__)
 
 

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Dict, List, Optional
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

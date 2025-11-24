@@ -33,6 +33,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
 
+
 try:
     import asyncpg
 except ImportError as e:
@@ -68,6 +69,7 @@ console = Console()
 
 # Import environment validation
 from env_validation import validate_required_env_vars
+
 
 # Validate environment configuration in production
 validate_required_env_vars(

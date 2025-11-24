@@ -23,16 +23,23 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
 
 
-def get_timeout_seconds() -> float:
+def get_timeout_seconds(override_seconds: Optional[int] = None) -> float:
     """
     Get timeout value in seconds from type-safe configuration.
 
     Returns timeout from Pydantic Settings (default: 5 seconds).
     Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Args:
+        override_seconds: Optional custom timeout in seconds. If provided,
+                         this value takes precedence over configuration.
+                         Useful for long-running operations that need
+                         extended timeouts.
 
     Returns:
         Timeout in seconds (float)
@@ -41,7 +48,26 @@ def get_timeout_seconds() -> float:
         Timeout strategy: All helper subprocess/network calls use the same
         timeout to prevent infinite hangs. Default is 5 seconds, configurable
         via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+
+        Use override_seconds for specific operations that require longer
+        timeouts (e.g., generate-status-report --timeout 30).
+
+        Priority order:
+        1. override_seconds parameter (highest priority)
+        2. OPERATION_TIMEOUT_OVERRIDE environment variable (for CLI scripts)
+        3. REQUEST_TIMEOUT_MS from Pydantic Settings (default)
     """
+    if override_seconds is not None:
+        return float(override_seconds)
+
+    # Check for operation-specific timeout override (for CLI scripts)
+    env_override = os.getenv("OPERATION_TIMEOUT_OVERRIDE")
+    if env_override is not None:
+        try:
+            return float(env_override)
+        except (ValueError, TypeError):
+            pass  # Fall through to default
+
     return settings.request_timeout_ms / 1000.0
 
 
@@ -50,7 +76,9 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
     List all Docker containers, optionally filtered by name.
 
     Args:
-        name_filter: Optional filter for container names (e.g., "archon-", "omninode-")
+        name_filter: Optional filter for container names. Supports:
+                    - Simple substring: "archon-" matches any name containing "archon-"
+                    - Regex pattern: "archon-|omninode-|omniclaude-" matches any of the prefixes
 
     Returns:
         Dictionary with container list
@@ -67,7 +95,17 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
                 "containers": [],
                 "count": 0,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
+
+        # Compile regex if filter contains regex patterns ("|" character)
+        filter_regex = None
+        if name_filter and "|" in name_filter:
+            try:
+                filter_regex = re.compile(name_filter)
+            except re.error:
+                # If regex compilation fails, fall back to substring matching
+                pass
 
         containers = []
         for line in result.stdout.strip().split("\n"):
@@ -75,11 +113,22 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
                 continue
             try:
                 container = json.loads(line)
+                container_name = container.get("Names", "")
+
                 # Apply name filter if specified
-                if name_filter is None or name_filter in container.get("Names", ""):
+                if name_filter is None:
+                    matches = True
+                elif filter_regex:
+                    # Use regex matching if pattern was compiled
+                    matches = filter_regex.search(container_name) is not None
+                else:
+                    # Fall back to simple substring matching
+                    matches = name_filter in container_name
+
+                if matches:
                     containers.append(
                         {
-                            "name": container.get("Names", ""),
+                            "name": container_name,
                             "status": container.get("Status", ""),
                             "state": container.get("State", ""),
                             "image": container.get("Image", ""),
@@ -95,9 +144,35 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "containers": containers,
             "count": len(containers),
             "error": None,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "containers": [], "count": 0, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "containers": [],
+            "count": 0,
+            "error": f"Docker command timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "containers": [],
+            "count": 0,
+            "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
+        }
+    except (subprocess.SubprocessError, OSError, Exception) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        # Exception: catch-all for unexpected errors (JSON decode, etc.)
+        return {
+            "success": False,
+            "containers": [],
+            "count": 0,
+            "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
+        }
 
 
 def get_container_status(container_name: str) -> Dict[str, Any]:
@@ -125,6 +200,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
                 "container": container_name,
                 "status": "not_found",
                 "error": "Container not found",
+                "return_code": result.returncode,
             }
 
         inspect_data = json.loads(result.stdout)[0]
@@ -149,9 +225,39 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             "restart_count": state.get("RestartCount", 0),
             "image": config.get("Image", ""),
             "error": None,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "container": container_name, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Docker inspect timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
+        }
+    except json.JSONDecodeError as e:
+        # JSONDecodeError: Docker returned invalid JSON
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Invalid JSON from Docker: {str(e)}",
+            "return_code": 1,
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
+        }
 
 
 def check_container_health(container_name: str) -> Dict[str, Any]:
@@ -176,6 +282,7 @@ def check_container_health(container_name: str) -> Dict[str, Any]:
         "health_status": status.get("health", "unknown"),
         "running": status.get("running", False),
         "error": None,
+        "return_code": 0,
     }
 
 
@@ -209,6 +316,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
 
         # Parse stats output
@@ -220,6 +328,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": "Could not parse stats output",
+                "return_code": 0,
             }
 
         cpu_percent = parts[0].replace("%", "").strip()
@@ -233,9 +342,39 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             "memory_usage": mem_usage,
             "memory_percent": float(mem_percent) if mem_percent else 0.0,
             "error": None,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "container": container_name, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Docker stats timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
+        }
+    except ValueError as e:
+        # ValueError: float conversion errors from stats parsing
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Failed to parse stats: {str(e)}",
+            "return_code": 1,
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
+        }
 
 
 def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
@@ -256,6 +395,15 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             text=True,
             timeout=get_timeout_seconds(),
         )
+
+        # Check if Docker command failed
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "container": container_name,
+                "error": f"Docker logs failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
+            }
 
         # Combine stdout and stderr
         logs = result.stdout + result.stderr
@@ -280,9 +428,31 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             "errors": errors,
             "error_count": len(errors),
             "error": None,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "container": container_name, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Docker logs timed out after {get_timeout_seconds()}s",
+            "return_code": 1,
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "container": container_name,
+            "error": "Docker CLI not found. Ensure Docker is installed.",
+            "return_code": 1,
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "container": container_name,
+            "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
+        }
 
 
 def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
@@ -323,6 +493,7 @@ def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
         "unhealthy": unhealthy,
         "healthy": running - unhealthy,
         "error": None,
+        "return_code": 0,
     }
 
 

@@ -103,15 +103,16 @@ Implementation:
 
 from .settings import Settings, get_settings, reload_settings
 
+
 # Export singleton instance for easy imports
 settings = get_settings()
 
 # Public API
 __all__ = [
-    "settings",
     "Settings",
     "get_settings",
     "reload_settings",
+    "settings",
 ]
 
 # Version information

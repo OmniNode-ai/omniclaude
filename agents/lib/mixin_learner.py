@@ -50,6 +50,7 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from .mixin_features import MixinFeatureExtractor
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -189,9 +190,7 @@ class MixinLearner:
             if self.metrics_path.exists():
                 # Load model metrics (generated internally, trusted source)
                 with open(self.metrics_path, "rb") as f:
-                    self.metrics = pickle.load(  # noqa: S301 - internal metrics files only
-                        f
-                    )  # nosec B301
+                    self.metrics = pickle.load(f)  # noqa: S301  # nosec B301
 
             self.logger.info("Successfully loaded model and metrics")
 

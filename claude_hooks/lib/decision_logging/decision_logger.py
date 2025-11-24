@@ -6,7 +6,7 @@ Tracks violations, corrections, scores, actions, and user responses.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -81,7 +81,7 @@ class DecisionLogger:
                 - models_used: List of models that participated
         """
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "violation": {
                 "type": violation.get("type"),
                 "name": violation.get("name"),
@@ -118,7 +118,10 @@ class DecisionLogger:
         """
         with open(self.decisions_file, "a") as f:
             for decision in decisions:
-                entry = {"timestamp": datetime.utcnow().isoformat(), **decision}
+                entry = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    **decision,
+                }
                 f.write(json.dumps(entry) + "\n")
 
     def get_recent_decisions(self, count: int = 100) -> list[Dict[str, Any]]:

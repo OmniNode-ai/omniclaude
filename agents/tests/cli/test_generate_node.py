@@ -25,6 +25,7 @@ import pytest
 
 from agents.lib.models.pipeline_models import PipelineResult
 
+
 # Mock CLIHandler before any imports
 mock_cli_handler_module = MagicMock()
 mock_cli_handler_class = MagicMock()

@@ -15,6 +15,7 @@ import pytest
 
 from agents.lib.patterns.orchestration_pattern import OrchestrationPattern
 
+
 # ============================================================================
 # FIXTURES
 # ============================================================================

@@ -54,6 +54,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Set, Union
 
+
 # Sensitive key patterns (case-insensitive matching)
 # Any dict key containing these substrings will have its VALUE redacted
 # Note: These are substrings, so "password" matches "user_password", "PASSWORD", etc.
@@ -411,13 +412,13 @@ def sanitize_for_logging(
 
 
 __all__ = [
-    "sanitize_dict",
-    "sanitize_value",
-    "sanitize_string",
-    "sanitize_error_context",
-    "sanitize_stack_trace",
-    "sanitize_for_logging",
+    "REDACTED",
     "SENSITIVE_KEYS",
     "SENSITIVE_PATTERNS",
-    "REDACTED",
+    "sanitize_dict",
+    "sanitize_error_context",
+    "sanitize_for_logging",
+    "sanitize_stack_trace",
+    "sanitize_string",
+    "sanitize_value",
 ]

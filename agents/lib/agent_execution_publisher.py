@@ -51,6 +51,7 @@ from aiokafka.errors import KafkaError
 
 from config import settings
 
+
 # Import ActionLogger for enhanced observability
 try:
     from agents.lib.action_logger import ActionLogger
@@ -976,7 +977,7 @@ async def publish_execution_failed(
 __all__ = [
     "AgentExecutionPublisher",
     "AgentExecutionPublisherContext",
-    "publish_execution_started",
     "publish_execution_completed",
     "publish_execution_failed",
+    "publish_execution_started",
 ]

@@ -32,12 +32,25 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
+
 # Add shared_lib to path for kafka_config and kafka_publisher
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared_lib"))
+# Relative path resolution from execute_kafka.py:
+#   execute_kafka.py (current file)
+#   └── parent: log-routing-decision/
+#       └── parent: agent-tracking/
+#           └── parent: skills/
+#               └── parent: claude-artifacts/
+#                   └── parent: omniclaude/ (project root)
+# Full path: omniclaude/claude-artifacts/skills/agent-tracking/log-routing-decision/execute_kafka.py
+# Target: omniclaude/shared_lib/ (5 parent levels up + shared_lib)
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
+)
 from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
 
@@ -46,7 +59,7 @@ from kafka_publisher import get_kafka_producer
 def load_env_file():
     """Load environment variables from project .env file."""
     # Calculate project root from this file's location (skills/agent-tracking/log-routing-decision/)
-    project_root = Path(__file__).parent.parent.parent.parent.resolve()
+    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
     env_paths = [
         project_root / ".env",
         Path.home() / "Code" / "omniclaude" / ".env",

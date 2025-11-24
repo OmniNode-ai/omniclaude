@@ -29,6 +29,7 @@ from agents.lib.event_optimizer import (
     OptimizerConfig,
 )
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

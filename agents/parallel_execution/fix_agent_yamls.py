@@ -7,6 +7,7 @@ Fixes intelligence_integration string → null conversions.
 import sys
 from pathlib import Path
 
+
 # Agents that need intelligence_integration → null
 INTELLIGENCE_FIX_AGENTS = [
     "agent-testing",

@@ -20,6 +20,7 @@ import pytest
 
 from agents.lib.template_cache import TemplateCache
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

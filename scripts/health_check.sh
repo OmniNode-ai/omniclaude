@@ -14,6 +14,13 @@
 # Usage: ./scripts/health_check.sh
 # Output: Saves to {REPO}/tmp/health_check_latest.txt and appends to {REPO}/tmp/health_check_history.log
 #
+# Exit Codes (see scripts/observability/EXIT_CODES.md):
+#   0 - All checks passed, system healthy
+#   1 - Some checks failed, system degraded
+#   2 - Critical failure, system unavailable
+#   3 - Configuration error, can't run checks
+#   4 - Dependency missing (psql, kcat, docker not installed)
+#
 
 set -euo pipefail
 
@@ -38,7 +45,7 @@ NC='\033[0m' # No Color
 if [[ ! -f "$PROJECT_ROOT/.env" ]]; then
     echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
     echo "   Please copy .env.example to .env and configure it"
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Source .env file
@@ -53,6 +60,8 @@ POSTGRES_USER="${POSTGRES_USER}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
 QDRANT_HOST="${QDRANT_HOST}"
 QDRANT_PORT="${QDRANT_PORT}"
+QDRANT_URL="${QDRANT_URL:-}"  # Optional: Full URL with protocol
+ENVIRONMENT="${ENVIRONMENT:-development}"  # Default to development
 
 # Verify required variables are set
 missing_vars=()
@@ -72,17 +81,27 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     done
     echo ""
     echo "Please update your .env file with these variables."
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Initialize results
 ISSUES_FOUND=0
+CRITICAL_ISSUES=0
 declare -a ISSUES=()
+declare -a CRITICAL_ISSUES_LIST=()
 
-# Function to add issue
+# Function to add issue (non-critical)
 add_issue() {
     ISSUES+=("$1")
     ((ISSUES_FOUND++)) || true  # Always return 0 to prevent set -e exit
+}
+
+# Function to add critical issue
+add_critical_issue() {
+    CRITICAL_ISSUES_LIST+=("$1")
+    ISSUES+=("$1")
+    ((ISSUES_FOUND++)) || true
+    ((CRITICAL_ISSUES++)) || true
 }
 
 # Function to check service health
@@ -92,7 +111,12 @@ check_service() {
 
     if [[ "$status" == "not found" || -z "$status" ]]; then
         echo "  ❌ ${service_name} (not running)"
-        add_issue "${service_name} container not running"
+        # Intelligence services are critical
+        if [[ "$service_name" == "archon-intelligence" || "$service_name" == "archon-qdrant" ]]; then
+            add_critical_issue "${service_name} container not running (critical)"
+        else
+            add_issue "${service_name} container not running"
+        fi
         return 1
     elif [[ "$status" == *"unhealthy"* ]]; then
         echo "  ⚠️  ${service_name} (unhealthy)"
@@ -121,7 +145,7 @@ check_kafka() {
             echo "  ✅ Kafka: $KAFKA_HOST (connected, $topic_count topics)"
         else
             echo "  ❌ Kafka: $KAFKA_HOST (cannot list topics)"
-            add_issue "Kafka connectivity failed"
+            add_critical_issue "Kafka connectivity failed (critical)"
         fi
     else
         # Fallback: just check if port is open
@@ -129,7 +153,7 @@ check_kafka() {
             echo "  ✅ Kafka: $KAFKA_HOST (port open)"
         else
             echo "  ❌ Kafka: $KAFKA_HOST (connection failed)"
-            add_issue "Kafka connection failed"
+            add_critical_issue "Kafka connection failed (critical)"
         fi
     fi
 }
@@ -139,27 +163,41 @@ check_qdrant() {
     echo ""
     echo "Qdrant:"
 
-    local response=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections" 2>/dev/null || echo "")
+    # Determine Qdrant URL with protocol support
+    local qdrant_url
+    if [[ -n "$QDRANT_URL" ]] && [[ "$QDRANT_URL" =~ ^https?:// ]]; then
+        # Use explicit QDRANT_URL if it contains protocol
+        qdrant_url="$QDRANT_URL"
+    else
+        # Construct URL from host+port with protocol based on ENVIRONMENT
+        local protocol="http"
+        if [[ "$ENVIRONMENT" == "production" ]]; then
+            protocol="https"
+        fi
+        qdrant_url="${protocol}://${QDRANT_HOST}:${QDRANT_PORT}"
+    fi
+
+    local response=$(curl -s "${qdrant_url}/collections" 2>/dev/null || echo "")
 
     if [[ -n "$response" ]]; then
         # Parse collection count and vector counts
         local collection_count=$(echo "$response" | jq -r '.result.collections | length' 2>/dev/null || echo "0")
 
         if [[ $collection_count -gt 0 ]]; then
-            echo "  ✅ Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connected, $collection_count collections)"
+            echo "  ✅ Qdrant: ${qdrant_url} (connected, $collection_count collections)"
 
             # Get vector counts for key collections
-            local code_patterns=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections/code_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
-            local exec_patterns=$(curl -s "http://${QDRANT_HOST}:${QDRANT_PORT}/collections/execution_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
+            local code_patterns=$(curl -s "${qdrant_url}/collections/code_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
+            local exec_patterns=$(curl -s "${qdrant_url}/collections/execution_patterns" 2>/dev/null | jq -r '.result.points_count' 2>/dev/null || echo "0")
 
             echo "  📊 Collections: code_patterns ($code_patterns vectors), execution_patterns ($exec_patterns vectors)"
         else
-            echo "  ⚠️  Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connected, but no collections)"
+            echo "  ⚠️  Qdrant: ${qdrant_url} (connected, but no collections)"
             add_issue "Qdrant has no collections"
         fi
     else
-        echo "  ❌ Qdrant: http://${QDRANT_HOST}:${QDRANT_PORT} (connection failed)"
-        add_issue "Qdrant connection failed"
+        echo "  ❌ Qdrant: ${qdrant_url} (connection failed)"
+        add_critical_issue "Qdrant connection failed (critical)"
     fi
 }
 
@@ -189,7 +227,7 @@ check_postgres() {
         echo "  📊 Manifest Injections (24h): $manifest_count"
     else
         echo "  ❌ PostgreSQL: ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB} (connection failed)"
-        add_issue "PostgreSQL connection failed"
+        add_critical_issue "PostgreSQL connection failed (critical)"
     fi
 
     unset PGPASSWORD
@@ -408,22 +446,39 @@ echo "=== Summary ==="
 
 if [[ $ISSUES_FOUND -eq 0 ]]; then
     echo "✅ All systems healthy"
+    EXIT_CODE=0
+elif [[ $CRITICAL_ISSUES -gt 0 ]]; then
+    echo "❌ Critical Issues Found: $CRITICAL_ISSUES"
+    echo "⚠️  Total Issues: $ISSUES_FOUND"
+    echo ""
+    echo "Critical Issues:"
+    for issue in "${CRITICAL_ISSUES_LIST[@]}"; do
+        echo "  - $issue"
+    done
+    if [[ ${#ISSUES[@]} -gt ${#CRITICAL_ISSUES_LIST[@]} ]]; then
+        echo ""
+        echo "Other Issues:"
+        for issue in "${ISSUES[@]}"; do
+            # Only show non-critical issues
+            if [[ ! " ${CRITICAL_ISSUES_LIST[*]} " =~ " ${issue} " ]]; then
+                echo "  - $issue"
+            fi
+        done
+    fi
+    EXIT_CODE=2  # Critical failure
 else
-    echo "❌ Issues Found: $ISSUES_FOUND"
+    echo "⚠️  Issues Found: $ISSUES_FOUND"
     echo ""
     for issue in "${ISSUES[@]}"; do
         echo "  - $issue"
     done
+    EXIT_CODE=1  # Degraded
 fi
 
 echo ""
 echo "=== End Health Check ==="
 
-# Save the exit code decision first (while ISSUES_FOUND is still accessible)
-EXIT_CODE=0
-if [[ $ISSUES_FOUND -gt 0 ]]; then
-    EXIT_CODE=1
-fi
+# Exit code is already set above based on issue severity
 
 # Close stdout to signal tee to finish, then wait for it
 exec 1>&-

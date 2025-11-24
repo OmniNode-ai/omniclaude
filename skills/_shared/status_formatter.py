@@ -15,9 +15,13 @@ Created: 2025-11-12
 """
 
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 class StatusJSONEncoder(json.JSONEncoder):
@@ -106,7 +110,14 @@ def format_table(
     col_widths.extend([0] * (max_cols - len(col_widths)))
 
     # Update widths based on row data
-    for row in rows:
+    for row_idx, row in enumerate(rows):
+        # Warn if row has more columns than headers (potential data loss)
+        if len(row) > len(headers):
+            logger.warning(
+                f"Row {row_idx} has {len(row)} columns but only {len(headers)} headers - "
+                f"extra columns will be appended without proper alignment"
+            )
+
         for i, cell in enumerate(row):
             cell_str = str(cell)
             col_widths[i] = max(col_widths[i], len(cell_str))
@@ -215,17 +226,56 @@ def format_percentage(value: float, decimals: int = 1) -> str:
     """
     Format a value as percentage.
 
+    This function handles two input formats:
+    - Fractional values (0.0-1.0): Treated as decimal fractions and multiplied by 100
+    - Whole percentages (>1.0): Treated as already-converted percentages
+
     Args:
-        value: Value between 0 and 1 (or 0 and 100)
-        decimals: Number of decimal places
+        value: Numeric value to format as percentage
+            - If 0.0 <= value <= 1.0: Treated as fraction (e.g., 0.95 → 95%)
+            - If value > 1.0: Treated as whole percentage (e.g., 95 → 95%)
+        decimals: Number of decimal places in output (default: 1)
 
     Returns:
-        Formatted percentage string
+        Formatted percentage string with '%' suffix
+
+    Examples:
+        Fractional input (0.0-1.0):
+        >>> format_percentage(0.0)
+        '0.0%'
+        >>> format_percentage(0.5)
+        '50.0%'
+        >>> format_percentage(0.95)
+        '95.0%'
+        >>> format_percentage(1.0)
+        '100.0%'
+
+        Whole percentage input (>1.0):
+        >>> format_percentage(50)
+        '50.0%'
+        >>> format_percentage(95)
+        '95.0%'
+        >>> format_percentage(100)
+        '100.0%'
+
+        Custom decimal places:
+        >>> format_percentage(0.9567, decimals=2)
+        '95.67%'
+        >>> format_percentage(0.9567, decimals=0)
+        '96%'
+
+    Note:
+        Boundary condition: The value 1.0 is treated as a fraction (100%).
+        This handles the common case where 1.0 represents "100% complete".
+        Only values strictly greater than 1.0 are treated as pre-converted percentages.
     """
-    # Assume value is 0-1 if less than 1, otherwise 0-100
-    if value < 1.0:
+    # Decision boundary: values <= 1.0 are fractions (need *100 conversion)
+    # Only values > 1.0 are treated as already-converted percentages
+    if value <= 1.0:
+        # Fraction format: multiply by 100 to convert to percentage
         percentage = value * 100
     else:
+        # Already a whole percentage: use as-is
         percentage = value
 
     return f"{percentage:.{decimals}f}%"
@@ -283,7 +333,7 @@ def format_timestamp(timestamp: Optional[datetime] = None) -> str:
         ISO formatted timestamp string
     """
     if timestamp is None:
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
     return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 

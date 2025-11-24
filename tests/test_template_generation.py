@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import uuid4
 
+
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -39,6 +40,7 @@ from agents.lib.simple_prd_analyzer import (
     ParsedPRD,
     PRDAnalysisResult,
 )
+
 
 # Configure logging
 logging.basicConfig(

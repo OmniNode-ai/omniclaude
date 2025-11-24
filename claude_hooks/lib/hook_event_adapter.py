@@ -39,6 +39,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+
 # Use kafka-python for synchronous publishing (simpler for hooks)
 try:
     from kafka import KafkaProducer

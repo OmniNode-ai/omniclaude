@@ -29,6 +29,7 @@ import pytest
 # Import all agent framework components
 from agents.lib.persistence import CodegenPersistence
 
+
 # Mark all tests in this module as integration tests (require database)
 pytestmark = pytest.mark.integration
 

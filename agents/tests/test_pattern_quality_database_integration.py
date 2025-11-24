@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+
 # Add project root to path for centralized config import
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:

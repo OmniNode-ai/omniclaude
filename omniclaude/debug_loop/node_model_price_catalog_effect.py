@@ -29,6 +29,7 @@ from omnibase_core.nodes import NodeEffect
 # omniclaude imports
 from omniclaude.debug_loop.enum_provider import EnumProvider
 
+
 # omnibase_spi imports (protocol for database access)
 try:
     from omnibase_spi.protocols import IDatabaseProtocol

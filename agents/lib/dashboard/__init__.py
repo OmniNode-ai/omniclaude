@@ -3,4 +3,5 @@
 
 from .quality_dashboard import QualityDashboard
 
+
 __all__ = ["QualityDashboard"]

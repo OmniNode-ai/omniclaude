@@ -31,6 +31,7 @@ from .model_quality_gate import (
 from .prompt_parse_result import PromptParseResult
 from .quorum_config import QuorumConfig
 
+
 __all__ = [
     "PromptParseResult",
     "IntelligenceContext",

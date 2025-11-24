@@ -19,6 +19,7 @@ from .effect_contract_builder import EffectContractBuilder
 from .orchestrator_contract_builder import OrchestratorContractBuilder
 from .reducer_contract_builder import ReducerContractBuilder
 
+
 logger = logging.getLogger(__name__)
 
 

@@ -12,10 +12,17 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from constants import (
+        MAX_TOP_AGENTS,
+        MIN_TOP_AGENTS,
+        ROUTING_TIMEOUT_THRESHOLD_MS,
+    )
     from db_helper import execute_query
     from status_formatter import format_json
     from timeframe_helper import parse_timeframe
@@ -24,38 +31,66 @@ except ImportError as e:
     sys.exit(1)
 
 
-def main():
+def validate_limit(value):
+    """Validate LIMIT value to prevent SQL injection and DoS attacks.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        int: Validated integer value (1-100)
+
+    Raises:
+        argparse.ArgumentTypeError: If value is outside valid range
+    """
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid integer: {value}")
+
+    if not (1 <= ivalue <= 100):
+        raise argparse.ArgumentTypeError(
+            f"Value must be between 1 and 100 (got {ivalue})"
+        )
+
+    return ivalue
+
+
+def validate_top_agents(value: str) -> int:
+    """Validate top_agents is in range MIN_TOP_AGENTS to MAX_TOP_AGENTS.
+
+    Args:
+        value: String value from argparse
+
+    Returns:
+        Validated integer value
+
+    Raises:
+        argparse.ArgumentTypeError: If value is invalid or out of range
+    """
+    try:
+        ivalue: int = int(value)
+        if not (MIN_TOP_AGENTS <= ivalue <= MAX_TOP_AGENTS):
+            raise argparse.ArgumentTypeError(
+                f"top_agents must be between {MIN_TOP_AGENTS} and {MAX_TOP_AGENTS}"
+            )
+        return ivalue
+    except ValueError:
+        raise argparse.ArgumentTypeError("top_agents must be an integer")
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Check agent performance")
     parser.add_argument(
         "--timeframe", default="1h", help="Time period (5m, 15m, 1h, 24h, 7d)"
     )
     parser.add_argument(
-        "--top-agents", type=int, default=10, help="Number of top agents (1-100)"
+        "--top-agents",
+        type=validate_top_agents,
+        default=10,
+        help=f"Number of top agents ({MIN_TOP_AGENTS}-{MAX_TOP_AGENTS})",
     )
     args = parser.parse_args()
-
-    # Validate --top-agents parameter
-    if args.top_agents <= 0:
-        print(
-            format_json(
-                {
-                    "success": False,
-                    "error": f"top_agents must be positive (got {args.top_agents})",
-                }
-            )
-        )
-        return 1
-
-    if args.top_agents > 100:
-        print(
-            format_json(
-                {
-                    "success": False,
-                    "error": f"top_agents must be <= 100 (got {args.top_agents})",
-                }
-            )
-        )
-        return 1
 
     # Validate and parse timeframe
     try:
@@ -73,11 +108,11 @@ def main():
                 COUNT(*) as total_decisions,
                 AVG(routing_time_ms) as avg_routing_time_ms,
                 AVG(confidence_score) as avg_confidence,
-                COUNT(CASE WHEN routing_time_ms > 100 THEN 1 END) as threshold_violations
+                COUNT(CASE WHEN routing_time_ms > {ROUTING_TIMEOUT_THRESHOLD_MS} THEN 1 END) as threshold_violations
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
         """
-        routing_result = execute_query(routing_query)
+        routing_result = execute_query(routing_query, (interval,))
 
         if routing_result["success"] and routing_result["rows"]:
             row = routing_result["rows"][0]
@@ -89,18 +124,18 @@ def main():
             }
 
         # Get top agents
-        top_agents_query = f"""
+        top_agents_query = """
             SELECT
                 selected_agent as agent,
                 COUNT(*) as count,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::interval
             GROUP BY selected_agent
             ORDER BY count DESC
-            LIMIT {args.top_agents}
+            LIMIT %s
         """
-        top_result = execute_query(top_agents_query)
+        top_result = execute_query(top_agents_query, (interval, args.top_agents))
 
         if top_result["success"]:
             result["top_agents"] = [
@@ -113,15 +148,15 @@ def main():
             ]
 
         # Get transformation stats
-        transform_query = f"""
+        transform_query = """
             SELECT
                 COUNT(*) as total,
                 AVG(CASE WHEN success THEN 1.0 ELSE 0.0 END) as success_rate,
                 AVG(transformation_duration_ms) as avg_duration_ms
             FROM agent_transformation_events
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE started_at > NOW() - %s::interval
         """
-        transform_result = execute_query(transform_query)
+        transform_result = execute_query(transform_query, (interval,))
 
         if transform_result["success"] and transform_result["rows"]:
             row = transform_result["rows"][0]

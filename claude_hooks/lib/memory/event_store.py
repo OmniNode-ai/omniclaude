@@ -17,7 +17,7 @@ import json
 import logging
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from config import settings
 
 from .event_models import EventType, IntentContextData, WorkflowEvent
+
 
 logger = logging.getLogger(__name__)
 
@@ -621,7 +622,7 @@ class EventStore:
         conn = sqlite3.connect(str(self.storage_path))
         cursor = conn.cursor()
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         query = """
             SELECT DISTINCT correlation_id
@@ -647,7 +648,7 @@ class EventStore:
         Returns:
             Number of events removed
         """
-        cutoff = datetime.utcnow() - timedelta(days=self.retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=self.retention_days)
 
         conn = sqlite3.connect(str(self.storage_path))
         cursor = conn.cursor()

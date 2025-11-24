@@ -18,6 +18,7 @@ from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 from agents.lib.agent_execution_mixin import AgentExecutionMixin
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

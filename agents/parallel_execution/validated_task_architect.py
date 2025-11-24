@@ -14,6 +14,7 @@ from typing import Any, Dict, List
 
 from quorum_minimal import MinimalQuorum, ValidationDecision
 
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv

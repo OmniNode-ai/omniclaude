@@ -20,6 +20,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+
 # Import AgentRouter (PYTHONPATH includes /app/lib via Dockerfile)
 try:
     from agent_router import AgentRouter
@@ -30,6 +31,7 @@ except ImportError:
     AgentRouter = None  # type: ignore
 
 from .postgres_logger import PostgresLogger
+
 
 logger = logging.getLogger(__name__)
 

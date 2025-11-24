@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 
+
 # Add hooks lib to path
 sys.path.insert(0, str(Path.home() / ".claude" / "hooks" / "lib"))
 

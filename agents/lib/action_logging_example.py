@@ -18,11 +18,13 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from action_logger import ActionLogger, log_action
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

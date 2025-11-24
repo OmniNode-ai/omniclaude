@@ -24,6 +24,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -52,6 +53,19 @@ def check_docker_services(verbose: bool = False) -> dict:
         # Check all services
         all_services = get_service_summary()
 
+        # Check if Docker is unavailable (CLI not installed, daemon not running, permission denied)
+        if not all_services.get("success", False):
+            return {
+                "success": False,
+                "error": all_services.get("error", "Failed to check Docker services"),
+                "total": 0,
+                "running": 0,
+                "stopped": 0,
+                "unhealthy": 0,
+                "healthy": 0,
+                "details": {},
+            }
+
         # Check archon services specifically
         archon_services = get_service_summary("archon-")
 
@@ -61,13 +75,20 @@ def check_docker_services(verbose: bool = False) -> dict:
         # Check app services
         app_services = get_service_summary("app")
 
+        # Extract counts
+        total = all_services.get("total", 0)
+        running = all_services.get("running", 0)
+        stopped = all_services.get("stopped", 0)
+        unhealthy = all_services.get("unhealthy", 0)
+        healthy = all_services.get("healthy", 0)
+
         return {
             "success": True,
-            "total": all_services.get("total", 0),
-            "running": all_services.get("running", 0),
-            "stopped": all_services.get("stopped", 0),
-            "unhealthy": all_services.get("unhealthy", 0),
-            "healthy": all_services.get("healthy", 0),
+            "total": total,
+            "running": running,
+            "stopped": stopped,
+            "unhealthy": unhealthy,
+            "healthy": healthy,
             "details": {
                 "archon": archon_services if verbose else None,
                 "omninode": omninode_services if verbose else None,
@@ -100,7 +121,8 @@ def check_infrastructure(verbose: bool = False) -> dict:
     # Check PostgreSQL
     try:
         postgres_result = execute_query(
-            "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'public'"
+            "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = %s",
+            ("public",),
         )
         if postgres_result["success"] and postgres_result["rows"]:
             table_count = postgres_result["rows"][0]["count"]
@@ -308,7 +330,12 @@ def format_output(data: dict, format_type: str) -> str:
         return "\n".join(lines)
 
 
-def main():
+def main() -> int:
+    """Check overall system health.
+
+    Returns:
+        Exit code (0=healthy, 1=degraded, 2=critical, 3=error)
+    """
     parser = argparse.ArgumentParser(description="Check system health")
     parser.add_argument(
         "--format",

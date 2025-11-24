@@ -41,7 +41,7 @@ import logging
 import os
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +50,7 @@ import requests
 
 from config import settings
 from lib.resilience import ResilientAPIClient, graceful_tracking
+
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,7 @@ class PatternTracker:
             "tool_name": context.get("tool_name", "unknown"),
             "framework": context.get("framework", ""),
             "pattern_type": context.get("pattern_type", "code"),
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "metadata": {
                 k: v
                 for k, v in context.items()
@@ -386,7 +387,7 @@ class PatternTracker:
             "language": context.get("language", "unknown"),
             "file_path": context.get("file_path", ""),
             "tool_name": context.get("tool_name", "unknown"),
-            "modified_at": datetime.utcnow().isoformat(),
+            "modified_at": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
             "metadata": context,
         }
@@ -472,7 +473,7 @@ class PatternTracker:
 
         # Prepare application data
         pattern_data = {
-            "applied_at": datetime.utcnow().isoformat(),
+            "applied_at": datetime.now(timezone.utc).isoformat(),
             "file_path": context.get("file_path", ""),
             "tool_name": context.get("tool_name", "unknown"),
             "reason": context.get("reason", "Pattern reused"),
@@ -565,7 +566,7 @@ class PatternTracker:
         pattern_data = {
             "code": merged_code,
             "merged_from": source_pattern_ids,
-            "merged_at": datetime.utcnow().isoformat(),
+            "merged_at": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
             "metadata": context,
         }

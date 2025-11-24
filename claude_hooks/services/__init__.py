@@ -16,6 +16,7 @@ from .event_handlers import (
 )
 from .hook_event_processor import HookEventProcessor
 
+
 __all__ = [
     "HookEventProcessor",
     "EventHandlerRegistry",

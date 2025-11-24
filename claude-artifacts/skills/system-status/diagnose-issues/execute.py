@@ -16,12 +16,28 @@ Created: 2025-11-12
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 try:
+    from constants import (
+        MAX_CONNECTIONS_THRESHOLD,
+        MAX_RESTART_COUNT_THRESHOLD,
+        QUERY_TIMEOUT_THRESHOLD_MS,
+        ROUTING_TIMEOUT_THRESHOLD_MS,
+    )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
     from kafka_helper import check_kafka_connection
@@ -32,9 +48,13 @@ except ImportError as e:
     sys.exit(3)
 
 
-def check_service_issues():
-    """Check for Docker service issues."""
-    issues = []
+def check_service_issues() -> List[Dict[str, Any]]:
+    """Check for Docker service issues.
+
+    Returns:
+        List of issue dictionaries containing severity, component, issue description, and recommendations
+    """
+    issues: List[Dict[str, Any]] = []
 
     try:
         containers = list_containers()
@@ -86,27 +106,41 @@ def check_service_issues():
             container_status = get_container_status(name)
             if (
                 container_status.get("success")
-                and container_status.get("restart_count", 0) > 5
+                and container_status.get("restart_count", 0)
+                > MAX_RESTART_COUNT_THRESHOLD
             ):
                 issues.append(
                     {
                         "severity": "warning",
                         "component": name,
                         "issue": "High restart count",
-                        "details": f"Restarted {container_status['restart_count']} times",
+                        "details": f"Restarted {container_status['restart_count']} times (threshold: {MAX_RESTART_COUNT_THRESHOLD})",
                         "recommendation": f"Investigate crashes: docker logs {name}",
                         "auto_fix_available": False,
                     }
                 )
 
+    except (ConnectionError, TimeoutError) as e:
+        logger.error(f"Docker connectivity check failed: {e}", exc_info=True)
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "docker",
+                "issue": "Docker connection failed",
+                "details": str(e),
+                "recommendation": "Verify Docker daemon is running and accessible",
+                "auto_fix_available": False,
+            }
+        )
     except Exception as e:
+        logger.exception(f"Unexpected error in Docker service check: {e}")
         issues.append(
             {
                 "severity": "critical",
                 "component": "docker",
                 "issue": "Service check failed",
-                "details": str(e),
-                "recommendation": "Verify Docker is accessible",
+                "details": f"Unexpected error: {e}",
+                "recommendation": "Check Docker installation and permissions",
                 "auto_fix_available": False,
             }
         )
@@ -114,106 +148,156 @@ def check_service_issues():
     return issues
 
 
-def check_infrastructure_issues():
-    """Check for infrastructure connectivity issues."""
-    issues = []
+def check_infrastructure_issues() -> List[Dict[str, Any]]:
+    """Check for infrastructure connectivity issues.
 
-    # Check Kafka
+    Returns:
+        List of issue dictionaries containing severity, component, issue description, and recommendations
+    """
+    issues: List[Dict[str, Any]] = []
+
+    # Check Kafka (independent check - failures don't affect other checks)
+    kafka_result = None
     try:
-        kafka = check_kafka_connection()
-        if not kafka.get("reachable"):
+        kafka_result = check_kafka_connection()
+        if not kafka_result.get("reachable"):
             issues.append(
                 {
                     "severity": "critical",
                     "component": "kafka",
                     "issue": "Kafka broker unreachable",
-                    "details": kafka.get("error", "Connection failed"),
+                    "details": kafka_result.get("error", "Connection failed"),
                     "recommendation": "Check Kafka broker: docker logs omninode-bridge-redpanda",
                     "auto_fix_available": False,
                 }
             )
+    except (ConnectionError, TimeoutError) as e:
+        logger.error(f"Kafka connectivity check failed: {e}", exc_info=True)
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "kafka",
+                "issue": "Kafka connection failed",
+                "details": str(e),
+                "recommendation": "Verify Kafka broker is running and KAFKA_BOOTSTRAP_SERVERS in .env is correct",
+                "auto_fix_available": False,
+            }
+        )
     except Exception as e:
+        logger.exception(f"Unexpected error in Kafka check: {e}")
         issues.append(
             {
                 "severity": "critical",
                 "component": "kafka",
                 "issue": "Kafka check failed",
-                "details": str(e),
-                "recommendation": "Verify Kafka configuration in .env",
+                "details": f"Unexpected error: {e}",
+                "recommendation": "Verify Kafka configuration in .env and check kafka_helper.py",
                 "auto_fix_available": False,
             }
         )
 
-    # Check PostgreSQL
+    # Check PostgreSQL (independent check - failures don't affect other checks)
+    postgres_result = None
     try:
-        result = execute_query("SELECT 1")
-        if not result.get("success"):
+        postgres_result = execute_query("SELECT 1")
+        if not postgres_result.get("success"):
             issues.append(
                 {
                     "severity": "critical",
                     "component": "postgres",
                     "issue": "PostgreSQL unreachable",
-                    "details": result.get("error", "Connection failed"),
-                    "recommendation": "Verify PostgreSQL credentials in .env file",
+                    "details": postgres_result.get("error", "Connection failed"),
+                    "recommendation": "Verify PostgreSQL credentials in .env file and source .env before running",
                     "auto_fix_available": False,
                 }
             )
         else:
             # Check connection pool
-            conn_result = execute_query(
+            try:
+                conn_result = execute_query(
+                    """
+                    SELECT count(*) as active
+                    FROM pg_stat_activity
+                    WHERE state = 'active'
                 """
-                SELECT count(*) as active
-                FROM pg_stat_activity
-                WHERE state = 'active'
-            """
-            )
-            if conn_result.get("success") and conn_result.get("rows"):
-                active = conn_result["rows"][0]["active"]
-                if active > 80:
-                    issues.append(
-                        {
-                            "severity": "warning",
-                            "component": "postgres",
-                            "issue": "Connection pool near capacity",
-                            "details": f"Active connections: {active}/100",
-                            "recommendation": "Consider increasing max_connections or optimizing queries",
-                            "auto_fix_available": False,
-                        }
-                    )
+                )
+                if conn_result.get("success") and conn_result.get("rows"):
+                    active = conn_result["rows"][0]["active"]
+                    if active > MAX_CONNECTIONS_THRESHOLD:
+                        issues.append(
+                            {
+                                "severity": "warning",
+                                "component": "postgres",
+                                "issue": "Connection pool near capacity",
+                                "details": f"Active connections: {active}/{MAX_CONNECTIONS_THRESHOLD + 20}",
+                                "recommendation": "Consider increasing max_connections or optimizing queries",
+                                "auto_fix_available": False,
+                            }
+                        )
+            except Exception as e:
+                logger.warning(f"Could not check PostgreSQL connection pool: {e}")
+                # Don't add to issues - pool check is optional
+    except (ConnectionError, TimeoutError) as e:
+        logger.error(f"PostgreSQL connectivity check failed: {e}", exc_info=True)
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "postgres",
+                "issue": "PostgreSQL connection failed",
+                "details": str(e),
+                "recommendation": "Verify PostgreSQL is running: docker ps | grep postgres",
+                "auto_fix_available": False,
+            }
+        )
     except Exception as e:
+        logger.exception(f"Unexpected error in PostgreSQL check: {e}")
         issues.append(
             {
                 "severity": "critical",
                 "component": "postgres",
                 "issue": "PostgreSQL check failed",
-                "details": str(e),
-                "recommendation": "Verify database is running and accessible",
+                "details": f"Unexpected error: {e}",
+                "recommendation": "Verify database is running and POSTGRES_* variables in .env are correct",
                 "auto_fix_available": False,
             }
         )
 
-    # Check Qdrant
+    # Check Qdrant (independent check - failures don't affect other checks)
+    qdrant_result = None
     try:
-        qdrant = check_qdrant_connection()
-        if not qdrant.get("reachable"):
+        qdrant_result = check_qdrant_connection()
+        if not qdrant_result.get("reachable"):
             issues.append(
                 {
                     "severity": "critical",
                     "component": "qdrant",
                     "issue": "Qdrant unreachable",
-                    "details": qdrant.get("error", "Connection failed"),
+                    "details": qdrant_result.get("error", "Connection failed"),
                     "recommendation": "Check Qdrant service: docker logs archon-qdrant",
                     "auto_fix_available": False,
                 }
             )
+    except (ConnectionError, TimeoutError) as e:
+        logger.error(f"Qdrant connectivity check failed: {e}", exc_info=True)
+        issues.append(
+            {
+                "severity": "critical",
+                "component": "qdrant",
+                "issue": "Qdrant connection failed",
+                "details": str(e),
+                "recommendation": "Verify Qdrant is running and QDRANT_URL in .env is correct",
+                "auto_fix_available": False,
+            }
+        )
     except Exception as e:
+        logger.exception(f"Unexpected error in Qdrant check: {e}")
         issues.append(
             {
                 "severity": "critical",
                 "component": "qdrant",
                 "issue": "Qdrant check failed",
-                "details": str(e),
-                "recommendation": "Verify Qdrant configuration",
+                "details": f"Unexpected error: {e}",
+                "recommendation": "Verify Qdrant configuration in .env and check qdrant_helper.py",
                 "auto_fix_available": False,
             }
         )
@@ -221,9 +305,13 @@ def check_infrastructure_issues():
     return issues
 
 
-def check_performance_issues():
-    """Check for performance degradation."""
-    issues = []
+def check_performance_issues() -> List[Dict[str, Any]]:
+    """Check for performance degradation.
+
+    Returns:
+        List of issue dictionaries containing severity, component, issue description, and recommendations
+    """
+    issues: List[Dict[str, Any]] = []
 
     try:
         # Check manifest injection performance
@@ -236,13 +324,13 @@ def check_performance_issues():
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")
-            if avg_time and float(avg_time) > 5000:
+            if avg_time and float(avg_time) > QUERY_TIMEOUT_THRESHOLD_MS:
                 issues.append(
                     {
                         "severity": "warning",
                         "component": "manifest-injection",
                         "issue": "High manifest injection latency",
-                        "details": f"Avg query time: {int(avg_time)}ms (target: <2000ms)",
+                        "details": f"Avg query time: {int(avg_time)}ms (target: <{QUERY_TIMEOUT_THRESHOLD_MS}ms)",
                         "recommendation": "Check Qdrant performance and collection sizes",
                         "auto_fix_available": False,
                     }
@@ -258,20 +346,21 @@ def check_performance_issues():
 
         if result.get("success") and result.get("rows"):
             avg_time = result["rows"][0].get("avg_time")
-            if avg_time and float(avg_time) > 100:
+            if avg_time and float(avg_time) > ROUTING_TIMEOUT_THRESHOLD_MS:
                 issues.append(
                     {
                         "severity": "warning",
                         "component": "routing",
                         "issue": "High routing latency",
-                        "details": f"Avg routing time: {int(avg_time)}ms (target: <100ms)",
+                        "details": f"Avg routing time: {int(avg_time)}ms (target: <{ROUTING_TIMEOUT_THRESHOLD_MS}ms)",
                         "recommendation": "Review routing algorithm efficiency",
                         "auto_fix_available": False,
                     }
                 )
-    except Exception:
-        # Silently skip performance checks if tables don't exist
-        pass
+    except Exception as e:
+        # Performance checks are optional - log but don't fail if tables don't exist
+        logger.info(f"Performance checks skipped (tables may not exist yet): {e}")
+        # Not adding to issues - performance monitoring is optional during initial setup
 
     return issues
 
@@ -305,7 +394,12 @@ def format_text_output(data: dict) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main() -> int:
+    """Diagnose system issues.
+
+    Returns:
+        Exit code (0=healthy, 1=warnings, 2=critical, 3=error)
+    """
     parser = argparse.ArgumentParser(description="Diagnose system issues")
     parser.add_argument("--severity", help="Filter by severity (critical,warning,info)")
     parser.add_argument(

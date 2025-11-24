@@ -6,7 +6,7 @@ Defines data structures for tracking pipeline execution, validation gates,
 and stage progress across the 6-stage generation pipeline.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -50,7 +50,8 @@ class ValidationGate(BaseModel):
     )
     duration_ms: int = Field(..., description="Gate execution time in milliseconds")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Gate execution timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Gate execution timestamp",
     )
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})

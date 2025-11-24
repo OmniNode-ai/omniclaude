@@ -33,6 +33,7 @@ import uuid
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
+
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -40,6 +41,7 @@ from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualit
 
 # Import Pydantic Settings for type-safe configuration
 from config import settings
+
 
 try:
     from qdrant_client import QdrantClient

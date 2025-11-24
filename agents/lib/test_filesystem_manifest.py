@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add lib directory to path
 lib_path = Path(__file__).parent
 if str(lib_path) not in sys.path:

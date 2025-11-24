@@ -18,6 +18,7 @@ from uuid import uuid4
 import pytest
 from dotenv import load_dotenv
 
+
 # Only load .env in local development (not in CI)
 # In CI, environment variables are set by GitHub Actions and should not be overridden
 if not os.getenv("CI"):
@@ -35,8 +36,7 @@ else:
     print("ℹ️  Running in CI environment - using GitHub Actions environment variables")
 
 # Import project modules
-# Temporarily commented out - contract_validator depends on omnibase_core
-# from agents.lib.generation.contract_validator import ContractValidator, ValidationResult
+from agents.lib.generation.contract_validator import ContractValidator, ValidationResult
 
 
 # -------------------------------------------------------------------------
@@ -63,8 +63,12 @@ lifecycle:
   initialization: ["connect_to_database"]
   cleanup: ["close_connection"]
 dependencies:
-  - asyncpg
-  - psycopg2-binary
+  - name: asyncpg
+    module: asyncpg
+    dependency_type: module
+  - name: psycopg2-binary
+    module: psycopg2
+    dependency_type: module
 performance:
   expected_duration_ms: 100
   timeout_ms: 5000
@@ -81,11 +85,19 @@ description: "Transforms data using pure computation"
 node_type: COMPUTE
 input_model: ModelDataInput
 output_model: ModelDataOutput
-error_model: ModelOnexError
-computation_type: transformation
-is_pure: true
+algorithm:
+  algorithm_type: transformation
+  factors:
+    factor_1:
+      weight: 0.6
+      calculation_method: linear
+    factor_2:
+      weight: 0.4
+      calculation_method: exponential
 dependencies:
-  - numpy
+  - name: numpy
+    module: numpy
+    dependency_type: module
 performance:
   expected_duration_ms: 50
   timeout_ms: 2000
@@ -102,14 +114,17 @@ description: "Aggregates data and emits intents"
 node_type: REDUCER
 input_model: ModelAggregationInput
 output_model: ModelAggregationOutput
-error_model: ModelOnexError
 aggregation_strategy: sum
-state_management: true
+state_management:
+  state_management_enabled: true
+  state_scope: node_local
 intent_emissions:
   - intent_type: data_aggregated
     destination: event_bus
 dependencies:
-  - redis
+  - name: redis
+    module: redis
+    dependency_type: module
 performance:
   expected_duration_ms: 200
   timeout_ms: 10000
@@ -126,16 +141,18 @@ description: "Orchestrates multi-step workflow"
 node_type: ORCHESTRATOR
 input_model: ModelWorkflowInput
 output_model: ModelWorkflowOutput
-error_model: ModelOnexError
-workflow_steps:
-  - step: validate_input
-  - step: process_data
-  - step: store_results
-lease_management: true
+workflow_coordination:
+  workflow_coordination_enabled: true
+  orchestration_pattern: sequential
 dependencies:
-  - redis
-  - asyncio
+  - name: redis
+    module: redis
+    dependency_type: module
+  - name: asyncio
+    module: asyncio
+    dependency_type: module
 performance:
+  single_operation_max_ms: 500
   expected_duration_ms: 500
   timeout_ms: 30000
 """
@@ -156,19 +173,18 @@ input_model: ModelInput
 # -------------------------------------------------------------------------
 
 
-# Temporarily commented out - contract_validator depends on omnibase_core
-# @pytest.fixture
-# def contract_validator() -> ContractValidator:
-#     """Create contract validator instance."""
-#     return ContractValidator()
-#
-#
-# @pytest.fixture
-# def contract_validator_with_search_paths(tmp_path: Path) -> ContractValidator:
-#     """Create contract validator with model search paths."""
-#     models_dir = tmp_path / "models"
-#     models_dir.mkdir()
-#     return ContractValidator(model_search_paths=[models_dir])
+@pytest.fixture
+def contract_validator() -> ContractValidator:
+    """Create contract validator instance."""
+    return ContractValidator()
+
+
+@pytest.fixture
+def contract_validator_with_search_paths(tmp_path: Path) -> ContractValidator:
+    """Create contract validator with model search paths."""
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    return ContractValidator(model_search_paths=[models_dir])
 
 
 # -------------------------------------------------------------------------
@@ -267,29 +283,29 @@ def correlation_id() -> str:
 # Validation Result Helpers
 # -------------------------------------------------------------------------
 
-# Temporarily commented out - ValidationResult depends on omnibase_core
-# def create_valid_validation_result(
-#     node_type: str = "EFFECT",
-# ) -> ValidationResult:
-#     """Helper to create valid validation result for testing."""
-#     return ValidationResult(
-#         valid=True,
-#         node_type=node_type,
-#         schema_compliance=True,
-#         model_references_valid=True,
-#     )
-#
-#
-# def create_invalid_validation_result(
-#     node_type: str = "EFFECT", errors: list = None
-# ) -> ValidationResult:
-#     """Helper to create invalid validation result for testing."""
-#     return ValidationResult(
-#         valid=False,
-#         node_type=node_type,
-#         schema_compliance=False,
-#         errors=errors or [{"loc": ["test"], "msg": "Test error", "type": "test"}],
-#     )
+
+def create_valid_validation_result(
+    node_type: str = "EFFECT",
+) -> ValidationResult:
+    """Helper to create valid validation result for testing."""
+    return ValidationResult(
+        valid=True,
+        node_type=node_type,
+        schema_compliance=True,
+        model_references_valid=True,
+    )
+
+
+def create_invalid_validation_result(
+    node_type: str = "EFFECT", errors: list = None
+) -> ValidationResult:
+    """Helper to create invalid validation result for testing."""
+    return ValidationResult(
+        valid=False,
+        node_type=node_type,
+        schema_compliance=False,
+        errors=errors or [{"loc": ["test"], "msg": "Test error", "type": "test"}],
+    )
 
 
 # -------------------------------------------------------------------------
@@ -334,6 +350,111 @@ def pytest_configure(config):
         "markers",
         "benchmark: marks tests as performance benchmarks (deselect with '-m \"not benchmark\"')",
     )
+
+
+# -------------------------------------------------------------------------
+# Database Wait Helper for Kafka Consumer Tests
+# -------------------------------------------------------------------------
+
+
+async def wait_for_db_condition(
+    db_pool,
+    query: str,
+    expected_condition,
+    timeout_seconds: float = 10.0,
+    poll_interval: float = 0.2,
+    *query_args,
+):
+    """
+    Wait for a database condition to be met with retry logic.
+
+    Args:
+        db_pool: asyncpg connection pool
+        query: SQL query to execute
+        expected_condition: Callable that takes query result and returns True if condition met
+        timeout_seconds: Maximum time to wait
+        poll_interval: Time between polls
+        *query_args: Arguments for the query
+
+    Returns:
+        Query result when condition is met
+
+    Raises:
+        TimeoutError: If condition not met within timeout
+    """
+    start_time = asyncio.get_event_loop().time()
+
+    while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        async with db_pool.acquire() as conn:
+            result = (
+                await conn.fetchval(query, *query_args)
+                if query_args
+                else await conn.fetchval(query)
+            )
+
+            if expected_condition(result):
+                return result
+
+        await asyncio.sleep(poll_interval)
+
+    # Timeout - get final result for error message
+    async with db_pool.acquire() as conn:
+        final_result = (
+            await conn.fetchval(query, *query_args)
+            if query_args
+            else await conn.fetchval(query)
+        )
+
+    raise TimeoutError(
+        f"Database condition not met within {timeout_seconds}s. "
+        f"Final result: {final_result}"
+    )
+
+
+@pytest.fixture
+async def wait_for_records():
+    """
+    Fixture that provides a helper to wait for records in database.
+
+    Usage in tests:
+        count = await wait_for_records(
+            db_pool,
+            correlation_id=correlation_id,
+            expected_count=4,
+            timeout_seconds=10.0
+        )
+    """
+
+    async def _wait_for_records(
+        db_pool,
+        correlation_id: str = None,
+        agent_name: str = None,
+        expected_count: int = 1,
+        timeout_seconds: float = 10.0,
+        poll_interval: float = 0.2,
+    ):
+        """Wait for expected number of records to appear in agent_actions table."""
+        if correlation_id:
+            query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
+            args = (correlation_id,)
+        elif agent_name:
+            query = (
+                f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
+            )
+            args = ()
+        else:
+            raise ValueError("Must provide either correlation_id or agent_name")
+
+        return await wait_for_db_condition(
+            db_pool,
+            query,
+            lambda count: count >= expected_count,
+            timeout_seconds,
+            poll_interval,
+            *args if args else (),
+        )
+
+    return _wait_for_records
 
 
 # -------------------------------------------------------------------------

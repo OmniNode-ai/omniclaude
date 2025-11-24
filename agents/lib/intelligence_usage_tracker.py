@@ -36,6 +36,7 @@ from uuid import UUID
 
 import asyncpg
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

@@ -8,6 +8,7 @@ import pytest
 
 from agents.lib.manifest_injector import ManifestInjector, inject_manifest
 
+
 # Mock data for event bus responses
 MOCK_EXECUTION_PATTERNS_RESPONSE = {
     "patterns": [

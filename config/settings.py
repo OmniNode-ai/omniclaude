@@ -46,6 +46,7 @@ from dotenv import load_dotenv
 from pydantic import Field, HttpUrl, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -349,11 +350,17 @@ class Settings(BaseSettings):
 
     # PostgreSQL Connection Pool Configuration
     postgres_pool_min_size: int = Field(
-        default=2, ge=1, le=100, description="Minimum connection pool size"
+        default=1,
+        ge=1,
+        le=100,
+        description="Minimum connection pool size (psycopg2 SimpleConnectionPool minconn)",
     )
 
     postgres_pool_max_size: int = Field(
-        default=10, ge=1, le=100, description="Maximum connection pool size"
+        default=5,
+        ge=1,
+        le=100,
+        description="Maximum connection pool size (psycopg2 SimpleConnectionPool maxconn)",
     )
 
     # =========================================================================
@@ -794,6 +801,18 @@ class Settings(BaseSettings):
         if v > 100:
             logger.warning(
                 f"Pool size {v} is very large, consider reducing for resource efficiency"
+            )
+        return v
+
+    @field_validator("postgres_pool_max_size")
+    @classmethod
+    def validate_pool_max_size(cls, v: int, info: ValidationInfo) -> int:
+        """Validate max pool size is greater than or equal to min pool size."""
+        # Get min_size from the data being validated
+        min_size = info.data.get("postgres_pool_min_size")
+        if min_size is not None and v < min_size:
+            raise ValueError(
+                f"postgres_pool_max_size ({v}) must be >= postgres_pool_min_size ({min_size})"
             )
         return v
 

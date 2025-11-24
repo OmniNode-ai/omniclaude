@@ -29,6 +29,7 @@ from lib.resilience import (
     graceful_tracking,
 )
 
+
 # ============================================================================
 # ResilientExecutor Tests
 # ============================================================================
@@ -309,9 +310,9 @@ async def test_cache_cleanup_old_events(tmp_path):
         event_data = json.load(f)
 
     # Set old timestamp (2 days ago)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    old_time = datetime.utcnow() - timedelta(days=2)
+    old_time = datetime.now(timezone.utc) - timedelta(days=2)
     event_data["timestamp"] = old_time.isoformat()
 
     with open(cache_files[0], "w") as f:

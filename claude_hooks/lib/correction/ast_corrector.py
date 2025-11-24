@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .framework_detector import FrameworkMethodDetector
 
+
 logger = logging.getLogger(__name__)
 
 # Try to import libcst
@@ -88,12 +89,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
         self.current_function = None
         self.current_class = None
 
-    def visit_ClassDef(self, node) -> bool:
+    def visit_ClassDef(self, node) -> bool:  # noqa: N802
         """Track current class for framework context."""
         self.current_class = node
         return True
 
-    def leave_ClassDef(self, original_node, updated_node):
+    def leave_ClassDef(self, original_node, updated_node):  # noqa: N802
         """Handle class name renaming and exit class context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -117,12 +118,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
         self.current_class = None
         return updated_node
 
-    def visit_FunctionDef(self, node) -> bool:
+    def visit_FunctionDef(self, node) -> bool:  # noqa: N802
         """Track current function for framework context."""
         self.current_function = node
         return True
 
-    def leave_FunctionDef(self, original_node, updated_node):
+    def leave_FunctionDef(self, original_node, updated_node):  # noqa: N802
         """Handle function name renaming and exit function context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -164,7 +165,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
         self.current_function = None
         return updated_node
 
-    def leave_Name(self, original_node, updated_node):
+    def leave_Name(self, original_node, updated_node):  # noqa: N802
         """Rename variable/identifier names at specific line/column positions."""
         if not LIBCST_AVAILABLE:
             return updated_node

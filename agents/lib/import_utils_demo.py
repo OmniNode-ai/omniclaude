@@ -83,6 +83,7 @@ from import_utils import (  # noqa: E402 (demo file - import shown in context)
     import_from_lib,
 )
 
+
 # Import modules
 intelligence_event_client = import_from_lib("intelligence_event_client")
 intelligence_cache = import_from_lib("intelligence_cache")

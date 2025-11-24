@@ -32,6 +32,7 @@ from aiohttp import web
 from .config import get_config
 from .router_event_handler import RouterEventHandler
 
+
 logger = logging.getLogger(__name__)
 
 

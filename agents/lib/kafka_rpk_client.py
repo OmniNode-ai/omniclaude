@@ -4,13 +4,24 @@ Redpanda rpk-based Kafka client (workaround for advertised listener issues).
 
 Uses docker exec with rpk CLI to publish/consume messages.
 More reliable than Python Kafka clients when dealing with Docker-mapped ports.
+
+All methods follow standardized API contract with TypedDict return values.
+See kafka_types.py for complete API documentation.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+# Import standardized Kafka result types
+# Add _shared to path for skills compatibility
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "skills" / "_shared"))
+from kafka_types import KafkaConsumeResult, KafkaPublishResult
 
 
 class RpkKafkaClient:
@@ -52,7 +63,7 @@ class RpkKafkaClient:
         except subprocess.TimeoutExpired:
             raise RuntimeError("Docker check timed out. Docker may not be running.")
 
-    def publish(self, topic: str, payload: Dict[str, Any]) -> None:
+    def publish(self, topic: str, payload: Dict[str, Any]) -> KafkaPublishResult:
         """
         Publish message to Kafka topic using rpk.
 
@@ -60,8 +71,20 @@ class RpkKafkaClient:
             topic: Kafka topic name
             payload: Message payload (will be JSON-encoded)
 
-        Raises:
-            RuntimeError: If publish fails
+        Returns:
+            KafkaPublishResult with:
+            - success: True if message published, False otherwise
+            - topic: Topic name
+            - data: Publish metadata on success (None for rpk - metadata not easily parsable)
+            - error: Error message on failure, None on success
+
+        Example:
+            >>> client = RpkKafkaClient("omninode-bridge-redpanda")
+            >>> result = client.publish("my-topic", {"key": "value"})
+            >>> if result["success"]:
+            ...     print("Message published successfully")
+            ... else:
+            ...     print(f"Publish failed: {result['error']}")
         """
         data = json.dumps(payload)
 
@@ -88,26 +111,47 @@ class RpkKafkaClient:
             # rpk sends success output to stdout, errors to stderr
             # Success format: "Produced to partition N at offset M with timestamp T."
             if result.returncode == 0:
-                return  # Success (rpk returned 0)
+                return {
+                    "success": True,
+                    "topic": topic,
+                    "data": None,  # rpk output not easily parsable for metadata
+                    "error": None,
+                }
             else:
                 # This shouldn't happen due to check=True, but handle anyway
                 output = result.stdout.decode("utf-8") if result.stdout else ""
                 error = result.stderr.decode("utf-8") if result.stderr else ""
-                raise RuntimeError(
-                    f"rpk failed with code {result.returncode}: {output} {error}"
-                )
+                return {
+                    "success": False,
+                    "topic": topic,
+                    "data": None,
+                    "error": f"rpk failed with code {result.returncode}: {output} {error}",
+                }
 
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode("utf-8") if e.stderr else str(e)
-            raise RuntimeError(f"rpk publish failed: {error_msg}") from e
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"rpk publish failed: {error_msg}",
+            }
         except subprocess.TimeoutExpired:
-            raise RuntimeError("rpk publish timed out after 10 seconds")
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": "rpk publish timed out after 10 seconds",
+            }
         except Exception as e:
-            raise RuntimeError(f"rpk publish error: {e}") from e
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"rpk publish error: {str(e)}",
+            }
 
-    def consume_one(
-        self, topic: str, timeout_sec: float = 10.0
-    ) -> Optional[Dict[str, Any]]:
+    def consume_one(self, topic: str, timeout_sec: float = 10.0) -> KafkaConsumeResult:
         """
         Consume one message from topic.
 
@@ -116,7 +160,22 @@ class RpkKafkaClient:
             timeout_sec: Timeout in seconds
 
         Returns:
-            Parsed JSON message or None if no message available
+            KafkaConsumeResult with:
+            - success: True if message consumed or no message available, False on error
+            - topic: Topic name
+            - data: Message payload on success, None if no message or error
+            - error: Error message on failure, None on success
+            - timeout: True if no message within timeout, False otherwise
+
+        Example:
+            >>> client = RpkKafkaClient("omninode-bridge-redpanda")
+            >>> result = client.consume_one("my-topic", timeout_sec=5.0)
+            >>> if result["success"] and result["data"]:
+            ...     print(f"Received: {result['data']}")
+            ... elif result.get("timeout"):
+            ...     print("No message available within timeout")
+            ... else:
+            ...     print(f"Consume failed: {result['error']}")
         """
         try:
             # Use rpk to consume one message
@@ -143,15 +202,57 @@ class RpkKafkaClient:
 
             output = result.stdout.decode("utf-8").strip()
             if output:
-                return json.loads(output)
+                try:
+                    data = json.loads(output)
+                    return {
+                        "success": True,
+                        "topic": topic,
+                        "data": data,
+                        "error": None,
+                        "timeout": False,
+                    }
+                except json.JSONDecodeError as e:
+                    return {
+                        "success": False,
+                        "topic": topic,
+                        "data": None,
+                        "error": f"JSON decode error: {str(e)}",
+                        "timeout": False,
+                    }
             else:
-                return None
+                # No message available
+                return {
+                    "success": True,
+                    "topic": topic,
+                    "data": None,
+                    "error": None,
+                    "timeout": False,
+                }
 
         except subprocess.TimeoutExpired:
-            return None  # No message within timeout
-        except subprocess.CalledProcessError:
-            return None  # Topic doesn't exist or other error
-        except json.JSONDecodeError:
-            return None  # Invalid JSON
-        except Exception:
-            return None
+            # No message within timeout
+            return {
+                "success": True,
+                "topic": topic,
+                "data": None,
+                "error": None,
+                "timeout": True,
+            }
+        except subprocess.CalledProcessError as e:
+            # Topic doesn't exist or other rpk error
+            error_msg = e.stderr.decode("utf-8") if e.stderr else str(e)
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"rpk consume failed: {error_msg}",
+                "timeout": False,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"Consume error: {str(e)}",
+                "timeout": False,
+            }

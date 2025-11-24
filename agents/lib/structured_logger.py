@@ -30,6 +30,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import UUID
 
+
 # Context variables for thread-safe correlation tracking
 _correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 _session_id: ContextVar[Optional[str]] = ContextVar("session_id", default=None)

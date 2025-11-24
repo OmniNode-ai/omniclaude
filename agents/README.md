@@ -351,7 +351,7 @@ intelligence_integration:
 ### Prerequisites
 
 - Claude Code CLI installed
-- Python 3.11+ (for parallel execution and quality validation)
+- Python 3.12+ (for parallel execution and quality validation)
 - PostgreSQL 15+ (optional, for pattern tracking)
 - Docker (optional, for production infrastructure)
 

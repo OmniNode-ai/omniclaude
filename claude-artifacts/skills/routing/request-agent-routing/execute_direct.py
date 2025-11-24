@@ -25,29 +25,76 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+
 # Determine project root (skills are in ~/.claude/skills, not in project)
-OMNICLAUDE_PATH = Path(
-    os.environ.get("OMNICLAUDE_PATH", "/Volumes/PRO-G40/Code/omniclaude")
-)
+# Respect explicit environment variable - only fallback if NOT explicitly set
+_explicit_omniclaude_path = os.environ.get("OMNICLAUDE_PATH")
+if _explicit_omniclaude_path:
+    # Environment variable explicitly set - respect it (validation happens below)
+    OMNICLAUDE_PATH = Path(_explicit_omniclaude_path)
+else:
+    # No explicit env var - try default then fallbacks
+    OMNICLAUDE_PATH = Path.home() / "Code" / "omniclaude"
+    if not OMNICLAUDE_PATH.exists():
+        # Fallback to common locations only when env var not set
+        for fallback in [
+            Path("/Users") / "Shared" / "omniclaude",
+            Path("/Volumes/PRO-G40/Code/omniclaude"),
+        ]:
+            if fallback.exists():
+                OMNICLAUDE_PATH = fallback
+                break
+
+# Validate OMNICLAUDE_PATH before adding to sys.path
 if not OMNICLAUDE_PATH.exists():
-    # Fallback to common locations
-    for fallback in [
-        Path.home() / "Code" / "omniclaude",
-        Path("/Volumes/PRO-G40/Code/omniclaude"),
-    ]:
-        if fallback.exists():
-            OMNICLAUDE_PATH = fallback
-            break
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"OMNICLAUDE_PATH not found: {OMNICLAUDE_PATH}",
+                "hint": "Set OMNICLAUDE_PATH environment variable or ensure omniclaude directory exists in ~/Code/",
+            }
+        )
+    )
+    sys.exit(1)
 
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings
 
+
 # Add _shared to path for utilities
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
+shared_path = Path(__file__).parent.parent.parent / "_shared"
+if not shared_path.exists():
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"Shared utilities path not found: {shared_path}",
+                "hint": "Ensure skills/_shared directory exists",
+            }
+        )
+    )
+    sys.exit(1)
+
+sys.path.insert(0, str(shared_path))
 from db_helper import get_correlation_id
 
+
 # Add agents/lib to path for AgentRouter
-sys.path.insert(0, str(OMNICLAUDE_PATH / "agents" / "lib"))
+agents_lib_path = OMNICLAUDE_PATH / "agents" / "lib"
+if not agents_lib_path.exists():
+    print(
+        json.dumps(
+            {
+                "success": False,
+                "error": f"AgentRouter library path not found: {agents_lib_path}",
+                "hint": "Ensure OMNICLAUDE_PATH is set correctly and agents/lib directory exists",
+            }
+        )
+    )
+    sys.exit(1)
+
+sys.path.insert(0, str(agents_lib_path))
 
 
 def request_routing_direct(

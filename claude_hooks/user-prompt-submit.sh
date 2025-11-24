@@ -32,9 +32,17 @@ fi
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
 # Kafka/Redpanda configuration for event-based routing
-# Use remote Kafka at 192.168.86.200:29092 (from .env)
-export KAFKA_BOOTSTRAP_SERVERS="${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}"
-export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29092}"
+# IMPORTANT: KAFKA_BOOTSTRAP_SERVERS should be set in .env file
+# If not set, we use a development fallback with an explicit warning
+if [[ -z "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
+    # Development fallback (only used if .env not sourced)
+    export KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"
+    echo "WARNING: KAFKA_BOOTSTRAP_SERVERS not set in .env. Using development fallback: 192.168.86.200:29092" >&2
+    echo "         For production, set KAFKA_BOOTSTRAP_SERVERS in .env file." >&2
+fi
+
+# Set KAFKA_BROKERS as alias to KAFKA_BOOTSTRAP_SERVERS (for backward compatibility)
+export KAFKA_BROKERS="${KAFKA_BROKERS:-$KAFKA_BOOTSTRAP_SERVERS}"
 
 # Database credentials for hook event logging (required from .env)
 # Use POSTGRES_PASSWORD from .env for database connections

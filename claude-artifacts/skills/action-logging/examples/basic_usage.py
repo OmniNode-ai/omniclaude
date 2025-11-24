@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+
 # Add project root and agents/lib to path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root / "agents" / "lib"))
@@ -19,6 +20,7 @@ sys.path.insert(0, str(project_root))
 
 # Load environment from .env file
 from dotenv import load_dotenv
+
 
 env_path = project_root / ".env"
 if env_path.exists():

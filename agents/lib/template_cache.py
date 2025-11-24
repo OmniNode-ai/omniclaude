@@ -47,6 +47,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -534,12 +535,24 @@ class TemplateCache:
             return
 
         try:
-            asyncio.get_running_loop()
-            # If we have a running loop, schedule cleanup
-            asyncio.create_task(self.cleanup_async(timeout))
+            loop = asyncio.get_running_loop()
+            # If we have a running loop, schedule cleanup as a tracked task
+            task = asyncio.create_task(self.cleanup_async(timeout))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+            logger.debug(
+                f"Scheduled cleanup task for {len(self._background_tasks)-1} background tasks"
+            )
         except RuntimeError:
-            # No event loop running - tasks will be cleaned up by garbage collector
-            logger.debug("No event loop running, skipping task cleanup")
+            # No event loop running - try to run cleanup in new loop
+            try:
+                asyncio.run(self.cleanup_async(timeout))
+                logger.debug("Cleanup completed in new event loop")
+            except RuntimeError as e:
+                # Can't create event loop (maybe one is being closed)
+                logger.debug(
+                    f"Could not run cleanup: {e}, tasks will be cleaned up by garbage collector"
+                )
 
     async def __aenter__(self):
         """Async context manager entry."""

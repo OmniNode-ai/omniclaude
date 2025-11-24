@@ -57,6 +57,7 @@ from prometheus_client import (
     generate_latest,
 )
 
+
 logger = logging.getLogger(__name__)
 
 # ============================================================================

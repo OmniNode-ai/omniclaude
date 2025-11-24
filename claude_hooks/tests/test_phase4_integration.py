@@ -27,12 +27,14 @@ import pytest
 
 from config import settings
 
+
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from pattern_id_system import PatternIDSystem, PatternLineageDetector
 from pattern_tracker import PatternTracker
 from phase4_api_client import Phase4APIClient
+
 
 # ============================================================================
 # Test Configuration

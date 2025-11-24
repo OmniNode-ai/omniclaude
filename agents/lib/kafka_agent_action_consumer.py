@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 import asyncpg
 from kafka import KafkaConsumer
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings
@@ -31,6 +32,39 @@ except ImportError:
     settings = None
 
 logger = logging.getLogger(__name__)
+
+
+def safe_json_deserializer(message_bytes: bytes) -> Optional[Dict]:
+    """
+    Safely deserialize JSON message, returning None on error.
+
+    Args:
+        message_bytes: Raw message bytes from Kafka
+
+    Returns:
+        Deserialized dict or None if JSON is invalid
+    """
+    # Guard against None payload
+    if message_bytes is None:
+        logger.warning("Received None message payload, skipping deserialization")
+        return None
+
+    # Guard against non-bytes payload (already deserialized or wrong type)
+    if not isinstance(message_bytes, bytes):
+        logger.error(
+            f"Expected bytes, got {type(message_bytes).__name__}. "
+            f"Value: {message_bytes!r}"
+        )
+        return None
+
+    try:
+        return json.loads(message_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error(
+            f"Failed to deserialize message: {e}. "
+            f"Raw bytes (first 100): {message_bytes[:100]!r}"
+        )
+        return None
 
 
 class KafkaAgentActionConsumer:
@@ -101,7 +135,7 @@ class KafkaAgentActionConsumer:
             group_id=self.group_id,
             enable_auto_commit=False,  # Manual commit for safety
             auto_offset_reset="earliest",  # Process all messages
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            value_deserializer=safe_json_deserializer,
             max_poll_records=self.batch_size,
         )
 
@@ -136,6 +170,10 @@ class KafkaAgentActionConsumer:
         """
         Insert batch of events to PostgreSQL with idempotency.
 
+        Uses ON CONFLICT DO NOTHING to handle duplicates gracefully.
+        Relies on unique constraint: unique_action_per_correlation_timestamp
+        (correlation_id, action_name, created_at)
+
         Args:
             events: List of event dictionaries
 
@@ -145,8 +183,8 @@ class KafkaAgentActionConsumer:
         if not events or not self.db_pool:
             return 0
 
-        # Prepare insert query with ON CONFLICT for idempotency
-        # Assumes agent_actions table has unique constraint on (correlation_id, action_name, timestamp)
+        # Insert with ON CONFLICT DO NOTHING for thread-safe idempotency
+        # Constraint: unique_action_per_correlation_timestamp (correlation_id, action_name, created_at)
         insert_sql = """
             INSERT INTO agent_actions (
                 correlation_id,
@@ -158,11 +196,14 @@ class KafkaAgentActionConsumer:
                 duration_ms,
                 created_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (correlation_id, action_name, created_at) DO NOTHING
+            ON CONFLICT ON CONSTRAINT unique_action_per_correlation_timestamp
+            DO NOTHING
             RETURNING id
         """
 
         inserted_count = 0
+        duplicate_count = 0
+
         async with self.db_pool.acquire() as conn:
             async with conn.transaction():
                 for event in events:
@@ -172,6 +213,7 @@ class KafkaAgentActionConsumer:
                             event["timestamp"].replace("Z", "+00:00")
                         )
 
+                        # Insert new event (ON CONFLICT handles duplicates)
                         result = await conn.fetch(
                             insert_sql,
                             event["correlation_id"],
@@ -185,12 +227,29 @@ class KafkaAgentActionConsumer:
                         )
 
                         if result:
+                            # Insert succeeded (new record)
                             inserted_count += 1
+                        else:
+                            # Insert skipped due to conflict (duplicate)
+                            duplicate_count += 1
+                            logger.debug(
+                                f"Skipped duplicate event: {event['correlation_id']}/{event['action_name']}"
+                            )
+
+                    except asyncpg.UniqueViolationError as e:
+                        # This should not happen with ON CONFLICT, but handle gracefully
+                        duplicate_count += 1
+                        logger.debug(
+                            f"Duplicate detected via exception: {event['correlation_id']}/{event['action_name']}"
+                        )
 
                     except Exception as e:
                         logger.error(f"Failed to insert event: {e}", exc_info=True)
                         # Continue with other events
 
+        logger.debug(
+            f"Batch insert complete: {inserted_count} inserted, {duplicate_count} duplicates skipped"
+        )
         return inserted_count
 
     async def consume_loop(self):
@@ -209,6 +268,13 @@ class KafkaAgentActionConsumer:
                 # Process messages
                 for topic_partition, messages in message_batch.items():
                     for message in messages:
+                        # Skip messages with invalid JSON (deserializer returned None)
+                        if message.value is None:
+                            logger.warning(
+                                f"Skipping message with invalid JSON at offset {message.offset}"
+                            )
+                            continue
+
                         batch.append(message.value)
 
                         # Check if batch is full
@@ -217,7 +283,8 @@ class KafkaAgentActionConsumer:
                             batch = []
                             last_batch_time = asyncio.get_event_loop().time()
                             # Commit offset after successful processing
-                            self.consumer.commit()
+                            if self.consumer is not None:
+                                self.consumer.commit()
 
                 # Check batch timeout
                 current_time = asyncio.get_event_loop().time()
@@ -228,7 +295,8 @@ class KafkaAgentActionConsumer:
                     await self._process_batch(batch)
                     batch = []
                     last_batch_time = current_time
-                    self.consumer.commit()
+                    if self.consumer is not None:
+                        self.consumer.commit()
 
                 # Small sleep to prevent tight loop
                 await asyncio.sleep(0.01)
@@ -240,7 +308,8 @@ class KafkaAgentActionConsumer:
             # Process remaining batch
             if batch:
                 await self._process_batch(batch)
-                self.consumer.commit()
+                if self.consumer is not None:
+                    self.consumer.commit()
 
     async def _process_batch(self, batch: List[Dict]):
         """Process a batch of events."""

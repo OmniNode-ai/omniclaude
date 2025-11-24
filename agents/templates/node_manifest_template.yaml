@@ -13,7 +13,7 @@ entrypoint:
   target: "v1_0_0/node.py"
 namespace: "omninode.generated.{DOMAIN}.node_{MICROSERVICE_NAME}_{NODE_TYPE_LOWER}"
 meta_type: "node"
-runtime_language_hint: "python>=3.11"
+runtime_language_hint: "python>=3.12"
 
 # === NODE CAPABILITIES ===
 capabilities: []

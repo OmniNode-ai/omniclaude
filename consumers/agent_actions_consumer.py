@@ -51,6 +51,7 @@ import psycopg2.pool
 from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
 
+
 # Add _shared to path for db_helper
 SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"

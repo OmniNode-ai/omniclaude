@@ -27,6 +27,7 @@ from pathlib import Path
 
 from agents.lib.template_cache import TemplateCache
 
+
 # Try to import template engine, but make it optional
 try:
     from agents.lib.omninode_template_engine import OmniNodeTemplateEngine

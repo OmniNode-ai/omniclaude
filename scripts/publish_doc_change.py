@@ -21,12 +21,13 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 
 # Load .env from project root
 project_root = Path(__file__).parent.parent
@@ -37,6 +38,7 @@ sys.path.insert(0, str(project_root))
 
 # Import Pydantic settings for type-safe configuration
 from config import settings
+
 
 try:
     from agents.lib.kafka_rpk_client import RpkKafkaClient
@@ -180,7 +182,7 @@ def publish_doc_change(
     # Build event payload
     payload = {
         "event_type": event_type,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "file_path": file_path,
         "file_name": os.path.basename(file_path),
         "file_extension": file_extension,

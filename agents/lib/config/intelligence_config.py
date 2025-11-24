@@ -42,6 +42,7 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field, field_validator
 
+
 # Lazy import of settings to avoid circular dependency
 # Settings is loaded on first access, not at module import time
 _settings_cache = None

@@ -13,10 +13,18 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:
+    from constants import (
+        DEFAULT_TOP_AGENTS,
+        MAX_CONTAINERS_DISPLAY,
+        MIN_DIVISOR,
+        PERCENT_MULTIPLIER,
+    )
     from db_helper import execute_query
     from docker_helper import get_container_status, list_containers
     from kafka_helper import check_kafka_connection, list_topics
@@ -28,19 +36,22 @@ try:
         format_timestamp,
         generate_markdown_report,
     )
+    from timeframe_helper import parse_timeframe
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(1)
 
 
-def parse_timeframe(timeframe: str) -> str:
-    """Convert timeframe to PostgreSQL interval."""
-    mapping = {"1h": "1 hour", "24h": "24 hours", "7d": "7 days"}
-    return mapping.get(timeframe, "24 hours")
+def collect_report_data(timeframe: str, include_trends: bool) -> Dict[str, Any]:
+    """Collect all data for the report.
 
+    Args:
+        timeframe: Time period for the report (e.g., '24h', '7d')
+        include_trends: Whether to include trend analysis
 
-def collect_report_data(timeframe: str, include_trends: bool):
-    """Collect all data for the report."""
+    Returns:
+        Dictionary containing all report data
+    """
     interval = parse_timeframe(timeframe)
     data = {
         "generated": format_timestamp(),
@@ -52,7 +63,7 @@ def collect_report_data(timeframe: str, include_trends: bool):
     containers = list_containers()
     if containers["success"]:
         services_data = []
-        for container in containers["containers"][:20]:  # Limit to 20 for report
+        for container in containers["containers"][:MAX_CONTAINERS_DISPLAY]:
             status = get_container_status(container["name"])
             services_data.append(
                 {
@@ -91,15 +102,15 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Performance metrics
     try:
-        routing_query = f"""
+        routing_query = """
             SELECT
                 COUNT(*) as total,
                 AVG(routing_time_ms) as avg_time,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::INTERVAL
         """
-        routing_result = execute_query(routing_query)
+        routing_result = execute_query(routing_query, params=(interval,))
 
         if routing_result["success"] and routing_result["rows"]:
             row = routing_result["rows"][0]
@@ -113,12 +124,12 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Recent activity
     try:
-        manifest_query = f"""
+        manifest_query = """
             SELECT COUNT(*) as count
             FROM agent_manifest_injections
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::INTERVAL
         """
-        manifest_result = execute_query(manifest_query)
+        manifest_result = execute_query(manifest_query, params=(interval,))
 
         data["recent_activity"] = {
             "agent_executions": (
@@ -130,18 +141,20 @@ def collect_report_data(timeframe: str, include_trends: bool):
 
     # Top agents
     try:
-        top_agents_query = f"""
+        top_agents_query = """
             SELECT
                 selected_agent,
                 COUNT(*) as count,
                 AVG(confidence_score) as avg_confidence
             FROM agent_routing_decisions
-            WHERE created_at > NOW() - INTERVAL '{interval}'
+            WHERE created_at > NOW() - %s::INTERVAL
             GROUP BY selected_agent
             ORDER BY count DESC
-            LIMIT 10
+            LIMIT %s
         """
-        top_result = execute_query(top_agents_query)
+        top_result = execute_query(
+            top_agents_query, params=(interval, DEFAULT_TOP_AGENTS)
+        )
 
         if top_result["success"]:
             data["top_agents"] = [
@@ -159,14 +172,14 @@ def collect_report_data(timeframe: str, include_trends: bool):
     if include_trends:
         try:
             # Compare current period with previous period
-            trend_query = f"""
+            trend_query = """
                 WITH current_period AS (
                     SELECT
                         COUNT(*) as decisions,
                         AVG(routing_time_ms) as avg_time,
                         AVG(confidence_score) as avg_confidence
                     FROM agent_routing_decisions
-                    WHERE created_at > NOW() - INTERVAL '{interval}'
+                    WHERE created_at > NOW() - %s::INTERVAL
                 ),
                 previous_period AS (
                     SELECT
@@ -174,8 +187,8 @@ def collect_report_data(timeframe: str, include_trends: bool):
                         AVG(routing_time_ms) as avg_time,
                         AVG(confidence_score) as avg_confidence
                     FROM agent_routing_decisions
-                    WHERE created_at BETWEEN NOW() - INTERVAL '{interval}' * 2
-                        AND NOW() - INTERVAL '{interval}'
+                    WHERE created_at BETWEEN NOW() - %s::INTERVAL * 2
+                        AND NOW() - %s::INTERVAL
                 )
                 SELECT
                     c.decisions as current_decisions,
@@ -186,26 +199,30 @@ def collect_report_data(timeframe: str, include_trends: bool):
                     p.avg_confidence as previous_avg_confidence
                 FROM current_period c, previous_period p
             """
-            trend_result = execute_query(trend_query)
+            trend_result = execute_query(
+                trend_query, params=(interval, interval, interval)
+            )
 
             if trend_result["success"] and trend_result["rows"]:
                 row = trend_result["rows"][0]
                 curr_dec = row["current_decisions"] or 0
-                prev_dec = row["previous_decisions"] or 1  # Avoid division by zero
+                prev_dec = (
+                    row["previous_decisions"] or MIN_DIVISOR
+                )  # Avoid division by zero
                 curr_time = float(row["current_avg_time"] or 0)
-                prev_time = float(row["previous_avg_time"] or 1)
+                prev_time = float(row["previous_avg_time"] or MIN_DIVISOR)
                 curr_conf = float(row["current_avg_confidence"] or 0)
-                prev_conf = float(row["previous_avg_confidence"] or 1)
+                prev_conf = float(row["previous_avg_confidence"] or MIN_DIVISOR)
 
                 data["trends"] = {
                     "decisions_change_pct": round(
-                        ((curr_dec - prev_dec) / prev_dec) * 100, 1
+                        ((curr_dec - prev_dec) / prev_dec) * PERCENT_MULTIPLIER, 1
                     ),
                     "routing_time_change_pct": round(
-                        ((curr_time - prev_time) / prev_time) * 100, 1
+                        ((curr_time - prev_time) / prev_time) * PERCENT_MULTIPLIER, 1
                     ),
                     "confidence_change_pct": round(
-                        ((curr_conf - prev_conf) / prev_conf) * 100, 1
+                        ((curr_conf - prev_conf) / prev_conf) * PERCENT_MULTIPLIER, 1
                     ),
                 }
         except Exception as e:
@@ -230,7 +247,7 @@ def generate_markdown_output(data: dict) -> str:
 - **Services Running**: {services_running}/{services_total}
 - **Agent Executions**: {data.get('recent_activity', {}).get('agent_executions', 0)}
 - **Routing Decisions**: {perf.get('routing_decisions', 0)}
-- **Average Confidence**: {int(perf.get('avg_confidence', 0) * 100)}%
+- **Average Confidence**: {int(perf.get('avg_confidence', 0) * PERCENT_MULTIPLIER)}%
 """
     sections.append({"title": "Executive Summary", "content": summary})
 
@@ -297,7 +314,7 @@ def generate_markdown_output(data: dict) -> str:
                 [
                     agent["agent"],
                     agent["count"],
-                    f"{int(agent['avg_confidence'] * 100)}%",
+                    f"{int(agent['avg_confidence'] * PERCENT_MULTIPLIER)}%",
                 ]
             )
 
@@ -327,7 +344,12 @@ def generate_markdown_output(data: dict) -> str:
     return generate_markdown_report("System Status Report", sections)
 
 
-def main():
+def main() -> int:
+    """Generate comprehensive system status report.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(description="Generate system status report")
     parser.add_argument(
         "--format",

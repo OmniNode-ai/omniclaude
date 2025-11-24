@@ -405,9 +405,18 @@ Producer({
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from confluent_kafka import Consumer, KafkaError, Producer
+
+
+# Import standardized Kafka result types
+# Add _shared to path for skills compatibility
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "skills" / "_shared"))
+from kafka_types import KafkaConsumeResult, KafkaPublishResult
+
 
 # Import Pydantic Settings for type-safe configuration
 try:
@@ -423,7 +432,7 @@ class ConfluentKafkaClient:
         self.bootstrap_servers = bootstrap_servers
         self.group_id = group_id
 
-    def publish(self, topic: str, payload: Dict[str, Any]) -> None:
+    def publish(self, topic: str, payload: Dict[str, Any]) -> KafkaPublishResult:
         """
         Publish message to Kafka with delivery confirmation.
 
@@ -432,8 +441,24 @@ class ConfluentKafkaClient:
         - Rewrites omninode-bridge-redpanda:9092 → localhost:9092 in memory
         - Falls back to aiokafka if confluent-kafka fails
 
-        Raises:
-            RuntimeError: If message delivery fails
+        Args:
+            topic: Kafka topic name
+            payload: Message payload (will be JSON-encoded)
+
+        Returns:
+            KafkaPublishResult with:
+            - success: True if message published, False otherwise
+            - topic: Topic name
+            - data: Publish metadata on success (partition, offset, timestamp)
+            - error: Error message on failure, None on success
+
+        Example:
+            >>> client = ConfluentKafkaClient("192.168.86.200:29092")
+            >>> result = client.publish("my-topic", {"key": "value"})
+            >>> if result["success"]:
+            ...     print(f"Published to partition {result['data']['partition']}")
+            ... else:
+            ...     print(f"Publish failed: {result['error']}")
         """
         delivery_reports = []
 
@@ -452,53 +477,156 @@ class ConfluentKafkaClient:
         # No automatic host rewriting - use configured bootstrap servers directly
         # (Remote infrastructure should be properly configured with advertised listeners)
 
-        p = Producer(
-            {
-                "bootstrap.servers": bootstrap_servers,
-                "client.id": "omniclaude-producer",
-                "socket.keepalive.enable": True,
-                "enable.idempotence": True,
-                "broker.address.family": "v4",  # Force IPv4
-                "request.timeout.ms": 30000,  # Increase timeout to 30s
-                "delivery.timeout.ms": 30000,  # Increase delivery timeout to 30s
-                "metadata.max.age.ms": 300000,  # Cache metadata for 5 minutes
-                "log_level": 3,  # Warning level logging
-                # Workaround: Don't follow advertised listeners that point to internal hostnames
-                "client.dns.lookup": "use_all_dns_ips",
-            }
-        )
-
-        data = json.dumps(payload).encode("utf-8")
-        p.produce(topic, data, callback=delivery_callback)
-        p.flush(10)
-
-        # Check delivery results
-        if not delivery_reports:
-            raise RuntimeError("Message delivery timed out - no confirmation received")
-
-        status, result = delivery_reports[0]
-        if status == "error":
-            raise RuntimeError(f"Message delivery failed: {result}")
-
-    def consume_one(
-        self, topic: str, timeout_sec: float = 10.0
-    ) -> Optional[Dict[str, Any]]:
-        c = Consumer(
-            {
-                "bootstrap.servers": self.bootstrap_servers,
-                "group.id": self.group_id,
-                "auto.offset.reset": "latest",
-            }
-        )
-        c.subscribe([topic])
         try:
-            msg = c.poll(timeout_sec)
-            if msg is None:
-                return None
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    return None
-                raise RuntimeError(str(msg.error()))
-            return json.loads(msg.value().decode("utf-8"))
-        finally:
-            c.close()
+            p = Producer(
+                {
+                    "bootstrap.servers": bootstrap_servers,
+                    "client.id": "omniclaude-producer",
+                    "socket.keepalive.enable": True,
+                    "enable.idempotence": True,
+                    "broker.address.family": "v4",  # Force IPv4
+                    "request.timeout.ms": 30000,  # Increase timeout to 30s
+                    "delivery.timeout.ms": 30000,  # Increase delivery timeout to 30s
+                    "metadata.max.age.ms": 300000,  # Cache metadata for 5 minutes
+                    "log_level": 3,  # Warning level logging
+                    # Workaround: Don't follow advertised listeners that point to internal hostnames
+                    "client.dns.lookup": "use_all_dns_ips",
+                }
+            )
+
+            data = json.dumps(payload).encode("utf-8")
+            p.produce(topic, data, callback=delivery_callback)
+            p.flush(10)
+
+            # Check delivery results
+            if not delivery_reports:
+                return {
+                    "success": False,
+                    "topic": topic,
+                    "data": None,
+                    "error": "Message delivery timed out - no confirmation received",
+                }
+
+            status, result = delivery_reports[0]
+            if status == "error":
+                return {
+                    "success": False,
+                    "topic": topic,
+                    "data": None,
+                    "error": f"Message delivery failed: {result}",
+                }
+
+            # Success - extract metadata from message
+            return {
+                "success": True,
+                "topic": topic,
+                "data": {
+                    "partition": result.partition(),
+                    "offset": result.offset(),
+                    "timestamp": (
+                        result.timestamp()[1] if result.timestamp()[0] == 0 else None
+                    ),
+                },
+                "error": None,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"Publish error: {str(e)}",
+            }
+
+    def consume_one(self, topic: str, timeout_sec: float = 10.0) -> KafkaConsumeResult:
+        """
+        Consume one message from topic.
+
+        Args:
+            topic: Kafka topic name
+            timeout_sec: Timeout in seconds (default: 10.0)
+
+        Returns:
+            KafkaConsumeResult with:
+            - success: True if message consumed or no message available, False on error
+            - topic: Topic name
+            - data: Message payload on success, None if no message or error
+            - error: Error message on failure, None on success
+            - timeout: True if no message within timeout, False otherwise
+
+        Example:
+            >>> client = ConfluentKafkaClient("192.168.86.200:29092")
+            >>> result = client.consume_one("my-topic", timeout_sec=5.0)
+            >>> if result["success"] and result["data"]:
+            ...     print(f"Received: {result['data']}")
+            ... elif result.get("timeout"):
+            ...     print("No message available within timeout")
+            ... else:
+            ...     print(f"Consume failed: {result['error']}")
+        """
+        try:
+            c = Consumer(
+                {
+                    "bootstrap.servers": self.bootstrap_servers,
+                    "group.id": self.group_id,
+                    "auto.offset.reset": "latest",
+                }
+            )
+            c.subscribe([topic])
+            try:
+                msg = c.poll(timeout_sec)
+                if msg is None:
+                    # Timeout - no message available
+                    return {
+                        "success": True,
+                        "topic": topic,
+                        "data": None,
+                        "error": None,
+                        "timeout": True,
+                    }
+                if msg.error():
+                    if msg.error().code() == KafkaError._PARTITION_EOF:
+                        # End of partition - no message available
+                        return {
+                            "success": True,
+                            "topic": topic,
+                            "data": None,
+                            "error": None,
+                            "timeout": False,
+                        }
+                    # Other error
+                    return {
+                        "success": False,
+                        "topic": topic,
+                        "data": None,
+                        "error": str(msg.error()),
+                        "timeout": False,
+                    }
+                # Success - parse message
+                try:
+                    data = json.loads(msg.value().decode("utf-8"))
+                    return {
+                        "success": True,
+                        "topic": topic,
+                        "data": data,
+                        "error": None,
+                        "timeout": False,
+                    }
+                except json.JSONDecodeError as e:
+                    return {
+                        "success": False,
+                        "topic": topic,
+                        "data": None,
+                        "error": f"JSON decode error: {str(e)}",
+                        "timeout": False,
+                    }
+            finally:
+                c.close()
+        except Exception as e:
+            return {
+                "success": False,
+                "topic": topic,
+                "data": None,
+                "error": f"Consume error: {str(e)}",
+                "timeout": False,
+            }

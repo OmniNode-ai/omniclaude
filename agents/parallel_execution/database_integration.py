@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncpg
 from pydantic import BaseModel
 
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings

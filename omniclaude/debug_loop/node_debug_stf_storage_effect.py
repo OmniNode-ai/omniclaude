@@ -25,6 +25,7 @@ from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 # omnibase_core imports
 from omnibase_core.nodes import NodeEffect
 
+
 # omnibase_spi imports (protocol for database access)
 try:
     from omnibase_spi.protocols import IDatabaseProtocol

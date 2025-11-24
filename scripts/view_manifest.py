@@ -7,6 +7,7 @@ Shows all sections with pattern discovery, infrastructure, models, etc.
 import os
 import sys
 
+
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

@@ -4,6 +4,7 @@ Test OmniNode Template Engine
 """
 
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -117,7 +118,6 @@ class TestOmniNodeTemplateEngine:
             verification_successful=True,
         )
 
-        from datetime import datetime
         from uuid import uuid4
 
         analysis_result = PRDAnalysisResult(
@@ -131,7 +131,7 @@ class TestOmniNodeTemplateEngine:
             external_systems=["database", "auth_service"],
             quality_baseline=0.8,
             confidence_score=0.85,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         context = engine._prepare_template_context(
@@ -193,7 +193,6 @@ class TestOmniNodeTemplateEngine:
             verification_successful=True,
         )
 
-        from datetime import datetime
         from uuid import uuid4
 
         analysis_result = PRDAnalysisResult(
@@ -207,7 +206,7 @@ class TestOmniNodeTemplateEngine:
             external_systems=["database"],
             quality_baseline=0.8,
             confidence_score=0.85,
-            analysis_timestamp=datetime.utcnow(),
+            analysis_timestamp=datetime.now(timezone.utc),
         )
 
         # Create temporary directory for output

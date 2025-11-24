@@ -9,7 +9,7 @@ from intent detection through validation, correction, and final outcome.
 import hashlib
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -245,7 +245,7 @@ class WorkflowEvent:
         return cls(
             event_id=str(uuid.uuid4()),
             correlation_id=correlation_id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             event_type=event_type,
             tool_name=tool_name,
             file_path=file_path,
@@ -313,19 +313,19 @@ class WorkflowEvent:
 
         # Reconstruct optional complex objects
         intent = None
-        if "intent" in data and data["intent"]:
+        if data.get("intent"):
             intent = IntentContextData(**data["intent"])
 
         violations = None
-        if "violations" in data and data["violations"]:
+        if data.get("violations"):
             violations = [Violation(**v) for v in data["violations"]]
 
         corrections = None
-        if "corrections" in data and data["corrections"]:
+        if data.get("corrections"):
             corrections = [Correction(**c) for c in data["corrections"]]
 
         scores = None
-        if "scores" in data and data["scores"]:
+        if data.get("scores"):
             scores = AIQuorumScore(**data["scores"])
 
         return cls(

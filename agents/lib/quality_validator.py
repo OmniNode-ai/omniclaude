@@ -20,11 +20,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
-# Import from omnibase_core
-from omnibase_core.errors import EnumCoreErrorCode, OnexError
-
 from .codegen_config import CodegenConfig
 from .codegen_events import CodegenValidationRequest, CodegenValidationResponse
+
+# Import from local errors module (production-safe)
+from .errors import EnumCoreErrorCode, OnexError
+
 
 # Framework: ML-powered mixin compatibility (optional import)
 try:
@@ -1137,9 +1138,9 @@ class QualityValidator:
         )
 
         raise OnexError(
-            error_code=EnumCoreErrorCode.NOT_IMPLEMENTED,
+            code=EnumCoreErrorCode.NOT_IMPLEMENTED,
             message="Kafka integration not yet implemented",
-            correlation_id=correlation_id,
+            details={"correlation_id": str(correlation_id)},
         )
 
     # ========================================================================
@@ -1701,8 +1702,8 @@ async def validate_code(
 
 
 __all__ = [
+    "ONEXComplianceCheck",
     "QualityValidator",
     "ValidationResult",
-    "ONEXComplianceCheck",
     "validate_code",
 ]

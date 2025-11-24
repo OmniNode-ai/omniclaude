@@ -28,10 +28,10 @@ class TestCRUDPattern(unittest.TestCase):
 
         code = self.pattern.generate(capability, context)
 
-        self.assertIn("async def create_user", code)
-        self.assertIn("transaction_manager.begin", code)
-        self.assertIn("def _get_required_fields", code)
-        self.assertNotIn("TODO", code)
+        assert "async def create_user" in code
+        assert "transaction_manager.begin" in code
+        assert "def _get_required_fields" in code
+        assert "TODO" not in code
 
     def test_read_method_generation(self):
         """Test READ method generation"""
@@ -43,9 +43,9 @@ class TestCRUDPattern(unittest.TestCase):
 
         code = self.pattern.generate(capability, context)
 
-        self.assertIn("async def get_user", code)
-        self.assertIn("query_one", code)
-        self.assertIn("NOT_FOUND", code)
+        assert "async def get_user" in code
+        assert "query_one" in code
+        assert "NOT_FOUND" in code
 
     def test_update_method_generation(self):
         """Test UPDATE method generation"""
@@ -57,8 +57,8 @@ class TestCRUDPattern(unittest.TestCase):
 
         code = self.pattern.generate(capability, context)
 
-        self.assertIn("async def update_user", code)
-        self.assertIn("transaction_manager.begin", code)
+        assert "async def update_user" in code
+        assert "transaction_manager.begin" in code
 
     def test_delete_method_generation(self):
         """Test DELETE method generation"""
@@ -70,8 +70,8 @@ class TestCRUDPattern(unittest.TestCase):
 
         code = self.pattern.generate(capability, context)
 
-        self.assertIn("async def delete_user", code)
-        self.assertIn("db.delete", code)
+        assert "async def delete_user" in code
+        assert "db.delete" in code
 
 
 class TestTransformationPattern(unittest.TestCase):
@@ -91,13 +91,13 @@ class TestTransformationPattern(unittest.TestCase):
         code = self.pattern.generate(capability, context)
 
         # Check CSV parser implementation
-        self.assertIn("csv", code.lower())
-        self.assertIn("DictReader", code)
-        self.assertNotIn("TODO: Implement additional format parsers", code)
+        assert "csv" in code.lower()
+        assert "DictReader" in code
+        assert "TODO: Implement additional format parsers" not in code
 
         # Check CSV converter implementation
-        self.assertIn("DictWriter", code)
-        self.assertNotIn("TODO: Implement additional format converters", code)
+        assert "DictWriter" in code
+        assert "TODO: Implement additional format converters" not in code
 
     def test_data_mapping_generation(self):
         """Test data mapping method generation"""
@@ -106,15 +106,15 @@ class TestTransformationPattern(unittest.TestCase):
         code = self.pattern._generate_data_mapping("map_fields", "Map fields", context)
 
         # Check mapping rules implementation
-        self.assertIn("_get_default_mapping_rules", code)
-        self.assertIn("createdAt", code)
-        self.assertIn("created_at", code)
-        self.assertNotIn("TODO: Implement default mapping", code)
+        assert "_get_default_mapping_rules" in code
+        assert "createdAt" in code
+        assert "created_at" in code
+        assert "TODO: Implement default mapping" not in code
 
         # Check value transformation implementation
-        self.assertIn("_transform_value", code)
-        self.assertIn("email", code.lower())
-        self.assertNotIn("TODO: Implement value transformations", code)
+        assert "_transform_value" in code
+        assert "email" in code.lower()
+        assert "TODO: Implement value transformations" not in code
 
     def test_validation_transform_generation(self):
         """Test validation transformation generation"""
@@ -125,9 +125,9 @@ class TestTransformationPattern(unittest.TestCase):
         )
 
         # Check validation rules implementation
-        self.assertIn("_get_default_validation_rules", code)
-        self.assertIn('"required"', code)
-        self.assertNotIn("TODO: Implement default rules", code)
+        assert "_get_default_validation_rules" in code
+        assert '"required"' in code
+        assert "TODO: Implement default rules" not in code
 
     def test_streaming_transform_generation(self):
         """Test streaming transformation generation"""
@@ -138,9 +138,9 @@ class TestTransformationPattern(unittest.TestCase):
         )
 
         # Check item transformation implementation
-        self.assertIn("_transform_item", code)
-        self.assertIn("strip", code)
-        self.assertNotIn("TODO: Implement item transformation", code)
+        assert "_transform_item" in code
+        assert "strip" in code
+        assert "TODO: Implement item transformation" not in code
 
     def test_pattern_matching(self):
         """Test pattern matching works"""
@@ -151,7 +151,7 @@ class TestTransformationPattern(unittest.TestCase):
 
         confidence = self.pattern.matches(capability)
 
-        self.assertGreater(confidence, 0.5)
+        assert confidence > 0.5
 
 
 class TestAggregationPattern(unittest.TestCase):
@@ -167,11 +167,11 @@ class TestAggregationPattern(unittest.TestCase):
         code = self.pattern._generate_reduce_method("sum_values", "Sum values", context)
 
         # Check custom reduction implementation
-        self.assertIn("_apply_custom_reduction", code)
-        self.assertIn("stddev", code)
-        self.assertIn("median", code)
-        self.assertIn("percentile", code)
-        self.assertNotIn("TODO: Implement custom reduction", code)
+        assert "_apply_custom_reduction" in code
+        assert "stddev" in code
+        assert "median" in code
+        assert "percentile" in code
+        assert "TODO: Implement custom reduction" not in code
 
     def test_windowed_aggregation_generation(self):
         """Test windowed aggregation generation"""
@@ -182,15 +182,15 @@ class TestAggregationPattern(unittest.TestCase):
         )
 
         # Check time-based windowing implementation
-        self.assertIn("_aggregate_by_time_windows", code)
-        self.assertIn("datetime", code)
-        self.assertIn("timedelta", code)
-        self.assertNotIn("TODO: Implement time-based windowing", code)
+        assert "_aggregate_by_time_windows" in code
+        assert "datetime" in code
+        assert "timedelta" in code
+        assert "TODO: Implement time-based windowing" not in code
 
         # Check window aggregation implementation
-        self.assertIn("_aggregate_window", code)
-        self.assertIn("numeric_fields", code)
-        self.assertNotIn("TODO: Implement window aggregation", code)
+        assert "_aggregate_window" in code
+        assert "numeric_fields" in code
+        assert "TODO: Implement window aggregation" not in code
 
     def test_stateful_aggregation_generation(self):
         """Test stateful aggregation generation"""
@@ -201,16 +201,16 @@ class TestAggregationPattern(unittest.TestCase):
         )
 
         # Check state management implementation
-        self.assertIn("_load_aggregation_state", code)
-        self.assertIn("_save_aggregation_state", code)
-        self.assertIn("MixinStateManagement", code)
-        self.assertNotIn("TODO: Implement state loading", code)
-        self.assertNotIn("TODO: Implement state saving", code)
+        assert "_load_aggregation_state" in code
+        assert "_save_aggregation_state" in code
+        assert "MixinStateManagement" in code
+        assert "TODO: Implement state loading" not in code
+        assert "TODO: Implement state saving" not in code
 
         # Check aggregate computation implementation
-        self.assertIn("_compute_aggregates", code)
-        self.assertIn("stddev", code)
-        self.assertNotIn("TODO: Implement aggregate computation", code)
+        assert "_compute_aggregates" in code
+        assert "stddev" in code
+        assert "TODO: Implement aggregate computation" not in code
 
     def test_pattern_matching(self):
         """Test pattern matching works"""
@@ -221,7 +221,7 @@ class TestAggregationPattern(unittest.TestCase):
 
         confidence = self.pattern.matches(capability)
 
-        self.assertGreater(confidence, 0.8)
+        assert confidence > 0.8
 
 
 class TestPatternIntegration(unittest.TestCase):
@@ -245,16 +245,14 @@ class TestPatternIntegration(unittest.TestCase):
             code = pattern.generate(capability, {})
 
             # Basic validation
-            self.assertIsInstance(code, str)
-            self.assertGreater(len(code), 0)
-            self.assertIn("async def", code)
-            self.assertIn("OnexError", code)
+            assert isinstance(code, str)
+            assert len(code) > 0
+            assert "async def" in code
+            assert "OnexError" in code
 
             # Check for remaining TODOs (should be minimal or none)
             todo_count = code.count("TODO")
-            self.assertLessEqual(
-                todo_count, 2, f"Too many TODOs in {pattern.__class__.__name__}"
-            )
+            assert todo_count <= 2, f"Too many TODOs in {pattern.__class__.__name__}"
 
     def test_patterns_have_required_methods(self):
         """Test patterns have required methods"""
@@ -263,18 +261,18 @@ class TestPatternIntegration(unittest.TestCase):
         agg = AggregationPattern()
 
         # Check CRUD pattern
-        self.assertTrue(hasattr(crud, "matches"))
-        self.assertTrue(hasattr(crud, "generate"))
-        self.assertTrue(hasattr(crud, "get_required_imports"))
-        self.assertTrue(hasattr(crud, "get_required_mixins"))
+        assert hasattr(crud, "matches")
+        assert hasattr(crud, "generate")
+        assert hasattr(crud, "get_required_imports")
+        assert hasattr(crud, "get_required_mixins")
 
         # Check transformation pattern
-        self.assertTrue(hasattr(transform, "matches"))
-        self.assertTrue(hasattr(transform, "generate"))
+        assert hasattr(transform, "matches")
+        assert hasattr(transform, "generate")
 
         # Check aggregation pattern
-        self.assertTrue(hasattr(agg, "matches"))
-        self.assertTrue(hasattr(agg, "generate"))
+        assert hasattr(agg, "matches")
+        assert hasattr(agg, "generate")
 
 
 def run_tests():

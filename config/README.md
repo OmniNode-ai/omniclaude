@@ -122,11 +122,13 @@ settings.kafka_request_timeout_ms     # 5000
 
 **PostgreSQL** (192.168.86.200:5436):
 ```python
-settings.postgres_host       # "192.168.86.200"
-settings.postgres_port       # 5436
-settings.postgres_database   # "omninode_bridge"
-settings.postgres_user       # "postgres"
-settings.postgres_password   # From .env (REQUIRED)
+settings.postgres_host            # "192.168.86.200"
+settings.postgres_port            # 5436
+settings.postgres_database        # "omninode_bridge"
+settings.postgres_user            # "postgres"
+settings.postgres_password        # From .env (REQUIRED)
+settings.postgres_pool_min_size   # 1 (minimum connections)
+settings.postgres_pool_max_size   # 5 (maximum connections)
 ```
 
 ### 3. AI Provider API Keys
@@ -413,9 +415,27 @@ The Settings class includes several validators:
 
 - **Port validation**: Ensures ports are in valid range (1-65535)
 - **Quality threshold**: Validates pattern quality is 0.0-1.0
-- **Pool size validation**: Ensures connection pools are reasonable (1-100)
+- **Pool size validation**: Ensures connection pools are reasonable (1-100, min <= max)
 - **Timeout validation**: Ensures timeouts are reasonable (1-60 seconds)
 - **Path resolution**: Auto-resolves agent registry and definitions paths
+
+**Connection Pool Validation**:
+```python
+# Both pool sizes validated independently
+POSTGRES_POOL_MIN_SIZE >= 1 and <= 100
+POSTGRES_POOL_MAX_SIZE >= 1 and <= 100
+
+# Max must be >= min (cross-field validation)
+POSTGRES_POOL_MAX_SIZE >= POSTGRES_POOL_MIN_SIZE
+
+# Examples:
+# ✅ Valid: min=1, max=5
+# ✅ Valid: min=2, max=10
+# ✅ Valid: min=5, max=5 (same is allowed)
+# ❌ Invalid: min=10, max=5 (max < min)
+# ❌ Invalid: min=0, max=5 (min < 1)
+# ❌ Invalid: min=1, max=101 (max > 100)
+```
 
 ## Helper Methods
 
@@ -502,11 +522,11 @@ async def connect_to_database():
     # Get async connection string
     dsn = settings.get_postgres_dsn(async_driver=True)
 
-    # Create connection pool
+    # Create connection pool with configurable sizes
     pool = await asyncpg.create_pool(
         dsn,
-        min_size=settings.postgres_pool_min_size,
-        max_size=settings.postgres_pool_max_size,
+        min_size=settings.postgres_pool_min_size,  # From POSTGRES_POOL_MIN_SIZE (default: 1)
+        max_size=settings.postgres_pool_max_size,  # From POSTGRES_POOL_MAX_SIZE (default: 5)
     )
     return pool
 ```

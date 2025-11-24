@@ -8,21 +8,26 @@ Provides functions for:
 - Consumer group status
 - Message throughput monitoring
 
+All functions follow a standardized API contract with TypedDict return values.
+See kafka_types.py for complete API documentation.
+
 Example:
     from kafka_helper import check_kafka_connection, list_topics, get_topic_stats
 
     # Check Kafka connectivity
     connection = check_kafka_connection()
-    if connection["reachable"]:
+    if connection["success"] and connection["reachable"]:
         # List available topics
         topics = list_topics()
         print(f"Found {topics['count']} topics")
 
         # Get stats for specific topic
         stats = get_topic_stats("my-topic")
-        print(f"Partitions: {stats['partitions']}")
+        if stats["success"]:
+            print(f"Partitions: {stats['partitions']}")
 
 Created: 2025-11-12
+Updated: 2025-11-23 - Added standardized type hints and API contract
 """
 
 import json
@@ -33,17 +38,33 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
+# Import standardized Kafka result types
+from kafka_types import (
+    KafkaConnectionResult,
+    KafkaConsumerGroupsResult,
+    KafkaMessageCountResult,
+    KafkaTopicsResult,
+    KafkaTopicStatsResult,
+)
+
+
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import settings
 
 
-def get_timeout_seconds() -> float:
+def get_timeout_seconds(override_seconds: Optional[int] = None) -> float:
     """
     Get timeout value in seconds from type-safe configuration.
 
     Returns timeout from Pydantic Settings (default: 5 seconds).
     Configurable via REQUEST_TIMEOUT_MS environment variable.
+
+    Args:
+        override_seconds: Optional custom timeout in seconds. If provided,
+                         this value takes precedence over configuration.
+                         Useful for long-running operations that need
+                         extended timeouts.
 
     Returns:
         Timeout in seconds (float)
@@ -52,7 +73,26 @@ def get_timeout_seconds() -> float:
         Timeout strategy: All helper subprocess/network calls use the same
         timeout to prevent infinite hangs. Default is 5 seconds, configurable
         via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
+
+        Use override_seconds for specific operations that require longer
+        timeouts (e.g., generate-status-report --timeout 30).
+
+        Priority order:
+        1. override_seconds parameter (highest priority)
+        2. OPERATION_TIMEOUT_OVERRIDE environment variable (for CLI scripts)
+        3. REQUEST_TIMEOUT_MS from Pydantic Settings (default)
     """
+    if override_seconds is not None:
+        return float(override_seconds)
+
+    # Check for operation-specific timeout override (for CLI scripts)
+    env_override = os.getenv("OPERATION_TIMEOUT_OVERRIDE")
+    if env_override is not None:
+        try:
+            return float(env_override)
+        except (ValueError, TypeError):
+            pass  # Fall through to default
+
     return settings.request_timeout_ms / 1000.0
 
 
@@ -105,12 +145,25 @@ def get_timeout_command() -> str:
     return "gtimeout" if platform.system() == "Darwin" else "timeout"
 
 
-def check_kafka_connection() -> Dict[str, Any]:
+def check_kafka_connection() -> KafkaConnectionResult:
     """
     Check if Kafka is reachable and responsive.
 
     Returns:
-        Dictionary with connection status and metadata
+        KafkaConnectionResult with:
+        - success: True if connected, False otherwise
+        - status: Connection status ("connected", "error", "timeout")
+        - broker: Bootstrap server address
+        - reachable: Whether broker is reachable
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = check_kafka_connection()
+        >>> if result["success"] and result["reachable"]:
+        ...     print(f"Connected to {result['broker']}")
+        ... else:
+        ...     print(f"Connection failed: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -125,20 +178,25 @@ def check_kafka_connection() -> Dict[str, Any]:
 
         if result.returncode == 0:
             return {
+                "success": True,
                 "status": "connected",
                 "broker": bootstrap_servers,
                 "reachable": True,
                 "error": None,
+                "return_code": 0,
             }
         else:
             return {
+                "success": False,
                 "status": "error",
                 "broker": bootstrap_servers,
                 "reachable": False,
                 "error": result.stderr.strip(),
+                "return_code": result.returncode,
             }
     except subprocess.TimeoutExpired:
         return {
+            "success": False,
             "status": "timeout",
             "broker": bootstrap_servers,
             "reachable": False,
@@ -153,26 +211,42 @@ def check_kafka_connection() -> Dict[str, Any]:
             "See deployment/README.md for details"
         )
         return {
+            "success": False,
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
             "error": install_instructions,
         }
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
         return {
+            "success": False,
             "status": "error",
             "broker": bootstrap_servers,
             "reachable": False,
-            "error": str(e),
+            "error": f"Subprocess error: {str(e)}",
         }
 
 
-def list_topics() -> Dict[str, Any]:
+def list_topics() -> KafkaTopicsResult:
     """
     List all Kafka topics.
 
     Returns:
-        Dictionary with topic list and count
+        KafkaTopicsResult with:
+        - success: True if topics retrieved, False otherwise
+        - topics: List of topic names (empty list on failure)
+        - count: Number of topics found
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = list_topics()
+        >>> if result["success"]:
+        ...     print(f"Found {result['count']} topics: {result['topics']}")
+        ... else:
+        ...     print(f"Failed to list topics: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -189,7 +263,8 @@ def list_topics() -> Dict[str, Any]:
                 "success": False,
                 "topics": [],
                 "count": 0,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Parse topic names from output using regex for robustness
@@ -201,12 +276,46 @@ def list_topics() -> Dict[str, Any]:
                 topic_name = match.group(1)
                 topics.append(topic_name)
 
-        return {"success": True, "topics": topics, "count": len(topics), "error": None}
-    except Exception as e:
-        return {"success": False, "topics": [], "count": 0, "error": str(e)}
+        return {
+            "success": True,
+            "topics": topics,
+            "count": len(topics),
+            "error": None,
+            "return_code": 0,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "topics": [],
+            "count": 0,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        install_instructions = (
+            "kcat command not found. "
+            "Install: macOS: 'brew install kcat' | "
+            "Ubuntu/Debian: 'sudo apt-get install kafkacat' | "
+            "Alpine/Docker: 'apk add kafkacat' | "
+            "See deployment/README.md for details"
+        )
+        return {
+            "success": False,
+            "topics": [],
+            "count": 0,
+            "error": install_instructions,
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "topics": [],
+            "count": 0,
+            "error": f"Subprocess error: {str(e)}",
+        }
 
 
-def get_topic_stats(topic_name: str) -> Dict[str, Any]:
+def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
     """
     Get statistics for a specific topic.
 
@@ -214,7 +323,19 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
         topic_name: Name of the topic
 
     Returns:
-        Dictionary with topic statistics
+        KafkaTopicStatsResult with:
+        - success: True if stats retrieved, False otherwise
+        - topic: Topic name
+        - partitions: Number of partitions
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Example:
+        >>> result = get_topic_stats("my-topic")
+        >>> if result["success"]:
+        ...     print(f"Topic '{result['topic']}' has {result['partitions']} partitions")
+        ... else:
+        ...     print(f"Failed to get stats: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -230,32 +351,78 @@ def get_topic_stats(topic_name: str) -> Dict[str, Any]:
             return {
                 "success": False,
                 "topic": topic_name,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Parse partition count from output
-        # Use regex to match specific partition line format to avoid false positives
+        # kcat format: topic "name" with X partitions:
+        #              partition 0, leader ...
+        # Extract partition count directly from the "with X partitions:" line
         partitions = 0
         for line in result.stdout.split("\n"):
-            if re.search(rf'topic "{re.escape(topic_name)}" partition \d+', line):
-                partitions += 1
+            # Match: topic "topic-name" with X partitions:
+            match = re.search(
+                rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line
+            )
+            if match:
+                partitions = int(match.group(1))
+                break
 
         return {
             "success": True,
             "topic": topic_name,
             "partitions": partitions,
             "error": None,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "topic": topic_name, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "topic": topic_name,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "topic": topic_name,
+            "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "topic": topic_name,
+            "error": f"Subprocess error: {str(e)}",
+        }
 
 
-def get_consumer_groups() -> Dict[str, Any]:
+def get_consumer_groups() -> KafkaConsumerGroupsResult:
     """
     List all consumer groups.
 
     Returns:
-        Dictionary with consumer group list
+        KafkaConsumerGroupsResult with:
+        - success: True if groups retrieved, False otherwise
+        - groups: List of consumer group names (empty list on failure)
+        - count: Number of consumer groups found
+        - error: Error message on failure, None on success
+        - implemented: Whether the operation is implemented (False for placeholder)
+        - return_code: Process return code if applicable
+
+    Note:
+        This operation is not yet fully implemented.
+        Requires kafka-consumer-groups command or Kafka Admin API.
+
+    Example:
+        >>> result = get_consumer_groups()
+        >>> if result["success"] and result["implemented"]:
+        ...     print(f"Found {result['count']} consumer groups")
+        ... elif not result["implemented"]:
+        ...     print("Consumer group listing not yet implemented")
+        ... else:
+        ...     print(f"Failed: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -272,7 +439,8 @@ def get_consumer_groups() -> Dict[str, Any]:
                 "success": False,
                 "groups": [],
                 "count": 0,
-                "error": result.stderr.strip(),
+                "error": f"kcat failed: {result.stderr.strip()}",
+                "return_code": result.returncode,
             }
 
         # Note: kcat -L doesn't show consumer groups
@@ -282,10 +450,33 @@ def get_consumer_groups() -> Dict[str, Any]:
             "success": False,
             "groups": [],
             "count": 0,
-            "error": "Consumer group listing requires kafka-consumer-groups command",
+            "error": "Consumer group listing not yet implemented (requires kafka-consumer-groups command or Kafka Admin API)",
+            "implemented": False,
+            "return_code": 0,
         }
-    except Exception as e:
-        return {"success": False, "groups": [], "count": 0, "error": str(e)}
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "groups": [],
+            "count": 0,
+            "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+        }
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "groups": [],
+            "count": 0,
+            "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+        }
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
+        return {
+            "success": False,
+            "groups": [],
+            "count": 0,
+            "error": f"Subprocess error: {str(e)}",
+        }
 
 
 def check_topic_exists(topic_name: str) -> bool:
@@ -307,7 +498,7 @@ def check_topic_exists(topic_name: str) -> bool:
 
 def get_recent_message_count(
     topic_name: str, timeout_seconds: int = 2
-) -> Dict[str, Any]:
+) -> KafkaMessageCountResult:
     """
     Get count of recent messages in a topic (sample).
 
@@ -316,7 +507,25 @@ def get_recent_message_count(
         timeout_seconds: How long to consume messages (default: 2s)
 
     Returns:
-        Dictionary with message count estimate
+        KafkaMessageCountResult with:
+        - success: True if operation succeeded, False otherwise
+        - topic: Topic name
+        - messages_sampled: Number of messages found (0 on failure)
+        - sample_duration_s: Sampling duration in seconds
+        - error: Error message on failure, None on success
+        - return_code: Process return code if applicable
+
+    Note:
+        Distinguishes between:
+        - "0 messages found" (success=True, messages_sampled=0)
+        - "operation failed" (success=False, error contains details)
+
+    Example:
+        >>> result = get_recent_message_count("my-topic", timeout_seconds=5)
+        >>> if result["success"]:
+        ...     print(f"Found {result['messages_sampled']} messages in {result['sample_duration_s']}s")
+        ... else:
+        ...     print(f"Failed to sample messages: {result['error']}")
     """
     bootstrap_servers = get_kafka_bootstrap_servers()
 
@@ -340,6 +549,41 @@ def get_recent_message_count(
             timeout=timeout_seconds,
         )
 
+        # Check if kcat command failed (non-zero exit code)
+        if result.returncode != 0:
+            return {
+                "success": False,
+                "topic": topic_name,
+                "messages_sampled": 0,
+                "sample_duration_s": timeout_seconds,
+                "error": f"kcat failed (exit {result.returncode}): {result.stderr.strip()}",
+                "return_code": result.returncode,
+            }
+
+        # Check stderr for connection/broker errors even when returncode is 0
+        # kcat may exit 0 but report broker issues in stderr
+        stderr_lower = result.stderr.lower()
+        error_indicators = [
+            "failed to connect",
+            "connection refused",
+            "no brokers",
+            "broker transport failure",
+            "all broker connections are down",
+            "timed out",
+            "authentication failure",
+            "sasl authentication",
+        ]
+        for indicator in error_indicators:
+            if indicator in stderr_lower:
+                return {
+                    "success": False,
+                    "topic": topic_name,
+                    "messages_sampled": 0,
+                    "sample_duration_s": timeout_seconds,
+                    "error": f"kcat connection error: {result.stderr.strip()}",
+                    "return_code": result.returncode,
+                }
+
         # Count lines (each line is a message)
         message_count = len(
             [line for line in result.stdout.split("\n") if line.strip()]
@@ -351,29 +595,37 @@ def get_recent_message_count(
             "messages_sampled": message_count,
             "sample_duration_s": timeout_seconds,
             "error": None,
+            "return_code": 0,
         }
     except subprocess.TimeoutExpired:
-        # Timeout occurred - sampling didn't complete in time
+        # Timeout occurred - kcat didn't complete in time (likely broker unreachable)
         return {
             "success": False,
             "topic": topic_name,
             "messages_sampled": 0,
             "sample_duration_s": timeout_seconds,
-            "error": f"Sampling timed out after {timeout_seconds}s",
+            "error": f"kcat timed out after {timeout_seconds}s (broker may be unreachable)",
+            "return_code": None,
         }
     except FileNotFoundError:
         return {
             "success": False,
             "topic": topic_name,
             "messages_sampled": 0,
+            "sample_duration_s": timeout_seconds,
             "error": "kcat command not found. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+            "return_code": None,
         }
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
+        # SubprocessError: subprocess-related failures
+        # OSError: system-level errors (permissions, resource limits, etc.)
         return {
             "success": False,
             "topic": topic_name,
             "messages_sampled": 0,
-            "error": str(e),
+            "sample_duration_s": timeout_seconds,
+            "error": f"Subprocess error: {str(e)}",
+            "return_code": None,
         }
 
 

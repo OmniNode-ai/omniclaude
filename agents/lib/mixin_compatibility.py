@@ -18,6 +18,7 @@ from .mixin_features import MixinFeatureExtractor
 from .mixin_learner import MixinLearner, MixinPrediction
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -518,9 +519,9 @@ class MixinCompatibilityManager:
 
 
 __all__ = [
-    "MixinCompatibilityManager",
     "CompatibilityCheck",
+    "CompatibilityLevel",
+    "MixinCompatibilityManager",
     "MixinRecommendation",
     "MixinSet",
-    "CompatibilityLevel",
 ]

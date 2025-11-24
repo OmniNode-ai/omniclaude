@@ -240,7 +240,9 @@ class TestRoutingEventClient:
         )
 
         # Should fail to start
-        with pytest.raises(Exception):
+        from aiokafka.errors import KafkaError
+
+        with pytest.raises(KafkaError):
             await client.start()
 
         # Test wrapper with fallback enabled

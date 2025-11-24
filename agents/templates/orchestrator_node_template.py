@@ -8,7 +8,7 @@ Generated from PRD: {BUSINESS_DESCRIPTION}
 import asyncio
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -237,7 +237,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
             "parameters": input_data.parameters,
             "metadata": input_data.metadata,
             "operations": operations,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "orchestrating"
         }
 
@@ -248,7 +248,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
         return {
             "service": "{MICROSERVICE_NAME}",
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": "1.0.0",
             "orchestration_capability": "enabled"
         }
@@ -261,7 +261,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
             "error_count": 0,
             "uptime_seconds": 0,
             "orchestration_efficiency": 0.0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
     async def initialize(self) -> None:
@@ -346,7 +346,7 @@ class Node{MICROSERVICE_NAME_PASCAL}Orchestrator(NodeOrchestrator{MIXIN_INHERITA
                 "health_check_endpoint": f"/health/{self._instance_id}",
                 "metadata": {
                     "node_class": "Node{MICROSERVICE_NAME_PASCAL}Orchestrator",
-                    "initialized_at": datetime.utcnow().isoformat(),
+                    "initialized_at": datetime.now(timezone.utc).isoformat(),
                 },
             }
 

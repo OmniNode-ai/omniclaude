@@ -53,6 +53,7 @@ from aiokafka.errors import KafkaError
 from agents.lib.security_utils import validate_sql_identifier
 from config import settings
 
+
 logger = logging.getLogger(__name__)
 
 

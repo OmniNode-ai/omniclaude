@@ -16,6 +16,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+
 # Add agents/lib to path
 lib_path = Path(__file__).parent / "agents" / "lib"
 if str(lib_path) not in sys.path:

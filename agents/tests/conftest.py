@@ -29,6 +29,7 @@ import pytest
 # This ensures database credentials and other config are available
 from dotenv import load_dotenv
 
+
 # Ensure project root is on sys.path for test imports
 # This allows tests to import from the agents package
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

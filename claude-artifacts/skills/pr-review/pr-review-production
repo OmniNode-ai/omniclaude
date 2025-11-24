@@ -2,18 +2,15 @@
 set -euo pipefail
 
 # ============================================================================
-# PR Review - Production Mode
+# pr-review-production - Strict Production-Ready PR Review
 # ============================================================================
-# Strict PR review wrapper for production deployments.
+# Strict PR review wrapper for production deployments with smart caching.
 #
-# Production Requirements (STRICT):
-#   ✅ ALL Critical issues MUST be resolved
-#   ✅ ALL Major issues MUST be resolved
-#   ✅ ALL Minor issues MUST be resolved
-#   ⚪ Nits are optional (nice to have)
-#
-# This wrapper enforces production-grade quality standards and will block
-# merge if ANY critical/major/minor issues remain.
+# Optimizations:
+#   - Single data fetch (no redundant API calls)
+#   - Uses cached data for multiple passes
+#   - Passes data via stdin to analyze-pr-comments (avoids re-fetch)
+#   - Smart auto-limiting for large PRs
 # ============================================================================
 
 # Colors for output
@@ -36,8 +33,8 @@ Arguments:
 Options:
   --output-file FILE       Save review to file (default: {REPO}/tmp/pr-review-{PR}-production.md)
   --json                   Output in JSON format
-  --create-linear-tickets  Create Linear tickets for each Critical/Major issue
-  --team TEAM_ID          Linear team ID (required with --create-linear-tickets)
+  --limit NUM              Limit comments (for large PRs, default: auto-detect)
+  --no-cache               Skip cache, fetch fresh data
 
 Production Standards:
   🔴 CRITICAL - MUST be resolved (BLOCKING)
@@ -55,8 +52,8 @@ Examples:
   # Production review
   $(basename "$0") 22
 
-  # Create Linear tickets for issues
-  $(basename "$0") 22 --create-linear-tickets --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
+  # Large PR with auto-limiting
+  $(basename "$0") 88 --limit 50
 
   # JSON output for CI/CD
   $(basename "$0") 22 --json | tee production-review.json
@@ -68,8 +65,12 @@ EOF
 check_dependencies() {
     local missing_deps=()
 
-    if [[ ! -x "$HOME/.claude/skills/pr-review/review-pr" ]]; then
-        missing_deps+=("review-pr (run: chmod +x ~/.claude/skills/pr-review/review-pr)")
+    if [[ ! -x "$HOME/.claude/skills/pr-review/fetch-pr-data" ]]; then
+        missing_deps+=("fetch-pr-data (run: chmod +x ~/.claude/skills/pr-review/fetch-pr-data)")
+    fi
+
+    if [[ ! -x "$HOME/.claude/skills/pr-review/analyze-pr-comments" ]]; then
+        missing_deps+=("analyze-pr-comments (run: chmod +x ~/.claude/skills/pr-review/analyze-pr-comments)")
     fi
 
     if ! command -v jq &> /dev/null; then
@@ -85,103 +86,102 @@ check_dependencies() {
     fi
 }
 
-# Create Linear tickets for issues
-create_linear_tickets() {
+# Extract PR number
+extract_pr_number() {
+    local input="$1"
+    if [[ "$input" =~ pull/([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    elif [[ "$input" =~ ^[0-9]+$ ]]; then
+        echo "$input"
+    else
+        echo -e "${RED}✗${NC} Invalid PR number: $input" >&2
+        exit 1
+    fi
+}
+
+# Format production markdown output
+format_production_output() {
     local categorized="$1"
     local pr_number="$2"
-    local team_id="$3"
 
-    echo -e "${BLUE}[LINEAR]${NC} Creating tickets for Critical and Major issues..."
+    local critical_count=$(echo "$categorized" | jq '.summary.total_critical')
+    local major_count=$(echo "$categorized" | jq '.summary.total_major')
+    local minor_count=$(echo "$categorized" | jq '.summary.total_minor')
+    local nit_count=$(echo "$categorized" | jq '.summary.total_nitpicks')
 
-    # Create tickets for Critical issues
-    local critical_issues=$(echo "$categorized" | jq -c '.critical[]')
-    local ticket_count=0
+    cat << EOF
+# PR #${pr_number} - Production Review
 
-    while IFS= read -r issue; do
-        [[ -z "$issue" ]] && continue
+**Generated**: $(date '+%Y-%m-%d %H:%M:%S')
+**Mode**: Production (Strict)
 
-        local author=$(echo "$issue" | jq -r '.author')
-        local body=$(echo "$issue" | jq -r '.body')
-        local path=$(echo "$issue" | jq -r '.path // "N/A"')
+## Priority Breakdown
 
-        local title="🔴 CRITICAL: Fix issue in PR #${pr_number}"
-        if [[ "$path" != "N/A" ]]; then
-            title="🔴 CRITICAL: Fix issue in $path (PR #${pr_number})"
-        fi
+| Priority | Count | Status |
+|----------|-------|--------|
+| 🔴 CRITICAL | $critical_count | MUST resolve (BLOCKING) |
+| 🟠 MAJOR | $major_count | MUST resolve (BLOCKING) |
+| 🟡 MINOR | $minor_count | MUST resolve (BLOCKING) |
+| ⚪ NIT | $nit_count | Optional (NOT blocking) |
 
-        local description="## Critical Issue from PR #${pr_number}
+## Production Readiness
 
-**Reporter**: ${author}
-**File**: ${path}
-**Priority**: Critical (BLOCKING)
+EOF
 
-## Issue Description
+    if [[ $critical_count -gt 0 ]] || [[ $major_count -gt 0 ]] || [[ $minor_count -gt 0 ]]; then
+        echo "❌ **NOT READY FOR PRODUCTION**"
+        echo ""
+        [[ $critical_count -gt 0 ]] && echo "- ❌ $critical_count Critical issue(s) MUST be resolved"
+        [[ $major_count -gt 0 ]] && echo "- ❌ $major_count Major issue(s) MUST be resolved"
+        [[ $minor_count -gt 0 ]] && echo "- ⚠️  $minor_count Minor issue(s) MUST be resolved"
+    else
+        echo "✅ **READY FOR PRODUCTION**"
+        echo ""
+        echo "All critical, major, and minor issues have been resolved."
+        [[ $nit_count -gt 0 ]] && echo "" && echo "⚪ $nit_count nit(s) remain but are optional."
+    fi
 
-${body}
+    echo ""
+    echo "---"
+    echo ""
 
-## Requirements
-- Must be resolved before production deployment
-- Security and stability implications
-- Requires thorough testing after fix
+    # Output each priority category
+    for priority in "critical" "major" "minor" "nitpicks"; do
+        local count=$(echo "$categorized" | jq ".summary.total_${priority}")
+        [[ $count -eq 0 ]] && continue
 
-## Definition of Done
-- [ ] Issue resolved and verified
-- [ ] Tests added/updated
-- [ ] PR review passed
-- [ ] Security review completed (if applicable)
-- [ ] Documentation updated
-"
+        case "$priority" in
+            critical) echo "## 🔴 CRITICAL Issues ($count)" ;;
+            major) echo "## 🟠 MAJOR Issues ($count)" ;;
+            minor) echo "## 🟡 MINOR Issues ($count)" ;;
+            nitpicks) echo "## ⚪ NIT / Nice to Have ($count)" ;;
+        esac
 
-        # Would create ticket here using Linear MCP
-        echo -e "${GREEN}✓${NC} Would create ticket: $title"
-        ((ticket_count++))
+        echo ""
 
-    done <<< "$critical_issues"
+        local issues=$(echo "$categorized" | jq -c ".categorized_issues.${priority}[]")
+        local issue_num=1
 
-    # Create tickets for Major issues
-    local major_issues=$(echo "$categorized" | jq -c '.major[]')
+        while IFS= read -r issue; do
+            [[ -z "$issue" ]] && continue
 
-    while IFS= read -r issue; do
-        [[ -z "$issue" ]] && continue
+            local author=$(echo "$issue" | jq -r '.author')
+            local title=$(echo "$issue" | jq -r '.title // .description' | head -c 150)
+            local file=$(echo "$issue" | jq -r '.file // "N/A"')
+            local status=$(echo "$issue" | jq -r '.status // "unknown"')
 
-        local author=$(echo "$issue" | jq -r '.author')
-        local body=$(echo "$issue" | jq -r '.body')
-        local path=$(echo "$issue" | jq -r '.path // "N/A"')
+            echo "### ${priority^^}-${issue_num}: $author"
+            [[ "$file" != "N/A" ]] && [[ "$file" != "null" ]] && echo "**File**: \`$file\`"
+            echo "**Status**: $status"
+            echo ""
+            echo "$title..."
+            echo ""
+            echo "---"
+            echo ""
 
-        local title="🟠 MAJOR: Fix issue in PR #${pr_number}"
-        if [[ "$path" != "N/A" ]]; then
-            title="🟠 MAJOR: Fix issue in $path (PR #${pr_number})"
-        fi
-
-        local description="## Major Issue from PR #${pr_number}
-
-**Reporter**: ${author}
-**File**: ${path}
-**Priority**: Major (IMPORTANT)
-
-## Issue Description
-
-${body}
-
-## Requirements
-- Should be resolved before production deployment
-- Affects functionality or quality
-- Requires testing after fix
-
-## Definition of Done
-- [ ] Issue resolved and verified
-- [ ] Tests added/updated
-- [ ] PR review passed
-- [ ] Documentation updated
-"
-
-        # Would create ticket here using Linear MCP
-        echo -e "${GREEN}✓${NC} Would create ticket: $title"
-        ((ticket_count++))
-
-    done <<< "$major_issues"
-
-    echo -e "${GREEN}✓${NC} Created $ticket_count Linear ticket(s)"
+            ((issue_num++))
+        done <<< "$issues"
+    done
 }
 
 # Main function
@@ -189,8 +189,8 @@ main() {
     local pr_number=""
     local output_file=""
     local json_output=false
-    local create_tickets=false
-    local team_id=""
+    local limit=""
+    local use_cache=true
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -203,13 +203,13 @@ main() {
                 json_output=true
                 shift
                 ;;
-            --create-linear-tickets)
-                create_tickets=true
-                shift
-                ;;
-            --team)
-                team_id="$2"
+            --limit)
+                limit="$2"
                 shift 2
+                ;;
+            --no-cache)
+                use_cache=false
+                shift
                 ;;
             -h|--help)
                 usage
@@ -230,107 +230,112 @@ main() {
         usage
     fi
 
-    if [[ "$create_tickets" == true ]] && [[ -z "$team_id" ]]; then
-        echo -e "${RED}✗${NC} --team is required when using --create-linear-tickets"
-        exit 1
-    fi
-
     check_dependencies
 
-    echo -e "${MAGENTA}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║           PR REVIEW - PRODUCTION MODE                      ║${NC}"
-    echo -e "${MAGENTA}╚════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${BLUE}[PRODUCTION]${NC} Running strict production review for PR #${pr_number}..."
-    echo ""
+    pr_number=$(extract_pr_number "$pr_number")
 
-    # Determine output file (use repo tmp directory)
+    echo -e "${MAGENTA}╔════════════════════════════════════════════════════════════╗${NC}" >&2
+    echo -e "${MAGENTA}║           PR REVIEW - PRODUCTION MODE                      ║${NC}" >&2
+    echo -e "${MAGENTA}╚════════════════════════════════════════════════════════════╝${NC}" >&2
+    echo "" >&2
+    echo -e "${BLUE}[PRODUCTION]${NC} Running strict production review for PR #${pr_number}..." >&2
+    echo "" >&2
+
+    # Determine output file
     if [[ -z "$output_file" ]]; then
-        # Get repo root (traverse up from script location)
         local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         local repo_root="$(cd "$script_dir/../.." && pwd)"
         mkdir -p "$repo_root/tmp"
         output_file="$repo_root/tmp/pr-review-${pr_number}-production.md"
     fi
 
-    # Run underlying review-pr script in strict mode
-    local review_output
-    if [[ "$json_output" == true ]]; then
-        review_output=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --strict --json 2>&1) || true
-    else
-        review_output=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --strict --output-file "$output_file" 2>&1) || true
-    fi
+    # Fetch PR data ONCE (with caching)
+    echo -e "${BLUE}[PRODUCTION]${NC} Fetching PR data (cached)..." >&2
+    local fetch_args=("$pr_number")
+    [[ -n "$limit" ]] && fetch_args+=("--limit" "$limit")
+    [[ "$use_cache" == false ]] && fetch_args+=("--no-cache")
 
-    # Verify review file was created
-    if [[ ! -f "$output_file" ]]; then
-        echo -e "${RED}✗${NC} Review file not created at $output_file"
-        echo -e "${RED}✗${NC} Review may have failed - check output above"
-        exit 3
-    fi
-
-    # Extract categorized data from review-pr JSON output
-    local categorized
-    categorized=$("$HOME/.claude/skills/pr-review/review-pr" "$pr_number" --json 2>/dev/null) || {
-        echo -e "${RED}✗${NC} Failed to get categorized data"
+    local pr_data
+    pr_data=$("$HOME/.claude/skills/pr-review/fetch-pr-data" "${fetch_args[@]}") || {
+        echo -e "${RED}✗${NC} Failed to fetch PR data" >&2
         exit 3
     }
 
-    local critical_count=$(echo "$categorized" | jq '.summary.critical_count')
-    local major_count=$(echo "$categorized" | jq '.summary.major_count')
-    local minor_count=$(echo "$categorized" | jq '.summary.minor_count')
-    local nit_count=$(echo "$categorized" | jq '.summary.nit_count')
+    echo -e "${GREEN}✓${NC} PR data fetched" >&2
 
-    # Production summary
-    echo ""
-    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${MAGENTA}   PRODUCTION REVIEW SUMMARY${NC}"
-    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    echo "  🔴 CRITICAL (MUST resolve): $critical_count"
-    echo "  🟠 MAJOR    (MUST resolve): $major_count"
-    echo "  🟡 MINOR    (MUST resolve): $minor_count"
-    echo "  ⚪ NIT      (optional):      $nit_count"
-    echo ""
-    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-
-    # Create Linear tickets if requested
-    if [[ "$create_tickets" == true ]] && ([[ $critical_count -gt 0 ]] || [[ $major_count -gt 0 ]]); then
-        create_linear_tickets "$categorized" "$pr_number" "$team_id"
-        echo ""
+    # Check if we need auto-limiting for large PRs
+    local total_comments=$(echo "$pr_data" | jq '.summary.total_all_comments')
+    if [[ $total_comments -gt 1000 ]] && [[ -z "$limit" ]]; then
+        echo -e "${YELLOW}⚠${NC} Large PR detected ($total_comments comments)" >&2
+        echo -e "${YELLOW}⚠${NC} Re-fetching with auto-limit of 50 recent + all bot comments..." >&2
+        pr_data=$("$HOME/.claude/skills/pr-review/fetch-pr-data" "$pr_number" --limit 50 --no-cache) || {
+            echo -e "${RED}✗${NC} Failed to re-fetch with limit" >&2
+            exit 3
+        }
+        total_comments=$(echo "$pr_data" | jq '.summary.total_all_comments')
+        echo -e "${GREEN}✓${NC} Limited to $total_comments comments" >&2
     fi
+
+    # Analyze comments (categorization) - uses pr_data from stdin
+    echo -e "${BLUE}[PRODUCTION]${NC} Analyzing comments..." >&2
+    local categorized
+    categorized=$(echo "$pr_data" | "$HOME/.claude/skills/pr-review/analyze-pr-comments") || {
+        echo -e "${RED}✗${NC} Failed to analyze comments" >&2
+        exit 3
+    }
+
+    echo -e "${GREEN}✓${NC} Analysis complete" >&2
+
+    # Extract counts
+    local critical_count=$(echo "$categorized" | jq '.summary.total_critical')
+    local major_count=$(echo "$categorized" | jq '.summary.total_major')
+    local minor_count=$(echo "$categorized" | jq '.summary.total_minor')
+    local nit_count=$(echo "$categorized" | jq '.summary.total_nitpicks')
+
+    # Production summary (to stderr)
+    echo "" >&2
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}" >&2
+    echo -e "${MAGENTA}   PRODUCTION REVIEW SUMMARY${NC}" >&2
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}" >&2
+    echo "" >&2
+    echo "  🔴 CRITICAL (MUST resolve): $critical_count" >&2
+    echo "  🟠 MAJOR    (MUST resolve): $major_count" >&2
+    echo "  🟡 MINOR    (MUST resolve): $minor_count" >&2
+    echo "  ⚪ NIT      (optional):      $nit_count" >&2
+    echo "" >&2
+    echo -e "${MAGENTA}═══════════════════════════════════════════════════════════${NC}" >&2
+    echo "" >&2
+
+    # Generate output
+    if [[ "$json_output" == true ]]; then
+        echo "$categorized" | tee "$output_file"
+    else
+        format_production_output "$categorized" "$pr_number" | tee "$output_file"
+    fi
+
+    echo "" >&2
+    echo -e "${GREEN}✓${NC} Review saved to: $output_file" >&2
+    echo "" >&2
 
     # Production readiness check
     if [[ $critical_count -gt 0 ]] || [[ $major_count -gt 0 ]] || [[ $minor_count -gt 0 ]]; then
-        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║  ❌ NOT READY FOR PRODUCTION                               ║${NC}"
-        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        if [[ $critical_count -gt 0 ]]; then
-            echo -e "${RED}  ✗ $critical_count CRITICAL issue(s) MUST be resolved${NC}"
-        fi
-        if [[ $major_count -gt 0 ]]; then
-            echo -e "${RED}  ✗ $major_count MAJOR issue(s) MUST be resolved${NC}"
-        fi
-        if [[ $minor_count -gt 0 ]]; then
-            echo -e "${YELLOW}  ⚠  $minor_count MINOR issue(s) MUST be resolved${NC}"
-        fi
-        echo ""
-        echo -e "Review details: ${BLUE}$output_file${NC}"
-        echo ""
+        echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}" >&2
+        echo -e "${RED}║  ❌ NOT READY FOR PRODUCTION                               ║${NC}" >&2
+        echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}" >&2
+        echo "" >&2
+        [[ $critical_count -gt 0 ]] && echo -e "${RED}  ✗ $critical_count CRITICAL issue(s) MUST be resolved${NC}" >&2
+        [[ $major_count -gt 0 ]] && echo -e "${RED}  ✗ $major_count MAJOR issue(s) MUST be resolved${NC}" >&2
+        [[ $minor_count -gt 0 ]] && echo -e "${YELLOW}  ⚠  $minor_count MINOR issue(s) MUST be resolved${NC}" >&2
+        echo "" >&2
         exit 2
     else
-        echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║  ✅ READY FOR PRODUCTION                                   ║${NC}"
-        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        echo -e "${GREEN}  ✓ All Critical, Major, and Minor issues resolved${NC}"
-        if [[ $nit_count -gt 0 ]]; then
-            echo -e "${BLUE}  ℹ  $nit_count nit(s) remain but are optional${NC}"
-        fi
-        echo ""
-        echo -e "Review details: ${BLUE}$output_file${NC}"
-        echo ""
+        echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}" >&2
+        echo -e "${GREEN}║  ✅ READY FOR PRODUCTION                                   ║${NC}" >&2
+        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}" >&2
+        echo "" >&2
+        echo -e "${GREEN}  ✓ All Critical, Major, and Minor issues resolved${NC}" >&2
+        [[ $nit_count -gt 0 ]] && echo -e "${BLUE}  ℹ  $nit_count nit(s) remain but are optional${NC}" >&2
+        echo "" >&2
         exit 0
     fi
 }

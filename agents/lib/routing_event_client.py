@@ -49,6 +49,7 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 
+
 # CRITICAL: Add project root FIRST to avoid config module conflicts
 # There's a config module in agents/lib/config/ that conflicts with main config/
 _project_root = PathLib(__file__).parent.parent.parent

@@ -6,6 +6,12 @@
 # Database: omninode_bridge
 # Queries: routing_metrics.sql
 # Correlation ID: 60d7acac-8d46-4041-ae43-49f1aa7fdccc
+#
+# Exit Codes (see scripts/observability/EXIT_CODES.md):
+#   0 - All checks passed, routing system healthy
+#   1 - Threshold violations found, system degraded
+#   3 - Configuration error (missing .env, SQL file, or credentials)
+#   4 - Dependency missing (psql, bc not installed)
 # ============================================================================
 
 set -euo pipefail
@@ -25,7 +31,7 @@ LOG_FILE="$LOG_DIR/routing_health_${TIMESTAMP}.log"
 if [ ! -f "$PROJECT_ROOT/.env" ]; then
     echo "❌ ERROR: .env file not found at $PROJECT_ROOT/.env"
     echo "   Please copy .env.example to .env and configure it"
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Source .env file
@@ -54,7 +60,7 @@ if [ ${#missing_vars[@]} -gt 0 ]; then
     done
     echo ""
     echo "Please update your .env file with these variables."
-    exit 1
+    exit 3  # Configuration error
 fi
 
 # Thresholds
@@ -100,27 +106,31 @@ print_info() {
 }
 
 check_prerequisites() {
-    local missing_prereqs=0
-
     # Check psql
     if ! command -v psql &> /dev/null; then
         print_error "psql command not found. Please install PostgreSQL client."
-        missing_prereqs=1
+        exit 4  # Dependency missing
+    fi
+
+    # Check bc (for float comparisons)
+    if ! command -v bc &> /dev/null; then
+        print_error "bc command not found. Please install bc for floating-point comparisons."
+        echo "  macOS: brew install bc"
+        echo "  Ubuntu/Debian: sudo apt-get install bc"
+        exit 4  # Dependency missing
     fi
 
     # Check SQL file
     if [ ! -f "$SQL_FILE" ]; then
         print_error "SQL file not found: $SQL_FILE"
-        missing_prereqs=1
+        exit 3  # Configuration error
     fi
 
     # Check database connection
     if [ -z "$POSTGRES_PASSWORD" ]; then
         print_error "POSTGRES_PASSWORD not set in environment"
-        missing_prereqs=1
+        exit 3  # Configuration error
     fi
-
-    return $missing_prereqs
 }
 
 setup_log_directory() {
@@ -382,10 +392,7 @@ main() {
 
     # Check prerequisites
     print_info "Checking prerequisites..."
-    if ! check_prerequisites; then
-        print_error "Prerequisites check failed. Exiting."
-        exit 1
-    fi
+    check_prerequisites  # Exits with 3 or 4 on failure
     print_success "Prerequisites check passed"
     echo ""
 
@@ -435,13 +442,5 @@ main() {
 # Script Entry Point
 # ============================================================================
 
-# Check if bc is available (needed for float comparisons)
-if ! command -v bc &> /dev/null; then
-    echo "Error: 'bc' command not found. Please install bc for floating-point comparisons."
-    echo "  macOS: brew install bc"
-    echo "  Ubuntu/Debian: sudo apt-get install bc"
-    exit 1
-fi
-
-# Run main function
+# Run main function (prerequisites are checked inside main)
 main "$@"

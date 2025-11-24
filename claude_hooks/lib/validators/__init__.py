@@ -2,4 +2,5 @@
 
 from .naming_validator import NamingValidator, Violation
 
+
 __all__ = ["NamingValidator", "Violation"]

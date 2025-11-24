@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from typing import Any, Optional
 from uuid import uuid4
 
+
 # Kafka imports
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -44,6 +45,7 @@ except ImportError:
 from .config import get_config
 from .routing_handler import RoutingHandler
 from .schemas import TOPICS, EventTypes, ModelRoutingEventEnvelope
+
 
 logger = logging.getLogger(__name__)
 

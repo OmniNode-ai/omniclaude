@@ -19,6 +19,7 @@ from omnibase_core.models.common.model_schema_value import ModelSchemaValue
 from omnibase_core.models.contracts.model_contract_base import ModelContractBase
 from omnibase_core.primitives.model_semver import ModelSemVer
 
+
 logger = logging.getLogger(__name__)
 
 # Type variable for contract types

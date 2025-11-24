@@ -1,7 +1,7 @@
 # OmniClaude
 
 [![License](https://img.shields.io/badge/license-OmniNode-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![AI Providers](https://img.shields.io/badge/AI%20providers-7-green.svg)](#supported-providers)
 [![Agents](https://img.shields.io/badge/agents-52-purple.svg)](#agent-framework-highlights)
 [![Quality Gates](https://img.shields.io/badge/quality%20gates-23-orange.svg)](#key-features)

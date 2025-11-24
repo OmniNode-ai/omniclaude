@@ -82,10 +82,20 @@ Create a plan to execute tasks in parallel:
 
 ### ❌ WRONG (Running commands directly):
 ```
-DO NOT DO THIS:
-- Bash: git add file.py && git commit
+DO NOT DO THIS IN COORDINATOR:
 - Edit: file.py to change code
 - Write: file.py with new content
+- Bash: running implementation commands directly
+
+DO NOT DO THIS IN SPAWNED AGENTS:
+- Bash: git add file.py && git commit
+- Bash: git add . && git commit -m "message"
+- Bash: git push
+- Bash: git stash
+- Any git operations (add, commit, push, stash, rebase, etc.)
+
+Git operations are ONLY for the main coordinator when EXPLICITLY requested by the user,
+not for spawned polymorphic agents.
 ```
 
 ### ✅ CORRECT (Dispatching to polymorphic agent):
@@ -211,14 +221,26 @@ Generate final summary across **all polymorphic agent cycles**:
    - Manual intervention required
    - Recommendations for next steps
 
-## Phase 7: Optional Next Steps
+## Phase 7: User-Controlled Next Steps
 
-Ask user if they want to:
-- Commit the changes
-- Continue with remaining tasks
-- Review captured debug intelligence
-- Test the new features/optimizations
-- Deploy the changes
+**🚨 IMPORTANT: NEVER automatically commit changes 🚨**
+
+After all fixes are complete, **ASK the user** if they want to:
+- ❓ **Review the changes** (git diff, file-by-file review)
+- ❓ **Commit the changes** (ONLY if user explicitly requests it)
+- ❓ **Run tests** to verify fixes
+- ❓ **Continue with remaining tasks**
+- ❓ **Review captured debug intelligence**
+- ❓ **Deploy the changes**
+
+**Git operations require explicit user approval:**
+- ✅ User says "commit these changes" → OK to run git commands
+- ✅ User says "create a commit" → OK to run git commands
+- ❌ User says "fix this bug" → DO NOT commit automatically
+- ❌ User says "implement this feature" → DO NOT commit automatically
+- ❌ Silence from user → DO NOT commit automatically
+
+**Wait for explicit user approval before ANY git operations.**
 
 ---
 
@@ -239,6 +261,9 @@ Ask user if they want to:
 - Execute tasks yourself instead of using Task tool
 - Skip dispatching to polymorphic agents
 - Reject tasks because they're "enhancements" or "features" instead of bugs
+- **Run git commands in spawned agents** (git add, git commit, git push, git stash, etc.)
+- **Automatically commit changes** without explicit user approval
+- **Assume user wants changes committed** - always ask first
 
 **DO**:
 - Use Task tool for EVERY task in your plan (bugs, features, enhancements, optimizations, etc.)

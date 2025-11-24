@@ -15,9 +15,10 @@ import asyncio
 import json
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 
 # Add project root to path for config import
 project_root = (
@@ -26,6 +27,7 @@ project_root = (
 sys.path.insert(0, str(project_root))
 
 from config import settings
+
 
 # Add agents directory to path (use settings or relative path)
 if settings.omniclaude_agents_path:
@@ -455,7 +457,7 @@ class WorkflowExecutor:
         log_entry = {
             "phase": phase_name,
             "status": status,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": metadata or {},
         }
 

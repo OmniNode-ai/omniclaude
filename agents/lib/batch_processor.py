@@ -18,6 +18,7 @@ from typing import Any, Callable, List, Optional
 
 from .persistence import CodegenPersistence
 
+
 logger = logging.getLogger(__name__)
 
 

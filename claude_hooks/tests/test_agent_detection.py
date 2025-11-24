@@ -18,12 +18,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+
 # Add lib directory to path
 HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
 from agent_detector import AgentDetector  # noqa: E402
 from hybrid_agent_selector import HybridAgentSelector, SelectionMethod  # noqa: E402
+
 
 # ============================================================================
 # FIXTURES

@@ -28,9 +28,11 @@ import sys
 from enum import Enum
 from pathlib import Path
 
+
 # Add hooks/lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
 from hook_event_adapter import get_hook_event_adapter
+
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))

@@ -13,6 +13,7 @@ Tests:
 import sys
 from pathlib import Path
 
+
 # Add omniclaude to path dynamically
 # Determine repository root (this file is at repo root)
 REPO_ROOT = Path(__file__).resolve().parent

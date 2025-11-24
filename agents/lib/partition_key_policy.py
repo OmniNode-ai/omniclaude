@@ -31,6 +31,7 @@ import logging
 from enum import Enum
 from typing import Any, Dict, Optional, Union
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -375,14 +376,14 @@ VALID_EVENT_FAMILIES = [family.value for family in EventFamily]
 
 
 __all__ = [
-    "EventFamily",
+    "DEFAULT_PARTITION_KEY_FIELD",
     "PARTITION_KEY_POLICY",
+    "VALID_EVENT_FAMILIES",
+    "EventFamily",
+    "get_all_event_families",
     "get_event_family",
     "get_partition_key_for_event",
     "get_partition_policy",
-    "validate_partition_key",
-    "get_all_event_families",
     "get_policy_summary",
-    "DEFAULT_PARTITION_KEY_FIELD",
-    "VALID_EVENT_FAMILIES",
+    "validate_partition_key",
 ]

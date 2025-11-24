@@ -28,8 +28,10 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
+
 
 # Database configuration
 DB_CONFIG = {

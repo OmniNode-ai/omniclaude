@@ -24,6 +24,7 @@ from .config import RoutingAdapterConfig, get_config
 from .routing_adapter_service import RoutingAdapterService
 from .routing_handler import RoutingHandler
 
+
 __all__ = [
     "RoutingAdapterService",
     "RoutingHandler",
