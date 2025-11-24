@@ -103,12 +103,12 @@ def main() -> int:
         result = {"timeframe": args.timeframe}
 
         # Get routing statistics
-        routing_query = """
+        routing_query = f"""
             SELECT
                 COUNT(*) as total_decisions,
                 AVG(routing_time_ms) as avg_routing_time_ms,
                 AVG(confidence_score) as avg_confidence,
-                COUNT(CASE WHEN routing_time_ms > 100 THEN 1 END) as threshold_violations
+                COUNT(CASE WHEN routing_time_ms > {ROUTING_TIMEOUT_THRESHOLD_MS} THEN 1 END) as threshold_violations
             FROM agent_routing_decisions
             WHERE created_at > NOW() - %s::interval
         """
