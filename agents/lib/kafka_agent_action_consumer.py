@@ -44,6 +44,19 @@ def safe_json_deserializer(message_bytes: bytes) -> Optional[Dict]:
     Returns:
         Deserialized dict or None if JSON is invalid
     """
+    # Guard against None payload
+    if message_bytes is None:
+        logger.warning("Received None message payload, skipping deserialization")
+        return None
+
+    # Guard against non-bytes payload (already deserialized or wrong type)
+    if not isinstance(message_bytes, bytes):
+        logger.error(
+            f"Expected bytes, got {type(message_bytes).__name__}. "
+            f"Value: {message_bytes!r}"
+        )
+        return None
+
     try:
         return json.loads(message_bytes.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as e:

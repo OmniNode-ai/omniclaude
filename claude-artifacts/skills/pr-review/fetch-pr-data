@@ -177,9 +177,15 @@ fetch_pr_data() {
     local cache_only="${5:-false}"
     local repo_name
 
-    # Setup cache
+    # Setup cache with mode-specific key to prevent serving truncated data as full
     mkdir -p "$CACHE_DIR"
-    local cache_file="$CACHE_DIR/pr_${pr_number}_data.json"
+    local fetch_mode="full"
+    if [[ "$summary_only" == "true" ]]; then
+        fetch_mode="summary"
+    elif [[ -n "$limit" ]]; then
+        fetch_mode="limited_${limit}"
+    fi
+    local cache_file="$CACHE_DIR/pr_${pr_number}_${fetch_mode}.json"
 
     # Check cache
     if [[ "$use_cache" == "true" ]] && check_cache "$cache_file"; then
@@ -307,16 +313,23 @@ fetch_pr_data() {
                 })
             " > "$issue_comments_file" 2>/dev/null || echo "[]" > "$issue_comments_file"
         else
-            # Capture stderr to surface GitHub API errors instead of silently failing
-            if ! gh api "$endpoint" --paginate \
+            # Capture stderr to detect GitHub API errors
+            local api_output
+            if api_output=$(gh api "$endpoint" --paginate \
                 --jq '[.[] | {
                     author: .user.login,
                     body: .body,
                     created_at: .created_at,
                     id: .id
-                }]' > "$issue_comments_file" 2>&1; then
+                }]' 2>&1); then
+                echo "$api_output" > "$issue_comments_file"
+            else
+                # GitHub API error - surface to user and exit with error code
                 echo "[]" > "$issue_comments_file"
-                print_error "GitHub API error fetching issue comments (endpoint: $endpoint)"
+                print_error "GitHub API error fetching issue comments: $api_output"
+                print_error "Endpoint: $endpoint"
+                rm -rf "$tmp_dir"
+                exit 2
             fi
         fi
         print_success "Issue Comments API (Claude bot comments!)"
