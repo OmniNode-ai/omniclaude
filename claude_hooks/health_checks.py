@@ -38,7 +38,7 @@ except ImportError:
 
 # Import pattern tracker for configuration
 try:
-    from pattern_tracker import PatternTrackerConfig, get_tracker
+    from .pattern_tracker import PatternTrackerConfig, get_tracker
 
     HAS_PATTERN_TRACKER = True
 except ImportError:

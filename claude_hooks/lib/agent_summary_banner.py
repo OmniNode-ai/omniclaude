@@ -18,8 +18,8 @@ from typing import Dict, List, Optional
 
 # Import hook infrastructure
 try:
-    from correlation_manager import get_correlation_context
-    from hook_event_logger import get_logger
+    from .correlation_manager import get_correlation_context
+    from .hook_event_logger import get_logger
 except ImportError:
     print("Error: Unable to import hook infrastructure", file=sys.stderr)
     sys.exit(1)

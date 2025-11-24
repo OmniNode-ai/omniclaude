@@ -19,10 +19,17 @@ Architecture:
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 
-def load_manifest(correlation_id: str = None, agent_name: str = None):
+if TYPE_CHECKING:
+    from typing import Any
+
+
+def load_manifest(
+    correlation_id: Optional[str] = None, agent_name: Optional[str] = None
+) -> str:
     """
     Load and return dynamic system manifest.
 

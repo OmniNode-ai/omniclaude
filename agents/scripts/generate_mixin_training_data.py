@@ -31,8 +31,8 @@ import logging
 import random
 from typing import List, Tuple
 
-from lib.mixin_features import MixinFeatureExtractor
-from lib.persistence import CodegenPersistence
+from agents.lib.mixin_features import MixinFeatureExtractor
+from agents.lib.persistence import CodegenPersistence
 
 
 logging.basicConfig(level=logging.INFO)

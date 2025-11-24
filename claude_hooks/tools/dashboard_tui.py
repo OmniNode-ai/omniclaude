@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 # Import the dashboard logic
-from system_dashboard_md import SystemDashboard
+from ..system_dashboard_md import SystemDashboard
 
 
 # ANSI Color Codes

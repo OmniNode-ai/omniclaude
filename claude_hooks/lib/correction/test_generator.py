@@ -7,7 +7,7 @@ Validates Phase 1 functionality with and without Archon MCP.
 import asyncio
 import sys
 
-from generator import CorrectionGenerator, Violation
+from .generator import CorrectionGenerator, Violation
 
 
 async def test_context_extraction():

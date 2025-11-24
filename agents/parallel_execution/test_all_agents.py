@@ -16,7 +16,7 @@ Setup:
 import asyncio
 import sys
 
-from agent_loader import AgentLoader, AgentLoadStatus
+from .agent_loader import AgentLoader, AgentLoadStatus
 
 
 async def main():

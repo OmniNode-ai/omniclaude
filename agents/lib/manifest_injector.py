@@ -62,7 +62,17 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path as _Path
-from typing import Any, Dict, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 from uuid import UUID
 
 
@@ -81,112 +91,64 @@ except ImportError:
     nest_asyncio = None
 
 # Import IntelligenceEventClient for event bus communication
-try:
-    from intelligence_event_client import IntelligenceEventClient
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from intelligence_event_client import IntelligenceEventClient
-
 # Import IntelligenceCache for Valkey-backed caching
-try:
-    from intelligence_cache import IntelligenceCache
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from intelligence_cache import IntelligenceCache
-
-# Import PatternQualityScorer for quality filtering
-try:
-    from pattern_quality_scorer import PatternQualityScorer
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from pattern_quality_scorer import PatternQualityScorer
-
-# Import TaskClassifier for task-aware section selection
-try:
-    from task_classifier import TaskClassifier, TaskContext, TaskIntent
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from task_classifier import TaskClassifier, TaskContext, TaskIntent
-
+from .intelligence_cache import IntelligenceCache
+from .intelligence_event_client import IntelligenceEventClient
 
 # Import IntelligenceUsageTracker for intelligence effectiveness tracking
-try:
-    from intelligence_usage_tracker import IntelligenceUsageTracker
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
+from .intelligence_usage_tracker import IntelligenceUsageTracker
 
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    from intelligence_usage_tracker import IntelligenceUsageTracker
+# Import PatternQualityScorer for quality filtering
+from .pattern_quality_scorer import PatternQualityScorer
+
+# Import TaskClassifier for task-aware section selection
+from .task_classifier import TaskClassifier, TaskContext, TaskIntent
+
 
 # Import ActionLogger for tracking intelligence gathering performance
-try:
-    from agents.lib.action_logger import ActionLogger
+ACTION_LOGGER_AVAILABLE: bool = False
+ActionLogger: Optional[type] = None
 
-    ACTION_LOGGER_AVAILABLE = True
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
+# Type alias for ActionLogger (can be None if not available)
+ActionLoggerType = Any  # Will be replaced with actual ActionLogger type if imported
 
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
+
+def _load_action_logger() -> bool:
+    """Try to load ActionLogger from various locations."""
+    global ACTION_LOGGER_AVAILABLE, ActionLogger
     try:
-        from action_logger import ActionLogger
+        from .action_logger import ActionLogger as _ALImport
 
+        ActionLogger = _ALImport
         ACTION_LOGGER_AVAILABLE = True
+        return True
     except ImportError:
         ACTION_LOGGER_AVAILABLE = False
-        ActionLogger = None  # type: ignore
+        return False
+
+
+_load_action_logger()
+
 
 # Import data sanitizer for secure logging
-try:
-    from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
-except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
-    import sys
-    from pathlib import Path
-
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
+def _load_sanitizers() -> Tuple[Callable[[Any], Any], Callable[[Any], Any]]:
+    """Try to load sanitizer functions from various locations."""
     try:
-        from data_sanitizer import sanitize_dict, sanitize_string
+        from .data_sanitizer import sanitize_dict, sanitize_string
+
+        return sanitize_dict, sanitize_string
     except ImportError:
         # Fallback: no-op sanitization functions
-        def sanitize_dict(d, **kwargs):
+        def fallback_dict(d: Any, **kwargs: Any) -> Any:
             return d
 
-        def sanitize_string(s, **kwargs):
+        def fallback_string(s: Any, **kwargs: Any) -> Any:
             return s
+
+        return fallback_dict, fallback_string
+
+
+sanitize_dict, sanitize_string = _load_sanitizers()
 
 
 logger = logging.getLogger(__name__)
@@ -787,6 +749,9 @@ class ManifestInjector:
             agent_name: Agent name for logging (if known at init time)
                        Falls back to AGENT_NAME environment variable if not provided
         """
+        # Initialize logger early for use throughout __init__
+        self.logger = logging.getLogger(__name__)
+
         self.kafka_brokers = kafka_brokers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
@@ -802,6 +767,7 @@ class ManifestInjector:
         self.cache_ttl_seconds = cache_ttl_seconds or default_ttl
 
         # Initialize enhanced caching layer (in-memory)
+        self._cache: ManifestCache | None
         if enable_cache:
             self._cache = ManifestCache(
                 default_ttl_seconds=self.cache_ttl_seconds,
@@ -830,6 +796,7 @@ class ManifestInjector:
         self._current_warnings: List[str] = []
 
         # Storage handler
+        self._storage: ManifestInjectionStorage | None
         if self.enable_storage:
             self._storage = ManifestInjectionStorage()
         else:
@@ -851,9 +818,7 @@ class ManifestInjector:
         self.min_quality_threshold = settings.min_pattern_quality
 
         # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
-        self._action_logger_cache: Dict[str, Optional[ActionLogger]] = {}
-
-        self.logger = logging.getLogger(__name__)
+        self._action_logger_cache: Dict[str, Optional[Any]] = {}
 
     async def __aenter__(self):
         """
@@ -1027,6 +992,9 @@ class ManifestInjector:
         # Check cache first
         if not force_refresh and self._is_cache_valid():
             self.logger.debug("Using cached manifest data")
+            assert (
+                self._manifest_data is not None
+            ), "Cache valid but manifest_data is None"
             return self._manifest_data
 
         # Run async query in event loop
@@ -1034,7 +1002,9 @@ class ManifestInjector:
             loop = asyncio.get_event_loop()
             # With nest_asyncio.apply(), we can run_until_complete even in running loop
             return loop.run_until_complete(
-                self.generate_dynamic_manifest_async(correlation_id, force_refresh)
+                self.generate_dynamic_manifest_async(
+                    correlation_id, force_refresh=force_refresh
+                )
             )
         except RuntimeError as e:
             if "no running event loop" in str(e).lower():
@@ -1045,7 +1015,7 @@ class ManifestInjector:
                 try:
                     return loop.run_until_complete(
                         self.generate_dynamic_manifest_async(
-                            correlation_id, force_refresh
+                            correlation_id, force_refresh=force_refresh
                         )
                     )
                 finally:
@@ -1061,7 +1031,7 @@ class ManifestInjector:
             )
             return self._get_minimal_manifest()
 
-    def _get_action_logger(self, correlation_id: str) -> Optional[ActionLogger]:
+    def _get_action_logger(self, correlation_id: str) -> Optional[Any]:
         """
         Get or create ActionLogger instance with caching.
 
@@ -1079,7 +1049,7 @@ class ManifestInjector:
             return self._action_logger_cache[correlation_id]
 
         # Check availability (explicit check added for consistency)
-        if not ACTION_LOGGER_AVAILABLE:
+        if not ACTION_LOGGER_AVAILABLE or ActionLogger is None:
             self.logger.debug("ActionLogger not available, skipping logging")
             self._action_logger_cache[correlation_id] = None
             return None
@@ -1126,10 +1096,8 @@ class ManifestInjector:
         import time
 
         # Convert correlation_id to UUID
-        if isinstance(correlation_id, str):
-            correlation_id_uuid = UUID(correlation_id)
-        else:
-            correlation_id_uuid = correlation_id
+        # correlation_id is always str per function signature, so direct conversion
+        correlation_id_uuid = UUID(correlation_id)
 
         # Store correlation ID for tracking
         self._current_correlation_id = correlation_id_uuid
@@ -1173,6 +1141,9 @@ class ManifestInjector:
                         f"ActionLogger cache hit logging failed: {log_err}"
                     )
 
+            assert (
+                self._manifest_data is not None
+            ), "Cache valid but manifest_data is None"
             return self._manifest_data
 
         start_time = time.time()
@@ -1413,7 +1384,7 @@ class ManifestInjector:
             # Stop client
             await client.stop()
 
-    async def _embed_text(self, text: str, model: str = None) -> List[float]:
+    async def _embed_text(self, text: str, model: str | None = None) -> List[float]:
         """
         Embed text using GTE-Qwen2-1.5B embedding service.
 
@@ -1451,7 +1422,8 @@ class ManifestInjector:
                     if response.status == 200:
                         data = await response.json()
                         # OpenAI-compatible format: data[0].embedding
-                        return data["data"][0]["embedding"]
+                        embedding = data["data"][0]["embedding"]
+                        return cast(List[float], embedding)
                     else:
                         error_text = await response.text()
                         raise RuntimeError(
@@ -1466,7 +1438,7 @@ class ManifestInjector:
     async def _query_patterns_direct_qdrant(
         self,
         correlation_id: str,
-        collections: List[str] = None,
+        collections: List[str] | None = None,
         limit_per_collection: int = 20,
         task_context: Optional[TaskContext] = None,
         user_prompt: Optional[str] = None,
@@ -1925,7 +1897,11 @@ class ManifestInjector:
                     # Also store in in-memory cache for faster subsequent access
                     if self.enable_cache and self._cache:
                         self._cache.set("patterns", cached_result)
-                    return cached_result
+                    # Cast to dict for type safety
+                    cached_dict: Dict[str, Any] = (
+                        cached_result if isinstance(cached_result, dict) else {}
+                    )
+                    return cached_dict
             except Exception as e:
                 self.logger.warning(f"Valkey cache check failed: {e}")
 
@@ -1938,7 +1914,11 @@ class ManifestInjector:
                 self.logger.info(
                     f"[{correlation_id}] Pattern query: IN-MEMORY CACHE HIT ({elapsed_ms}ms)"
                 )
-                return cached_result
+                # Cast to dict for type safety
+                cached_dict_mem: Dict[str, Any] = (
+                    cached_result if isinstance(cached_result, dict) else {}
+                )
+                return cached_dict_mem
 
         try:
             self.logger.debug(
@@ -1973,18 +1953,26 @@ class ManifestInjector:
             archon_result, codegen_result = results
 
             # Handle exceptions from gather
+            archon_dict: Dict[str, Any] = {"patterns": [], "query_time_ms": 0}
+            codegen_dict: Dict[str, Any] = {"patterns": [], "query_time_ms": 0}
+
             if isinstance(archon_result, Exception):
                 self.logger.warning(f"archon_vectors query failed: {archon_result}")
-                archon_result = {"patterns": [], "query_time_ms": 0}
+                archon_dict = {"patterns": [], "query_time_ms": 0}
+            elif isinstance(archon_result, dict):
+                archon_dict = archon_result
+
             if isinstance(codegen_result, Exception):
                 self.logger.warning(
                     f"code_generation_patterns query failed: {codegen_result}"
                 )
-                codegen_result = {"patterns": [], "query_time_ms": 0}
+                codegen_dict = {"patterns": [], "query_time_ms": 0}
+            elif isinstance(codegen_result, dict):
+                codegen_dict = codegen_result
 
             # Merge results from both collections
-            archon_patterns = archon_result.get("patterns", [])
-            codegen_patterns = codegen_result.get("patterns", [])
+            archon_patterns = archon_dict.get("patterns", [])
+            codegen_patterns = codegen_dict.get("patterns", [])
 
             all_patterns = archon_patterns + codegen_patterns
 
@@ -1992,8 +1980,8 @@ class ManifestInjector:
             all_patterns = await self._filter_by_quality(all_patterns)
 
             # Calculate combined query time
-            exec_time = archon_result.get("query_time_ms", 0)
-            code_time = codegen_result.get("query_time_ms", 0)
+            exec_time = archon_dict.get("query_time_ms", 0)
+            code_time = codegen_dict.get("query_time_ms", 0)
             total_query_time = exec_time + code_time
 
             # Track timing
@@ -2297,7 +2285,8 @@ class ManifestInjector:
             cursor.execute(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
             )
-            table_count = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            table_count = result[0] if result else 0
             cursor.close()
             conn.close()
 
@@ -2426,7 +2415,7 @@ class ManifestInjector:
 
         def _blocking_query():
             """Blocking Docker operations."""
-            import docker
+            import docker  # type: ignore[import-untyped]
 
             client = docker.from_env()
             containers = client.containers.list()
@@ -3033,8 +3022,13 @@ class ManifestInjector:
                 f"[{correlation_id}] Database schemas query completed in {elapsed_ms}ms"
             )
 
+            # Cast result to dict to satisfy type checker
+            result_dict: Dict[str, Any] = result if isinstance(result, dict) else {}
+
             # Check if result has actual schemas, trigger fallback if empty
-            schemas = result.get("schemas", result.get("database_schemas", []))
+            schemas = result_dict.get(
+                "schemas", result_dict.get("database_schemas", [])
+            )
             if not schemas or len(schemas) == 0:
                 self.logger.warning(
                     f"[{correlation_id}] Event-based schema query returned 0 schemas, trying direct PostgreSQL fallback..."
@@ -3065,7 +3059,7 @@ class ManifestInjector:
                         f"[{correlation_id}] Direct PostgreSQL fallback failed: {fallback_error}"
                     )
 
-            return result
+            return result_dict
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
@@ -3147,14 +3141,16 @@ class ManifestInjector:
                     ),  # Shorter timeout for first attempt
                 )
 
-                if result and result.get("similar_workflows"):
+                # Cast result to dict
+                result_dict: Dict[str, Any] = result if isinstance(result, dict) else {}
+                if result_dict and result_dict.get("similar_workflows"):
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     self._current_query_times["debug_intelligence"] = elapsed_ms
                     self.logger.info(
                         f"[{correlation_id}] Debug intelligence from Qdrant: "
-                        f"{len(result.get('similar_workflows', []))} workflows in {elapsed_ms}ms"
+                        f"{len(result_dict.get('similar_workflows', []))} workflows in {elapsed_ms}ms"
                     )
-                    return result
+                    return result_dict
             except Exception as qdrant_error:
                 self.logger.debug(
                     f"[{correlation_id}] Qdrant workflow_events unavailable: {qdrant_error}"
@@ -3625,8 +3621,8 @@ class ManifestInjector:
 
             # Scan filesystem
             file_tree = []
-            file_types = {}
-            onex_files = {
+            file_types: Dict[str, int] = {}
+            onex_files: Dict[str, List[str]] = {
                 "effect": [],
                 "compute": [],
                 "reducer": [],
@@ -3999,7 +3995,7 @@ class ManifestInjector:
         Returns:
             Structured manifest dictionary
         """
-        manifest = {
+        manifest: Dict[str, Any] = {
             "manifest_metadata": {
                 "version": "2.0.0",
                 "generated_at": datetime.now(UTC).isoformat(),
@@ -4125,7 +4121,7 @@ class ManifestInjector:
             return [], 0
 
         # Group patterns by name
-        pattern_groups = {}
+        pattern_groups: Dict[str, Any] = {}
 
         for pattern in patterns:
             name = pattern.get("name", "Unknown Pattern")
@@ -5407,7 +5403,8 @@ async def inject_manifest_async(
             logger.error(f"Failed to generate dynamic manifest: {e}")
             # Will use minimal manifest
 
-        return injector.format_for_prompt(sections)
+        formatted = injector.format_for_prompt(sections)
+        return cast(str, formatted)
 
 
 # Convenience function for quick access (sync wrapper for backward compatibility)

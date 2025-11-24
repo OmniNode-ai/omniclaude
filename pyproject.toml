@@ -42,6 +42,7 @@ jinja2 = "^3.1.0"
 rich = "^13.7.0"
 dependency-injector = "^4.48.1"
 prometheus-client = "^0.21.0"
+qdrant-client = "^1.16.0"
 
 [tool.poetry.group.patterns.dependencies]
 # Optional dependencies for pattern storage with Qdrant
@@ -71,6 +72,15 @@ isort = "^7.0.0"
 pre-commit = "^4.3.0"
 tabulate = "^0.9.0"
 pytest-xdist = "^3.8.0"
+types-psycopg2 = "^2.9.21.20251012"
+types-redis = "^4.6.0.20241004"
+types-aiofiles = "^25.1.0.20251011"
+types-pyyaml = "^6.0.12.20250915"
+types-requests = "^2.32.4.20250913"
+types-urllib3 = "^1.26.25.14"
+types-protobuf = "^6.32.1.20251105"
+types-psutil = "^7.1.1.20251122"
+types-docker = "^7.1.0.20251009"
 
 [build-system]
 requires = ["poetry-core"]
@@ -99,11 +109,16 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 explicit_package_bases = true
 namespace_packages = true
+plugins = ["pydantic.mypy"]
 exclude = [
     "^agents/templates/",  # Template files with placeholder syntax
     "^agents/parallel_execution/templates/",  # More template files
     "^skills/",  # Third-party skills - not our code to lint
 ]
+
+[tool.pydantic]
+# Pydantic settings for mypy plugin
+mypy_init_subclass_as_base = true
 
 [tool.ruff]
 line-length = 88

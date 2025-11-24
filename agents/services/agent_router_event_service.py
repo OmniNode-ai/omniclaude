@@ -80,17 +80,14 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
     logging.error("aiohttp not available. Install with: pip install aiohttp")
 
-# Add lib directory to Python path for AgentRouter imports
-lib_path = Path(__file__).parent.parent / "lib"
-sys.path.insert(0, str(lib_path))
-
 # Import required modules (must succeed for service to function)
 try:
-    from agent_execution_logger import log_agent_execution
-    from agent_router import AgentRouter
-    from confidence_scoring_publisher import publish_confidence_scored
-    from data_sanitizer import sanitize_dict, sanitize_string
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
+
+    from ..lib.agent_execution_logger import log_agent_execution
+    from ..lib.agent_router import AgentRouter
+    from ..lib.confidence_scoring_publisher import publish_confidence_scored
+    from ..lib.data_sanitizer import sanitize_dict, sanitize_string
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
@@ -98,7 +95,7 @@ except ImportError as e:
 
 # Import ActionLogger separately (optional - graceful degradation if unavailable)
 try:
-    from action_logger import ActionLogger
+    from ..lib.action_logger import ActionLogger
 
     ACTION_LOGGER_AVAILABLE = True
 except ImportError:
@@ -109,7 +106,7 @@ except ImportError:
 
 # Import Slack notifier for error notifications
 try:
-    from slack_notifier import get_slack_notifier
+    from ..lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
 except ImportError:

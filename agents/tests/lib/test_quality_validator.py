@@ -1504,7 +1504,7 @@ class BadCode:
         # Pass invalid type to trigger exception
         try:
             await default_validator.validate_generated_code(
-                code=123,  # type: ignore - intentionally wrong type
+                code=123,  # type: ignore[arg-type]  # intentionally wrong type
                 contract={},
                 node_type="EFFECT",
                 microservice_name="test",

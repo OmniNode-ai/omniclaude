@@ -193,15 +193,17 @@ class IntelligenceUsageTracker:
             self.db_user = db_user or os.environ.get("POSTGRES_USER")
             self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
 
-            # Validate required configuration
-            if not all([self.db_host, self.db_port, self.db_name, self.db_user]):
-                logger.warning(
-                    "Database configuration incomplete. Required: POSTGRES_HOST, POSTGRES_PORT, "
-                    "POSTGRES_DATABASE, POSTGRES_USER. Intelligence usage tracking disabled. Run: source .env"
-                )
-                self.enable_tracking = False
-                self._pool = None
-                return
+        # Connection pool for async database operations - declare type once
+        self._pool: Optional[asyncpg.Pool] = None
+
+        # Validate required configuration
+        if not all([self.db_host, self.db_port, self.db_name, self.db_user]):
+            logger.warning(
+                "Database configuration incomplete. Required: POSTGRES_HOST, POSTGRES_PORT, "
+                "POSTGRES_DATABASE, POSTGRES_USER. Intelligence usage tracking disabled. Run: source .env"
+            )
+            self.enable_tracking = False
+            return
 
         self.enable_tracking = enable_tracking
 
@@ -210,12 +212,8 @@ class IntelligenceUsageTracker:
                 "POSTGRES_PASSWORD not set. Intelligence usage tracking disabled. Run: source .env"
             )
             self.enable_tracking = False
-            # Initialize pool to None for cleanup in close() method
-            self._pool = None
+            # Pool already initialized to None above
             return  # Early return from __init__ - no need to initialize pool config
-
-        # Connection pool for async database operations
-        self._pool: Optional[asyncpg.Pool] = None
 
         # Pool configuration from settings
         if settings:

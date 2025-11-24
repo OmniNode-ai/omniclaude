@@ -6,7 +6,8 @@ based on analysis of 508 files from the omnibase_core codebase.
 """
 
 import pytest
-from lib.validators.naming_validator import NamingValidator, Violation
+
+from ...lib.validators.naming_validator import NamingValidator, Violation
 
 
 class TestOmninodeModelClasses:

@@ -27,7 +27,7 @@ class MockDatabaseLayer:
 
 async def test_state_manager():
     """Test state manager basic functionality."""
-    from state_manager import (
+    from .state_manager import (
         ErrorCategory,
         ErrorSeverity,
         ModelCodePointer,

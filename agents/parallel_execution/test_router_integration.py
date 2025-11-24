@@ -19,8 +19,8 @@ Setup:
 import asyncio
 import sys
 
-from agent_dispatcher import ParallelCoordinator
-from agent_model import AgentTask
+from .agent_dispatcher import ParallelCoordinator
+from .agent_model import AgentTask
 
 
 async def test_router_integration():

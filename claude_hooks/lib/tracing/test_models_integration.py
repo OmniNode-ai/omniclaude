@@ -16,17 +16,14 @@ try:
     import sys
     from pathlib import Path
 
-    # Add parent directory to path for imports
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
-    from hooks.lib.tracing.models import (
+    from .models import (
         HookMetadata,
         TraceContext,
         create_new_hook_execution,
         create_new_trace,
         parse_trace_from_row,
     )
-    from hooks.lib.tracing.postgres_client import PostgresTracingClient
+    from .postgres_client import PostgresTracingClient
 
     IMPORTS_AVAILABLE = True
 except ImportError as e:

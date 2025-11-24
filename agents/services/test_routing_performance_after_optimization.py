@@ -28,10 +28,6 @@ from pathlib import Path
 from typing import List
 
 
-# Add lib directory to Python path
-lib_path = Path(__file__).parent.parent / "lib"
-sys.path.insert(0, str(lib_path))
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # Import routing client
 try:
-    from routing_event_client import route_via_events
+    from ..lib.routing_event_client import route_via_events
 except ImportError as e:
     logger.error(f"Failed to import routing_event_client: {e}")
     logger.error(f"Python path: {sys.path}")

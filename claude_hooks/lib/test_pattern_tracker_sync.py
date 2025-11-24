@@ -3,7 +3,7 @@
 
 import sys
 
-from lib.pattern_tracker_sync import PatternTrackerSync
+from .pattern_tracker_sync import PatternTrackerSync
 
 
 def test_basic_tracking():

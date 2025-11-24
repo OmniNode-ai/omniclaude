@@ -10,13 +10,12 @@ from typing import Dict, Optional
 import yaml
 
 
-# Add lib directory to path AFTER stdlib imports
+# Define script directory
 SCRIPT_DIR = Path(__file__).parent
-sys.path.insert(0, str(SCRIPT_DIR / "lib"))
 
 # Import pattern tracker (graceful fallback if unavailable)
 try:
-    from pattern_tracker_sync import PatternTrackerSync
+    from .lib.pattern_tracker_sync import PatternTrackerSync
 
     PATTERN_TRACKING_ENABLED = True
 except ImportError:
@@ -161,8 +160,8 @@ def apply_correction(content: str, correction: Dict) -> str:
         Modified content with correction applied, or original on error
     """
     try:
-        from correction.ast_corrector import apply_single_correction
-        from correction.framework_detector import FrameworkMethodDetector
+        from .lib.correction.ast_corrector import apply_single_correction
+        from .lib.correction.framework_detector import FrameworkMethodDetector
 
         # Create framework detector
         detector = FrameworkMethodDetector()
@@ -326,7 +325,7 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     # Phase 2: Generate corrections
     print("[PostToolUse] Generating corrections...", file=sys.stderr)
-    from correction.generator import CorrectionGenerator
+    from .lib.correction.generator import CorrectionGenerator
 
     generator = CorrectionGenerator()
 
@@ -353,7 +352,7 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     if quorum_enabled:
         print(f"[PostToolUse] Running AI Quorum for {len(corrections)} correction(s)")
-        from consensus.quorum import AIQuorum
+        from .lib.consensus.quorum import AIQuorum
 
         quorum = AIQuorum()  # AIQuorum loads config internally
 

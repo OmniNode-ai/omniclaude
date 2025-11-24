@@ -11,12 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agent_model import AgentConfig, AgentResult, AgentTask
-from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+from .agent_model import AgentConfig, AgentResult, AgentTask
+from .agent_registry import register_agent
 
 
 # Load environment variables from .env file

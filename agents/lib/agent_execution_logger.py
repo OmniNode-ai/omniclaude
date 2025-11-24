@@ -33,14 +33,19 @@ from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
 try:
     # Try relative imports first (for package usage)
-    from .db import get_pg_pool
-    from .kafka_rpk_client import RpkKafkaClient
-    from .structured_logger import StructuredLogger
+    from .db import get_pg_pool  # noqa: F401
+    from .kafka_rpk_client import RpkKafkaClient  # noqa: F401
+    from .structured_logger import StructuredLogger  # noqa: F401
 except ImportError:
     # Fall back to absolute imports (for standalone usage)
-    from db import get_pg_pool
-    from kafka_rpk_client import RpkKafkaClient
-    from structured_logger import StructuredLogger
+    import db as _db  # noqa: F401
+    import kafka_rpk_client as _kafka  # noqa: F401
+    import structured_logger as _logger  # noqa: F401
+
+    # Import specific items from fallback modules
+    get_pg_pool = _db.get_pg_pool  # noqa: F811
+    RpkKafkaClient = _kafka.RpkKafkaClient  # noqa: F811
+    StructuredLogger = _logger.StructuredLogger  # noqa: F811
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None

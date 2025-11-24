@@ -16,20 +16,29 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 
 # Import Pydantic Settings for type-safe configuration
-try:
-    from config import settings
-except ImportError:
-    settings = None
+if TYPE_CHECKING:
+    from config import Settings
 
+settings: Optional[Any] = None
 try:
-    import psycopg2
-    from psycopg2.extras import Json
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
-    psycopg2 = None
+    pass
+
+psycopg2: Optional[Any] = None
+try:
+    import psycopg2 as _psycopg2
+    from psycopg2.extras import Json
+
+    psycopg2 = _psycopg2
+except ImportError:
+    pass
 
 
 @dataclass
@@ -410,6 +419,9 @@ class PatternQualityScorer:
                 f"Error: {e}"
             )
 
+        if psycopg2 is None:
+            raise ImportError("psycopg2 is required for database operations")
+
         conn = None
         try:
             conn = psycopg2.connect(connection_string)
@@ -505,9 +517,9 @@ class PatternQualityScorer:
         if db_connection_string:
             connection_string = db_connection_string
         elif os.getenv("HOST_DATABASE_URL"):
-            connection_string = os.getenv("HOST_DATABASE_URL")
+            connection_string = os.getenv("HOST_DATABASE_URL") or ""
         elif os.getenv("DATABASE_URL"):
-            connection_string = os.getenv("DATABASE_URL")
+            connection_string = os.getenv("DATABASE_URL") or ""
         elif settings:
             # Use Pydantic settings to build production connection string
             try:

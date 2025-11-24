@@ -16,8 +16,8 @@ Setup:
 import asyncio
 from pathlib import Path
 
-from agent_dispatcher import ParallelCoordinator
-from agent_model import AgentTask
+from .agent_dispatcher import ParallelCoordinator
+from .agent_model import AgentTask
 
 
 # Calculator contract

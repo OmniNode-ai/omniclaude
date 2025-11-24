@@ -14,12 +14,8 @@ import sys
 import time
 from pathlib import Path
 
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-
-from hook_event_logger import HookEventLogger
-from post_tool_metrics import collect_post_tool_metrics
+from .lib.hook_event_logger import HookEventLogger
+from .lib.post_tool_metrics import collect_post_tool_metrics
 
 
 def simulate_write_operation():

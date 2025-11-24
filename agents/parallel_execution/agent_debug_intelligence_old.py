@@ -9,9 +9,10 @@ Based on agent-debug-intelligence.yaml configuration.
 import time
 from typing import Any, Dict
 
-from agent_model import AgentConfig, AgentResult, AgentTask
 from mcp_client import ArchonMCPClient
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+from .agent_model import AgentConfig, AgentResult, AgentTask
 
 
 class DebugIntelligenceAgent:

@@ -22,7 +22,10 @@ except ImportError:
     lib_path = Path(__file__).parent
     if str(lib_path) not in sys.path:
         sys.path.insert(0, str(lib_path))
-    from task_classifier import TaskContext, TaskIntent
+    import task_classifier as _tc  # noqa: F401
+
+    TaskContext = _tc.TaskContext  # noqa: F811
+    TaskIntent = _tc.TaskIntent  # noqa: F811
 
 
 class RelevanceScorer:

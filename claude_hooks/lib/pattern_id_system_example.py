@@ -13,7 +13,7 @@ Demonstrates real-world usage patterns for:
 
 import threading
 
-from pattern_id_system import (
+from .pattern_id_system import (
     PatternDeduplicator,
     PatternVersion,
     detect_pattern_derivation,

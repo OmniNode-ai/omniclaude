@@ -77,11 +77,11 @@ except ImportError:
     BaseModel = None
     PYDANTIC_AVAILABLE = False
 
-from agent_architect import ArchitectAgent
-from agent_dispatcher import ParallelCoordinator
-from agent_model import AgentTask
-from agent_registry import agent_exists, list_registered_agents
-from context_manager import ContextManager
+from .agent_architect import ArchitectAgent
+from .agent_dispatcher import ParallelCoordinator
+from .agent_model import AgentTask
+from .agent_registry import agent_exists, list_registered_agents
+from .context_manager import ContextManager
 
 
 # Configure logging to write to both stderr and file
@@ -102,7 +102,7 @@ logger.info("[DispatchRunner] Logging initialized, output saved to: %s", log_fil
 logger.info("[AgentImport] Starting agent module imports...")
 try:
     logger.info("[AgentImport] Importing agent_analyzer...")
-    import agent_analyzer  # noqa: F401
+    from . import agent_analyzer  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_analyzer")
 except ImportError as e:
@@ -110,7 +110,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_researcher...")
-    import agent_researcher  # noqa: F401
+    from . import agent_researcher  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_researcher")
 except ImportError as e:
@@ -118,7 +118,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_validator...")
-    import agent_validator  # noqa: F401
+    from . import agent_validator  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_validator")
 except ImportError as e:
@@ -126,7 +126,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_debug_intelligence...")
-    import agent_debug_intelligence  # noqa: F401
+    from . import agent_debug_intelligence  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_debug_intelligence")
 except ImportError as e:
@@ -134,7 +134,7 @@ except ImportError as e:
 
 try:
     logger.info("[AgentImport] Importing agent_code_generator...")
-    import agent_code_generator  # noqa: F401
+    from . import agent_code_generator  # noqa: F401
 
     logger.info("[AgentImport] Successfully imported agent_code_generator")
 except ImportError as e:
@@ -144,19 +144,19 @@ logger.info("[AgentImport] Agent module imports completed")
 
 # Import quorum validation (optional dependency)
 try:
-    from quorum_minimal import MinimalQuorum, ValidationDecision
+    from .quorum_validator import QuorumValidator, ValidationDecision
 
     QUORUM_AVAILABLE = True
 except ImportError:
     QUORUM_AVAILABLE = False
     print(
-        "[DispatchRunner] Warning: Quorum validation unavailable (quorum_minimal.py not found)",
+        "[DispatchRunner] Warning: Quorum validation unavailable (quorum_validator.py not found)",
         file=sys.stderr,
     )
 
 # Import interactive validator (optional dependency)
 try:
-    from interactive_validator import (
+    from .interactive_validator import (
         CheckpointType,
         UserChoice,
         create_validator,
@@ -567,7 +567,7 @@ async def execute_phase_1_quorum_validation(
     # Retry loop for quorum validation
     while retry_count <= max_retries:
         try:
-            quorum = MinimalQuorum()
+            quorum = QuorumValidator()
 
             if retry_count > 0:
                 print(

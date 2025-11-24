@@ -42,17 +42,52 @@ from uuid import uuid4
 # Configure logging first
 logger = logging.getLogger(__name__)
 
-# Import ONEX nodes
+# Import ONEX nodes with fallback to placeholders
+NODES_AVAILABLE = False
+
+
+# Define placeholder classes first
+class _PlaceholderNodeDebugSTFStorageEffect:
+    """Placeholder - requires omnibase_core installation."""
+
+    def __init__(self, *args, **kwargs):
+        raise ImportError(
+            "NodeDebugSTFStorageEffect requires omnibase_core.\n"
+            "Install with: pip install omnibase_core\n"
+            "This node provides STF storage and retrieval functionality."
+        )
+
+
+class _PlaceholderNodeSTFHashCompute:
+    """Placeholder - requires omnibase_core installation."""
+
+    def __init__(self, *args, **kwargs):
+        raise ImportError(
+            "NodeSTFHashCompute requires omnibase_core.\n"
+            "Install with: pip install omnibase_core\n"
+            "This node provides code normalization and deduplication."
+        )
+
+
+# Initialize with placeholders as defaults
+NodeDebugSTFStorageEffect = _PlaceholderNodeDebugSTFStorageEffect
+NodeSTFHashCompute = _PlaceholderNodeSTFHashCompute
+
 try:
     from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
     from omniclaude.debug_loop.node_debug_stf_storage_effect import (
-        NodeDebugSTFStorageEffect,
+        NodeDebugSTFStorageEffect as _ActualNodeDebugSTFStorageEffect,
     )
-    from omniclaude.debug_loop.node_stf_hash_compute import NodeSTFHashCompute
+    from omniclaude.debug_loop.node_stf_hash_compute import (
+        NodeSTFHashCompute as _ActualNodeSTFHashCompute,
+    )
 
+    # Use actual implementations
+    NodeDebugSTFStorageEffect = _ActualNodeDebugSTFStorageEffect
+    NodeSTFHashCompute = _ActualNodeSTFHashCompute
     NODES_AVAILABLE = True
 except ImportError as e:
-    # omnibase_core not installed - provide mock implementations for testing
+    # omnibase_core not installed - use placeholder implementations
     logger.warning(
         f"ONEX nodes not available: {e}\n"
         "STFHelper requires omnibase_core for full functionality.\n"
@@ -65,28 +100,9 @@ except ImportError as e:
     NODES_AVAILABLE = False
 
     # Import mock protocol only
-    from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
-
-    # Create placeholder classes
-    class NodeDebugSTFStorageEffect:
-        """Placeholder - requires omnibase_core installation."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "NodeDebugSTFStorageEffect requires omnibase_core.\n"
-                "Install with: pip install omnibase_core\n"
-                "This node provides STF storage and retrieval functionality."
-            )
-
-    class NodeSTFHashCompute:
-        """Placeholder - requires omnibase_core installation."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "NodeSTFHashCompute requires omnibase_core.\n"
-                "Install with: pip install omnibase_core\n"
-                "This node provides code normalization and deduplication."
-            )
+    from omniclaude.debug_loop.mock_database_protocol import (
+        MockDatabaseProtocol,  # noqa: F401
+    )
 
 
 class STFHelper:

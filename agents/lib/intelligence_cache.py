@@ -99,9 +99,10 @@ class IntelligenceCache:
             self.redis_url = redis_url or os.getenv("VALKEY_URL", default_url)
         self._client: Optional[Any] = None
 
-        # Default TTLs by operation type (in seconds)
+        # Default TTLs by operation type (in seconds) - declare once
+        self._default_ttls: Dict[str, int]
         if settings is not None:
-            self._default_ttls: Dict[str, int] = {
+            self._default_ttls = {
                 "pattern_discovery": settings.cache_ttl_patterns,
                 "infrastructure_query": settings.cache_ttl_infrastructure,
                 "schema_query": settings.cache_ttl_schemas,
@@ -110,7 +111,7 @@ class IntelligenceCache:
                 "filesystem_query": settings.cache_ttl_patterns,
             }
         else:
-            self._default_ttls: Dict[str, int] = {
+            self._default_ttls = {
                 "pattern_discovery": int(
                     os.getenv("CACHE_TTL_PATTERNS", "300")
                 ),  # 5 min

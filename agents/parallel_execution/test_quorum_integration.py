@@ -23,7 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from quorum_minimal import MinimalQuorum, ValidationDecision
+from .quorum_validator import QuorumValidator, ValidationDecision
 
 
 class QuorumIntegrationTest:
@@ -177,7 +177,7 @@ class QuorumIntegrationTest:
 
         # Test directly with quorum
         try:
-            quorum = MinimalQuorum()
+            quorum = QuorumValidator()
             result = await quorum.validate_intent(user_prompt, bad_breakdown)
 
             print(f"\nQuorum Decision: {result.decision.value}")
@@ -249,7 +249,7 @@ class QuorumIntegrationTest:
         user_prompt = "Build a postgres adapter effect node that takes kafka event bus events and turns them into postgres api calls"
 
         try:
-            quorum = MinimalQuorum()
+            quorum = QuorumValidator()
             result = await quorum.validate_intent(user_prompt, valid_breakdown)
 
             print(f"\nQuorum Decision: {result.decision.value}")

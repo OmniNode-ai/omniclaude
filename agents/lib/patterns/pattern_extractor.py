@@ -116,7 +116,7 @@ class PatternExtractor:
         end_time = datetime.now(timezone.utc)
         extraction_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-        return ModelPatternExtractionResult(
+        return ModelPatternExtractionResult(  # type: ignore[call-arg]
             patterns=patterns,
             extraction_time_ms=extraction_time_ms,
             source_context=context,
@@ -153,7 +153,7 @@ class PatternExtractor:
         )
         if len(stage_pattern) >= 3:  # At least 3 stages
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.WORKFLOW,
                     pattern_name="Multi-stage workflow execution",
                     pattern_description=f"Workflow with {len(stage_pattern)} sequential stages",
@@ -172,7 +172,7 @@ class PatternExtractor:
         orchestration_keywords = ["asyncio.gather", "await.*await", "parallel"]
         if any(re.search(kw, code) for kw in orchestration_keywords):
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.WORKFLOW,
                     pattern_name="Parallel orchestration pattern",
                     pattern_description="Orchestrates multiple parallel async tasks",
@@ -221,7 +221,7 @@ class PatternExtractor:
                         for suffix in ["Effect", "Compute", "Reducer", "Orchestrator"]
                     ):
                         patterns.append(
-                            ModelCodePattern(
+                            ModelCodePattern(  # type: ignore[call-arg]
                                 pattern_type=EnumPatternType.CODE,
                                 pattern_name=f"ONEX {node.name} class pattern",
                                 pattern_description=f"ONEX node class: {node.name}",
@@ -244,7 +244,7 @@ class PatternExtractor:
                     ]
                     if decorator_names:
                         patterns.append(
-                            ModelCodePattern(
+                            ModelCodePattern(  # type: ignore[call-arg]
                                 pattern_type=EnumPatternType.CODE,
                                 pattern_name=f"Function with decorators: {', '.join(decorator_names)}",
                                 pattern_description=f"Function decorated with {decorator_names}",
@@ -295,7 +295,7 @@ class PatternExtractor:
             matches = re.findall(pattern, code)
             if matches:
                 patterns.append(
-                    ModelCodePattern(
+                    ModelCodePattern(  # type: ignore[call-arg]
                         pattern_type=EnumPatternType.NAMING,
                         pattern_name=f"ONEX {name} naming convention",
                         pattern_description=f"ONEX naming pattern for {name}",
@@ -318,7 +318,7 @@ class PatternExtractor:
             matches = re.findall(pattern, code)
             if len(matches) >= 2:  # At least 2 instances
                 patterns.append(
-                    ModelCodePattern(
+                    ModelCodePattern(  # type: ignore[call-arg]
                         pattern_type=EnumPatternType.NAMING,
                         pattern_name=f"{name.capitalize()} naming pattern",
                         pattern_description=f"Consistent naming for {name}",
@@ -356,7 +356,7 @@ class PatternExtractor:
         # Dependency injection pattern
         if re.search(r"def\s+__init__\s*\(self,.*:\s*\w+", code):
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.ARCHITECTURE,
                     pattern_name="Dependency injection pattern",
                     pattern_description="Constructor with typed dependencies",
@@ -371,7 +371,7 @@ class PatternExtractor:
         # Factory pattern
         if re.search(r"@(classmethod|staticmethod).*\s+def\s+create", code):
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.ARCHITECTURE,
                     pattern_name="Factory method pattern",
                     pattern_description="Class/static method for object creation",
@@ -409,7 +409,7 @@ class PatternExtractor:
         try_except_matches = re.findall(r"try:.*?except\s+(\w+Error)", code, re.DOTALL)
         if try_except_matches:
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.ERROR_HANDLING,
                     pattern_name="Typed exception handling",
                     pattern_description=f"Try-except with specific error types: {set(try_except_matches)}",
@@ -446,7 +446,7 @@ class PatternExtractor:
         # Pytest patterns
         if re.search(r"@pytest\.(fixture|mark)", code):
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.TESTING,
                     pattern_name="Pytest fixture/marker pattern",
                     pattern_description="Pytest decorators for test organization",
@@ -461,7 +461,7 @@ class PatternExtractor:
         # Async test patterns
         if re.search(r"async\s+def\s+test_", code):
             patterns.append(
-                ModelCodePattern(
+                ModelCodePattern(  # type: ignore[call-arg]
                     pattern_type=EnumPatternType.TESTING,
                     pattern_name="Async test pattern",
                     pattern_description="Async test function pattern",

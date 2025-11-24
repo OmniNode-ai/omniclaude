@@ -20,10 +20,9 @@ import tempfile
 import time
 from uuid import uuid4
 
-from lib.codegen_workflow import CodegenWorkflow
-from lib.simple_prd_analyzer import PRDAnalyzer
-
-from tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
+from agents.lib.codegen_workflow import CodegenWorkflow
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
+from agents.tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
 
 
 async def benchmark_sequential_generation(num_nodes: int = 6) -> float:

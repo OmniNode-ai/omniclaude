@@ -2,7 +2,7 @@
 
 import asyncio
 
-from metrics_collector import get_metrics_collector
+from .metrics_collector import get_metrics_collector
 
 
 async def main():

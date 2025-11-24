@@ -11,13 +11,9 @@ Usage:
 
 import asyncio
 import sys
-from pathlib import Path
 from uuid import uuid4
 
-
-# Add agents lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-
+from agents.lib.db import get_pg_pool
 from agents.parallel_execution.agent_coder import CoderAgent
 from agents.parallel_execution.agent_debug_intelligence import DebugIntelligenceAgent
 from agents.parallel_execution.agent_model import AgentTask
@@ -150,10 +146,6 @@ async def verify_database_records(correlation_ids):
     print(f"✓ Verifying {len(valid_ids)} correlation IDs")
 
     try:
-        # Import database helpers
-        sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
-        from db import get_pg_pool
-
         pool = await get_pg_pool()
         if not pool:
             print("⚠️ Database pool unavailable - skipping verification")

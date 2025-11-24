@@ -459,8 +459,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
 
     # Test 1: Import health checks
     try:
-        sys.path.append(os.path.expanduser("~/.claude/hooks"))
-        from health_checks import Phase4HealthChecker
+        from .health_checks import Phase4HealthChecker
 
         checker = Phase4HealthChecker()
         test_results["tests"]["import_health_checks"] = {
@@ -475,7 +474,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
 
     # Test 2: Import error handling
     try:
-        from error_handling import PatternTrackingErrorHandler, PatternTrackingLogger
+        from .error_handling import PatternTrackingErrorHandler, PatternTrackingLogger
 
         logger = PatternTrackingLogger()
         PatternTrackingErrorHandler(logger)

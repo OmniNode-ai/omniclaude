@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agent_model import AgentConfig, AgentResult, AgentTask
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+from .agent_model import AgentConfig, AgentResult, AgentTask
 
 
 # Load environment variables from .env file

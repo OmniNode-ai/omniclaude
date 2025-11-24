@@ -54,7 +54,7 @@ pytestmark = pytest.mark.skip(
     "Tracking: Week 4 pipeline integration"
 )
 
-from lib.generation_pipeline import GenerationPipeline  # noqa: E402
+from agents.lib.generation_pipeline import GenerationPipeline  # noqa: E402
 
 
 async def test_non_interactive_mode():

@@ -10,7 +10,11 @@ Usage:
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, cast
+
+
+if TYPE_CHECKING:
+    from .manifest_injector import ManifestCache
 
 
 class ManifestCacheUtilitiesMixin:
@@ -44,7 +48,8 @@ class ManifestCacheUtilitiesMixin:
         ):
             return {"error": "Caching disabled"}
 
-        return self._cache.get_metrics(query_type)
+        cache = cast("ManifestCache", self._cache)
+        return cache.get_metrics(query_type)
 
     def invalidate_cache(self, query_type: Optional[str] = None) -> int:
         """
@@ -61,7 +66,8 @@ class ManifestCacheUtilitiesMixin:
         ):
             return 0
 
-        return self._cache.invalidate(query_type)
+        cache = cast("ManifestCache", self._cache)
+        return cache.invalidate(query_type)
 
     def get_cache_info(self) -> Dict[str, Any]:
         """
@@ -76,7 +82,8 @@ class ManifestCacheUtilitiesMixin:
         ):
             return {"error": "Caching disabled"}
 
-        return self._cache.get_cache_info()
+        cache = cast("ManifestCache", self._cache)
+        return cache.get_cache_info()
 
     def log_cache_metrics(self) -> None:
         """

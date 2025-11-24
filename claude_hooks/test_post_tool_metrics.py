@@ -14,11 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-
-from post_tool_metrics import PostToolMetricsCollector, collect_post_tool_metrics
+from .lib.post_tool_metrics import PostToolMetricsCollector, collect_post_tool_metrics
 
 
 def test_success_classification():

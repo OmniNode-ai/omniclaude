@@ -378,7 +378,7 @@ class QualityEnforcer:
             List of Violation objects
         """
         try:
-            from validators.naming_validator import NamingValidator
+            from .lib.validators.naming_validator import NamingValidator
 
             # Use auto-detection mode to apply appropriate conventions
             validator = NamingValidator(language=language, validation_mode="auto")
@@ -422,7 +422,7 @@ class QualityEnforcer:
             self._log("[Phase 2] Querying RAG intelligence...")
 
             try:
-                from correction.generator import CorrectionGenerator
+                from .lib.correction.generator import CorrectionGenerator
 
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})
@@ -464,7 +464,7 @@ class QualityEnforcer:
             self._log("[Phase 4] Running AI quorum...")
 
             try:
-                from consensus.quorum import AIQuorum
+                from .lib.consensus.quorum import AIQuorum
 
                 quorum = AIQuorum()
 

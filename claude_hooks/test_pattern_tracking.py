@@ -13,9 +13,7 @@ import uuid
 
 from config import settings
 
-
-# Add hooks to path
-sys.path.insert(0, "/Users/jonah/.claude/hooks")
+from .pattern_tracker import get_tracker
 
 
 def test_pattern_tracking():
@@ -23,8 +21,7 @@ def test_pattern_tracking():
     print("=== Pattern Tracking End-to-End Test ===")
 
     try:
-        # Import pattern tracker
-        from pattern_tracker import get_tracker
+        # Import pattern tracker (already imported above)
 
         print("✓ Pattern tracker imported successfully")
 

@@ -173,22 +173,22 @@ class Settings(BaseSettings):
     # =========================================================================
     # Services provided by omniarchon repository (192.168.86.101)
 
-    archon_intelligence_url: HttpUrl = Field(
+    archon_intelligence_url: str = Field(
         default="http://192.168.86.101:8053",
         description="Archon Intelligence API - Code quality, pattern discovery, RAG queries",
     )
 
-    archon_search_url: HttpUrl = Field(
+    archon_search_url: str = Field(
         default="http://192.168.86.101:8055",
         description="Archon Search API - Vector search, semantic search",
     )
 
-    archon_bridge_url: HttpUrl = Field(
+    archon_bridge_url: str = Field(
         default="http://192.168.86.101:8054",
         description="Archon Bridge API - Bridge services between systems",
     )
 
-    archon_mcp_url: HttpUrl = Field(
+    archon_mcp_url: str = Field(
         default="http://192.168.86.101:8051",
         description="Archon MCP Server - Model Context Protocol server",
     )
@@ -198,7 +198,7 @@ class Settings(BaseSettings):
         description="Legacy alias for intelligence service (backward compatibility)",
     )
 
-    main_server_url: HttpUrl = Field(
+    main_server_url: str = Field(
         default="http://192.168.86.101:8181",
         description="Archon Main Server (if different from intelligence)",
     )
@@ -423,7 +423,7 @@ class Settings(BaseSettings):
         default=6333, ge=1, le=65535, description="Qdrant server port"
     )
 
-    qdrant_url: HttpUrl = Field(
+    qdrant_url: str = Field(
         default="http://localhost:6333",
         description="Qdrant full URL (derived from host:port)",
     )
@@ -683,12 +683,12 @@ class Settings(BaseSettings):
     )
 
     # Agent Router Configuration
-    agent_registry_path: str = Field(
+    agent_registry_path: Optional[str] = Field(
         default=None,
         description="Path to agent registry YAML (defaults to ~/.claude/agent-definitions/agent-registry.yaml)",
     )
 
-    agent_definitions_path: str = Field(
+    agent_definitions_path: Optional[str] = Field(
         default=None,
         description="Path to agent definitions directory (defaults to ~/.claude/agent-definitions/)",
     )
@@ -890,7 +890,7 @@ class Settings(BaseSettings):
 
     @field_validator("routing_adapter_host", mode="before")
     @classmethod
-    def validate_routing_adapter_host(cls, v: Any, info: ValidationInfo) -> str:
+    def validate_routing_adapter_host(cls, v: str | None, info: ValidationInfo) -> str:
         """
         Validate and set environment-specific host binding for security.
 
@@ -923,7 +923,7 @@ class Settings(BaseSettings):
             Host binding address (0.0.0.0 for dev, 127.0.0.1 for prod)
         """
         # If explicitly set via ROUTING_ADAPTER_HOST environment variable, respect that
-        if v is not None:
+        if v is not None and isinstance(v, str):
             return v
 
         # Read ENVIRONMENT env var directly (case-insensitive due to Settings config)

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-from quorum_minimal import MinimalQuorum, ValidationDecision
+from .quorum_validator import QuorumValidator, ValidationDecision
 
 
 # Load environment variables from .env file
@@ -32,7 +32,7 @@ class ValidatedTaskArchitect:
     """Task architect with quorum validation and intelligent retry"""
 
     def __init__(self):
-        self.quorum = MinimalQuorum()
+        self.quorum = QuorumValidator()
         self.max_retries = 3
 
     async def breakdown_tasks_with_validation(

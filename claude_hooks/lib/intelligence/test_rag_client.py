@@ -5,7 +5,8 @@ Run with: python -m pytest test_rag_client.py -v
 """
 
 import pytest
-from rag_client import RAGIntelligenceClient, get_rag_client
+
+from .rag_client import RAGIntelligenceClient, get_rag_client
 
 
 @pytest.mark.asyncio
