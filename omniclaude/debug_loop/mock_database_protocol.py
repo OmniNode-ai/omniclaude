@@ -261,7 +261,7 @@ class MockDatabaseProtocol:
                     limit_idx = query_lower.index("limit") + 6
                     limit = int(query_lower[limit_idx : limit_idx + 10].split()[0])
                 except (ValueError, IndexError):
-                    pass
+                    pass  # nosec B110 - uses default limit=10 on parse failure
 
             return results[:limit]
 

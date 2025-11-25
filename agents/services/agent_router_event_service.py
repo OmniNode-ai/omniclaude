@@ -39,7 +39,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 # Configure logging FIRST (before any logging calls)
@@ -143,7 +143,7 @@ class PostgresLogger:
         self.pool_min_size = pool_min_size
         self.pool_max_size = pool_max_size
 
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
         self._initialized = False
 
         # Metrics
@@ -277,11 +277,11 @@ class PostgresLogger:
         confidence_score: float,
         routing_strategy: str,
         routing_time_ms: float,
-        correlation_id: Optional[str] = None,
-        alternatives: Optional[List[Dict[str, Any]]] = None,
-        reasoning: Optional[str] = None,
+        correlation_id: str | None = None,
+        alternatives: list[dict[str, Any]] | None = None,
+        reasoning: str | None = None,
         max_retries: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Log routing decision to database with retry logic.
 
@@ -367,7 +367,7 @@ class PostgresLogger:
 
         return None
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """Get logging statistics."""
         return {
             "total_logs": self._log_count,
@@ -391,12 +391,12 @@ class PostgresLogger:
         context_confidence: float,
         capability_confidence: float,
         historical_confidence: float,
-        correlation_id: Optional[str] = None,
-        user_request_hash: Optional[str] = None,
-        context_hash: Optional[str] = None,
-        alternative_agents: Optional[List[Dict[str, Any]]] = None,
+        correlation_id: str | None = None,
+        user_request_hash: str | None = None,
+        context_hash: str | None = None,
+        alternative_agents: list[dict[str, Any]] | None = None,
         max_retries: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Log router performance metrics to database with retry logic.
 
@@ -527,7 +527,7 @@ class AgentRouterEventService:
         self,
         bootstrap_servers: str,
         consumer_group_id: str = "agent-router-service",
-        registry_path: Optional[str] = None,
+        registry_path: str | None = None,
         db_host: str = "192.168.86.200",
         db_port: int = 5436,
         db_name: str = "omninode_bridge",
@@ -579,12 +579,12 @@ class AgentRouterEventService:
         }
 
         # Components
-        self._router: Optional[AgentRouter] = None
-        self._producer: Optional[AIOKafkaProducer] = None
-        self._consumer: Optional[AIOKafkaConsumer] = None
-        self._postgres_logger: Optional[PostgresLogger] = None
-        self._health_app: Optional[web.Application] = None
-        self._health_runner: Optional[web.AppRunner] = None
+        self._router: AgentRouter | None = None
+        self._producer: AIOKafkaProducer | None = None
+        self._consumer: AIOKafkaConsumer | None = None
+        self._postgres_logger: PostgresLogger | None = None
+        self._health_app: web.Application | None = None
+        self._health_runner: web.AppRunner | None = None
         self._shutdown_event = asyncio.Event()
         self._started = False
 
@@ -835,8 +835,8 @@ class AgentRouterEventService:
         self,
         correlation_id: str,
         user_request: str,
-        context: Dict[str, Any],
-        options: Dict[str, Any],
+        context: dict[str, Any],
+        options: dict[str, Any],
     ) -> None:
         """
         Handle a single routing request.

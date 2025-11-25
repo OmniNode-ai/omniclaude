@@ -66,11 +66,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
     cast,
 )
 from uuid import UUID
@@ -107,7 +102,7 @@ from .task_classifier import TaskClassifier, TaskContext, TaskIntent
 
 # Import ActionLogger for tracking intelligence gathering performance
 ACTION_LOGGER_AVAILABLE: bool = False
-ActionLogger: Optional[type] = None
+ActionLogger: type | None = None
 
 # Type alias for ActionLogger (can be None if not available)
 ActionLoggerType = Any  # Will be replaced with actual ActionLogger type if imported
@@ -131,7 +126,7 @@ _load_action_logger()
 
 
 # Import data sanitizer for secure logging
-def _load_sanitizers() -> Tuple[Callable[[Any], Any], Callable[[Any], Any]]:
+def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
     """Try to load sanitizer functions from various locations."""
     try:
         from .data_sanitizer import sanitize_dict, sanitize_string
@@ -163,8 +158,8 @@ class CacheMetrics:
     cache_misses: int = 0
     total_query_time_ms: int = 0
     cache_query_time_ms: int = 0
-    last_hit_timestamp: Optional[datetime] = None
-    last_miss_timestamp: Optional[datetime] = None
+    last_hit_timestamp: datetime | None = None
+    last_miss_timestamp: datetime | None = None
 
     @property
     def hit_rate(self) -> float:
@@ -202,7 +197,7 @@ class CacheMetrics:
         self.total_query_time_ms += query_time_ms
         self.last_miss_timestamp = datetime.now(UTC)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary for logging."""
         return {
             "total_queries": self.total_queries,
@@ -260,8 +255,8 @@ class ManifestCache:
         """Initialize manifest cache."""
         self.default_ttl_seconds = default_ttl_seconds
         self.enable_metrics = enable_metrics
-        self._caches: Dict[str, CacheEntry] = {}
-        self._ttls: Dict[str, int] = {
+        self._caches: dict[str, CacheEntry] = {}
+        self._ttls: dict[str, int] = {
             "patterns": default_ttl_seconds * 3,  # 15 minutes
             "infrastructure": default_ttl_seconds * 2,  # 10 minutes
             "models": default_ttl_seconds * 3,  # 15 minutes
@@ -270,13 +265,13 @@ class ManifestCache:
             "filesystem": default_ttl_seconds,  # 5 minutes
             "full_manifest": default_ttl_seconds,  # 5 minutes
         }
-        self.metrics: Dict[str, CacheMetrics] = {}
+        self.metrics: dict[str, CacheMetrics] = {}
         if enable_metrics:
             for query_type in self._ttls.keys():
                 self.metrics[query_type] = CacheMetrics()
         self.logger = logging.getLogger(__name__)
 
-    def get(self, query_type: str) -> Optional[Any]:
+    def get(self, query_type: str) -> Any | None:
         """Get cached data for query type."""
         import time
 
@@ -304,9 +299,7 @@ class ManifestCache:
         self.logger.debug(f"Cache HIT: {query_type}")
         return entry.data
 
-    def set(
-        self, query_type: str, data: Any, ttl_seconds: Optional[int] = None
-    ) -> None:
+    def set(self, query_type: str, data: Any, ttl_seconds: int | None = None) -> None:
         """Store data in cache."""
         ttl = ttl_seconds or self._ttls.get(query_type, self.default_ttl_seconds)
         size_bytes = len(str(data).encode("utf-8"))
@@ -320,7 +313,7 @@ class ManifestCache:
         self._caches[query_type] = entry
         self.logger.debug(f"Cache SET: {query_type} (ttl: {ttl}s)")
 
-    def invalidate(self, query_type: Optional[str] = None) -> int:
+    def invalidate(self, query_type: str | None = None) -> int:
         """Invalidate cache entries."""
         if query_type is None:
             count = len(self._caches)
@@ -333,7 +326,7 @@ class ManifestCache:
             return 1
         return 0
 
-    def get_metrics(self, query_type: Optional[str] = None) -> Dict[str, Any]:
+    def get_metrics(self, query_type: str | None = None) -> dict[str, Any]:
         """Get cache metrics."""
         if not self.enable_metrics:
             return {"error": "Metrics disabled"}
@@ -357,7 +350,7 @@ class ManifestCache:
             "cache_entries": list(self._caches.keys()),
         }
 
-    def get_cache_info(self) -> Dict[str, Any]:
+    def get_cache_info(self) -> dict[str, Any]:
         """Get cache information and statistics."""
         total_size_bytes = sum(entry.size_bytes for entry in self._caches.values())
         entries_info = [
@@ -388,11 +381,11 @@ class ManifestInjectionStorage:
 
     def __init__(
         self,
-        db_host: Optional[str] = None,
-        db_port: Optional[int] = None,
-        db_name: Optional[str] = None,
-        db_user: Optional[str] = None,
-        db_password: Optional[str] = None,
+        db_host: str | None = None,
+        db_port: int | None = None,
+        db_name: str | None = None,
+        db_user: str | None = None,
+        db_password: str | None = None,
     ):
         """
         Initialize storage handler.
@@ -474,10 +467,10 @@ class ManifestInjectionStorage:
         self,
         correlation_id: UUID,
         agent_name: str,
-        manifest_data: Dict[str, Any],
+        manifest_data: dict[str, Any],
         formatted_text: str,
-        query_times: Dict[str, int],
-        sections_included: List[str],
+        query_times: dict[str, int],
+        sections_included: list[str],
         **kwargs,
     ) -> bool:
         """
@@ -621,7 +614,7 @@ class ManifestInjectionStorage:
         self,
         correlation_id: UUID,
         success: bool = True,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """
         Mark agent execution as completed by updating lifecycle fields.
@@ -726,13 +719,13 @@ class ManifestInjector:
 
     def __init__(
         self,
-        kafka_brokers: Optional[str] = None,
+        kafka_brokers: str | None = None,
         enable_intelligence: bool = True,
         query_timeout_ms: int = 10000,
         enable_storage: bool = True,
         enable_cache: bool = True,
-        cache_ttl_seconds: Optional[int] = None,
-        agent_name: Optional[str] = None,
+        cache_ttl_seconds: int | None = None,
+        agent_name: str | None = None,
     ):
         """
         Initialize manifest injector.
@@ -778,22 +771,22 @@ class ManifestInjector:
 
         # Initialize Valkey cache (distributed, persistent)
         # Valkey cache is checked BEFORE in-memory cache for better hit rates
-        self._valkey_cache: Optional[IntelligenceCache] = None
+        self._valkey_cache: IntelligenceCache | None = None
         if enable_cache:
             self._valkey_cache = IntelligenceCache()
         else:
             self._valkey_cache = None
 
         # Cached manifest data (for backward compatibility)
-        self._manifest_data: Optional[Dict[str, Any]] = None
-        self._cached_formatted: Optional[str] = None
-        self._last_update: Optional[datetime] = None
+        self._manifest_data: dict[str, Any] | None = None
+        self._cached_formatted: str | None = None
+        self._last_update: datetime | None = None
 
         # Tracking for current generation
-        self._current_correlation_id: Optional[UUID] = None
-        self._current_query_times: Dict[str, int] = {}
-        self._current_query_failures: Dict[str, Optional[str]] = {}
-        self._current_warnings: List[str] = []
+        self._current_correlation_id: UUID | None = None
+        self._current_query_times: dict[str, int] = {}
+        self._current_query_failures: dict[str, str | None] = {}
+        self._current_warnings: list[str] = []
 
         # Storage handler
         self._storage: ManifestInjectionStorage | None
@@ -803,7 +796,7 @@ class ManifestInjector:
             self._storage = None
 
         # Intelligence usage tracker
-        self._usage_tracker: Optional[IntelligenceUsageTracker] = None
+        self._usage_tracker: IntelligenceUsageTracker | None = None
         if self.enable_storage:
             try:
                 self._usage_tracker = IntelligenceUsageTracker()
@@ -818,7 +811,7 @@ class ManifestInjector:
         self.min_quality_threshold = settings.min_pattern_quality
 
         # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
-        self._action_logger_cache: Dict[str, Optional[Any]] = {}
+        self._action_logger_cache: dict[str, Any | None] = {}
 
     async def __aenter__(self):
         """
@@ -898,7 +891,7 @@ class ManifestInjector:
         # Return False to propagate any exceptions
         return False
 
-    async def _filter_by_quality(self, patterns: List[Dict]) -> List[Dict]:
+    async def _filter_by_quality(self, patterns: list[dict]) -> list[dict]:
         """
         Filter patterns by quality score.
 
@@ -972,7 +965,7 @@ class ManifestInjector:
         self,
         correlation_id: str,
         force_refresh: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate manifest by querying intelligence service (synchronous wrapper).
 
@@ -992,10 +985,13 @@ class ManifestInjector:
         # Check cache first
         if not force_refresh and self._is_cache_valid():
             self.logger.debug("Using cached manifest data")
-            assert (
-                self._manifest_data is not None
-            ), "Cache valid but manifest_data is None"
-            return self._manifest_data
+            if self._manifest_data is None:
+                # Cache consistency error - should not happen but handle gracefully
+                self.logger.warning(
+                    "Cache marked valid but manifest_data is None - forcing refresh"
+                )
+            else:
+                return self._manifest_data
 
         # Run async query in event loop
         try:
@@ -1031,7 +1027,7 @@ class ManifestInjector:
             )
             return self._get_minimal_manifest()
 
-    def _get_action_logger(self, correlation_id: str) -> Optional[Any]:
+    def _get_action_logger(self, correlation_id: str) -> Any | None:
         """
         Get or create ActionLogger instance with caching.
 
@@ -1071,9 +1067,9 @@ class ManifestInjector:
     async def generate_dynamic_manifest_async(
         self,
         correlation_id: str,
-        user_prompt: Optional[str] = None,
+        user_prompt: str | None = None,
         force_refresh: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate manifest by querying intelligence service (async).
 
@@ -1141,10 +1137,14 @@ class ManifestInjector:
                         f"ActionLogger cache hit logging failed: {log_err}"
                     )
 
-            assert (
-                self._manifest_data is not None
-            ), "Cache valid but manifest_data is None"
-            return self._manifest_data
+            if self._manifest_data is None:
+                # Cache consistency error - should not happen but handle gracefully
+                self.logger.warning(
+                    "Cache marked valid but manifest_data is None - forcing refresh"
+                )
+                # Fall through to regeneration below
+            else:
+                return self._manifest_data
 
         start_time = time.time()
         self.logger.info(
@@ -1384,7 +1384,7 @@ class ManifestInjector:
             # Stop client
             await client.stop()
 
-    async def _embed_text(self, text: str, model: str | None = None) -> List[float]:
+    async def _embed_text(self, text: str, model: str | None = None) -> list[float]:
         """
         Embed text using GTE-Qwen2-1.5B embedding service.
 
@@ -1423,7 +1423,7 @@ class ManifestInjector:
                         data = await response.json()
                         # OpenAI-compatible format: data[0].embedding
                         embedding = data["data"][0]["embedding"]
-                        return cast(List[float], embedding)
+                        return cast(list[float], embedding)
                     else:
                         error_text = await response.text()
                         raise RuntimeError(
@@ -1438,11 +1438,11 @@ class ManifestInjector:
     async def _query_patterns_direct_qdrant(
         self,
         correlation_id: str,
-        collections: List[str] | None = None,
+        collections: list[str] | None = None,
         limit_per_collection: int = 20,
-        task_context: Optional[TaskContext] = None,
-        user_prompt: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        task_context: TaskContext | None = None,
+        user_prompt: str | None = None,
+    ) -> dict[str, Any]:
         """
         Direct fallback: Query Qdrant HTTP API directly for patterns.
 
@@ -1855,9 +1855,9 @@ class ManifestInjector:
     async def _query_patterns(
         self,
         correlation_id: str,
-        task_context: Optional[TaskContext] = None,
-        user_prompt: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        task_context: TaskContext | None = None,
+        user_prompt: str | None = None,
+    ) -> dict[str, Any]:
         """
         Query available code generation patterns from BOTH collections.
 
@@ -1898,7 +1898,7 @@ class ManifestInjector:
                     if self.enable_cache and self._cache:
                         self._cache.set("patterns", cached_result)
                     # Cast to dict for type safety
-                    cached_dict: Dict[str, Any] = (
+                    cached_dict: dict[str, Any] = (
                         cached_result if isinstance(cached_result, dict) else {}
                     )
                     return cached_dict
@@ -1915,7 +1915,7 @@ class ManifestInjector:
                     f"[{correlation_id}] Pattern query: IN-MEMORY CACHE HIT ({elapsed_ms}ms)"
                 )
                 # Cast to dict for type safety
-                cached_dict_mem: Dict[str, Any] = (
+                cached_dict_mem: dict[str, Any] = (
                     cached_result if isinstance(cached_result, dict) else {}
                 )
                 return cached_dict_mem
@@ -1953,8 +1953,8 @@ class ManifestInjector:
             archon_result, codegen_result = results
 
             # Handle exceptions from gather
-            archon_dict: Dict[str, Any] = {"patterns": [], "query_time_ms": 0}
-            codegen_dict: Dict[str, Any] = {"patterns": [], "query_time_ms": 0}
+            archon_dict: dict[str, Any] = {"patterns": [], "query_time_ms": 0}
+            codegen_dict: dict[str, Any] = {"patterns": [], "query_time_ms": 0}
 
             if isinstance(archon_result, Exception):
                 self.logger.warning(f"archon_vectors query failed: {archon_result}")
@@ -2145,7 +2145,7 @@ class ManifestInjector:
     async def _query_infrastructure(
         self,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query current infrastructure topology.
 
@@ -2239,7 +2239,7 @@ class ManifestInjector:
                 "error": str(e),
             }
 
-    async def _query_postgresql(self) -> Dict[str, Any]:
+    async def _query_postgresql(self) -> dict[str, Any]:
         """
         Query PostgreSQL for connection details and statistics.
 
@@ -2311,7 +2311,7 @@ class ManifestInjector:
         except Exception as e:
             return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
-    async def _query_kafka(self) -> Dict[str, Any]:
+    async def _query_kafka(self) -> dict[str, Any]:
         """
         Query Kafka/Redpanda for connection details and topic count.
 
@@ -2355,7 +2355,7 @@ class ManifestInjector:
         except Exception as e:
             return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
-    async def _query_qdrant(self) -> Dict[str, Any]:
+    async def _query_qdrant(self) -> dict[str, Any]:
         """
         Query Qdrant for connection details and collection statistics.
 
@@ -2405,7 +2405,7 @@ class ManifestInjector:
         except Exception as e:
             return {"status": "unavailable", "error": f"Connection failed: {str(e)}"}
 
-    async def _query_docker_services(self) -> List[Dict[str, Any]]:
+    async def _query_docker_services(self) -> list[dict[str, Any]]:
         """
         Query Docker for running archon-* services.
 
@@ -2458,7 +2458,7 @@ class ManifestInjector:
             self.logger.debug(f"Docker query failed: {e}")
             return []
 
-    async def _query_memgraph(self) -> Dict[str, Any]:
+    async def _query_memgraph(self) -> dict[str, Any]:
         """
         Query Memgraph for graph database statistics and file relationships.
 
@@ -2575,7 +2575,7 @@ class ManifestInjector:
         self,
         query: str = "ONEX patterns implementation examples",
         limit: int = 10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query archon-search service for semantic code search.
 
@@ -2594,7 +2594,7 @@ class ManifestInjector:
                 "query": str,
                 "total_results": int,
                 "returned_results": int,
-                "results": List[Dict],  # Search result objects
+                "results": list[dict],  # Search result objects
                 "query_time_ms": float,
                 "error": str (if error/unavailable)
             }
@@ -2683,7 +2683,7 @@ class ManifestInjector:
     async def _query_models(
         self,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query available AI models and ONEX data models.
 
@@ -2850,7 +2850,7 @@ class ManifestInjector:
     async def _query_database_schemas_direct_postgres(
         self,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Direct fallback: Query PostgreSQL directly for database schemas.
 
@@ -2978,7 +2978,7 @@ class ManifestInjector:
         self,
         client: IntelligenceEventClient,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query database schemas and table definitions.
 
@@ -3023,7 +3023,7 @@ class ManifestInjector:
             )
 
             # Cast result to dict to satisfy type checker
-            result_dict: Dict[str, Any] = result if isinstance(result, dict) else {}
+            result_dict: dict[str, Any] = result if isinstance(result, dict) else {}
 
             # Check if result has actual schemas, trigger fallback if empty
             schemas = result_dict.get(
@@ -3095,7 +3095,7 @@ class ManifestInjector:
         self,
         client: IntelligenceEventClient,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query debug intelligence from workflow_events collection.
 
@@ -3142,7 +3142,7 @@ class ManifestInjector:
                 )
 
                 # Cast result to dict
-                result_dict: Dict[str, Any] = result if isinstance(result, dict) else {}
+                result_dict: dict[str, Any] = result if isinstance(result, dict) else {}
                 if result_dict and result_dict.get("similar_workflows"):
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     self._current_query_times["debug_intelligence"] = elapsed_ms
@@ -3230,7 +3230,7 @@ class ManifestInjector:
                 "query_time_ms": elapsed_ms,
             }
 
-    async def _query_agent_execution_logs(self) -> List[Dict[str, Any]]:
+    async def _query_agent_execution_logs(self) -> list[dict[str, Any]]:
         """
         Query agent execution logs from PostgreSQL agent_execution_logs table.
 
@@ -3304,7 +3304,7 @@ class ManifestInjector:
             self.logger.debug(f"PostgreSQL agent execution logs query failed: {e}")
             return []
 
-    async def _query_pattern_feedback_from_db(self) -> List[Dict[str, Any]]:
+    async def _query_pattern_feedback_from_db(self) -> list[dict[str, Any]]:
         """
         Query pattern feedback from PostgreSQL pattern_feedback_log table.
 
@@ -3367,7 +3367,7 @@ class ManifestInjector:
             self.logger.debug(f"PostgreSQL pattern feedback query failed: {e}")
             return []
 
-    async def _query_local_execution_logs(self) -> List[Dict[str, Any]]:
+    async def _query_local_execution_logs(self) -> list[dict[str, Any]]:
         """
         Query local JSON execution logs from AgentExecutionLogger fallback directory.
 
@@ -3422,8 +3422,8 @@ class ManifestInjector:
             return []
 
     def _format_execution_workflows(
-        self, workflows: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, workflows: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Format agent execution log results for debug intelligence.
 
@@ -3481,7 +3481,7 @@ class ManifestInjector:
             "query_time_ms": 0,
         }
 
-    def _format_db_workflows(self, workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _format_db_workflows(self, workflows: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Format database workflow results for debug intelligence.
 
@@ -3523,7 +3523,7 @@ class ManifestInjector:
             "query_time_ms": 0,
         }
 
-    def _format_log_workflows(self, workflows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _format_log_workflows(self, workflows: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Format local log workflow results for debug intelligence.
 
@@ -3563,7 +3563,7 @@ class ManifestInjector:
     async def _query_filesystem(
         self,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query filesystem tree and metadata.
 
@@ -3621,8 +3621,8 @@ class ManifestInjector:
 
             # Scan filesystem
             file_tree = []
-            file_types: Dict[str, int] = {}
-            onex_files: Dict[str, List[str]] = {
+            file_types: dict[str, int] = {}
+            onex_files: dict[str, list[str]] = {
                 "effect": [],
                 "compute": [],
                 "reducer": [],
@@ -3646,7 +3646,7 @@ class ManifestInjector:
                     return True
                 return False
 
-            def get_onex_node_type(file_path: Path) -> Optional[str]:
+            def get_onex_node_type(file_path: Path) -> str | None:
                 """Detect ONEX node type from filename."""
                 name = file_path.name.lower()
                 if "_effect.py" in name or "effect.py" == name:
@@ -3661,7 +3661,7 @@ class ManifestInjector:
 
             def scan_directory(
                 directory: Path, depth: int = 0, max_depth: int = 5
-            ) -> List[Dict[str, Any]]:
+            ) -> list[dict[str, Any]]:
                 """Recursively scan directory."""
                 nonlocal total_files, total_dirs, total_size_bytes
 
@@ -3790,7 +3790,7 @@ class ManifestInjector:
     async def _query_debug_loop_context(
         self,
         correlation_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Query debug loop STF database for available transformation patterns.
 
@@ -3950,8 +3950,8 @@ class ManifestInjector:
 
     def _select_sections_for_task(
         self,
-        task_context: Optional[TaskContext],
-    ) -> List[str]:
+        task_context: TaskContext | None,
+    ) -> list[str]:
         """
         Select manifest sections based on task intent.
 
@@ -3981,8 +3981,8 @@ class ManifestInjector:
 
     def _build_manifest_from_results(
         self,
-        results: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        results: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Build structured manifest from query results.
 
@@ -3995,7 +3995,7 @@ class ManifestInjector:
         Returns:
             Structured manifest dictionary
         """
-        manifest: Dict[str, Any] = {
+        manifest: dict[str, Any] = {
             "manifest_metadata": {
                 "version": "2.0.0",
                 "generated_at": datetime.now(UTC).isoformat(),
@@ -4105,8 +4105,8 @@ class ManifestInjector:
         return manifest
 
     def _deduplicate_patterns(
-        self, patterns: List[Dict[str, Any]]
-    ) -> tuple[List[Dict[str, Any]], int]:
+        self, patterns: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         Deduplicate patterns by name, keeping the highest confidence version
         and tracking instance counts and metadata from all occurrences.
@@ -4121,7 +4121,7 @@ class ManifestInjector:
             return [], 0
 
         # Group patterns by name
-        pattern_groups: Dict[str, Any] = {}
+        pattern_groups: dict[str, Any] = {}
 
         for pattern in patterns:
             name = pattern.get("name", "Unknown Pattern")
@@ -4186,7 +4186,7 @@ class ManifestInjector:
 
         return deduplicated, duplicates_removed
 
-    def _format_patterns_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_patterns_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format patterns query result into manifest structure."""
         patterns = result.get("patterns", [])
         collections_queried = result.get("collections_queried", {})
@@ -4226,7 +4226,7 @@ class ManifestInjector:
             "collections_queried": collections_queried,
         }
 
-    def _format_infrastructure_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_infrastructure_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format infrastructure query result into manifest structure."""
         # Check if result already has the correct structure (new direct query format)
         if "remote_services" in result or "local_services" in result:
@@ -4245,7 +4245,7 @@ class ManifestInjector:
             "docker_services": result.get("docker_services", []),
         }
 
-    def _format_models_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_models_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format models query result into manifest structure."""
         return {
             "ai_models": result.get("ai_models", {}),
@@ -4253,7 +4253,7 @@ class ManifestInjector:
             "intelligence_models": result.get("intelligence_models", []),
         }
 
-    def _format_schemas_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_schemas_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format database schemas query result into manifest structure."""
         # Check both "tables" and "schemas" keys for compatibility
         # Event-based queries return "schemas", direct PostgreSQL returns "tables"
@@ -4280,8 +4280,8 @@ class ManifestInjector:
         }
 
     def _format_debug_intelligence_result(
-        self, result: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, result: dict[str, Any]
+    ) -> dict[str, Any]:
         """Format debug intelligence query result into manifest structure."""
         similar_workflows = result.get("similar_workflows", [])
 
@@ -4299,7 +4299,7 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
-    def _format_filesystem_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_filesystem_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format filesystem query result into manifest structure."""
         return {
             "root_path": result.get("root_path", "unknown"),
@@ -4312,7 +4312,7 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
-    def _format_debug_loop_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_debug_loop_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format debug loop query result into manifest structure."""
         return {
             "available": result.get("available", False),
@@ -4323,7 +4323,7 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
-    def _format_archon_search_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_archon_search_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Format archon-search query result into manifest structure."""
         if result.get("status") != "success":
             return {
@@ -4376,7 +4376,7 @@ class ManifestInjector:
         age_seconds = (datetime.now(UTC) - self._last_update).total_seconds()
         return age_seconds < self.cache_ttl_seconds
 
-    def _get_minimal_manifest(self) -> Dict[str, Any]:
+    def _get_minimal_manifest(self) -> dict[str, Any]:
         """
         Get minimal fallback manifest.
 
@@ -4440,7 +4440,7 @@ class ManifestInjector:
             "note": "This is a minimal fallback manifest. Full system context requires intelligence service.",
         }
 
-    def format_for_prompt(self, sections: Optional[List[str]] = None) -> str:
+    def format_for_prompt(self, sections: list[str] | None = None) -> str:
         """
         Format manifest for injection into agent prompt.
 
@@ -4594,7 +4594,7 @@ class ManifestInjector:
 
         return "\n".join(snippet_lines)
 
-    def _format_patterns(self, patterns_data: Dict) -> str:
+    def _format_patterns(self, patterns_data: dict[str, Any]) -> str:
         """Format patterns section with grouped duplicate counts."""
         output = ["AVAILABLE PATTERNS:"]
 
@@ -4700,7 +4700,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_models(self, models_data: Dict) -> str:
+    def _format_models(self, models_data: dict[str, Any]) -> str:
         """Format models section."""
         output = ["AI MODELS & DATA MODELS:"]
 
@@ -4763,7 +4763,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_infrastructure(self, infra_data: Dict) -> str:
+    def _format_infrastructure(self, infra_data: dict[str, Any]) -> str:
         """Format infrastructure section."""
         output = ["INFRASTRUCTURE TOPOLOGY:"]
 
@@ -4860,7 +4860,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_database_schemas(self, schemas_data: Dict) -> str:
+    def _format_database_schemas(self, schemas_data: dict[str, Any]) -> str:
         """Format database schemas section."""
         output = ["DATABASE SCHEMAS:"]
 
@@ -4882,7 +4882,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_debug_intelligence(self, debug_data: Dict) -> str:
+    def _format_debug_intelligence(self, debug_data: dict[str, Any]) -> str:
         """Format debug intelligence section."""
         output = ["DEBUG INTELLIGENCE (Similar Workflows):"]
 
@@ -4927,7 +4927,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_archon_search(self, search_data: Dict) -> str:
+    def _format_archon_search(self, search_data: dict[str, Any]) -> str:
         """Format archon-search section with semantic search results."""
         output = ["ARCHON SEARCH RESULTS:"]
 
@@ -4990,7 +4990,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_filesystem(self, filesystem_data: Dict) -> str:
+    def _format_filesystem(self, filesystem_data: dict[str, Any]) -> str:
         """
         Format filesystem section.
 
@@ -5001,7 +5001,7 @@ class ManifestInjector:
         """
         return ""  # Return empty string instead of full tree
 
-    def _format_debug_loop(self, debug_loop_data: Dict) -> str:
+    def _format_debug_loop(self, debug_loop_data: dict[str, Any]) -> str:
         """Format debug loop section with STF availability and model pricing."""
         output = ["AVAILABLE DEBUG PATTERNS (STFs):"]
 
@@ -5044,7 +5044,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_action_logging(self, action_logging_data: Dict) -> str:
+    def _format_action_logging(self, action_logging_data: dict[str, Any]) -> str:
         """
         Format action logging requirements section.
 
@@ -5127,7 +5127,7 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def get_manifest_summary(self) -> Dict[str, Any]:
+    def get_manifest_summary(self) -> dict[str, Any]:
         """
         Get summary statistics about the manifest.
 
@@ -5255,7 +5255,7 @@ class ManifestInjector:
                 exc_info=True,
             )
 
-    def get_cache_metrics(self, query_type: Optional[str] = None) -> Dict[str, Any]:
+    def get_cache_metrics(self, query_type: str | None = None) -> dict[str, Any]:
         """
         Get cache performance metrics.
 
@@ -5270,7 +5270,7 @@ class ManifestInjector:
 
         return self._cache.get_metrics(query_type)
 
-    def invalidate_cache(self, query_type: Optional[str] = None) -> int:
+    def invalidate_cache(self, query_type: str | None = None) -> int:
         """
         Invalidate cache entries.
 
@@ -5285,7 +5285,7 @@ class ManifestInjector:
 
         return self._cache.invalidate(query_type)
 
-    def get_cache_info(self) -> Dict[str, Any]:
+    def get_cache_info(self) -> dict[str, Any]:
         """
         Get cache information and statistics.
 
@@ -5333,7 +5333,7 @@ class ManifestInjector:
     def mark_agent_completed(
         self,
         success: bool = True,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """
         Mark agent execution as completed (lifecycle tracking).
@@ -5376,9 +5376,9 @@ class ManifestInjector:
 
 # Convenience function for quick access (async with context manager)
 async def inject_manifest_async(
-    correlation_id: Optional[str] = None,
-    sections: Optional[List[str]] = None,
-    agent_name: Optional[str] = None,
+    correlation_id: str | None = None,
+    sections: list[str] | None = None,
+    agent_name: str | None = None,
 ) -> str:
     """
     Quick function to load and format manifest (asynchronous with context manager).
@@ -5409,9 +5409,9 @@ async def inject_manifest_async(
 
 # Convenience function for quick access (sync wrapper for backward compatibility)
 def inject_manifest(
-    correlation_id: Optional[str] = None,
-    sections: Optional[List[str]] = None,
-    agent_name: Optional[str] = None,
+    correlation_id: str | None = None,
+    sections: list[str] | None = None,
+    agent_name: str | None = None,
 ) -> str:
     """
     Quick function to load and format manifest (synchronous wrapper).

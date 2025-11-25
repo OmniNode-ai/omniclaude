@@ -50,7 +50,7 @@ NODES_AVAILABLE: bool = False
 class _PlaceholderNodeDebugSTFStorageEffect:
     """Placeholder - requires omnibase_core installation."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         raise ImportError(
             "NodeDebugSTFStorageEffect requires omnibase_core.\n"
             "Install with: pip install omnibase_core\n"
@@ -61,7 +61,7 @@ class _PlaceholderNodeDebugSTFStorageEffect:
 class _PlaceholderNodeSTFHashCompute:
     """Placeholder - requires omnibase_core installation."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         raise ImportError(
             "NodeSTFHashCompute requires omnibase_core.\n"
             "Install with: pip install omnibase_core\n"

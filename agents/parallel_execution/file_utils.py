@@ -416,7 +416,7 @@ class BackupManager:
                 try:
                     metadata = self.file_utils.read_json(metadata_path)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    pass
+                    pass  # nosec B110 - metadata is optional, defaults to empty dict
 
             backup_info = self.file_utils.get_file_info(backup_path)
             backup_info.update(metadata)

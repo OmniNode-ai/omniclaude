@@ -636,7 +636,7 @@ class DatabaseIntegrationLayer:
                     timeout=self.config.batch_timeout_ms / 1000,
                 )
             except asyncio.TimeoutError:
-                pass
+                pass  # nosec B110 - timeout is expected, flush_all_buffers called next
 
             # Flush all buffers
             await self._flush_all_buffers()

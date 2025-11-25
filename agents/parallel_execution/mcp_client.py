@@ -140,7 +140,7 @@ class ArchonMCPClient:
                     try:
                         events.append(json.loads(event_data))
                     except json.JSONDecodeError:
-                        pass
+                        pass  # nosec B110 - skip malformed SSE events, handled below
 
             # Get the last event (should be the result)
             if not events:
@@ -185,7 +185,7 @@ class ArchonMCPClient:
                         ),
                     )
             except Exception:
-                pass
+                pass  # nosec B110 - best-effort logging, main result returned below
 
             return mcp_result
 

@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
@@ -513,13 +514,14 @@ class GenerationPipeline:
         stages: List[PipelineStage] = []
         status = "failed"
         output_path = None
-        generated_files = []
+        generated_files: List[str] = []
         node_type = None
         service_name = None
         domain = None
         validation_passed = False
         compilation_passed = False
-        error_summary = None
+        error_summary: Optional[str] = None
+        error_traceback: Optional[str] = None
 
         # POLY-I: Framework Integration (FV-002) - Validates framework setup is correct
         gate_fv002 = await self._check_quality_gate(
@@ -1096,6 +1098,7 @@ class GenerationPipeline:
 
         except OnexError as e:
             error_summary = str(e)
+            error_traceback = traceback.format_exc()
             self.logger.error(
                 f"Pipeline failed for correlation_id={correlation_id}: {error_summary}"
             )
@@ -1105,6 +1108,7 @@ class GenerationPipeline:
 
         except Exception as e:
             error_summary = f"Unexpected error: {str(e)}"
+            error_traceback = traceback.format_exc()
             self.logger.error(
                 f"Pipeline failed with unexpected error: {error_summary}",
                 exc_info=True,
@@ -1113,20 +1117,65 @@ class GenerationPipeline:
             # Rollback written files
             await self._rollback(stages[-1].stage_name if stages else "unknown")
 
-        # Early return on error - skip expensive quality gates for failed pipelines
+        # Early return on error - include rich metadata for debugging
+        # Even on failure, callers may need partial results, timing data, and error context
         if status != "success":
             total_duration_ms = int((time() - start_time) * 1000)
             self.logger.info(
                 f"Pipeline failed, skipping post-error quality gates. "
                 f"Duration: {total_duration_ms}ms"
             )
+
+            # Determine the last successful stage for error context
+            last_successful_stage = None
+            failed_stage = None
+            for stage in stages:
+                if stage.status == StageStatus.COMPLETED:
+                    last_successful_stage = stage.stage_name
+                elif stage.status == StageStatus.FAILED:
+                    failed_stage = stage.stage_name
+                    break
+
+            # Build comprehensive error metadata
+            error_metadata: Dict[str, Any] = {
+                "prompt": prompt,
+                "output_directory": output_directory,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                # Performance metrics collected up to failure point
+                "performance_metrics": self.metrics_collector.get_summary(),
+                # Quality gates that were checked before failure
+                "quality_gates": self.quality_gate_registry.get_summary(),
+                # Error context for debugging
+                "error_context": {
+                    "error_type": (
+                        "OnexError"
+                        if error_summary and "Unexpected error" not in error_summary
+                        else "Exception"
+                    ),
+                    "error_traceback": error_traceback,
+                    "last_successful_stage": last_successful_stage,
+                    "failed_stage": failed_stage,
+                    "stages_completed": sum(
+                        1 for s in stages if s.status == StageStatus.COMPLETED
+                    ),
+                    "total_stages_attempted": len(stages),
+                },
+            }
+
             return PipelineResult(
                 status=status,
                 correlation_id=correlation_id,
                 node_type=node_type,
+                service_name=service_name,
+                domain=domain,
                 stages=stages,
+                output_path=output_path,
+                generated_files=generated_files,
+                validation_passed=validation_passed,
+                compilation_passed=compilation_passed,
                 error_summary=error_summary,
                 total_duration_ms=total_duration_ms,
+                metadata=error_metadata,
             )
 
         # Calculate total duration

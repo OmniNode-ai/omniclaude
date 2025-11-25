@@ -186,10 +186,18 @@ echo ""
 
 extract_error_from_logs() {
     local run_id="$1"
-    local job_name="$2"
-    local step_name="$3"
 
-    # Fetch logs for the run and extract errors for this specific job/step
+    # Validate run_id parameter
+    if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+        return 1
+    fi
+
+    # Validate run_id is numeric (workflow run IDs are always numeric)
+    if ! [[ "$run_id" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+
+    # Fetch logs for the run and extract errors
     # Use gh run view with --log to get full logs
     local logs
     logs=$(gh run view "$run_id" --log 2>/dev/null | grep -A 10 -B 2 -i "error\|fatal\|failed" | head -20 || echo "")
@@ -198,13 +206,16 @@ extract_error_from_logs() {
         return 1
     fi
 
-    # Filter logs to relevant section
     echo "$logs"
 }
 
 detect_error_pattern() {
     local error_text="$1"
-    local step_name="$2"
+
+    # Validate error_text parameter
+    if [ -z "$error_text" ]; then
+        return 1
+    fi
 
     # Docker build errors
     if echo "$error_text" | grep -qi "fatal: could not read Username"; then
@@ -321,11 +332,11 @@ while IFS= read -r workflow; do
         # Fetch and display error logs for this failure
         if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
             # Extract errors from logs
-            error_logs=$(extract_error_from_logs "$run_id" "$job" "$step" 2>/dev/null || echo "")
+            error_logs=$(extract_error_from_logs "$run_id" 2>/dev/null || echo "")
 
             if [ -n "$error_logs" ]; then
                 # Detect error pattern and provide diagnosis
-                diagnosis=$(detect_error_pattern "$error_logs" "$step" 2>/dev/null || echo "")
+                diagnosis=$(detect_error_pattern "$error_logs" 2>/dev/null || echo "")
 
                 if [ -n "$diagnosis" ]; then
                     echo "$diagnosis" | while IFS= read -r line; do

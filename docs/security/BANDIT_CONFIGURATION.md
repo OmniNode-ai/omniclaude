@@ -36,6 +36,32 @@ Command-line arguments in GitHub Actions.
 - Add CI-specific documentation
 - Generate reports for artifact upload
 
+### Configuration Precedence
+
+When running Bandit, configuration is loaded in this order:
+
+1. **`.bandit` file** (primary) - Loaded via `--ini .bandit` flag
+   - Provides `exclude_dirs` and `skips` settings
+   - This is the **single source of truth** for skip codes
+
+2. **CLI arguments** (override) - Specified in CI workflow
+   - `--exclude` adds additional directories to exclude
+   - `--confidence-level` and `--severity-level` filter output
+   - CLI exclusions are **merged** with `.bandit` exclusions
+
+3. **`pyproject.toml`** (secondary/backup) - Poetry projects
+   - Mirrors `.bandit` for IDE integration and documentation
+   - Some tools read from `[tool.bandit]` directly
+   - Keep in sync with `.bandit` manually
+
+**Effective Configuration** = `.bandit` + CLI arguments
+
+**Keep All Three In Sync**: When updating exclusions or skip codes:
+1. Update `.bandit` (primary)
+2. Update `pyproject.toml [tool.bandit]` (secondary)
+3. Verify CI workflow exclusions match
+4. Update this documentation
+
 ## Configuration Strategy
 
 ### Severity and Confidence Levels
@@ -183,7 +209,7 @@ The CI workflow runs Bandit in two passes:
 ## Scan Results
 
 **Code Scanned**: 129,809 lines of code
-**Issues Skipped**: 3 (via `#nosec` comments)
+**Issues Skipped**: 3 (via `# nosec` comments)
 **Issues Filtered**: 2 Low severity (High confidence)
 
 ## Local Development Usage

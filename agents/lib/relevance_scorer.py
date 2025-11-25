@@ -8,24 +8,22 @@ Scores patterns and schemas by relevance to user's task using:
 Part of Phase 3: Relevance Scoring implementation.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 
-# Import TaskClassifier types with fallback for different import contexts
+# Import TaskClassifier types with fallback for standalone usage
 try:
     from .task_classifier import TaskContext, TaskIntent
 except ImportError:
-    # Handle imports when module is installed in ~/.claude/agents/lib/
+    # Standalone usage: add lib directory to path
     import sys
     from pathlib import Path
 
-    lib_path = Path(__file__).parent
-    if str(lib_path) not in sys.path:
-        sys.path.insert(0, str(lib_path))
-    import task_classifier as _tc
+    _lib_path = Path(__file__).parent
+    if str(_lib_path) not in sys.path:
+        sys.path.insert(0, str(_lib_path))
 
-    TaskContext = _tc.TaskContext  # noqa: F811
-    TaskIntent = _tc.TaskIntent  # noqa: F811
+    from task_classifier import TaskContext, TaskIntent
 
 
 class RelevanceScorer:
@@ -43,7 +41,7 @@ class RelevanceScorer:
 
     def score_pattern_relevance(
         self,
-        pattern: Dict[str, Any],
+        pattern: dict[str, Any],
         task_context: TaskContext,
         user_prompt: str,
     ) -> float:
@@ -76,7 +74,7 @@ class RelevanceScorer:
 
     def score_schema_relevance(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         task_context: TaskContext,
         user_prompt: str,
     ) -> float:
@@ -113,7 +111,7 @@ class RelevanceScorer:
 
     def _compute_keyword_match(
         self,
-        pattern: Dict[str, Any],
+        pattern: dict[str, Any],
         task_context: TaskContext,
     ) -> float:
         """
@@ -151,7 +149,7 @@ class RelevanceScorer:
 
     def _compute_entity_match(
         self,
-        pattern: Dict[str, Any],
+        pattern: dict[str, Any],
         task_context: TaskContext,
         user_prompt: str,
     ) -> float:
@@ -223,7 +221,7 @@ class RelevanceScorer:
 
     def _compute_heuristic_score(
         self,
-        pattern: Dict[str, Any],
+        pattern: dict[str, Any],
         task_context: TaskContext,
     ) -> float:
         """

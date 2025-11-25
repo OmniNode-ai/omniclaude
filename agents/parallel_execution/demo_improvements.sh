@@ -8,7 +8,9 @@ echo "DEMONSTRATION: Environment Variable Handling Improvements"
 echo "========================================================================"
 echo ""
 
-PROJECT_ROOT="/Volumes/PRO-G40/Code/omniclaude"
+# Detect script directory and derive project root (script is in agents/parallel_execution/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "1. Configuration Validation (will fail if keys not set)"

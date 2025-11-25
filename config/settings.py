@@ -172,23 +172,24 @@ class Settings(BaseSettings):
     # EXTERNAL SERVICE DISCOVERY (from omniarchon)
     # =========================================================================
     # Services provided by omniarchon repository (192.168.86.101)
+    # Note: All URLs use HttpUrl validation for type safety
 
-    archon_intelligence_url: str = Field(
+    archon_intelligence_url: HttpUrl = Field(
         default="http://192.168.86.101:8053",
         description="Archon Intelligence API - Code quality, pattern discovery, RAG queries",
     )
 
-    archon_search_url: str = Field(
+    archon_search_url: HttpUrl = Field(
         default="http://192.168.86.101:8055",
         description="Archon Search API - Vector search, semantic search",
     )
 
-    archon_bridge_url: str = Field(
+    archon_bridge_url: HttpUrl = Field(
         default="http://192.168.86.101:8054",
         description="Archon Bridge API - Bridge services between systems",
     )
 
-    archon_mcp_url: str = Field(
+    archon_mcp_url: HttpUrl = Field(
         default="http://192.168.86.101:8051",
         description="Archon MCP Server - Model Context Protocol server",
     )
@@ -198,7 +199,7 @@ class Settings(BaseSettings):
         description="Legacy alias for intelligence service (backward compatibility)",
     )
 
-    main_server_url: str = Field(
+    main_server_url: HttpUrl = Field(
         default="http://192.168.86.101:8181",
         description="Archon Main Server (if different from intelligence)",
     )
@@ -683,13 +684,15 @@ class Settings(BaseSettings):
     )
 
     # Agent Router Configuration
-    agent_registry_path: Optional[str] = Field(
-        default=None,
+    # Note: These fields are always resolved to string values by validators.
+    # The validators provide sensible defaults, so None is never the final value.
+    agent_registry_path: str = Field(
+        default="",
         description="Path to agent registry YAML (defaults to ~/.claude/agent-definitions/agent-registry.yaml)",
     )
 
-    agent_definitions_path: Optional[str] = Field(
-        default=None,
+    agent_definitions_path: str = Field(
+        default="",
         description="Path to agent definitions directory (defaults to ~/.claude/agent-definitions/)",
     )
 
@@ -763,8 +766,9 @@ class Settings(BaseSettings):
         description="Enable debug logging and verbose output",
     )
 
-    omniclaude_agents_path: Optional[str] = Field(
-        default=None,
+    # Note: This field is always resolved to a string value by validators.
+    omniclaude_agents_path: str = Field(
+        default="",
         description="Path to OmniClaude agents directory (defaults to <project_root>/agents)",
     )
 
@@ -841,7 +845,7 @@ class Settings(BaseSettings):
 
     @field_validator("agent_registry_path", mode="before")
     @classmethod
-    def resolve_agent_registry_path(cls, v: Optional[str]) -> str:
+    def resolve_agent_registry_path(cls, v: str | None) -> str:
         """
         Resolve agent registry path with default.
 
@@ -849,44 +853,91 @@ class Settings(BaseSettings):
         1. AGENT_REGISTRY_PATH environment variable (explicit override)
         2. REGISTRY_PATH environment variable (Docker compatibility)
         3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+
+        Returns:
+            str: Resolved path to agent registry (never None or empty)
+
+        Raises:
+            ValueError: If resolved path is empty after all fallbacks (should not happen)
         """
-        if v:
+        if v and v.strip():
             return v
 
         # Check for Docker-compatible REGISTRY_PATH environment variable
         registry_path = os.getenv("REGISTRY_PATH")
-        if registry_path:
+        if registry_path and registry_path.strip():
             return registry_path
 
         # Fall back to home directory default
         home_dir = Path.home()
-        return str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml")
+        default_path = str(
+            home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml"
+        )
+
+        if not default_path:
+            raise ValueError(
+                "Failed to resolve agent_registry_path. "
+                "Set AGENT_REGISTRY_PATH or REGISTRY_PATH environment variable."
+            )
+
+        return default_path
 
     @field_validator("agent_definitions_path", mode="before")
     @classmethod
-    def resolve_agent_definitions_path(cls, v: Optional[str]) -> str:
-        """Resolve agent definitions directory with default."""
-        if v:
+    def resolve_agent_definitions_path(cls, v: str | None) -> str:
+        """
+        Resolve agent definitions directory with default.
+
+        Returns:
+            str: Resolved path to agent definitions directory (never None or empty)
+
+        Raises:
+            ValueError: If resolved path is empty after all fallbacks (should not happen)
+        """
+        if v and v.strip():
             return v
+
         home_dir = Path.home()
-        return str(home_dir / ".claude" / "agent-definitions")
+        default_path = str(home_dir / ".claude" / "agent-definitions")
+
+        if not default_path:
+            raise ValueError(
+                "Failed to resolve agent_definitions_path. "
+                "Set AGENT_DEFINITIONS_PATH environment variable."
+            )
+
+        return default_path
 
     @field_validator("omniclaude_agents_path", mode="before")
     @classmethod
-    def resolve_omniclaude_agents_path(cls, v: Optional[str]) -> str:
+    def resolve_omniclaude_agents_path(cls, v: str | None) -> str:
         """
         Resolve OmniClaude agents directory with default.
 
         Priority:
         1. OMNICLAUDE_AGENTS_PATH environment variable (explicit override)
         2. Default: <project_root>/agents/parallel_execution (agent framework location)
+
+        Returns:
+            str: Resolved path to agents directory (never None or empty)
+
+        Raises:
+            ValueError: If resolved path is empty after all fallbacks (should not happen)
         """
-        if v:
+        if v and v.strip():
             return v
 
         # Get project root (parent of config directory)
         project_root = Path(__file__).resolve().parent.parent
-        return str(project_root / "agents" / "parallel_execution")
+        default_path = str(project_root / "agents" / "parallel_execution")
+
+        if not default_path:
+            raise ValueError(
+                "Failed to resolve omniclaude_agents_path. "
+                "Set OMNICLAUDE_AGENTS_PATH environment variable."
+            )
+
+        return default_path
 
     @field_validator("routing_adapter_host", mode="before")
     @classmethod
@@ -1115,22 +1166,28 @@ class Settings(BaseSettings):
                 "Set KAFKA_BOOTSTRAP_SERVERS in .env file"
             )
 
-        # Validate agent registry exists (if configured)
+        # Validate agent registry exists
+        # Note: agent_registry_path is always set (via validator defaults to ~/.claude/agent-definitions/agent-registry.yaml)
+        # This validates the resolved path exists on disk
         if self.agent_registry_path:
             registry_path = Path(self.agent_registry_path)
             if not registry_path.exists():
                 errors.append(
                     f"Agent registry not found at: {self.agent_registry_path}. "
-                    f"Set AGENT_REGISTRY_PATH environment variable or ensure file exists."
+                    f"Either create this file, or set AGENT_REGISTRY_PATH environment variable "
+                    f"to point to an existing agent registry YAML file."
                 )
 
-        # Validate agent definitions directory exists (if configured)
+        # Validate agent definitions directory exists
+        # Note: agent_definitions_path is always set (via validator defaults to ~/.claude/agent-definitions/)
+        # This validates the resolved path exists on disk
         if self.agent_definitions_path:
             definitions_path = Path(self.agent_definitions_path)
             if not definitions_path.is_dir():
                 errors.append(
                     f"Agent definitions directory not found at: {self.agent_definitions_path}. "
-                    f"Set AGENT_DEFINITIONS_PATH environment variable or ensure directory exists."
+                    f"Either create this directory, or set AGENT_DEFINITIONS_PATH environment variable "
+                    f"to point to an existing directory containing agent definitions."
                 )
 
         return errors

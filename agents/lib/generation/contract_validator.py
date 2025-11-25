@@ -404,11 +404,13 @@ class ContractValidator:
                 )
 
         # Convert dict dependencies to List[ModelDependency]
-        if converted.get("dependencies"):
+        dependencies_raw = converted.get("dependencies")
+        if dependencies_raw is not None:
             try:
-                if isinstance(converted["dependencies"], list):
-                    converted_deps = []
-                    for dep in converted["dependencies"]:
+                # Validate that dependencies is iterable (list or tuple)
+                if isinstance(dependencies_raw, (list, tuple)):
+                    converted_deps: List[Any] = []
+                    for dep in dependencies_raw:
                         if isinstance(dep, dict):
                             converted_deps.append(ModelDependency(**dep))
                         else:
@@ -416,6 +418,11 @@ class ContractValidator:
                     converted["dependencies"] = converted_deps
                     self.logger.debug(
                         f"Converted {len(converted_deps)} dependencies to ModelDependency objects"
+                    )
+                else:
+                    self.logger.warning(
+                        f"Dependencies must be a list or tuple, got {type(dependencies_raw).__name__}. "
+                        "Pydantic validation will report this error."
                     )
             except Exception as e:
                 self.logger.warning(

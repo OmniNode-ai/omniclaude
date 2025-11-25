@@ -3,6 +3,10 @@
 
 set -e
 
+# Ensure we run from the project root (where this script lives)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 count_added=0
 count_existing=0
 

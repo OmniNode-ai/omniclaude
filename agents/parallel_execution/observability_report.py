@@ -285,7 +285,7 @@ class ObservabilityReporter:
                                     f"      - {alt['agent']}: {alt['confidence']:.4f}"
                                 )
                     except Exception:
-                        pass
+                        pass  # nosec B110 - report generation, parsing errors non-fatal
                 report_lines.append("")
         else:
             report_lines.append("  ⚠️  No routing decisions found")

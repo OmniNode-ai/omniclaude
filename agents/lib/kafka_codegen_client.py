@@ -142,7 +142,8 @@ class KafkaCodegenClient:
         # Fallback to direct publishing
         try:
             await self.start_producer()
-            assert self._producer is not None
+            if self._producer is None:
+                raise RuntimeError("Failed to start Kafka producer - producer is None")
             topic = event.to_kafka_topic()
             payload = json.dumps(
                 {
@@ -208,7 +209,8 @@ class KafkaCodegenClient:
     async def consume(self, topic: str) -> AsyncIterator[dict]:
         try:
             await self.start_consumer(topic)
-            assert self._consumer is not None
+            if self._consumer is None:
+                raise RuntimeError("Failed to start Kafka consumer - consumer is None")
             async for msg in self._consumer:
                 try:
                     yield json.loads(msg.value.decode("utf-8"))
@@ -236,7 +238,8 @@ class KafkaCodegenClient:
         """Consume messages until predicate(payload) is True or timeout expires."""
         try:
             await self.start_consumer(topic)
-            assert self._consumer is not None
+            if self._consumer is None:
+                raise RuntimeError("Failed to start Kafka consumer - consumer is None")
 
             async def _wait():
                 async for msg in self._consumer:

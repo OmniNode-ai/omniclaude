@@ -21,6 +21,9 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Handle CI cache issue where cli.lib may not be properly installed
+from typing import Any, Type, Union
+
 from agents.lib.models.pipeline_models import (
     GateType,
     PipelineResult,
@@ -30,14 +33,31 @@ from agents.lib.models.pipeline_models import (
 )
 
 
-# Handle CI cache issue where cli.lib may not be properly installed
-try:
-    from cli.lib import CLIHandler
+class _CLIHandlerNotAvailable:
+    """Placeholder class when CLIHandler cannot be imported."""
 
+    def __init__(self, **kwargs: Any) -> None:
+        raise ImportError(
+            "CLIHandler not available - CI cache issue with cli.lib package"
+        )
+
+
+# Type annotation that accommodates both real CLIHandler and placeholder
+_CLIHandlerType: Union[Type[Any], Type[_CLIHandlerNotAvailable]] = (
+    _CLIHandlerNotAvailable
+)
+CLI_AVAILABLE: bool = False
+
+try:
+    from cli.lib import CLIHandler as _ImportedCLIHandler
+
+    _CLIHandlerType = _ImportedCLIHandler
     CLI_AVAILABLE = True
 except ImportError:
-    CLIHandler = None  # type: ignore[misc, assignment]
-    CLI_AVAILABLE = False
+    pass
+
+# Expose CLIHandler for use in tests
+CLIHandler = _CLIHandlerType
 
 pytestmark = pytest.mark.skipif(
     not CLI_AVAILABLE,

@@ -245,12 +245,15 @@ collate_pr_issues() {
                     {location: "[\(.path):\(.line)]", body: (.body // ""), is_claude: false}),
 
                 # PR comments
+                # Claude detection: match "claude" as whole word, or common bot patterns
+                # Avoids false positives like "claudesmith" or "myclauderepo"
                 (.pr_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("claude"; "i"))}),
+                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i"))}),
 
                 # Issue comments
+                # Claude detection: match "claude" as whole word, or common bot patterns
                 (.issue_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("claude"; "i"))})
+                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i"))})
             ]
         ) as $all_comments |
 
@@ -306,8 +309,10 @@ collate_pr_issues() {
         # Combine Claude items and regular items
         ($claude_items + $regular_items) |
 
-        # Deduplicate by summary (keep first occurrence)
-        unique_by(.summary) |
+        # Deduplicate by location + summary combination (keep first occurrence)
+        # This prevents merging distinct issues that happen to have similar summaries
+        # but are in different files/locations
+        unique_by("\(.location // "")|\(.summary)") |
 
         # Group by severity
         group_by(.severity) |
