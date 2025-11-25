@@ -133,31 +133,85 @@ collate_pr_issues() {
                 null
             end;
 
+        # Function to extract actionable items from Claude bot structured reviews
+        # Claude bot uses sections like: ## 🔴 Critical Issues, ## ⚠️ Moderate Issues, ## 💡 Suggestions
+        def parse_claude_review:
+            if (. | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion")) then
+                # Use simpler string splitting approach
+                . as $body |
+                [
+                    # Critical Issues - extract ### N. **Title** items
+                    (if ($body | test("## 🔴")) then
+                        ($body | split("## 🔴")[1] // "" | split("\n## ")[0]) |
+                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
+                        map({severity: "critical", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Moderate Issues (Major) - extract ### N. **Title** items
+                    (if ($body | test("## ⚠️ Moderate")) then
+                        ($body | split("## ⚠️ Moderate")[1] // "" | split("\n## ")[0]) |
+                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
+                        map({severity: "major", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Suggestions (Minor) - extract ### N. **Title** items
+                    (if ($body | test("## 💡 Suggestion")) then
+                        ($body | split("## 💡 Suggestion")[1] // "" | split("\n## ")[0]) |
+                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
+                        map({severity: "minor", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Action Items - Before Merge (Critical)
+                    (if ($body | test("Before Merge \\(Critical\\)")) then
+                        ($body | split("Before Merge (Critical)")[1] // "" |
+                            split("Before Merge (Recommended)")[0] // split("Post-Merge")[0] // split("\n## ")[0]) |
+                        [scan("\\d+\\.\\s*[✅⚠️💡❓]*\\s*(Fix[^\n]+|Standardize[^\n]+|Simplify[^\n]+)")] |
+                        map({severity: "critical", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Action Items - Before Merge (Recommended)
+                    (if ($body | test("Before Merge \\(Recommended\\)")) then
+                        ($body | split("Before Merge (Recommended)")[1] // "" |
+                            split("Post-Merge")[0] // split("\n## ")[0]) |
+                        [scan("\\d+\\.\\s*[✅⚠️💡❓]*\\s*([^\n]+)")] |
+                        map({severity: "major", location: "", summary: .[0]})
+                    else [] end)
+                ] | flatten | map(select(.summary != null and (.summary | type == "string") and (.summary | length) > 3))
+            else
+                []
+            end;
+
         # Function to extract first non-empty line
         def extract_summary:
             split("\n") | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first // "";
 
-        # Process all comments
-        [
-            # Reviews
-            (.reviews[]? |
-                {location: "", body: (.body // "")}),
+        # Process all comments - split into regular and Claude bot reviews
+        (
+            [
+                # Reviews
+                (.reviews[]? |
+                    {location: "", body: (.body // ""), is_claude: false}),
 
-            # Inline comments
-            (.inline_comments[]? |
-                {location: "[\(.path):\(.line)]", body: (.body // "")}),
+                # Inline comments
+                (.inline_comments[]? |
+                    {location: "[\(.path):\(.line)]", body: (.body // ""), is_claude: false}),
 
-            # PR comments
-            (.pr_comments[]? |
-                {location: "", body: (.body // "")}),
+                # PR comments
+                (.pr_comments[]? |
+                    {location: "", body: (.body // ""), is_claude: (.author | test("claude"; "i"))}),
 
-            # Issue comments
-            (.issue_comments[]? |
-                {location: "", body: (.body // "")})
-        ] |
+                # Issue comments
+                (.issue_comments[]? |
+                    {location: "", body: (.body // ""), is_claude: (.author | test("claude"; "i"))})
+            ]
+        ) as $all_comments |
 
-        # Filter and categorize
-        map(
+        # Process Claude bot reviews separately to extract structured items
+        ([$all_comments[] | select(.is_claude == true and (.body | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion"))) | .body | parse_claude_review] | flatten | map(select(. != null and .summary != null))) as $claude_items |
+
+        # Process non-Claude comments normally
+        ([$all_comments[] |
+            select(.is_claude == false or (.body | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion") | not)) |
             select(.body != "" and .body != null) |
 
             # Skip already addressed
@@ -198,7 +252,13 @@ collate_pr_issues() {
                     empty
                 end
             end
-        ) |
+        ]) as $regular_items |
+
+        # Combine Claude items and regular items
+        ($claude_items + $regular_items) |
+
+        # Deduplicate by summary (keep first occurrence)
+        unique_by(.summary) |
 
         # Group by severity
         group_by(.severity) |

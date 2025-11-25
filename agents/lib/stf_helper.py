@@ -40,10 +40,10 @@ from uuid import uuid4
 
 
 # Configure logging first
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Import ONEX nodes with fallback to placeholders
-NODES_AVAILABLE = False
+NODES_AVAILABLE: bool = False
 
 
 # Define placeholder classes first
@@ -70,8 +70,8 @@ class _PlaceholderNodeSTFHashCompute:
 
 
 # Initialize with placeholders as defaults
-NodeDebugSTFStorageEffect = _PlaceholderNodeDebugSTFStorageEffect
-NodeSTFHashCompute = _PlaceholderNodeSTFHashCompute
+NodeDebugSTFStorageEffect: type = _PlaceholderNodeDebugSTFStorageEffect
+NodeSTFHashCompute: type = _PlaceholderNodeSTFHashCompute
 
 try:
     from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol

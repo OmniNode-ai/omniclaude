@@ -49,8 +49,8 @@ from .aggregators.gate_result_aggregator import GateResultAggregator  # noqa: E4
 
 # Import code refinement components  # noqa: E402
 from .code_refiner import CodeRefiner  # noqa: E402
-from .dashboard.quality_dashboard import QualityDashboard  # noqa: E402
 
+# QualityDashboard lazy-loaded to avoid Rich import overhead (~50-150ms)
 # Import contract building components  # noqa: E402
 from .generation.contract_builder_factory import ContractBuilderFactory  # noqa: E402
 
@@ -219,7 +219,7 @@ class GenerationPipeline:
 
         # Quality gate aggregation and dashboard (Week 2 Poly-J)
         self.gate_aggregator = GateResultAggregator(self.quality_gate_registry)
-        self.quality_dashboard = QualityDashboard()
+        self._quality_dashboard: Optional[Any] = None  # Lazy-loaded
 
         # Pattern extraction and storage (Week 2 Poly-E, Poly-I)
         from .patterns.pattern_extractor import PatternExtractor
@@ -228,8 +228,9 @@ class GenerationPipeline:
         self.pattern_extractor = PatternExtractor(min_confidence=0.6)
         self.pattern_storage = PatternStorage(use_in_memory=True)  # In-memory for now
 
-        # Register quality gate validators (POLY-F, POLY-I)
-        self._register_quality_validators()
+        # Lazy-load quality gate validators (POLY-F, POLY-I)
+        # Deferred until first quality gate check to save ~50-100ms on initialization
+        self._validators_registered = False
 
         # Configure performance thresholds for all stages
         self._configure_performance_thresholds()
@@ -240,6 +241,15 @@ class GenerationPipeline:
         self.logger.info(
             "✅ Pipeline initialization complete with framework integration"
         )
+
+    @property
+    def quality_dashboard(self) -> Any:
+        """Lazy-load quality dashboard to avoid Rich import overhead (~50-150ms)."""
+        if self._quality_dashboard is None:
+            from .dashboard.quality_dashboard import QualityDashboard
+
+            self._quality_dashboard = QualityDashboard()
+        return self._quality_dashboard
 
     def _find_project_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
         """
@@ -361,6 +371,18 @@ class GenerationPipeline:
             "KV-001 to KV-002, FV-001 to FV-002, QC-001 to QC-004, PF-001 to PF-002)"
         )
 
+    def _ensure_validators_registered(self) -> None:
+        """
+        Lazy-register validators only when needed.
+
+        This defers the import of 8 validator modules and instantiation of 23 validators
+        until the first quality gate check, saving ~50-100ms on pipeline initialization.
+        """
+        if self._validators_registered:
+            return
+        self._register_quality_validators()
+        self._validators_registered = True
+
     async def _check_quality_gate(
         self, gate: EnumQualityGate, context: Dict[str, Any]
     ) -> ModelQualityGateResult:
@@ -374,6 +396,8 @@ class GenerationPipeline:
         Returns:
             Quality gate result
         """
+        # Lazy-load validators on first quality gate check
+        self._ensure_validators_registered()
         return await self.quality_gate_registry.check_gate(gate, context)
 
     async def _extract_and_validate_patterns(
@@ -676,7 +700,7 @@ class GenerationPipeline:
                     "required_stages": required_stages,
                     "planning_completed": True,  # Stage 2 contract building = planning
                     "quality_gates_executed": [
-                        g.gate_name for s in stages for g in s.validation_gates
+                        g.name for s in stages for g in s.validation_gates
                     ],
                     "skipped_stages": [
                         s.stage_name for s in stages if s.status == StageStatus.SKIPPED
@@ -699,7 +723,7 @@ class GenerationPipeline:
                 EnumQualityGate.PROCESS_VALIDATION,
                 {
                     "current_stage": "stage_4",
-                    "completed_stages": [s.name for s in stages],
+                    "completed_stages": [s.stage_name for s in stages],
                     "expected_stages": (
                         [
                             "Stage 1: Prompt Parsing",
@@ -901,7 +925,7 @@ class GenerationPipeline:
                     "validation_passed": validation_passed,
                     "node_type": node_type,
                     "validation_gates": (
-                        [g.to_dict() for g in stage5.validation_gates]
+                        [g.model_dump() for g in stage5.validation_gates]
                         if hasattr(stage5, "validation_gates")
                         else []
                     ),
@@ -1037,7 +1061,7 @@ class GenerationPipeline:
                             {
                                 "stage": "1.5",
                                 "intelligence_context": (
-                                    intelligence_context.to_dict()
+                                    intelligence_context.model_dump()
                                     if intelligence_context
                                     else {}
                                 ),
@@ -1088,6 +1112,22 @@ class GenerationPipeline:
 
             # Rollback written files
             await self._rollback(stages[-1].stage_name if stages else "unknown")
+
+        # Early return on error - skip expensive quality gates for failed pipelines
+        if status != "success":
+            total_duration_ms = int((time() - start_time) * 1000)
+            self.logger.info(
+                f"Pipeline failed, skipping post-error quality gates. "
+                f"Duration: {total_duration_ms}ms"
+            )
+            return PipelineResult(
+                status=status,
+                correlation_id=correlation_id,
+                node_type=node_type,
+                stages=stages,
+                error_summary=error_summary,
+                total_duration_ms=total_duration_ms,
+            )
 
         # Calculate total duration
         total_duration_ms = int((time() - start_time) * 1000)
@@ -1301,7 +1341,7 @@ class GenerationPipeline:
                 "performance_metrics": self.metrics_collector.get_summary(),
                 "quality_gates": self.quality_gate_registry.get_summary(),
                 # Week 2 Poly-J: Add comprehensive quality report
-                "quality_report": quality_report.to_dict(),
+                "quality_report": quality_report.model_dump(),
             },
         )
 

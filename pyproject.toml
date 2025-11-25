@@ -196,6 +196,10 @@ markers = [
     "slow: marks tests as slow (>2 seconds)",
     "performance: marks tests that measure performance metrics",
 ]
+filterwarnings = [
+    "ignore:Task was destroyed but it is pending:RuntimeWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
 
 # Sane defaults optimized for 3499 tests on M2 Ultra (10 cores)
 # Uses pytest-xdist for parallel execution with smart load balancing

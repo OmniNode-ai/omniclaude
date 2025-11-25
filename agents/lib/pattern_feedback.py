@@ -207,11 +207,7 @@ class PatternFeedbackCollector:
         # Recall: correct / (correct + false_negatives)
         # This requires tracking what patterns were missed
         recall = None  # TODO: Implement recall tracking in future iteration
-
-        # F1 Score (if recall available)
-        f1_score = None
-        if recall is not None and precision > 0 and recall > 0:  # type: ignore[unreachable]
-            f1_score = 2 * (precision * recall) / (precision + recall)  # type: ignore[unreachable]
+        f1_score = None  # F1 score requires recall (not yet implemented)
 
         # Identify common false positives
         all_false_positives: List[str] = []

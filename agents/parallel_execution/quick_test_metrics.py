@@ -5,7 +5,12 @@ import asyncio
 from .metrics_collector import get_metrics_collector
 
 
-async def main():
+async def main() -> None:
+    """Test basic functionality of RouterMetricsCollector.
+
+    Tests recording routing decisions, threshold metrics, and retrieving statistics.
+    Prints test results to stdout.
+    """
     print("Testing RouterMetricsCollector...")
     collector = get_metrics_collector()
 

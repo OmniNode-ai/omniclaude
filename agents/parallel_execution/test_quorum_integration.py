@@ -79,7 +79,7 @@ class QuorumIntegrationTest:
         try:
             # Run without --enable-quorum flag
             result = subprocess.run(
-                ["python", str(self.dispatch_runner)],
+                [sys.executable, str(self.dispatch_runner)],
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
@@ -128,7 +128,7 @@ class QuorumIntegrationTest:
         try:
             # Run with --enable-quorum flag
             result = subprocess.run(
-                ["python", str(self.dispatch_runner), "--enable-quorum"],
+                [sys.executable, str(self.dispatch_runner), "--enable-quorum"],
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
@@ -349,10 +349,19 @@ class QuorumIntegrationTest:
 async def main():
     """Run integration tests"""
 
-    # Check dependencies
+    # Check dependencies - quorum_validator.py requires both API keys
+    missing_keys = []
     if not os.getenv("GEMINI_API_KEY"):
-        print("ERROR: GEMINI_API_KEY environment variable not set")
-        print("Quorum validation requires Gemini API access")
+        missing_keys.append("GEMINI_API_KEY")
+    if not os.getenv("ZAI_API_KEY"):
+        missing_keys.append("ZAI_API_KEY")
+
+    if missing_keys:
+        print(
+            f"ERROR: Required environment variables not set: {', '.join(missing_keys)}"
+        )
+        print("Quorum validation requires both Gemini and Z.ai API access")
+        print("Set these in your .env file or environment")
         sys.exit(1)
 
     # Run tests

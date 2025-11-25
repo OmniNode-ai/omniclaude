@@ -7,6 +7,8 @@ correctly understand user intent before proceeding to code generation.
 
 import asyncio
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -15,17 +17,47 @@ from typing import Any, Dict, List
 from .quorum_validator import QuorumValidator, ValidationDecision
 
 
-# Load environment variables from .env file
+# Use project's type-safe configuration system
 try:
-    from dotenv import load_dotenv
+    from config import settings
 
-    # Load .env from the same directory as this script
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(dotenv_path=env_path)
+    # Validate required configuration at startup
+    config_errors = []
+
+    # Check required API keys for QuorumValidator
+    if not settings.gemini_api_key:
+        config_errors.append("GEMINI_API_KEY is not set")
+    if not settings.zai_api_key:
+        config_errors.append("ZAI_API_KEY is not set")
+
+    # Check service dependencies (optional but recommended)
+    service_errors = settings.validate_required_services()
+    if service_errors:
+        config_errors.extend([f"Service validation: {err}" for err in service_errors])
+
+    if config_errors:
+        print("=" * 60)
+        print("CONFIGURATION ERRORS")
+        print("=" * 60)
+        for error in config_errors:
+            print(f"  ❌ {error}")
+        print("\n" + "=" * 60)
+        print("Fix these issues before running validated_task_architect.py:")
+        print("  1. Copy .env.example to .env if not exists")
+        print("  2. Set required API keys in .env")
+        print("  3. Verify service endpoints are reachable")
+        print("  4. Run: source .env")
+        print("=" * 60)
+        sys.exit(1)
+
 except ImportError:
+    print("ERROR: Could not import config module")
+    print("Make sure you're running from the project root with PYTHONPATH set:")
+    print("  cd /path/to/omniclaude")
     print(
-        "Warning: python-dotenv not installed, relying on system environment variables"
+        "  PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/validated_task_architect.py"
     )
+    sys.exit(1)
 
 
 class ValidatedTaskArchitect:
@@ -192,35 +224,84 @@ class ValidatedTaskArchitect:
             # Get absolute path to task_architect.py (same directory as this file)
             task_architect_path = Path(__file__).parent / "task_architect.py"
 
+            # Validate that task_architect.py exists
+            if not task_architect_path.exists():
+                raise FileNotFoundError(
+                    f"task_architect.py not found at {task_architect_path}"
+                )
+
+            # Find Python interpreter (prefer python3, fallback to python)
+            python_exe = shutil.which("python3") or shutil.which("python")
+            if not python_exe:
+                raise RuntimeError(
+                    "Python interpreter not found. Please ensure python3 or python is in PATH"
+                )
+
+            # Prepare environment variables for subprocess
+            # Inherit current environment and ensure critical vars are set
+            env = os.environ.copy()
+
+            # Add PYTHONPATH if not set (needed for imports)
+            project_root = Path(__file__).parent.parent.parent
+            if "PYTHONPATH" not in env:
+                env["PYTHONPATH"] = str(project_root)
+            else:
+                # Prepend project root to existing PYTHONPATH
+                env["PYTHONPATH"] = f"{project_root}:{env['PYTHONPATH']}"
+
+            # Ensure critical API keys are available in subprocess
+            required_vars = ["GEMINI_API_KEY", "ZAI_API_KEY"]
+            missing_vars = [var for var in required_vars if not env.get(var)]
+            if missing_vars:
+                raise EnvironmentError(
+                    f"Required environment variables not set: {', '.join(missing_vars)}"
+                )
+
             # Call task_architect.py as subprocess
             result = subprocess.run(
-                ["python3", str(task_architect_path)],
+                [python_exe, str(task_architect_path)],
                 input=json.dumps(input_data),
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=str(Path(__file__).parent),  # Set working directory
+                cwd=str(project_root),  # Run from project root
+                env=env,  # Pass environment with proper setup
             )
 
             if result.returncode != 0:
-                print(f"⚠️  task_architect.py failed: {result.stderr}")
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                print(f"⚠️  task_architect.py failed with exit code {result.returncode}")
+                print(f"    Error: {error_msg}")
+                if result.stdout:
+                    print(f"    Stdout: {result.stdout[:500]}")  # First 500 chars
                 # Return fallback breakdown
                 return self._generate_fallback_breakdown(user_prompt)
 
             # Parse output
-            output = json.loads(result.stdout)
-            return output
+            try:
+                output = json.loads(result.stdout)
+                return output
+            except json.JSONDecodeError as e:
+                print(f"⚠️  Failed to parse task_architect output: {e}")
+                print(f"    Raw output (first 500 chars): {result.stdout[:500]}")
+                return self._generate_fallback_breakdown(user_prompt)
 
         except subprocess.TimeoutExpired:
-            print("⚠️  task_architect.py timed out")
+            print("⚠️  task_architect.py timed out after 30 seconds")
             return self._generate_fallback_breakdown(user_prompt)
 
-        except json.JSONDecodeError as e:
-            print(f"⚠️  Failed to parse task_architect output: {e}")
+        except FileNotFoundError as e:
+            print(f"⚠️  File not found: {e}")
+            return self._generate_fallback_breakdown(user_prompt)
+
+        except EnvironmentError as e:
+            print(f"⚠️  Environment error: {e}")
             return self._generate_fallback_breakdown(user_prompt)
 
         except Exception as e:
-            print(f"⚠️  Error calling task_architect: {e}")
+            print(
+                f"⚠️  Unexpected error calling task_architect: {type(e).__name__}: {e}"
+            )
             return self._generate_fallback_breakdown(user_prompt)
 
     def _generate_fallback_breakdown(self, user_prompt: str) -> Dict[str, Any]:
@@ -335,39 +416,105 @@ class ValidatedTaskArchitect:
 
 # CLI Interface
 async def main():
-    """CLI interface for validated task architect"""
+    """CLI interface for validated task architect
 
-    if len(sys.argv) < 2:
-        print("Usage: python validated_task_architect.py '<user_prompt>'")
-        print("\nOr pipe JSON input:")
-        print('  echo \'{"prompt": "..."}\' | python validated_task_architect.py')
-        sys.exit(1)
+    Usage:
+        # Command line argument
+        python validated_task_architect.py 'Create a REST API'
 
-    # Check if there are command line arguments
-    if len(sys.argv) > 1:
-        # Read from command line
-        user_prompt = sys.argv[1]
-        global_context = None
-    elif not sys.stdin.isatty():
-        # Read from stdin
-        input_data = json.loads(sys.stdin.read())
-        user_prompt = input_data.get("prompt")
-        global_context = input_data.get("global_context")
-    else:
-        print("Error: No input provided")
-        sys.exit(1)
+        # Piped JSON input
+        echo '{"prompt": "Create a REST API", "global_context": {...}}' | python validated_task_architect.py
 
+        # From file
+        cat request.json | python validated_task_architect.py
+    """
+
+    user_prompt = None
+    global_context = None
+
+    # Try to read from stdin first (if available)
+    if not sys.stdin.isatty():
+        try:
+            stdin_content = sys.stdin.read().strip()
+            if stdin_content:
+                # Parse JSON input
+                input_data = json.loads(stdin_content)
+                user_prompt = input_data.get("prompt")
+                global_context = input_data.get("global_context")
+
+                if not user_prompt:
+                    print("ERROR: JSON input must contain 'prompt' field")
+                    print('Expected format: {"prompt": "...", "global_context": {...}}')
+                    sys.exit(1)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Invalid JSON input: {e}")
+            print('Expected format: {"prompt": "...", "global_context": {...}}')
+            sys.exit(1)
+        except Exception as e:
+            print(f"ERROR: Failed to read stdin: {e}")
+            sys.exit(1)
+
+    # If no stdin, check command line arguments
+    if user_prompt is None:
+        if len(sys.argv) < 2:
+            print("ERROR: No input provided")
+            print()
+            print("Usage:")
+            print("  python validated_task_architect.py '<user_prompt>'")
+            print()
+            print("Or pipe JSON input:")
+            print('  echo \'{"prompt": "..."}\' | python validated_task_architect.py')
+            print()
+            print("Examples:")
+            print('  python validated_task_architect.py "Create a REST API"')
+            print(
+                '  echo \'{"prompt": "Create a REST API"}\' | python validated_task_architect.py'
+            )
+            sys.exit(1)
+
+        # Read from command line argument
+        user_prompt = " ".join(sys.argv[1:])  # Join all args in case of spaces
+
+        # Validate prompt is not empty
+        if not user_prompt.strip():
+            print("ERROR: User prompt cannot be empty")
+            sys.exit(1)
+
+    # Validate required configuration
+    print(f"Configuration check:")
+    print(f"  ✓ GEMINI_API_KEY: {'set' if settings.gemini_api_key else 'NOT SET'}")
+    print(f"  ✓ ZAI_API_KEY: {'set' if settings.zai_api_key else 'NOT SET'}")
+    print()
+
+    # Create architect and run validation
     architect = ValidatedTaskArchitect()
 
-    result = await architect.breakdown_tasks_with_validation(
-        user_prompt, global_context
-    )
+    try:
+        result = await architect.breakdown_tasks_with_validation(
+            user_prompt, global_context
+        )
 
-    # Output result as JSON
-    print("\n" + "=" * 60)
-    print("FINAL RESULT")
-    print("=" * 60)
-    print(json.dumps(result, indent=2))
+        # Output result as JSON
+        print("\n" + "=" * 60)
+        print("FINAL RESULT")
+        print("=" * 60)
+        print(json.dumps(result, indent=2))
+
+        # Exit with appropriate code
+        if result.get("validated"):
+            sys.exit(0)  # Success
+        else:
+            sys.exit(1)  # Validation failed
+
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user")
+        sys.exit(130)  # Standard exit code for SIGINT
+    except Exception as e:
+        print(f"\n\nFATAL ERROR: {type(e).__name__}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

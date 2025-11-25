@@ -8,6 +8,7 @@ Comprehensive test suite for pipeline orchestration and validation gates.
 import asyncio
 import sys
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -76,6 +77,16 @@ def pipeline(mock_template_engine):
     return GenerationPipeline(
         template_engine=mock_template_engine,
         enable_compilation_testing=False,  # Disable for faster tests
+    )
+
+
+@pytest.fixture
+def pipeline_lite(mock_template_engine):
+    """Lightweight pipeline for performance tests - disables heavy initialization."""
+    return GenerationPipeline(
+        template_engine=mock_template_engine,
+        enable_compilation_testing=False,
+        enable_intelligence_gathering=False,  # Skip intelligence gatherer init
     )
 
 
@@ -479,10 +490,34 @@ def test_prompt_to_prd(pipeline):
 
 
 def test_detect_node_type(pipeline):
-    """Test node type detection."""
-    # POC: Always returns EFFECT
+    """Test node type detection from prompt keywords."""
+    # Explicit node type mentions are detected with high confidence
     assert pipeline._detect_node_type("Create EFFECT node") == "EFFECT"
-    assert pipeline._detect_node_type("Build a compute node") == "EFFECT"
+    assert pipeline._detect_node_type("Build a compute node") == "COMPUTE"
+    assert (
+        pipeline._detect_node_type("Create a reducer node for aggregation") == "REDUCER"
+    )
+    assert (
+        pipeline._detect_node_type("orchestrator node for workflow") == "ORCHESTRATOR"
+    )
+
+    # Case insensitivity
+    assert pipeline._detect_node_type("COMPUTE node for calculations") == "COMPUTE"
+    assert pipeline._detect_node_type("effect node for database writes") == "EFFECT"
+
+    # Action verb inference (when no explicit node type keyword present)
+    assert (
+        pipeline._detect_node_type("Process some data") == "COMPUTE"
+    )  # "process" is COMPUTE indicator
+    assert (
+        pipeline._detect_node_type("Write to database") == "EFFECT"
+    )  # "write" is EFFECT indicator
+    assert (
+        pipeline._detect_node_type("Aggregate the results") == "REDUCER"
+    )  # "aggregate" is REDUCER indicator
+
+    # Default to EFFECT when no node type indicators present
+    assert pipeline._detect_node_type("Do something with data") == "EFFECT"
 
 
 def test_extract_service_name_from_prompt(pipeline):
@@ -539,8 +574,8 @@ async def test_stage_1_parse_prompt_success(pipeline, valid_prompt):
 
 
 @pytest.mark.asyncio
-async def test_stage_2_pre_validation_success(pipeline):
-    """Test Stage 2 with valid parsed data."""
+async def test_stage_3_pre_validation_success(pipeline):
+    """Test Stage 3 with valid parsed data."""
     parsed_data = {
         "node_type": "EFFECT",
         "service_name": "test_service",
@@ -551,7 +586,7 @@ async def test_stage_2_pre_validation_success(pipeline):
         "confidence": 0.85,
     }
 
-    stage = await pipeline._stage_2_pre_validation(parsed_data)
+    stage = await pipeline._stage_3_pre_validation(parsed_data)
 
     assert stage.status == StageStatus.COMPLETED
     assert stage.stage_name == "pre_generation_validation"
@@ -559,8 +594,8 @@ async def test_stage_2_pre_validation_success(pipeline):
 
 
 @pytest.mark.asyncio
-async def test_stage_2_pre_validation_fail_invalid_node_type(pipeline):
-    """Test Stage 2 failure with invalid node type."""
+async def test_stage_3_pre_validation_fail_invalid_node_type(pipeline):
+    """Test Stage 3 failure with invalid node type."""
     parsed_data = {
         "node_type": "INVALID",  # Invalid for POC
         "service_name": "test_service",
@@ -571,7 +606,7 @@ async def test_stage_2_pre_validation_fail_invalid_node_type(pipeline):
         "confidence": 0.85,
     }
 
-    stage = await pipeline._stage_2_pre_validation(parsed_data)
+    stage = await pipeline._stage_3_pre_validation(parsed_data)
 
     assert stage.status == StageStatus.FAILED
     assert "Invalid node type" in stage.error
@@ -697,12 +732,15 @@ class NodeTestEffect(NodeEffect):
     assert result.success is True
 
 
-@pytest.mark.asyncio
-async def test_validation_gates_performance(pipeline):
-    """Test individual validation gates meet <200ms target."""
+def test_validation_gates_performance(pipeline_lite):
+    """Test individual validation gates meet <200ms target.
+
+    Uses pipeline_lite fixture for faster initialization and
+    time.perf_counter() for more accurate timing measurements.
+    """
     # G1
-    start = asyncio.get_event_loop().time()
-    pipeline._gate_g1_prompt_completeness_full(
+    start = time.perf_counter()
+    pipeline_lite._gate_g1_prompt_completeness_full(
         {
             "node_type": "EFFECT",
             "service_name": "test",
@@ -710,19 +748,19 @@ async def test_validation_gates_performance(pipeline):
             "description": "test",
         }
     )
-    duration_ms = (asyncio.get_event_loop().time() - start) * 1000
+    duration_ms = (time.perf_counter() - start) * 1000
     assert duration_ms < 200
 
     # G2
-    start = asyncio.get_event_loop().time()
-    pipeline._gate_g2_node_type_valid("EFFECT")
-    duration_ms = (asyncio.get_event_loop().time() - start) * 1000
+    start = time.perf_counter()
+    pipeline_lite._gate_g2_node_type_valid("EFFECT")
+    duration_ms = (time.perf_counter() - start) * 1000
     assert duration_ms < 200
 
     # G3
-    start = asyncio.get_event_loop().time()
-    pipeline._gate_g3_service_name_valid("test_service")
-    duration_ms = (asyncio.get_event_loop().time() - start) * 1000
+    start = time.perf_counter()
+    pipeline_lite._gate_g3_service_name_valid("test_service")
+    duration_ms = (time.perf_counter() - start) * 1000
     assert duration_ms < 200
 
 

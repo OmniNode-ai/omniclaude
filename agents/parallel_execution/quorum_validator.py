@@ -2,12 +2,12 @@
 Minimal Quorum Validation System
 
 Validates agent outputs using consensus from multiple AI models.
-Uses Gemini (direct API) and local Ollama models for voting.
+Uses Gemini (direct API) and Z.ai models for voting.
 """
 
 import asyncio
 import json
-import os
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -16,17 +16,17 @@ from typing import Any, Dict, List
 import httpx
 
 
-# Load environment variables from .env file
+# Use project's type-safe configuration system
 try:
-    from dotenv import load_dotenv
-
-    # Load .env from the same directory as this script
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(dotenv_path=env_path)
+    from config import settings
 except ImportError:
+    print("ERROR: Could not import config module")
+    print("Make sure you're running from the project root with PYTHONPATH set:")
+    print("  cd /path/to/omniclaude")
     print(
-        "Warning: python-dotenv not installed, relying on system environment variables"
+        "  PYTHONPATH=/path/to/omniclaude python -m agents.parallel_execution.quorum_validator"
     )
+    sys.exit(1)
 
 
 class ValidationDecision(Enum):
@@ -52,13 +52,20 @@ class QuorumValidator:
     """Quorum validation for AI model consensus"""
 
     def __init__(self):
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        # Use type-safe configuration from project's config system
+        self.gemini_api_key = settings.gemini_api_key
         if not self.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not set")
+            raise ValueError(
+                "GEMINI_API_KEY is not set. Please set it in .env file. "
+                "See .env.example and SECURITY_KEY_ROTATION.md for setup instructions."
+            )
 
-        self.zai_api_key = os.getenv("ZAI_API_KEY")
+        self.zai_api_key = settings.zai_api_key
         if not self.zai_api_key:
-            raise ValueError("ZAI_API_KEY environment variable not set")
+            raise ValueError(
+                "ZAI_API_KEY is not set. Please set it in .env file. "
+                "See .env.example and SECURITY_KEY_ROTATION.md for setup instructions."
+            )
 
         # Cloud-only models (128K minimum context)
         self.models = {

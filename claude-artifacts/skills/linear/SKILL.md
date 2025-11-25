@@ -7,6 +7,39 @@ description: Create, update, list, and manage Linear tickets with requirements a
 
 Comprehensive ticket management for Linear with automatic requirements and definition of done tracking.
 
+## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+
+**DO NOT run bash scripts or MCP tools directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
+
+### ❌ WRONG - Running tools directly:
+```
+Bash(~/.claude/skills/linear/create-ticket "Fix bug")
+mcp__linear-server__create_issue(...)
+```
+
+### ✅ CORRECT - Dispatch to polymorphic-agent:
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="Create Linear ticket for bug fix",
+  prompt="Create a Linear ticket for the following:
+    Title: Fix authentication bug in login flow
+    Priority: High
+    Team: Engineering
+
+    Use Linear MCP tools or skill scripts:
+    - ~/.claude/skills/linear/create-ticket
+    - mcp__linear-server__create_issue
+
+    Include:
+    - Requirements section
+    - Definition of Done
+    - Appropriate labels and priority"
+)
+```
+
+**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running tools directly bypasses all of this.
+
 ## Skills Available
 
 This skill package provides 4 sub-skills:

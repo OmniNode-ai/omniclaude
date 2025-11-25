@@ -6,7 +6,7 @@ set -e
 count_added=0
 count_existing=0
 
-find agents/ claude_hooks/ config/ services/ -type f -name "__init__.py" -not -path "*/.*" | while IFS= read -r init_file; do
+while IFS= read -r init_file; do
   dir=$(dirname "$init_file")
   if [ ! -f "$dir/py.typed" ]; then
     touch "$dir/py.typed"
@@ -16,7 +16,7 @@ find agents/ claude_hooks/ config/ services/ -type f -name "__init__.py" -not -p
     echo "  Already exists: $dir/py.typed"
     count_existing=$((count_existing + 1))
   fi
-done
+done < <(find agents/ claude_hooks/ config/ services/ -type f -name "__init__.py" -not -path "*/.*")
 
 echo ""
 echo "Summary:"

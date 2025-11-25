@@ -13,14 +13,28 @@ import yaml
 # Define script directory
 SCRIPT_DIR = Path(__file__).parent
 
-# Import pattern tracker (graceful fallback if unavailable)
+# Add parent directory to sys.path for direct script execution
+# This enables absolute imports when run as a standalone script
+parent_dir = SCRIPT_DIR.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+# Import pattern tracker (supports both module and script execution)
 try:
+    # Try relative import first (when used as a module)
     from .lib.pattern_tracker_sync import PatternTrackerSync
 
     PATTERN_TRACKING_ENABLED = True
 except ImportError:
-    PATTERN_TRACKING_ENABLED = False
-    PatternTrackerSync = None
+    try:
+        # Fall back to absolute import (when run as a script)
+        from claude_hooks.lib.pattern_tracker_sync import PatternTrackerSync
+
+        PATTERN_TRACKING_ENABLED = True
+    except ImportError:
+        # Pattern tracking unavailable
+        PATTERN_TRACKING_ENABLED = False
+        PatternTrackerSync = None
 
 
 def load_config():
@@ -160,8 +174,18 @@ def apply_correction(content: str, correction: Dict) -> str:
         Modified content with correction applied, or original on error
     """
     try:
-        from .lib.correction.ast_corrector import apply_single_correction
-        from .lib.correction.framework_detector import FrameworkMethodDetector
+        # Try relative imports first (when used as a module)
+        try:
+            from .lib.correction.ast_corrector import apply_single_correction
+            from .lib.correction.framework_detector import FrameworkMethodDetector
+        except ImportError:
+            # Fall back to absolute imports (when run as a script)
+            from claude_hooks.lib.correction.ast_corrector import (
+                apply_single_correction,
+            )
+            from claude_hooks.lib.correction.framework_detector import (
+                FrameworkMethodDetector,
+            )
 
         # Create framework detector
         detector = FrameworkMethodDetector()
@@ -325,7 +349,12 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     # Phase 2: Generate corrections
     print("[PostToolUse] Generating corrections...", file=sys.stderr)
-    from .lib.correction.generator import CorrectionGenerator
+
+    # Import generator (supports both module and script execution)
+    try:
+        from .lib.correction.generator import CorrectionGenerator
+    except ImportError:
+        from claude_hooks.lib.correction.generator import CorrectionGenerator
 
     generator = CorrectionGenerator()
 
@@ -352,7 +381,12 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     if quorum_enabled:
         print(f"[PostToolUse] Running AI Quorum for {len(corrections)} correction(s)")
-        from .lib.consensus.quorum import AIQuorum
+
+        # Import quorum (supports both module and script execution)
+        try:
+            from .lib.consensus.quorum import AIQuorum
+        except ImportError:
+            from claude_hooks.lib.consensus.quorum import AIQuorum
 
         quorum = AIQuorum()  # AIQuorum loads config internally
 

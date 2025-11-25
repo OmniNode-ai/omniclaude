@@ -423,7 +423,7 @@ class Settings(BaseSettings):
         default=6333, ge=1, le=65535, description="Qdrant server port"
     )
 
-    qdrant_url: str = Field(
+    qdrant_url: HttpUrl = Field(
         default="http://localhost:6333",
         description="Qdrant full URL (derived from host:port)",
     )
