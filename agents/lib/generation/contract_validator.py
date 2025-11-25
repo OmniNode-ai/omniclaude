@@ -163,6 +163,10 @@ class ContractValidator:
 
             # Validate using Pydantic
             try:
+                # NOTE: ModelContractCompute has a known upstream bug where __init__
+                # doesn't pass the 'algorithm' field to the parent constructor.
+                # This causes validation failures for COMPUTE contracts.
+                # See test_validate_compute_contract_success for workaround details.
                 contract = contract_model(**contract_dict)
                 result.contract = contract
                 result.valid = True
@@ -335,6 +339,8 @@ class ContractValidator:
         into the typed objects expected by omnibase_core contract models:
         - String node_type → EnumNodeType enum
         - String version → ModelSemVer object
+        - Dict dependencies → List[ModelDependency]
+        - Dict algorithm → ModelAlgorithmConfig (for COMPUTE nodes)
 
         Args:
             contract_dict: Raw contract dictionary from YAML parsing
@@ -345,6 +351,10 @@ class ContractValidator:
         # Import here to avoid circular dependencies and handle missing omnibase_core gracefully
         try:
             from omnibase_core.enums import EnumNodeType
+            from omnibase_core.models.contracts.model_algorithm_config import (
+                ModelAlgorithmConfig,
+            )
+            from omnibase_core.models.contracts.model_dependency import ModelDependency
             from omnibase_core.primitives.model_semver import ModelSemVer
         except ImportError:
             # If omnibase_core is not available, log warning and return unchanged
@@ -390,6 +400,38 @@ class ContractValidator:
                 # Invalid version format - let Pydantic validation catch it
                 self.logger.warning(
                     f"Failed to parse version '{converted['version']}': {e}. "
+                    "Pydantic validation will report this error."
+                )
+
+        # Convert dict dependencies to List[ModelDependency]
+        if converted.get("dependencies"):
+            try:
+                if isinstance(converted["dependencies"], list):
+                    converted_deps = []
+                    for dep in converted["dependencies"]:
+                        if isinstance(dep, dict):
+                            converted_deps.append(ModelDependency(**dep))
+                        else:
+                            converted_deps.append(dep)  # Already converted
+                    converted["dependencies"] = converted_deps
+                    self.logger.debug(
+                        f"Converted {len(converted_deps)} dependencies to ModelDependency objects"
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to convert dependencies: {e}. "
+                    "Pydantic validation will report this error."
+                )
+
+        # Convert dict algorithm to ModelAlgorithmConfig (for COMPUTE nodes)
+        if "algorithm" in converted and isinstance(converted["algorithm"], dict):
+            try:
+                # Pydantic will handle nested ModelAlgorithmFactorConfig conversion
+                converted["algorithm"] = ModelAlgorithmConfig(**converted["algorithm"])
+                self.logger.debug("Converted algorithm to ModelAlgorithmConfig object")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to convert algorithm: {e}. "
                     "Pydantic validation will report this error."
                 )
 
