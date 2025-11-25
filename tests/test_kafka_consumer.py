@@ -89,6 +89,7 @@ def test_topic():
     return f"agent-actions-test-{uuid.uuid4().hex[:8]}"
 
 
+@pytest.mark.integration
 class TestKafkaConsumerIntegration:
     """Integration tests for Kafka consumer with PostgreSQL."""
 
@@ -565,6 +566,7 @@ class TestKafkaConsumerIntegration:
                 pass
 
 
+@pytest.mark.integration
 class TestConsumerPerformance:
     """Performance tests for Kafka consumer."""
 

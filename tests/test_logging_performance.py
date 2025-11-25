@@ -148,6 +148,7 @@ class PerformanceMetrics:
         }
 
 
+@pytest.mark.integration
 class TestKafkaPublishPerformance:
     """Performance tests for Kafka publish operations."""
 
@@ -235,6 +236,7 @@ class TestKafkaPublishPerformance:
         ), f"Throughput {throughput:.2f} < 1000 events/sec target"
 
 
+@pytest.mark.integration
 class TestConsumerPerformance:
     """Performance tests for Kafka consumer."""
 

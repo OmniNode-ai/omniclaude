@@ -134,31 +134,79 @@ collate_pr_issues() {
             end;
 
         # Function to extract actionable items from Claude bot structured reviews
-        # Claude bot uses sections like: ## 🔴 Critical Issues, ## ⚠️ Moderate Issues, ## 💡 Suggestions
+        # Claude bot uses various formats including:
+        #   - ## 🐛 Potential Issues & Concerns
+        #   - ### 🔴 Critical: [title]
+        #   - ### ⚠️ Minor Concerns
+        #   - ### Must Fix (Before Merge)
+        #   - ### Should Fix (Near Term)
+        #   - ## 🎯 Final Recommendations
+        # Also supports CodeRabbit format: ## 🔴, ## ⚠️ Moderate, ## 💡 Suggestion
         def parse_claude_review:
-            if (. | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion")) then
+            if (. | test("## 🔴|## ⚠️|## 🐛|### 🔴|### ⚠️|### Must Fix|### Should Fix|## 🎯 Final")) then
                 # Use simpler string splitting approach
                 . as $body |
                 [
-                    # Critical Issues - extract ### N. **Title** items
+                    # CodeRabbit: Critical Issues - extract ### N. **Title** items
                     (if ($body | test("## 🔴")) then
                         ($body | split("## 🔴")[1] // "" | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "critical", location: "", summary: .[0]})
                     else [] end),
 
-                    # Moderate Issues (Major) - extract ### N. **Title** items
+                    # CodeRabbit: Moderate Issues (Major) - extract ### N. **Title** items
                     (if ($body | test("## ⚠️ Moderate")) then
                         ($body | split("## ⚠️ Moderate")[1] // "" | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "major", location: "", summary: .[0]})
                     else [] end),
 
-                    # Suggestions (Minor) - extract ### N. **Title** items
+                    # CodeRabbit: Suggestions (Minor) - extract ### N. **Title** items
                     (if ($body | test("## 💡 Suggestion")) then
                         ($body | split("## 💡 Suggestion")[1] // "" | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "minor", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ### 🔴 Critical: [title] inline headers
+                    (if ($body | test("### 🔴 Critical")) then
+                        [scan("### 🔴 Critical[:\\s]*([^\n]+)")] |
+                        map({severity: "critical", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ### ⚠️ Minor/Warning sections
+                    (if ($body | test("### ⚠️")) then
+                        [scan("### ⚠️[^:\n]*[:\\s]*([^\n]+)")] |
+                        map({severity: "minor", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ## 🐛 Potential Issues section - extract numbered items
+                    (if ($body | test("## 🐛")) then
+                        ($body | split("## 🐛")[1] // "" | split("\n## ")[0]) |
+                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
+                        map({severity: "major", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ### Must Fix (Before Merge) items
+                    (if ($body | test("### Must Fix")) then
+                        ($body | split("### Must Fix")[1] // "" | split("\n### ")[0]) |
+                        [scan("[-*]\\s*([^\n]+)")] |
+                        map({severity: "critical", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ### Should Fix (Near Term) items
+                    (if ($body | test("### Should Fix")) then
+                        ($body | split("### Should Fix")[1] // "" | split("\n### ")[0]) |
+                        [scan("[-*]\\s*([^\n]+)")] |
+                        map({severity: "major", location: "", summary: .[0]})
+                    else [] end),
+
+                    # Claude: ## 🎯 Final Recommendations - extract action items
+                    (if ($body | test("## 🎯 Final")) then
+                        ($body | split("## 🎯 Final")[1] // "" | split("\n## ")[0]) |
+                        [scan("[-*]\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*([^\n]{10,})")] |
+                        map(.[0] // .[1]) | map(select(. != null)) |
+                        map({severity: "major", location: "", summary: .})
                     else [] end),
 
                     # Action Items - Before Merge (Critical)
@@ -207,11 +255,12 @@ collate_pr_issues() {
         ) as $all_comments |
 
         # Process Claude bot reviews separately to extract structured items
-        ([$all_comments[] | select(.is_claude == true and (.body | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion"))) | .body | parse_claude_review] | flatten | map(select(. != null and .summary != null))) as $claude_items |
+        # Pattern matches both Claude bot and CodeRabbit structured review formats
+        ([$all_comments[] | select(.is_claude == true and (.body | test("## 🔴|## ⚠️|## 🐛|### 🔴|### ⚠️|### Must Fix|### Should Fix|## 🎯 Final|## 💡 Suggestion"))) | .body | parse_claude_review] | flatten | map(select(. != null and .summary != null))) as $claude_items |
 
         # Process non-Claude comments normally
         ([$all_comments[] |
-            select(.is_claude == false or (.body | test("## 🔴|## ⚠️ Moderate|## 💡 Suggestion") | not)) |
+            select(.is_claude == false or (.body | test("## 🔴|## ⚠️|## 🐛|### 🔴|### ⚠️|### Must Fix|### Should Fix|## 🎯 Final|## 💡 Suggestion") | not)) |
             select(.body != "" and .body != null) |
 
             # Skip already addressed
