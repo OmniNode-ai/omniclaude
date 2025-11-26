@@ -34,17 +34,16 @@ def test_env_configuration_loaded():
     assert password is not None, "POSTGRES_PASSWORD must be set"
     assert len(password) > 0, "POSTGRES_PASSWORD cannot be empty"
 
+    # Database name may vary by environment (omninode_bridge for prod, test_db for CI)
+    assert settings.postgres_database, "POSTGRES_DATABASE must be set"
     assert (
-        settings.postgres_database == "omninode_bridge"
-    ), f"POSTGRES_DATABASE should be 'omninode_bridge', got {settings.postgres_database}"
-    assert (
-        settings.postgres_user == "postgres"
-    ), f"POSTGRES_USER should be 'postgres', got {settings.postgres_user}"
+        settings.postgres_user == "postgres" or settings.postgres_user == "test"
+    ), f"POSTGRES_USER should be 'postgres' or 'test', got {settings.postgres_user}"
 
     # Verify DSN is constructed correctly using helper method
     pg_dsn = settings.get_postgres_dsn()
     assert pg_dsn is not None, "PostgreSQL DSN must be generated"
-    assert "omninode_bridge" in pg_dsn, "DSN should contain database name"
+    assert settings.postgres_database in pg_dsn, "DSN should contain database name"
     # Verify DSN contains a password (without checking specific value)
     assert ":@" not in pg_dsn, "DSN should contain a password (not empty)"
 

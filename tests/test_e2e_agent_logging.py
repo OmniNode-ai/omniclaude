@@ -114,6 +114,7 @@ async def running_consumer(kafka_brokers, postgres_dsn):
         pass
 
 
+@pytest.mark.integration
 class TestEndToEndAgentLogging:
     """End-to-end tests for agent logging system."""
 
