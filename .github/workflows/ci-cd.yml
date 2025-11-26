@@ -476,7 +476,7 @@ jobs:
           context: .
           file: ./deployment/Dockerfile
           load: true
-          tags: ${{ env.IMAGE_NAME }}:scan
+          tags: ${{ github.repository | lower }}:scan
           cache-from: type=gha
 
       # ============================================================================
@@ -485,7 +485,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:scan
+          image-ref: ${{ github.repository | lower }}:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -499,7 +499,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (table output)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:scan
+          image-ref: ${{ github.repository | lower }}:scan
           format: 'table'
           severity: 'CRITICAL,HIGH'
 
