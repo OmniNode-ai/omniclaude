@@ -89,12 +89,30 @@ jobs:
             }
           echo "::endgroup::"
 
-      # Temporarily disabled - 499 pre-existing type errors need separate cleanup PR
-      # Costs money to run on every CI iteration
-      # - name: Run type checking (mypy)
-      #   run: |
-      #     poetry run pip install mypy types-PyYAML
-      #     poetry run mypy agents/ --ignore-missing-imports
+      - name: Run type checking (mypy)
+        run: |
+          echo "::group::MyPy Type Checking"
+          echo "🔍 Running MyPy type checker..."
+          poetry run pip install mypy types-PyYAML types-aiofiles types-redis
+          # Use project's mypy.ini config which has proper exclusions
+          # Phase 1: Non-blocking check (report errors but don't fail CI)
+          # Phase 2: Fix errors and make blocking (TODO: remove || true)
+          poetry run mypy agents/ claude_hooks/ --config-file mypy.ini \
+            --exclude "agents/tests/" --exclude "claude_hooks/tests/" \
+            --exclude "agents/examples/" 2>&1 | tee mypy-output.txt || true
+
+          ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
+          echo ""
+          echo "📊 MyPy Summary: $ERROR_COUNT type errors found"
+          if [ "$ERROR_COUNT" -eq "0" ]; then
+            echo "✅ MyPy check passed - no type errors!"
+          else
+            echo "⚠️  MyPy found $ERROR_COUNT type errors (non-blocking for now)"
+            echo "💡 Run: poetry run mypy agents/ claude_hooks/ --config-file mypy.ini"
+            # TODO: Uncomment to make blocking once errors are fixed
+            # exit 1
+          fi
+          echo "::endgroup::"
 
   # ============================================================================
   # Security Scanning - Python Dependencies
