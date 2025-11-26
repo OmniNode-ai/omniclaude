@@ -114,7 +114,10 @@ class ParallelGenerator:
                     # Disable cache to avoid asyncio event loop issues in worker threads
                     self._template_engine = OmniNodeTemplateEngine(enable_cache=False)
         # At this point _template_engine is guaranteed to be initialized
-        assert self._template_engine is not None
+        if self._template_engine is None:
+            raise RuntimeError(
+                "Template engine failed to initialize in double-checked lock"
+            )
         return self._template_engine
 
     async def generate_nodes_parallel(

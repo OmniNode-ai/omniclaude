@@ -16,7 +16,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple, TypedDict
 
 
 # Add parent directory to path for imports
@@ -171,50 +171,58 @@ def check_legacy_getenv(hook_path: Path) -> Tuple[bool, List[str]]:
         return False, [f"File read error: {str(e)}"]
 
 
-class ImportResult(Dict[str, Any]):
+class ImportResultDict(TypedDict):
     """Type for import test result."""
 
-    pass
+    success: bool
+    message: str
 
 
-class SettingsResult(Dict[str, Any]):
+class SettingsResultDict(TypedDict):
     """Type for settings test result."""
 
-    pass
+    success: bool
+    message: str
 
 
-class LegacyResult(Dict[str, Any]):
+class LegacyResultDict(TypedDict):
     """Type for legacy test result."""
 
-    pass
+    is_clean: bool
+    issues: List[str]
 
 
-class TestResult(Dict[str, Any]):
-    """Type for comprehensive test result."""
+# Using functional syntax because "import" is a Python reserved word
+TestResultDict = TypedDict(
+    "TestResultDict",
+    {
+        "hook": str,
+        "import": ImportResultDict,
+        "settings": SettingsResultDict,
+        "legacy": LegacyResultDict,
+        "overall_pass": bool,
+    },
+)
 
-    pass
 
-
-def run_comprehensive_test(hook_path: Path) -> TestResult:
+def run_comprehensive_test(hook_path: Path) -> TestResultDict:
     """
     Run comprehensive test on a single hook.
 
     Returns:
-        dict with test results
+        TestResultDict with test results
     """
-    import_result: Dict[str, Any] = {"success": False, "message": ""}
-    settings_result: Dict[str, Any] = {"success": False, "message": ""}
-    legacy_result: Dict[str, Any] = {"is_clean": False, "issues": []}
+    import_result: ImportResultDict = {"success": False, "message": ""}
+    settings_result: SettingsResultDict = {"success": False, "message": ""}
+    legacy_result: LegacyResultDict = {"is_clean": False, "issues": []}
 
-    results: TestResult = TestResult(
-        {
-            "hook": hook_path.name,
-            "import": import_result,
-            "settings": settings_result,
-            "legacy": legacy_result,
-            "overall_pass": False,
-        }
-    )
+    results: TestResultDict = {
+        "hook": hook_path.name,
+        "import": import_result,
+        "settings": settings_result,
+        "legacy": legacy_result,
+        "overall_pass": False,
+    }
 
     # Test 1: Import
     import_success, import_msg, module = check_import(hook_path)

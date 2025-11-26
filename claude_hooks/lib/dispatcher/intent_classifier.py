@@ -12,7 +12,26 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import List, Optional, TypedDict
+
+
+class IntentPatternDict(TypedDict):
+    """Type definition for intent pattern configuration."""
+
+    triggers: List[str]
+    agents: List[str]
+    validators: List[str]
+    onex_rules: List[str]
+    weight: float
+
+
+class IntentMetadataDict(TypedDict):
+    """Type definition for intent metadata."""
+
+    tool_name: str
+    file_path: str
+    language: Optional[str]
+    all_scores: dict[str, float]
 
 
 @dataclass
@@ -36,7 +55,11 @@ class IntentContext:
     validators: List[str] = field(default_factory=list)
     onex_rules: List[str] = field(default_factory=list)
     secondary_intents: List[str] = field(default_factory=list)
-    metadata: Dict = field(default_factory=dict)
+    metadata: IntentMetadataDict = field(
+        default_factory=lambda: IntentMetadataDict(
+            tool_name="", file_path="", language=None, all_scores={}
+        )
+    )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -63,7 +86,7 @@ class IntentClassifier:
     """
 
     # Intent pattern definitions (class constant - keep UPPERCASE)
-    INTENT_PATTERNS = {
+    INTENT_PATTERNS: dict[str, IntentPatternDict] = {
         "file_modification": {
             "triggers": ["Edit", "Write", "replace_", "modify", "update"],
             "agents": ["agent-code-quality-analyzer", "agent-onex-compliance"],
@@ -188,7 +211,7 @@ class IntentClassifier:
         # Factor 1: Tool name pattern matching
         for intent, pattern in self.INTENT_PATTERNS.items():
             score = self._score_tool_name(tool_name, pattern)
-            scores[intent] = score * float(cast(Any, pattern["weight"]))
+            scores[intent] = score * pattern["weight"]
 
         # Factor 2: File path analysis
         if file_path:
@@ -226,19 +249,19 @@ class IntentClassifier:
         return IntentContext(
             primary_intent=primary_intent,
             confidence=confidence,
-            suggested_agents=cast(List[str], pattern["agents"]),
-            validators=cast(List[str], pattern["validators"]),
-            onex_rules=cast(List[str], pattern["onex_rules"]),
+            suggested_agents=pattern["agents"],
+            validators=pattern["validators"],
+            onex_rules=pattern["onex_rules"],
             secondary_intents=secondary_intents,
-            metadata={
-                "tool_name": tool_name,
-                "file_path": file_path,
-                "language": self._detect_language(file_path),
-                "all_scores": normalized_scores,
-            },
+            metadata=IntentMetadataDict(
+                tool_name=tool_name,
+                file_path=file_path,
+                language=self._detect_language(file_path),
+                all_scores=normalized_scores,
+            ),
         )
 
-    def _score_tool_name(self, tool_name: str, pattern: dict) -> float:
+    def _score_tool_name(self, tool_name: str, pattern: IntentPatternDict) -> float:
         """
         Score tool name against intent pattern triggers.
 

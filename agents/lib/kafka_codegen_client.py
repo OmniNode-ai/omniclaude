@@ -211,7 +211,7 @@ class KafkaCodegenClient:
         try:
             await self.start_consumer(topic)
             if self._consumer is None:
-                raise RuntimeError("Failed to start Kafka consumer - consumer is None")
+                raise OnexError("Failed to start Kafka consumer - consumer is None")
             consumer = self._consumer  # Local reference for type narrowing
             async for msg in consumer:
                 try:
@@ -242,7 +242,7 @@ class KafkaCodegenClient:
         try:
             await self.start_consumer(topic)
             if self._consumer is None:
-                raise RuntimeError("Failed to start Kafka consumer - consumer is None")
+                raise OnexError("Failed to start Kafka consumer - consumer is None")
             consumer = self._consumer  # Local reference for type narrowing
 
             async def _wait() -> Optional[Dict[Any, Any]]:

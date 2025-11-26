@@ -91,7 +91,10 @@ class MemgraphLineageStore:
         def _execute_in_session() -> None:
             # _driver is guaranteed non-None here due to guard at start of write_edge
             driver = self._driver
-            assert driver is not None
+            if driver is None:
+                raise RuntimeError(
+                    "Neo4j driver unexpectedly None in _execute_in_session"
+                )
             with driver.session() as session:
                 session.execute_write(_write)
 

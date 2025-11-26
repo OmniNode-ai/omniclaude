@@ -383,9 +383,18 @@ class GenerationPipeline:
         This defers the import of 8 validator modules and instantiation of 23 validators
         until the first quality gate check, saving ~50-100ms on pipeline initialization.
 
-        Thread-safe: Uses lock to prevent double registration from concurrent calls.
+        Thread-safe: Uses double-checked locking pattern to prevent race conditions
+        while minimizing lock contention. The first check (without lock) provides a
+        fast path for the common case where validators are already registered.
         """
+        # Fast path: check without lock (most calls after first registration)
+        if self._validators_registered:
+            return
+
+        # Slow path: acquire lock and double-check
         with self._validator_lock:
+            # Double-check after acquiring lock to handle race condition
+            # where another thread registered between our check and lock acquisition
             if self._validators_registered:
                 return
             self._register_quality_validators()

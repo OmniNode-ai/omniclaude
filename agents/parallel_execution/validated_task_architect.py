@@ -18,46 +18,72 @@ from .quorum_validator import QuorumValidator, ValidationDecision
 
 
 # Use project's type-safe configuration system
-try:
-    from config import settings
+# Import is deferred to avoid side effects during module import
+_settings = None
+_config_import_error: Optional[str] = None
 
-    # Validate required configuration at startup
-    config_errors = []
+try:
+    from config import settings as _imported_settings
+
+    _settings = _imported_settings
+except ImportError as e:
+    _config_import_error = str(e)
+
+
+def _validate_configuration() -> tuple[bool, list[str]]:
+    """Validate configuration without side effects.
+
+    Returns:
+        Tuple of (is_valid, error_messages)
+    """
+    errors: list[str] = []
+
+    # Check if config module was imported successfully
+    if _config_import_error is not None:
+        errors.append(f"Could not import config module: {_config_import_error}")
+        errors.append(
+            "Make sure you're running from the project root with PYTHONPATH set:"
+        )
+        errors.append("  cd /path/to/omniclaude")
+        errors.append(
+            "  PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/validated_task_architect.py"
+        )
+        return False, errors
+
+    if _settings is None:
+        errors.append("Configuration settings not available")
+        return False, errors
 
     # Check required API keys for QuorumValidator
-    if not settings.gemini_api_key:
-        config_errors.append("GEMINI_API_KEY is not set")
-    if not settings.zai_api_key:
-        config_errors.append("ZAI_API_KEY is not set")
+    if not _settings.gemini_api_key:
+        errors.append("GEMINI_API_KEY is not set")
+    if not _settings.zai_api_key:
+        errors.append("ZAI_API_KEY is not set")
 
     # Check service dependencies (optional but recommended)
-    service_errors = settings.validate_required_services()
+    service_errors = _settings.validate_required_services()
     if service_errors:
-        config_errors.extend([f"Service validation: {err}" for err in service_errors])
+        errors.extend([f"Service validation: {err}" for err in service_errors])
 
-    if config_errors:
-        print("=" * 60)
-        print("CONFIGURATION ERRORS")
-        print("=" * 60)
-        for error in config_errors:
-            print(f"  ❌ {error}")
-        print("\n" + "=" * 60)
-        print("Fix these issues before running validated_task_architect.py:")
-        print("  1. Copy .env.example to .env if not exists")
-        print("  2. Set required API keys in .env")
-        print("  3. Verify service endpoints are reachable")
-        print("  4. Run: source .env")
-        print("=" * 60)
-        sys.exit(1)
+    return len(errors) == 0, errors
 
-except ImportError:
-    print("ERROR: Could not import config module")
-    print("Make sure you're running from the project root with PYTHONPATH set:")
-    print("  cd /path/to/omniclaude")
+
+def _print_config_errors(errors: list[str]) -> None:
+    """Print configuration errors in a formatted way."""
+    print("=" * 60, file=sys.stderr)
+    print("CONFIGURATION ERRORS", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    for error in errors:
+        print(f"  - {error}", file=sys.stderr)
+    print("\n" + "=" * 60, file=sys.stderr)
     print(
-        "  PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/validated_task_architect.py"
+        "Fix these issues before running validated_task_architect.py:", file=sys.stderr
     )
-    sys.exit(1)
+    print("  1. Copy .env.example to .env if not exists", file=sys.stderr)
+    print("  2. Set required API keys in .env", file=sys.stderr)
+    print("  3. Verify service endpoints are reachable", file=sys.stderr)
+    print("  4. Run: source .env", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
 
 
 class ValidatedTaskArchitect:
@@ -415,7 +441,7 @@ class ValidatedTaskArchitect:
 
 
 # CLI Interface
-async def main():
+async def main() -> int:
     """CLI interface for validated task architect
 
     Usage:
@@ -427,7 +453,15 @@ async def main():
 
         # From file
         cat request.json | python validated_task_architect.py
+
+    Returns:
+        Exit code (0 for success, non-zero for failure)
     """
+    # Validate configuration first (moved from module-level)
+    is_valid, config_errors = _validate_configuration()
+    if not is_valid:
+        _print_config_errors(config_errors)
+        return 1
 
     user_prompt = None
     global_context = None
@@ -443,47 +477,68 @@ async def main():
                 global_context = input_data.get("global_context")
 
                 if not user_prompt:
-                    print("ERROR: JSON input must contain 'prompt' field")
-                    print('Expected format: {"prompt": "...", "global_context": {...}}')
-                    sys.exit(1)
+                    print(
+                        "ERROR: JSON input must contain 'prompt' field", file=sys.stderr
+                    )
+                    print(
+                        'Expected format: {"prompt": "...", "global_context": {...}}',
+                        file=sys.stderr,
+                    )
+                    return 1
         except json.JSONDecodeError as e:
-            print(f"ERROR: Invalid JSON input: {e}")
-            print('Expected format: {"prompt": "...", "global_context": {...}}')
-            sys.exit(1)
+            print(f"ERROR: Invalid JSON input: {e}", file=sys.stderr)
+            print(
+                'Expected format: {"prompt": "...", "global_context": {...}}',
+                file=sys.stderr,
+            )
+            return 1
         except Exception as e:
-            print(f"ERROR: Failed to read stdin: {e}")
-            sys.exit(1)
+            print(f"ERROR: Failed to read stdin: {e}", file=sys.stderr)
+            return 1
 
     # If no stdin, check command line arguments
     if user_prompt is None:
         if len(sys.argv) < 2:
-            print("ERROR: No input provided")
-            print()
-            print("Usage:")
-            print("  python validated_task_architect.py '<user_prompt>'")
-            print()
-            print("Or pipe JSON input:")
-            print('  echo \'{"prompt": "..."}\' | python validated_task_architect.py')
-            print()
-            print("Examples:")
-            print('  python validated_task_architect.py "Create a REST API"')
+            print("ERROR: No input provided", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Usage:", file=sys.stderr)
             print(
-                '  echo \'{"prompt": "Create a REST API"}\' | python validated_task_architect.py'
+                "  python validated_task_architect.py '<user_prompt>'", file=sys.stderr
             )
-            sys.exit(1)
+            print(file=sys.stderr)
+            print("Or pipe JSON input:", file=sys.stderr)
+            print(
+                '  echo \'{"prompt": "..."}\' | python validated_task_architect.py',
+                file=sys.stderr,
+            )
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print(
+                '  python validated_task_architect.py "Create a REST API"',
+                file=sys.stderr,
+            )
+            print(
+                '  echo \'{"prompt": "Create a REST API"}\' | python validated_task_architect.py',
+                file=sys.stderr,
+            )
+            return 1
 
         # Read from command line argument
         user_prompt = " ".join(sys.argv[1:])  # Join all args in case of spaces
 
         # Validate prompt is not empty
         if not user_prompt.strip():
-            print("ERROR: User prompt cannot be empty")
-            sys.exit(1)
+            print("ERROR: User prompt cannot be empty", file=sys.stderr)
+            return 1
 
-    # Validate required configuration
-    print(f"Configuration check:")
-    print(f"  ✓ GEMINI_API_KEY: {'set' if settings.gemini_api_key else 'NOT SET'}")
-    print(f"  ✓ ZAI_API_KEY: {'set' if settings.zai_api_key else 'NOT SET'}")
+    # Show configuration status (use _settings which is validated above)
+    print("Configuration check:")
+    print(
+        f"  - GEMINI_API_KEY: {'set' if _settings and _settings.gemini_api_key else 'NOT SET'}"
+    )
+    print(
+        f"  - ZAI_API_KEY: {'set' if _settings and _settings.zai_api_key else 'NOT SET'}"
+    )
     print()
 
     # Create architect and run validation
@@ -500,22 +555,22 @@ async def main():
         print("=" * 60)
         print(json.dumps(result, indent=2))
 
-        # Exit with appropriate code
+        # Return appropriate exit code
         if result.get("validated"):
-            sys.exit(0)  # Success
+            return 0  # Success
         else:
-            sys.exit(1)  # Validation failed
+            return 1  # Validation failed
 
     except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        sys.exit(130)  # Standard exit code for SIGINT
+        print("\n\nInterrupted by user", file=sys.stderr)
+        return 130  # Standard exit code for SIGINT
     except Exception as e:
-        print(f"\n\nFATAL ERROR: {type(e).__name__}: {e}")
+        print(f"\n\nFATAL ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         import traceback
 
         traceback.print_exc()
-        sys.exit(1)
+        return 1
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))

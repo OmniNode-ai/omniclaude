@@ -1306,8 +1306,8 @@ class AgentRouterEventService:
 
     def _create_fallback_recommendation(self):
         """Create fallback recommendation when routing fails."""
-        from ..lib.agent_router import AgentRecommendation
-        from ..lib.confidence_scorer import ConfidenceScore
+        # Import from package-level exports (not submodules) for maintainability
+        from ..lib import AgentRecommendation, ConfidenceScore
 
         return AgentRecommendation(
             agent_name="polymorphic-agent",

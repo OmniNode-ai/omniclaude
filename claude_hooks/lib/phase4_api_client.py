@@ -992,6 +992,7 @@ class Phase4APIClient:
             if lineage.get("success"):
                 result["lineage"] = lineage
             else:
+                result["success"] = False
                 errors.append(f"Lineage failed: {lineage.get('error')}")
 
         if errors:
@@ -1002,8 +1003,12 @@ class Phase4APIClient:
         if analytics_data and isinstance(analytics_data, dict):
             success_metrics = analytics_data.get("success_metrics", {})
             if isinstance(success_metrics, dict):
-                quality = float(success_metrics.get("avg_quality_score", 0))
-                success_rate = float(success_metrics.get("success_rate", 0))
+                quality_value = success_metrics.get("avg_quality_score", 0)
+                success_rate_value = success_metrics.get("success_rate", 0)
+                quality = float(quality_value if quality_value is not None else 0)
+                success_rate = float(
+                    success_rate_value if success_rate_value is not None else 0
+                )
                 health_score = (quality + success_rate) / 2
                 result["health_score"] = health_score
 

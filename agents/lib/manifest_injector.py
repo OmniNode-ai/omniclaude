@@ -62,6 +62,7 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path as _Path
+from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -813,7 +814,7 @@ class ManifestInjector:
         # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
         self._action_logger_cache: dict[str, Any | None] = {}
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> ManifestInjector:
         """
         Async context manager entry.
 
@@ -833,7 +834,12 @@ class ManifestInjector:
 
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         """
         Async context manager exit with proper resource cleanup.
 

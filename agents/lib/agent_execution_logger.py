@@ -36,16 +36,10 @@ try:
     from .kafka_rpk_client import RpkKafkaClient
     from .structured_logger import StructuredLogger
 except ImportError:
-    # Standalone usage: add lib directory to path
-    import sys
-
-    _lib_path = Path(__file__).parent
-    if str(_lib_path) not in sys.path:
-        sys.path.insert(0, str(_lib_path))
-
-    from db import get_pg_pool  # type: ignore[no-redef]
-    from kafka_rpk_client import RpkKafkaClient  # type: ignore[no-redef]
-    from structured_logger import StructuredLogger  # type: ignore[no-redef]
+    # Standalone usage - requires running from lib directory
+    from db import get_pg_pool  # type: ignore[import-not-found]
+    from kafka_rpk_client import RpkKafkaClient  # type: ignore[import-not-found]
+    from structured_logger import StructuredLogger  # type: ignore[import-not-found]
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None

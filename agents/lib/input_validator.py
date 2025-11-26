@@ -494,7 +494,8 @@ class InputValidator:
             Sanitized prompt
         """
         result = await self.validate_and_sanitize(prompt, InputType.USER_PROMPT)
-        assert isinstance(result, ValidationResult)
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
         return str(result.sanitized_input)
 
     async def validate_json_input(self, json_str: str) -> Tuple[bool, Any]:
@@ -510,7 +511,10 @@ class InputValidator:
         try:
             parsed = json.loads(json_str)
             result = await self.validate_and_sanitize(parsed, InputType.JSON_DATA)
-            assert isinstance(result, ValidationResult)
+            if not isinstance(result, ValidationResult):
+                raise TypeError(
+                    f"Expected ValidationResult, got {type(result).__name__}"
+                )
             return result.is_valid, result.sanitized_input
         except json.JSONDecodeError:
             return False, None
@@ -526,7 +530,8 @@ class InputValidator:
             Tuple of (is_valid, sanitized_path)
         """
         result = await self.validate_and_sanitize(file_path, InputType.FILE_PATH)
-        assert isinstance(result, ValidationResult)
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
         return result.is_valid, str(result.sanitized_input)
 
     async def validate_url(self, url: str) -> Tuple[bool, str]:
@@ -540,7 +545,8 @@ class InputValidator:
             Tuple of (is_valid, sanitized_url)
         """
         result = await self.validate_and_sanitize(url, InputType.URL)
-        assert isinstance(result, ValidationResult)
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
         return result.is_valid, str(result.sanitized_input)
 
     def _get_timestamp(self) -> str:
@@ -573,7 +579,8 @@ async def validate_and_sanitize(
     result = await input_validator.validate_and_sanitize(
         user_input, input_type, strict_mode
     )
-    assert isinstance(result, ValidationResult)
+    if not isinstance(result, ValidationResult):
+        raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
     return result
 
 

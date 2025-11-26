@@ -46,27 +46,54 @@ logger: logging.Logger = logging.getLogger(__name__)
 NODES_AVAILABLE: bool = False
 
 
+# Type alias for node classes
+NodeClassType = type
+
+
 # Define placeholder classes first
 class _PlaceholderNodeDebugSTFStorageEffect:
-    """Placeholder - requires omnibase_core installation."""
+    """Placeholder for when omnibase_core is unavailable.
+
+    This placeholder allows STFHelper to be instantiated in degraded mode
+    without raising ImportError. All operations will return empty/failed results.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        raise ImportError(
-            "NodeDebugSTFStorageEffect requires omnibase_core.\n"
-            "Install with: pip install omnibase_core\n"
-            "This node provides STF storage and retrieval functionality."
-        )
+        """Initialize placeholder - does not raise, allows degraded mode."""
+        pass
+
+    async def execute_effect(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+        """Return failure result for all operations in degraded mode."""
+        return {
+            "success": False,
+            "error": "STF storage unavailable - omnibase_core not installed",
+            "search_results": [],
+            "stf_data": None,
+        }
 
 
 class _PlaceholderNodeSTFHashCompute:
-    """Placeholder - requires omnibase_core installation."""
+    """Placeholder for when omnibase_core is unavailable.
+
+    This placeholder allows STFHelper to be instantiated in degraded mode
+    without raising ImportError. Hash computation returns a deterministic fallback.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        raise ImportError(
-            "NodeSTFHashCompute requires omnibase_core.\n"
-            "Install with: pip install omnibase_core\n"
-            "This node provides code normalization and deduplication."
-        )
+        """Initialize placeholder - does not raise, allows degraded mode."""
+        pass
+
+    async def execute_compute(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+        """Return fallback hash result for degraded mode."""
+        import hashlib
+
+        stf_code = contract.get("stf_code", "")
+        # Simple fallback hash without normalization
+        fallback_hash = hashlib.sha256(stf_code.encode()).hexdigest()
+        return {
+            "stf_hash": fallback_hash,
+            "normalization_applied": ["none (degraded mode)"],
+        }
 
 
 # Initialize with placeholders as defaults
@@ -114,7 +141,15 @@ class STFHelper:
     - Retrieve full STF details
     - Store new STFs with automatic deduplication
     - Update STF usage metrics
+
+    Gracefully degrades when omnibase_core is unavailable:
+    - Operations return empty/failed results
+    - Warnings are logged on initialization
+    - Module can be imported without errors
     """
+
+    # Class-level flag indicating if nodes are available
+    nodes_available: bool = NODES_AVAILABLE
 
     def __init__(self, db_protocol: Optional[Any] = None) -> None:
         """
@@ -123,15 +158,39 @@ class STFHelper:
         Args:
             db_protocol: Database protocol (IDatabaseProtocol).
                         If None, uses MockDatabaseProtocol for testing.
+
+        Note:
+            When omnibase_core is unavailable, STFHelper initializes in degraded
+            mode with placeholder nodes. All operations will return empty/failed
+            results but will not raise exceptions.
         """
+        # Track degraded mode for this instance
+        self._degraded_mode: bool = not NODES_AVAILABLE
+
         # Use provided protocol or create mock for testing
         self.db: Any = db_protocol or MockDatabaseProtocol()
 
-        # Initialize ONEX nodes
+        # Initialize ONEX nodes (placeholders if omnibase_core unavailable)
         self.storage_node: Any = NodeDebugSTFStorageEffect(db_protocol=self.db)
         self.hash_node: Any = NodeSTFHashCompute()
 
-        logger.info("STFHelper initialized with database protocol")
+        if self._degraded_mode:
+            logger.warning(
+                "STFHelper initialized in DEGRADED MODE - omnibase_core not available. "
+                "STF operations will return empty/failed results. "
+                "Install omnibase_core for full functionality: pip install omnibase_core"
+            )
+        else:
+            logger.info("STFHelper initialized with database protocol")
+
+    @property
+    def is_degraded(self) -> bool:
+        """Check if STFHelper is running in degraded mode.
+
+        Returns:
+            True if omnibase_core is unavailable and placeholder nodes are in use.
+        """
+        return self._degraded_mode
 
     async def query_stfs(
         self,
@@ -163,6 +222,8 @@ class STFHelper:
                 - usage_count: Number of times STF has been used
                 - success_rate: Ratio of successful uses (0.0-1.0)
 
+            Returns empty list if in degraded mode (omnibase_core unavailable).
+
         Example:
             stfs = await helper.query_stfs(
                 problem_signature="No module named",
@@ -173,6 +234,12 @@ class STFHelper:
             for stf in stfs:
                 print(f"Found STF: {stf['stf_name']} (quality: {stf['quality_score']})")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"query_stfs called in degraded mode - returning empty list "
+                f"(signature='{problem_signature}', category='{problem_category}')"
+            )
+
         try:
             # Build search criteria
             search_criteria = {
@@ -235,13 +302,18 @@ class STFHelper:
                 - created_at: Creation timestamp
                 - last_used_at: Last usage timestamp
 
-            Returns None if STF not found.
+            Returns None if STF not found or in degraded mode.
 
         Example:
             stf = await helper.retrieve_stf(stf_id)
             if stf:
                 print(f"STF Code:\n{stf['stf_code']}")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"retrieve_stf called in degraded mode - returning None (id={stf_id})"
+            )
+
         try:
             # Execute retrieve via storage node
             contract = {
@@ -295,7 +367,7 @@ class STFHelper:
             contributor_agent_name: Optional name of agent that created STF
 
         Returns:
-            STF ID (str) on success, None on failure
+            STF ID (str) on success, None on failure or in degraded mode
 
         Example:
             stf_id = await helper.store_stf(
@@ -311,6 +383,11 @@ class STFHelper:
             if stf_id:
                 print(f"Stored STF with ID: {stf_id}")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"store_stf called in degraded mode - returning None (name='{stf_name}')"
+            )
+
         try:
             # Step 1: Compute hash using NodeSTFHashCompute
             hash_contract = {
@@ -387,7 +464,7 @@ class STFHelper:
             success: True if STF was successfully applied, False otherwise
 
         Returns:
-            True if update succeeded, False otherwise
+            True if update succeeded, False otherwise (including degraded mode)
 
         Example:
             # After applying STF
@@ -396,6 +473,11 @@ class STFHelper:
             else:
                 await helper.update_stf_usage(stf_id, success=False)
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"update_stf_usage called in degraded mode - returning False (id={stf_id})"
+            )
+
         try:
             # Update usage count via storage node
             contract = {
@@ -437,6 +519,7 @@ class STFHelper:
 
         Returns:
             List of top-ranked STFs (same structure as query_stfs)
+            Returns empty list if in degraded mode.
 
         Example:
             top_stfs = await helper.get_top_stfs(
@@ -449,6 +532,12 @@ class STFHelper:
                       f"(quality: {stf['quality_score']}, "
                       f"usage: {stf['usage_count']})")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"get_top_stfs called in degraded mode - returning empty list "
+                f"(category='{problem_category}')"
+            )
+
         try:
             # Query without problem_signature to get all STFs in category
             search_criteria = {

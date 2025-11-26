@@ -19,14 +19,17 @@ import logging
 import os
 import signal
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import asyncpg
 from kafka import KafkaConsumer
 
 
+if TYPE_CHECKING:
+    from config.settings import Settings
+
 # Import Pydantic Settings for type-safe configuration
-settings: Optional[Any] = None
+settings: Optional["Settings"] = None
 try:
     from config import settings as _settings
 

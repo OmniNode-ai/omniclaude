@@ -43,6 +43,20 @@ except ImportError:
     print("Error: psycopg2 not installed. Install with: pip install psycopg2-binary")
     sys.exit(1)
 
+# Import OnexError for consistent exception handling
+try:
+    from omnibase.exceptions import OnexError
+except ImportError:
+    try:
+        from omnibase_core.errors import OnexError
+    except ImportError:
+
+        class OnexError(Exception):
+            """Fallback OnexError when omnibase not available."""
+
+            pass
+
+
 # Try to import rich for nice formatting
 try:
     from rich import box
@@ -196,7 +210,7 @@ class AgentHistoryBrowser:
             List of agent run records
         """
         if self.conn is None:
-            raise RuntimeError(
+            raise OnexError(
                 "Database connection not established. Call connect() first."
             )
         cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -249,7 +263,7 @@ class AgentHistoryBrowser:
             Complete run record or None if not found
         """
         if self.conn is None:
-            raise RuntimeError(
+            raise OnexError(
                 "Database connection not established. Call connect() first."
             )
         cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -302,7 +316,11 @@ class AgentHistoryBrowser:
 
     def _display_list_rich(self, runs: List[Dict[str, Any]], show_numbers: bool):
         """Display list using rich formatting."""
-        assert self.console is not None  # Guarded by RICH_AVAILABLE check in caller
+        # Guarded by RICH_AVAILABLE check in caller
+        if self.console is None:
+            raise OnexError(
+                "_display_list_rich called but rich Console is not available"
+            )
         table = Table(
             title="Recent Agent Runs",
             box=box.ROUNDED,
@@ -420,7 +438,11 @@ class AgentHistoryBrowser:
 
     def _display_detail_rich(self, run: Dict[str, Any]):
         """Display detail view using rich formatting."""
-        assert self.console is not None  # Guarded by RICH_AVAILABLE check in caller
+        # Guarded by RICH_AVAILABLE check in caller
+        if self.console is None:
+            raise OnexError(
+                "_display_detail_rich called but rich Console is not available"
+            )
         # Header panel
         header_text = f"""
 [bold cyan]Correlation ID:[/] {run['correlation_id']}
