@@ -496,6 +496,7 @@ class TestConsumerPerformance:
                 pass
 
 
+@pytest.mark.integration
 class TestBatchSizeOptimization:
     """Tests for optimal batch size configuration."""
 

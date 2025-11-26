@@ -276,6 +276,7 @@ async def test_cleanup_async_can_be_called_multiple_times(
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_cleanup_async_with_none_template_engine(caplog):
     """
     Test cleanup_async handles None template_engine gracefully.
