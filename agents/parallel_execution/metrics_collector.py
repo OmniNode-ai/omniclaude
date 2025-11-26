@@ -172,6 +172,11 @@ class RouterMetricsCollector:
         # Initialize thresholds
         self._load_thresholds()
 
+    @property
+    def threshold_count(self) -> int:
+        """Return the number of configured performance thresholds."""
+        return len(self._thresholds)
+
     def _load_thresholds(self):
         """Load performance thresholds from configuration."""
         # These are the 33 thresholds from performance-thresholds.yaml

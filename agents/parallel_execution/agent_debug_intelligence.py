@@ -29,7 +29,7 @@ try:
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    pass  # python-dotenv already installed via poetry
+    pass  # python-dotenv not available, skipping .env loading
 
 
 # ============================================================================
@@ -482,9 +482,11 @@ class DebugIntelligenceAgent(AgentExecutionMixin):
                 trace_id=self._current_trace_id,
             )
 
+            # TODO: trace_logger expects literal strings "completed"/"failed", not enums.
+            # Consider updating trace_logger API to accept EnumOperationStatus.
             await self.trace_logger.end_agent_trace(
                 trace_id=self._current_trace_id,
-                status="completed",
+                status="completed",  # trace_logger-specific value, not EnumOperationStatus
                 result=agent_result.model_dump(),
             )
 
@@ -503,7 +505,9 @@ class DebugIntelligenceAgent(AgentExecutionMixin):
             error_msg = f"Debug analysis failed: {str(e)}"
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="failed", error=error_msg
+                trace_id=self._current_trace_id,
+                status="failed",  # trace_logger-specific value, not EnumOperationStatus
+                error=error_msg,
             )
 
             await self.trace_logger.log_event(

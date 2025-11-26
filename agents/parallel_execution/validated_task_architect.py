@@ -42,11 +42,11 @@ def _validate_configuration() -> tuple[bool, list[str]]:
     if _config_import_error is not None:
         errors.append(f"Could not import config module: {_config_import_error}")
         errors.append(
-            "Make sure you're running from the project root with PYTHONPATH set:"
+            "Make sure you're running from the project root using module syntax:"
         )
         errors.append("  cd /path/to/omniclaude")
         errors.append(
-            "  PYTHONPATH=/path/to/omniclaude python agents/parallel_execution/validated_task_architect.py"
+            "  python -m agents.parallel_execution.validated_task_architect '<prompt>'"
         )
         return False, errors
 
@@ -445,14 +445,14 @@ async def main() -> int:
     """CLI interface for validated task architect
 
     Usage:
-        # Command line argument
-        python validated_task_architect.py 'Create a REST API'
+        # Command line argument (from project root)
+        python -m agents.parallel_execution.validated_task_architect 'Create a REST API'
 
         # Piped JSON input
-        echo '{"prompt": "Create a REST API", "global_context": {...}}' | python validated_task_architect.py
+        echo '{"prompt": "Create a REST API", "global_context": {...}}' | python -m agents.parallel_execution.validated_task_architect
 
         # From file
-        cat request.json | python validated_task_architect.py
+        cat request.json | python -m agents.parallel_execution.validated_task_architect
 
     Returns:
         Exit code (0 for success, non-zero for failure)
@@ -501,24 +501,25 @@ async def main() -> int:
         if len(sys.argv) < 2:
             print("ERROR: No input provided", file=sys.stderr)
             print(file=sys.stderr)
-            print("Usage:", file=sys.stderr)
+            print("Usage (from project root):", file=sys.stderr)
             print(
-                "  python validated_task_architect.py '<user_prompt>'", file=sys.stderr
+                "  python -m agents.parallel_execution.validated_task_architect '<user_prompt>'",
+                file=sys.stderr,
             )
             print(file=sys.stderr)
             print("Or pipe JSON input:", file=sys.stderr)
             print(
-                '  echo \'{"prompt": "..."}\' | python validated_task_architect.py',
+                '  echo \'{"prompt": "..."}\' | python -m agents.parallel_execution.validated_task_architect',
                 file=sys.stderr,
             )
             print(file=sys.stderr)
             print("Examples:", file=sys.stderr)
             print(
-                '  python validated_task_architect.py "Create a REST API"',
+                '  python -m agents.parallel_execution.validated_task_architect "Create a REST API"',
                 file=sys.stderr,
             )
             print(
-                '  echo \'{"prompt": "Create a REST API"}\' | python validated_task_architect.py',
+                '  echo \'{"prompt": "Create a REST API"}\' | python -m agents.parallel_execution.validated_task_architect',
                 file=sys.stderr,
             )
             return 1

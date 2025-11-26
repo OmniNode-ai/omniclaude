@@ -5197,9 +5197,9 @@ class ManifestInjector:
             local_services = infrastructure_data.get("local_services", {})
             infrastructure_services = len(remote_services) + len(local_services)
 
-            # Count models
+            # Count models (ai_models is a dict with provider names as keys)
             ai_models = models_data.get("ai_models", {})
-            models_count = len(ai_models.get("providers", []))
+            models_count = len(ai_models)
 
             # Count schemas
             database_schemas_count = len(schemas_data.get("tables", []))

@@ -6,10 +6,18 @@ from .metrics_collector import get_metrics_collector
 
 
 async def main() -> None:
-    """Test basic functionality of RouterMetricsCollector.
+    """Quick validation test of RouterMetricsCollector functionality.
 
-    Tests recording routing decisions, threshold metrics, and retrieving statistics.
-    Prints test results to stdout.
+    Tests basic operations: recording routing decisions, recording threshold metrics,
+    and retrieving statistics. Intended for manual validation during development.
+
+    Returns:
+        None
+
+    Example:
+        >>> await main()
+        Testing RouterMetricsCollector...
+        ✓ Metrics collector working!
     """
     print("Testing RouterMetricsCollector...")
     collector = get_metrics_collector()
@@ -35,7 +43,7 @@ async def main() -> None:
     print("\n✓ Metrics collector working!")
     print(f"  Routing decisions: {routing_stats['total_decisions']}")
     print(f"  Cache hit rate: {cache_stats['hit_rate_percent']:.1f}%")
-    print(f"  Thresholds defined: {len(collector._thresholds)}")
+    print(f"  Thresholds defined: {collector.threshold_count}")
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ Integration:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 from uuid import uuid4
 
 
@@ -97,8 +97,8 @@ class _PlaceholderNodeSTFHashCompute:
 
 
 # Initialize with placeholders as defaults
-NodeDebugSTFStorageEffect: type = _PlaceholderNodeDebugSTFStorageEffect
-NodeSTFHashCompute: type = _PlaceholderNodeSTFHashCompute
+NodeDebugSTFStorageEffect: Type[Any] = _PlaceholderNodeDebugSTFStorageEffect
+NodeSTFHashCompute: Type[Any] = _PlaceholderNodeSTFHashCompute
 
 try:
     from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
@@ -142,10 +142,10 @@ class STFHelper:
     - Store new STFs with automatic deduplication
     - Update STF usage metrics
 
-    Gracefully degrades when omnibase_core is unavailable:
-    - Operations return empty/failed results
-    - Warnings are logged on initialization
-    - Module can be imported without errors
+    Raises:
+        ImportError: If instantiated when omnibase_core is not installed.
+            The module can be imported without errors, but STFHelper
+            instantiation requires the actual ONEX node implementations.
     """
 
     # Class-level flag indicating if nodes are available
@@ -159,29 +159,28 @@ class STFHelper:
             db_protocol: Database protocol (IDatabaseProtocol).
                         If None, uses MockDatabaseProtocol for testing.
 
-        Note:
-            When omnibase_core is unavailable, STFHelper initializes in degraded
-            mode with placeholder nodes. All operations will return empty/failed
-            results but will not raise exceptions.
+        Raises:
+            ImportError: If omnibase_core is not installed. STFHelper requires
+                        the actual ONEX node implementations to function.
         """
-        # Track degraded mode for this instance
-        self._degraded_mode: bool = not NODES_AVAILABLE
+        # Guard check: fail fast if ONEX nodes are not available
+        if not NODES_AVAILABLE:
+            raise ImportError(
+                "STFHelper requires omnibase_core to be installed.\n"
+                "Install with: pip install omnibase_core"
+            )
+
+        # After guard check, NODES_AVAILABLE is always True
+        self._degraded_mode: bool = False
 
         # Use provided protocol or create mock for testing
         self.db: Any = db_protocol or MockDatabaseProtocol()
 
-        # Initialize ONEX nodes (placeholders if omnibase_core unavailable)
+        # Initialize ONEX nodes
         self.storage_node: Any = NodeDebugSTFStorageEffect(db_protocol=self.db)
         self.hash_node: Any = NodeSTFHashCompute()
 
-        if self._degraded_mode:
-            logger.warning(
-                "STFHelper initialized in DEGRADED MODE - omnibase_core not available. "
-                "STF operations will return empty/failed results. "
-                "Install omnibase_core for full functionality: pip install omnibase_core"
-            )
-        else:
-            logger.info("STFHelper initialized with database protocol")
+        logger.info("STFHelper initialized with database protocol")
 
     @property
     def is_degraded(self) -> bool:

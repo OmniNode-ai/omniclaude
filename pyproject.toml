@@ -44,10 +44,6 @@ dependency-injector = "^4.48.1"
 prometheus-client = "^0.21.0"
 qdrant-client = "^1.16.0"
 
-[tool.poetry.group.patterns.dependencies]
-# Optional dependencies for pattern storage with Qdrant
-qdrant-client = "^1.7.0"
-
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"
 kafka-python = "^2.0.2"

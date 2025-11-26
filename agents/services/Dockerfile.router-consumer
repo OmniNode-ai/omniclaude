@@ -70,9 +70,6 @@ COPY --chown=omniclaude:omniclaude agents/lib/data_sanitizer.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/action_logger.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/slack_notifier.py ./lib/
 
-# Copy shared kafka types
-COPY --chown=omniclaude:omniclaude skills/_shared/kafka_types.py ./lib/
-
 # Copy omnibase_core mock for enums (needed by agent_execution_logger)
 COPY --chown=omniclaude:omniclaude agents/tests/mocks/omnibase_core/ ./lib/omnibase_core/
 
