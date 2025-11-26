@@ -337,7 +337,7 @@ def check_python_environment() -> Dict[str, Any]:
     """Check Python environment and required packages"""
     print("🐍 Checking Python environment...", file=sys.stderr)
 
-    env_info = {
+    env_info: Dict[str, Any] = {
         "python_version": sys.version,
         "python_path": sys.executable,
         "packages": {},
@@ -455,7 +455,7 @@ def test_pattern_tracking_flow() -> Dict[str, Any]:
     print("🧪 TESTING PATTERN TRACKING FLOW", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
-    test_results = {"timestamp": time.time(), "tests": {}}
+    test_results: Dict[str, Any] = {"timestamp": time.time(), "tests": {}}
 
     # Test 1: Import health checks
     try:

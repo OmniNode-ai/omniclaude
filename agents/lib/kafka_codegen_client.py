@@ -20,6 +20,7 @@ import logging
 from typing import AsyncIterator, Dict, List, Optional
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from omnibase_core.errors import OnexError
 
 from .codegen_events import BaseEvent
 from .version_config import get_config
@@ -143,7 +144,7 @@ class KafkaCodegenClient:
         try:
             await self.start_producer()
             if self._producer is None:
-                raise RuntimeError("Failed to start Kafka producer - producer is None")
+                raise OnexError("Failed to start Kafka producer - producer is None")
             topic = event.to_kafka_topic()
             payload = json.dumps(
                 {

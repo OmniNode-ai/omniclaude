@@ -8,6 +8,7 @@ Scores patterns and schemas by relevance to user's task using:
 Part of Phase 3: Relevance Scoring implementation.
 """
 
+from pathlib import Path
 from typing import Any
 
 
@@ -17,7 +18,6 @@ try:
 except ImportError:
     # Standalone usage: add lib directory to path
     import sys
-    from pathlib import Path
 
     _lib_path = Path(__file__).parent
     if str(_lib_path) not in sys.path:

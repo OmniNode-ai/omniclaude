@@ -8,7 +8,7 @@ Uses asyncpg to persist generation_sessions and generation_artifacts.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from urllib.parse import quote_plus
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from .version_config import get_config
 class CodegenPersistence:
     def __init__(self, dsn: Optional[str] = None) -> None:
         self._persistence_enabled = True
+        self.dsn: Optional[str] = None
 
         if dsn:
             self.dsn = dsn
@@ -66,6 +67,8 @@ class CodegenPersistence:
         status: str,
     ) -> None:
         pool = await self._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -83,6 +86,8 @@ class CodegenPersistence:
 
     async def complete_session(self, session_id: UUID) -> None:
         pool = await self._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -104,6 +109,8 @@ class CodegenPersistence:
         template_version: Optional[str] = None,
     ) -> None:
         pool = await self._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -157,6 +164,10 @@ class CodegenPersistence:
             UUID of the compatibility record
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            raise RuntimeError(
+                "Database pool not initialized - persistence is disabled"
+            )
         async with pool.acquire() as conn:
             result = await conn.fetchval(
                 """
@@ -169,7 +180,7 @@ class CodegenPersistence:
                 conflict_reason,
                 resolution_pattern,
             )
-            return result
+            return cast(UUID, result)
 
     async def get_mixin_compatibility(
         self, mixin_a: str, mixin_b: str, node_type: str
@@ -185,6 +196,8 @@ class CodegenPersistence:
             Compatibility record or None
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return None
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -204,6 +217,8 @@ class CodegenPersistence:
             List of summary records by node type
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM mixin_compatibility_summary")
             return [dict(row) for row in rows]
@@ -236,6 +251,10 @@ class CodegenPersistence:
             UUID of the feedback record
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            raise RuntimeError(
+                "Database pool not initialized - persistence is disabled"
+            )
         async with pool.acquire() as conn:
             # Convert dict to JSONB string if provided
             contract_jsonb = json.dumps(contract_json) if contract_json else None
@@ -252,7 +271,7 @@ class CodegenPersistence:
                 user_provided,
                 contract_jsonb,
             )
-            return result
+            return cast(UUID, result)
 
     async def get_pattern_feedback_analysis(
         self, pattern_name: Optional[str] = None
@@ -266,6 +285,8 @@ class CodegenPersistence:
             List of feedback analysis records
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             if pattern_name:
                 rows = await conn.fetch(
@@ -310,6 +331,8 @@ class CodegenPersistence:
             metadata: Optional additional metadata
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             # Convert dict to JSONB string if provided
             metadata_jsonb = json.dumps(metadata) if metadata else None
@@ -346,6 +369,8 @@ class CodegenPersistence:
             List of performance summary records
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             if session_id:
                 rows = await conn.fetch(
@@ -472,6 +497,8 @@ class CodegenPersistence:
             List of cache efficiency records by type
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             rows = await conn.fetch("SELECT * FROM template_cache_efficiency")
             return [dict(row) for row in rows]
@@ -505,6 +532,8 @@ class CodegenPersistence:
             batch_size: Batch size
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -537,6 +566,8 @@ class CodegenPersistence:
             List of health metrics records
         """
         pool = await self._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             if event_type:
                 rows = await conn.fetch(

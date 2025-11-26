@@ -514,7 +514,7 @@ class LoggingEventPublisher:
             "cookie",
         }
 
-        sanitized = {}
+        sanitized: Dict[str, Any] = {}
         for key, value in context.items():
             # Check if key is sensitive via:
             # 1. Hardcoded set (exact case-insensitive match)
@@ -735,10 +735,10 @@ class LoggingEventPublisher:
     async def publish_audit_log(
         self,
         tenant_id: Optional[str] = None,
-        action: str = None,
-        actor: str = None,
-        resource: str = None,
-        outcome: Union[Outcome, str] = None,
+        action: Optional[str] = None,
+        actor: Optional[str] = None,
+        resource: Optional[str] = None,
+        outcome: Optional[Union[Outcome, str]] = None,
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -781,7 +781,12 @@ class LoggingEventPublisher:
                 )
         """
         # Resolve tenant_id with fallback chain
-        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+        # The "default" fallback ensures effective_tenant_id is always a non-empty string
+        effective_tenant_id = (
+            tenant_id if tenant_id else os.getenv("TENANT_ID", "default")
+        )
+        if not effective_tenant_id:
+            effective_tenant_id = "default"
 
         # Warn when using fallback
         if tenant_id is None and os.getenv("TENANT_ID") is None:
@@ -789,6 +794,16 @@ class LoggingEventPublisher:
                 "tenant_id not provided and TENANT_ID env var not set, using 'default'",
                 extra={"event_type": "audit_log", "action": action},
             )
+
+        # Validate required string parameters
+        if action is None:
+            raise TypeError("action must be a string, got NoneType")
+        if actor is None:
+            raise TypeError("actor must be a string, got NoneType")
+        if resource is None:
+            raise TypeError("resource must be a string, got NoneType")
+        if outcome is None:
+            raise TypeError("outcome must be provided")
 
         # Validate input fields BEFORE any Kafka operations
         # tenant_id is used as partition key - requires strict validation
@@ -913,10 +928,10 @@ class LoggingEventPublisher:
     async def publish_security_log(
         self,
         tenant_id: Optional[str] = None,
-        event_type: str = None,
-        user_id: str = None,
-        resource: str = None,
-        decision: Union[Decision, str] = None,
+        event_type: Optional[str] = None,
+        user_id: Optional[str] = None,
+        resource: Optional[str] = None,
+        decision: Optional[Union[Decision, str]] = None,
         correlation_id: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
@@ -959,7 +974,12 @@ class LoggingEventPublisher:
                 )
         """
         # Resolve tenant_id with fallback chain
-        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+        # The "default" fallback ensures effective_tenant_id is always a non-empty string
+        effective_tenant_id = (
+            tenant_id if tenant_id else os.getenv("TENANT_ID", "default")
+        )
+        if not effective_tenant_id:
+            effective_tenant_id = "default"
 
         # Warn when using fallback
         if tenant_id is None and os.getenv("TENANT_ID") is None:
@@ -967,6 +987,16 @@ class LoggingEventPublisher:
                 "tenant_id not provided and TENANT_ID env var not set, using 'default'",
                 extra={"event_type": "security_log", "security_event_type": event_type},
             )
+
+        # Validate required string parameters
+        if event_type is None:
+            raise TypeError("event_type must be a string, got NoneType")
+        if user_id is None:
+            raise TypeError("user_id must be a string, got NoneType")
+        if resource is None:
+            raise TypeError("resource must be a string, got NoneType")
+        if decision is None:
+            raise TypeError("decision must be provided")
 
         # Validate input fields BEFORE any Kafka operations
         # tenant_id is used as partition key - requires strict validation
@@ -1203,7 +1233,12 @@ class LoggingEventPublisher:
         level_str = str(level.value) if isinstance(level, LogLevel) else level
 
         # Resolve tenant_id with fallback
-        effective_tenant_id = tenant_id or os.getenv("TENANT_ID", "default")
+        # The "default" fallback ensures effective_tenant_id is always a non-empty string
+        effective_tenant_id = (
+            tenant_id if tenant_id else os.getenv("TENANT_ID", "default")
+        )
+        if not effective_tenant_id:
+            effective_tenant_id = "default"
 
         # Build payload (type-specific)
         payload = {

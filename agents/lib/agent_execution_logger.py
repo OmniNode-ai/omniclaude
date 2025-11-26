@@ -38,7 +38,6 @@ try:
 except ImportError:
     # Standalone usage: add lib directory to path
     import sys
-    from pathlib import Path
 
     _lib_path = Path(__file__).parent
     if str(_lib_path) not in sys.path:

@@ -189,6 +189,11 @@ class OmniNodeTemplateEngine:
         # self.metadata_validator = ToolMetadataValidator()
         self.logger = logging.getLogger(__name__)
 
+        # Declare instance variable types (allows None assignments)
+        self.template_cache: Optional[TemplateCache]
+        self.pattern_library: Optional[PatternLibrary]
+        self.pattern_storage: Optional[PatternStorage]
+
         # Initialize template cache (Agent Framework)
         self.enable_cache = enable_cache
         if enable_cache:
@@ -209,7 +214,9 @@ class OmniNodeTemplateEngine:
             try:
                 self.pattern_library = PatternLibrary()
                 self.pattern_storage = PatternStorage(
-                    qdrant_url=settings.qdrant_url,
+                    qdrant_url=(
+                        str(settings.qdrant_url) if settings.qdrant_url else None
+                    ),
                     collection_name="code_generation_patterns",
                     use_in_memory=False,  # Try Qdrant first, fallback to in-memory if unavailable
                 )
@@ -785,8 +792,8 @@ class OmniNodeTemplateEngine:
     ) -> Dict[str, Any]:
         """Prepare context variables for template rendering with intelligence"""
 
-        # Basic context
-        context = {
+        # Basic context - explicitly typed to allow Any values (lists, dicts, floats)
+        context: Dict[str, Any] = {
             "DOMAIN": domain,
             "MICROSERVICE_NAME": microservice_name,
             "MICROSERVICE_NAME_PASCAL": self._to_pascal_case(microservice_name),
@@ -1271,7 +1278,7 @@ from .enums import *
 '''
 
     def _generate_models_init(
-        self, microservice_name: str, node_type: str = None
+        self, microservice_name: str, node_type: Optional[str] = None
     ) -> str:
         """Generate models __init__.py"""
         base_imports = f'''#!/usr/bin/env python3

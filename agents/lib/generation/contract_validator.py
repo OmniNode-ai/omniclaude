@@ -166,7 +166,14 @@ class ContractValidator:
                 # NOTE: ModelContractCompute has a known upstream bug where __init__
                 # doesn't pass the 'algorithm' field to the parent constructor.
                 # This causes validation failures for COMPUTE contracts.
-                # See test_validate_compute_contract_success for workaround details.
+                # Additionally, model_post_init() expects all nested dicts (algorithm,
+                # performance, dependencies) to be converted to proper Pydantic models.
+                #
+                # Bug Location: omnibase_core.models.contracts.ModelContractCompute.__init__
+                # Workaround: See tests/generation/test_contract_validator.py::test_validate_compute_contract_success
+                # Reference: omninode_bridge adapter pattern in src/omninode_bridge/nodes/conftest.py
+                # Status: No upstream issue filed - this should be reported to omnibase_core maintainers
+                # FIXME: Remove this workaround when upstream bug is fixed in omnibase_core
                 contract = contract_model(**contract_dict)
                 result.contract = contract
                 result.valid = True

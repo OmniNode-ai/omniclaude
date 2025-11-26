@@ -21,7 +21,7 @@ import asyncio
 import logging
 import sys
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import httpx
 
@@ -64,7 +64,7 @@ class Phase4APIClient:
 
     def __init__(
         self,
-        base_url: str = None,
+        base_url: Optional[str] = None,
         timeout: float = 2.0,
         max_retries: int = 3,
         api_key: Optional[str] = None,
@@ -137,7 +137,7 @@ class Phase4APIClient:
                 # Execute the request
                 response = await request_func()
                 response.raise_for_status()
-                return response.json()
+                return cast(Dict[str, Any], response.json())
 
             except httpx.TimeoutException:
                 last_error = f"Timeout after {self.timeout}s"
@@ -363,7 +363,8 @@ class Phase4APIClient:
         if metadata:
             payload["metadata"] = metadata
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.post(
                 "/api/pattern-traceability/lineage/track", json=payload
             )
@@ -427,7 +428,8 @@ class Phase4APIClient:
             "include_descendants": str(include_descendants).lower(),
         }
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.get(
                 f"/api/pattern-traceability/lineage/{pattern_id}", params=params
             )
@@ -512,7 +514,8 @@ class Phase4APIClient:
         if metrics:
             payload["metrics"] = metrics
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.post(
                 "/api/pattern-traceability/analytics/compute", json=payload
             )
@@ -554,7 +557,8 @@ class Phase4APIClient:
             "include_trends": str(include_trends).lower(),
         }
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.get(
                 f"/api/pattern-traceability/analytics/{pattern_id}", params=params
             )
@@ -651,7 +655,8 @@ class Phase4APIClient:
             "enable_ab_testing": enable_ab_testing,
         }
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.post(
                 "/api/pattern-traceability/feedback/analyze", json=payload
             )
@@ -712,7 +717,7 @@ class Phase4APIClient:
                 "error": "Client not initialized - use 'async with' context manager",
             }
 
-        payload = {"query": query, "limit": limit}
+        payload: Dict[str, Any] = {"query": query, "limit": limit}
 
         if pattern_types:
             payload["pattern_types"] = pattern_types
@@ -721,7 +726,8 @@ class Phase4APIClient:
         if time_window_days is not None:
             payload["time_window_days"] = time_window_days
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.post(
                 "/api/pattern-traceability/search", json=payload
             )
@@ -782,7 +788,7 @@ class Phase4APIClient:
                 "error": "Client not initialized - use 'async with' context manager",
             }
 
-        payload = {
+        payload: Dict[str, Any] = {
             "check_lineage": check_lineage,
             "check_analytics": check_analytics,
             "check_orphans": check_orphans,
@@ -791,7 +797,8 @@ class Phase4APIClient:
         if pattern_id:
             payload["pattern_id"] = pattern_id
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.post(
                 "/api/pattern-traceability/validate", json=payload
             )
@@ -831,7 +838,8 @@ class Phase4APIClient:
                 "error": "Client not initialized - use 'async with' context manager",
             }
 
-        async def request():
+        async def request() -> httpx.Response:
+            assert self._client is not None
             return await self._client.get("/api/pattern-traceability/health")
 
         return await self._retry_request(request, "health_check")
@@ -865,7 +873,7 @@ class Phase4APIClient:
         Returns:
             Same as track_lineage()
         """
-        pattern_data = {
+        pattern_data: Dict[str, Any] = {
             "code": code,
             "language": language,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -959,7 +967,7 @@ class Phase4APIClient:
                 "status": "healthy" | "degraded" | "unhealthy"
             }
         """
-        result = {
+        result: Dict[str, Any] = {
             "success": True,
             "pattern_id": pattern_id,
             "analytics": None,
@@ -967,6 +975,7 @@ class Phase4APIClient:
             "health_score": 0.0,
             "status": "unknown",
         }
+        errors: List[str] = []
 
         # Get analytics if requested
         if include_analytics:
@@ -975,7 +984,7 @@ class Phase4APIClient:
                 result["analytics"] = analytics
             else:
                 result["success"] = False
-                result["errors"] = [f"Analytics failed: {analytics.get('error')}"]
+                errors.append(f"Analytics failed: {analytics.get('error')}")
 
         # Get lineage if requested
         if include_lineage:
@@ -983,27 +992,26 @@ class Phase4APIClient:
             if lineage.get("success"):
                 result["lineage"] = lineage
             else:
-                if "errors" not in result:
-                    result["errors"] = []
-                result["errors"].append(f"Lineage failed: {lineage.get('error')}")
+                errors.append(f"Lineage failed: {lineage.get('error')}")
+
+        if errors:
+            result["errors"] = errors
 
         # Calculate health score
-        if result["analytics"]:
-            quality = (
-                result["analytics"]
-                .get("success_metrics", {})
-                .get("avg_quality_score", 0)
-            )
-            success_rate = (
-                result["analytics"].get("success_metrics", {}).get("success_rate", 0)
-            )
-            result["health_score"] = (quality + success_rate) / 2
+        analytics_data = result.get("analytics")
+        if analytics_data and isinstance(analytics_data, dict):
+            success_metrics = analytics_data.get("success_metrics", {})
+            if isinstance(success_metrics, dict):
+                quality = float(success_metrics.get("avg_quality_score", 0))
+                success_rate = float(success_metrics.get("success_rate", 0))
+                health_score = (quality + success_rate) / 2
+                result["health_score"] = health_score
 
-            if result["health_score"] >= 0.8:
-                result["status"] = "healthy"
-            elif result["health_score"] >= 0.5:
-                result["status"] = "degraded"
-            else:
-                result["status"] = "unhealthy"
+                if health_score >= 0.8:
+                    result["status"] = "healthy"
+                elif health_score >= 0.5:
+                    result["status"] = "degraded"
+                else:
+                    result["status"] = "unhealthy"
 
         return result

@@ -20,7 +20,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import yaml
 
@@ -36,10 +36,10 @@ from config import settings
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 
-def load_config() -> Dict:
+def load_config() -> Dict[str, Any]:
     """Load configuration from config.yaml with environment variable overrides."""
     config_path = Path(__file__).parent / "config.yaml"
-    config = {}
+    config: Dict[str, Any] = {}
 
     # Load from YAML if exists
     if config_path.exists():
@@ -146,7 +146,7 @@ class ViolationsLogger:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
-            summary = {
+            summary: Dict[str, Any] = {
                 "last_updated": "",
                 "total_violations_today": 0,
                 "files_with_violations": [],
@@ -155,14 +155,17 @@ class ViolationsLogger:
             if self.violations_summary.exists():
                 try:
                     with open(self.violations_summary, "r", encoding="utf-8") as f:
-                        summary = json.load(f)
+                        loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            summary = loaded
                 except (json.JSONDecodeError, ValueError):
                     # Start fresh if corrupted
                     pass
 
             # Check if this is today's data (reset counter at midnight UTC)
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            last_update_date = summary.get("last_updated", "")[:10]
+            last_updated = summary.get("last_updated", "")
+            last_update_date = str(last_updated)[:10] if last_updated else ""
 
             if last_update_date != today:
                 # New day, reset counter
@@ -171,20 +174,28 @@ class ViolationsLogger:
 
             # Update summary
             summary["last_updated"] = timestamp
-            summary["total_violations_today"] += len(violations)
+            total_today = summary.get("total_violations_today", 0)
+            summary["total_violations_today"] = int(total_today) + len(violations)
 
             # Add file entry
-            file_entry = {
+            file_entry: Dict[str, Any] = {
                 "path": file_path,
                 "violations": len(violations),
                 "timestamp": timestamp,
                 "suggestions": [v.suggestion or v.name for v in violations[:10]],
             }
-            summary["files_with_violations"].append(file_entry)
+            files_list = summary.get("files_with_violations", [])
+            if isinstance(files_list, list):
+                files_list.append(file_entry)
+                summary["files_with_violations"] = files_list
 
             # Keep only recent entries (configurable limit)
-            if len(summary["files_with_violations"]) > self.max_violations_history:
-                summary["files_with_violations"] = summary["files_with_violations"][
+            files_with_violations = summary.get("files_with_violations", [])
+            if (
+                isinstance(files_with_violations, list)
+                and len(files_with_violations) > self.max_violations_history
+            ):
+                summary["files_with_violations"] = files_with_violations[
                     -self.max_violations_history :
                 ]
 
@@ -235,16 +246,16 @@ class QualityEnforcer:
         self.performance_budget = PERFORMANCE_BUDGET_SECONDS
         self.violations_logger = ViolationsLogger()
         self.system_message = None  # For Claude Code systemMessage field
-        self.stats = {
-            "phase_1_time": 0,
-            "phase_2_time": 0,
-            "phase_3_time": 0,
-            "phase_4_time": 0,
-            "phase_5_time": 0,
-            "violations_found": 0,
-            "corrections_applied": 0,
-            "corrections_suggested": 0,
-            "corrections_skipped": 0,
+        self.stats: Dict[str, float] = {
+            "phase_1_time": 0.0,
+            "phase_2_time": 0.0,
+            "phase_3_time": 0.0,
+            "phase_4_time": 0.0,
+            "phase_5_time": 0.0,
+            "violations_found": 0.0,
+            "corrections_applied": 0.0,
+            "corrections_suggested": 0.0,
+            "corrections_skipped": 0.0,
         }
 
         # Enhanced metadata for decision intelligence
@@ -477,7 +488,7 @@ class QualityEnforcer:
                         break
 
                     score = await quorum.score_correction(
-                        correction, content, file_path
+                        correction, content, file_path  # type: ignore[arg-type]
                     )
                     scored_corrections.append(
                         {"correction": correction, "score": score}
@@ -532,21 +543,15 @@ class QualityEnforcer:
         Create fallback scores when AI Quorum is disabled or fails.
         Use medium confidence scores that won't trigger auto-apply.
         """
-        from dataclasses import dataclass
+        from dataclasses import dataclass, field
 
         @dataclass
         class FallbackScore:
             consensus_score: float = 0.65
-            individual_scores: dict = None
-            individual_explanations: dict = None
+            individual_scores: Dict[str, Any] = field(default_factory=dict)
+            individual_explanations: Dict[str, Any] = field(default_factory=dict)
             confidence: float = 0.60
             should_apply: bool = False
-
-            def __post_init__(self):
-                if self.individual_scores is None:
-                    self.individual_scores = {}
-                if self.individual_explanations is None:
-                    self.individual_explanations = {}
 
         scored = []
         for correction in corrections:
@@ -648,12 +653,14 @@ class QualityEnforcer:
 
         # Handle different tool types
         if "content" in params:
-            return params["content"]
+            return str(params["content"])
         elif "new_string" in params:
-            return params["new_string"]
+            return str(params["new_string"])
         elif "edits" in params:
             # MultiEdit case
-            return "\n".join(edit.get("new_string", "") for edit in params["edits"])
+            return "\n".join(
+                str(edit.get("new_string", "")) for edit in params["edits"]
+            )
 
         return ""
 
@@ -723,7 +730,7 @@ class QualityEnforcer:
         lines.append("")
 
         # Group violations by type for better readability
-        violations_by_type = {}
+        violations_by_type: Dict[str, List[Any]] = {}
         for v in violations:
             vtype = v.violation_type
             if vtype not in violations_by_type:
@@ -781,7 +788,9 @@ class QualityEnforcer:
             tool_input: Tool input parameters
         """
         try:
-            from lib.tool_selection_intelligence import create_enhanced_metadata
+            from lib.tool_selection_intelligence import (
+                create_enhanced_metadata,  # type: ignore[import-not-found]
+            )
 
             # Generate enhanced metadata (includes tool selection + context)
             self.tool_selection_metadata = create_enhanced_metadata(
@@ -812,9 +821,9 @@ class QualityEnforcer:
             from lib.tool_selection_intelligence import QualityCheckMetadata
 
             # Categorize checks
-            checks_passed = ["syntax_validation"] if not violations else []
-            checks_warnings = []
-            checks_failed = []
+            checks_passed: List[str] = ["syntax_validation"] if not violations else []
+            checks_warnings: List[str] = []
+            checks_failed: List[str] = []
 
             # Analyze violations
             if violations:

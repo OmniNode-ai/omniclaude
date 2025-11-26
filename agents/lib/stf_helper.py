@@ -116,7 +116,7 @@ class STFHelper:
     - Update STF usage metrics
     """
 
-    def __init__(self, db_protocol=None):
+    def __init__(self, db_protocol: Optional[Any] = None) -> None:
         """
         Initialize STF helper.
 
@@ -125,11 +125,11 @@ class STFHelper:
                         If None, uses MockDatabaseProtocol for testing.
         """
         # Use provided protocol or create mock for testing
-        self.db = db_protocol or MockDatabaseProtocol()
+        self.db: Any = db_protocol or MockDatabaseProtocol()
 
         # Initialize ONEX nodes
-        self.storage_node = NodeDebugSTFStorageEffect(db_protocol=self.db)
-        self.hash_node = NodeSTFHashCompute()
+        self.storage_node: Any = NodeDebugSTFStorageEffect(db_protocol=self.db)
+        self.hash_node: Any = NodeSTFHashCompute()
 
         logger.info("STFHelper initialized with database protocol")
 

@@ -31,13 +31,14 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 
 try:
     import psycopg2
     import psycopg2.extras
+    from psycopg2.extensions import connection as psycopg_connection
 except ImportError:
     print("Error: psycopg2 not installed. Install with: pip install psycopg2-binary")
     sys.exit(1)
@@ -87,11 +88,8 @@ class AgentHistoryBrowser:
 
         # Require explicit configuration - no hardcoded defaults
         self.db_host = db_host or os.environ.get("POSTGRES_HOST")
-        self.db_port = db_port or (
-            int(os.environ.get("POSTGRES_PORT"))
-            if os.environ.get("POSTGRES_PORT")
-            else None
-        )
+        env_port = os.environ.get("POSTGRES_PORT")
+        self.db_port = db_port or (int(env_port) if env_port else None)
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE")
         self.db_user = db_user or os.environ.get("POSTGRES_USER")
         self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
@@ -118,8 +116,8 @@ class AgentHistoryBrowser:
                 "Database password not found! Set POSTGRES_PASSWORD environment variable or add to .env file."
             )
 
-        self.console = Console() if RICH_AVAILABLE else None
-        self.conn = None
+        self.console: Optional["Console"] = Console() if RICH_AVAILABLE else None
+        self.conn: Optional[psycopg_connection] = None
 
     def _load_env_file(self):
         """Load environment variables from .env file if it exists."""
@@ -197,6 +195,10 @@ class AgentHistoryBrowser:
         Returns:
             List of agent run records
         """
+        if self.conn is None:
+            raise RuntimeError(
+                "Database connection not established. Call connect() first."
+            )
         cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         query = """
@@ -214,7 +216,7 @@ class AgentHistoryBrowser:
             FROM agent_manifest_injections
             WHERE 1=1
         """
-        params = []
+        params: List[Any] = []
 
         # Add filters
         if agent_name:
@@ -234,7 +236,9 @@ class AgentHistoryBrowser:
 
         return [dict(run) for run in runs]
 
-    def get_run_detail(self, correlation_id: str) -> Optional[Dict[str, Any]]:
+    def get_run_detail(
+        self, correlation_id: Union[str, UUID]
+    ) -> Optional[Dict[str, Any]]:
         """
         Get complete details for a specific agent run.
 
@@ -244,6 +248,10 @@ class AgentHistoryBrowser:
         Returns:
             Complete run record or None if not found
         """
+        if self.conn is None:
+            raise RuntimeError(
+                "Database connection not established. Call connect() first."
+            )
         cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # Convert string to UUID for proper type handling
@@ -294,6 +302,7 @@ class AgentHistoryBrowser:
 
     def _display_list_rich(self, runs: List[Dict[str, Any]], show_numbers: bool):
         """Display list using rich formatting."""
+        assert self.console is not None  # Guarded by RICH_AVAILABLE check in caller
         table = Table(
             title="Recent Agent Runs",
             box=box.ROUNDED,
@@ -323,7 +332,7 @@ class AgentHistoryBrowser:
             # Color code based on fallback status
             agent_style = "red" if run.get("is_fallback") else "green"
 
-            row = []
+            row: List[Any] = []
             if show_numbers:
                 row.append(str(idx))
             row.extend(
@@ -411,6 +420,7 @@ class AgentHistoryBrowser:
 
     def _display_detail_rich(self, run: Dict[str, Any]):
         """Display detail view using rich formatting."""
+        assert self.console is not None  # Guarded by RICH_AVAILABLE check in caller
         # Header panel
         header_text = f"""
 [bold cyan]Correlation ID:[/] {run['correlation_id']}
@@ -684,7 +694,7 @@ class AgentHistoryBrowser:
                     self._show_help()
                 elif command.lower().startswith("search "):
                     agent_filter = command[7:].strip()
-                    if RICH_AVAILABLE:
+                    if RICH_AVAILABLE and self.console:
                         self.console.print(
                             f"Filtering by agent: {agent_filter}", style="yellow"
                         )
@@ -692,14 +702,14 @@ class AgentHistoryBrowser:
                         print(f"Filtering by agent: {agent_filter}")
                 elif command.lower() == "clear":
                     agent_filter = None
-                    if RICH_AVAILABLE:
+                    if RICH_AVAILABLE and self.console:
                         self.console.print("Filter cleared", style="yellow")
                     else:
                         print("Filter cleared")
                 elif command.lower().startswith("limit "):
                     try:
                         limit = int(command[6:].strip())
-                        if RICH_AVAILABLE:
+                        if RICH_AVAILABLE and self.console:
                             self.console.print(f"Limit set to: {limit}", style="yellow")
                         else:
                             print(f"Limit set to: {limit}")
@@ -740,7 +750,7 @@ class AgentHistoryBrowser:
 
     def _show_header(self):
         """Show browser header."""
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.clear()
             header = Text()
             header.append("=" * 80 + "\n", style="cyan")
@@ -759,7 +769,7 @@ class AgentHistoryBrowser:
         """Show available commands."""
         filter_info = f" (filtering: {current_filter})" if current_filter else ""
 
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             commands = f"""
 [bold]Commands:[/]
   [cyan][number][/]           View detailed history for agent run
@@ -783,7 +793,7 @@ class AgentHistoryBrowser:
 
     def _show_help(self):
         """Show detailed help."""
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.clear()
 
         help_text = """
@@ -861,7 +871,7 @@ Connection details must be configured via environment variables or .env file:
 The tool will search for .env file in current directory and up to 5 parent levels.
 """
 
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.print(Panel(help_text, title="Help", border_style="cyan"))
             Prompt.ask("\nPress Enter to return", default="")
         else:
@@ -888,21 +898,21 @@ The tool will search for .env file in current directory and up to 5 parent level
 
     def _print_success(self, message: str):
         """Print success message."""
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.print(f"✓ {message}", style="bold green")
         else:
             print(f"✓ {message}")
 
     def _print_error(self, message: str):
         """Print error message."""
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.print(f"✗ {message}", style="bold red")
         else:
             print(f"✗ {message}")
 
     def _print_warning(self, message: str):
         """Print warning message."""
-        if RICH_AVAILABLE:
+        if RICH_AVAILABLE and self.console:
             self.console.print(f"⚠ {message}", style="bold yellow")
         else:
             print(f"⚠ {message}")
