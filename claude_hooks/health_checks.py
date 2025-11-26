@@ -84,7 +84,7 @@ class Phase4HealthChecker:
 
     def __init__(
         self,
-        base_url: str = None,
+        base_url: Optional[str] = None,
         config: Optional[PatternTrackerConfig] = None,
     ):
         """
@@ -441,19 +441,19 @@ class Phase4HealthChecker:
         """Run all health checks and return comprehensive status"""
         print("🔍 Running comprehensive Phase 4 health check...", file=sys.stderr)
 
-        results = {"timestamp": time.time(), "checks": {}}
+        checks: Dict[str, Dict[str, Any]] = {}
 
         # Run all checks
-        results["checks"]["intelligence_service"] = self.check_intelligence_service()
-        results["checks"]["database_connectivity"] = self.check_database_connectivity()
-        results["checks"]["lineage_endpoint"] = self.check_lineage_endpoint()
-        results["checks"]["feedback_endpoint"] = self.check_feedback_endpoint()
+        checks["intelligence_service"] = self.check_intelligence_service()
+        checks["database_connectivity"] = self.check_database_connectivity()
+        checks["lineage_endpoint"] = self.check_lineage_endpoint()
+        checks["feedback_endpoint"] = self.check_feedback_endpoint()
 
         # Calculate overall status
         overall_status = "healthy"
-        failed_checks = []
+        failed_checks: list[str] = []
 
-        for check_name, check_result in results["checks"].items():
+        for check_name, check_result in checks.items():
             status = check_result.get("status", "error")
             if status in ["error", "timeout", "connection_error", "unhealthy"]:
                 overall_status = "unhealthy"
@@ -462,12 +462,18 @@ class Phase4HealthChecker:
                 overall_status = "degraded"
                 failed_checks.append(check_name)
 
-        results["overall_status"] = overall_status
-        results["failed_checks"] = failed_checks
-        results["summary"] = {
-            "total_checks": len(results["checks"]),
-            "passed_checks": len(results["checks"]) - len(failed_checks),
+        summary = {
+            "total_checks": len(checks),
+            "passed_checks": len(checks) - len(failed_checks),
             "failed_checks": len(failed_checks),
+        }
+
+        results: Dict[str, Any] = {
+            "timestamp": time.time(),
+            "checks": checks,
+            "overall_status": overall_status,
+            "failed_checks": failed_checks,
+            "summary": summary,
         }
 
         # Print summary
@@ -481,7 +487,7 @@ class Phase4HealthChecker:
             file=sys.stderr,
         )
         print(
-            f"📊 Passed: {results['summary']['passed_checks']}/{results['summary']['total_checks']} checks",
+            f"📊 Passed: {summary['passed_checks']}/{summary['total_checks']} checks",
             file=sys.stderr,
         )
 

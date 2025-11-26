@@ -231,7 +231,8 @@ class IntelligenceRequestPublisher:
                     logger.debug(
                         f"Received intelligence response (correlation_id: {correlation_id})"
                     )
-                    return response
+                    result: Dict[str, Any] = response
+                    return result
 
                 # Wrong correlation ID, keep polling
                 logger.debug(

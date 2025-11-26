@@ -293,7 +293,8 @@ class ContractAnalyzer:
         Returns:
             Dictionary of definition schemas
         """
-        return contract_data.get("definitions", {})
+        result: Dict[str, Dict[str, Any]] = contract_data.get("definitions", {})
+        return result
 
     def clear_cache(self) -> None:
         """Clear the contract cache."""

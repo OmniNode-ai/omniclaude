@@ -56,9 +56,13 @@ print(f"Result: {result}")
         tracker = get_tracker()
         print(f"✓ Pattern tracker initialized (session: {tracker.session_id})")
 
-        # Test the sync wrapper (used by hooks)
-        pattern_id = tracker.track_pattern_creation_sync(
-            code=test_code, context=context, metadata=metadata
+        # Test the async method using asyncio.run()
+        import asyncio
+
+        pattern_id = asyncio.run(
+            tracker.track_pattern_creation(
+                code=test_code, context=context, metadata=metadata
+            )
         )
 
         print("✓ Pattern creation tracked successfully")

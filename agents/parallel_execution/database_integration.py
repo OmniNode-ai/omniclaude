@@ -19,17 +19,24 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+
+# Import Pydantic Settings for type-safe configuration
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import asyncpg
 from pydantic import BaseModel
 
 
-# Import Pydantic Settings for type-safe configuration
+if TYPE_CHECKING:
+    from config import Settings as SettingsType
+
+_settings_module: "SettingsType | None" = None
 try:
-    from config import settings
+    from config import settings as _imported_settings
+
+    _settings_module = _imported_settings
 except ImportError:
-    settings = None
+    _settings_module = None
 
 logger = logging.getLogger(__name__)
 
@@ -88,26 +95,33 @@ class DatabaseConfig(BaseModel):
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
         """Load configuration from environment variables or Pydantic Settings."""
+        import os
+
         # Prefer Pydantic Settings if available (type-safe, validated)
-        if settings is not None:
+        if _settings_module is not None:
+            settings = _settings_module
             return cls(
                 host=settings.postgres_host,
                 port=settings.postgres_port,
                 database=settings.postgres_database,
                 user=settings.postgres_user,
                 password=settings.get_effective_postgres_password(),
-                pool_min_size=settings.postgres_pool_min_size,
-                pool_max_size=settings.postgres_pool_max_size,
-                pool_exhaustion_threshold=settings.postgres_pool_exhaustion_threshold,
-                max_queries_per_connection=settings.postgres_max_queries_per_connection,
-                connection_max_age=settings.postgres_connection_max_age,
-                query_timeout=settings.postgres_query_timeout,
-                acquire_timeout=settings.postgres_acquire_timeout,
+                pool_min_size=getattr(settings, "postgres_pool_min_size", 5),
+                pool_max_size=getattr(settings, "postgres_pool_max_size", 20),
+                pool_exhaustion_threshold=float(
+                    os.getenv("POSTGRES_POOL_EXHAUSTION_THRESHOLD", "80.0")
+                ),
+                max_queries_per_connection=int(
+                    os.getenv("POSTGRES_MAX_QUERIES_PER_CONNECTION", "10000")
+                ),
+                connection_max_age=int(
+                    os.getenv("POSTGRES_CONNECTION_MAX_AGE", "3600")
+                ),
+                query_timeout=int(os.getenv("POSTGRES_QUERY_TIMEOUT", "30")),
+                acquire_timeout=int(os.getenv("POSTGRES_ACQUIRE_TIMEOUT", "10")),
             )
 
         # Fallback to os.getenv() for backward compatibility
-        import os
-
         return cls(
             host=os.getenv("POSTGRES_HOST", "192.168.86.200"),
             port=int(os.getenv("POSTGRES_PORT", "5436")),
@@ -396,17 +410,19 @@ class DatabaseIntegrationLayer:
     @asynccontextmanager
     async def acquire(self):
         """Acquire database connection from pool with circuit breaker."""
-        if not self.pool:
+        if self.pool is None:
             raise Exception("Database pool not initialized")
 
+        pool = self.pool  # Local reference for type narrowing
+
         async def _acquire():
-            return await self.pool.acquire(timeout=self.config.acquire_timeout)
+            return await pool.acquire(timeout=self.config.acquire_timeout)
 
         conn = await self.circuit_breaker.call(_acquire)
         try:
             yield conn
         finally:
-            await self.pool.release(conn)
+            await pool.release(conn)
 
     async def execute_query(self, query: str, *params, fetch: str = "none") -> Any:
         """
@@ -657,8 +673,8 @@ class DatabaseIntegrationLayer:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Query trace events with filters."""
-        conditions = []
-        params = []
+        conditions: List[str] = []
+        params: List[Any] = []
         param_count = 1
 
         if trace_id:
@@ -713,8 +729,8 @@ class DatabaseIntegrationLayer:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Query routing decisions with filters."""
-        conditions = []
-        params = []
+        conditions: List[str] = []
+        params: List[Any] = []
         param_count = 1
 
         if selected_agent:

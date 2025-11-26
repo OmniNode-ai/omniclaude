@@ -65,7 +65,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 # HTTP client imports
@@ -163,6 +163,7 @@ class SlackNotifier:
 
         # Initialize simple attributes (no method calls yet)
         # Load webhook URL from config or environment
+        self.webhook_url: Optional[str]
         if webhook_url:
             self.webhook_url = webhook_url
         elif SETTINGS_AVAILABLE:
@@ -489,51 +490,49 @@ class SlackNotifier:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         # Build Slack message using Block Kit format
-        message = {
-            "text": f"🚨 OmniClaude Error Alert: {error_type} in {service}",
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": f"🚨 Error in {service}",
-                        "emoji": True,
-                    },
+        # Explicitly type the blocks as a mutable list to allow append operations
+        blocks: List[Dict[str, Any]] = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"🚨 Error in {service}",
+                    "emoji": True,
                 },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Error Type:*\n{error_type}",
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Service:*\n{service}",
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Operation:*\n{operation}",
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Timestamp:*\n{timestamp}",
-                        },
-                    ],
-                },
-                {
-                    "type": "section",
-                    "text": {
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
                         "type": "mrkdwn",
-                        "text": f"*Error Message:*\n```{error_message}```",
+                        "text": f"*Error Type:*\n{error_type}",
                     },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Service:*\n{service}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Operation:*\n{operation}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Timestamp:*\n{timestamp}",
+                    },
+                ],
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Error Message:*\n```{error_message}```",
                 },
-            ],
-        }
+            },
+        ]
 
         # Add correlation ID if available
         if correlation_id != "N/A":
-            message["blocks"].append(
+            blocks.append(
                 {
                     "type": "section",
                     "text": {
@@ -552,7 +551,7 @@ class SlackNotifier:
         if extra_context:
             # Context is already sanitized, just format it
             context_str = "\n".join(f"• {k}: {v}" for k, v in extra_context.items())
-            message["blocks"].append(
+            blocks.append(
                 {
                     "type": "section",
                     "text": {
@@ -563,7 +562,7 @@ class SlackNotifier:
             )
 
         # Add stack trace (collapsible)
-        message["blocks"].append(
+        blocks.append(
             {
                 "type": "section",
                 "text": {
@@ -572,6 +571,11 @@ class SlackNotifier:
                 },
             }
         )
+
+        message: Dict[str, Any] = {
+            "text": f"🚨 OmniClaude Error Alert: {error_type} in {service}",
+            "blocks": blocks,
+        }
 
         return message
 

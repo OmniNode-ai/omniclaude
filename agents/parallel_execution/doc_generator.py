@@ -30,7 +30,7 @@ class MarkdownDocGenerator:
         """Generate documentation from agent results."""
         try:
             # Extract results list from phase_results if needed
-            results_list = []
+            results_list: list[Any] = []
             if "phase_results" in results:
                 # Extract from phase results structure
                 for phase in results["phase_results"]:

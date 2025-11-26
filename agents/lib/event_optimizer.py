@@ -248,8 +248,9 @@ class EventOptimizer:
 
             # Track success metrics
             if self.persistence:
+                event_type = getattr(event, "event", "unknown")
                 await self.persistence.insert_event_processing_metric(
-                    event_type=event.event,
+                    event_type=event_type,
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
                     success=True,
@@ -260,8 +261,9 @@ class EventOptimizer:
 
             # Track failure metrics
             if self.persistence:
+                event_type = getattr(event, "event", "unknown")
                 await self.persistence.insert_event_processing_metric(
-                    event_type=event.event,
+                    event_type=event_type,
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
                     success=False,

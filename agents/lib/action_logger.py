@@ -113,7 +113,7 @@ class ToolCallContext:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Log action when exiting context."""
-        duration_ms = int((time.time() - self.start_time) * 1000)
+        duration_ms = int((time.time() - (self.start_time or time.time())) * 1000)
 
         # If exception occurred, mark as failure
         if exc_type is not None:

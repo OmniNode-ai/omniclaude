@@ -420,9 +420,11 @@ from kafka_types import KafkaConsumeResult, KafkaPublishResult
 
 # Import Pydantic Settings for type-safe configuration
 try:
-    from config import settings
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
-    settings = None
+    settings = None  # type: ignore[assignment]
 
 
 class ConfluentKafkaClient:

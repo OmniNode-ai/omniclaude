@@ -133,7 +133,8 @@ class ResponseIntelligence:
                     file=sys.stderr,
                 )
 
-            return event_id
+            result: Optional[str] = event_id
+            return result
 
         except Exception as e:
             print(

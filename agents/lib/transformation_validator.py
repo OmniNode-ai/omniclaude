@@ -19,7 +19,7 @@ Solution:
 Target: Reduce self-transformation rate from 45.5% to <10%
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -38,11 +38,7 @@ class TransformationValidationResult:
     is_valid: bool
     error_message: str = ""
     warning_message: str = ""
-    metrics: dict = None
-
-    def __post_init__(self):
-        if self.metrics is None:
-            self.metrics = {}
+    metrics: dict = field(default_factory=dict)
 
 
 class TransformationValidator:

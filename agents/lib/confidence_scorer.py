@@ -193,7 +193,8 @@ class ConfidenceScorer:
         if agent_name not in self.historical_success:
             return 0.5
 
-        return self.historical_success[agent_name].get("overall", 0.5)
+        result = self.historical_success[agent_name].get("overall", 0.5)
+        return float(result) if result is not None else 0.5
 
     def _generate_explanation(
         self,

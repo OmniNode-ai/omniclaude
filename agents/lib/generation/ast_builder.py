@@ -75,8 +75,8 @@ class ASTBuilder:
         # Create base class reference
         bases = [ast.Name(id=base_class, ctx=ast.Load())]
 
-        # Create class body
-        body = []
+        # Create class body - use list[ast.stmt] for proper typing
+        body: list[ast.stmt] = []
 
         # Add docstring
         description = schema.get(
@@ -110,10 +110,11 @@ class ASTBuilder:
 
         class_def = ast.ClassDef(
             name=class_name,
-            bases=bases,
+            bases=list(bases),  # Cast to list[expr] for type checker
             keywords=[],
             decorator_list=[],
             body=body,
+            type_params=[],  # Required for Python 3.12+
         )
 
         # Fix missing locations for proper AST
@@ -122,21 +123,21 @@ class ASTBuilder:
         return class_def
 
     def create_field_definition(
-        self, field_name: str, field_schema: Dict[str, Any], is_required: bool = True
+        self, field_name: str, field_schema: Any, is_required: bool = True
     ) -> Optional[ast.AnnAssign]:
         """
         Create a field definition from schema.
 
         Args:
             field_name: Name of the field
-            field_schema: Schema for the field
+            field_schema: Schema for the field (expected dict but validated at runtime)
             is_required: Whether the field is required
 
         Returns:
             AST AnnAssign node for the field definition
         """
         if not isinstance(field_schema, dict):
-            logger.warning(
+            self.logger.warning(
                 f"Invalid field schema for {field_name}, skipping",
                 extra={
                     "field_name": field_name,
@@ -145,17 +146,8 @@ class ASTBuilder:
             )
             return None
 
-        # Get type annotation
+        # Get type annotation (get_type_annotation guarantees ast.expr return type)
         type_annotation = self.get_type_annotation(field_schema)
-
-        # Ensure type_annotation is an AST node
-        if not isinstance(type_annotation, ast.expr):
-            logger.error(
-                f"Type annotation is not an AST expr: {type(type_annotation)} for field {field_name}",
-                extra={"field_name": field_name, "type": str(type(type_annotation))},
-            )
-            # Fallback to Any
-            type_annotation = ast.Name(id="Any", ctx=ast.Load())
 
         # Wrap in Optional if not required
         if not is_required:
@@ -175,16 +167,17 @@ class ASTBuilder:
             target=target, annotation=type_annotation, value=field_call, simple=1
         )
 
-    def get_type_annotation(self, schema: Dict[str, Any]) -> ast.expr:
+    def get_type_annotation(self, schema: Any) -> ast.expr:
         """
         Get proper type annotation AST node from schema.
 
         Args:
-            schema: Schema to generate type annotation for
+            schema: Schema to generate type annotation for (expected dict but validated at runtime)
 
         Returns:
             AST expression node for the type annotation
         """
+        # Early return for non-dict schemas
         if not isinstance(schema, dict):
             return ast.Name(id="Any", ctx=ast.Load())
 
@@ -300,8 +293,8 @@ class ASTBuilder:
         Returns:
             AST Call node for Field() with appropriate arguments
         """
-        args = []
-        keywords = []
+        args: list[ast.expr] = []
+        keywords: list[ast.keyword] = []
 
         # Handle required/optional fields
         if is_required:
@@ -384,7 +377,7 @@ class ASTBuilder:
         Returns:
             AST Module node with imports and classes
         """
-        body = []
+        body: list[ast.stmt] = []
 
         # Add imports
         for module, names in sorted(imports.items()):

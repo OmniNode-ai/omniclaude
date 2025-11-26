@@ -53,10 +53,13 @@ from typing import Any, Dict, Optional
 
 
 # Import Pydantic Settings for type-safe configuration
+settings: Optional[Any] = None
 try:
-    from config import settings
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
-    settings = None
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +199,8 @@ class IntelligenceCache:
             cached_json = await self._client.get(cache_key)
             if cached_json:
                 logger.debug(f"Cache HIT: {operation_type} (key: {cache_key})")
-                return json.loads(cached_json)
+                result: Dict[str, Any] = json.loads(cached_json)
+                return result
             else:
                 logger.debug(f"Cache MISS: {operation_type} (key: {cache_key})")
                 return None

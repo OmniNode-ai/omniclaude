@@ -43,7 +43,7 @@ import logging
 import os
 import sys
 from pathlib import Path as PathLib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -511,7 +511,7 @@ class RoutingEventClient:
                 f"Routing completed (correlation_id: {correlation_id}, recommendations: {len(result.get('recommendations', []))})"
             )
 
-            return result.get("recommendations", [])
+            return cast(List[Dict[str, Any]], result.get("recommendations", []))
 
         except asyncio.TimeoutError as e:
             self.logger.warning(
@@ -610,7 +610,7 @@ class RoutingEventClient:
                 future, timeout=timeout_ms / 1000.0  # Convert to seconds
             )
 
-            return result
+            return cast(Dict[str, Any], result)
 
         finally:
             # Clean up pending request

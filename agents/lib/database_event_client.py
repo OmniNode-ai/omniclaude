@@ -44,7 +44,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path as PathLib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -396,7 +396,7 @@ class DatabaseEventClient:
                 f"Query completed (correlation_id: {correlation_id}, rows: {result.get('rows_affected', 0)})"
             )
 
-            return result.get("rows", [])
+            return cast(List[Dict[str, Any]], result.get("rows", []))
 
         except asyncio.TimeoutError:
             self.logger.warning(
@@ -853,7 +853,7 @@ class DatabaseEventClient:
                 future, timeout=timeout_ms / 1000.0  # Convert to seconds
             )
 
-            return result
+            return cast(Dict[str, Any], result)
 
         finally:
             # Clean up pending request

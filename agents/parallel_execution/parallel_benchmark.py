@@ -18,6 +18,7 @@ Setup:
 import asyncio
 import tempfile
 import time
+from typing import Any
 from uuid import uuid4
 
 from agents.lib.codegen_workflow import CodegenWorkflow
@@ -130,15 +131,15 @@ async def run_comprehensive_benchmark():
         {"num_nodes": 9, "workers": 3, "name": "Large (9 nodes)"},
     ]
 
-    results = []
+    results: list[dict[str, Any]] = []
 
     for config in configurations:
         print(f"\n\n{'=' * 60}")
         print(f"Configuration: {config['name']}")
         print(f"{'=' * 60}")
 
-        num_nodes = config["num_nodes"]
-        workers = config["workers"]
+        num_nodes: int = config["num_nodes"]  # type: ignore[assignment]
+        workers: int = config["workers"]  # type: ignore[assignment]
 
         # Sequential
         sequential_time = await benchmark_sequential_generation(num_nodes)
@@ -191,8 +192,9 @@ async def run_comprehensive_benchmark():
     print("=" * 60)
 
     target_speedup = 3.0
-    best_speedup = max(r["speedup"] for r in results)
-    avg_speedup = sum(r["speedup"] for r in results) / len(results)
+    speedups: list[float] = [float(r["speedup"]) for r in results]
+    best_speedup = max(speedups)
+    avg_speedup = sum(speedups) / len(speedups)
 
     print(f"Target Speedup:  {target_speedup:.1f}x")
     print(

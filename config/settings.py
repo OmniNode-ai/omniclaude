@@ -174,32 +174,32 @@ class Settings(BaseSettings):
     # Services provided by omniarchon repository (192.168.86.101)
     # Note: All URLs use HttpUrl validation for type safety
 
-    archon_intelligence_url: HttpUrl = Field(
+    archon_intelligence_url: str = Field(
         default="http://192.168.86.101:8053",
         description="Archon Intelligence API - Code quality, pattern discovery, RAG queries",
     )
 
-    archon_search_url: HttpUrl = Field(
+    archon_search_url: str = Field(
         default="http://192.168.86.101:8055",
         description="Archon Search API - Vector search, semantic search",
     )
 
-    archon_bridge_url: HttpUrl = Field(
+    archon_bridge_url: str = Field(
         default="http://192.168.86.101:8054",
         description="Archon Bridge API - Bridge services between systems",
     )
 
-    archon_mcp_url: HttpUrl = Field(
+    archon_mcp_url: str = Field(
         default="http://192.168.86.101:8051",
         description="Archon MCP Server - Model Context Protocol server",
     )
 
-    intelligence_service_url: Optional[HttpUrl] = Field(
+    intelligence_service_url: Optional[str] = Field(
         default=None,
         description="Legacy alias for intelligence service (backward compatibility)",
     )
 
-    main_server_url: HttpUrl = Field(
+    main_server_url: str = Field(
         default="http://192.168.86.101:8181",
         description="Archon Main Server (if different from intelligence)",
     )
@@ -424,7 +424,7 @@ class Settings(BaseSettings):
         default=6333, ge=1, le=65535, description="Qdrant server port"
     )
 
-    qdrant_url: HttpUrl = Field(
+    qdrant_url: str = Field(
         default="http://localhost:6333",
         description="Qdrant full URL (derived from host:port)",
     )
@@ -1372,8 +1372,14 @@ def _send_config_error_notification(errors: list[str]) -> None:
 
             # Send synchronously (no event loop during initialization)
             try:
+                # Guard against None webhook_url (should not happen if is_enabled() returned True)
+                webhook_url = notifier.webhook_url
+                if webhook_url is None:
+                    logger.debug("Webhook URL is None, skipping notification")
+                    return
+
                 response = httpx.post(
-                    notifier.webhook_url,
+                    webhook_url,
                     json=payload,
                     timeout=10.0,
                 )

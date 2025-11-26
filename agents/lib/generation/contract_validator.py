@@ -194,7 +194,8 @@ class ContractValidator:
                 )
 
             except ValidationError as e:
-                result.errors = e.errors()
+                # Convert ErrorDetails to dicts for storage
+                result.errors = [dict(err) for err in e.errors()]
                 result.schema_compliance = False
                 self.logger.error(
                     f"Contract validation failed for {node_type}: {e.error_count()} errors"
@@ -463,7 +464,7 @@ class ContractValidator:
         Returns:
             Dict mapping contract names to validation results
         """
-        results = {}
+        results: Dict[str, ValidationResult] = {}
 
         for contract_data in contracts:
             contract_yaml = contract_data["yaml"]

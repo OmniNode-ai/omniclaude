@@ -52,9 +52,9 @@ class AgentSelection:
     method: SelectionMethod = SelectionMethod.NONE
     reasoning: str = ""
     latency_ms: float = 0.0
-    alternatives: List[str] = None
+    alternatives: Optional[List[str]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.alternatives is None:
             self.alternatives = []
 
@@ -149,11 +149,14 @@ class HybridAgentSelector:
         """Load configuration from settings and config file."""
         # Use Pydantic Settings for base configuration
         # Note: These settings use environment variables automatically
-        config = {
-            "enable_ai": settings.enable_ai_agent_selection,
-            "confidence_threshold": settings.ai_agent_confidence_threshold,
-            "model_preference": settings.ai_model_preference,
-            "timeout_ms": settings.ai_selection_timeout_ms,
+        # Provide defaults if settings attributes are not defined
+        config: Dict[str, Any] = {
+            "enable_ai": getattr(settings, "enable_ai_agent_selection", True),
+            "confidence_threshold": getattr(
+                settings, "ai_agent_confidence_threshold", 0.8
+            ),
+            "model_preference": getattr(settings, "ai_model_preference", "auto"),
+            "timeout_ms": getattr(settings, "ai_selection_timeout_ms", 500),
         }
 
         # Try to load from config file for additional overrides

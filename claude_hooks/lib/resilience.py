@@ -126,7 +126,7 @@ class ResilientExecutor:
                 file=sys.stderr,
             )
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> Dict[str, Any]:
         """Get executor statistics"""
         return {
             "total_tasks": self._task_count,
@@ -655,7 +655,7 @@ class Phase4HealthChecker:
 
     def __init__(
         self,
-        base_url: str = None,
+        base_url: Optional[str] = None,
         check_interval: int = 30,
         timeout: float = 1.0,
     ):
@@ -672,7 +672,7 @@ class Phase4HealthChecker:
         self.timeout = timeout
 
         self.is_healthy = False
-        self.last_check = 0
+        self.last_check: float = 0.0
         self.last_health_data: Optional[Dict] = None
         self.consecutive_failures = 0
         self.consecutive_successes = 0
@@ -816,7 +816,7 @@ class ResilientAPIClient:
 
     def __init__(
         self,
-        base_url: str = None,
+        base_url: Optional[str] = None,
         enable_caching: bool = True,
         enable_circuit_breaker: bool = True,
     ):
@@ -836,11 +836,13 @@ class ResilientAPIClient:
         self.executor = ResilientExecutor()
         self.health_checker = Phase4HealthChecker(base_url=base_url)
 
+        self.circuit_breaker: Optional[CircuitBreaker]
         if enable_circuit_breaker:
             self.circuit_breaker = CircuitBreaker(failure_threshold=3, timeout=60)
         else:
             self.circuit_breaker = None
 
+        self.cache: Optional[PatternCache]
         if enable_caching:
             self.cache = PatternCache()
         else:
@@ -879,7 +881,8 @@ class ResilientAPIClient:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
             response.raise_for_status()
-            return response.json()
+            result: Dict[Any, Any] = response.json()
+            return result
 
     async def track_pattern_resilient(
         self,

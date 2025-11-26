@@ -240,7 +240,8 @@ class AgentDetector:
                 if not config or not isinstance(config, dict):
                     return None
 
-                return config
+                result: Dict[str, Any] = config
+                return result
         except Exception as e:
             print(f"Error loading agent config: {e}", file=sys.stderr)
             return None

@@ -168,7 +168,7 @@ def validate_event_envelope(envelope: Dict[str, Any]) -> ValidationResult:
     return result
 
 
-def validate_uuid_field(value: str, field_name: str) -> ValidationResult:
+def validate_uuid_field(value: Any, field_name: str) -> ValidationResult:
     """
     Validate that a field value is a valid UUID string.
 
@@ -200,7 +200,7 @@ def validate_uuid_field(value: str, field_name: str) -> ValidationResult:
     return result
 
 
-def validate_timestamp_field(timestamp: str) -> ValidationResult:
+def validate_timestamp_field(timestamp: Any) -> ValidationResult:
     """
     Validate timestamp is in valid ISO 8601 format.
 
@@ -240,7 +240,7 @@ def validate_timestamp_field(timestamp: str) -> ValidationResult:
     return result
 
 
-def validate_event_naming(event_type: str, strict: bool = True) -> ValidationResult:
+def validate_event_naming(event_type: Any, strict: bool = True) -> ValidationResult:
     """
     Validate event type follows naming convention.
 
@@ -320,7 +320,7 @@ def validate_event_naming(event_type: str, strict: bool = True) -> ValidationRes
     return result
 
 
-def validate_schema_reference(schema_ref: str) -> ValidationResult:
+def validate_schema_reference(schema_ref: Any) -> ValidationResult:
     """
     Validate schema reference format.
 
@@ -509,8 +509,8 @@ def validate_full_event(
 
 def validate_event_batch(
     envelopes: List[Dict[str, Any]],
-    **validation_options,
-) -> Dict[str, ValidationResult]:
+    **validation_options: Any,
+) -> Dict[int, ValidationResult]:
     """
     Validate a batch of events.
 

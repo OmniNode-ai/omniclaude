@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from omnibase_core.errors import OnexError
@@ -28,16 +28,16 @@ from .version_config import get_config
 
 # Optional confluent fallback
 try:
-    from .kafka_confluent_client import ConfluentKafkaClient  # type: ignore
+    from .kafka_confluent_client import ConfluentKafkaClient
 except Exception:  # pragma: no cover
-    ConfluentKafkaClient = None  # type: ignore
+    ConfluentKafkaClient = None  # type: ignore[misc,assignment]
 
 # Optional event optimizer
 try:
-    from .event_optimizer import EventOptimizer, OptimizerConfig  # type: ignore
+    from .event_optimizer import EventOptimizer, OptimizerConfig
 except Exception:  # pragma: no cover
-    EventOptimizer = None  # type: ignore
-    OptimizerConfig = None  # type: ignore
+    EventOptimizer = None  # type: ignore[misc,assignment]
+    OptimizerConfig = None  # type: ignore[misc,assignment]
 
 
 class KafkaCodegenClient:
@@ -207,14 +207,16 @@ class KafkaCodegenClient:
         for event in events:
             await self.publish(event)
 
-    async def consume(self, topic: str) -> AsyncIterator[dict]:
+    async def consume(self, topic: str) -> AsyncIterator[Dict[Any, Any]]:
         try:
             await self.start_consumer(topic)
             if self._consumer is None:
                 raise RuntimeError("Failed to start Kafka consumer - consumer is None")
-            async for msg in self._consumer:
+            consumer = self._consumer  # Local reference for type narrowing
+            async for msg in consumer:
                 try:
-                    yield json.loads(msg.value.decode("utf-8"))
+                    result: Dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
+                    yield result
                 except Exception as e:  # noqa: S112
                     # Skip malformed messages
                     self.logger.debug(f"Skipping malformed message: {e}")
@@ -235,17 +237,18 @@ class KafkaCodegenClient:
 
     async def consume_until(
         self, topic: str, predicate, timeout_seconds: float = 30.0
-    ) -> Optional[dict]:
+    ) -> Optional[Dict[Any, Any]]:
         """Consume messages until predicate(payload) is True or timeout expires."""
         try:
             await self.start_consumer(topic)
             if self._consumer is None:
                 raise RuntimeError("Failed to start Kafka consumer - consumer is None")
+            consumer = self._consumer  # Local reference for type narrowing
 
-            async def _wait():
-                async for msg in self._consumer:
+            async def _wait() -> Optional[Dict[Any, Any]]:
+                async for msg in consumer:
                     try:
-                        payload = json.loads(msg.value.decode("utf-8"))
+                        payload: Dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
                     except Exception as e:  # noqa: S112
                         self.logger.debug(f"Skipping malformed message: {e}")
                         continue
@@ -268,5 +271,6 @@ class KafkaCodegenClient:
             while asyncio.get_event_loop().time() < end:
                 payload = client.consume_one(topic, timeout_sec=1.0)
                 if payload and predicate(payload):
-                    return payload
+                    result: Dict[Any, Any] = payload
+                    return result
             return None

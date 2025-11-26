@@ -27,7 +27,7 @@ from agents.lib.circuit_breaker import (
 from agents.lib.context_optimizer import ContextOptimizer
 from agents.lib.input_validator import InputValidator
 from agents.lib.performance_monitor import PerformanceMonitor
-from agents.lib.performance_optimization import PerformanceOptimizer
+from agents.lib.performance_optimization import BatchOperation, PerformanceOptimizer
 from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
 from agents.parallel_execution.context_manager import ContextManager
 from agents.parallel_execution.quorum_validator import QuorumValidator
@@ -178,9 +178,12 @@ class PerformanceBenchmark:
 
         # Test batch operation
         start_time = time.time()
-        await self.performance_optimizer.batch_write_with_pooling(
-            data=test_data, operation_type="INSERT", table_name="benchmark_test"
+        batch_op = BatchOperation(
+            operation_type="insert",
+            table_name="benchmark_test",
+            data=test_data,
         )
+        await self.performance_optimizer.batch_write_with_pooling([batch_op])
         batch_duration = time.time() - start_time
 
         # Test individual operations (simulated)
@@ -421,18 +424,34 @@ class PerformanceBenchmark:
         # Test validation performance
         start_time = time.time()
 
-        validation_results = []
+        validation_results: List[Dict[str, Any]] = []
         for test_input in test_inputs:
+            user_prompt_str = str(test_input["user_prompt"])
+            tasks_data_dict = test_input["tasks_data"]
             result = await self.input_validator.validate_and_sanitize(
-                user_prompt=test_input["user_prompt"],
-                tasks_data=test_input["tasks_data"],
+                user_prompt=user_prompt_str,
+                tasks_data=(
+                    tasks_data_dict if isinstance(tasks_data_dict, dict) else None
+                ),
             )
-            validation_results.append(result)
+            # validate_and_sanitize returns Dict[str, Any] when called with user_prompt/tasks_data
+            if isinstance(result, dict):
+                validation_results.append(result)
+            else:
+                # Handle ValidationResult case
+                validation_results.append(
+                    {
+                        "is_valid": result.is_valid,
+                        "errors": result.errors if hasattr(result, "errors") else [],
+                    }
+                )
 
         validation_duration = time.time() - start_time
 
         # Calculate statistics
-        valid_count = sum(1 for result in validation_results if result["is_valid"])
+        valid_count = sum(
+            1 for result in validation_results if result.get("is_valid", False)
+        )
         invalid_count = len(validation_results) - valid_count
 
         return {

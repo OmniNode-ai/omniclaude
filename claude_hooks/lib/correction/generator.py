@@ -43,7 +43,7 @@ class CorrectionGenerator:
         self.intelligence_client = ArchonIntelligence(
             archon_url=archon_url, timeout=timeout
         )
-        self._cache = {}  # Cache RAG results during session
+        self._cache: Dict[str, Dict[str, Any]] = {}  # Cache RAG results during session
 
     async def generate_corrections(
         self, violations: List[Violation], content: str, file_path: str, language: str
@@ -145,7 +145,8 @@ class CorrectionGenerator:
         # Check cache first
         cache_key = f"{language}:{violation_type}:{violation_name}"
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            cached: Dict[str, Any] = self._cache[cache_key]
+            return cached
 
         # Build intelligent query for RAG
 
@@ -157,8 +158,10 @@ class CorrectionGenerator:
         }
 
         try:
-            result = await self.intelligence_client.gather_domain_standards(
-                agent_type="naming_correction", task_context=task_context
+            result: Dict[str, Any] = (
+                await self.intelligence_client.gather_domain_standards(
+                    agent_type="naming_correction", task_context=task_context
+                )
             )
 
             # Cache the result
@@ -193,9 +196,9 @@ class CorrectionGenerator:
                 # Look for examples in the first result
                 content = results[0].get("content", {})
                 examples = content.get("examples", [])
-                if examples and isinstance(examples, list):
+                if examples and isinstance(examples, list) and len(examples) > 0:
                     # Use first example as template
-                    return examples[0]
+                    return str(examples[0])
 
         # Fallback: Apply basic transformation based on violation type
         return self._apply_basic_transformation(violation)
@@ -212,16 +215,17 @@ class CorrectionGenerator:
         """
         name = violation.name
 
-        transformations = {
+        transformations: Dict[str, Any] = {
             "function": self._to_snake_case,
             "variable": self._to_snake_case,
             "class": self._to_pascal_case,
             "constant": self._to_upper_snake_case,
-            "interface": lambda n: f"I{self._to_pascal_case(n.lstrip('I'))}",
+            "interface": lambda n: f"I{CorrectionGenerator._to_pascal_case(n.lstrip('I'))}",
         }
 
         transform_func = transformations.get(violation.type, lambda x: x)
-        return transform_func(name)
+        result: str = transform_func(name)
+        return result
 
     def _generate_explanation(
         self, violation: Violation, rag_result: Dict[str, Any]
@@ -243,7 +247,7 @@ class CorrectionGenerator:
                 content = results[0].get("content", {})
                 description = content.get("description", "")
                 if description:
-                    return description
+                    return str(description)
 
         # Fallback to violation rule
         explanation = violation.rule

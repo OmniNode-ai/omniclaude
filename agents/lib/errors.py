@@ -8,6 +8,7 @@ for production deployment.
 """
 
 from enum import Enum
+from typing import Any, Dict, Optional
 
 
 class EnumCoreErrorCode(str, Enum):
@@ -46,7 +47,12 @@ class OnexError(Exception):
         context: Nested context structure for compatibility
     """
 
-    def __init__(self, code: EnumCoreErrorCode, message: str, details: dict = None):
+    def __init__(
+        self,
+        code: EnumCoreErrorCode,
+        message: str,
+        details: Optional[Dict[Any, Any]] = None,
+    ):
         """
         Initialize ONEX error.
 
@@ -78,7 +84,10 @@ class ModelOnexError(OnexError):
     """
 
     def __init__(
-        self, error_code: EnumCoreErrorCode, message: str, context: dict = None
+        self,
+        error_code: EnumCoreErrorCode,
+        message: str,
+        context: Optional[Dict[Any, Any]] = None,
     ):
         """
         Initialize model-specific ONEX error.

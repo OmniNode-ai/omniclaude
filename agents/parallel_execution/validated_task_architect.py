@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .quorum_validator import QuorumValidator, ValidationDecision
 
@@ -70,7 +70,7 @@ class ValidatedTaskArchitect:
     async def breakdown_tasks_with_validation(
         self,
         user_prompt: str,
-        global_context: Dict[str, Any] = None,
+        global_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Break down tasks with validation and retry
 
@@ -203,7 +203,7 @@ class ValidatedTaskArchitect:
     async def _generate_breakdown(
         self,
         user_prompt: str,
-        global_context: Dict[str, Any] = None,
+        global_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate task breakdown by calling task_architect.py
 
@@ -216,7 +216,7 @@ class ValidatedTaskArchitect:
         """
 
         # Prepare input for task_architect
-        input_data = {"prompt": user_prompt}
+        input_data: Dict[str, Any] = {"prompt": user_prompt}
         if global_context:
             input_data["global_context"] = global_context
 
@@ -279,7 +279,7 @@ class ValidatedTaskArchitect:
 
             # Parse output
             try:
-                output = json.loads(result.stdout)
+                output: Dict[str, Any] = json.loads(result.stdout)
                 return output
             except json.JSONDecodeError as e:
                 print(f"⚠️  Failed to parse task_architect output: {e}")
@@ -324,7 +324,7 @@ class ValidatedTaskArchitect:
         self,
         task_breakdown: Dict[str, Any],
         user_prompt: str,
-        global_context: Dict[str, Any] = None,
+        global_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Add final validation task using agent-workflow-coordinator
 

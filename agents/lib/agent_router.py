@@ -25,7 +25,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import yaml
 
@@ -258,7 +258,7 @@ class AgentRouter:
                     cache_hit=True,
                 )
 
-                return cached
+                return cast(List[AgentRecommendation], cached)
 
             self.routing_stats["cache_misses"] += 1
 
@@ -519,7 +519,7 @@ class AgentRouter:
         Returns:
             Dictionary with cache performance metrics
         """
-        cache_stats = self.cache.stats()
+        cache_stats: Dict[str, Any] = self.cache.stats()
         cache_stats["cache_hit_rate"] = (
             self.routing_stats["cache_hits"] / self.routing_stats["total_routes"]
             if self.routing_stats["total_routes"] > 0
@@ -534,7 +534,7 @@ class AgentRouter:
         Returns:
             Dictionary with routing performance metrics
         """
-        stats = self.routing_stats.copy()
+        stats: Dict[str, Any] = dict(self.routing_stats)
 
         # Calculate rates
         total = stats["total_routes"]

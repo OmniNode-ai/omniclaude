@@ -288,15 +288,15 @@ class MixinLearner:
         gb_pred = gb_model.predict(X_test)
 
         # Ensemble prediction: use RF for primary, GB to break ties or boost confidence
-        y_pred = []
+        y_pred_list: List[int] = []
         for i in range(len(X_test)):
             if rf_pred[i] == gb_pred[i]:
-                y_pred.append(rf_pred[i])
+                y_pred_list.append(int(rf_pred[i]))
             else:
                 # When models disagree, use RF probability
                 rf_proba = rf_model.predict_proba(X_test[i : i + 1])[0]
-                y_pred.append(1 if rf_proba[1] > 0.6 else 0)
-        y_pred = np.array(y_pred)
+                y_pred_list.append(1 if rf_proba[1] > 0.6 else 0)
+        y_pred = np.array(y_pred_list)
 
         rf_model.predict_proba(X_test)
 
@@ -352,6 +352,8 @@ class MixinLearner:
             List of compatibility records with features
         """
         pool = await self.persistence._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -444,6 +446,8 @@ class MixinLearner:
         """
         try:
             pool = await self.persistence._ensure_pool()
+            if pool is None:
+                return None
             async with pool.acquire() as conn:
                 # Try both orderings
                 row = await conn.fetchrow(
@@ -508,7 +512,12 @@ class MixinLearner:
             raise ValueError("Model not trained. Call train_model() first.")
 
         # Create canonical cache key (alphabetically sorted)
-        cache_key = tuple(sorted([mixin_a, mixin_b]) + [node_type])
+        sorted_mixins = sorted([mixin_a, mixin_b])
+        cache_key: Tuple[str, str, str] = (
+            sorted_mixins[0],
+            sorted_mixins[1],
+            node_type,
+        )
 
         # Check prediction cache first (fastest path)
         if cache_key in self._prediction_cache:

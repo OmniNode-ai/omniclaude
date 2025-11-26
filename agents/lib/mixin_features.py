@@ -9,7 +9,7 @@ Author: OmniClaude Autonomous Code Generation System
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -59,17 +59,9 @@ class MixinCharacteristics:
     async_safe: bool = True
     state_modifying: bool = False
     resource_intensive: bool = False
-    external_dependencies: List[str] = None
-    lifecycle_hooks: List[str] = None
-    compatibility_tags: Set[str] = None
-
-    def __post_init__(self):
-        if self.external_dependencies is None:
-            self.external_dependencies = []
-        if self.lifecycle_hooks is None:
-            self.lifecycle_hooks = []
-        if self.compatibility_tags is None:
-            self.compatibility_tags = set()
+    external_dependencies: List[str] = field(default_factory=list)
+    lifecycle_hooks: List[str] = field(default_factory=list)
+    compatibility_tags: Set[str] = field(default_factory=set)
 
 
 class MixinFeatureExtractor:

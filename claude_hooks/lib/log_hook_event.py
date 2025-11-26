@@ -226,7 +226,7 @@ async def log_hook_invocation(
         await publisher.start()
 
         try:
-            return await publisher.publish_application_log(
+            result = await publisher.publish_application_log(
                 service_name="omniclaude-hooks",
                 instance_id=os.environ.get("HOSTNAME", "local"),
                 level=LogLevel.INFO,
@@ -236,6 +236,7 @@ async def log_hook_invocation(
                 context=log_context,
                 correlation_id=correlation_id,
             )
+            return bool(result)
         finally:
             await publisher.stop()
 
@@ -307,7 +308,7 @@ async def log_routing_decision(
         await publisher.start()
 
         try:
-            return await publisher.publish_application_log(
+            result = await publisher.publish_application_log(
                 service_name="omniclaude-hooks",
                 instance_id=os.environ.get("HOSTNAME", "local"),
                 level=LogLevel.INFO,
@@ -317,6 +318,7 @@ async def log_routing_decision(
                 context=log_context,
                 correlation_id=correlation_id,
             )
+            return bool(result)
         finally:
             await publisher.stop()
 
@@ -373,7 +375,7 @@ async def log_hook_error(
         await publisher.start()
 
         try:
-            return await publisher.publish_application_log(
+            result = await publisher.publish_application_log(
                 service_name="omniclaude-hooks",
                 instance_id=os.environ.get("HOSTNAME", "local"),
                 level=LogLevel.ERROR,
@@ -383,6 +385,7 @@ async def log_hook_error(
                 context=log_context,
                 correlation_id=correlation_id,
             )
+            return bool(result)
         finally:
             await publisher.stop()
 

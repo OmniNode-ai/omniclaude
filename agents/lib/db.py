@@ -6,7 +6,7 @@ import asyncpg
 
 try:
     # Load variables from .env if present
-    from dotenv import load_dotenv  # type: ignore
+    from dotenv import load_dotenv
 
     load_dotenv()
 except Exception:
@@ -112,4 +112,5 @@ async def execute_command(query: str, *args) -> str:
         return ""
 
     async with pool.acquire() as conn:
-        return await conn.execute(query, *args)
+        result = await conn.execute(query, *args)
+        return str(result) if result else ""

@@ -65,8 +65,8 @@ class TransformationEventType(str, Enum):
 
 
 # Lazy-loaded Kafka producer (singleton)
-_kafka_producer = None
-_producer_lock = None
+_kafka_producer: Optional[Any] = None
+_producer_lock: Optional[asyncio.Lock] = None
 
 
 def _get_kafka_bootstrap_servers() -> str:
@@ -149,9 +149,9 @@ async def _get_kafka_producer():
 
     # Get the lock (created lazily under running event loop)
     async with await get_producer_lock():
-        # Double-check after acquiring lock
+        # Double-check after acquiring lock (another coroutine may have created it)
         if _kafka_producer is not None:
-            return _kafka_producer
+            return _kafka_producer  # type: ignore[unreachable]
 
         try:
             from aiokafka import AIOKafkaProducer

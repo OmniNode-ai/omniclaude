@@ -32,6 +32,10 @@ class ManifestCacheUtilitiesMixin:
     - log_cache_metrics(): Log current cache metrics for monitoring
     """
 
+    # Declare expected attributes from parent class (for type checking)
+    _cache: Optional["ManifestCache"]
+    enable_cache: bool
+
     def get_cache_metrics(self, query_type: Optional[str] = None) -> Dict[str, Any]:
         """
         Get cache performance metrics.

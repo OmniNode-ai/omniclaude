@@ -189,7 +189,7 @@ class ToolSelectionIntelligence:
         Returns:
             Context information dictionary
         """
-        context = {}
+        context: Dict[str, Any] = {}
 
         # File-related tools need file context
         if tool_name in ("Write", "Edit", "Read", "NotebookEdit"):
@@ -457,7 +457,7 @@ if __name__ == "__main__":
     temp_test_file.close()
 
     # Test cases
-    test_cases = [
+    test_cases: List[Dict[str, Any]] = [
         {
             "name": "Write (new file)",
             "tool_name": "Write",
@@ -501,9 +501,14 @@ if __name__ == "__main__":
         )
 
         # Generate enhanced metadata
+        tool_name_str: str = str(test_case["tool_name"])
+        tool_input_val = test_case["tool_input"]
+        tool_input_dict: Dict[str, Any] = (
+            tool_input_val if isinstance(tool_input_val, dict) else {}
+        )
         metadata = create_enhanced_metadata(
-            tool_name=test_case["tool_name"],
-            tool_input=test_case["tool_input"],
+            tool_name=tool_name_str,
+            tool_input=tool_input_dict,
             quality_checks=quality_checks,
         )
 

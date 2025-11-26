@@ -372,7 +372,7 @@ def main():
 
     if not args.agent_name:
         parser.error("agent_name is required unless using --list")
-        return
+        # parser.error() raises SystemExit, this line is never reached
 
     try:
         transformation_prompt = transformer.transform(args.agent_name)

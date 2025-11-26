@@ -6,6 +6,7 @@ Simple Performance Test - Validates core optimizations without import conflicts.
 import hashlib
 import time
 import uuid
+from typing import Dict
 
 import requests
 
@@ -34,7 +35,7 @@ def test_basic_performance():
     uncached_time = time.time() - start_time
 
     # With caching simulation
-    pattern_id_cache = {}
+    pattern_id_cache: Dict[str, str] = {}
     start_time = time.time()
     for i in range(iterations):
         file_path = test_context["file_path"]
@@ -95,7 +96,11 @@ def test_basic_performance():
             self.base_url = str(settings.archon_intelligence_url)
             self.timeout = 5
             self._pattern_id_cache = {}
-            self._metrics = {"total_requests": 0, "cache_hits": 0, "total_time": 0}
+            self._metrics: Dict[str, float] = {
+                "total_requests": 0,
+                "cache_hits": 0,
+                "total_time": 0.0,
+            }
             self._session = requests.Session()
 
         def _generate_pattern_id_cached(self, code, context):

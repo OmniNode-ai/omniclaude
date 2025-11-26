@@ -545,7 +545,7 @@ class TraceLogger:
             reverse=True,
         )
 
-        results = []
+        results: List[TraceEvent] = []
         for routing_file in routing_files:
             if len(results) >= limit:
                 break
@@ -626,8 +626,8 @@ class TraceLogger:
             }
 
         # Collect statistics
-        agents_selected = {}
-        confidence_scores = []
+        agents_selected: Dict[str, int] = {}
+        confidence_scores: List[float] = []
         confidence_distribution = {
             "0.0-0.3": 0,
             "0.3-0.5": 0,
@@ -635,7 +635,7 @@ class TraceLogger:
             "0.7-0.9": 0,
             "0.9-1.0": 0,
         }
-        routing_strategies = {}
+        routing_strategies: Dict[str, int] = {}
         low_confidence_count = 0
 
         for event in all_decisions:

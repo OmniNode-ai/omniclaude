@@ -726,6 +726,7 @@ class HealthChecker:
                         error=str(check),
                     )
                 else:
+                    assert not isinstance(check, BaseException)
                     results[component] = check
                     self.last_checks[component] = check
 

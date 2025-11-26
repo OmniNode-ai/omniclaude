@@ -63,6 +63,7 @@ class PRDAnalyzer:
             enable_ml_recommendations: Whether to use ML-powered mixin recommendations
         """
         self.logger = logging.getLogger(__name__)
+        self.mixin_manager: Optional["MixinCompatibilityManager"] = None
 
         # Framework: Initialize ML-powered mixin compatibility manager
         self.enable_ml = enable_ml_recommendations and ML_AVAILABLE
@@ -76,8 +77,6 @@ class PRDAnalyzer:
                 )
                 self.enable_ml = False
                 self.mixin_manager = None
-        else:
-            self.mixin_manager = None
 
     async def analyze_prd(
         self, prd_content: str, workspace_context: Optional[Dict[str, Any]] = None
@@ -657,8 +656,8 @@ class PRDAnalysisResult:
     external_systems: List[str]
     quality_baseline: float
     confidence_score: float
-    analysis_timestamp: datetime = None
+    analysis_timestamp: Optional[datetime] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.analysis_timestamp is None:
             self.analysis_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)

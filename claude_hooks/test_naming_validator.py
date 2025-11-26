@@ -43,6 +43,7 @@ class TaskData(BaseModel):
         model_violations = [v for v in violations if v.violation_type == "class"]
         assert len(model_violations) == 1
         assert "Model" in model_violations[0].message
+        assert model_violations[0].suggestion is not None
         assert "ModelTaskData" in model_violations[0].suggestion
 
     def test_multiple_model_classes(self):
@@ -102,6 +103,7 @@ class TaskStatus(str, Enum):
         enum_violations = [v for v in violations if v.violation_type == "class"]
         assert len(enum_violations) == 1
         assert "Enum" in enum_violations[0].message
+        assert enum_violations[0].suggestion is not None
         assert "EnumTaskStatus" in enum_violations[0].suggestion
 
     def test_enum_members_upper_snake_case(self):
@@ -830,6 +832,7 @@ class User(BaseModel):
         class_violations = [v for v in violations if v.violation_type == "class"]
         assert len(class_violations) == 1
         assert "Model" in class_violations[0].message
+        assert class_violations[0].suggestion is not None
         assert "ModelUser" in class_violations[0].suggestion
 
     def test_auto_detection_archon_path(self):

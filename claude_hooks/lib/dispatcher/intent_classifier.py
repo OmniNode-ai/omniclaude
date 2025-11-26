@@ -12,7 +12,7 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 
 @dataclass
@@ -188,7 +188,7 @@ class IntentClassifier:
         # Factor 1: Tool name pattern matching
         for intent, pattern in self.INTENT_PATTERNS.items():
             score = self._score_tool_name(tool_name, pattern)
-            scores[intent] = score * pattern["weight"]
+            scores[intent] = score * float(cast(Any, pattern["weight"]))
 
         # Factor 2: File path analysis
         if file_path:
@@ -210,7 +210,7 @@ class IntentClassifier:
             normalized_scores = {"file_modification": 0.5}  # Default fallback
 
         # Get primary intent
-        primary_intent = max(normalized_scores, key=normalized_scores.get)
+        primary_intent = max(normalized_scores, key=lambda k: normalized_scores[k])
         confidence = normalized_scores[primary_intent]
 
         # Get secondary intents (score >= 0.5)
@@ -226,9 +226,9 @@ class IntentClassifier:
         return IntentContext(
             primary_intent=primary_intent,
             confidence=confidence,
-            suggested_agents=pattern["agents"],
-            validators=pattern["validators"],
-            onex_rules=pattern["onex_rules"],
+            suggested_agents=cast(List[str], pattern["agents"]),
+            validators=cast(List[str], pattern["validators"]),
+            onex_rules=cast(List[str], pattern["onex_rules"]),
             secondary_intents=secondary_intents,
             metadata={
                 "tool_name": tool_name,
@@ -349,9 +349,9 @@ class IntentClassifier:
         """Extract content from tool arguments."""
         # Handle different tool argument structures
         if "content" in arguments:
-            return arguments["content"]
+            return str(arguments["content"])
         elif "new_string" in arguments:
-            return arguments["new_string"]
+            return str(arguments["new_string"])
         elif "edits" in arguments:
             # MultiEdit case
             return "\n".join(

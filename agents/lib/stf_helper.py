@@ -198,7 +198,7 @@ class STFHelper:
                 logger.warning(f"STF search failed: {result}")
                 return []
 
-            search_results = result.get("search_results", [])
+            search_results: List[Dict[str, Any]] = result.get("search_results", [])
             logger.info(
                 f"Query found {len(search_results)} STFs for signature='{problem_signature}' "
                 f"category='{problem_category}' min_quality={min_quality}"
@@ -255,7 +255,7 @@ class STFHelper:
                 logger.warning(f"STF retrieve failed for id={stf_id}: {result}")
                 return None
 
-            stf_data = result.get("stf_data")
+            stf_data: Optional[Dict[str, Any]] = result.get("stf_data")
             logger.info(f"Retrieved STF: {stf_id}")
 
             return stf_data
@@ -356,7 +356,7 @@ class STFHelper:
                 logger.error(f"STF storage failed: {store_result}")
                 return None
 
-            stf_id = store_result["stf_id"]
+            stf_id: Optional[str] = store_result["stf_id"]
             is_duplicate = store_result.get("duplicate", False)
 
             if is_duplicate:
@@ -469,7 +469,7 @@ class STFHelper:
                 logger.warning(f"Top STFs query failed: {result}")
                 return []
 
-            search_results = result.get("search_results", [])
+            search_results: List[Dict[str, Any]] = result.get("search_results", [])
             logger.info(
                 f"Retrieved {len(search_results)} top STFs for category '{problem_category}'"
             )

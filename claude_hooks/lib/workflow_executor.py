@@ -17,7 +17,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 # Add project root to path for config import
@@ -75,7 +75,7 @@ class WorkflowExecutor:
         self.correlation_id = correlation_id
         self.workspace = workspace or str(Path.cwd())
         self.db_logging = db_logging
-        self.execution_trace = []
+        self.execution_trace: List[Dict[str, Any]] = []
 
     async def execute_workflow(
         self, user_prompt: str, agent_context: Optional[Dict[str, Any]] = None
@@ -406,14 +406,18 @@ class WorkflowExecutor:
     async def _aggregate_results(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Aggregate results from parallel execution."""
 
-        aggregated = {
+        generated_code: Dict[str, Any] = {}
+        quality_metrics: Dict[str, float] = {}
+        outputs: Dict[str, Any] = {}
+
+        aggregated: Dict[str, Any] = {
             "workflow_status": "completed",
             "total_tasks": len(results),
             "successful_tasks": sum(1 for r in results.values() if r.success),
             "failed_tasks": sum(1 for r in results.values() if not r.success),
-            "outputs": {},
-            "quality_metrics": {},
-            "generated_code": {},
+            "outputs": outputs,
+            "quality_metrics": quality_metrics,
+            "generated_code": generated_code,
         }
 
         for task_id, result in results.items():
@@ -422,27 +426,21 @@ class WorkflowExecutor:
 
                 # Collect generated code
                 if "generated_code" in output_data:
-                    aggregated["generated_code"][task_id] = output_data[
-                        "generated_code"
-                    ]
+                    generated_code[task_id] = output_data["generated_code"]
 
                 # Collect quality metrics
                 if "quality_score" in output_data:
-                    aggregated["quality_metrics"][task_id] = output_data[
-                        "quality_score"
-                    ]
+                    quality_metrics[task_id] = output_data["quality_score"]
 
-                aggregated["outputs"][task_id] = {
+                outputs[task_id] = {
                     "agent": result.agent_name,
                     "execution_time_ms": result.execution_time_ms,
                     "summary": output_data,
                 }
 
         # Calculate overall quality
-        if aggregated["quality_metrics"]:
-            avg_quality = sum(aggregated["quality_metrics"].values()) / len(
-                aggregated["quality_metrics"]
-            )
+        if quality_metrics:
+            avg_quality = sum(quality_metrics.values()) / len(quality_metrics)
             aggregated["average_quality_score"] = avg_quality
         else:
             aggregated["average_quality_score"] = 0.0

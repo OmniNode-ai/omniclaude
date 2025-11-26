@@ -2415,7 +2415,7 @@ class ManifestInjector:
 
         def _blocking_query():
             """Blocking Docker operations."""
-            import docker  # type: ignore[import-untyped]
+            import docker
 
             client = docker.from_env()
             containers = client.containers.list()

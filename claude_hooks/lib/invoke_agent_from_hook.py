@@ -19,7 +19,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 # Add hooks lib to path
@@ -46,7 +46,7 @@ async def process_agent_invocation(
     correlation_id: str,
     session_id: str,
     context: Dict[str, Any],
-    detected_agent: str = None,
+    detected_agent: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Process agent invocation from hook.

@@ -36,7 +36,8 @@ def load_agent_yaml(agent_name: str) -> Optional[Dict[str, Any]]:
         if config_path.exists():
             try:
                 with open(config_path, "r") as f:
-                    return yaml.safe_load(f)
+                    config: Dict[str, Any] = yaml.safe_load(f)
+                    return config
             except Exception as e:
                 print(f"ERROR: Failed to load {config_path}: {e}")
                 continue

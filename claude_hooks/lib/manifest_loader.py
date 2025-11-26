@@ -19,10 +19,13 @@ Architecture:
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 
-def load_manifest(correlation_id: str = None, agent_name: str = None):
+def load_manifest(
+    correlation_id: Optional[str] = None, agent_name: Optional[str] = None
+) -> str:
     """
     Load and return dynamic system manifest.
 
@@ -65,7 +68,7 @@ def load_manifest(correlation_id: str = None, agent_name: str = None):
         # Call inject_manifest with correlation_id and agent_name (new v2.0 API)
         # This will query event bus for dynamic data or fall back to minimal manifest
         manifest = inject_manifest(correlation_id=correlation_id, agent_name=agent_name)
-        return manifest
+        return str(manifest) if manifest is not None else ""
 
     except ImportError as e:
         # manifest_injector not found - installation issue
@@ -99,7 +102,7 @@ if __name__ == "__main__":
     )
 
     # Get agent_name from args or environment (command-line takes precedence)
-    agent_name = args.agent_name or os.environ.get("AGENT_NAME")
+    agent_name: Optional[str] = args.agent_name or os.environ.get("AGENT_NAME")
 
     # Load and print manifest
     print(load_manifest(correlation_id, agent_name))

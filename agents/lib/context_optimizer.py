@@ -54,7 +54,7 @@ class ContextOptimizer:
         self.task_patterns: Dict[str, List[str]] = defaultdict(list)
         self.context_effectiveness: Dict[str, float] = {}
         self._cache_ttl = 3600  # 1 hour
-        self._last_cache_update = 0
+        self._last_cache_update: float = 0.0
 
     async def learn_from_success(
         self,

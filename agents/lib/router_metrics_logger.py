@@ -26,14 +26,23 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from queue import Queue
-from typing import Any, Dict, List, Optional
+
+# Import Pydantic Settings for type-safe configuration
+# Type annotation for settings that allows None
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import asyncpg
 
 
-# Import Pydantic Settings for type-safe configuration
+if TYPE_CHECKING:
+    from config import Settings
+
+    settings: Optional["Settings"]
+
 try:
-    from config import settings
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
     settings = None
 
@@ -110,14 +119,17 @@ class RouterMetricsLogger:
         self.worker_thread: Optional[threading.Thread] = None
         self.shutdown_event = threading.Event()
 
-        # Statistics
-        self.stats = {
+        # Statistics - properly typed dict
+        self.stats: Dict[str, Any] = {
             "total_logged": 0,
             "total_batches": 0,
             "failed_writes": 0,
             "queue_overflows": 0,
             "last_write_time": None,
         }
+
+        # Thread pool for worker thread (initialized lazily)
+        self._thread_pool: Optional[asyncpg.Pool] = None
 
         # Load database configuration
         self.db_config = self._load_db_config()
@@ -131,6 +143,7 @@ class RouterMetricsLogger:
         """
         # Prefer Pydantic Settings if available (type-safe, validated)
         if settings is not None:
+            # Use getattr with fallback for optional attributes
             return {
                 "host": settings.postgres_host,
                 "port": settings.postgres_port,
@@ -139,7 +152,7 @@ class RouterMetricsLogger:
                 "password": settings.get_effective_postgres_password(),
                 "min_size": settings.postgres_pool_min_size,
                 "max_size": settings.postgres_pool_max_size,
-                "timeout": settings.postgres_query_timeout,
+                "timeout": getattr(settings, "postgres_query_timeout", 30),
             }
 
         # Fallback to os.getenv() for backward compatibility

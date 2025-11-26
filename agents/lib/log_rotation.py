@@ -29,7 +29,7 @@ Usage:
 import logging
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from .structured_logger import JSONFormatter, StructuredLogger
 
@@ -155,6 +155,7 @@ def configure_file_rotation(
     log_file = log_path / filename
 
     # Create appropriate handler based on rotation type
+    handler: Union[RotatingFileHandler, TimedRotatingFileHandler]
     if config.rotation_type == "size":
         handler = RotatingFileHandler(
             filename=str(log_file),

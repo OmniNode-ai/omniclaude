@@ -180,7 +180,7 @@ class MetadataExtractor:
 
         # Return highest scoring stage
         if scores:
-            return max(scores, key=scores.get)
+            return max(scores, key=lambda k: scores.get(k, 0))
 
         # Default: exploratory if no clear match
         return "exploratory"
@@ -292,7 +292,7 @@ class MetadataExtractor:
         Returns:
             Session context
         """
-        context = {
+        context: Dict[str, Any] = {
             "prompts_in_session": 1,
             "time_since_last_prompt_seconds": None,
         }  # Default: first prompt
@@ -389,7 +389,9 @@ def extract_metadata(
     Returns:
         Complete metadata dictionary
     """
-    extractor = MetadataExtractor(working_dir=working_dir)
+    extractor = MetadataExtractor(
+        working_dir=Path(working_dir) if working_dir else None
+    )
     return extractor.extract_all(prompt, agent_name=agent_name)
 
 

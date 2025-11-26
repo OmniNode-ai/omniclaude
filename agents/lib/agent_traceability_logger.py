@@ -548,7 +548,7 @@ class AgentTraceabilityLogger:
                 )
 
             # Group by trace type
-            trace_data = {
+            trace_data: Dict[str, List[Any]] = {
                 "prompt": [],
                 "file_operation": [],
                 "intelligence_usage": [],

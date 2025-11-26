@@ -17,7 +17,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
 
 from .codegen_config import CodegenConfig
@@ -102,6 +102,7 @@ class QualityValidator:
 
         # Framework: Initialize ML-powered mixin compatibility manager
         self.enable_ml = enable_ml_validation and ML_AVAILABLE
+        self.mixin_manager: Optional["MixinCompatibilityManager"] = None
         if self.enable_ml:
             try:
                 self.mixin_manager = MixinCompatibilityManager(enable_ml=True)
@@ -110,8 +111,6 @@ class QualityValidator:
                 self.logger.warning(f"Failed to initialize ML validation: {e}")
                 self.enable_ml = False
                 self.mixin_manager = None
-        else:
-            self.mixin_manager = None
 
         # ONEX naming patterns
         self.node_class_pattern = re.compile(
@@ -337,8 +336,8 @@ class QualityValidator:
         Returns:
             Tuple of (compliance_score, violations, suggestions)
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)
@@ -625,9 +624,15 @@ class QualityValidator:
 
         return score
 
-    def _categorize_imports(self, imports: List[ast.AST]) -> Dict[str, List[ast.AST]]:
+    def _categorize_imports(
+        self, imports: List[Union[ast.Import, ast.ImportFrom]]
+    ) -> Dict[str, List[Union[ast.Import, ast.ImportFrom]]]:
         """Categorize imports into stdlib, third-party, local"""
-        categorized = {"stdlib": [], "third_party": [], "local": []}
+        categorized: Dict[str, List[Union[ast.Import, ast.ImportFrom]]] = {
+            "stdlib": [],
+            "third_party": [],
+            "local": [],
+        }
 
         for imp in imports:
             if isinstance(imp, ast.ImportFrom):
@@ -648,7 +653,7 @@ class QualityValidator:
         return categorized
 
     def _is_import_order_correct(
-        self, import_sections: Dict[str, List[ast.AST]]
+        self, import_sections: Dict[str, List[Union[ast.Import, ast.ImportFrom]]]
     ) -> bool:
         """Check if imports are in correct order"""
         # For simplicity, just check they are present in the right categories
@@ -674,8 +679,8 @@ class QualityValidator:
         Returns:
             Tuple of (conformance_score, violations, suggestions)
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)
@@ -798,8 +803,8 @@ class QualityValidator:
         Returns:
             Tuple of (compatibility_score, violations, suggestions)
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)
@@ -873,8 +878,8 @@ class QualityValidator:
         Returns:
             Tuple of (quality_score, violations, suggestions)
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)
@@ -1219,8 +1224,8 @@ class QualityValidator:
         Returns:
             Dict with valid, has_type_annotations, uses_bare_any, violations
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)
@@ -1259,8 +1264,8 @@ class QualityValidator:
         Returns:
             Dict with valid, has_try_except, uses_onex_error, violations
         """
-        violations = []
-        suggestions = []
+        violations: List[str] = []
+        suggestions: List[str] = []
 
         try:
             tree = ast.parse(code)

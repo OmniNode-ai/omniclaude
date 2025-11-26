@@ -46,7 +46,7 @@ class ObservabilityReporter:
             """,
                 (table_name,),
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
     def get_all_tables(self) -> List[str]:
         """Get list of all tables in the database."""
@@ -65,12 +65,14 @@ class ObservabilityReporter:
     def get_table_row_counts(self) -> Dict[str, int]:
         """Get row counts for all tables."""
         tables = self.get_all_tables()
-        counts = {}
+        counts: Dict[str, int] = {}
         with self.conn.cursor() as cur:
             for table in tables:
                 # Note: Table names from database introspection (information_schema.tables)
                 cur.execute(f"SELECT COUNT(*) FROM {table}")  # nosec B608
-                counts[table] = cur.fetchone()[0]
+                result = cur.fetchone()
+                if result is not None:
+                    counts[table] = result[0]
         return counts
 
     def get_routing_decisions(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -85,9 +87,9 @@ class ObservabilityReporter:
             """,
                 (limit,),
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
-    def get_routing_statistics(self) -> Dict[str, Any]:
+    def get_routing_statistics(self) -> Optional[Dict[str, Any]]:
         """Get routing decision statistics."""
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -104,7 +106,8 @@ class ObservabilityReporter:
                 FROM agent_routing_decisions
             """
             )
-            return cur.fetchone()
+            result = cur.fetchone()
+            return dict(result) if result is not None else None
 
     def get_agent_usage_stats(self) -> List[Dict[str, Any]]:
         """Get agent usage statistics."""
@@ -121,7 +124,7 @@ class ObservabilityReporter:
                 ORDER BY usage_count DESC
             """
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
     def get_transformation_events(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent transformation events."""
@@ -150,7 +153,7 @@ class ObservabilityReporter:
                     LIMIT %s
                 """  # nosec B608 - time_col from DB introspection, not user input
                 cur.execute(query, (limit,))
-                return cur.fetchall()
+                return [dict(row) for row in cur.fetchall()]
             return []
 
     def get_hook_events(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -165,7 +168,7 @@ class ObservabilityReporter:
             """,
                 (limit,),
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
     def get_workflows(self) -> List[Dict[str, Any]]:
         """Get workflow information."""
@@ -177,7 +180,7 @@ class ObservabilityReporter:
                 ORDER BY created_at DESC
             """
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
     def get_workflow_tasks(self) -> List[Dict[str, Any]]:
         """Get workflow task information."""
@@ -189,7 +192,7 @@ class ObservabilityReporter:
                 ORDER BY created_at DESC
             """
             )
-            return cur.fetchall()
+            return [dict(row) for row in cur.fetchall()]
 
     def generate_report(self) -> str:
         """Generate comprehensive observability report."""

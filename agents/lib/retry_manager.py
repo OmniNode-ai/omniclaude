@@ -9,7 +9,17 @@ import asyncio
 import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, TypedDict
+
+
+class RetryStats(TypedDict):
+    """Type definition for retry statistics."""
+
+    total_attempts: int
+    total_retries: int
+    total_successes: int
+    total_failures: int
+    retry_distribution: Dict[str, int]
 
 
 class RetryStrategy(Enum):
@@ -65,7 +75,7 @@ class RetryManager:
             config: Retry configuration
         """
         self.config = config or RetryConfig()
-        self._stats = {
+        self._stats: RetryStats = {
             "total_attempts": 0,
             "total_retries": 0,
             "total_successes": 0,
@@ -298,15 +308,13 @@ class RetryManager:
             },
         }
 
-    def reset_stats(self):
+    def reset_stats(self) -> None:
         """Reset retry statistics."""
-        self._stats = {
-            "total_attempts": 0,
-            "total_retries": 0,
-            "total_successes": 0,
-            "total_failures": 0,
-            "retry_distribution": {},
-        }
+        self._stats["total_attempts"] = 0
+        self._stats["total_retries"] = 0
+        self._stats["total_successes"] = 0
+        self._stats["total_failures"] = 0
+        self._stats["retry_distribution"] = {}
 
 
 class RetryManagerManager:

@@ -97,7 +97,7 @@ async def run_migrations() -> None:
                 continue
             # Build dynamic insert covering required non-null, no-default columns
             insert_cols = []
-            insert_vals = []
+            insert_vals: list[str | int] = []
             if ident_col in col_meta:
                 insert_cols.append(ident_col)
                 insert_vals.append(migration_id)
@@ -109,6 +109,7 @@ async def run_migrations() -> None:
                     continue
                 # Provide sensible filler values based on type
                 dtype = (meta["type"] or "").lower()
+                filler: str | int
                 if "int" in dtype or dtype in ("integer", "smallint", "bigint"):
                     filler = 1
                 elif "timestamp" in dtype or "date" in dtype:

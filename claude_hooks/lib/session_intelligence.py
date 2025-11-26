@@ -55,7 +55,7 @@ def get_git_metadata(cwd: str) -> Dict[str, Any]:
     Returns:
         Dict with git_branch, git_dirty, git_commit, git_remote
     """
-    metadata = {
+    metadata: Dict[str, Any] = {
         "git_branch": None,
         "git_dirty": False,
         "git_commit": None,
@@ -148,7 +148,7 @@ def get_environment_metadata() -> Dict[str, Any]:
     # Capture username with better fallback handling
     username = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
 
-    metadata = {
+    metadata: Dict[str, Any] = {
         "user": username,
         "hostname": platform.node(),
         "platform": platform.system(),
@@ -275,7 +275,7 @@ def log_session_start(
         else:
             print("❌ Failed to log session start", file=sys.stderr)
 
-        return event_id
+        return str(event_id) if event_id else None
 
     except Exception as e:
         # Graceful error handling - don't break user workflow
@@ -409,7 +409,8 @@ def query_session_statistics() -> Dict[str, Any]:
             """,
                 (session_start,),
             )
-            prompt_count = cur.fetchone()[0]
+            result = cur.fetchone()
+            prompt_count = result[0] if result else 0
 
             # Count tools
             cur.execute(
@@ -421,7 +422,8 @@ def query_session_statistics() -> Dict[str, Any]:
             """,
                 (session_start,),
             )
-            tool_count = cur.fetchone()[0]
+            result = cur.fetchone()
+            tool_count = result[0] if result else 0
 
             # Get unique agents invoked
             cur.execute(
@@ -665,7 +667,7 @@ def log_session_end(
         else:
             print("❌ Failed to log session end", file=sys.stderr)
 
-        return event_id
+        return str(event_id) if event_id else None
 
     except Exception as e:
         # Graceful error handling - don't break user workflow

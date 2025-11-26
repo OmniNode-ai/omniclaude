@@ -112,10 +112,11 @@ class TemplateCache:
         self.enable_persistence = enable_persistence
 
         # Background task tracking
-        self._background_tasks: Set[asyncio.Task] = set()
+        self._background_tasks: Set[asyncio.Task[Any]] = set()
 
         # Persistence instance (cached to avoid repeated checks)
-        self._persistence_instance = None
+        # Note: Type is Any to avoid import cycle with persistence module
+        self._persistence_instance: Any = None
         self._persistence_checked = False
 
         # Metrics
@@ -203,7 +204,9 @@ class TemplateCache:
                                 )
                                 # Track task and remove when done
                                 self._background_tasks.add(task)
-                                task.add_done_callback(self._background_tasks.discard)
+                                task.add_done_callback(
+                                    lambda t: self._background_tasks.discard(t)
+                                )
                             except RuntimeError:
                                 # No event loop running - skip async metrics update
                                 pass
@@ -262,7 +265,9 @@ class TemplateCache:
                         )
                         # Track task and remove when done
                         self._background_tasks.add(task)
-                        task.add_done_callback(self._background_tasks.discard)
+                        task.add_done_callback(
+                            lambda t: self._background_tasks.discard(t)
+                        )
                     except RuntimeError:
                         # No event loop running - skip async metrics update
                         pass
@@ -515,14 +520,14 @@ class TemplateCache:
             self._background_tasks.clear()
 
         # Close persistence instance if created
-        if self._persistence_instance is not None:
+        persistence = self._persistence_instance
+        if persistence is not None:
+            self._persistence_instance = None
             try:
-                await self._persistence_instance.close()
+                await persistence.close()
                 logger.debug("Persistence connection closed")
             except Exception as e:
                 logger.debug(f"Error closing persistence: {e}")
-            finally:
-                self._persistence_instance = None
 
     def cleanup_sync(self, timeout: float = 5.0):
         """
@@ -663,7 +668,11 @@ class TemplateCache:
                 )
 
             # Sort by access count (most accessed first)
-            template_stats.sort(key=lambda x: x["access_count"], reverse=True)
+            def sort_key(x: Dict[str, object]) -> int:
+                count = x.get("access_count", 0)
+                return int(count) if isinstance(count, (int, float)) else 0
+
+            template_stats.sort(key=sort_key, reverse=True)
 
             stats["templates"] = template_stats
             return stats
@@ -676,8 +685,8 @@ if __name__ == "__main__":
     print("=== Testing Template Cache ===\n")
 
     # Create temporary test templates
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
+    with tempfile.TemporaryDirectory() as tmpdir_str:
+        tmpdir = Path(tmpdir_str)
 
         # Create test template files
         effect_template = tmpdir / "effect_node_template.py"

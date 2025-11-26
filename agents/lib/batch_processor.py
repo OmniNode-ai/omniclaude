@@ -64,6 +64,7 @@ class BatchProcessor:
         self.flush_task: Optional[asyncio.Task] = None
 
         # Only create persistence if explicitly enabled and not provided
+        self.persistence: Optional[CodegenPersistence]
         if persistence is not None:
             self.persistence = persistence
         elif self.config.enable_metrics:

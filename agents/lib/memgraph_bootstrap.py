@@ -1,10 +1,14 @@
 import os
+from typing import Any, Optional
 
+
+# GraphDatabase is optional - may not be installed
+GraphDatabase: Optional[Any] = None
 
 try:
-    from neo4j import GraphDatabase  # type: ignore
-except Exception:
-    GraphDatabase = None  # type: ignore
+    from neo4j import GraphDatabase  # noqa: F811
+except ImportError:
+    pass  # GraphDatabase stays None
 
 
 def bootstrap() -> None:
@@ -19,7 +23,10 @@ def bootstrap() -> None:
 
     user = os.getenv("MEMGRAPH_USER") or os.getenv("NEO4J_USER")
     password = os.getenv("MEMGRAPH_PASSWORD") or os.getenv("NEO4J_PASSWORD")
-    auth = (user, password) if user or password else None
+    # Only create auth tuple if both user and password are present
+    auth: Optional[tuple[str, str]] = None
+    if user and password:
+        auth = (user, password)
 
     driver = GraphDatabase.driver(uri, auth=auth)
 

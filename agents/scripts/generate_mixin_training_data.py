@@ -139,7 +139,7 @@ NODE_TYPE_PATTERNS = {
 
 def generate_training_samples(
     num_samples: int = 200,
-) -> List[Tuple[str, str, str, bool, str]]:
+) -> List[Tuple[str, str, str, int, int, str]]:
     """
     Generate training samples with known compatibility outcomes.
 

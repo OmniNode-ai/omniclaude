@@ -19,22 +19,25 @@ import logging
 import os
 import signal
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import asyncpg
 from kafka import KafkaConsumer
 
 
 # Import Pydantic Settings for type-safe configuration
+settings: Optional[Any] = None
 try:
-    from config import settings
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
-    settings = None
+    pass
 
 logger = logging.getLogger(__name__)
 
 
-def safe_json_deserializer(message_bytes: bytes) -> Optional[Dict]:
+def safe_json_deserializer(message_bytes: Optional[bytes]) -> Optional[Dict[str, Any]]:
     """
     Safely deserialize JSON message, returning None on error.
 
@@ -49,16 +52,9 @@ def safe_json_deserializer(message_bytes: bytes) -> Optional[Dict]:
         logger.warning("Received None message payload, skipping deserialization")
         return None
 
-    # Guard against non-bytes payload (already deserialized or wrong type)
-    if not isinstance(message_bytes, bytes):
-        logger.error(
-            f"Expected bytes, got {type(message_bytes).__name__}. "
-            f"Value: {message_bytes!r}"
-        )
-        return None
-
     try:
-        return json.loads(message_bytes.decode("utf-8"))
+        result: Dict[str, Any] = json.loads(message_bytes.decode("utf-8"))
+        return result
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         logger.error(
             f"Failed to deserialize message: {e}. "
@@ -252,13 +248,17 @@ class KafkaAgentActionConsumer:
         )
         return inserted_count
 
-    async def consume_loop(self):
+    async def consume_loop(self) -> None:
         """
         Main consumption loop with batching.
         """
         logger.info("Starting consumption loop")
-        batch: List[Dict] = []
+        batch: List[Dict[str, Any]] = []
         last_batch_time = asyncio.get_event_loop().time()
+
+        # Ensure consumer is initialized
+        if self.consumer is None:
+            raise RuntimeError("Consumer not initialized. Call start() first.")
 
         try:
             while self.running:

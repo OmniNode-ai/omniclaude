@@ -68,7 +68,7 @@ class PatternTrackingLogger:
         self.logger.warning(message)
 
     def log_error(
-        self, operation: str, error: Exception, context: Dict[str, Any] = None
+        self, operation: str, error: Exception, context: Optional[Dict[str, Any]] = None
     ):
         """Log errors with full context"""
         error_details = {
@@ -95,15 +95,14 @@ class PatternTrackingErrorHandler:
     def __init__(self, logger: PatternTrackingLogger):
         self.logger = logger
         self.retryable_errors = [
-            requests.exceptions.ConnectError,
-            requests.exceptions.Timeout,
             requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
             requests.exceptions.ReadTimeout,
             requests.exceptions.HTTPError,
         ]
 
     def handle_api_error(
-        self, operation: str, error: Exception, context: Dict[str, Any] = None
+        self, operation: str, error: Exception, context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Handle API-related errors, return handling information"""
         error_type = type(error).__name__
@@ -113,14 +112,11 @@ class PatternTrackingErrorHandler:
             isinstance(error, error_class) for error_class in self.retryable_errors
         )
 
-        # Specific handling for different error types
-        if isinstance(error, requests.exceptions.ConnectError):
-            error_category = "connection"
-            suggestion = "Check if the Phase 4 intelligence service is running (configured via settings.archon_intelligence_url)"
-            retry_suggested = True
-            retry_delay_seconds = 5
+        # Initialize retry_delay_seconds to avoid unbound variable
+        retry_delay_seconds: int = 5
 
-        elif isinstance(error, requests.exceptions.Timeout):
+        # Specific handling for different error types
+        if isinstance(error, requests.exceptions.Timeout):
             error_category = "timeout"
             suggestion = (
                 "The request timed out. The service might be overloaded or slow."
@@ -148,8 +144,6 @@ class PatternTrackingErrorHandler:
             else:
                 suggestion = "Unknown HTTP error occurred."
                 retry_suggested = False
-            retry_delay_seconds = getattr(locals(), "retry_delay_seconds", 5)
-
         elif isinstance(error, requests.exceptions.ConnectionError):
             error_category = "connection_error"
             suggestion = (
@@ -169,7 +163,6 @@ class PatternTrackingErrorHandler:
             error_category = "unknown"
             suggestion = f"Unknown error type: {error_type}. Check the error details."
             retry_suggested = False
-            retry_delay_seconds = 0
 
         # Log the error with enhanced context
         enhanced_context = {
@@ -192,7 +185,10 @@ class PatternTrackingErrorHandler:
         }
 
     def handle_validation_error(
-        self, operation: str, validation_errors: list, context: Dict[str, Any] = None
+        self,
+        operation: str,
+        validation_errors: list,
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Handle data validation errors"""
         error_details = {
@@ -235,13 +231,16 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count = 0
-        self.last_failure_time = None
+        self.last_failure_time: Optional[float] = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
     def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker protection"""
         if self.state == "OPEN":
-            if time.time() - self.last_failure_time > self.timeout:
+            if (
+                self.last_failure_time is not None
+                and time.time() - self.last_failure_time > self.timeout
+            ):
                 self.state = "HALF_OPEN"
             else:
                 raise Exception("Circuit breaker is OPEN")
@@ -365,13 +364,15 @@ def log_success(operation: str, details: Dict[str, Any]):
     get_default_logger().log_success(operation, details)
 
 
-def log_error(operation: str, error: Exception, context: Dict[str, Any] = None):
+def log_error(
+    operation: str, error: Exception, context: Optional[Dict[str, Any]] = None
+):
     """Quick error logging"""
     get_default_logger().log_error(operation, error, context)
 
 
 def handle_error(
-    operation: str, error: Exception, context: Dict[str, Any] = None
+    operation: str, error: Exception, context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Quick error handling"""
     return get_default_error_handler().handle_api_error(operation, error, context)
@@ -389,7 +390,7 @@ if __name__ == "__main__":
 
     # Test error handling with a mock connection error
     try:
-        raise requests.exceptions.ConnectError("Connection failed")
+        raise requests.exceptions.ConnectionError("Connection failed")
     except Exception as e:
         error_info = error_handler.handle_api_error("test_connection", e)
         print(f"Error handled: {error_info}")

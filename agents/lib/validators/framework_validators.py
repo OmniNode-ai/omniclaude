@@ -111,6 +111,16 @@ class LifecycleComplianceValidator(BaseQualityGate):
         if agent_instance and not agent_class:
             agent_class = type(agent_instance)
 
+        if agent_class is None:
+            issues.append("No agent class provided")
+            return ModelQualityGateResult(
+                gate=self.gate,
+                status="failed",
+                execution_time_ms=0,
+                message="No agent class or instance provided",
+                metadata={"issues": issues, "warnings": warnings, **metadata},
+            )
+
         metadata["agent_class"] = agent_class.__name__
 
         # Check required __init__ method

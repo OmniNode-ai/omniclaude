@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import psycopg2
+import psycopg2.extensions
 from psycopg2.extras import Json
+
+
+# Type alias for connection - use Any to avoid strict type checking on psycopg2 internals
+Connection = psycopg2.extensions.connection
 
 
 # Add project root to path for config import
@@ -71,9 +76,9 @@ class HookEventLogger:
                 )
 
         self.connection_string = connection_string
-        self._conn = None
+        self._conn: Optional[psycopg2.extensions.connection] = None
 
-    def _get_connection(self):
+    def _get_connection(self) -> psycopg2.extensions.connection:
         """Get or create database connection."""
         if self._conn is None or self._conn.closed:
             self._conn = psycopg2.connect(self.connection_string)
@@ -147,7 +152,7 @@ class HookEventLogger:
             # Log error but don't fail the hook
             print(f"⚠️  [HookEventLogger] Failed to log event: {e}", file=sys.stderr)
             try:
-                if self._conn:
+                if self._conn is not None:
                     self._conn.rollback()
             except Exception as rollback_error:
                 # Log rollback failure - this is critical for debugging database issues
@@ -293,9 +298,9 @@ class HookEventLogger:
             metadata=event_metadata,
         )
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
-        if self._conn and not self._conn.closed:
+        if self._conn is not None and not self._conn.closed:
             self._conn.close()
             self._conn = None
 

@@ -789,7 +789,7 @@ class QualityEnforcer:
         """
         try:
             from lib.tool_selection_intelligence import (
-                create_enhanced_metadata,  # type: ignore[import-not-found]
+                create_enhanced_metadata,
             )
 
             # Generate enhanced metadata (includes tool selection + context)

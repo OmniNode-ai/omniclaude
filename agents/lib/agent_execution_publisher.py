@@ -528,7 +528,7 @@ class AgentExecutionPublisher:
             if action_logger:
                 try:
                     # Build success details with performance metrics
-                    success_details = {
+                    success_details: Dict[str, Any] = {
                         "execution_duration_ms": duration_ms,
                         "publish_duration_ms": publish_duration_ms,
                         "publish_success": publish_success,
@@ -660,7 +660,7 @@ class AgentExecutionPublisher:
             if action_logger:
                 try:
                     # Build error context with all details (sanitized)
-                    error_context = {
+                    error_context: Dict[str, Any] = {
                         "publish_duration_ms": publish_duration_ms,
                         "publish_success": publish_success,
                     }
@@ -729,12 +729,14 @@ class AgentExecutionPublisher:
         }
 
         # Add optional fields if provided
-        if quality_score is not None:
-            envelope["payload"]["quality_score"] = quality_score
-        if output_summary is not None:
-            envelope["payload"]["output_summary"] = output_summary
-        if metrics:
-            envelope["payload"]["metrics"] = metrics
+        payload = envelope["payload"]
+        if isinstance(payload, dict):
+            if quality_score is not None:
+                payload["quality_score"] = quality_score
+            if output_summary is not None:
+                payload["output_summary"] = output_summary
+            if metrics:
+                payload["metrics"] = metrics
 
         return envelope
 
@@ -780,12 +782,14 @@ class AgentExecutionPublisher:
         }
 
         # Add optional fields if provided
-        if error_type is not None:
-            envelope["payload"]["error_type"] = error_type
-        if error_stack_trace is not None:
-            envelope["payload"]["error_stack_trace"] = error_stack_trace
-        if partial_results:
-            envelope["payload"]["partial_results"] = partial_results
+        payload = envelope["payload"]
+        if isinstance(payload, dict):
+            if error_type is not None:
+                payload["error_type"] = error_type
+            if error_stack_trace is not None:
+                payload["error_stack_trace"] = error_stack_trace
+            if partial_results:
+                payload["partial_results"] = partial_results
 
         return envelope
 

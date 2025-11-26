@@ -196,7 +196,8 @@ class ReferenceResolver:
             path = []
 
         if not isinstance(schema, dict):
-            return schema
+            # Schema is a primitive value, wrap it in a dict for type consistency
+            return {"__value": schema}  # type: ignore[unreachable]
 
         # Check for $ref
         if "$ref" in schema:
@@ -214,12 +215,12 @@ class ReferenceResolver:
             return {"type": "object", "__resolved_ref": resolved_type}
 
         # Recursively resolve all dict values
-        result = {}
+        result: Dict[str, Any] = {}
         for key, value in schema.items():
             if isinstance(value, dict):
                 result[key] = self.resolve_references(value, path)
             elif isinstance(value, list):
-                result[key] = [
+                resolved_list: List[Any] = [
                     (
                         self.resolve_references(item, path)
                         if isinstance(item, dict)
@@ -227,6 +228,7 @@ class ReferenceResolver:
                     )
                     for item in value
                 ]
+                result[key] = resolved_list
             else:
                 result[key] = value
 

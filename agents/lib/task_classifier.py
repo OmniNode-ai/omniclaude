@@ -173,7 +173,7 @@ class TaskClassifier:
 
         # Primary intent = highest score
         if intent_scores:
-            primary_intent = max(intent_scores, key=intent_scores.get)
+            primary_intent = max(intent_scores, key=lambda k: intent_scores.get(k, 0))
             confidence = intent_scores[primary_intent] / 10.0  # Normalize
 
             # Boost confidence for IMPLEMENT intent with domain-specific terminology

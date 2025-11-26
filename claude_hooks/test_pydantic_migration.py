@@ -16,7 +16,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 # Add parent directory to path for imports
@@ -171,38 +171,68 @@ def check_legacy_getenv(hook_path: Path) -> Tuple[bool, List[str]]:
         return False, [f"File read error: {str(e)}"]
 
 
-def run_comprehensive_test(hook_path: Path) -> Dict:
+class ImportResult(Dict[str, Any]):
+    """Type for import test result."""
+
+    pass
+
+
+class SettingsResult(Dict[str, Any]):
+    """Type for settings test result."""
+
+    pass
+
+
+class LegacyResult(Dict[str, Any]):
+    """Type for legacy test result."""
+
+    pass
+
+
+class TestResult(Dict[str, Any]):
+    """Type for comprehensive test result."""
+
+    pass
+
+
+def run_comprehensive_test(hook_path: Path) -> TestResult:
     """
     Run comprehensive test on a single hook.
 
     Returns:
         dict with test results
     """
-    results = {
-        "hook": hook_path.name,
-        "import": {"success": False, "message": ""},
-        "settings": {"success": False, "message": ""},
-        "legacy": {"is_clean": False, "issues": []},
-        "overall_pass": False,
-    }
+    import_result: Dict[str, Any] = {"success": False, "message": ""}
+    settings_result: Dict[str, Any] = {"success": False, "message": ""}
+    legacy_result: Dict[str, Any] = {"is_clean": False, "issues": []}
+
+    results: TestResult = TestResult(
+        {
+            "hook": hook_path.name,
+            "import": import_result,
+            "settings": settings_result,
+            "legacy": legacy_result,
+            "overall_pass": False,
+        }
+    )
 
     # Test 1: Import
     import_success, import_msg, module = check_import(hook_path)
-    results["import"]["success"] = import_success
-    results["import"]["message"] = import_msg
+    import_result["success"] = import_success
+    import_result["message"] = import_msg
 
     if not import_success:
         return results
 
     # Test 2: Settings usage
     settings_success, settings_msg = check_settings_usage(module)
-    results["settings"]["success"] = settings_success
-    results["settings"]["message"] = settings_msg
+    settings_result["success"] = settings_success
+    settings_result["message"] = settings_msg
 
     # Test 3: Legacy os.getenv()
     is_clean, issues = check_legacy_getenv(hook_path)
-    results["legacy"]["is_clean"] = is_clean
-    results["legacy"]["issues"] = issues
+    legacy_result["is_clean"] = is_clean
+    legacy_result["issues"] = issues
 
     # Overall pass if all tests pass
     results["overall_pass"] = import_success and settings_success and is_clean

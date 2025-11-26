@@ -38,10 +38,14 @@ import asyncpg
 
 
 # Import Pydantic Settings for type-safe configuration
+# Type defined once at module level, value set in try/except
+settings: Optional[Settings] = None
 try:
-    from config import settings
+    from config import Settings, settings as _settings
+
+    settings = _settings
 except ImportError:
-    settings = None
+    pass  # settings remains None
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +105,10 @@ class IntelligenceUsageRecord:
     metadata: Optional[Dict[str, Any]] = None
 
     # Timestamps
-    created_at: datetime = None
+    created_at: Optional[datetime] = None
     applied_at: Optional[datetime] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default values after initialization."""
         if self.created_at is None:
             self.created_at = datetime.now(UTC)
@@ -164,6 +168,13 @@ class IntelligenceUsageTracker:
             db_password: Database password (default: from settings or env)
             enable_tracking: Enable tracking (disable for testing)
         """
+        # Declare instance variables with proper types
+        self.db_host: Optional[str] = None
+        self.db_port: Optional[int] = None
+        self.db_name: Optional[str] = None
+        self.db_user: Optional[str] = None
+        self.db_password: Optional[str] = None
+
         # Use Pydantic settings if available, otherwise fall back to env vars
         if settings:
             self.db_host = db_host or settings.postgres_host
@@ -184,11 +195,8 @@ class IntelligenceUsageTracker:
         else:
             # Fall back to environment variables (NO hardcoded defaults - fail fast if not configured)
             self.db_host = db_host or os.environ.get("POSTGRES_HOST")
-            self.db_port = db_port or (
-                int(os.environ.get("POSTGRES_PORT"))
-                if os.environ.get("POSTGRES_PORT")
-                else None
-            )
+            port_str = os.environ.get("POSTGRES_PORT")
+            self.db_port = db_port or (int(port_str) if port_str else None)
             self.db_name = db_name or os.environ.get("POSTGRES_DATABASE")
             self.db_user = db_user or os.environ.get("POSTGRES_USER")
             self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
@@ -594,8 +602,8 @@ class IntelligenceUsageTracker:
             pool = await self._get_pool()
 
             # Build query with optional filters
-            where_clauses = []
-            params = []
+            where_clauses: List[str] = []
+            params: List[str] = []
 
             if intelligence_name:
                 where_clauses.append(f"intelligence_name = ${len(params) + 1}")

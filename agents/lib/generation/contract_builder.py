@@ -130,7 +130,7 @@ class ContractBuilder(ABC, Generic[T_Contract]):
         """
         try:
             # Use Pydantic model's to_yaml() method
-            yaml_content = contract.to_yaml()
+            yaml_content: str = contract.to_yaml()
 
             # Write to file if path provided
             if output_path:

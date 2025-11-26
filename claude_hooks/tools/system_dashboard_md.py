@@ -7,7 +7,7 @@ Auto-generates markdown dashboard from database metrics
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -23,7 +23,7 @@ class SystemDashboard:
 
     def __init__(
         self,
-        db_password: str = None,
+        db_password: Optional[str] = None,
         output_file: str = "SYSTEM_DASHBOARD.md",
     ):
         password = db_password or settings.get_effective_postgres_password()

@@ -5,10 +5,10 @@ Script to detect which Claude Code agents have 4-phase Archon MCP integration.
 
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
-def analyze_agent_file(filepath: Path) -> Dict[str, any]:
+def analyze_agent_file(filepath: Path) -> Dict[str, Any]:
     """Analyze an agent file for Archon MCP integration patterns."""
 
     with open(filepath, "r", encoding="utf-8") as f:
@@ -92,11 +92,11 @@ def scan_agents_directory(agents_dir: str) -> List[Dict]:
     return results
 
 
-def print_summary_report(results: List[Dict]):
+def print_summary_report(results: List[Dict[str, Any]]) -> None:
     """Print a comprehensive summary report."""
 
     # Group results by status
-    status_groups = {}
+    status_groups: Dict[str, List[Dict[str, Any]]] = {}
     for result in results:
         status = result["status"]
         if status not in status_groups:

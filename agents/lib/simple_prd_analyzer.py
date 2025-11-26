@@ -7,7 +7,7 @@ A simplified PRD analyzer that doesn't depend on legacy omniagent code.
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -543,11 +543,9 @@ class SimplePRDAnalysisResult:
     external_systems: List[str]
     quality_baseline: float
     confidence_score: float
-    analysis_timestamp: datetime = None
-
-    def __post_init__(self):
-        if self.analysis_timestamp is None:
-            self.analysis_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+    analysis_timestamp: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
 
 
 # Aliases for compatibility

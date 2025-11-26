@@ -22,7 +22,7 @@ import yaml
 try:
     import httpx
 except ImportError:
-    httpx = None
+    httpx = None  # type: ignore[assignment]
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 
@@ -138,8 +138,11 @@ class AIQuorum:
         self.enable_ai_scoring = enable_ai_scoring and not stub_mode
         self.parallel_execution = parallel_execution
 
-        # Validate configuration
-        if self.enable_ai_scoring and httpx is None:
+        # Validate configuration - use getattr to avoid type narrowing issues
+        if (
+            self.enable_ai_scoring
+            and getattr(sys.modules.get("httpx"), "__name__", None) is None
+        ):
             print(
                 "Warning: httpx not available, falling back to stub mode",
                 file=sys.stderr,
@@ -358,8 +361,11 @@ class AIQuorum:
                 score = await self._score_with_model(model, scoring_prompt)
                 scores.append(score)
 
-        # Calculate weighted consensus
-        return self._calculate_consensus(scores)
+        # Calculate weighted consensus - filter out exceptions
+        valid_scores: List[Tuple[ModelConfig, Dict[str, Any]]] = [
+            item for item in scores if not isinstance(item, BaseException)
+        ]
+        return self._calculate_consensus(valid_scores)
 
     def _generate_scoring_prompt(
         self,
@@ -665,9 +671,6 @@ Provide your evaluation:"""
         weighted_score_sum = 0.0
 
         for item in scores:
-            if isinstance(item, Exception):
-                continue
-
             model, score_data = item
 
             score = score_data.get("score", 0.5)

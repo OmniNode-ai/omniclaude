@@ -68,7 +68,7 @@ async def test_basic_model_creation():
     trace.mark_completed(success=True)
     assert trace.status == "completed"
     assert trace.success is True
-    assert trace.completed_at is not None
+    assert trace.completed_at is not None  # type: ignore[unreachable]
     print(f"✓ Marked trace as completed, duration: {trace.duration_ms}ms")
 
     hook.mark_completed(success=True)

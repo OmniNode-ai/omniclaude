@@ -54,7 +54,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path, Path as PathLib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -425,7 +425,7 @@ class IntelligenceEventClient:
         )
 
         # Extract patterns list from result dict
-        return result.get("patterns", [])
+        return cast(List[Dict[str, Any]], result.get("patterns", []))
 
     async def request_code_analysis(
         self,
@@ -657,7 +657,7 @@ class IntelligenceEventClient:
                 future, timeout=timeout_ms / 1000.0  # Convert to seconds
             )
 
-            return result
+            return cast(Dict[str, Any], result)
 
         finally:
             # Clean up pending request

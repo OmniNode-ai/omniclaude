@@ -569,14 +569,12 @@ class AgentRouterEventService:
                 )
         self.registry_path = registry_path
 
-        # Database config
-        self.db_config = {
-            "host": db_host,
-            "port": db_port,
-            "database": db_name,
-            "user": db_user,
-            "password": db_password,
-        }
+        # Database config - stored separately for type safety
+        self.db_host = db_host
+        self.db_port = db_port
+        self.db_name = db_name
+        self.db_user = db_user
+        self.db_password = db_password
 
         # Components
         self._router: AgentRouter | None = None
@@ -621,7 +619,13 @@ class AgentRouterEventService:
         self.logger.info(f"Loaded {agent_count} agents successfully")
 
         # Initialize PostgreSQL logger
-        self._postgres_logger = PostgresLogger(**self.db_config)
+        self._postgres_logger = PostgresLogger(
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
+            user=self.db_user,
+            password=self.db_password,
+        )
         await self._postgres_logger.initialize()
 
         # Initialize Kafka producer
@@ -1331,22 +1335,17 @@ async def main():
     registry_path = os.getenv("REGISTRY_PATH")  # Optional override
     health_check_port = settings.health_check_port
 
-    # PostgreSQL configuration
-    db_config = {
-        "db_host": settings.postgres_host,
-        "db_port": settings.postgres_port,
-        "db_name": settings.postgres_database,
-        "db_user": settings.postgres_user,
-        "db_password": settings.get_effective_postgres_password(),
-    }
-
-    # Create service
+    # Create service with PostgreSQL configuration
     service = AgentRouterEventService(
         bootstrap_servers=bootstrap_servers,
         consumer_group_id=consumer_group_id,
         registry_path=registry_path,
         health_check_port=health_check_port,
-        **db_config,
+        db_host=settings.postgres_host,
+        db_port=settings.postgres_port,
+        db_name=settings.postgres_database,
+        db_user=settings.postgres_user,
+        db_password=settings.get_effective_postgres_password(),
     )
 
     # Setup signal handlers for graceful shutdown

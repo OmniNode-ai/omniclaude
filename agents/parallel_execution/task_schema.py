@@ -7,7 +7,7 @@ Use this file as a reference when creating task definitions.
 
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -177,9 +177,9 @@ class TaskBuilder:
         contract_description: str,
         node_type: Literal["Effect", "Compute", "Reducer", "Orchestrator"],
         output_path: str,
-        context_files: List[str] = None,
+        context_files: Optional[List[str]] = None,
         validation_level: str = "moderate",
-        dependencies: List[str] = None,
+        dependencies: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Create a properly formatted CoderAgent task."""
         return {
@@ -202,10 +202,10 @@ class TaskBuilder:
         description: str,
         problem_description: str,
         affected_files: List[str],
-        error_traces: List[str] = None,
+        error_traces: Optional[List[str]] = None,
         analysis_depth: str = "standard",
         hypothesis: str = "",
-        dependencies: List[str] = None,
+        dependencies: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Create a properly formatted DebugAgent task."""
         return {

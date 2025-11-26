@@ -23,7 +23,7 @@ except ImportError:
     if str(_lib_path) not in sys.path:
         sys.path.insert(0, str(_lib_path))
 
-    from task_classifier import TaskContext, TaskIntent
+    from task_classifier import TaskContext, TaskIntent  # type: ignore[no-redef]
 
 
 class RelevanceScorer:

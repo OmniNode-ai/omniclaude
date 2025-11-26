@@ -65,7 +65,7 @@ class NodeTextClassifierCompute:
 # ============================================================================
 
 
-def demo_pattern_matcher():
+async def demo_pattern_matcher() -> None:
     """Demonstrate ProductionPatternMatcher usage."""
     print("\n" + "=" * 80)
     print("DEMO 1: ProductionPatternMatcher")
@@ -75,7 +75,7 @@ def demo_pattern_matcher():
 
     # Find similar Effect nodes
     print("\n--- Finding similar Effect nodes for 'database' domain ---")
-    effect_nodes = matcher.find_similar_nodes("effect", "database", limit=3)
+    effect_nodes = await matcher.find_similar_nodes("effect", "database", limit=3)
     print(f"\nFound {len(effect_nodes)} similar Effect nodes:")
     for i, node_path in enumerate(effect_nodes, 1):
         print(f"  {i}. {node_path.name}")
@@ -106,7 +106,9 @@ def demo_pattern_matcher():
 
     # Find similar Compute nodes
     print("\n--- Finding similar Compute nodes for 'classification' domain ---")
-    compute_nodes = matcher.find_similar_nodes("compute", "classification", limit=2)
+    compute_nodes = await matcher.find_similar_nodes(
+        "compute", "classification", limit=2
+    )
     print(f"\nFound {len(compute_nodes)} similar Compute nodes:")
     for i, node_path in enumerate(compute_nodes, 1):
         print(f"  {i}. {node_path.name}")
@@ -218,7 +220,7 @@ async def demo_code_refiner():
         print(f"\n❌ Refinement failed: {e}")
 
 
-def demo_pattern_caching():
+async def demo_pattern_caching() -> None:
     """Demonstrate pattern caching."""
     print("\n" + "=" * 80)
     print("DEMO 3: Pattern Caching")
@@ -228,7 +230,7 @@ def demo_pattern_caching():
 
     # First extraction (will parse file)
     print("\n--- First extraction (parsing file) ---")
-    nodes = matcher.find_similar_nodes("effect", "database", limit=1)
+    nodes = await matcher.find_similar_nodes("effect", "database", limit=1)
     if nodes:
         import time
 
@@ -275,13 +277,13 @@ async def main():
         print("   Some demos may not work without production examples")
 
     # Demo 1: Pattern Matcher
-    demo_pattern_matcher()
+    await demo_pattern_matcher()
 
     # Demo 2: Code Refiner
     await demo_code_refiner()
 
     # Demo 3: Pattern Caching
-    demo_pattern_caching()
+    await demo_pattern_caching()
 
     print("\n" + "=" * 80)
     print(" Demo Complete ".center(80))

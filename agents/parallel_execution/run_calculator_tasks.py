@@ -66,6 +66,7 @@ async def create_calculator():
         tasks = [
             AgentTask(
                 task_id="generate_calculator",
+                agent_name="agent-code-generator",
                 description="Generate ONEX Compute node for calculator from contract",
                 input_data={
                     "contract": CALCULATOR_CONTRACT,

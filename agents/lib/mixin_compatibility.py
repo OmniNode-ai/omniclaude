@@ -123,7 +123,9 @@ class MixinCompatibilityManager:
         self.enable_ml = enable_ml
 
         if enable_ml:
-            self.learner = learner or MixinLearner(persistence=self.persistence)
+            self.learner: Optional[MixinLearner] = learner or MixinLearner(
+                persistence=self.persistence
+            )
         else:
             self.learner = None
 

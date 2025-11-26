@@ -236,7 +236,7 @@ class PostToolMetricsCollector:
                 if "=" in line and not line.strip().startswith("#"):
                     if re.search(r"\b[A-Z_]{2,}\b\s*=", line) and "class " not in line:
                         # Likely a constant, but check if it's inside a function
-                        violations += 0.5
+                        violations += 1  # Round up to avoid float type issue
 
             # Calculate score
             if violations == 0:

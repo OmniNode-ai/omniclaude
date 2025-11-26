@@ -138,7 +138,7 @@ class CapabilityIndex:
         Returns:
             List of (agent_name, capability_count) sorted by count (desc)
         """
-        agent_counts = {}
+        agent_counts: Dict[str, int] = {}
 
         for capability in capabilities:
             agents = self.capability_to_agents.get(capability, set())
@@ -195,16 +195,17 @@ class CapabilityIndex:
         Returns:
             Dictionary with index statistics
         """
+        avg_caps: float = (
+            sum(len(caps) for caps in self.agent_to_capabilities.values())
+            / len(self.agent_to_capabilities)
+            if self.agent_to_capabilities
+            else 0.0
+        )
         return {
             "total_agents": len(self.agent_to_capabilities),
             "total_capabilities": len(self.capability_to_agents),
             "total_domains": len(self.domain_to_agents),
-            "avg_capabilities_per_agent": (
-                sum(len(caps) for caps in self.agent_to_capabilities.values())
-                / len(self.agent_to_capabilities)
-                if self.agent_to_capabilities
-                else 0
-            ),
+            "avg_capabilities_per_agent": int(avg_caps),
         }
 
 

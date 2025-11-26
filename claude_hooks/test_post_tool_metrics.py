@@ -13,6 +13,7 @@ Tests:
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from .lib.post_tool_metrics import PostToolMetricsCollector, collect_post_tool_metrics
 
@@ -21,7 +22,7 @@ def test_success_classification():
     """Test success classification logic."""
     print("\n=== Test: Success Classification ===")
 
-    test_cases = [
+    test_cases: list[tuple[dict[str, Any] | None, str]] = [
         # (tool_output, expected_classification)
         ({"success": True}, "full_success"),
         ({"success": False}, "failed"),
@@ -53,7 +54,7 @@ def test_quality_scoring_python():
     """Test Python quality scoring."""
     print("\n=== Test: Python Quality Scoring ===")
 
-    test_cases = [
+    test_cases: list[dict[str, Any]] = [
         # Perfect code (regex-based detection has limitations, 0.85+ is excellent)
         {
             "name": "Perfect Python",
@@ -94,13 +95,12 @@ def test_quality_scoring_python():
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics(
-            "/test/example.py", test_case["content"]
-        )
+        content: str = test_case["content"]
+        metrics = collector._calculate_quality_metrics("/test/example.py", content)
 
         score = metrics.quality_score
-        expected_min = test_case.get("expected_min_score", 0.0)
-        expected_max = test_case.get("expected_max_score", 1.0)
+        expected_min: float = test_case.get("expected_min_score", 0.0)
+        expected_max: float = test_case.get("expected_max_score", 1.0)
 
         is_valid = expected_min <= score <= expected_max
         status = "✓" if is_valid else "✗"
@@ -126,7 +126,7 @@ def test_quality_scoring_typescript():
     """Test TypeScript quality scoring."""
     print("\n=== Test: TypeScript Quality Scoring ===")
 
-    test_cases = [
+    test_cases: list[dict[str, Any]] = [
         # Good TypeScript
         {
             "name": "Good TypeScript",
@@ -161,13 +161,12 @@ function calculateSum(a: number, b: number): number {
     failed = 0
 
     for test_case in test_cases:
-        metrics = collector._calculate_quality_metrics(
-            "/test/example.ts", test_case["content"]
-        )
+        content: str = test_case["content"]
+        metrics = collector._calculate_quality_metrics("/test/example.ts", content)
 
         score = metrics.quality_score
-        expected_min = test_case.get("expected_min_score", 0.0)
-        expected_max = test_case.get("expected_max_score", 1.0)
+        expected_min: float = test_case.get("expected_min_score", 0.0)
+        expected_max: float = test_case.get("expected_max_score", 1.0)
 
         is_valid = expected_min <= score <= expected_max
         status = "✓" if is_valid else "✗"
@@ -193,22 +192,19 @@ def test_performance_metrics():
     """Test performance metrics extraction."""
     print("\n=== Test: Performance Metrics ===")
 
-    tool_info = {
-        "tool_name": "Write",
-        "tool_input": {
-            "file_path": "/test/example.py",
-            "content": "def test():\n    pass\n",
-        },
-        "tool_response": {"success": True},
+    tool_input: dict[str, Any] = {
+        "file_path": "/test/example.py",
+        "content": "def test():\n    pass\n",
     }
+    tool_response: dict[str, Any] = {"success": True}
 
     collector = PostToolMetricsCollector()
     metadata = collector.collect_metrics(
         tool_name="Write",
-        tool_input=tool_info["tool_input"],
-        tool_output=tool_info["tool_response"],
+        tool_input=tool_input,
+        tool_output=tool_response,
         file_path="/test/example.py",
-        content=tool_info["tool_input"]["content"],
+        content=str(tool_input["content"]),
     )
 
     perf = metadata.performance_metrics
@@ -293,7 +289,7 @@ def test_execution_analysis():
     """Test execution analysis logic."""
     print("\n=== Test: Execution Analysis ===")
 
-    test_cases = [
+    test_cases: list[tuple[dict[str, Any] | None, str]] = [
         # (tool_output, expected_deviation)
         ({"success": True}, "none"),
         ({"error": "Failed"}, "major"),

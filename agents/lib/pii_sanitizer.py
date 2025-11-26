@@ -61,7 +61,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
 
 
 logger = logging.getLogger(__name__)
@@ -526,8 +526,9 @@ def sanitize_string(value: str) -> str:
     Returns:
         Sanitized string with PII masked
     """
+    # Type guard for runtime safety (value is always str per type annotation)
     if not isinstance(value, str):
-        return value
+        return value  # type: ignore[unreachable]
 
     # Apply patterns in order of specificity (most specific first)
 
@@ -587,8 +588,9 @@ def is_sensitive_field(field_name: str) -> bool:
     Returns:
         True if field name suggests sensitive data
     """
+    # Type guard for runtime safety (field_name is always str per type annotation)
     if not isinstance(field_name, str):
-        return False
+        return False  # type: ignore[unreachable]
 
     # Case-insensitive check
     field_lower = field_name.lower()
@@ -770,7 +772,7 @@ def sanitize_error_context_for_slack(
     if not context:
         return {}
 
-    return sanitize_for_slack(context, sanitize_all_strings=False)
+    return cast(Dict[str, Any], sanitize_for_slack(context, sanitize_all_strings=False))
 
 
 # =========================================================================
