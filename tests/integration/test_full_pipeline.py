@@ -155,6 +155,7 @@ class TestAllNodeTypes:
         result = validator.validate_contract(sample_effect_contract_yaml, "EFFECT")
 
         assert result.valid is True
+        assert result.contract is not None
         assert result.contract.name == "NodeDatabaseWriterEffect"
         assert hasattr(result.contract, "io_operations")
         assert hasattr(result.contract, "lifecycle")
@@ -165,6 +166,7 @@ class TestAllNodeTypes:
         result = validator.validate_contract(sample_effect_contract_yaml, "EFFECT")
 
         assert result.valid is True
+        assert result.contract is not None
         # IO operations should be present in EFFECT nodes
         assert result.contract.io_operations is not None
 
@@ -174,6 +176,7 @@ class TestAllNodeTypes:
         result = validator.validate_contract(sample_effect_contract_yaml, "EFFECT")
 
         assert result.valid is True
+        assert result.contract is not None
         # Lifecycle hooks should be present
         assert result.contract.lifecycle is not None
 
@@ -183,6 +186,7 @@ class TestAllNodeTypes:
         result = validator.validate_contract(sample_effect_contract_yaml, "EFFECT")
 
         assert result.valid is True
+        assert result.contract is not None
         # Dependencies should be specified
         assert result.contract.dependencies is not None
 
@@ -194,6 +198,7 @@ class TestAllNodeTypes:
         result = validator.validate_contract(sample_compute_contract_yaml, "COMPUTE")
 
         assert result.valid is True
+        assert result.contract is not None
         assert result.contract.name == "NodeDataTransformerCompute"
         assert hasattr(result.contract, "computation_type")
 
@@ -253,6 +258,7 @@ is_pure: true
         result = validator.validate_contract(sample_reducer_contract_yaml, "REDUCER")
 
         assert result.valid is True
+        assert result.contract is not None
         assert result.contract.name == "NodeAggregationReducer"
         assert hasattr(result.contract, "aggregation_strategy")
 
@@ -305,6 +311,7 @@ state_management: true
         )
 
         assert result.valid is True
+        assert result.contract is not None
         assert result.contract.name == "NodeWorkflowOrchestrator"
         assert hasattr(result.contract, "workflow_steps")
 
@@ -318,6 +325,7 @@ state_management: true
         )
 
         assert result.valid is True
+        assert result.contract is not None
         # Workflow steps should be defined
         assert result.contract.workflow_steps is not None
 

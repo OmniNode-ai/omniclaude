@@ -26,6 +26,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -133,8 +134,8 @@ class ActionLoggingE2ETest:
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
         self.correlation_id = str(uuid4())
-        self.test_actions = []
-        self.db_conn = None
+        self.test_actions: list[dict[str, Any]] = []
+        self.db_conn: Any = None
 
         # Configure logging level
         if verbose:
@@ -169,17 +170,15 @@ class ActionLoggingE2ETest:
                 )
                 return False
 
-            db_config = {
-                "host": postgres_host,
-                "port": int(postgres_port),
-                "database": postgres_database,
-                "user": postgres_user,
-                "password": postgres_password,
-            }
-
-            self.db_conn = psycopg2.connect(**db_config)
+            self.db_conn = psycopg2.connect(
+                host=postgres_host,
+                port=int(postgres_port or "5436"),
+                dbname=postgres_database,
+                user=postgres_user,
+                password=postgres_password,
+            )
             logger.info(
-                f"✓ Database connection established: {db_config['host']}:{db_config['port']}"
+                f"✓ Database connection established: {postgres_host}:{postgres_port}"
             )
             return True
 

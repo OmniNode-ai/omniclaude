@@ -37,7 +37,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 from uuid import UUID, uuid4
 
 
@@ -167,6 +167,8 @@ class RoutingEventTestClient:
     async def _consume_responses(self):
         """Consume response events from Kafka (background task)."""
         try:
+            if self.consumer is None:
+                return
             async for msg in self.consumer:
                 envelope_data = msg.value
 
@@ -227,36 +229,41 @@ class RoutingEventTestClient:
         )
 
         # Publish request
+        if self.producer is None:
+            raise ValueError("Producer not initialized")
         await self.producer.send(TOPICS.REQUEST, envelope.model_dump())
 
         # Wait for response with timeout
+        if self._response_event is None:
+            raise ValueError("Response event not initialized")
         try:
             await asyncio.wait_for(
                 self._response_event.wait(), timeout=self.timeout_ms / 1000.0
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(
                 f"No response received within {self.timeout_ms}ms. "
                 "Is agent-router-service running?"
-            )
+            ) from None
 
-        # Parse response
-        if not self._response_payload:
+        # Parse response - background task sets _response_payload, which mypy
+        # doesn't track across async boundaries, so we use cast() here
+        response_payload: Dict[str, Any] = cast(Dict[str, Any], self._response_payload)
+        if not response_payload:
             raise ValueError("Response event set but no payload received")
 
-        event_type = self._response_payload.get("event_type")
+        event_type = response_payload.get("event_type")
 
         if event_type == EventTypes.FAILED:
             # Parse error response
-            error_payload = self._response_payload.get("payload", {})
+            error_payload = response_payload.get("payload", {})
             error = ModelRoutingError(**error_payload)
             raise ValueError(
                 f"Routing failed: {error.error_code} - {error.error_message}"
             )
 
         # Parse success response
-        response_payload = self._response_payload.get("payload", {})
-        return response_payload
+        return cast(Dict[str, Any], response_payload.get("payload", {}))
 
 
 # Helper function to check PostgreSQL logging

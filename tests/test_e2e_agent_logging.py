@@ -165,7 +165,7 @@ class TestEndToEndAgentLogging:
 
         # Execute workflow by calling log-agent-action skill
         for action in workflow_actions:
-            cmd = [
+            cmd: list[str] = [
                 "python",
                 str(
                     Path(__file__).parent.parent
@@ -176,18 +176,18 @@ class TestEndToEndAgentLogging:
                     / "execute_kafka.py"
                 ),
                 "--agent",
-                action["agent"],
+                str(action["agent"]),
                 "--action-type",
-                action["action_type"],
+                str(action["action_type"]),
                 "--action-name",
-                action["action_name"],
+                str(action["action_name"]),
                 "--correlation-id",
                 correlation_id,
                 "--debug-mode",  # Force debug mode
             ]
 
             if "details" in action:
-                cmd.extend(["--details", action["details"]])
+                cmd.extend(["--details", str(action["details"])])
 
             if "duration_ms" in action:
                 cmd.extend(["--duration-ms", str(action["duration_ms"])])

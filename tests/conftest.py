@@ -340,7 +340,7 @@ def sample_orchestrator_prompt() -> str:
 @pytest.fixture(params=["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"])
 def node_type(request) -> str:
     """Parametrized fixture for all node types."""
-    return request.param
+    return str(request.param)
 
 
 @pytest.fixture
@@ -392,7 +392,7 @@ def create_valid_validation_result(
 
 
 def create_invalid_validation_result(
-    node_type: str = "EFFECT", errors: list = None
+    node_type: str = "EFFECT", errors: list | None = None
 ) -> ValidationResult:
     """Helper to create invalid validation result for testing."""
     return ValidationResult(
@@ -470,7 +470,7 @@ def pytest_configure(config):
 
         # Also patch in sys.modules to catch imports that happen later
         if "aiokafka" in sys.modules:
-            sys.modules["aiokafka"].AIOKafkaProducer = _get_mock_kafka_producer
+            sys.modules["aiokafka"].AIOKafkaProducer = _get_mock_kafka_producer  # type: ignore[attr-defined]
 
     except ImportError:
         # aiokafka not installed, no need to mock
@@ -576,13 +576,14 @@ async def wait_for_records():
 
     async def _wait_for_records(
         db_pool,
-        correlation_id: str = None,
-        agent_name: str = None,
+        correlation_id: str | None = None,
+        agent_name: str | None = None,
         expected_count: int = 1,
         timeout_seconds: float = 10.0,
         poll_interval: float = 0.2,
     ):
         """Wait for expected number of records to appear in agent_actions table."""
+        args: tuple[str, ...] = ()
         if correlation_id:
             query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
             args = (correlation_id,)
@@ -590,7 +591,6 @@ async def wait_for_records():
             query = (
                 f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
             )
-            args = ()
         else:
             raise ValueError("Must provide either correlation_id or agent_name")
 
@@ -781,7 +781,7 @@ def pytest_unconfigure(config):
         if hasattr(config, "_original_aiokafka_producer"):
             aiokafka.AIOKafkaProducer = config._original_aiokafka_producer
             if "aiokafka" in sys.modules:
-                sys.modules["aiokafka"].AIOKafkaProducer = (
+                sys.modules["aiokafka"].AIOKafkaProducer = (  # type: ignore[attr-defined]
                     config._original_aiokafka_producer
                 )
     except ImportError:

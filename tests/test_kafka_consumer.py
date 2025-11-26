@@ -110,8 +110,10 @@ class TestKafkaConsumerIntegration:
         assert consumer.db_pool is not None
 
         await consumer.stop()
-        assert consumer.running is False
-        assert consumer.consumer is None
+        # Note: mypy can't track that stop() changes running from True to False
+        running_after_stop = consumer.running
+        assert running_after_stop is False
+        assert consumer.consumer is None  # type: ignore[unreachable]
         assert consumer.db_pool is None
 
     @pytest.mark.asyncio

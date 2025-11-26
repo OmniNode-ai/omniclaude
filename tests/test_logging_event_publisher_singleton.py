@@ -191,10 +191,12 @@ class TestSingletonPattern:
         print(f"Speedup: {first_call_time / subsequent_avg_time:.1f}x faster")
 
         # Verify singleton is created and reused
-        assert logging_event_publisher._global_publisher is not None
+        # Note: mypy can't track that publish_application_log sets _global_publisher
+        publisher = logging_event_publisher._global_publisher
+        assert publisher is not None
         # Subsequent calls should not be significantly slower than first
         # (both should be fast since enable_events=False)
-        assert subsequent_avg_time < 0.01  # Should be <10ms
+        assert subsequent_avg_time < 0.01  # type: ignore[unreachable]
 
     @pytest.mark.asyncio
     async def test_all_convenience_functions_share_singleton(self):
@@ -241,8 +243,9 @@ class TestSingletonPattern:
         publisher3 = logging_event_publisher._global_publisher
 
         # All should have created/reused the same singleton
+        # Note: mypy can't track that publish_* functions set _global_publisher
         assert publisher1 is not None
-        assert publisher2 is publisher1  # Same instance
+        assert publisher2 is publisher1  # type: ignore[unreachable]
         assert publisher3 is publisher1  # Same instance
         # Note: _started is False when enable_events=False (expected behavior)
 

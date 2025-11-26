@@ -181,7 +181,13 @@ async def verify_database_persistence(
             "password": os.getenv("POSTGRES_PASSWORD", ""),
         }
 
-        conn = psycopg2.connect(**db_config)
+        conn = psycopg2.connect(
+            host=str(db_config["host"]),
+            port=db_config["port"],
+            dbname=str(db_config["database"]),
+            user=str(db_config["user"]),
+            password=str(db_config["password"]),
+        )
         cursor = conn.cursor()
 
         # Query for our test events
