@@ -123,9 +123,10 @@ async def run_migrations() -> None:
                 placeholders = ",".join(f"${i+1}" for i in range(len(insert_vals)))
                 cols_sql = ",".join(insert_cols)
                 try:
-                    # Note: Column names from database introspection (information_schema.columns)
-                    await conn.execute(  # nosec B608
-                        f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",
+                    # Column names from database introspection (information_schema.columns),
+                    # not user input - safe for dynamic SQL construction
+                    await conn.execute(
+                        f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",  # nosec B608
                         *insert_vals,
                     )
                 except Exception:

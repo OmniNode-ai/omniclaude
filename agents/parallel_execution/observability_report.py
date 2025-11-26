@@ -141,16 +141,15 @@ class ObservabilityReporter:
 
             if timestamp_col:
                 time_col = timestamp_col["column_name"]
-                # Note: Column name from database introspection (information_schema.columns)
-                cur.execute(  # nosec B608
-                    f"""
+                # Column name from database introspection (information_schema.columns),
+                # not user input - safe for dynamic SQL construction
+                query = f"""
                     SELECT *
                     FROM agent_transformation_events
                     ORDER BY {time_col} DESC
                     LIMIT %s
-                """,
-                    (limit,),
-                )
+                """  # nosec B608
+                cur.execute(query, (limit,))
                 return cur.fetchall()
             return []
 

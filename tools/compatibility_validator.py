@@ -358,7 +358,7 @@ class OmniBaseCompatibilityValidator:
                     # Try to actually import it
                     try:
                         # Add omnibase_core to path if provided
-                        if self.omnibase_path.exists():
+                        if self.omnibase_path and self.omnibase_path.exists():
                             sys.path.insert(0, str(self.omnibase_path / "src"))
 
                         importlib.import_module(module)

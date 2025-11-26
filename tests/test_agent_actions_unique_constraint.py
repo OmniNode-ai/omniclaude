@@ -7,6 +7,17 @@ Tests:
 2. Unique constraint prevents duplicates
 3. Concurrent insertions are handled correctly
 4. ON CONFLICT DO NOTHING works as expected
+
+NOTE: These tests require a real PostgreSQL database with the agent_actions table.
+They are marked as integration tests and will be skipped in CI environments
+where the database is not available.
+
+Usage:
+    # Run locally with database available
+    pytest tests/test_agent_actions_unique_constraint.py -v
+
+    # Skip in CI (tests auto-skip when POSTGRES_PASSWORD is not set)
+    pytest tests/test_agent_actions_unique_constraint.py -v
 """
 
 import asyncio
@@ -23,12 +34,39 @@ import pytest
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import settings
+# Load environment variables for skip check (before importing settings)
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+
+# Check if all required environment variables are set
+_HAS_DB_CONFIG = all(
+    [POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD]
+)
+
+# Only import settings if we have database config (avoids import errors in CI)
+if _HAS_DB_CONFIG:
+    from config import settings
+else:
+    settings = None  # type: ignore[assignment]
+
+
+# Skip reason for tests requiring database
+_SKIP_REASON = (
+    "Requires PostgreSQL database with agent_actions table. "
+    "Set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, "
+    "POSTGRES_PASSWORD environment variables."
+)
 
 
 @pytest.fixture
 async def db_pool():
     """Create database connection pool for testing."""
+    if not _HAS_DB_CONFIG or settings is None:
+        pytest.skip(_SKIP_REASON)
+
     pool = await asyncpg.create_pool(
         settings.get_postgres_dsn(),
         min_size=2,
@@ -39,6 +77,8 @@ async def db_pool():
     await pool.close()
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(not _HAS_DB_CONFIG, reason=_SKIP_REASON)
 @pytest.mark.asyncio
 async def test_unique_constraint_exists(db_pool):
     """Test that the unique constraint exists in the database."""
@@ -60,6 +100,8 @@ async def test_unique_constraint_exists(db_pool):
         print("✅ Unique constraint exists in database")
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(not _HAS_DB_CONFIG, reason=_SKIP_REASON)
 @pytest.mark.asyncio
 async def test_duplicate_prevention(db_pool):
     """Test that duplicate insertions are prevented."""
@@ -136,6 +178,8 @@ async def test_duplicate_prevention(db_pool):
         )
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(not _HAS_DB_CONFIG, reason=_SKIP_REASON)
 @pytest.mark.asyncio
 async def test_concurrent_insertions(db_pool):
     """Test that concurrent insertions are handled correctly."""
@@ -210,6 +254,8 @@ async def test_concurrent_insertions(db_pool):
         )
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(not _HAS_DB_CONFIG, reason=_SKIP_REASON)
 @pytest.mark.asyncio
 async def test_different_timestamps_allowed(db_pool):
     """Test that same action with different timestamps is allowed."""
