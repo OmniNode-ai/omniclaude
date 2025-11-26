@@ -16,7 +16,43 @@ Categories: 7 (intelligence, parallel_execution, coordination, context_managemen
 """
 
 from enum import Enum
-from typing import Any, Dict, List
+from typing import TypedDict
+
+
+class ThresholdMetadata(TypedDict, total=False):
+    """TypedDict for threshold metadata with type-safe field definitions.
+
+    Required fields (always present):
+        name: Human-readable threshold name
+        description: Detailed threshold description
+        category: Threshold category (e.g., 'intelligence', 'parallel_execution')
+        criticality: Criticality level ('high', 'medium', 'low')
+        measurement_type: Type of measurement (e.g., 'response_time', 'overhead')
+
+    Optional fields (one set per measurement unit):
+        threshold_ms/mb/ratio: Target threshold value
+        tolerance_ms/mb/ratio: Acceptable tolerance range
+        alert_threshold_ms/mb/ratio: Early warning threshold
+    """
+
+    # Required fields
+    name: str
+    description: str
+    category: str
+    criticality: str
+    measurement_type: str
+    # Time-based thresholds (optional)
+    threshold_ms: int
+    tolerance_ms: int
+    alert_threshold_ms: int
+    # Memory-based thresholds (optional)
+    threshold_mb: int
+    tolerance_mb: int
+    alert_threshold_mb: int
+    # Ratio-based thresholds (optional)
+    threshold_ratio: float
+    tolerance_ratio: float
+    alert_threshold_ratio: float
 
 
 class EnumPerformanceThreshold(str, Enum):
@@ -180,17 +216,17 @@ class EnumPerformanceThreshold(str, Enum):
         result: str = self._get_metadata()["description"]
         return result
 
-    def _get_metadata(self) -> Dict[str, Any]:
+    def _get_metadata(self) -> ThresholdMetadata:
         """Get metadata for this threshold from specification."""
         return _THRESHOLD_METADATA.get(self, {})
 
     @staticmethod
-    def all_thresholds() -> List["EnumPerformanceThreshold"]:
+    def all_thresholds() -> list["EnumPerformanceThreshold"]:
         """Get all performance thresholds."""
         return list(EnumPerformanceThreshold)
 
     @staticmethod
-    def by_category(category: str) -> List["EnumPerformanceThreshold"]:
+    def by_category(category: str) -> list["EnumPerformanceThreshold"]:
         """Get thresholds by category."""
         return [
             threshold
@@ -199,7 +235,7 @@ class EnumPerformanceThreshold(str, Enum):
         ]
 
     @staticmethod
-    def by_criticality(criticality: str) -> List["EnumPerformanceThreshold"]:
+    def by_criticality(criticality: str) -> list["EnumPerformanceThreshold"]:
         """Get thresholds by criticality level."""
         return [
             threshold
@@ -209,7 +245,7 @@ class EnumPerformanceThreshold(str, Enum):
 
 
 # Threshold metadata from performance-thresholds.yaml specification
-_THRESHOLD_METADATA: Dict[EnumPerformanceThreshold, Dict[str, Any]] = {
+_THRESHOLD_METADATA: dict[EnumPerformanceThreshold, ThresholdMetadata] = {
     # Intelligence Thresholds (INT-001 to INT-006)
     EnumPerformanceThreshold.RAG_QUERY_RESPONSE_TIME: {
         "name": "RAG Query Response Time",

@@ -44,9 +44,8 @@ def test_polymorphic_agent_updates():
     print("✅ Test 4 passed: Validation checks present")
 
     # Test 5: Check for correct examples
-    assert (  # noqa: PT018
-        "✅" in content and "Frontend Task" in content
-    ), "❌ Missing: Correct transformation examples"
+    assert "✅" in content, "❌ Missing: Success checkmark in examples"
+    assert "Frontend Task" in content, "❌ Missing: Frontend Task in examples"
     assert (
         "agent-frontend-developer" in content
     ), "❌ Missing: Frontend developer example"

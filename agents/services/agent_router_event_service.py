@@ -29,6 +29,8 @@ Created: 2025-10-30
 Reference: agent_router_service.py (HTTP version)
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -39,7 +41,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 # Configure logging FIRST (before any logging calls)
@@ -53,6 +55,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import settings
 
 
+# Type-only imports for optional dependencies (avoid runtime errors)
+if TYPE_CHECKING:
+    import asyncpg
+    from aiohttp import web
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+
+
 # Kafka imports
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -60,6 +69,8 @@ try:
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
+    AIOKafkaConsumer = None  # type: ignore[misc,assignment]
+    AIOKafkaProducer = None  # type: ignore[misc,assignment]
     logging.error("aiokafka not available. Install with: pip install aiokafka")
 
 # PostgreSQL imports
@@ -69,6 +80,7 @@ try:
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
+    asyncpg = None  # type: ignore[assignment]
     logging.error("asyncpg not available. Install with: pip install asyncpg")
 
 # HTTP server for health checks
@@ -78,6 +90,7 @@ try:
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
+    web = None  # type: ignore[assignment]
     logging.error("aiohttp not available. Install with: pip install aiohttp")
 
 # Import required modules (must succeed for service to function)

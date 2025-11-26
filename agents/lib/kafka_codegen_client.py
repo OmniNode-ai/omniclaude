@@ -217,8 +217,9 @@ class KafkaCodegenClient:
                 try:
                     result: Dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
                     yield result
-                except Exception as e:  # noqa: S112
-                    # Skip malformed messages
+                except (
+                    Exception
+                ) as e:  # noqa: S112 - intentional: skip malformed messages, continue consuming
                     self.logger.debug(f"Skipping malformed message: {e}")
                     continue
         except Exception as e:
@@ -249,7 +250,9 @@ class KafkaCodegenClient:
                 async for msg in consumer:
                     try:
                         payload: Dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
-                    except Exception as e:  # noqa: S112
+                    except (
+                        Exception
+                    ) as e:  # noqa: S112 - intentional: skip malformed messages, continue consuming
                         self.logger.debug(f"Skipping malformed message: {e}")
                         continue
                     if predicate(payload):

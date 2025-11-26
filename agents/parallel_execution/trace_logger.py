@@ -577,8 +577,7 @@ class TraceLogger:
 
                 results.append(event)
             except Exception:  # noqa: S112
-                # Skip corrupted files
-                continue
+                continue  # Skip corrupted trace files, continue query
 
         return results
 

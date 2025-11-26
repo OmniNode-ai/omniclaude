@@ -121,12 +121,14 @@ def _get_kafka_bootstrap_servers() -> str:
     if env_servers:
         return env_servers
 
-    # Use production external endpoint as last resort (matches Pydantic settings default for host)
-    # Note: For Docker contexts, KAFKA_BOOTSTRAP_SERVERS should be explicitly set to internal endpoint
-    default_servers = "192.168.86.200:29092"
+    # Use localhost as safe default - works in most development environments
+    # Production deployments should always set KAFKA_BOOTSTRAP_SERVERS explicitly
+    fallback_host = os.getenv("KAFKA_FALLBACK_HOST", "localhost")
+    fallback_port = os.getenv("KAFKA_FALLBACK_PORT", "9092")
+    default_servers = f"{fallback_host}:{fallback_port}"
     logger.warning(
-        f"KAFKA_BOOTSTRAP_SERVERS not configured. Using production external endpoint: {default_servers}. "
-        f"For Docker containers, set KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
+        f"KAFKA_BOOTSTRAP_SERVERS not configured. Using fallback: {default_servers}. "
+        f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
     )
     return default_servers
 

@@ -33,6 +33,26 @@ from .persistence import CodegenPersistence
 logger = logging.getLogger(__name__)
 
 
+def _get_event_type(event: BaseEvent) -> str:
+    """
+    Get event type from event with type-safe fallback.
+
+    Uses explicit hasattr check instead of getattr fallback to make the
+    optional nature of the 'event' attribute explicit and type-checker friendly.
+
+    Args:
+        event: Event to extract type from
+
+    Returns:
+        Event type string, or "unknown" if attribute is missing or not a string
+    """
+    if hasattr(event, "event"):
+        event_attr = event.event
+        if isinstance(event_attr, str):
+            return event_attr
+    return "unknown"
+
+
 class CircuitState(Enum):
     """Circuit breaker states"""
 
@@ -248,7 +268,7 @@ class EventOptimizer:
 
             # Track success metrics
             if self.persistence:
-                event_type = getattr(event, "event", "unknown")
+                event_type = _get_event_type(event)
                 await self.persistence.insert_event_processing_metric(
                     event_type=event_type,
                     event_source="event_optimizer",
@@ -261,7 +281,7 @@ class EventOptimizer:
 
             # Track failure metrics
             if self.persistence:
-                event_type = getattr(event, "event", "unknown")
+                event_type = _get_event_type(event)
                 await self.persistence.insert_event_processing_metric(
                     event_type=event_type,
                     event_source="event_optimizer",

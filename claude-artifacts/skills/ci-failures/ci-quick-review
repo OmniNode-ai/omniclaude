@@ -213,8 +213,9 @@ detect_error_pattern() {
     local error_text="$1"
 
     # Validate error_text parameter
+    # Return 2 for empty input to distinguish from "no pattern matched" (return 1)
     if [ -z "$error_text" ]; then
-        return 1
+        return 2
     fi
 
     # Docker build errors
@@ -290,6 +291,17 @@ detect_error_pattern() {
         return 0
     fi
 
+    # Fallback: error text exists but no recognizable pattern found
+    # Provide first non-empty line as context instead of failing silently
+    local first_line
+    first_line=$(echo "$error_text" | grep -v '^[[:space:]]*$' | head -1 | sed 's/^[[:space:]]*//' | cut -c1-80)
+    if [ -n "$first_line" ]; then
+        echo "❓ Unrecognized error pattern. First log line:"
+        echo "   $first_line"
+        return 0
+    fi
+
+    # No useful content found in error text
     return 1
 }
 

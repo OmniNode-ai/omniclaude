@@ -32,35 +32,28 @@ from time import time
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
-# Load environment variables from .env file
+# Load environment variables from .env file BEFORE importing omnibase_core modules
+# which may depend on environment variables for configuration
 from dotenv import load_dotenv
 
 
 load_dotenv()  # Load .env file automatically
 
-# Import from omnibase_core  # noqa: E402 (must load .env first)
+# All imports below MUST come after load_dotenv() - omnibase_core requires env vars  # noqa: E402
 from omnibase_core.errors import EnumCoreErrorCode, OnexError  # noqa: E402
 
-# Import interactive validation  # noqa: E402
 from ..parallel_execution.interactive_validator import (  # noqa: E402
     CheckpointType,
     UserChoice,
     create_validator,
 )
 from .aggregators.gate_result_aggregator import GateResultAggregator  # noqa: E402
-
-# Import code refinement components  # noqa: E402
 from .code_refiner import CodeRefiner  # noqa: E402
 
 # QualityDashboard lazy-loaded to avoid Rich import overhead (~50-150ms)
-# Import contract building components  # noqa: E402
 from .generation.contract_builder_factory import ContractBuilderFactory  # noqa: E402
-
-# Import existing components  # noqa: E402
 from .intelligence_gatherer import IntelligenceGatherer  # noqa: E402
 from .models.intelligence_context import IntelligenceContext  # noqa: E402
-
-# Import performance tracking and quality gates  # noqa: E402
 from .models.model_performance_tracking import (  # noqa: E402
     MetricsCollector,
 )
@@ -69,8 +62,6 @@ from .models.model_quality_gate import (  # noqa: E402
     ModelQualityGateResult,
     QualityGateRegistry,
 )
-
-# Import pipeline models  # noqa: E402
 from .models.pipeline_models import (  # noqa: E402
     GateType,
     PipelineResult,

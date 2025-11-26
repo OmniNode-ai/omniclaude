@@ -396,7 +396,7 @@ class EnumTestOperationType(str, Enum):
             prd_analysis=sample_prd_analysis, service_name="user_management"
         )
 
-        # Execute the generated code in a namespace
+        # Execute the generated code in a namespace (test-only, validates generated code works)
         namespace = {}
         exec(result.source_code, namespace)  # noqa: S102
 
@@ -414,7 +414,7 @@ class EnumTestOperationType(str, Enum):
             prd_analysis=sample_prd_analysis, service_name="user_management"
         )
 
-        # Execute the generated code
+        # Execute the generated code (test-only, validates generated code works)
         namespace = {}
         exec(result.source_code, namespace)  # noqa: S102
         enum_class = namespace["EnumUserManagementOperationType"]
@@ -437,7 +437,7 @@ class EnumTestOperationType(str, Enum):
             prd_analysis=sample_prd_analysis, service_name="user_management"
         )
 
-        # Execute the generated code
+        # Execute the generated code (test-only, validates generated code works)
         namespace = {}
         exec(result.source_code, namespace)  # noqa: S102
         enum_class = namespace["EnumUserManagementOperationType"]

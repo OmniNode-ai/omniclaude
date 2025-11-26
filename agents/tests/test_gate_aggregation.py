@@ -29,7 +29,7 @@ from agents.lib.models.model_gate_aggregation import (
     ModelGateAggregation,
     ModelPipelineQualityReport,
 )
-from agents.lib.models.model_quality_gate import (  # noqa: E402
+from agents.lib.models.model_quality_gate import (
     EnumQualityGate,
     ModelQualityGateResult,
     QualityGateRegistry,

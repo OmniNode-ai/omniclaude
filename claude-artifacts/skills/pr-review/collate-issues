@@ -114,11 +114,26 @@ collate_pr_issues() {
     # If --unfinished-only, get list of modified files to filter out addressed issues
     local modified_files=""
     if [[ "$UNFINISHED_ONLY" == "true" ]]; then
-        # Get modified files from git (both staged and unstaged)
-        # This helps filter out issues for files that have already been fixed
-        modified_files=$(git diff --name-only HEAD 2>/dev/null | tr '\n' '|' | sed 's/|$//')
-        if [[ -z "$modified_files" ]]; then
+        # Check if we're in a git repository first
+        if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "WARNING: Not in a git repository. --unfinished-only requires git to detect modified files." >&2
+            echo "         Proceeding without filtering (showing all issues)." >&2
             modified_files="__NO_MODIFIED_FILES__"
+        else
+            # Get modified files from git (both staged and unstaged)
+            # This helps filter out issues for files that have already been fixed
+            local git_output
+            git_output=$(git diff --name-only HEAD 2>&1) || {
+                echo "WARNING: git diff command failed: $git_output" >&2
+                echo "         Proceeding without filtering (showing all issues)." >&2
+                modified_files="__NO_MODIFIED_FILES__"
+            }
+            if [[ -n "$git_output" && "$modified_files" != "__NO_MODIFIED_FILES__" ]]; then
+                modified_files=$(echo "$git_output" | tr '\n' '|' | sed 's/|$//')
+            fi
+            if [[ -z "$modified_files" ]]; then
+                modified_files="__NO_MODIFIED_FILES__"
+            fi
         fi
     fi
 
@@ -387,12 +402,18 @@ collate_pr_issues() {
         # Filter out issues for files that have been modified (if --unfinished-only)
         # This removes issues where the file has already been touched/fixed
         (if $unfinished_only == "true" and $modified_files != "" and $modified_files != "__NO_MODIFIED_FILES__" then
+            # Convert pipe-separated modified files to array for exact matching
+            ($modified_files | split("|")) as $modified_array |
             map(select(
                 # Keep items without file locations (general issues)
                 (.location == "" or .location == null) or
                 # Extract file path from location like "[path/to/file.py:123]" and check
-                # Keep items where extracted path does NOT match any modified file
-                ((.location // "") | gsub("^\\[|:\\d*\\]$|:null\\]$"; "") | test($modified_files) | not)
+                # Keep items where extracted path does NOT exactly match any modified file
+                # Use exact string matching (IN array) instead of regex to avoid false positives
+                # e.g., "foo.py" in modified files should NOT match "foobar.py"
+                ((.location // "") | gsub("^\\[|:\\d*\\]$|:null\\]$"; "") as $extracted_path |
+                    ($modified_array | map(. == $extracted_path) | any | not)
+                )
             ))
         else
             .

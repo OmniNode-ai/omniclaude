@@ -44,6 +44,8 @@ pytestmark = pytest.mark.skip(
     "Tracking: Week 4 pipeline integration"
 )
 
+from pydantic import ValidationError  # noqa: E402
+
 from agents.lib.models.intelligence_context import (  # noqa: E402
     IntelligenceContext,
     get_default_intelligence,
@@ -371,10 +373,10 @@ def test_intelligence_context_validation():
     assert len(context.node_type_patterns) == 2
 
     # Test confidence score bounds
-    with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic validation error
+    with pytest.raises(ValidationError):
         IntelligenceContext(confidence_score=1.5)  # Too high
 
-    with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic validation error
+    with pytest.raises(ValidationError):
         IntelligenceContext(confidence_score=-0.1)  # Too low
 
 

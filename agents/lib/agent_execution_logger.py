@@ -31,12 +31,12 @@ from uuid import UUID, uuid4
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
 
-try:
+# Import pattern: use relative imports when run as package, absolute when standalone
+if __package__:
     from .db import get_pg_pool
     from .kafka_rpk_client import RpkKafkaClient
     from .structured_logger import StructuredLogger
-except ImportError:
-    # Standalone usage - requires running from lib directory
+else:
     from db import get_pg_pool  # type: ignore[import-not-found]
     from kafka_rpk_client import RpkKafkaClient  # type: ignore[import-not-found]
     from structured_logger import StructuredLogger  # type: ignore[import-not-found]
