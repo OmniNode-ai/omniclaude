@@ -148,7 +148,7 @@ class ObservabilityReporter:
                     FROM agent_transformation_events
                     ORDER BY {time_col} DESC
                     LIMIT %s
-                """  # nosec B608
+                """  # nosec B608 - time_col from DB introspection, not user input
                 cur.execute(query, (limit,))
                 return cur.fetchall()
             return []

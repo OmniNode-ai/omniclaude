@@ -84,8 +84,8 @@ async def run_migrations() -> None:
             row = None
             if ident_col in col_meta:
                 # Note: ident_col is from database introspection (fixed set: filename/name/id/version)
-                row = await conn.fetchrow(  # nosec B608
-                    f"SELECT 1 FROM schema_migrations WHERE {ident_col}=$1",
+                row = await conn.fetchrow(
+                    f"SELECT 1 FROM schema_migrations WHERE {ident_col}=$1",  # nosec B608
                     migration_id,
                 )
             if row:
