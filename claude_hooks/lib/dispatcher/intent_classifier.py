@@ -9,19 +9,21 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 - Mistake prevention
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, TypedDict
+from typing import Optional, TypedDict
 
 
 class IntentPatternDict(TypedDict):
     """Type definition for intent pattern configuration."""
 
-    triggers: List[str]
-    agents: List[str]
-    validators: List[str]
-    onex_rules: List[str]
+    triggers: list[str]
+    agents: list[str]
+    validators: list[str]
+    onex_rules: list[str]
     weight: float
 
 
@@ -51,10 +53,10 @@ class IntentContext:
 
     primary_intent: str
     confidence: float
-    suggested_agents: List[str] = field(default_factory=list)
-    validators: List[str] = field(default_factory=list)
-    onex_rules: List[str] = field(default_factory=list)
-    secondary_intents: List[str] = field(default_factory=list)
+    suggested_agents: list[str] = field(default_factory=list)
+    validators: list[str] = field(default_factory=list)
+    onex_rules: list[str] = field(default_factory=list)
+    secondary_intents: list[str] = field(default_factory=list)
     metadata: IntentMetadataDict = field(
         default_factory=lambda: IntentMetadataDict(
             tool_name="", file_path="", language=None, all_scores={}
@@ -391,7 +393,7 @@ class IntentClassifier:
         return self.LANGUAGE_MAP.get(ext)
 
     @classmethod
-    def get_available_intents(cls) -> List[str]:
+    def get_available_intents(cls) -> list[str]:
         """Get list of all available intent categories."""
         return list(cls.INTENT_PATTERNS.keys())
 
