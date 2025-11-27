@@ -415,9 +415,8 @@ tail -20 ~/.claude/hooks/logs/quality_enforcer.log
 
 | File | Purpose |
 |------|---------|
-| `~/.claude/hooks/logs/pre-tool-use-events.log` | Human-readable event log |
-| `~/.claude/hooks/logs/pre-tool-use-events.jsonl` | JSON lines for analysis |
-| `~/.claude/hooks/logs/permissions.log` | Permission decisions |
+| `~/.claude/logs/pre_tool_use_*.json` | Phase 1 event logs (timestamped JSON files) |
+| `~/.claude/hooks/logs/permissions.log` | Permission decisions (Phase 2) |
 | `~/.claude/hooks/logs/quality_enforcer.log` | Quality check results |
 | `~/.claude/hooks/hook-enhanced.log` | UserPromptSubmit hook log |
 
@@ -433,8 +432,8 @@ grep "BLOCKED" ~/.claude/hooks/logs/permissions.log | wc -l
 # View recent quality issues
 grep -E "(ERROR|WARNING|BLOCKED)" ~/.claude/hooks/logs/quality_enforcer.log | tail -20
 
-# Export events for analysis
-cp ~/.claude/hooks/logs/pre-tool-use-events.jsonl ~/Desktop/tool-events-$(date +%Y%m%d).jsonl
+# Export Phase 1 events for analysis
+cp ~/.claude/logs/pre_tool_use_*.json ~/Desktop/tool-events-$(date +%Y%m%d)/
 ```
 
 ### Kafka Event Viewing (if enabled)
@@ -640,16 +639,8 @@ log_hook_invocation(
 ### Phase 1 Setup (Logger Only)
 
 ```bash
-# 1. Create logger script
-cat > ~/.claude/hooks/pre-tool-use-log.sh << 'EOF'
-#!/bin/bash
-set -euo pipefail
-LOG_FILE="$HOME/.claude/hooks/logs/pre-tool-use-events.log"
-mkdir -p "$(dirname "$LOG_FILE")"
-TOOL_INFO=$(cat)
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $(echo "$TOOL_INFO" | jq -r '.tool_name')" >> "$LOG_FILE"
-echo "$TOOL_INFO"
-EOF
+# 1. Copy the logger script from this repository
+cp claude_hooks/pre-tool-use-log.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/pre-tool-use-log.sh
 
 # 2. Update settings.json
@@ -657,21 +648,21 @@ chmod +x ~/.claude/hooks/pre-tool-use-log.sh
 
 # 3. Restart Claude Code
 
-# 4. Verify
-tail -f ~/.claude/hooks/logs/pre-tool-use-events.log
+# 4. Verify - check for timestamped JSON files
+ls -lt ~/.claude/logs/pre_tool_use_*.json | head -5
 ```
 
 ### Phase 2 Setup (Full Enforcement)
 
 ```bash
-# 1. Create permission hook
-# (See pre-tool-use-permissions.py template above)
+# 1. Copy the permission hook scaffold from this repository
+cp claude_hooks/pre-tool-use-permissions.py ~/.claude/hooks/
 chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
 
 # 2. Verify quality hook exists
 ls -la ~/.claude/hooks/pre-tool-use-quality.sh
 
-# 3. Update settings.json with both hooks
+# 3. Update settings.json with both hooks (see Phase 2 section above)
 
 # 4. Restart Claude Code
 
